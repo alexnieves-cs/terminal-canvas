@@ -1,5 +1,9 @@
 import type { AgentOptions } from '@shared/cost'
 import type { SpawnRequest } from '@shared/ipc-contract'
+import { BACKENDS, BACKEND_IDS, type AgentBackend } from '@shared/agent-backends'
+
+/** M99. The registry's order is the sheet's row order. */
+export { BACKEND_IDS }
 
 /**
  * M65. THE SPAWN SHEET'S MODEL — pure, plain-node checked in `verify:palette`.
@@ -25,6 +29,29 @@ export const CHAT_WHAT_ID = '__chat__'
 export const CODEX_WHAT_ID = '__codex__'
 /** M81. A chat whose subject is the canvas: created with the supervisor's system prompt. */
 export const SUPERVISOR_WHAT_ID = '__supervisor__'
+
+/** M99. Each backend's value in the `what` select — the two M73/M90 ids, by row. */
+export const WHAT_ID_BY_BACKEND: Readonly<Record<AgentBackend, string>> = { claude: CHAT_WHAT_ID, codex: CODEX_WHAT_ID }
+
+export interface BackendOption {
+  id: AgentBackend
+  label: string
+  disabled: boolean
+}
+
+/**
+ * M99. One conversation row per REGISTERED backend, in registry order,
+ * labelled `chat with <label>`; a backend whose CLI is absent is DISABLED
+ * with the fix in its label (`— not on PATH`), never dropped — a row that
+ * vanishes reads as a backend that was never built. `available` is keyed by
+ * backend so a third row needs no new parameter.
+ */
+export function backendOptions(available: Partial<Record<AgentBackend, boolean>>): BackendOption[] {
+  return BACKEND_IDS.map((id) => {
+    const ok = available[id] === true
+    return { id, label: ok ? `chat with ${BACKENDS[id].label}` : `chat with ${BACKENDS[id].label} — not on PATH`, disabled: !ok }
+  })
+}
 
 export interface SheetValues {
   what: SheetWhat

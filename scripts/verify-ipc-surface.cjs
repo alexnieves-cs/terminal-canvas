@@ -216,8 +216,10 @@ app.whenReady().then(() => {
   // M85 vault:read (88). M86 git:status and review:across (90).
   // M88 github:list (91).
   // M89 broker:audit (92).
+  // M93 snapshot:list and snapshot:restore (94).
   // M97 agent:auto-start / agent:auto-stop (96).
-  const EXPECTED_CHANNELS = 96
+  // M98 agent:grants and agent:revoke-grants (98) — session grants read and dropped.
+  const EXPECTED_CHANNELS = 98
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

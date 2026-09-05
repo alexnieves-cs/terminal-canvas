@@ -23,7 +23,19 @@ import type { AgentSessionEvent } from '@shared/agent-session'
  * `agent:acknowledge` (focus) never reaches this: a chat's `needs you` is a
  * fact — a question with no answer — not a bell.
  *
- * Plain node; `verify:agent-session approve.1–.3`.
+ * M98. THE TRACKER OWNS GRANTS TOO, because it owns pending. `Allow for
+ * session` is a grant keyed by session AND tool, held in a Map here and
+ * written NOWHERE — not the layout, not the transcript log, not a store
+ * (`grant.2` reads this file as text and fails on a filesystem import). A
+ * grant that survived a relaunch would answer a question the user was never
+ * shown in a session they may not remember granting; a grant that survives
+ * an EXIT is right, because the conversation resumes (`--resume`) and the
+ * tool is the same tool. Cleared on `disposed`, and by `revoke`. The
+ * manager consults `granted` through its `preAnswer` dep BEFORE a request
+ * is pending, so a granted tool never reaches this tracker's pending set
+ * and never lights attention.
+ *
+ * Plain node; `verify:agent-session approve.1–.3`, `grant.1–.2`.
  */
 
 export interface ApprovalTrackerDeps {
@@ -45,10 +57,21 @@ export interface ApprovalTracker {
   resync(id: string): void
   /** Panel ids with at least one pending request, in entry order. */
   pendingIds(): string[]
+  /** M98. Allow `toolName` for the rest of this session, without asking. */
+  grant(id: string, toolName: string): void
+  /** M98. Whether `toolName` is granted for `id` — what the manager's `preAnswer` asks. */
+  granted(id: string, toolName: string): boolean
+  /** M98. The granted tools, in grant order. Empty for an unknown id. */
+  grantsOf(id: string): string[]
+  /** M98. Drop every grant for `id`. */
+  revoke(id: string): void
 }
 
 export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracker {
   const pending = new Map<string, Set<string>>()
+  // M98. Insertion-ordered per session, so the inspector lists grants in
+  // the order they were given.
+  const grants = new Map<string, Set<string>>()
   const badge = (): void => { deps.sink.badge(pending.size) }
   return {
     apply(event) {
@@ -78,6 +101,9 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
         }
         case 'status': {
           if (event.status !== 'disposed' && event.status !== 'exited') return
+          // M98. Grants outlive an exit (the conversation resumes) and die
+          // with the session; pending dies with either.
+          if (event.status === 'disposed') grants.delete(event.id)
           if (!pending.delete(event.id)) return
           badge()
           return
@@ -87,7 +113,15 @@ export function createApprovalTracker(deps: ApprovalTrackerDeps): ApprovalTracke
       }
     },
     resync(id) { if (pending.has(id)) deps.emitState(id, 'wants-you') },
-    pendingIds: () => [...pending.keys()]
+    pendingIds: () => [...pending.keys()],
+    grant(id, toolName) {
+      const set = grants.get(id)
+      if (set) { set.add(toolName); return }
+      grants.set(id, new Set([toolName]))
+    },
+    granted: (id, toolName) => grants.get(id)?.has(toolName) ?? false,
+    grantsOf: (id) => [...(grants.get(id) ?? [])],
+    revoke(id) { grants.delete(id) }
   }
 }
 

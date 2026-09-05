@@ -1,3 +1,4 @@
+import { carryBackend } from '@shared/agent-backends'
 import { useMemo, type RefObject } from 'react'
 import { useChat, getChat } from '@renderer/chat/chat-store'
 import { chatStateInput, chatHasRun } from '@renderer/chat/chat-model'
@@ -105,7 +106,7 @@ function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
   const chat = getChat(p.rect.id)
   return {
     busy: chat.snapshot !== null && (chat.snapshot.status === 'streaming' || chat.snapshot.pending.length > 0),
-    ...(p.chat.backend === 'codex' ? { backend: 'codex' as const } : {}),
+    ...carryBackend(p.chat),
     // M97. Absent unless a run is live or just resolved — the palette's Auto rows read it.
     ...(chat.snapshot?.auto === undefined ? {} : { auto: chat.snapshot.auto }),
     turns: chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length
@@ -347,7 +348,9 @@ export function useRailModels(deps: RailModelsDeps) {
             // M77. The ONE definition the palette row uses too.
             ran: chatHasRun(selectedChat),
             // M76. The oldest pending request, for the pane's Allow and Deny.
-            ...((): { approval?: PendingApproval } => { const a = pendingApprovals.find((x) => x.id === selectedPanel.rect.id); return a === undefined ? {} : { approval: a } })()
+            ...((): { approval?: PendingApproval } => { const a = pendingApprovals.find((x) => x.id === selectedPanel.rect.id); return a === undefined ? {} : { approval: a } })(),
+            // M98. Main's grants, mirrored; absent until it has answered (the field reads `unknown`).
+            ...(selectedChat.grants === undefined ? {} : { grants: selectedChat.grants })
           }
         })()
       )

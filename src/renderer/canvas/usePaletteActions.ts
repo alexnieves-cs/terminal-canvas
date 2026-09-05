@@ -4,7 +4,8 @@ import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
-import { insertIntoComposer, lastAssistantText } from '@renderer/chat/chat-store'
+import { insertIntoComposer, lastAssistantText, reportedModels } from '@renderer/chat/chat-store'
+import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
 import type { SettingValue } from '@shared/settings-schema'
@@ -1217,6 +1218,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
             claudeAvailable: claudeOk,
             codexAvailable: codexAvailable(presetRows),
+            // M99. What live sessions have reported, for the model field's suggestions.
+            reportedModels: reportedModels(),
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
             templates,
             ...(templateId === undefined ? {} : { templateId }),
@@ -1464,8 +1467,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M76. The ONE answer verb every surface calls; main clears every
     // surface through its permission-answered event. A deny carries a
     // message the agent reads.
-    answerApproval: (id, requestId, allow) => {
-      void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE } })
+    // M98. `scope` rides only when given (an `undefined` key crosses IPC
+    // as present); a scoped answer refreshes the store's grants mirror.
+    answerApproval: (id, requestId, allow, scope) => {
+      void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+        .then(() => { if (scope !== undefined) refreshChatGrants(id) })
     },
     setPresetWorktree: (id, on) => {
       // Main owns the store and refuses a built-in; the reload is what makes

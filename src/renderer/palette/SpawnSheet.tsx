@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
 import { templateHoles } from './template-model'
@@ -47,6 +48,8 @@ export interface SpawnSheetModel {
   claudeAvailable: boolean
   /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
   codexAvailable: boolean
+  /** M99. The models live sessions have REPORTED — the model field's suggestions. Absent suggests nothing. */
+  reportedModels?: readonly string[]
   /** M81. One supervisor per canvas: the row says so rather than vanishing. */
   hasSupervisor?: boolean
 }
@@ -217,9 +220,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           <option value={COMMAND}>type a command…</option>
           {/* M73. The conversation arm, disabled by name when claude is absent. */}
-          <option value={CHAT_WHAT_ID} disabled={!model.claudeAvailable}>chat with claude{model.claudeAvailable ? '' : ' — not on PATH'}</option>
-          {/* M90. The second backend behind the same seam, disabled by name when codex is absent. */}
-          <option value={CODEX_WHAT_ID} data-sheet-codex disabled={!model.codexAvailable}>chat with codex{model.codexAvailable ? '' : ' — not on PATH'}</option>
+          {/* M90/M99. One conversation row per registered backend, from the
+              registry's order, disabled by name when its CLI is absent. The
+              codex row keeps its `data-sheet-codex` mark (`verify:panels codex.1`). */}
+          {backendOptions({ claude: model.claudeAvailable, codex: model.codexAvailable }).map((row) => (
+            <option key={row.id} value={WHAT_ID_BY_BACKEND[row.id]} disabled={row.disabled} data-sheet-backend={row.id} data-sheet-codex={row.id === BACKENDS.codex.id ? '' : undefined}>{row.label}</option>
+          ))}
           {/* M81. One per canvas, disabled by name when there already is one. */}
           <option value={SUPERVISOR_WHAT_ID} disabled={!model.claudeAvailable || model.hasSupervisor === true}>
             supervisor of this canvas{!model.claudeAvailable ? ' — not on PATH' : model.hasSupervisor === true ? ' — this canvas already has one' : ''}
@@ -270,7 +276,11 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               <option value="">{own.effort ?? 'default'} effort</option>
               {EFFORTS.map((m) => <option key={m} value={m}>{m} effort</option>)}
             </select>
-            <input className="sheet__input sheet__input--mono" data-sheet-model value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
+            <input className="sheet__input sheet__input--mono" data-sheet-model list="sheet-reported-models" value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
+            {/* M99. Suggestions are what live sessions REPORTED, never a vendor list (a fixed list rots the day a model ships). */}
+            <datalist id="sheet-reported-models" data-sheet-reported-models>
+              {(model.reportedModels ?? []).map((m) => <option key={m} value={m} />)}
+            </datalist>
           </div>
         </div>
       )}

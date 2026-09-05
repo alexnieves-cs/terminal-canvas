@@ -147,7 +147,9 @@ const bridge: CanvasBridge = {
     importSession: (req) => ipcRenderer.invoke(IPC.AGENT_IMPORT, req),
     onEvent: (listener) => subscribe<AgentSessionEvent>(IPC_EVENTS.AGENT_EVENT, listener),
     autoStart: (req) => ipcRenderer.invoke(IPC.AGENT_AUTO_START, req),
-    autoStop: (id) => ipcRenderer.invoke(IPC.AGENT_AUTO_STOP, id)
+    autoStop: (id) => ipcRenderer.invoke(IPC.AGENT_AUTO_STOP, id),
+    grants: (id) => ipcRenderer.invoke(IPC.AGENT_GRANTS, id),
+    revokeGrants: (id) => ipcRenderer.invoke(IPC.AGENT_REVOKE_GRANTS, id)
   },
   snapshot: {
     list: () => ipcRenderer.invoke(IPC.SNAPSHOT_LIST),
