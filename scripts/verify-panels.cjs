@@ -93,6 +93,7 @@ const {
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
   readVault,
+  createLayoutSnapshots, restoreFromSnapshot,
   listGithubWorkItems,
   createBrokerAudit,
   credentialDir: harnessCredentialDir,
@@ -685,7 +686,10 @@ app.whenReady().then(async () => {
     // changed, check it against the schema's minimum by hand.
     preferences: { 'agent.idleAfterMs': 250 }
   }), 'utf8')
-  const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH })
+  // M93. The harness's own ring, uncoalesced so a check can take two snapshots in a second.
+  const snapshotDir = join(mkdtempSync(join(tmpdir(), 'tc panels snaps ')), 'layout-snapshots')
+  const layoutSnapshots = createLayoutSnapshots({ dir: snapshotDir, minMs: 0, max: 20 })
+  const layoutStore = createLayoutStore({ filePath: LAYOUT_PATH, onWritten: (bytes) => { layoutSnapshots.record(bytes) } })
   /* The real runner, FENCED to this suite's own fixture directories.
 
      captureBaseline fires on EVERY pty:create, and most fixture panels here
@@ -1152,6 +1156,17 @@ app.whenReady().then(async () => {
     // M85. The vault's read: the REAL reader over the fixture folder, the
     // reasoning every real export in this harness follows.
     vaultRead: (root) => readVault(root),
+    // M93. The same two fences main wires, over the harness's ring.
+    snapshotList: () => layoutSnapshots.list(),
+    snapshotRestore: (at, afterId) => {
+      let bytes
+      try { bytes = readFileSync(join(snapshotDir, `${at}.json`), 'utf8') } catch { return { kind: 'refused', reason: 'that snapshot is gone' } }
+      const result = restoreFromSnapshot(layoutStore.current(), bytes, Date.now(), (n) => `n${n}`, afterId)
+      if (result.kind === 'refused') return result
+      const added = result.layout.workspaces[result.layout.workspaces.length - 1]
+      layoutStore.addWorkspaceRecord(added)
+      return { kind: 'restored', workspaceId: added.id }
+    },
     memoryList: (root, limit) => memoryStore.list(root, limit),
     memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
@@ -17899,7 +17914,8 @@ app.whenReady().then(async () => {
         const before = await rectOf('lkA')
         const c1 = await chromeOf('lkA')
         wc.sendInputEvent({ type: 'mouseDown', x: c1.x, y: c1.y, button: 'left', clickCount: 1 })
-        for (let i = 1; i <= 6; i++) { wc.sendInputEvent({ type: 'mouseMove', x: c1.x + i * 25, y: c1.y + i * 15, buttons: 1 }); await sleep(20) }
+        // leftButtonDown, or the drag hook reads the move as a release (the harness's own lesson).
+        for (let i = 1; i <= 6; i++) { wc.sendInputEvent({ type: 'mouseMove', x: c1.x + i * 25, y: c1.y + i * 15, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(40) }
         wc.sendInputEvent({ type: 'mouseUp', x: c1.x + 150, y: c1.y + 90, button: 'left', clickCount: 1 })
         await settle()
         const after = await rectOf('lkA')
@@ -17942,6 +17958,160 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onL)
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* M93. The canvas as a document: annotations and the time machine    */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = [
+        'annot.1 Annotate… enters a loud mode with its exit on the strip; a real click on the ground places a world note and one on a panel places a panel note, each typed in place and saved on disk with its anchor; the panel note follows a drag; Delete removes the selected note; the mode is refused by name while merged',
+        'history.1 the Workspaces pane lists the snapshots the ring kept (three states), and Restore mints a NEW workspace beside the current one with re-minted ids, switches to it, and leaves the original workspace untouched'
+      ]
+      const aLog = []
+      const onA = (_e, _l, m) => { aLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onA)
+      try {
+        layoutStore.save({ panels: [
+          { id: 'anA', x: 300, y: 300, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'anA', focusedId: 'anA' })
+        flushLayoutStore()
+        const reA = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reA
+        await settle()
+        // Live, so the drag half drags a panel and not a card that wakes on mousedown.
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="anA"] .panel__slot') !== null`), 8000)
+        const openP = async () => {
+          await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+          return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        }
+        const runRow = async (rowId) => {
+          const opened = await openP()
+          if (opened !== true) return 'no palette'
+          const r = await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify(rowId)}) + ']')
+            if (!el) return 'no row'
+            if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+            return true })()`)
+          await settle()
+          return r
+        }
+        const entered = await runRow('canvas.annotate')
+        const strip = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-annotate-strip]'); return s ? { text: s.textContent, done: s.querySelector('[data-annotate-done]') !== null, cursor: getComputedStyle(document.querySelector('.canvas')).cursor } : false })()`), 3000)
+        const host = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left, y: r.top } })()`)
+        if (host === null) throw new Error('stage host: no .canvas')
+        // A world note: a real click on empty ground, then type and Enter.
+        wc.sendInputEvent({ type: 'mouseDown', x: host.x + 60, y: host.y + 60, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: host.x + 60, y: host.y + 60, button: 'left', clickCount: 1 })
+        const editor1 = await waitUntil(() => wc.executeJavaScript(`document.activeElement && document.activeElement.hasAttribute('data-annotation-editor')`), 3000)
+        for (const ch of 'first note') wc.sendInputEvent({ type: 'char', keyCode: ch })
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+        const world = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="world"]'); return g ? g.querySelector('[data-annotation-label]')?.textContent ?? null : false })()`), 3000)
+        // A panel note: a click inside the panel's slot.
+        // The restored panel is a CARD (dormant); the note lands on its frame, below the chrome.
+        const slot = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="anA"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: r.left + 60, y: r.top + 80 } })()`)
+        if (slot === null) throw new Error('stage slot: panel anA gone; panels=' + JSON.stringify(await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id'))`)))
+        wc.sendInputEvent({ type: 'mouseDown', x: slot.x, y: slot.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: slot.x, y: slot.y, button: 'left', clickCount: 1 })
+        await waitUntil(() => wc.executeJavaScript(`document.activeElement && document.activeElement.hasAttribute('data-annotation-editor')`), 3000)
+        for (const ch of 'on the panel') wc.sendInputEvent({ type: 'char', keyCode: ch })
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+        const panelNote = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="panel"]'); if (!g) return false; const r = g.querySelector('[data-annotation-label]').getBoundingClientRect(); return { text: g.querySelector('[data-annotation-label]').textContent, x: r.left, y: r.top, leader: g.querySelector('.annotation__leader') !== null } })()`), 3000)
+        // Leave the mode, drag the panel, and the panel note follows.
+        await wc.executeJavaScript(`document.querySelector('[data-annotate-done]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`)
+        await settle()
+        const stripGone = await wc.executeJavaScript(`document.querySelector('[data-annotate-strip]') === null`)
+        const chrome = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="anA"] .pf__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 } })()`)
+        if (chrome === null) throw new Error('stage chrome: panel anA gone; panels=' + JSON.stringify(await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id'))`)))
+        const panelBefore = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="anA"]').getBoundingClientRect().left`)
+        wc.sendInputEvent({ type: 'mouseDown', x: chrome.x, y: chrome.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: chrome.x + i * 30, y: chrome.y, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(40) }
+        wc.sendInputEvent({ type: 'mouseUp', x: chrome.x + 150, y: chrome.y, button: 'left', clickCount: 1 })
+        await settle()
+        const panelNoteAfter = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="panel"]'); if (!g) return null; const r = g.querySelector('[data-annotation-label]').getBoundingClientRect(); return { x: r.left, y: r.top, panelMoved: document.querySelector('.panel[data-panel-id="anA"]').getBoundingClientRect().left - ${panelBefore} } })()`)
+        layoutStore.flushSync()
+        const stored = (layoutStore.initial().annotations || []).map((a) => ({ text: a.text, kind: a.anchor.kind }))
+        // Select the world note and Delete it.
+        await wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-kind="world"] [data-annotation-label]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`)
+        await settle()
+        const selected = await wc.executeJavaScript(`document.querySelector('.annotation--selected') !== null`)
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' })
+        const deleted = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-kind="world"]') === null`), 3000)
+        const remaining = await wc.executeJavaScript(`document.querySelectorAll('[data-annotation]').length`)
+        // Merged: the row is disabled by name.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        const mergedRow = await (async () => {
+          const on = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] button'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+          if (on !== true) return 'no merged door'
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector('.shell--merged, [data-merged="true"], .canvas--merged') !== null || document.querySelector('[data-rail-merged] button[aria-pressed="true"]') !== null`), 4000)
+          const r = await runRow('canvas.annotate')
+          await wc.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`)
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-merged] button'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+          await settle()
+          return r
+        })()
+        ok(IDS[0],
+          entered === true && strip && /Annotating/.test(strip.text) && strip.done === true && strip.cursor === 'crosshair' &&
+            editor1 === true && world === 'first note' &&
+            panelNote && panelNote.text === 'on the panel' && panelNote.leader === true &&
+            stripGone === true && panelNoteAfter !== null && Math.abs((panelNoteAfter.x - panelNote.x) - 150) <= 3 && Math.abs(panelNoteAfter.y - panelNote.y) <= 2 &&
+            stored.length === 2 && stored.some((s) => s.kind === 'world' && s.text === 'first note') && stored.some((s) => s.kind === 'panel' && s.text === 'on the panel') &&
+            selected === true && deleted === true && remaining === 1 &&
+            typeof mergedRow === 'string' && /disabled/.test(mergedRow) && /merged/.test(mergedRow),
+          JSON.stringify({ entered, strip, editor1, world, panelNote, stripGone, panelNoteAfter, stored, selected, deleted, remaining, mergedRow, log: aLog.slice(-4) }))
+
+        // ---- history.1
+        // Two distinct saves so the ring holds two snapshots (uncoalesced here).
+        const wsBefore = layoutStore.initial()
+        layoutStore.save({ panels: [{ id: 'snA', x: 100, y: 100, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'from the past' }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        // The snapshot of THAT save, by stamp: the harness saves constantly and the ring is full of its own history.
+        const pastAt = layoutSnapshots.list()[0].at
+        layoutStore.save({ panels: [{ id: 'snA', x: 100, y: 100, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'from the past' }, { id: 'snB', x: 900, y: 100, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const ringBefore = layoutSnapshots.list().length
+        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const rows = await waitUntil(() => wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('[data-rail-snapshot]')]; return rows.length >= 2 ? rows.map((r) => ({ at: r.getAttribute('data-rail-snapshot'), label: r.querySelector('.rail-row__label')?.textContent ?? '', restore: r.querySelector('[data-rail-snapshot-restore]') !== null })) : false })()`), 6000)
+        const workspacesBefore = layoutStore.initial() ? (await wc.executeJavaScript(`document.querySelectorAll('[data-rail-workspace]').length`)) : 0
+        const activeBefore = layoutStore.current().activeWorkspaceId
+        // Restore the OLDER snapshot (one panel): a new workspace with one panel, re-minted.
+        const oldest = rows && rows.some((r) => Number(r.at) === pastAt) ? String(pastAt) : null
+        const clicked = oldest === null ? false : await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-snapshot="${oldest}"] [data-rail-snapshot-restore]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const switched = await waitUntil(async () => {
+          const a = layoutStore.current().activeWorkspaceId
+          return a !== activeBefore ? a : false
+        }, 8000)
+        await settle()
+        const restoredPanels = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-id]')]; return ps.length === 1 ? ps.map((p) => ({ id: p.getAttribute('data-panel-id'), title: p.querySelector('.pf__title')?.textContent ?? '' })) : false })()`), 6000)
+        layoutStore.flushSync()
+        const all = layoutStore.current().workspaces
+        const original = all.find((w) => w.id === activeBefore)
+        const added = all.find((w) => w.id === switched)
+        ok(IDS[1],
+          ringBefore >= 2 && rows && rows.length >= 2 && rows.every((r) => r.restore === true && /panel/.test(r.label)) &&
+            clicked === true && typeof switched === 'string' && restoredPanels && restoredPanels[0].title === 'from the past' && restoredPanels[0].id !== 'snA' &&
+            original !== undefined && original.panels.length === 2 && added !== undefined && /@/.test(added.name) && added.panels.length === 1 && added.panels[0].id === restoredPanels[0].id,
+          JSON.stringify({ ringBefore, rows, activeBefore, clicked, switched, restoredPanels, original: original && original.panels.map((p) => p.id), added: added && { name: added.name, panels: added.panels.map((p) => p.id) }, log: aLog.slice(-4) }))
+        // Back to the original workspace and clean up.
+        if (typeof switched === 'string' && activeBefore) {
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-rail-workspace="${activeBefore}"] button, [data-rail-workspace="${activeBefore}"] .rail-row__main'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          await settle()
+          layoutStore.deleteWorkspace(switched)
+        }
+        for (const id of ['anA', 'snA', 'snB']) { try { await ptyManager.kill(id) } catch {} }
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reA2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reA2
+        await settle()
+      } catch (aErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(aErr && aErr.message || aErr) + ' | renderer: ' + (aLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onA)
       }
     }
 

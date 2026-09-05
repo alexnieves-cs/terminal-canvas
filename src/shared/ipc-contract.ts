@@ -105,6 +105,9 @@ import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
 import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
 
+/** M93. A snapshot's metadata: the stamp is the file's name and the restore's key. */
+export interface SnapshotMeta { at: number; bytes: number; workspaces: number; panels: number }
+
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
 export const IPC = {
   PTY_CREATE: 'pty:create',
@@ -240,6 +243,9 @@ export const IPC = {
   /** M83. The project memory, for the node that renders it and the chat that carries it. */
   /** M85. Every `.md` under the vault root, read in main — the renderer has no fs. */
   VAULT_READ: 'vault:read',
+  /** M93. The layout time machine: snapshots of saves, restored as a NEW workspace. */
+  SNAPSHOT_LIST: 'snapshot:list',
+  SNAPSHOT_RESTORE: 'snapshot:restore',
   MEMORY_LIST: 'memory:list',
   MEMORY_ADD: 'memory:add',
   /**
@@ -1187,6 +1193,12 @@ export interface CanvasBridge {
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
   }
   /** M85. The vault: a folder of markdown notes, read in main. */
+  snapshot: {
+    /** M93. Every snapshot of a save, newest first: its stamp, size and counts. */
+    list(): Promise<SnapshotMeta[]>
+    /** M93. Mint a NEW workspace from the snapshot's active one; the current workspace is never touched. The renderer switches to the id. */
+    restore(at: number, afterId?: number): Promise<{ kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }>
+  }
   vault: {
     /** Every `.md` under `root`, newest first, with what the caps dropped. An absent root answers empty WITH ITS REASON. */
     read(root: string): Promise<VaultReadResult>

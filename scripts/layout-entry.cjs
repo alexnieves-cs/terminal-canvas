@@ -2,6 +2,9 @@
    its file path as a parameter, so neither needs Electron or a DOM — which is
    what keeps this suite in the cheap plain-node tier. */
 module.exports = {
+  /* M93. The snapshot ring: injected dir/now, plain node. */
+  ...require('../src/main/layout-snapshots'),
+  ...require('../src/shared/annotations'),
   ...require('../src/shared/layout-schema'),
   /* M6b: the settings schema is pure data with no imports at all, so it costs
      this tier nothing and gets covered by the suite that already owns the

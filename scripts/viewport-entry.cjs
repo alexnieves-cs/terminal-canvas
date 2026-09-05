@@ -9,6 +9,8 @@ module.exports = {
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
   ...require('../src/renderer/panels/panels'),
+  /* M93. Annotation anchoring is pure geometry. */
+  ...require('../src/shared/annotations'),
   // M49. toPanels/fromPanels: the sixth absent-stays-absent copy site.
   ...require('../src/renderer/panels/layout-adapt'),
   // M50. Snapping and tidy: pure rect math over applyDrag's output.

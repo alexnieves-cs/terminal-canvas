@@ -221,6 +221,8 @@ export interface PaletteActions {
   unpinPanel(id: string): void
   maximisePanel(id: string): void
   restorePanel(id: string): void
+  /** M93. */
+  beginAnnotate(): void
   /** M49. Commit a per-panel font size; undefined returns the panel to the global. */
   setPanelFontSize(id: string, size: number | undefined): void
   /** M50. Arrange these panels compactly, one undoable step, never reordering. */
@@ -1332,6 +1334,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       group: 'panel',
       run: () => { if (target !== undefined) actions.exportPanelText(target.id) }
     }, reason))
+    // M93. Annotate mode: present always; disabled by name while merged.
+    out.push(withReason({
+      id: 'canvas.annotate',
+      title: 'Annotate…',
+      subtitle: 'click to place notes on the canvas or on a panel; Escape to stop',
+      searchText: 'annotate note label sticky comment margin',
+      group: 'canvas',
+      run: () => actions.beginAnnotate()
+    }, ctx.merged === true ? 'the merged view is read-only — leave it to annotate' : undefined))
     out.push({
       id: 'canvas.export-png',
       title: 'Export canvas as PNG…',

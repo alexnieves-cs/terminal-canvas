@@ -3602,3 +3602,15 @@ failure here was the by-name rebuild: a rename rebuilt the panel with `title` an
 and dropped `locked`, so renaming unlocked; `carryMarks` is the spread every such rebuild
 adds, and the verifier's grep for field-by-field copies is the check to repeat when a
 field joins `PanelBase`.
+
+**A snapshot is taken AFTER the rename, and a restore never touches the current workspace
+(`main/layout-snapshots.ts`, `layout-store.ts`'s `onWritten`, M93).** Two silent failures.
+A snapshot of bytes the store was ABOUT to write would record a save that a crash then
+never completed — history that never happened — so the hook runs after `renameSync`, and a
+failed write records nothing. And a restore that replaced the active workspace would be a
+second author of the record the renderer is saving every second: the renderer's next save
+would overwrite it, or the restore would overwrite the renderer's, with no error either way.
+The restore adds a workspace and returns its id; the renderer switches through the ordinary
+transaction. `parseLayout` never throws — a corrupt file is a default layout with warnings —
+and that is exactly wrong for a restore, where the user asked for THIS file: the JSON is
+checked first and refused by name. `verify:layout snap.1`/`snap.2` pin both halves.

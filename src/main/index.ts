@@ -14,6 +14,7 @@ import { resolveShellEnv, shellProbeOutcome, whichFromEnv } from './shell-env'
 import { buildEnvReport } from './env-report'
 import { resolveLinkOpen } from './link-open'
 import { createRunLedger } from './run-ledger'
+import { createLayoutSnapshots, restoreFromSnapshot } from './layout-snapshots'
 import { createLayoutStore } from './layout-store'
 import { createCredentialStore } from './credential-store'
 import { createSafeStorageCrypto } from './credential-crypto'
@@ -124,8 +125,11 @@ let loginEnv: Record<string, string> = {}
 
 // userData is the standard per-user application directory; app.getPath is only
 // valid once the app module is loaded, which it is by the time this module runs.
+// M93. Snapshots of saves, beside layout.json: a side effect of every successful write.
+const layoutSnapshots = createLayoutSnapshots({ dir: join(app.getPath('userData'), 'layout-snapshots') })
 const layoutStore = createLayoutStore({
-  filePath: join(app.getPath('userData'), 'layout.json')
+  filePath: join(app.getPath('userData'), 'layout.json'),
+  onWritten: (bytes) => { layoutSnapshots.record(bytes) }
 })
 
 // Its own file, deliberately not a key in layout.json. That file is rewritten
@@ -389,11 +393,14 @@ async function confirmReset(): Promise<void> {
     running > 0
       ? `${panels} panel${panels === 1 ? '' : 's'} will be closed, including ${running} running process${running === 1 ? '' : 'es'}. This cannot be undone.`
       : `${panels} panel${panels === 1 ? '' : 's'} will be closed. This cannot be undone.`
+  // M93. Reset stays final, and the dialog says where the past is kept.
+  const kept = layoutSnapshots.list().length
+  const detailWithHistory = kept > 0 ? `${detail} ${kept} snapshot${kept === 1 ? '' : 's'} of earlier saves exist — restore one from the Workspaces pane.` : detail
 
   const { response } = await dialog.showMessageBox(window, {
     type: 'warning',
     message: 'Reset this canvas?',
-    detail,
+    detail: detailWithHistory,
     buttons: ['Cancel', 'Reset Canvas'],
     // Cancel is the default, so Return dismisses rather than destroys.
     defaultId: 0,
@@ -1230,6 +1237,17 @@ app.whenReady().then(async () => {
       // to $HOME for a path that is not there, and a typo'd vault would have
       // walked the user's entire home directory and listed it as the vault
       // (M85's verifier). A missing root is the reader's own "no vault" arm.
+      snapshotList: () => layoutSnapshots.list(),
+      snapshotRestore: (at, afterId) => {
+        const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
+        let bytes: string
+        try { bytes = readFileSync(path, 'utf8') } catch { return { kind: 'refused', reason: 'that snapshot is gone — the ring keeps the newest twenty' } }
+        const result = restoreFromSnapshot(layoutStore.current(), bytes, Date.now(), (n) => `n${n}`, afterId)
+        if (result.kind === 'refused') return result
+        const added = result.layout.workspaces[result.layout.workspaces.length - 1]!
+        layoutStore.addWorkspaceRecord(added)
+        return { kind: 'restored', workspaceId: added.id }
+      },
       vaultRead: (root) => {
         const expanded = expandTilde(root.trim())
         let real = expanded

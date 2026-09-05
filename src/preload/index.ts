@@ -147,6 +147,10 @@ const bridge: CanvasBridge = {
     importSession: (req) => ipcRenderer.invoke(IPC.AGENT_IMPORT, req),
     onEvent: (listener) => subscribe<AgentSessionEvent>(IPC_EVENTS.AGENT_EVENT, listener)
   },
+  snapshot: {
+    list: () => ipcRenderer.invoke(IPC.SNAPSHOT_LIST),
+    restore: (at, afterId) => ipcRenderer.invoke(IPC.SNAPSHOT_RESTORE, at, afterId)
+  },
   vault: {
     read: (root) => ipcRenderer.invoke(IPC.VAULT_READ, root),
     onChanged: (listener) => subscribe<void>(IPC_EVENTS.VAULT_CHANGED, () => listener())

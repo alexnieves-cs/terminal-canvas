@@ -130,6 +130,9 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { onChatSession } from '@renderer/chat/chat-store'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
+import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
+import { AnnotationLayer } from './AnnotationLayer'
+import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
@@ -240,6 +243,20 @@ export function Canvas({
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
   // M79. Runs: a history kept with the layout, owned by useRuns below.
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
+  // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
+  const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
+  const annotationsRef = useRef(annotations)
+  annotationsRef.current = annotations
+  // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
+  // or the strip's Done. A selected note is the canvas's, like a selected
+  // edge; the editing note is the one whose input is open.
+  const [annotating, setAnnotating] = useState(false)
+  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null)
+  const [editingAnnotation, setEditingAnnotation] = useState<string | null>(null)
+  const annotationSeq = useRef(0)
+  // The pointer hook is called above the verb's declaration (the M28 ordering
+  // rule): it reads the verb through a ref, as beginNewChatRef does.
+  const placeAnnotationRef = useRef<(world: { x: number; y: number }) => boolean>(() => false)
   const runsRef = useRef(runs)
   runsRef.current = runs
   // M79. useRuns is created far below (it needs restartWithSpec); the workspace
@@ -1483,6 +1500,9 @@ export function Canvas({
     const fresh = firstRunPanels()
     setPanels(fresh)
     setGroups([])
+    // M93. A reset is a reset: the notes go with the panels.
+    setAnnotations([])
+    setSelectedAnnotation(null); setEditingAnnotation(null); setAnnotating(false)
     setDormantIds(new Set())
     selectOnly(null)
     setFocusedId(null)
@@ -1658,7 +1678,7 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
@@ -2207,9 +2227,10 @@ export function Canvas({
       selectedId: merged && before ? before.selectedId : selectedId,
       focusedId: merged && before ? before.focusedId : focusedId,
       bookmarks,
-      runs
+      runs,
+      ...(annotations.length === 0 ? {} : { annotations })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -2221,7 +2242,8 @@ export function Canvas({
     hostRef, viewport, viewportRef, panelsRef, marqueeFromRef, marqueeEndRef,
     navGridIsOpenRef, hitOrder, palette, linkMode, merged, spaceHeld,
     beginPanDrag, commitHistory, selectAndRaise, selectOnly, onSelectPanel,
-    setPanels, setSelectedIds, setFocusedId, setMarquee, setCursor
+    setPanels, setSelectedIds, setFocusedId, setMarquee, setCursor,
+    annotate: (world) => placeAnnotationRef.current(world)
   })
 
   // Loaded on mount AND whenever the palette opens — but never on a
@@ -3519,6 +3541,91 @@ export function Canvas({
     readOnly: merged
   }), [marksSignature, maximisePanel, restorePanel, merged])
 
+  // M93. The verbs. Placement resolves the anchor against the panels in paint
+  // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
+  // is one stack over one Panel[], and widening it is a bigger change than a
+  // margin note earns — so deleting a note is not undoable, said plainly in
+  // the build log rather than pretended here.
+  const placeAnnotation = useCallback((world: { x: number; y: number }): boolean => {
+    if (!annotating || mergedRef.current) return false
+    const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
+    const anchor = resolveAnchor(world, ordered)
+    const id = `a${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
+    setAnnotations((current) => [...current, { id, text: '', anchor }].slice(-ANNOTATIONS_MAX))
+    setSelectedAnnotation(id)
+    setEditingAnnotation(id)
+    return true
+  }, [annotating])
+  const commitAnnotation = useCallback((id: string, text: string) => {
+    setEditingAnnotation((current) => (current === id ? null : current))
+    // An empty FRESH note is no note (a mis-click removes itself); an existing
+    // note emptied and blurred keeps its text — clearing is not deleting, and
+    // Delete is the verb for that.
+    setAnnotations((current) => {
+      const existing = current.find((a) => a.id === id)
+      if (text === '' && existing !== undefined && existing.text !== '') return current
+      return text === '' ? current.filter((a) => a.id !== id) : current.map((a) => (a.id === id ? { ...a, text } : a))
+    })
+    if (text === '') setSelectedAnnotation((current) => (current === id ? null : current))
+  }, [])
+  const removeAnnotation = useCallback((id: string) => {
+    setAnnotations((current) => current.filter((a) => a.id !== id))
+    setSelectedAnnotation((current) => (current === id ? null : current))
+    setEditingAnnotation((current) => (current === id ? null : current))
+  }, [])
+  const beginAnnotate = useCallback((): { kind: string; reason?: string } => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only — leave it to annotate' }
+    setAnnotating(true)
+    return { kind: 'entered' }
+  }, [])
+  const endAnnotate = useCallback(() => { setAnnotating(false) }, [])
+  placeAnnotationRef.current = placeAnnotation
+  // Delete removes the selected note; Escape clears the selection or leaves the mode.
+  useEffect(() => {
+    if (selectedAnnotation === null && !annotating) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (shouldIgnoreKeys()) return
+      const active = document.activeElement
+      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable)) return
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedAnnotation !== null) {
+        event.preventDefault()
+        removeAnnotation(selectedAnnotation)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        if (selectedAnnotation !== null) setSelectedAnnotation(null)
+        else setAnnotating(false)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [selectedAnnotation, annotating, shouldIgnoreKeys, removeAnnotation])
+  // A panel-anchored note whose panel is gone draws nothing (annotationPoint
+  // is null) and is dropped by the parser on the next load — NOT pruned here
+  // on every panels change: undo of a panel's removal would otherwise have
+  // pruned its note for good (the verifier). The mode ends when the view merges.
+  useEffect(() => { if (merged) { setAnnotating(false); setSelectedAnnotation(null); setEditingAnnotation(null) } }, [merged])
+  // M93. The time machine's rows: read when the Workspaces pane is on screen
+  // and after every restore; null until the first answer (three states).
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[] | null>(null)
+  const readSnapshots = useCallback(() => {
+    void window.canvas.snapshot.list().then(setSnapshots).catch(() => setSnapshots([]))
+  }, [])
+  useEffect(() => { if (chrome.navigator === 'workspaces') readSnapshots() }, [chrome.navigator, readSnapshots])
+  const restoreSnapshot = useCallback((at: number) => {
+    if (mergedRef.current) return
+    // The renderer's own id counter rides along: a panel spawned inside the
+    // store's coalesce window is not on disk yet, and main mints past both.
+    void window.canvas.snapshot.restore(at, nextIdRef.current).then(async (result) => {
+      if (result.kind === 'refused') { console.warn(`[snapshot] ${result.reason}`); return }
+      // A new workspace exists on disk; the list re-reads, then the ordinary
+      // switch — the same transaction a click on a workspace row runs.
+      await reloadWorkspacesRef.current?.()
+      await switchWorkspace(result.workspaceId)
+      readSnapshots()
+    })
+  }, [switchWorkspace, readSnapshots])
+  const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
+
   const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
@@ -3864,7 +3971,7 @@ export function Canvas({
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
-    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
+    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -4101,6 +4208,8 @@ export function Canvas({
         onToggle={chrome.toggleNavigator}
         merged={merged}
         workspaces={railWorkspaces}
+        snapshots={snapshots}
+        onRestoreSnapshot={restoreSnapshot}
         onSwitchWorkspace={paletteActions.switchWorkspace}
         onCreateWorkspace={paletteActions.beginCreateWorkspace}
         onRenameWorkspace={paletteActions.beginRenameWorkspace}
@@ -4146,7 +4255,7 @@ export function Canvas({
         // mousemove (setCursor), so the class catches up within a frame or
         // two of the keypress rather than exactly on it. Cursor feedback
         // only; the gesture itself never consults this className.
-        className={`canvas${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
@@ -4210,7 +4319,14 @@ export function Canvas({
               removing a link means. Suppressed while merged, where geometry
               and links are read-only, the same gate the drag and the move
               verb already take. */}
+          {/* M93. In annotate mode a transparent sheet over the world takes every
+              click — a panel's own mousedown stops propagation, so without it a
+              note could be placed on the ground but never on a panel. */}
+          {annotating && <div className="annotate-sheet" data-annotate-sheet />}
           <SnapGuides guides={snapGuides} />
+          {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
+          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation}
+            onSelect={merged ? undefined : setSelectedAnnotation} onBeginEdit={merged ? undefined : setEditingAnnotation} onCommitEdit={commitAnnotation} onCancelEdit={(id) => { const a = annotationsRef.current.find((x) => x.id === id); commitAnnotation(id, a?.text ?? '') }} />
           <LinkLayer
             panels={displayPanels}
             draw={linkDraw.state}
@@ -4416,7 +4532,7 @@ export function Canvas({
             corner, hidden while merged (the merged view's geometry is not this
             canvas's) and by `canvas.minimap`. */}
         {minimapEnabled && !merged && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -4450,6 +4566,13 @@ export function Canvas({
         {linkMode.from !== null && (
           <div className="link-banner" role="status">
             Linking from <strong>{linkSourceName}</strong> — click a panel, or press Escape
+          </div>
+        )}
+        {/* M93. The annotate strip: LOUD, with its exit on it (M40's rule). */}
+        {annotating && (
+          <div className="link-banner link-banner--annotate" role="status" data-annotate-strip>
+            <strong>Annotating</strong> — click to place a note, on a panel or the canvas; Escape to stop
+            <button type="button" className="link-banner__stop" aria-label="Stop annotating" data-annotate-done {...shellControl(endAnnotate)}>Done</button>
           </div>
         )}
         {broadcastInput && (

@@ -398,7 +398,9 @@ app.whenReady().then(async () => {
       groups: [{ id: 'g1', label: 'workers', colour: 'violet', panelIds: ['groupA', 'groupB'] }],
       // M79. A run that already happened: the chat and worker a handed off into twin.
       runs: [{ id: 'run-1', name: 'run 1', panelIds: ['chat', 'groupA', 'twin'], edges: [{ from: 'chat', to: 'twin' }, { from: 'groupA', to: 'twin' }], startedAt: Date.now() - 3600000, endedAt: Date.now() - 3480000, entries: [{ panelId: 'chat', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3590000, outcome: 'a turn' }, { panelId: 'groupA', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3560000, outcome: 'exit 0' }, { panelId: 'twin', startedAt: Date.now() - 3560000, endedAt: Date.now() - 3480000, outcome: 'exit 0' }], costUsd: 0.2138 }],
-      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }]
+      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }],
+      // M93. Notes in the margins: one on the canvas, one on a panel.
+      annotations: [{ id: 'note-1', text: 'the api pair — worker b takes over on exit 0', anchor: { kind: 'world', x: 30, y: 318 } }, { id: 'note-2', text: 'flaky since the watchdog change', anchor: { kind: 'panel', panelId: 'dormant', dx: 12, dy: 262 } }]
     }, {
       id: 'w2', name: 'docs', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
       panels: [

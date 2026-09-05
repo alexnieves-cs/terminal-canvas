@@ -61,6 +61,16 @@ palette with a loud exit, persisted with the record rules, drawn on the minimap.
 - The minimap draws every annotation as a 2px dot in `--fg-3`; the far tiers keep labels
   legible at the summary tier (`font-size` in world units scaled like the frame border, M91).
 
+## Amended after the verifier
+
+- A workspace switch loads the incoming workspace's annotations and reset clears them.
+- Notes are OUTSIDE the panel history: deleting one is not undoable; a note whose panel is
+  gone draws nothing and is dropped by the parser on the next load (never pruned live).
+- An existing note emptied and blurred keeps its text; a fresh empty note removes itself.
+- The renderer's id counter rides `snapshot:restore` as a hint.
+- The palette scope for snapshots is not built: the pane's History section is the door.
+- The pure anchoring lives in `shared/annotations.ts`; the panels check is `history.1`.
+
 ## What it must not break
 
 - Reset stays final: a restore never touches the current workspace and never resurrects a
@@ -76,4 +86,4 @@ palette with a loud exit, persisted with the record rules, drawn on the minimap.
 | A malformed annotation crashing the parse; a panel-anchored note surviving its panel | `verify:layout annot.1` |
 | A panel-anchored note not moving with its panel; a click inside a panel yielding a world anchor | `verify:viewport annot.1` |
 | Annotate mode reachable while merged; a note placed and edited through the real surfaces | `verify:panels annot.1` |
-| The History rows missing when snapshots exist, or a restore not activating the new workspace | `verify:panels snap.1` |
+| The History rows missing when snapshots exist, or a restore not activating the new workspace | `verify:panels history.1` |

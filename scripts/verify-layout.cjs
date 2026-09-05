@@ -3431,6 +3431,96 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ warnings: out.warnings, n1, n3 }))
 }
 
+{
+  // M93. SNAPSHOTS are a side effect of a SAVE: the ring keeps the newest
+  // SNAPSHOT_MAX, trims oldest-first, coalesces within SNAPSHOT_MIN_MS (the
+  // first record always lands), writes temp-and-rename, and a list reads
+  // metadata newest first. Driven with an injected directory and clock.
+  const { mkdtempSync, readdirSync, readFileSync: rf } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const dir = join(mkdtempSync(join(tmpdir(), 'tc layout snaps ')), 'layout-snapshots')
+  let now = 1_000_000
+  const snaps = L.createLayoutSnapshots({ dir, now: () => now, max: 3, minMs: 60_000 })
+  const layoutBytes = (n) => JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w' + n, camera: { x: 0, y: 0, scale: 1 }, panels: Array.from({ length: n }, (_, i) => ({ id: 'n' + i, x: 0, y: 0, w: 520, h: 340, z: i + 1, cwd: '~', command: 'sh', args: [] })) }] })
+  const first = snaps.record(layoutBytes(1))
+  now += 1000
+  const tooSoon = snaps.record(layoutBytes(2))
+  now += 60_000
+  const second = snaps.record(layoutBytes(3))
+  now += 60_000
+  const third = snaps.record(layoutBytes(4))
+  now += 60_000
+  const fourth = snaps.record(layoutBytes(5))
+  const files = readdirSync(dir).sort()
+  const listed = snaps.list()
+  ok('snap.1 the ring records the first save, coalesces a save inside the window, keeps the newest max files oldest-trimmed, lists newest first with panel and workspace counts, and leaves no temp file',
+    first === true && tooSoon === false && second === true && third === true && fourth === true &&
+      files.length === 3 && files.every((f) => f.endsWith('.json')) &&
+      listed.length === 3 && listed[0].panels === 5 && listed[2].panels === 3 && listed[0].at > listed[1].at && listed[0].workspaces === 1 && listed[0].bytes > 0 &&
+      JSON.parse(rf(join(dir, files[files.length - 1]), 'utf8')).workspaces[0].name === 'w5',
+    JSON.stringify({ first, tooSoon, second, third, fourth, files, listed }))
+  const read = snaps.read(listed[1].at)
+  const missing = snaps.read(42)
+  ok('snap.1.b a snapshot reads back through the ONE layout parser; a missing stamp answers null rather than throwing',
+    read !== null && read.snapshot.workspaces[0].panels.length === 4 && missing === null,
+    JSON.stringify({ read: read && read.snapshot.workspaces[0].panels.length, missing }))
+}
+
+{
+  // M93. RESTORE mints a NEW workspace from a snapshot's active workspace,
+  // never touching the current one, with every panel id re-minted so a
+  // restored panel cannot collide with a live one; a malformed snapshot is
+  // refused by name.
+  const current = { version: 1, activeWorkspaceId: 'a', workspaces: [
+    { id: 'a', name: 'main', camera: { x: 0, y: 0, scale: 1 }, panels: [{ id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] }] }
+  ] }
+  const snapshot = { version: 1, activeWorkspaceId: 'b', workspaces: [
+    { id: 'zzz', name: 'other', camera: { x: 0, y: 0, scale: 1 }, panels: [] },
+    { id: 'b', name: 'main', camera: { x: 5, y: 6, scale: 0.5 }, panels: [
+      { id: 'n1', x: 10, y: 10, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [], links: [{ to: 'n2' }] },
+      { id: 'n2', x: 900, y: 10, w: 520, h: 340, z: 2, cwd: '~', command: 'sh', args: [], links: [{ to: 'elsewhere' }] }
+    ], groups: [{ id: 'g1', label: 'pair', colour: 'blue', panelIds: ['n1', 'n2'] }] }
+  ] }
+  const out = L.restoreFromSnapshot(L.parseLayout(JSON.stringify(current)).snapshot, JSON.stringify(snapshot), 1_700_000_000_000, (n) => 'r' + n, 7)
+  const bad = L.restoreFromSnapshot(L.parseLayout(JSON.stringify(current)).snapshot, '{not json', 1, (n) => 'r' + n)
+  const ws = out.kind === 'restored' ? out.layout.workspaces : []
+  const added = ws.find((w) => w.id !== 'a')
+  ok('snap.2 restore adds ONE workspace (the snapshot\'s active one) beside the current, names it by the source and the time, re-mints every panel id past the renderer\'s hint with links and groups following (a link to a panel outside the workspace is already gone — the ONE parser drops it before the restore sees it, so dropped counts nothing here), activates it, leaves the current workspace byte-identical, and refuses a malformed snapshot by name',
+    out.kind === 'restored' && ws.length === 2 && added !== undefined && /main/.test(added.name) && out.layout.activeWorkspaceId === added.id &&
+      added.panels.length === 2 && added.panels.every((p) => /^r\d+$/.test(p.id)) && added.panels[0].links[0].to === added.panels[1].id &&
+      added.panels.map((p) => Number(p.id.slice(1))).every((n) => n >= 7) && (added.panels[1].links === undefined || added.panels[1].links.length === 0) && out.dropped === 0 &&
+      added.groups[0].panelIds.join(',') === added.panels.map((p) => p.id).join(',') && added.camera.scale === 0.5 &&
+      JSON.stringify(ws.find((w) => w.id === 'a')) === JSON.stringify(L.parseLayout(JSON.stringify(current)).snapshot.workspaces[0]) &&
+      bad.kind === 'refused' && /snapshot/.test(bad.reason),
+    JSON.stringify({ kind: out.kind, added: added && { id: added.id, name: added.name, panels: added.panels.map((p) => p.id), groups: added.groups }, bad }))
+}
+
+{
+  // M93. ANNOTATIONS on the workspace record: absent is every pre-M93 file;
+  // a malformed entry is dropped by name; a panel-anchored note whose panel
+  // is gone is dropped and the rest kept; the cap keeps the newest.
+  const many = Array.from({ length: 205 }, (_, i) => ({ id: 'a' + i, text: 't' + i, anchor: { kind: 'world', x: i, y: 0 } }))
+  const out = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [
+    { id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [{ id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] }],
+      annotations: [
+        { id: 'a1', text: 'hello', anchor: { kind: 'world', x: 10, y: 20 } },
+        { id: 'a2', text: 'on n1', anchor: { kind: 'panel', panelId: 'n1', dx: 5, dy: -30 } },
+        { id: 'a3', text: 'orphan', anchor: { kind: 'panel', panelId: 'gone', dx: 0, dy: 0 } },
+        { id: 'a4', text: 7, anchor: { kind: 'world', x: 0, y: 0 } },
+        { id: 'a5', text: 'bad anchor', anchor: { kind: 'moon' } },
+        'not an object'
+      ] },
+    { id: 'v', name: 'v', camera: { x: 0, y: 0, scale: 1 }, panels: [] },
+    { id: 'u', name: 'u', camera: { x: 0, y: 0, scale: 1 }, panels: [], annotations: many }
+  ] }))
+  const w = out.snapshot.workspaces[0], v = out.snapshot.workspaces[1], u = out.snapshot.workspaces[2]
+  ok('annot.1 annotations round-trip (world and panel anchors), an orphaned panel anchor / a non-string text / an unknown anchor / a non-object are each dropped by name with the rest kept, an absent list stays absent, and the cap keeps the newest 200',
+    w.annotations.length === 2 && w.annotations[0].id === 'a1' && w.annotations[1].anchor.kind === 'panel' && w.annotations[1].anchor.dy === -30 &&
+      out.warnings.filter((m) => /a3|a4|a5|annotation/.test(m)).length >= 3 &&
+      !('annotations' in v) && u.annotations.length === 200 && u.annotations[0].id === 'a5' && u.annotations[199].id === 'a204',
+    JSON.stringify({ w: w.annotations, v: Object.keys(v), u: u.annotations && [u.annotations.length, u.annotations[0].id], warnings: out.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

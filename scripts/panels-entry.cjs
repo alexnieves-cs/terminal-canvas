@@ -123,6 +123,8 @@ module.exports = {
   // a store, hand it to registerIpcHandlers, and later call flushSync() on the
   // SAME instance to force its 500ms-debounced write deterministically.
   ...require('../src/main/layout-store'),
+  /* M93. The snapshot ring and the pure restore. */
+  ...require('../src/main/layout-snapshots'),
   // M4b: panels now come from layout:load instead of a hardcoded constant, so
   // this suite has to seed the store's file with SEED_PANELS itself before the
   // window loads, or it boots the one-panel first-run canvas instead of the

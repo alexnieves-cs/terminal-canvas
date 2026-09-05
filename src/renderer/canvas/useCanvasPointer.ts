@@ -27,6 +27,8 @@ export interface CanvasPointerDeps {
   selectAndRaise: (id: string, additive?: boolean) => void
   selectOnly: (id: string | null) => void
   onSelectPanel: (id: string, additive?: boolean) => void
+  /** M93. Annotate mode: a click PLACES a note and does nothing else. True when consumed. */
+  annotate?: (world: { x: number; y: number }) => boolean
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
   setFocusedId: Dispatch<SetStateAction<string | null>>
@@ -242,6 +244,9 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
   const onMouseDown = (event: MouseEvent<HTMLDivElement>): void => {
     // Only background clicks reach here; panels stopPropagation.
     const world = toWorld(event)
+    // M93. In annotate mode the click is the note's position, over a panel or
+    // the ground alike: it neither selects nor starts a marquee.
+    if (world && event.button === 0 && deps.annotate?.(world) === true) { event.preventDefault(); return }
     const hit = world ? hitTest(hitOrder, world) : null
     // Through onSelectPanel, not selectOnly: selecting raises. A live
     // panel's own chrome handler already does that, but a CARDED panel has no
