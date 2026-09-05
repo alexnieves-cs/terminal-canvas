@@ -107,7 +107,9 @@ export function buildPlan(inputs: readonly PlanInput[], facts: PlanFacts): PlanR
     const bound = bindArgs(verb, input.args, facts, i)
     if ('kind' in bound) return bound
     // Guardrail 4: the panel's kind decides who may be typed into.
-    if (verb.id === 'type' || verb.id === 'submit') {
+    // `interrupt` too: Ctrl-C is the one control byte a plan may send, and
+    // only into an agent — a plain shell gets nothing from a plan.
+    if (verb.id === 'type' || verb.id === 'submit' || verb.id === 'interrupt') {
       const panel = facts.panels.find((p) => p.id === bound.args['panel'])
       if (panel !== undefined && !acceptsTyping(panel)) {
         return refuse(`step ${i + 1}: ${panel.id} is a ${panel.kind === 'terminal' ? 'plain shell' : panel.kind} — a plan may only type into an agent`, 'aim it at an agent panel: a terminal running claude or codex, or a chat')

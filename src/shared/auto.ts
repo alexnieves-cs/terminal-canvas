@@ -96,7 +96,7 @@ export function validateAutoMode(mode: AutoMode, facts: PlanFacts, panelId = fac
 }
 
 export type AutoState = 'running' | 'done' | 'stuck' | 'stopped'
-export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget'
+export type AutoStuckReason = 'limit' | 'permission' | 'exit' | 'budget' | 'error'
 
 export interface AutoStatus {
   mode: AutoModeId
@@ -110,7 +110,8 @@ const STUCK_WORDS: Record<AutoStuckReason, string> = {
   limit: 'limit reached',
   permission: 'a permission question went unanswered',
   exit: 'the agent exited',
-  budget: 'the budget refused a send'
+  budget: 'the budget refused a send',
+  error: 'a turn ended in an error'
 }
 
 /** The chip's words: one function, every surface. */

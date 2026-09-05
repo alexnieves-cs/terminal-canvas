@@ -1361,6 +1361,57 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ pAutos, xAutos, bAutos, stAutos, stopped, again }))
   }
 
+  /* auto.4 — the verifier's window. A message the user typed mid-turn queues
+     AHEAD of the continuation; the stop must still land, the limit must
+     still land, and the run's own continuation must leave with the run. */
+  {
+    const q = makeManager()
+    q.manager.create({ id: 'q1', cwd: '/repo' })
+    q.manager.startAuto('q1', { mode: 'complete', limit: 4 })
+    const proc = q.spawns[0].proc
+    proc.emitLines(fixture('turn.jsonl'))      // turn 1: the continuation goes out
+    await tick(10)
+    const typed = q.manager.send('q1', 'a question from the user')  // queued behind the turn in flight
+    proc.emitLines(fixture('turn.jsonl'))      // turn 2: the user's line is served; the continuation queues behind it
+    await tick(10)
+    const queuedBefore = q.manager.get('q1').queued
+    const stopped = q.manager.stopAuto('q1')
+    const writesAtStop = proc.stdin.length
+    proc.emitLines(fixture('turn.jsonl'))      // the (interrupted) turn ends: NOTHING of the run's may be served
+    await tick(10)
+    const later = proc.stdin.slice(writesAtStop)
+    const dropped = q.events.filter((e) => e.id === 'q1' && e.type === 'queue-dropped')
+    ok('auto.4 a continuation queued behind the user\'s own message is dropped with the run on stopAuto — no write after the stop carries the auto prompt — and the drop is said once',
+      typed === 'queued' && queuedBefore === 1 && stopped === true && later.every((l) => !l.includes(A_MARK())) && dropped.length === 1 && dropped[0].count === 1 && q.manager.get('q1').queued === 0,
+      JSON.stringify({ typed, queuedBefore, stopped, later, dropped, snap: q.manager.get('q1') }))
+
+    const l = makeManager()
+    l.manager.create({ id: 'l1', cwd: '/repo' })
+    l.manager.startAuto('l1', { mode: 'complete', limit: 2 })
+    const lp = l.spawns[0].proc
+    lp.emitLines(fixture('turn.jsonl'))       // turn 1 → continuation sent (turn 2 in flight)
+    await tick(10)
+    l.manager.send('l1', 'user line')          // queued behind turn 2
+    lp.emitLines(fixture('turn.jsonl'))       // turn 2 = the limit: stuck first, THEN the user's line served, and no continuation
+    await tick(10)
+    const lAutos = l.events.filter((e) => e.id === 'l1' && e.type === 'auto')
+    const autoWrites = lp.stdin.filter((w) => w.includes(A_MARK())).length
+    ok('auto.4.b at the limit the decision is made BEFORE the queue is served: the user\'s queued line still goes, no third auto prompt ever does, and the chip reads stuck — limit',
+      lAutos[lAutos.length - 1].state === 'stuck' && lAutos[lAutos.length - 1].reason === 'limit' && autoWrites === 2 && lp.stdin.length === 3 && lp.stdin[2].includes('user line'),
+      JSON.stringify({ lAutos, stdin: lp.stdin.length, autoWrites }))
+
+    const h = makeManager()
+    h.manager.create({ id: 'h1', cwd: '/repo' })
+    h.manager.startAuto('h1', { mode: 'complete', limit: 4 })
+    h.manager.interrupt('h1')
+    h.spawns[0].proc.emitLines(fixture('turn.jsonl'))
+    await tick(10)
+    const hAutos = h.events.filter((e) => e.id === 'h1' && e.type === 'auto')
+    ok('auto.4.c an interrupt by hand mid-run resolves the run as stopped — never a chip that spins forever over a turn nobody continues',
+      hAutos[hAutos.length - 1].state === 'stopped' && h.spawns[0].proc.stdin.filter((w) => w.includes(A_MARK())).length === 1,
+      JSON.stringify({ hAutos }))
+  }
+
   /* M98 — grant.1–.2. Main owns pending, so main owns granted: a grant is
      keyed by session AND tool, lives in the tracker, answers the request
      before the renderer ever sees it, is cleared on dispose, and is written
@@ -1426,7 +1477,7 @@ const isResult = (l) => l.includes('"type":"result"')
     const pattern = /backend\s*[!=]==\s*'(?:claude|codex)'|case '(?:claude|codex)':/
     const hits = files.filter((f) => pattern.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const expected = ['shared/layout-schema.ts']
-    ok('registry.1 no consumer switches on the backend name: the only file comparing `backend` to a literal member is the layout parser (absent-vs-malformed needs the literal), and no `case` names a member',
+    ok('registry.1 no file compares a `backend` field to a literal member of the union, and no `case` names one, except the layout parser (absent-vs-malformed needs the literal) — the sheet\'s own `what.kind` vocabulary is outside this grep and is named in the act log',
       JSON.stringify(hits) === JSON.stringify(expected), JSON.stringify(hits))
     const B = M.backends
     const ids = B.BACKEND_IDS

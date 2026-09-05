@@ -283,7 +283,8 @@ const SCENES = [
       // Back to the chat: the row's run moved nothing, and the card sits under the composer.
       await k.goTo('api (chat)')
       await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
-      await k.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      // Raise it over the review node an earlier scene opened on top of it.
+      await k.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (c) c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
       await sleep(500)
       await k.shot('auto')
     } },
@@ -411,9 +412,9 @@ app.whenReady().then(async () => {
         { id: 'memory', kind: 'memory', x: 1200, y: 570, w: 460, h: 420, z: 12, source: { root: REPO } },
         // M73. A chat panel with a recorded conversation in its durable file
         // (seeded below), so the scene shows a transcript with no process.
-        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
+        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 560, h: 360, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
         // M90. The second backend beside the first: the chrome names it, the rest is the same panel.
-        { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api (chat)', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
+        { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })

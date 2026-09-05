@@ -179,6 +179,23 @@ const FACTS = {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   }
 
+  // gate.2 — the gate is the only door OUT. `redactSecrets` may be called by
+  // the gate and by the memory store's write scrub (a store, not a reader)
+  // and nowhere else; every reader of pane text goes through `outward`.
+  {
+    const { readdirSync, statSync } = require('node:fs')
+    const root = join(__dirname, '..', 'src')
+    const files = []
+    const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p) } }
+    walk(root)
+    const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
+    const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
+    const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
+    ok('gate.2 redactSecrets has exactly two callers (the outward gate and the memory store\'s write scrub), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
+      JSON.stringify({ callers, readers, unguarded }))
+  }
+
   // auto.1 (M97) — a mode is a plan with a turn limit; a mode holding a
   // destructive verb without its confirmation is refused by name.
   {

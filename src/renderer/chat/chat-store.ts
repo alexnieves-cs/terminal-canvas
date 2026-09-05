@@ -36,6 +36,8 @@ export interface ChatState {
    * sequence number so an identical request twice is two insertions; the
    * component takes it and clears it.
    */
+  /** M98. Tools main answered from a session grant this launch, in order — the quiet row's source. */
+  granted?: string[]
   insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
   /**
    * M98. The tools main has granted for this session, in grant order. A
@@ -367,9 +369,10 @@ export function applyChatEvent(event: AgentSessionEvent): void {
     }
     case 'permission-auto-allowed':
       // M98. Main answered it from a session grant before it was ever
-      // pending, so there is nothing to remove from `pending` and nothing to
-      // light. An explicit arm rather than the default, so a later reader
-      // does not add one that pushes it onto the pending list.
+      // pending: nothing to remove, nothing to light — but the panel says so
+      // in a quiet row, or a call that ran under a grant is indistinguishable
+      // from one the user allowed by hand.
+      update(event.id, { ...prev, granted: [...(prev.granted ?? []), event.toolName] })
       return
     case 'unknown':
       if (!snap) return

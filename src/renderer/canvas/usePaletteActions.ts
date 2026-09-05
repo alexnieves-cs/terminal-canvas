@@ -1638,7 +1638,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const open = (initial: string, refused?: string): void => {
         setInputMode({
           kind: 'text',
-          label: refused ?? 'verb arguments — e.g. focus n3 · type n3 hello · close n3; several with ;',
+          // The mode names itself on the line (the critic could not tell it from
+          // Rename), and Enter is `run`, not `save`.
+          label: refused ? `Run a verb — ${refused}` : 'Run a verb — e.g. focus n3 · type n3 hello · close n3; several with ;',
+          verb: 'run',
           initial,
           ...(refused ? { feedback: true as const } : {}),
           submit: (line) => {

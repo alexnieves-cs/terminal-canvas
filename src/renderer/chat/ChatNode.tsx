@@ -487,7 +487,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             with a labelled dismiss. Never a decision — main stops the run. */}
         {snapshot?.auto !== undefined && (() => {
           const a = snapshot.auto
-          return <span className={`chat__auto pf__kind${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
+          return <span className={`badge pf__word chat__auto${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
             {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
             {autoChipWords(a)}
             {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
@@ -571,6 +571,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
             <>
+              {chat.granted !== undefined && chat.granted.length > 0 && (
+                <p className="pf__note chat__grant-note" data-chat-grant-note>{chat.granted[chat.granted.length - 1]} ran under a session grant{chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail</p>
+              )}
               {memoryBlock !== null && turnCount === 0 && (
                 <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from this repository will go with your first message</p>
               )}

@@ -157,7 +157,8 @@ interface Session {
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
   abortReason: 'interrupt-timeout' | 'budget' | null
-  queue: { text: string; images: OutgoingImage[] }[]
+  /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
+  queue: { text: string; images: OutgoingImage[]; auto?: true }[]
   pending: Map<string, PendingPermission>
   usage: TokenTotals
   costUsd?: number
@@ -177,6 +178,8 @@ interface Session {
 }
 
 interface AutoRun {
+  /** True while `send` is being called BY the run, so the queue entry is tagged. */
+  sending: boolean
   mode: AutoModeId
   turn: number
   limit: number
@@ -260,6 +263,10 @@ export class AgentSessionManager {
     // M90. A prompt that is an argument has no block to carry an image.
     // Refused whole and stored nowhere, like the budget's refusal.
     if (!BACKENDS[session.backend].images && images.length > 0) return 'refused-images'
+    // M97. A send by hand after a resolved run supersedes its chip: the next
+    // snapshot no longer carries it (the renderer's dismiss is local; this is
+    // main's half, so a workspace switch does not resurrect a dismissed chip).
+    if (session.auto === undefined && session.autoLast !== undefined) session.autoLast = undefined
     const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0 }
     if (limits.budgetUsd > 0 && this.spent() >= limits.budgetUsd) {
       // Nothing stored: a refused message is not a turn, and a transcript that
@@ -274,7 +281,7 @@ export class AgentSessionManager {
         blocks: [{ type: 'text', text }, ...images.map((img) => ({ type: 'image' as const, mediaType: img.mediaType, size: Buffer.byteLength(img.base64, 'base64') }))],
         at: this.now()
       })
-      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
+      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })), ...(session.auto?.sending ? { auto: true as const } : {}) })
       this.emit({ id, type: 'queued', text, reason: 'concurrency' })
       return 'queued'
     }
@@ -294,7 +301,7 @@ export class AgentSessionManager {
     // that window cannot spawn (the thread is still held) and must not be
     // dropped as sent — it queues, and handleExit serves it.
     if (session.inFlight || (BACKENDS[session.backend].oneProcessPerTurn && session.proc !== undefined)) {
-      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
+      session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })), ...(session.auto?.sending ? { auto: true as const } : {}) })
       this.emit({ id, type: 'queued', text, reason: 'in-flight' })
       return 'queued'
     }
@@ -365,12 +372,14 @@ export class AgentSessionManager {
     if (session.auto !== undefined) return { kind: 'refused', reason: `an auto run is already running here (${session.auto.mode}) — stop it first` }
     const prompts = autoPlanOf(opts.mode, id, opts.task)
     const limit = Math.max(1, Math.min(prompts.limit, opts.limit ?? prompts.limit))
-    session.auto = { mode: opts.mode, turn: 0, limit, continuation: prompts.continuation, permissionTimer: null }
+    session.auto = { sending: false, mode: opts.mode, turn: 0, limit, continuation: prompts.continuation, permissionTimer: null }
     session.autoLast = undefined
     this.emitAuto(session, 'running')
+    session.auto.sending = true
     const sent = this.send(id, prompts.opening)
+    if (session.auto) session.auto.sending = false
     if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'no-session') {
-      this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'exit')
+      this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'error')
       return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : 'the send was refused' }
     }
     return { kind: 'started', limit }
@@ -397,31 +406,47 @@ export class AgentSessionManager {
     const run = session.auto
     if (run === undefined) return
     if (run.permissionTimer !== null) { clearTimeout(run.permissionTimer); run.permissionTimer = null }
+    // The run's own continuations leave with it: a continuation queued behind
+    // a message the user typed mid-turn would otherwise be served after the
+    // stop — a paid turn on the auto prompt under a chip that reads stopped.
+    const kept = session.queue.filter((q) => q.auto !== true)
+    const dropped = session.queue.length - kept.length
+    session.queue = kept
+    if (dropped > 0) this.emit({ id: session.id, type: 'queue-dropped', count: dropped })
     session.autoLast = { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
     session.auto = undefined
     this.emit({ id: session.id, type: 'auto', ...session.autoLast })
   }
 
   /**
-   * M97. The decision, on every result of a session with a run live: done if
-   * the last assistant text carries the marker; stuck at the limit; else the
-   * continuation is sent. An interrupted or failed result counts as a turn
-   * but never continues past a failure.
+   * M97. The decision, on every result of a session with a run live — made
+   * BEFORE the queue is served (so a stop or the limit lands even when a
+   * user's message is queued ahead of the continuation), and the
+   * continuation sent AFTER it (so it lands behind what the user typed). An
+   * interrupted result by hand is a stop; an error result is stuck: error.
    */
-  private autoAfterResult(session: Session, event: { ok?: boolean; interrupted: boolean }): void {
+  private autoDecide(session: Session, event: { ok?: boolean; interrupted: boolean }): boolean {
     const run = session.auto
-    if (run === undefined) return
+    if (run === undefined) return false
     run.turn += 1
-    if (event.interrupted) return
+    if (event.interrupted) { this.resolveAuto(session, 'stopped'); return false }
     const last = [...session.turns].reverse().find((t) => t.role === 'assistant')
     const text = last === undefined ? '' : last.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-    if (text.includes(AUTO_DONE_MARKER)) { this.resolveAuto(session, 'done'); return }
-    if (event.ok === false) { this.resolveAuto(session, 'stuck', 'exit'); return }
-    if (run.turn >= run.limit) { this.resolveAuto(session, 'stuck', 'limit'); return }
+    if (text.includes(AUTO_DONE_MARKER)) { this.resolveAuto(session, 'done'); return false }
+    if (event.ok === false) { this.resolveAuto(session, 'stuck', 'error'); return false }
+    if (run.turn >= run.limit) { this.resolveAuto(session, 'stuck', 'limit'); return false }
     this.emitAuto(session, 'running')
+    return true
+  }
+
+  private autoContinue(session: Session): void {
+    const run = session.auto
+    if (run === undefined) return
+    run.sending = true
     const sent = this.send(session.id, run.continuation)
+    if (session.auto === run) run.sending = false
     if (sent === 'refused-budget') this.resolveAuto(session, 'stuck', 'budget')
-    else if (sent !== 'sent' && sent !== 'queued') this.resolveAuto(session, 'stuck', 'exit')
+    else if (sent !== 'sent' && sent !== 'queued') this.resolveAuto(session, 'stuck', 'error')
   }
 
   dispose(id: string): void {
@@ -639,19 +664,22 @@ export class AgentSessionManager {
           session.turnEnded = true
           this.setStatus(session, 'ready')
           this.emit({ id, ...event, interrupted })
-          this.autoAfterResult(session, { ok: event.ok, interrupted })
+          // The continuation queues (the process is still held) and handleExit
+          // serves it — or drops it, if the run resolved in between.
+          if (this.autoDecide(session, { ok: event.ok, interrupted })) this.autoContinue(session)
           return
         }
         if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
         this.emit({ id, ...event, interrupted })
+        // M97. Decide first, serve the queue, then continue: the stop lands
+        // whatever is queued, and the continuation lands behind it.
+        const continueAuto = this.autoDecide(session, { ok: event.ok, interrupted })
         const next = session.queue.shift()
         if (next !== undefined) {
           this.writeUser(session, next.text, next.images)
           this.emit({ id, type: 'dequeued', text: next.text })
         }
-        // M97. After the queue, so a continuation lands behind what the user
-        // typed during the turn rather than ahead of it.
-        this.autoAfterResult(session, { ok: event.ok, interrupted })
+        if (continueAuto) this.autoContinue(session)
         return
       }
       case 'permission-request':

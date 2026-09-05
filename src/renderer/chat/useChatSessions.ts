@@ -1,3 +1,4 @@
+import { carryBackend } from '@shared/agent-backends'
 import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
@@ -42,7 +43,7 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
     // M81. A restored SUPERVISOR carries its system prompt again: the CLI
     // keeps no record of an appended prompt, so a resume without it would
     // leave a panel that looks like a supervisor and is not one.
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...(panel.chat.backend === undefined ? {} : { backend: panel.chat.backend }), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {

@@ -1125,11 +1125,12 @@ app.whenReady().then(async () => {
     // tool name main holds in its own pending record, never by a name the
     // renderer sent. A deny never grants, whatever the scope says.
     answer: ({ id, requestId, answer, scope }) => {
-      if (scope === 'session' && answer.allow) {
-        const toolName = agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName
-        if (toolName !== undefined) approvals?.grant(id, toolName)
-      }
-      return agentSessions?.answerPermission(id, requestId, answer) ?? false
+      const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
+      const answered = agentSessions?.answerPermission(id, requestId, answer) ?? false
+      // Granted only for a request that was really answered: a grant for a
+      // question the process never heard would outlive it invisibly.
+      if (answered && toolName !== undefined) approvals?.grant(id, toolName)
+      return answered
     },
     grants: (id) => approvals?.grantsOf(id) ?? [],
     revokeGrants: (id) => { approvals?.revoke(id) },
