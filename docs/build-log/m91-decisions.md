@@ -77,3 +77,14 @@ now at the same thickness as every other frame (`far-line.1`). (7) The cluster's
 the fixture's camera. (8) `⌘N` and `⌘⇧N` are two verbs (the default preset now; the sheet),
 and each line names its own.
 
+## What the chain caught after the merge
+
+The first full run went red on two panel checks, both from the wider rail — and the merge
+had already landed on a grep that succeeded regardless of the chain's exit code, so this
+milestone carries a second merge commit. `shell.1` pinned the literal `260`; it reads the
+new width now (a token rather than a literal would be the third place a width lives, and
+the check is the pin). `drop.1` was the real find: the `__m59Drop` hook handed CLIENT
+coordinates to a host-relative `dropPath`, an error the size of the shell's left columns
+that the 260px rail had hidden because the slot's centre still fell inside the panel. The
+hook subtracts the host's origin now, as the real `onDrop` always did. Lesson for the
+harness: a check that passes by a margin measured in pixels is one layout token from red.

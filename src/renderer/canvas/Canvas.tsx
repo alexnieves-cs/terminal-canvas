@@ -3006,7 +3006,15 @@ export function Canvas({
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
     // M59. The drop door, by screen point — see dropPath.
-    w.__m59Drop = (path: string, x: number, y: number): string => dropPath(path, { x, y })
+    // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
+    // and subtracts the host's origin, exactly as the real onDrop does — the
+    // first version handed them to dropPath raw, which is host-relative, and
+    // an error the size of the shell's left columns went unseen while the
+    // rail was 260px (the slot's centre still fell inside the panel).
+    w.__m59Drop = (path: string, x: number, y: number): string => {
+      const bounds = hostRef.current?.getBoundingClientRect()
+      return dropPath(path, { x: x - (bounds?.left ?? 0), y: y - (bounds?.top ?? 0) })
+    }
     // M21's mint, through the SAME openToolboxPanel the inspector button and
     // the palette row both call — so the hook proves the real path rather than
     // a parallel one, the rule __m13Open already obeys.
