@@ -114,7 +114,7 @@ import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
-import { SUPERVISOR_PROMPT, REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
+import { SUPERVISOR_PROMPT, REASON_CODEX_NO_TERMINAL, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
@@ -4416,6 +4416,8 @@ export function Canvas({
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
             onNewChat={paletteActions.newChat}
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
+            onNewCodexChat={() => { void beginNewChat({ backend: 'codex' }) }}
+            codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (

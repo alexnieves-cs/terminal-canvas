@@ -18,6 +18,9 @@ export interface LauncherProps {
   onNewChat: () => void
   /** Null when claude is on the login PATH; otherwise the reason. */
   chatReason: string | null
+  /** M91. The codex door: its reason when the CLI is absent. */
+  onNewCodexChat: () => void
+  codexReason: string | null
 }
 
 /**
@@ -43,7 +46,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason }: LauncherProps): JSX.Element {
   const found = report ? report.clis.filter((c) => c.path !== null).map((c) => c.name) : []
   const missing = report ? report.clis.filter((c) => c.path === null).map((c) => c.name) : []
   return (
@@ -71,10 +74,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
               className="launcher__verb"
               data-launcher-preset={p.id}
               disabled={!p.available}
-              title={p.available ? `New ${p.name} panel` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
+              title={p.available ? `Start ${p.name} ${p.subtitle.replace(/^.*— /, 'in ')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
               {...shellControl(() => { if (p.available) onSpawnPreset(p.id) })}
             >
-              <span className="launcher__verb-name">{p.name}</span>
+              {/* M91. A verb reads as an invitation, not a preset's name: `Start Claude…`
+                  says what the click does where `Claude` only says what it is. */}
+              <span className="launcher__verb-name">Start {p.name}…</span>
               <span className="launcher__verb-hint">{p.available ? `in ${p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
             </button>
           )
@@ -83,8 +88,14 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
             starts in a terminal, rendered as a transcript. */}
         <button type="button" className="launcher__verb" data-launcher-new-chat disabled={chatReason !== null}
           title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>
-          <span className="launcher__verb-name">Chat with claude…</span>
+          <span className="launcher__verb-name">Chat with Claude…</span>
           <span className="launcher__verb-hint">{chatReason === null ? 'a conversation panel — the same agent, no terminal' : chatReason}</span>
+        </button>
+        {/* M90/M91. The second backend's door, beside the first, disabled by name. */}
+        <button type="button" className="launcher__verb" data-launcher-new-codex disabled={codexReason !== null}
+          title={codexReason === null ? 'A chat with codex, in your home directory' : codexReason} {...shellControl(() => { if (codexReason === null) onNewCodexChat() })}>
+          <span className="launcher__verb-name">Chat with Codex…</span>
+          <span className="launcher__verb-hint">{codexReason === null ? 'a conversation panel — codex, one process per turn' : codexReason}</span>
         </button>
         <button type="button" className="launcher__verb" data-launcher-open-file title="Open a file as a panel" {...shellControl(onOpenFile)}>
           <span className="launcher__verb-name">Open a file…</span>

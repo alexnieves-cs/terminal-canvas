@@ -152,3 +152,4 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   statement (M44) says what the panels cannot offer.
 
 - **M90.** `chat with codex` is present and disabled by name when codex is absent (the sheet); a codex chat's Interrupt mid-turn, its terminal door and an image attachment are each refused with a sentence naming the fix; a codex send with no codex configured is `refused-backend`, never a spawn of a bare name.
+- **M91.** The launcher's `Chat with codex…` door is present and disabled by name when codex is absent; every launcher verb is an invitation with a hint naming where it lands.

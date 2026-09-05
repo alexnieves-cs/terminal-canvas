@@ -521,6 +521,10 @@ Every entry in this section exists because the naive version fails *silently*. I
 every session's context — it is ~145KB of prose that is needed when you are about to change
 one specific module, not on every turn.
 
+**M91 recovered ~190 M1–M24 entries the file had dropped into
+[docs/load-bearing-recovered.md](docs/load-bearing-recovered.md)** — symbol-checked, not
+re-verified; search both files.
+
 **Read it before changing anything, and search it rather than scrolling it.** Nearly every
 entry names its own module in backticks, so `grep -n 'pty-manager' docs/load-bearing.md` is
 the reliable way in. The subsystem keyword clusters worth knowing are

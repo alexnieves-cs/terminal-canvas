@@ -1,5 +1,9 @@
 # Load-bearing details
 
+> **M91.** ~190 entries the M24-era draft carried and this file had dropped live in
+> [load-bearing-recovered.md](load-bearing-recovered.md), symbol-checked but not re-verified.
+> Search both.
+
 > Split out of `CLAUDE.md` so it is not resident in every session's context.
 > Nothing here changed; `CLAUDE.md` keeps the pointer and the reading
 > instructions. Cross-references elsewhere in the repo that say "see
