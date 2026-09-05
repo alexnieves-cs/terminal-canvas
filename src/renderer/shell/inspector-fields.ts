@@ -69,6 +69,8 @@ export interface InspectorModel {
   fields: InspectorField[]
   reattached: boolean
   restartable: boolean
+  /** M92. The three layout facts, present only when one is set — the pane's toggles read them. */
+  marks?: { locked: boolean; pinned: boolean; maximised: boolean }
   /** M63. What panelState needs for the pinned state word — the kind, the status and dormancy. */
   state: StateInput
   /**
@@ -433,7 +435,7 @@ export interface ChatInspectorInput {
   ran?: boolean
 }
 
-export function buildInspectorModel(
+export function buildInspectorModelBare(
   panel: Panel,
   status: PanelStatus | undefined,
   /**
@@ -1146,4 +1148,23 @@ export function visibleDetailFields(fields: readonly InspectorField[]): Inspecto
     if (f.key === 'command' && agree) return [{ ...f, label: 'command · as asked' }]
     return [f]
   })
+}
+
+/** M92. Every model carries the panel's marks, added ONCE here rather than in each kind's arm. */
+export function buildInspectorModel(
+  panel: Panel,
+  status: PanelStatus | undefined,
+  live?: LiveSession | undefined,
+  panels?: Panel[],
+  usage?: PanelUsage | undefined,
+  sessionOptions?: AgentOptions | undefined,
+  typography?: { fontSize: number; isDefault: boolean } | undefined,
+  dormant?: boolean,
+  chat?: ChatInspectorInput | undefined
+): InspectorModel {
+  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat)
+  if (panel.locked === true || panel.pinned === true || panel.maximised !== undefined) {
+    return { ...model, marks: { locked: panel.locked === true, pinned: panel.pinned === true, maximised: panel.maximised !== undefined } }
+  }
+  return model
 }

@@ -17845,6 +17845,106 @@ app.whenReady().then(async () => {
       }
     }
 
+    /* ---------------------------------------------------------------- */
+    /* M92. Lock, pin and maximise through the real surfaces             */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['lockpin.1 a locked panel does not move under a real chrome drag while its handles and close stay; a pinned panel carries its mark and stays live; maximise fills the host inset by the margin with a restore rect, the chrome control reads restore, Restore puts it back, and both are single undo entries; every row and mark names its state']
+      const lLog = []
+      const onL = (_e, _l, m) => { lLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onL)
+      try {
+        layoutStore.save({ panels: [
+          { id: 'lkA', x: 200, y: 200, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] },
+          { id: 'lkB', x: 900, y: 200, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'lkA', focusedId: 'lkA' })
+        flushLayoutStore()
+        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reL
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lkA"] .panel__slot') !== null`), 8000)
+        const openP = async () => {
+          await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+          return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        }
+        const closeP = () => wc.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true`)
+        const rowState = async (rowId) => {
+          const opened = await openP()
+          if (opened !== true) return 'no palette'
+          const r = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify(rowId)}) + ']'); if (!el) return 'no row'; return el.className.includes('palette__row--disabled') ? 'disabled: ' + (el.getAttribute('title') || el.textContent || '') : 'enabled' })()`)
+          await closeP(); await settle()
+          return r
+        }
+        const runRow = async (rowId) => {
+          const opened = await openP()
+          if (opened !== true) return 'no palette'
+          const r = await wc.executeJavaScript(`(() => {
+            const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify(rowId)}) + ']')
+            if (!el) return 'no row'
+            if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+            return true })()`)
+          await settle()
+          return r
+        }
+        const rectOf = (id) => wc.executeJavaScript(`(() => { const el = document.querySelector('.panel[data-panel-id="${id}"]'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height } })()`)
+        const chromeOf = (id) => wc.executeJavaScript(`(() => { const el = document.querySelector('.panel[data-panel-id="${id}"] .pf__chrome'); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 } })()`)
+        // Focus lkA by a real click on its chrome so the palette captures it.
+        const c0 = await chromeOf('lkA')
+        wc.sendInputEvent({ type: 'mouseDown', x: c0.x, y: c0.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: c0.x, y: c0.y, button: 'left', clickCount: 1 })
+        await settle()
+        const unlockBefore = await rowState('panel.unlock')
+        const locked = await runRow('panel.lock')
+        const mark = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="lkA"] [data-panel-locked]'); return m ? { title: m.title, handles: document.querySelectorAll('.panel[data-panel-id="lkA"] .pf__handle, .panel[data-panel-id="lkA"] .panel__handle').length, close: document.querySelector('.panel[data-panel-id="lkA"] .pf__close') !== null } : false })()`), 4000)
+        const before = await rectOf('lkA')
+        const c1 = await chromeOf('lkA')
+        wc.sendInputEvent({ type: 'mouseDown', x: c1.x, y: c1.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 6; i++) { wc.sendInputEvent({ type: 'mouseMove', x: c1.x + i * 25, y: c1.y + i * 15, buttons: 1 }); await sleep(20) }
+        wc.sendInputEvent({ type: 'mouseUp', x: c1.x + 150, y: c1.y + 90, button: 'left', clickCount: 1 })
+        await settle()
+        const after = await rectOf('lkA')
+        const lockAgain = await rowState('panel.lock')
+        // Pin.
+        const pinned = await runRow('panel.pin')
+        const pinMark = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="lkA"] [data-panel-pinned]'); return m ? { title: m.title } : false })()`), 4000)
+        layoutStore.flushSync()
+        const stored = (layoutStore.initial().panels || []).find((p) => p.id === 'lkA')
+        // Maximise, through the chrome control, and Restore through the row.
+        const host = await wc.executeJavaScript(`(() => { const h = document.querySelector('.canvas'); const r = h.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height } })()`)
+        const clickedFill = await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="lkA"] [data-panel-maximise="maximise"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await settle()
+        const maxRect = await rectOf('lkA')
+        const control = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="lkA"] [data-panel-maximise]')?.getAttribute('data-panel-maximise') ?? null`)
+        const restored = await runRow('panel.restore')
+        const backRect = await rectOf('lkA')
+        // Undo: one entry for restore, one for maximise.
+        wc.send('edit:undo'); await settle()
+        const undoOnce = await rectOf('lkA')
+        wc.send('edit:undo'); await settle()
+        const undoTwice = await rectOf('lkA')
+        const near = (a, b, tol = 2) => a !== null && b !== null && Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol
+        const fills = maxRect !== null && Math.abs(maxRect.x - (host.x + 16)) <= 2 && Math.abs(maxRect.y - (host.y + 16)) <= 2 && Math.abs(maxRect.w - (host.w - 32)) <= 2 && Math.abs(maxRect.h - (host.h - 32)) <= 2
+        ok(IDS[0],
+          /not locked/.test(unlockBefore) && locked === true && mark && /Unlock/.test(mark.title) && mark.close === true &&
+            near(before, after) && /already locked/.test(lockAgain) &&
+            pinned === true && pinMark && /Unpin/.test(pinMark.title) && stored && stored.locked === true && stored.pinned === true &&
+            clickedFill === true && fills && control === 'restore' && restored === true && near(backRect, before) &&
+            near(undoOnce, maxRect) && near(undoTwice, before),
+          JSON.stringify({ unlockBefore, locked, mark, before, after, lockAgain, pinned, pinMark, stored: stored && { locked: stored.locked, pinned: stored.pinned }, host, clickedFill, maxRect, control, restored, backRect, undoOnce, undoTwice, log: lLog.slice(-3) }))
+        await wc.executeJavaScript(`window.__m4aSessions ? null : null`)
+        for (const id of ['lkA', 'lkB']) { try { await ptyManager.kill(id) } catch {} }
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reL2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reL2
+        await settle()
+      } catch (lErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr) + ' | renderer: ' + (lLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onL)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

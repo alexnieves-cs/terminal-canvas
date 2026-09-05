@@ -158,3 +158,17 @@ export const KindGithub = (p: IconProps): JSX.Element => (
 )
 
 export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher } as const
+
+/** M92. A lock: the closed padlock, a state mark on a frame. */
+export const Lock = (
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3.5" y="7.5" width="9" height="6" rx="1" />
+    <path d="M5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2" />
+  </svg>
+)
+/** M92. A pin: the drawing pin, a state mark on a frame. */
+export const Pin = (
+  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M9.5 2.5l4 4-2 1-1.5 3.5-3-3L3 12.5l3.5-4-3-3L7 4z" />
+  </svg>
+)

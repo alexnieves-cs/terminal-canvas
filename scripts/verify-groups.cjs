@@ -70,5 +70,21 @@ const group = { id: 'g1', label: 'auth refactor', colour: 'blue', panelIds: ['n1
     restored.label === 'auth' && restored.collapsed === true && restored.panelIds.join(',') === 'n1',
     JSON.stringify(restored))
 }
+{
+  // M92. A locked member stays where it is under a group drag: the drag state
+  // is built for the UNLOCKED members only, so the locked one neither moves
+  // nor shears the others (each member still recomputes from its own origin).
+  const withLock = panels.map((p) => (p.rect.id === 'n1' ? { ...p, locked: true } : p))
+  const state = G.groupDragState(group, withLock, { x: 10, y: 20 })
+  const moved = G.applyGroupDrag(withLock, state, { x: 180, y: -30 })
+  const a = moved.find((p) => p.rect.id === 'n1').rect
+  const b = moved.find((p) => p.rect.id === 'n2').rect
+  ok('lock.1 a group drag skips a locked member and moves the rest by the same delta',
+    a.x === withLock[0].rect.x && a.y === withLock[0].rect.y &&
+      b.x - withLock[1].rect.x === 170 && b.y - withLock[1].rect.y === -50 &&
+      state.members.length === 1 && G.lockedCount(group, withLock) === 1,
+    JSON.stringify({ a, b, members: state.members.length }))
+}
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)
 if (results.some((r) => !r.pass)) process.exit(1)

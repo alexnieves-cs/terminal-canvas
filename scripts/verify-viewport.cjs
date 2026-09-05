@@ -2020,6 +2020,51 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ cam, centre }))
 }
 
+// M92. PINS are counted INSIDE assignTiers: promoted first, in array order,
+//      before the focused panel and before recency; a pin off-screen is still
+//      live (that is what a pin is for); pins past the budget are carded in
+//      array order, which is the same count the verb's refusal reads.
+{
+  const rects = []
+  for (let i = 0; i < 12; i++) rects.push(panelAt('p' + i, 100 + i * 10, 100))
+  const far = panelAt('farpin', 90000, 90000)
+  const all = [...rects, far]
+  const tiers = V.assignTiers({
+    rects: all, viewport: AT_ORIGIN, size: SIZE, focusedId: 'p11', lastFocusedAt: { p0: 100, p1: 90 },
+    pinnedIds: new Set(['farpin', 'p5', 'p6']), budget: 4
+  })
+  const beyond = V.assignTiers({
+    rects: all, viewport: AT_ORIGIN, size: SIZE, focusedId: null, lastFocusedAt: {},
+    pinnedIds: new Set(['p0', 'p1', 'p2', 'p3', 'p4', 'p5']), budget: 4
+  })
+  // Focus is NEVER carded: with pins filling the budget it evicts the last pin.
+  const full = V.assignTiers({
+    rects: all, viewport: AT_ORIGIN, size: SIZE, focusedId: 'p9', lastFocusedAt: {},
+    pinnedIds: new Set(['p0', 'p1', 'p2', 'p3']), budget: 4
+  })
+  ok('pin.1 pins are live first (an off-screen pin included), then the focused panel, then recency; pins past the budget are carded in array order; the focused panel is never carded (it evicts the last pin); pinCount counts terminals only and PIN_MAX is one below the budget',
+    tiers.farpin === 'live' && tiers.p5 === 'live' && tiers.p6 === 'live' && tiers.p11 === 'live' && tiers.p0 === 'card' &&
+      beyond.p0 === 'live' && beyond.p3 === 'live' && beyond.p4 === 'card' && beyond.p5 === 'card' &&
+      full.p9 === 'live' && full.p3 === 'card' && full.p0 === 'live' &&
+      V.pinCount([{ kind: 'terminal', pinned: true }, { kind: 'review', pinned: true }, { kind: 'terminal' }]) === 1 &&
+      V.PIN_MAX === V.LIVE_BUDGET - 1 &&
+      typeof V.pinRefusal('review', false, 0) === 'string' && typeof V.pinRefusal('terminal', false, V.PIN_MAX) === 'string' && V.pinRefusal('terminal', false, 0) === undefined,
+    JSON.stringify({ tiers, beyond, full }))
+}
+
+// M92. MAXIMISE is a rect: the visible viewport in world units at the current
+//      scale, inset by a margin — pure arithmetic over the camera.
+{
+  const vp = { x: -200, y: -100, scale: 0.5 }
+  const rect = V.maximiseRect(vp, SIZE, 16)
+  // world -> screen is world * scale + camera; the rect's corner must land on the margin.
+  const back = { x: rect.x * vp.scale + vp.x, y: rect.y * vp.scale + vp.y }
+  ok('max.1 maximiseRect fills the visible viewport at the current scale, inset by the margin in screen pixels',
+    Math.abs(back.x - 16) < 0.01 && Math.abs(back.y - 16) < 0.01 &&
+      Math.abs(rect.w * vp.scale - (SIZE.width - 32)) < 0.01 && Math.abs(rect.h * vp.scale - (SIZE.height - 32)) < 0.01,
+    JSON.stringify({ rect, back }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

@@ -1,6 +1,7 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer } from '@renderer/chat/chat-store'
@@ -85,6 +86,13 @@ export interface PaletteActionsDeps {
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>
+  /** M92. Lock, pin and maximise, each with its opposite. */
+  lockPanel: (id: string) => void
+  unlockPanel: (id: string) => void
+  pinPanel: (id: string) => void
+  unpinPanel: (id: string) => void
+  maximisePanel: (id: string) => void
+  restorePanel: (id: string) => void
   /** M80. Instantiate a template: every node and edge in one history entry. */
   instantiateTemplate: (template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>
   /** M74. The two front-end verbs. */
@@ -146,6 +154,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -384,37 +393,37 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             const next: Panel[] = prev.map((p) => {
               if (p.rect.id !== id) return p
               if (isReviewPanel(p)) {
-                return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               if (isFilePanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
-              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+              if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               if (isToolboxPanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M83. The seventh arm — a memory node carries its root.
               if (isMemoryPanel(p)) {
-                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M88. The ninth arm — a github panel carries nothing but its title.
               if (isGithubPanel(p)) {
-                return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M84. The eighth arm — a watcher carries its whole record.
               if (isWatcherPanel(p)) {
-                return { kind: p.kind, rect: p.rect, watch: p.watch, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, watch: p.watch, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M73. The sixth arm; `verify:layout chat.1` is the parse side of
               // the same field-by-field rule this rename obeys.
               if (isChatPanel(p)) {
-                return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
               // silently dropped a font override and every link the panel
               // held — found while adding the override, fixed for both.
-              return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name,
+              return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z, title: name, ...carryMarks(p),
                 ...(p.links === undefined ? {} : { links: p.links }),
                 ...(p.fontSize === undefined ? {} : { fontSize: p.fontSize }) }
             })
@@ -446,7 +455,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // rejects; order never changes, so the arrangement keeps its meaning.
       setPanels((prev) => {
         const wanted = new Set(ids)
-        const chosen = prev.filter((p) => wanted.has(p.rect.id))
+        // M92. A locked panel stays where it is under Arrange too.
+        const chosen = prev.filter((p) => wanted.has(p.rect.id) && p.locked !== true)
         if (chosen.length < 2) return prev
         const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
         const next = prev.map((p) => {
@@ -472,6 +482,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           if (p.rect.id !== id || !isTerminalPanel(p)) return p
           return { kind: p.kind, rect: p.rect, spec: p.spec, z: p.z,
             ...(p.title === undefined ? {} : { title: p.title }),
+            ...carryMarks(p),
             ...(p.links === undefined ? {} : { links: p.links }),
             ...(size === undefined ? {} : { fontSize: size }) }
         })
@@ -1039,6 +1050,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
      * the user asked to replace; the control's own title is where the warning
      * lives instead.
      */
+    // M92. Pass-throughs: the rule lives in Canvas beside the record.
+    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
     restartPanel: (id) => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
       // A sessionless panel has no process to restart. The isRestartable gate
@@ -1504,5 +1517,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
+       lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
 }

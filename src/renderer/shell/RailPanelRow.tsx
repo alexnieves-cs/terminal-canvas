@@ -2,7 +2,7 @@ import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
-import { Close, KIND_GLYPH } from '@renderer/icons'
+import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
 import { panelState } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
 import { useWatch } from '@renderer/watcher/watcher-store'
@@ -102,6 +102,9 @@ function RailPanelRowImpl({
           <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
         )}
         <span className="rail-row__label">{row.label}</span>
+        {/* M92. Lock and pin marks after the label, the same glyphs the frame paints. */}
+        {row.locked === true && <span className="rail-row__mark" data-rail-locked title="locked">{Lock}</span>}
+        {row.pinned === true && <span className="rail-row__mark" data-rail-pinned title="pinned live">{Pin}</span>}
         {/* M63. The kind already sits in the glyph column; the state column
             is for state, so a sessionless row leaves it empty rather than
             saying its kind a second time. */}

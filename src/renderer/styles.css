@@ -3677,3 +3677,11 @@ body {
 .chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
 .chat__chip-remove:hover { color: var(--fg); }
 .chat__image { color: var(--fg-2); }
+
+/* M92. Lock and pin are marks in the chrome row, dim like the kind glyph
+   with the fix in their title; the maximise verb is the word control every
+   kind's chrome already uses. A group's locked count sits after its label. */
+.pf__mark { display: inline-flex; align-items: center; color: var(--fg-3); flex: 0 0 auto; }
+.pf__mark svg { width: 14px; height: 14px; }
+.pf__maximise { flex: 0 0 auto; }
+.canvas-group__locked { margin-left: var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }

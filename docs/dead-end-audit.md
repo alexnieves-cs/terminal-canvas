@@ -153,3 +153,4 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 
 - **M90.** `chat with codex` is present and disabled by name when codex is absent (the sheet); a codex chat's Interrupt mid-turn, its terminal door and an image attachment are each refused with a sentence naming the fix; a codex send with no codex configured is `refused-backend`, never a spawn of a bare name.
 - **M91.** The launcher's `Chat with codex…` door is present and disabled by name when codex is absent; every launcher verb is an invitation with a hint naming where it lands.
+- **M92.** Six palette rows for lock/unlock, pin/unpin, maximise/restore, each present and disabled naming the state; the ninth pin names the count and the fix; a locked panel's handles stay with the fix in their title; the frame's `fill` control is disabled by name in the merged view.

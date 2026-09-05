@@ -1,4 +1,4 @@
-import { useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
@@ -6,7 +6,8 @@ import type { Panel } from '@renderer/panels/panels'
 import type { PanelStateWord } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
-import { Close, KIND_GLYPH } from '@renderer/icons'
+import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
+import { shellControl } from '@renderer/shell/shell-control'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -47,6 +48,22 @@ export interface PanelFrameClose {
   /** Extra attributes for a check to find the control by. */
   attrs?: Record<string, string | boolean | undefined>
 }
+
+
+/**
+ * M92. The marks a frame paints — lock, pin, maximised — keyed by panel id,
+ * provided ONCE by the canvas the way `CardDetailContext` provides the tier,
+ * so no kind has to thread three props it does not understand. `maximise` and
+ * `restore` are the verbs the chrome control runs; `readOnly` is the merged
+ * view, where the control is disabled by name.
+ */
+export interface PanelMarks {
+  marks: ReadonlyMap<string, { locked: boolean; pinned: boolean; maximised: boolean }>
+  maximise: (id: string) => void
+  restore: (id: string) => void
+  readOnly: boolean
+}
+export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
 
 export interface PanelFrameProps {
   id: string
@@ -95,6 +112,8 @@ export function PanelFrame({
 }: PanelFrameProps): JSX.Element {
   // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
   // process kind's is its state's, a document kind's is `kind`.
+  const marks = useContext(PanelMarksContext)
+  const mark = marks.marks.get(id)
   const tone = state?.tone ?? rootAttrs?.['data-tone'] ?? 'kind'
   // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
   // summary in place of its body; below BLOCK_ENTER, a block in its tone. The
@@ -140,7 +159,17 @@ export function PanelFrame({
           <span className="pf__state pf__state--kind" data-tone="kind" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind]; return <G /> })()}</span>
         )}
         <span className="pf__title panel__title">{title}</span>
+        {/* M92. Lock and pin are STATE MARKS with the fix in their title; maximise is a control. */}
+        {mark?.locked && <span className="pf__mark pf__mark--lock" data-panel-locked title="locked — drag and resize refuse; Unlock panel in the palette or the pane">{Lock}</span>}
+        {mark?.pinned && <span className="pf__mark pf__mark--pin" data-panel-pinned title="pinned — kept live wherever the camera is; Unpin panel in the palette or the pane">{Pin}</span>}
         {chrome}
+        {close !== null && (
+          <button type="button" className="pf__verb pf__verb--word pf__maximise" data-panel-maximise={mark?.maximised ? 'restore' : 'maximise'}
+            disabled={marks.readOnly}
+            title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
+            aria-label={mark?.maximised ? 'Restore panel' : 'Maximise panel'}
+            {...shellControl(() => { if (!marks.readOnly) (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? 'restore' : 'fill'}</button>
+        )}
         {close !== null && (
           <button
             type="button"
