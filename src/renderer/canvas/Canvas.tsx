@@ -110,11 +110,12 @@ import { getChat, insertIntoComposer, attachToComposer } from '@renderer/chat/ch
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
-import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
+import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
-import { SUPERVISOR_PROMPT, REASON_CODEX_NO_TERMINAL, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
+import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
+import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
@@ -127,7 +128,7 @@ import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
-import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession } from '@renderer/chat/chat-store'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
@@ -1353,7 +1354,7 @@ export function Canvas({
     const offSession = onChatSession((id, sessionId) => {
       setPanels((current) => {
         const panel = current.find((p) => p.rect.id === id)
-        if (!panel || !isChatPanel(panel) || panel.chat.backend !== 'codex' || panel.chat.sessionId === sessionId) return current
+        if (!panel || !isChatPanel(panel) || !BACKENDS[backendOf(panel.chat)].adoptsThreadId || panel.chat.sessionId === sessionId) return current
         return current.map((p) => (p === panel ? { ...panel, chat: { ...panel.chat, sessionId } } : p))
       })
     })
@@ -3643,7 +3644,7 @@ export function Canvas({
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
     // M90. The backend rides the create and the record; absent stays absent.
-    const backend = opts?.backend === 'codex' ? { backend: 'codex' as const } : {}
+    const backend = carryBackend(opts ?? {})
     const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
@@ -3699,8 +3700,9 @@ export function Canvas({
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const panel = panelsRef.current.find((p) => p.rect.id === id)
     if (!panel || !isChatPanel(panel)) return { kind: 'refused', reason: 'only a chat panel can open in a terminal' }
-    // M90. The terminal door is `claude --resume`; a codex chat has no such door.
-    if (panel.chat.backend === 'codex') return { kind: 'refused', reason: REASON_CODEX_NO_TERMINAL }
+    // M90/M99. The terminal door is `claude --resume`; a backend without one refuses by its row's reason.
+    const row = BACKENDS[backendOf(panel.chat)]
+    if (!row.terminalDoor) return { kind: 'refused', reason: row.reasons.noTerminal }
     // The precondition IN the verb, not only on its three doors (M74's
     // verifier): a turn in flight or a permission waiting is one front-end
     // still working, and an empty chat has nothing to resume.
@@ -4469,7 +4471,7 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
-                  claudeAvailable={panel.chat.backend === 'codex' ? codexAvailable(presetRows) : claudeAvailable(presetRows)}
+                  claudeAvailable={backendAvailable(presetRows, backendOf(panel.chat))}
                   onOpenInTerminal={openInTerminal}
                 />
               )
@@ -4683,6 +4685,7 @@ export function Canvas({
         onLock={paletteActions.lockPanel} onUnlock={paletteActions.unlockPanel} onPin={paletteActions.pinPanel} onUnpin={paletteActions.unpinPanel} onMaximise={paletteActions.maximisePanel} onRestore={paletteActions.restorePanel} pinnedCount={pinCount(panels)}
         onFrontEnd={onFrontEnd}
         onAnswer={paletteActions.answerApproval}
+        onRevokeGrants={revokeChatGrants}
         onOpenReview={paletteActions.openReview}
         onLink={paletteActions.beginLink}
         onRemoveLink={paletteActions.removeLink}

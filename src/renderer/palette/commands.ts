@@ -129,8 +129,8 @@ export interface PaletteActions {
   setDefaultPreset(id: string): void
   goToPanel(id: string): void
   insertPrompt(id: string): void
-  /** M76. Answer a chat's pending permission request from anywhere. */
-  answerApproval(id: string, requestId: string, allow: boolean): void
+  /** M76. Answer a chat's pending permission request from anywhere. M98: `scope: 'session'` also grants the tool. */
+  answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
@@ -599,7 +599,8 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
 export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
-import { REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
+import type { AgentBackend } from '@shared/agent-session'
+import { BACKENDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
@@ -637,6 +638,12 @@ export function claudeAvailable(presets: readonly PresetRow[]): boolean {
 /** M90. The same fact for codex — the built-in codex preset's probe. */
 export function codexAvailable(presets: readonly PresetRow[]): boolean {
   return presets.some((p) => p.agent === 'codex' && p.available)
+}
+
+/** M99. The fact by ROW: a panel asks for its own backend's availability without naming one. */
+export function backendAvailable(presets: readonly PresetRow[], backend: AgentBackend): boolean {
+  const probes: Record<AgentBackend, (rows: readonly PresetRow[]) => boolean> = { claude: claudeAvailable, codex: codexAvailable }
+  return probes[backend](presets)
 }
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
@@ -840,7 +847,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         },
         ctx.capturedId === null ? REASON_NO_FOCUS
           : target === undefined || target.kind !== 'chat' ? REASON_NOT_CHAT
-            : target.backend === 'codex' ? REASON_CODEX_NO_TERMINAL
+            : target.backend !== undefined && !BACKENDS[target.backend].terminalDoor ? BACKENDS[target.backend].reasons.noTerminal
             : target.busy === true ? REASON_CHAT_BUSY
               : (target.turns ?? 0) === 0 ? REASON_CHAT_EMPTY : undefined
       )

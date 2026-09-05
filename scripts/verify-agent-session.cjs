@@ -1434,6 +1434,21 @@ const isResult = (l) => l.includes('"type":"result"')
         !B.BACKENDS.claude.oneProcessPerTurn && B.BACKENDS.claude.interrupts && B.BACKENDS.claude.asksPermission &&
         M.cost.AGENT_CAPABILITIES.codex.headless.interrupts === B.BACKENDS.codex.interrupts && M.cost.AGENT_CAPABILITIES['claude-code'].headless.permissions === B.BACKENDS.claude.asksPermission,
       JSON.stringify(rows.map((r) => r.id)))
+    // registry.3 — the copy sites' one rule, and M90's names. `carryBackend`
+    // writes NOTHING for an absent backend and nothing for the default, so a
+    // claude record never grows a key through a by-name rebuild (panels.ts,
+    // layout-adapt.ts, useRailModels.ts, Canvas's create all spread it). And
+    // the four M90 constants are ALIASES of the registry's rows — pinned as
+    // text, the way grant.2 pins the absence of a store — so a check that
+    // regexes REASON_CODEX_NO_TERMINAL and a panel reading
+    // `reasons.noTerminal` are reading one sentence.
+    const carried = [B.carryBackend({}), B.carryBackend({ backend: 'claude' }), B.carryBackend({ backend: 'codex' })]
+    const aliasSrc = readFileSync(join(root, 'shared', 'agent-session.ts'), 'utf8')
+    ok('registry.3 carryBackend writes no key for an absent or default backend and the member for any other; the M90 reason constants are aliases of the registry rows',
+      Object.keys(carried[0]).length === 0 && Object.keys(carried[1]).length === 0 && carried[2].backend === 'codex' &&
+        /REASON_NO_CODEX = BACKENDS\.codex\.reasons\.noCli/.test(aliasSrc) && /REASON_CODEX_NO_INTERRUPT = BACKENDS\.codex\.reasons\.noInterrupt/.test(aliasSrc) &&
+        /REASON_CODEX_NO_IMAGES = BACKENDS\.codex\.reasons\.noImages/.test(aliasSrc) && /REASON_CODEX_NO_TERMINAL = BACKENDS\.codex\.reasons\.noTerminal/.test(aliasSrc),
+      JSON.stringify({ carried }))
   }
 
   const failed = results.filter((r) => !r.pass)

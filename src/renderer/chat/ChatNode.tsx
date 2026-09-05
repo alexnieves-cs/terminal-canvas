@@ -6,10 +6,11 @@ import type { DirResult } from '@shared/fs-tree'
 import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { REASON_CODEX_NO_TERMINAL } from '@shared/agent-session'
+import { BACKENDS, backendOf } from '@shared/agent-backends'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat } from './chat-store'
+import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext } from './memory-context'
 import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
@@ -192,7 +193,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const state = panelState({ kind: 'chat', status: undefined, dormant: false, ...(stateInput === undefined ? {} : { chat: stateInput }) }, undefined)
   // M90. The backend from the record (absent is claude); the snapshot's word
   // agrees once main answers. Every codex difference is a named reason.
-  const backend = props.panel.chat.backend ?? 'claude'
+  const backend = backendOf(props.panel.chat)
   const composer = composerState(snapshot, props.claudeAvailable, backend)
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
@@ -373,8 +374,13 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     if (!composer.interrupt.enabled) return
     void window.canvas.agentSession.interrupt(id)
   }
-  const answer = (requestId: string, allow: boolean): void => {
-    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE } })
+  // M98. `scope: 'session'` is the third verb: main grants the tool, then
+  // answers through the same door. The scope is written only when given —
+  // an `undefined` key would cross IPC as present. The mirror is refreshed
+  // after, so the inspector's field reads the grant main now holds.
+  const answer = (requestId: string, allow: boolean, scope?: 'session'): void => {
+    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+      .then(() => { if (scope !== undefined) refreshChatGrants(id) })
   }
 
   const alive = snapshot !== null && snapshot.pid !== undefined && snapshot.status !== 'exited' && snapshot.status !== 'disposed'
@@ -451,6 +457,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
           <span className="chat__far-question"><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow ${p.toolName}`} {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
           <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
         </div>) })() : undefined}
       onSelect={props.onSelect}
@@ -478,7 +485,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             name while answering or empty, never hidden. */}
         {props.readOnly !== true && (() => {
           const busy = snapshot !== null && (snapshot.status === 'streaming' || snapshot.pending.length > 0)
-          const reason = backend === 'codex' ? REASON_CODEX_NO_TERMINAL : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
+          // M99. The door is the ROW's: a backend with no terminal door names why, from the registry.
+          const reason = !BACKENDS[backend].terminalDoor ? BACKENDS[backend].reasons.noTerminal : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
           return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
             title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
             {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>to terminal</button>
@@ -531,6 +539,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · {shortInput(p.input)}</span>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+                {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
+                <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session — it will not ask again`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
                 <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
               </div>
             </div>

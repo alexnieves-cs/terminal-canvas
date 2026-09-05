@@ -1,8 +1,7 @@
 import { addTotals, emptyTotals, type AgentOptions, type TokenTotals } from '@shared/cost'
-import { codexArgs, parseCodexChunk } from '@shared/codex-transcript'
+import { BACKENDS, backendOf, type BackendDef } from '@shared/agent-backends'
 import {
   interruptLine,
-  parseStreamChunk,
   permissionResponseLine,
   userMessageLine,
   type OutgoingImage,
@@ -10,6 +9,7 @@ import {
   type TranscriptEvent,
   type TranscriptTurn
 } from '@shared/transcript'
+import { BACKEND_ADAPTERS } from './backend-adapters'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
 import type {
   AgentBackend,
@@ -21,8 +21,6 @@ import type {
   AgentSessionEvent,
   SendResult
 } from '@shared/agent-session'
-import { headlessArgs } from './agent-session-args'
-
 /**
  * M71. A main-process object that represents an agent CONVERSATION — a
  * structured, streaming transcript with a lifecycle of its own — rather than
@@ -60,6 +58,12 @@ import { headlessArgs } from './agent-session-args'
  *     matters on its own: after an exit-then-resume the session object is the
  *     SAME, and only the process identity tells the dead one's tail apart
  *     from the new one's stream.
+ *   - A BACKEND IS A ROW, NEVER A NAME (M99). Every difference between the
+ *     CLIs is read from `BACKENDS[session.backend]` — one process per turn,
+ *     stdin closed, the thread id adopted, no interrupt door, no image block
+ *     — and the process half (argv, parser) from `BACKEND_ADAPTERS`. A
+ *     comparison of `backend` to a vendor's name anywhere in here is a third
+ *     backend's silent default to claude's behaviour; `registry.1` greps for it.
  */
 
 export type {
@@ -86,8 +90,18 @@ export interface AgentSessionDeps {
    * M90. The second backend, when its CLI was found. Absent means every
    * codex session's send is refused BY NAME (`refused-backend`) and spawns
    * nothing — the sheet's row is already disabled, this is the rule.
+   * M99: `binaries` is the general form; this and `command` stay so every
+   * M71–M90 caller and check reads the same.
    */
   codex?: { command: string }
+  /** M99. Resolved binaries by backend, consulted before `command`/`codex`. Absent for a backend refuses its sends by name. */
+  binaries?: Partial<Record<AgentBackend, { command: string }>>
+  /**
+   * M98. Main's session grants: a `permission-request` this answers true for
+   * is answered `allow` here, before it is ever pending, and emitted as
+   * `permission-auto-allowed`. Absent means every request asks.
+   */
+  preAnswer?: (id: string, toolName: string) => boolean
   /**
    * M90. Whether this panel's transcript log already holds turns — the codex
    * analogue of `transcriptExists`: a restored codex chat with turns resumes
@@ -169,8 +183,9 @@ export class AgentSessionManager {
   create(spec: AgentSessionSpec): AgentSessionSnapshot {
     const existing = this.sessions.get(spec.id)
     if (existing) return this.snapshot(existing)
+    const backend = backendOf(spec)
     const session: Session = {
-      backend: spec.backend ?? 'claude',
+      backend,
       turnEnded: false,
       id: spec.id,
       cwd: spec.cwd,
@@ -178,7 +193,9 @@ export class AgentSessionManager {
       sessionId: spec.resume ?? spec.sessionId ?? this.deps.newSessionId(),
       status: 'not-started',
       // A resumed conversation spawns with --resume from its first process.
-      everSpawned: spec.resume !== undefined || (spec.backend === 'codex' && (this.deps.hasTurns?.(spec.id) ?? false)),
+      // M90/M99. A backend whose thread id is the CLI's own has no pin to
+      // create at: a record with turns names a real thread, so it resumes.
+      everSpawned: spec.resume !== undefined || (BACKENDS[backend].adoptsThreadId && (this.deps.hasTurns?.(spec.id) ?? false)),
       carry: '',
       turns: [],
       inFlight: false,
@@ -212,10 +229,10 @@ export class AgentSessionManager {
     if (!session) return 'no-session'
     // M82. The canvas's own ceilings, read LIVE (a setting changed while a
     // panel is open must take effect on the next send, not the next launch).
-    if (session.backend === 'codex' && this.deps.codex === undefined) return 'refused-backend'
-    // M90. codex's prompt is an argument: no block can carry an image. Refused
-    // whole and stored nowhere, like the budget's refusal.
-    if (session.backend === 'codex' && images.length > 0) return 'refused-images'
+    if (this.binaryFor(session.backend) === undefined) return 'refused-backend'
+    // M90. A prompt that is an argument has no block to carry an image.
+    // Refused whole and stored nowhere, like the budget's refusal.
+    if (!BACKENDS[session.backend].images && images.length > 0) return 'refused-images'
     const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0 }
     if (limits.budgetUsd > 0 && this.spent() >= limits.budgetUsd) {
       // Nothing stored: a refused message is not a turn, and a transcript that
@@ -249,7 +266,7 @@ export class AgentSessionManager {
     // M90. A codex process lingers between its result and its exit; a send in
     // that window cannot spawn (the thread is still held) and must not be
     // dropped as sent — it queues, and handleExit serves it.
-    if (session.inFlight || (session.backend === 'codex' && session.proc !== undefined)) {
+    if (session.inFlight || (BACKENDS[session.backend].oneProcessPerTurn && session.proc !== undefined)) {
       session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
       this.emit({ id, type: 'queued', text, reason: 'in-flight' })
       return 'queued'
@@ -265,8 +282,8 @@ export class AgentSessionManager {
    * id has been adopted from the first stream.
    */
   private startTurn(session: Session, text: string, images: readonly OutgoingImage[]): void {
-    if (session.backend === 'codex') {
-      this.spawnCodexTurn(session, text)
+    if (BACKENDS[session.backend].oneProcessPerTurn) {
+      this.spawnTurnProcess(session, text)
       return
     }
     this.ensureProcess(session)
@@ -280,7 +297,7 @@ export class AgentSessionManager {
     // M90. codex has no interrupt door: the only stop is a kill, which the
     // composer names (`close the panel to stop it`) rather than doing here
     // under a verb that means "finish gracefully" on the other backend.
-    if (session.backend === 'codex') return false
+    if (!BACKENDS[session.backend].interrupts) return false
     const requestId = `tc-int-${++this.requestSeq}`
     session.proc.write(interruptLine(requestId))
     session.interrupting = true
@@ -362,57 +379,58 @@ export class AgentSessionManager {
     // The probe runs only while this session has never spawned: a CLI
     // transcript exists for a conversation that ran in a previous launch.
     const resume = session.everSpawned || (this.deps.transcriptExists?.(session.sessionId) ?? false)
-    const args = headlessArgs({
-      sessionId: session.sessionId,
-      resume,
-      agentOptions: session.agentOptions,
-      // M81. Rides EVERY spawn, fresh or resumed: the CLI keeps no record of
-      // it, so a resumed supervisor without it would stop being one.
-      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt })
-    })
-    const proc = this.deps.runner({
-      command: this.deps.command,
-      args,
-      cwd: session.cwd,
-      env: this.deps.env
-    })
-    session.proc = proc
+    const proc = this.spawn(session, { text: '', resume })
+    if (proc === undefined) return
     session.everSpawned = true
-    session.carry = ''
-    session.exitCode = undefined
-    session.exitSignal = undefined
-    session.abortReason = null
     this.setStatus(session, 'starting')
-    proc.onData((chunk) => {
-      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
-      const { events, carry } = parseStreamChunk(chunk, session.carry)
-      session.carry = carry
-      for (const event of events) this.handle(session, event)
-    })
-    proc.onExit((info) => {
-      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
-      this.handleExit(session, info)
-    })
   }
 
-  private spawnCodexTurn(session: Session, text: string): void {
-    const codex = this.deps.codex
-    if (codex === undefined || session.proc) return
-    const resume = session.everSpawned
-    const args = codexArgs({ cwd: session.cwd, text, resume, sessionId: session.sessionId, agentOptions: session.agentOptions })
-    const proc = this.deps.runner({ command: codex.command, args, cwd: session.cwd, env: this.deps.env, closeStdin: true })
-    session.proc = proc
-    session.carry = ''
-    session.exitCode = undefined
-    session.exitSignal = undefined
-    session.abortReason = null
+  /**
+   * M90/M99. A process PER TURN, for a backend whose prompt is an argument:
+   * `exec` first, `exec resume <thread>` once the thread id has been adopted
+   * from the first stream.
+   */
+  private spawnTurnProcess(session: Session, text: string): void {
+    if (session.proc) return
+    const proc = this.spawn(session, { text, resume: session.everSpawned })
+    if (proc === undefined) return
     session.turnEnded = false
     session.inFlight = true
     session.interrupting = false
     this.setStatus(session, session.everSpawned ? 'streaming' : 'starting')
+  }
+
+  /**
+   * ONE spawn for both shapes: argv from the backend's adapter, the binary
+   * from deps, stdin closed when the row says an open pipe blocks the CLI,
+   * and both process callbacks gated on identity (the M61 rule) before the
+   * chunk reaches the backend's parser. Undefined when the binary is absent
+   * — `send` refused that by name already; this is the second lock.
+   */
+  private spawn(session: Session, turn: { text: string; resume: boolean }): AgentProcess | undefined {
+    const binary = this.binaryFor(session.backend)
+    if (binary === undefined) return undefined
+    const row: BackendDef = BACKENDS[session.backend]
+    const adapter = BACKEND_ADAPTERS[session.backend]
+    const args = adapter.args({
+      cwd: session.cwd,
+      text: turn.text,
+      resume: turn.resume,
+      sessionId: session.sessionId,
+      agentOptions: session.agentOptions,
+      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt })
+    })
+    // `closeStdin` is written only when true: the fake runner records the
+    // spawn as handed, and M71's checks compare the claude spawn by shape.
+    const proc = this.deps.runner({ command: binary, args, cwd: session.cwd, env: this.deps.env, ...(row.closeStdin ? { closeStdin: true } : {}) })
+    session.proc = proc
+    session.carry = ''
+    session.exitCode = undefined
+    session.exitSignal = undefined
+    session.abortReason = null
     proc.onData((chunk) => {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
-      const { events, carry } = parseCodexChunk(chunk, session.carry)
+      const { events, carry } = adapter.parseChunk(chunk, session.carry)
       session.carry = carry
       for (const event of events) this.handle(session, event)
     })
@@ -420,6 +438,19 @@ export class AgentSessionManager {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
       this.handleExit(session, info)
     })
+    return proc
+  }
+
+  /**
+   * M99. The resolved binary for a backend: `binaries` first, then M71's
+   * `command` (claude) and M90's `codex`, kept so every earlier caller and
+   * check reads the same. A lookup, never a switch on the name.
+   */
+  private binaryFor(backend: AgentBackend): string | undefined {
+    const general = this.deps.binaries?.[backend]?.command
+    if (general !== undefined) return general
+    const legacy: Partial<Record<AgentBackend, string | undefined>> = { claude: this.deps.command, codex: this.deps.codex?.command }
+    return legacy[backend]
   }
 
   private writeUser(session: Session, text: string, images: readonly OutgoingImage[] = []): void {
@@ -438,7 +469,7 @@ export class AgentSessionManager {
         // M90. codex mints the thread id; the first stream is where the
         // session learns what `exec resume` must name. claude's id is ours
         // (pinned with --session-id), and the event only ever repeats it.
-        if (session.backend === 'codex') { session.sessionId = event.sessionId; session.everSpawned = true }
+        if (BACKENDS[session.backend].adoptsThreadId) { session.sessionId = event.sessionId; session.everSpawned = true }
         if (session.status === 'starting') this.setStatus(session, session.inFlight ? 'streaming' : 'ready')
         this.emit({ id, ...event })
         return
@@ -498,7 +529,7 @@ export class AgentSessionManager {
         // crossing is noticed — once, and by INTERRUPTING (never killing): a
         // killed agent loses its turn, and the budget is a stop, not a loss.
         this.enforceBudget()
-        if (session.backend === 'codex') {
+        if (BACKENDS[session.backend].oneProcessPerTurn) {
           // M90. The process is about to exit; that exit is this turn's END,
           // not a failure. The queue is served from handleExit, once the
           // process is gone, because a second process cannot resume a
@@ -518,6 +549,16 @@ export class AgentSessionManager {
         return
       }
       case 'permission-request':
+        // M98. A tool the tracker has granted for this session is answered
+        // HERE, before it is pending: the renderer never sees a request, so
+        // no attention surface lights, and the transcript hears a quiet row
+        // naming the tool. The answer is written to THIS process (the
+        // identity gate above already held when the chunk arrived).
+        if (this.deps.preAnswer?.(id, event.toolName) === true && session.proc) {
+          session.proc.write(permissionResponseLine(event.requestId, event.input, { allow: true }))
+          this.emit({ id, type: 'permission-auto-allowed', requestId: event.requestId, toolName: event.toolName })
+          return
+        }
         session.pending.set(event.requestId, {
           requestId: event.requestId,
           toolName: event.toolName,
@@ -539,7 +580,7 @@ export class AgentSessionManager {
     // has ENDED ITS TURN: the session stays ready with its queue intact, and
     // the next queued message spawns the next process. Anything else — an
     // exit before the result, a non-zero code — is the ordinary exit below.
-    if (session.backend === 'codex' && session.turnEnded && info.code === 0) {
+    if (BACKENDS[session.backend].oneProcessPerTurn && session.turnEnded && info.code === 0) {
       session.turnEnded = false
       session.carry = ''
       session.exitCode = undefined
@@ -547,7 +588,7 @@ export class AgentSessionManager {
       this.flushBatch(session)
       const next = session.queue.shift()
       if (next !== undefined) {
-        this.spawnCodexTurn(session, next.text)
+        this.spawnTurnProcess(session, next.text)
         this.emit({ id, type: 'dequeued', text: next.text })
       }
       return
@@ -671,9 +712,9 @@ export class AgentSessionManager {
     let interrupted = 0
     for (const s of this.sessions.values()) {
       if (!s.inFlight) continue
-      // M90. codex has no interrupt door; a budget is a stop, and the only
-      // stop is the kill — named as such on the aborted turn.
-      if (s.backend === 'codex') {
+      // M90. A backend with no interrupt door: a budget is a stop, and the
+      // only stop is the kill — named as such on the aborted turn.
+      if (!BACKENDS[s.backend].interrupts) {
         if (s.proc) { s.abortReason = 'budget'; s.proc.kill(); interrupted += 1 }
         continue
       }

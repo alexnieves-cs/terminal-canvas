@@ -551,7 +551,15 @@ export const IPC = {
    */
   AGENT_IMPORT: 'agent:import',
   /** M75. The clipboard's image, for a ⌘V that carried no text. Main's `clipboard.readImage()`. */
-  AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image'
+  AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image',
+  /**
+   * M98. Session grants — `Allow for session`. The grant itself rides
+   * `agent:answer`'s `scope`; these two read the granted tools for a panel
+   * and drop them. Main holds them in memory only (never a file), so a
+   * relaunch asks again.
+   */
+  AGENT_GRANTS: 'agent:grants',
+  AGENT_REVOKE_GRANTS: 'agent:revoke-grants'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1185,12 +1193,17 @@ export interface CanvasBridge {
     interrupt(id: string): Promise<boolean>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */
     dispose(req: { id: string; drop: boolean }): Promise<void>
-    answer(req: { id: string; requestId: string; answer: PermissionAnswer }): Promise<boolean>
+    /** M98. `scope: 'session'` on an allow also grants the tool for the rest of the session — main grants, then answers. */
+    answer(req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }): Promise<boolean>
     list(): Promise<AgentSessionSnapshot[]>
     transcript(id: string): Promise<AgentTranscriptResult>
     /** M74. See AGENT_IMPORT. */
     importSession(req: AgentImportRequest): Promise<AgentImportResult>
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
+    /** M98. See AGENT_GRANTS: the tools granted for this session, in grant order. */
+    grants(id: string): Promise<string[]>
+    /** M98. See AGENT_REVOKE_GRANTS. */
+    revokeGrants(id: string): Promise<void>
   }
   /** M85. The vault: a folder of markdown notes, read in main. */
   snapshot: {

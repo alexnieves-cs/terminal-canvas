@@ -88,6 +88,8 @@ export interface InspectorProps {
   onFrontEnd: (id: string) => void
   /** M76. Answer the chat's pending permission request. */
   onAnswer: (id: string, requestId: string, allow: boolean) => void
+  /** M98. Drop every session grant for the chat; absent leaves the Revoke control disabled by name. */
+  onRevokeGrants?: (id: string) => void
   onOpenReview: (id: string) => void
   onLink: (id: string) => void
   onRemoveLink: (from: string, to: string) => void
@@ -150,7 +152,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
+  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -182,6 +184,7 @@ function InspectorImpl({
             onLock={onLock} onUnlock={onUnlock} onPin={onPin} onUnpin={onUnpin} onMaximise={onMaximise} onRestore={onRestore} pinnedCount={pinnedCount}
             onFrontEnd={onFrontEnd}
             onAnswer={onAnswer}
+            onRevokeGrants={onRevokeGrants}
             panelRun={panelRun ?? null}
             onRunAgain={onRunAgain ?? (() => {})}
             onOpenReview={onOpenReview}
@@ -393,7 +396,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   tab: ContextTab
@@ -421,6 +424,7 @@ function InspectorPanel({
   pinnedCount?: number
   onFrontEnd: (id: string) => void
   onAnswer: (id: string, requestId: string, allow: boolean) => void
+  onRevokeGrants?: (id: string) => void
   panelRun: PanelRunLine | null
   onRunAgain: (id: string) => void
   onOpenReview: (id: string) => void
@@ -517,6 +521,33 @@ function InspectorPanel({
             <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`} title={PATH_FIELDS.has(field.key) ? field.value : undefined}>{PATH_FIELDS.has(field.key) ? shortPath(field.value, 3) : field.value}</dd>
           </div>
         ))}
+      {/* M98. The chat's session grants, a field with its own control: four
+          arms (unknown / none / the tools / cannot), and Revoke DISABLED with
+          the arm's reason rather than absent — a codex chat, which cannot be
+          granted, still shows the field and says why. */}
+      {model.grants !== undefined && (() => {
+        const grants = model.grants
+        const revoke = grants.kind === 'unknown' ? { enabled: false, reason: 'main has not answered yet' } : grants.revoke
+        const value = grants.kind === 'unknown' ? 'asking…' : grants.kind === 'cannot' ? grants.reason : grants.kind === 'none' ? 'none' : grants.tools.join(', ')
+        return (
+          <div className="inspector__field inspector__field--grants" data-inspector-field="chat-grants" data-inspector-grants={grants.kind}>
+            <dt className="inspector__label">session grants</dt>
+            <dd className={`inspector__value${grants.kind === 'some' ? ' inspector__value--mono' : ''}`}>{value}</dd>
+            <dd className="inspector__value">
+              <button
+                type="button"
+                className="inspector__link-action"
+                data-inspector-action="revoke-grants"
+                disabled={!revoke.enabled}
+                title={revoke.enabled ? 'Revoke every tool granted for this session — it asks again' : revoke.reason}
+                {...shellControl(() => { if (revoke.enabled) onRevokeGrants?.(model.id) })}
+              >
+                Revoke
+              </button>
+            </dd>
+          </div>
+        )
+      })()}
       </dl>
       {model.links.length > 0 && (
         <div className="inspector__links" data-inspector-links>

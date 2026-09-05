@@ -36,6 +36,13 @@ export interface ChatState {
    * component takes it and clears it.
    */
   insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
+  /**
+   * M98. The tools main has granted for this session, in grant order. A
+   * CACHE of `agent:grants` — main's tracker is the author — refreshed after
+   * a scoped answer and a revoke; absent until main has answered once, which
+   * the inspector renders as `unknown` rather than `none`.
+   */
+  grants?: string[]
 }
 
 const states = new Map<string, ChatState>()
@@ -80,6 +87,28 @@ function syncApprovals(): void {
 export function approvals(): PendingApproval[] {
   return approvalSnapshot
 }
+
+/** M98. Main's answer to `agent:grants`, mirrored. A never-seeded id mints nothing (the recycled-id door). */
+export function setChatGrants(id: string, grants: readonly string[]): void {
+  const prev = states.get(id)
+  if (!prev) return
+  update(id, { ...prev, grants: [...grants] })
+}
+
+/**
+ * M99. The models live sessions have REPORTED, first seen first — the spawn
+ * sheet's suggestions. Never a vendor list: a fixed list rots the day a
+ * model ships (`MODEL_PATTERN`'s own argument), and what a session reported
+ * is a model that exists.
+ */
+export function reportedModels(): string[] {
+  const out: string[] = []
+  for (const state of states.values()) {
+    const model = state.snapshot?.model
+    if (model !== undefined && !out.includes(model)) out.push(model)
+  }
+  return out
+}
 export function useApprovals(): PendingApproval[] {
   return useSyncExternalStore(
     (cb) => { approvalListeners.add(cb); return () => { approvalListeners.delete(cb) } },
@@ -120,7 +149,9 @@ export function seedChat(
     turns: input.turns ?? prev.turns,
     live: prev.live,
     refusal: input.refusal === undefined ? prev.refusal : input.refusal,
-    ...(input.meta === undefined ? (prev.meta === undefined ? {} : { meta: prev.meta }) : { meta: input.meta })
+    ...(input.meta === undefined ? (prev.meta === undefined ? {} : { meta: prev.meta }) : { meta: input.meta }),
+    // M98. Carried, never re-seeded: a seed is main's snapshot, and grants are asked for separately.
+    ...(prev.grants === undefined ? {} : { grants: prev.grants })
   })
 }
 
@@ -306,6 +337,12 @@ export function applyChatEvent(event: AgentSessionEvent): void {
     case 'permission-dropped':
       if (!snap) return
       update(event.id, { ...prev, snapshot: { ...snap, pending: snap.pending.filter((p) => p.requestId !== event.requestId) } })
+      return
+    case 'permission-auto-allowed':
+      // M98. Main answered it from a session grant before it was ever
+      // pending, so there is nothing to remove from `pending` and nothing to
+      // light. An explicit arm rather than the default, so a later reader
+      // does not add one that pushes it onto the pending list.
       return
     case 'unknown':
       if (!snap) return

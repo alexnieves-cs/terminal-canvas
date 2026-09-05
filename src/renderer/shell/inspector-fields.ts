@@ -5,6 +5,7 @@ import { watchStateInput } from '@renderer/watcher/watcher-store'
 import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
+import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
@@ -55,6 +56,8 @@ export interface InspectorModel {
   reviewReason?: string
   /** M76. A chat's pending request; absent at rest and on every other kind. The pane disables its verbs by name from this. */
   approval?: PendingApproval
+  /** M98. The chat's session grants — four arms, never absent on a chat. See GrantsField. */
+  grants?: GrantsField
   /**
    * Which kind of panel this model describes. `'review'` is what gates
    * Inspector.tsx's Restart and Save-as-preset controls — an optional
@@ -422,6 +425,29 @@ export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   chat: 'A chat panel'
 }
 
+/**
+ * M98. The `Session grants` field's four arms: `unknown` before main has
+ * answered `agent:grants` (a store seeded this second), `none` and `some`
+ * from its answer, and `cannot` for a backend whose stream carries no
+ * permission request — the registry's `asksPermission`, with its own
+ * sentence on a DISABLED Revoke rather than a missing one.
+ */
+export type GrantsField =
+  | { kind: 'unknown' }
+  | { kind: 'none'; revoke: { enabled: false; reason: string } }
+  | { kind: 'some'; tools: string[]; revoke: { enabled: true } }
+  | { kind: 'cannot'; reason: string; revoke: { enabled: false; reason: string } }
+
+export const REASON_NO_GRANTS = 'nothing granted this session — Allow for session on a request adds one'
+
+function chatGrantsField(chat: { backend?: AgentBackend }, input: ChatInspectorInput | undefined): GrantsField {
+  const row = BACKENDS[backendOf(chat)]
+  if (!row.asksPermission) return { kind: 'cannot', reason: row.reasons.noPermissions, revoke: { enabled: false, reason: row.reasons.noPermissions } }
+  if (input?.grants === undefined) return { kind: 'unknown' }
+  if (input.grants.length === 0) return { kind: 'none', revoke: { enabled: false, reason: REASON_NO_GRANTS } }
+  return { kind: 'some', tools: [...input.grants], revoke: { enabled: true } }
+}
+
 /** M73. What the inspector needs from a chat session's snapshot. */
 export interface ChatInspectorInput {
   state: ChatStateInput
@@ -433,6 +459,8 @@ export interface ChatInspectorInput {
   approval?: PendingApproval
   /** M77. `chatHasRun` — the one definition the palette row shares. */
   ran?: boolean
+  /** M98. Main's granted tools, when it has answered. Absent reads `unknown`, never `none`. */
+  grants?: string[]
 }
 
 export function buildInspectorModelBare(
@@ -516,6 +544,7 @@ export function buildInspectorModelBare(
       reviewable: chatReviewable,
       ...(chatReviewable ? {} : { reviewReason: REASON_CHAT_NO_BASELINE }),
       ...(chat?.approval === undefined ? {} : { approval: chat.approval }),
+      grants: chatGrantsField(panel.chat, chat),
       frontEnd: {
         verb: 'open-in-terminal',
         enabled: !chatBusy && chatTurns > 0,
