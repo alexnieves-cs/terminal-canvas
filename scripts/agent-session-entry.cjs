@@ -9,6 +9,8 @@
    its own module, which is deliberately NOT bundled here. */
 module.exports = {
   transcript: require('../src/shared/transcript'),
+  /* M90. The codex adapter: codex's JSONL to the same TranscriptEvent union. */
+  codex: require('../src/shared/codex-transcript'),
   session: require('../src/main/agent-session'),
   args: require('../src/main/agent-session-args'),
   quit: require('../src/main/quit'),

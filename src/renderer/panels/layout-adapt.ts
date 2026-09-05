@@ -26,7 +26,7 @@ function copyChatSource(chat: ChatSource): ChatSource {
   // M81's `supervisor` copied like every other field: an absent one stays
   // absent (a spread would write `supervisor: undefined`, which survives IPC
   // and reads as present).
-  return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.supervisor === true ? { supervisor: true } : {}), ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
+  return { cwd: chat.cwd, sessionId: chat.sessionId, ...(chat.supervisor === true ? { supervisor: true } : {}), ...(chat.backend === 'codex' ? { backend: 'codex' as const } : {}), ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } }) }
 }
 
 /** M84. One arm per trigger kind — see the watcher arm below for why. */

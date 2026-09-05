@@ -87,6 +87,8 @@ export interface PanelRow {
   claude?: boolean
   /** M74. A chat panel with a turn in flight or a permission waiting — the open-in-terminal row's named refusal. */
   busy?: boolean
+  /** M90. A chat's backend; absent is claude. */
+  backend?: AgentBackend
   /** M74. A chat panel's completed turns; zero refuses open-in-terminal by name. */
   turns?: number
   /** M77. Whether Open review can act, with the kind's own reason when not. Absent falls back to `restartable`. */
@@ -582,6 +584,7 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
 export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
+import { REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
 export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
@@ -613,6 +616,11 @@ export interface ApprovalRow {
 /** M73. Whether a claude preset is available — the one fact the three chat doors share. */
 export function claudeAvailable(presets: readonly PresetRow[]): boolean {
   return presets.some((p) => p.agent === 'claude-code' && p.available)
+}
+
+/** M90. The same fact for codex — the built-in codex preset's probe. */
+export function codexAvailable(presets: readonly PresetRow[]): boolean {
+  return presets.some((p) => p.agent === 'codex' && p.available)
 }
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
@@ -816,6 +824,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         },
         ctx.capturedId === null ? REASON_NO_FOCUS
           : target === undefined || target.kind !== 'chat' ? REASON_NOT_CHAT
+            : target.backend === 'codex' ? REASON_CODEX_NO_TERMINAL
             : target.busy === true ? REASON_CHAT_BUSY
               : (target.turns ?? 0) === 0 ? REASON_CHAT_EMPTY : undefined
       )

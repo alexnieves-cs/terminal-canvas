@@ -3383,6 +3383,29 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), warnings: out.warnings }))
 }
 
+{
+  // M90. The backend on a chat record: codex round-trips, absent stays ABSENT
+  // (never `backend: undefined`, which survives IPC and reads as present), an
+  // unknown value warns and drops to claude, the panel kept.
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 'c1', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 1, chat: { cwd: '/r', sessionId: 'thread-1', backend: 'codex' } },
+      { id: 'c2', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 2, chat: { cwd: '/r', sessionId: 'u-2' } },
+      { id: 'c3', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 3, chat: { cwd: '/r', sessionId: 'u-3', backend: 'gemini' } },
+      { id: 'c4', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 4, chat: { cwd: '/r', sessionId: 'u-4', backend: 'claude' } }
+    ] }]
+  }))
+  const ws = out.snapshot.workspaces[0]
+  const by = (id) => (ws && ws.panels.find((p) => p.id === id)) || {}
+  ok('codex.1 a chat record\'s backend: codex round-trips, an absent backend stays absent, an unknown backend warns by name and the panel keeps claude, and an explicit claude is stored as absent',
+    ws !== undefined && ws.panels.length === 4 &&
+      by('c1').chat && by('c1').chat.backend === 'codex' &&
+      by('c2').chat && !('backend' in by('c2').chat) &&
+      by('c3').chat && !('backend' in by('c3').chat) && out.warnings.some((w) => /c3/.test(w) && /gemini/.test(w)) &&
+      by('c4').chat && !('backend' in by('c4').chat) && !out.warnings.some((w) => /c1|c2|c4/.test(w)),
+    JSON.stringify({ warnings: out.warnings, c1: by('c1').chat, c2: by('c2').chat, c3: by('c3').chat, c4: by('c4').chat }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

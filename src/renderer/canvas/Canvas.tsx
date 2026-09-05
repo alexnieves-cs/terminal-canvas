@@ -114,7 +114,7 @@ import { useChatSessions, disposeChat } from '@renderer/chat/useChatSessions'
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
-import { SUPERVISOR_PROMPT } from '@shared/agent-session'
+import { SUPERVISOR_PROMPT, REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
@@ -127,7 +127,8 @@ import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
-import { claudeAvailable } from '@renderer/palette/commands'
+import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { onChatSession } from '@renderer/chat/chat-store'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -1327,6 +1328,16 @@ export function Canvas({
     // M65. The menu's ⌘⇧N asks the renderer for the sheet. Through a ref:
     // paletteActions is built far below this effect.
     const offSheet = window.canvas.spawn.onOpenSheet(() => paletteActionsRef.current?.beginSpawnSheet())
+    // M90. A codex chat's thread id is the CLI's: written onto the record the
+    // first time the stream names it, with no history entry (nothing the user
+    // did), so a relaunch resumes the same thread. A claude id never changes.
+    const offSession = onChatSession((id, sessionId) => {
+      setPanels((current) => {
+        const panel = current.find((p) => p.rect.id === id)
+        if (!panel || !isChatPanel(panel) || panel.chat.backend !== 'codex' || panel.chat.sessionId === sessionId) return current
+        return current.map((p) => (p === panel ? { ...panel, chat: { ...panel.chat, sessionId } } : p))
+      })
+    })
     // M55. Recovered orphans, only ever after the user answered Restore.
     // Through commitHistory like a spawn, so Cmd+Z un-adopts — which
     // disposes the sessions, and that is right: asked, said yes, said no.
@@ -1379,6 +1390,7 @@ export function Canvas({
     })
     return () => {
       offSheet()
+      offSession()
       offSpawn()
       offRecover()
       offDefault()
@@ -2985,7 +2997,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3440,7 +3452,7 @@ export function Canvas({
   }, [commitHistory, selectOnly, addToSelection])
   instantiateTemplateRef.current = instantiateTemplate
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3456,12 +3468,14 @@ export function Canvas({
     if (opts?.appendSystemPrompt !== undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M90. The backend rides the create and the record; absent stays absent.
+    const backend = opts?.backend === 'codex' ? { backend: 'codex' as const } : {}
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -3511,6 +3525,8 @@ export function Canvas({
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const panel = panelsRef.current.find((p) => p.rect.id === id)
     if (!panel || !isChatPanel(panel)) return { kind: 'refused', reason: 'only a chat panel can open in a terminal' }
+    // M90. The terminal door is `claude --resume`; a codex chat has no such door.
+    if (panel.chat.backend === 'codex') return { kind: 'refused', reason: REASON_CODEX_NO_TERMINAL }
     // The precondition IN the verb, not only on its three doors (M74's
     // verifier): a turn in flight or a permission waiting is one front-end
     // still working, and an empty chat has nothing to resume.
@@ -4267,7 +4283,7 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
-                  claudeAvailable={claudeAvailable(presetRows)}
+                  claudeAvailable={panel.chat.backend === 'codex' ? codexAvailable(presetRows) : claudeAvailable(presetRows)}
                   onOpenInTerminal={openInTerminal}
                 />
               )

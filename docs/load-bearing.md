@@ -3559,3 +3559,28 @@ text, so the sentence can be reworded in one place without flipping a panel's ar
 **The Integrations page lists every DECLARED service, credential or not.** A page that showed
 only connected services would make "not connected" indistinguishable from "not supported" —
 `verify:palette 31`'s rule for rows, reached by a page.
+
+**A codex chat runs ONE PROCESS PER TURN, and the exit after `turn.completed` is the turn's
+normal end, not a failure (`main/agent-session.ts`, `shared/codex-transcript.ts`).** claude's
+headless mode is a long-lived process with messages on stdin; codex's `exec` takes the prompt
+as an argument and exits when the turn is done. Three things fail silently if the second is
+treated like the first. **The exit would paint `exited 0`** after every answer — a red panel
+that reads as a crash, with the conversation intact — so `result` on a codex session sets
+`turnEnded`, and `handleExit` on a `turnEnded` exit with code 0 leaves the session `ready`
+with its queue intact and spawns the next queued prompt; an exit BEFORE the result, or a
+non-zero code, is the ordinary exit. **stdin must be CLOSED at spawn** (`closeStdin: true`
+through `AgentSpawn`): an open pipe makes codex block on "Reading additional input from
+stdin…" forever, with a `starting` pill and no stderr. **The thread id is codex's, not
+ours**: `--session-id` has no equivalent, so the `session` event ADOPTS `thread_id` and every
+later spawn is `exec resume <thread>`; a session id minted on our side would name a thread
+that does not exist and the second turn would start a new conversation silently. `verify:
+agent-session codex.2` pins all three over the recorded streams. The renderer never learns
+any of this: `backend` on the snapshot is a WORD for the chrome, and every difference the
+user can see is a named reason on an existing control (`composerState`'s third argument).
+
+**Manual-only, added by M90.** `closeStdin` in `claude-cli-runner.ts` is never bundled into a
+suite (the real runner spawns a real process); that an open stdin blocks codex was observed
+once on this machine, and the fake runner only records the flag. And the adapter's reading of
+codex's `input_tokens` as INCLUSIVE of `cached_input_tokens` and `cache_write_input_tokens`
+(it subtracts both to reach the app's fresh-input figure) is consistent with the recorded
+numbers, not confirmed against codex's own definition.

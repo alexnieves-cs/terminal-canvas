@@ -6,6 +6,7 @@ import type { DirResult } from '@shared/fs-tree'
 import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
+import { REASON_CODEX_NO_TERMINAL } from '@shared/agent-session'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat } from './chat-store'
@@ -189,7 +190,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const hasHistory = chat.turns.length > 0
   const stateInput = chatStateInput(snapshot, hasHistory)
   const state = panelState({ kind: 'chat', status: undefined, dormant: false, ...(stateInput === undefined ? {} : { chat: stateInput }) }, undefined)
-  const composer = composerState(snapshot, props.claudeAvailable)
+  // M90. The backend from the record (absent is claude); the snapshot's word
+  // agrees once main answers. Every codex difference is a named reason.
+  const backend = props.panel.chat.backend ?? 'claude'
+  const composer = composerState(snapshot, props.claudeAvailable, backend)
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -465,6 +469,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // left the chrome after M73's critic — two facts in one slot — and lives
       // in the inspector's Detail and on the root as data.
       chrome={<>
+        {/* M90. Which CLI this panel talks to — a KIND fact, before the state pill, like the github card's. */}
+        <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M74. A LABELLED verb after the pill — the terminal's own row shape
             (`title · pill · controls`), and a word rather than the `>_` glyph
@@ -472,7 +478,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             name while answering or empty, never hidden. */}
         {props.readOnly !== true && (() => {
           const busy = snapshot !== null && (snapshot.status === 'streaming' || snapshot.pending.length > 0)
-          const reason = busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
+          const reason = backend === 'codex' ? REASON_CODEX_NO_TERMINAL : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
           return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
             title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
             {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>to terminal</button>
@@ -483,7 +489,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         <div className="chat__transcript" data-chat-transcript data-scroll-host ref={bodyRef} onScroll={onScroll}>
           {rows.length === 0 && chat.refusal === null && (
             <p className="pf__note chat__empty" data-chat-empty>
-              {props.claudeAvailable ? 'No turns yet. Send a message to start claude here.' : 'claude was not found on the login PATH, so this panel cannot start.'}
+              {props.claudeAvailable ? `No turns yet. Send a message to start ${backend} here.` : `${backend} was not found on the login PATH, so this panel cannot start.`}
             </p>
           )}
           {rows.map((row) => {

@@ -1,4 +1,5 @@
 import type { AgentOptions } from './cost'
+import type { AgentBackend } from './agent-session'
 
 /**
  * M73. What a chat PANEL persists: the directory its agent works in, the CLI
@@ -26,4 +27,6 @@ export interface ChatSource {
   cwd: string
   sessionId: string
   agentOptions?: AgentOptions
+  /** M90. Absent is claude — every pre-M90 record and every claude chat. */
+  backend?: AgentBackend
 }

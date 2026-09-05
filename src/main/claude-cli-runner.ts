@@ -27,7 +27,7 @@ import type { AgentProcess, AgentRunner } from './agent-runner'
 
 const STDERR_TAIL_MAX = 4096
 
-export const claudeCliRunner: AgentRunner = ({ command, args, cwd, env }): AgentProcess => {
+export const claudeCliRunner: AgentRunner = ({ command, args, cwd, env, closeStdin }): AgentProcess => {
   const child = spawn(command, args, {
     cwd,
     env,
@@ -68,6 +68,7 @@ export const claudeCliRunner: AgentRunner = ({ command, args, cwd, env }): Agent
     stderrTail = (stderrTail + String(error.message)).slice(-STDERR_TAIL_MAX)
     finish(null, null)
   })
+  if (closeStdin === true) child.stdin.end()
   child.stdin.on('error', () => {
     // EPIPE after the CLI exited; the exit callback carries the fact.
   })

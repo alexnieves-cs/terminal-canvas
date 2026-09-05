@@ -1,4 +1,5 @@
 import { addTotals, emptyTotals, type AgentOptions, type TokenTotals } from '@shared/cost'
+import { codexArgs, parseCodexChunk } from '@shared/codex-transcript'
 import {
   interruptLine,
   parseStreamChunk,
@@ -11,6 +12,7 @@ import {
 } from '@shared/transcript'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
 import type {
+  AgentBackend,
   AgentSessionStatus,
   AgentSessionSpec,
   PendingPermission,
@@ -80,6 +82,18 @@ export interface AgentSessionDeps {
   runner: AgentRunner
   /** The resolved path of the `claude` binary. */
   command: string
+  /**
+   * M90. The second backend, when its CLI was found. Absent means every
+   * codex session's send is refused BY NAME (`refused-backend`) and spawns
+   * nothing — the sheet's row is already disabled, this is the rule.
+   */
+  codex?: { command: string }
+  /**
+   * M90. Whether this panel's transcript log already holds turns — the codex
+   * analogue of `transcriptExists`: a restored codex chat with turns resumes
+   * the thread its record names rather than starting a new one silently.
+   */
+  hasTurns?: (id: string) => boolean
   /** The login environment every PTY gets — how the CLI finds its config. */
   env: Record<string, string>
   newSessionId: () => string
@@ -99,6 +113,9 @@ export interface AgentSessionDeps {
 
 
 interface Session {
+  backend: AgentBackend
+  /** M90. codex: the current process has reported turn.completed, so its exit is the turn's normal end. */
+  turnEnded: boolean
   /** M81. The supervisor's job, appended to the CLI's system prompt on every spawn. */
   appendSystemPrompt?: string
   id: string
@@ -116,7 +133,7 @@ interface Session {
   inFlight: boolean
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
-  abortReason: 'interrupt-timeout' | null
+  abortReason: 'interrupt-timeout' | 'budget' | null
   queue: { text: string; images: OutgoingImage[] }[]
   pending: Map<string, PendingPermission>
   usage: TokenTotals
@@ -153,13 +170,15 @@ export class AgentSessionManager {
     const existing = this.sessions.get(spec.id)
     if (existing) return this.snapshot(existing)
     const session: Session = {
+      backend: spec.backend ?? 'claude',
+      turnEnded: false,
       id: spec.id,
       cwd: spec.cwd,
       agentOptions: spec.agentOptions,
       sessionId: spec.resume ?? spec.sessionId ?? this.deps.newSessionId(),
       status: 'not-started',
       // A resumed conversation spawns with --resume from its first process.
-      everSpawned: spec.resume !== undefined,
+      everSpawned: spec.resume !== undefined || (spec.backend === 'codex' && (this.deps.hasTurns?.(spec.id) ?? false)),
       carry: '',
       turns: [],
       inFlight: false,
@@ -193,6 +212,10 @@ export class AgentSessionManager {
     if (!session) return 'no-session'
     // M82. The canvas's own ceilings, read LIVE (a setting changed while a
     // panel is open must take effect on the next send, not the next launch).
+    if (session.backend === 'codex' && this.deps.codex === undefined) return 'refused-backend'
+    // M90. codex's prompt is an argument: no block can carry an image. Refused
+    // whole and stored nowhere, like the budget's refusal.
+    if (session.backend === 'codex' && images.length > 0) return 'refused-images'
     const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0 }
     if (limits.budgetUsd > 0 && this.spent() >= limits.budgetUsd) {
       // Nothing stored: a refused message is not a turn, and a transcript that
@@ -223,20 +246,41 @@ export class AgentSessionManager {
       ],
       at: this.now()
     })
-    if (session.inFlight) {
+    // M90. A codex process lingers between its result and its exit; a send in
+    // that window cannot spawn (the thread is still held) and must not be
+    // dropped as sent — it queues, and handleExit serves it.
+    if (session.inFlight || (session.backend === 'codex' && session.proc !== undefined)) {
       session.queue.push({ text, images: images.map((img) => ({ mediaType: img.mediaType, base64: img.base64 })) })
       this.emit({ id, type: 'queued', text, reason: 'in-flight' })
       return 'queued'
     }
+    this.startTurn(session, text, images)
+    return 'sent'
+  }
+
+  /**
+   * M90. One door for both backends. claude: one long-lived process, the
+   * message on stdin. codex: a process PER TURN with the prompt in its argv
+   * and stdin closed; `exec` first, `exec resume <thread>` once the thread
+   * id has been adopted from the first stream.
+   */
+  private startTurn(session: Session, text: string, images: readonly OutgoingImage[]): void {
+    if (session.backend === 'codex') {
+      this.spawnCodexTurn(session, text)
+      return
+    }
     this.ensureProcess(session)
     this.writeUser(session, text, images)
-    return 'sent'
   }
 
   /** True when a request was written; false with no turn in flight. */
   interrupt(id: string): boolean {
     const session = this.sessions.get(id)
     if (!session || !session.inFlight || !session.proc) return false
+    // M90. codex has no interrupt door: the only stop is a kill, which the
+    // composer names (`close the panel to stop it`) rather than doing here
+    // under a verb that means "finish gracefully" on the other backend.
+    if (session.backend === 'codex') return false
     const requestId = `tc-int-${++this.requestSeq}`
     session.proc.write(interruptLine(requestId))
     session.interrupting = true
@@ -351,6 +395,33 @@ export class AgentSessionManager {
     })
   }
 
+  private spawnCodexTurn(session: Session, text: string): void {
+    const codex = this.deps.codex
+    if (codex === undefined || session.proc) return
+    const resume = session.everSpawned
+    const args = codexArgs({ cwd: session.cwd, text, resume, sessionId: session.sessionId, agentOptions: session.agentOptions })
+    const proc = this.deps.runner({ command: codex.command, args, cwd: session.cwd, env: this.deps.env, closeStdin: true })
+    session.proc = proc
+    session.carry = ''
+    session.exitCode = undefined
+    session.exitSignal = undefined
+    session.abortReason = null
+    session.turnEnded = false
+    session.inFlight = true
+    session.interrupting = false
+    this.setStatus(session, session.everSpawned ? 'streaming' : 'starting')
+    proc.onData((chunk) => {
+      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
+      const { events, carry } = parseCodexChunk(chunk, session.carry)
+      session.carry = carry
+      for (const event of events) this.handle(session, event)
+    })
+    proc.onExit((info) => {
+      if (this.sessions.get(session.id) !== session || session.proc !== proc) return
+      this.handleExit(session, info)
+    })
+  }
+
   private writeUser(session: Session, text: string, images: readonly OutgoingImage[] = []): void {
     if (!session.proc) return
     session.proc.write(userMessageLine(text, images))
@@ -364,6 +435,10 @@ export class AgentSessionManager {
     switch (event.type) {
       case 'session':
         session.model = event.model ?? session.model
+        // M90. codex mints the thread id; the first stream is where the
+        // session learns what `exec resume` must name. claude's id is ours
+        // (pinned with --session-id), and the event only ever repeats it.
+        if (session.backend === 'codex') { session.sessionId = event.sessionId; session.everSpawned = true }
         if (session.status === 'starting') this.setStatus(session, session.inFlight ? 'streaming' : 'ready')
         this.emit({ id, ...event })
         return
@@ -423,6 +498,16 @@ export class AgentSessionManager {
         // crossing is noticed — once, and by INTERRUPTING (never killing): a
         // killed agent loses its turn, and the budget is a stop, not a loss.
         this.enforceBudget()
+        if (session.backend === 'codex') {
+          // M90. The process is about to exit; that exit is this turn's END,
+          // not a failure. The queue is served from handleExit, once the
+          // process is gone, because a second process cannot resume a
+          // thread the first still holds.
+          session.turnEnded = true
+          this.setStatus(session, 'ready')
+          this.emit({ id, ...event, interrupted })
+          return
+        }
         if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
         this.emit({ id, ...event, interrupted })
         const next = session.queue.shift()
@@ -450,6 +535,24 @@ export class AgentSessionManager {
   private handleExit(session: Session, info: AgentExitInfo): void {
     const id = session.id
     session.proc = undefined
+    // M90. A codex process that reported turn.completed and then exited 0
+    // has ENDED ITS TURN: the session stays ready with its queue intact, and
+    // the next queued message spawns the next process. Anything else — an
+    // exit before the result, a non-zero code — is the ordinary exit below.
+    if (session.backend === 'codex' && session.turnEnded && info.code === 0) {
+      session.turnEnded = false
+      session.carry = ''
+      session.exitCode = undefined
+      session.exitSignal = undefined
+      this.flushBatch(session)
+      const next = session.queue.shift()
+      if (next !== undefined) {
+        this.spawnCodexTurn(session, next.text)
+        this.emit({ id, type: 'dequeued', text: next.text })
+      }
+      return
+    }
+    session.turnEnded = false
     session.exitCode = info.code
     session.exitSignal = info.signal ?? undefined
     session.carry = ''
@@ -568,6 +671,12 @@ export class AgentSessionManager {
     let interrupted = 0
     for (const s of this.sessions.values()) {
       if (!s.inFlight) continue
+      // M90. codex has no interrupt door; a budget is a stop, and the only
+      // stop is the kill — named as such on the aborted turn.
+      if (s.backend === 'codex') {
+        if (s.proc) { s.abortReason = 'budget'; s.proc.kill(); interrupted += 1 }
+        continue
+      }
       if (this.interrupt(s.id)) interrupted += 1
     }
     for (const s of this.sessions.values()) { this.emit({ id: s.id, type: 'budget', spent, limit, interrupted }); break }
@@ -576,6 +685,7 @@ export class AgentSessionManager {
   private snapshot(session: Session): AgentSessionSnapshot {
     return {
       id: session.id,
+      backend: session.backend,
       cwd: session.cwd,
       status: session.status,
       sessionId: session.sessionId,
