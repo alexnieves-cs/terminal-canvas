@@ -16,7 +16,19 @@ export type AgentSessionStatus =
   | 'exited'
   | 'disposed'
 
+/** M90. Which headless CLI answers. Absent is claude — every pre-M90 record. */
+export type AgentBackend = 'claude' | 'codex'
+
+/** M90. The one sentence every codex door shows when the CLI is absent. */
+export const REASON_NO_CODEX = 'codex was not found on the login PATH — install it, or check the environment report'
+/** M90. What codex cannot do, named where the control is. */
+export const REASON_CODEX_NO_INTERRUPT = 'codex has no interrupt — close the panel to stop it'
+export const REASON_CODEX_NO_IMAGES = 'codex takes no images here — reference a file by its path instead'
+export const REASON_CODEX_NO_TERMINAL = 'a codex chat continues only here — the terminal door is claude --resume'
+
 export interface AgentSessionSpec {
+  /** M90. Absent is claude. Fixed at create; a session never changes vendor. */
+  backend?: AgentBackend
   /** The caller's id — the panel id. Never minted by main. */
   id: string
   cwd: string
@@ -45,6 +57,8 @@ export interface AgentSessionCounters {
 
 export interface AgentSessionSnapshot {
   id: string
+  /** M90. Always present on a snapshot: the panel says which CLI it is talking to. */
+  backend: AgentBackend
   cwd: string
   status: AgentSessionStatus
   /** The CLI session UUID — what `--resume` names. */
@@ -75,7 +89,7 @@ export type AgentSessionEvent = { id: string } & (
   | ResultEvent
   | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
   | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' }
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'budget' }
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */
@@ -92,7 +106,7 @@ export type AgentSessionEvent = { id: string } & (
  * reached the ceiling its owner set, and the message was NOT stored — a
  * refused message is not a turn.
  */
-export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget'
+export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images'
 
 /** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
 export type ChatAttachment =

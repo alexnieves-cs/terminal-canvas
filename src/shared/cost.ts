@@ -169,6 +169,12 @@ export interface AgentCapability {
   readonly sessionIdFlag?: string
   /** Whether this app has a stable, per-panel transcript adapter. */
   readonly transcriptAccounting: boolean
+  /**
+   * M90. What the headless (chat) contract can do, when this app knows one.
+   * Absent means the CLI is launched only in a terminal. Every "codex cannot"
+   * reason in the panel reads this table rather than a scattered constant.
+   */
+  readonly headless?: { readonly interrupts: boolean; readonly images: boolean; readonly permissions: boolean; readonly terminalDoor: boolean }
 }
 
 export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = {
@@ -179,7 +185,8 @@ export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = 
       model: '--model'
     },
     sessionIdFlag: '--session-id',
-    transcriptAccounting: true
+    transcriptAccounting: true,
+    headless: { interrupts: true, images: true, permissions: true, terminalDoor: true }
   },
   codex: {
     flags: {
@@ -187,6 +194,7 @@ export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = 
       sandbox: '--sandbox',
       approvalPolicy: '--ask-for-approval'
     },
-    transcriptAccounting: false
+    transcriptAccounting: false,
+    headless: { interrupts: false, images: false, permissions: false, terminalDoor: false }
   }
 }

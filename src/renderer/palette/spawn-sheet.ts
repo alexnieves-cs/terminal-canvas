@@ -11,7 +11,7 @@ import type { SpawnRequest } from '@shared/ipc-contract'
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' }
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' }
 
 /**
  * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
@@ -21,6 +21,8 @@ export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; comm
  * exist rather than spawning anything.
  */
 export const CHAT_WHAT_ID = '__chat__'
+/** M90. The second conversation arm: a chat with codex. */
+export const CODEX_WHAT_ID = '__codex__'
 /** M81. A chat whose subject is the canvas: created with the supervisor's system prompt. */
 export const SUPERVISOR_WHAT_ID = '__supervisor__'
 
@@ -65,8 +67,10 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
     if (title !== '') req.title = title
     return req
   }
-  if (what.kind === 'chat') {
-    const req: SpawnRequest = { presetId: CHAT_WHAT_ID, cwd }
+  if (what.kind === 'chat' || what.kind === 'codex') {
+    // M90. Both conversation arms are minted in the renderer; the id here
+    // only names which, for the preview's shape.
+    const req: SpawnRequest = { presetId: what.kind === 'chat' ? CHAT_WHAT_ID : CODEX_WHAT_ID, cwd }
     if (title !== '') req.title = title
     if (Object.keys(values.agentOptions).length > 0) req.agentOptions = { ...values.agentOptions }
     return req

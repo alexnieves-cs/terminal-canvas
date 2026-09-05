@@ -776,6 +776,9 @@ export function makeChatPanel(
       // M81. A supervisor's flag is copied field-by-field like the rest: it is
       // what makes its next spawn carry the system prompt again.
       ...(chat.supervisor === true ? { supervisor: true as const } : {}),
+      // M90. The backend, the same way: present only when codex, so a claude
+      // record never grows a key (`verify:panels codex.1` reads the file).
+      ...(chat.backend === 'codex' ? { backend: 'codex' as const } : {}),
       cwd: chat.cwd,
       sessionId: chat.sessionId,
       ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })

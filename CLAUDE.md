@@ -81,7 +81,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
-| `verify:agent-session` | plain node | 72 checks (M71, M73–M76, M81, M82): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm |
+| `verify:agent-session` | plain node | ~89 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `shot` (`npm run shot`) | real Electron, **not in `npm run verify`**, asserts nothing | M61. 23 PNGs of the real renderer plus a `manifest.json` of intents, from a seeded fixture canvas — the visual loop. Read the images; hand them to a fresh-context critic. See `docs/build-log/m61-visual-loop.md` |
@@ -384,6 +384,16 @@ check does not, and should not, cover it.
   the seventh panel kind — sessionless, three states, an add line writing through the same
   store — and `renderer/chat/memory-context.ts` is the bound the chat's first message carries
   (`MEMORY_CONTEXT_MAX`, 4 KB) and states above the composer before it sends it.
+- `src/shared/codex-transcript.ts` — M90. The second headless backend behind M71's seam:
+  codex's JSONL to the SAME `TranscriptEvent` union (one line yields zero to two events — a
+  completed command is claude's tool_use/tool_result pair), and `codexArgs` — the prompt is an
+  ARGUMENT, so codex runs ONE PROCESS PER TURN with stdin CLOSED (`closeStdin` on `AgentSpawn`;
+  an open pipe blocks it). In the manager a codex session's `result` marks the turn ended and
+  the exit that follows is the turn's normal END (`ready`, never `exited`); the queue is served
+  from `handleExit`, because a second process cannot resume a thread the first still holds.
+  The thread id is codex's, adopted from `thread.started`; `backend` on the spec, the snapshot
+  and `ChatSource` (absent is claude, carried through BOTH field-by-field copy sites). No cost
+  is ever claimed; `interrupt` answers false and the composer names why.
 - `src/main/claude-transcript-import.ts` — M74. The CLI's own transcript (M17's glob) read
   into a chat panel's file for `Open as chat`: sidechain and meta records skipped, assistant
   records merged by message id with usage counted once, a typed prompt's string content a

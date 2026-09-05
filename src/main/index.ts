@@ -49,7 +49,7 @@ import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shar
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
-import type { AgentCreateResult, AgentSessionSpec } from '../shared/agent-session'
+import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { spawn as spawnChild } from 'node:child_process'
@@ -160,6 +160,8 @@ let agentSessions: AgentSessionManager | null = null
 // M76. Assigned beside it once the runtime exists; create() re-syncs through it.
 let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
+/** M90. The second headless CLI, from the same probe. Null means the codex chat row is disabled by name. */
+let codexPath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
 // constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
@@ -725,6 +727,7 @@ app.whenReady().then(async () => {
     // launchd PATH — see gitPath's declaration above.
     if (binary === 'git') gitPath = found
     if (binary === 'claude') claudePath = found
+    if (binary === 'codex') codexPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
   // The bare name is kept when the probe found nothing: the spawn then fails
@@ -734,6 +737,10 @@ app.whenReady().then(async () => {
   agentSessions = new AgentSessionManager({
     runner: claudeCliRunner,
     command: claudePath ?? 'claude',
+    // M90. Present only when found: an absent codex makes a codex send
+    // `refused-backend`, never a spawn of a bare name that ENOENTs.
+    ...(codexPath === null ? {} : { codex: { command: codexPath } }),
+    hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
     env,
     newSessionId: () => randomUUID(),
     // M73. Whether the CLI already holds a transcript for a session id —
@@ -1049,7 +1056,8 @@ app.whenReady().then(async () => {
     create: (spec: AgentSessionSpec): AgentCreateResult => {
       const manager = agentSessions
       if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
-      if (claudePath === null) return { kind: 'refused', reason: 'claude was not found on the login PATH — install it, or check the environment report' }
+      if (spec.backend === 'codex' && codexPath === null) return { kind: 'refused', reason: REASON_NO_CODEX }
+      if (spec.backend !== 'codex' && claudePath === null) return { kind: 'refused', reason: 'claude was not found on the login PATH — install it, or check the environment report' }
       const cwd = resolveCwd(spec.cwd)
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
@@ -1075,6 +1083,8 @@ app.whenReady().then(async () => {
         images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
       }
       const answer = agentSessions?.send(id, text, images) ?? 'no-session'
+      if (answer === 'refused-backend') return { refused: REASON_NO_CODEX }
+      if (answer === 'refused-images') return { refused: REASON_CODEX_NO_IMAGES }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0

@@ -930,6 +930,9 @@ app.whenReady().then(async () => {
   const memoryStore = createMemoryStore({ dir: memoryDir })
   const agentSessions = new AgentSessionManager({
     runner: chatRunner, command: '/fake/claude', env: { PATH: '/fake' },
+    // M90. The second backend behind the same fake runner; a codex chat's
+    // create needs nothing from it, and no check sends on one here.
+    codex: { command: '/fake/codex' },
     // M82. The canvas's ceilings, read live from the same store main reads.
     limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0 }),
     newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
@@ -17743,6 +17746,79 @@ app.whenReady().then(async () => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr) + ' | renderer: ' + (iLog.slice(-4).join(' || ') || '(none)'))
       } finally {
         wc.removeListener('console-message', onI)
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* M90. The second headless backend: the sheet's row and the panel   */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['codex.1 the sheet offers `chat with codex` beside claude (disabled BY NAME when codex is absent), a chat minted from it paints `codex` as its kind word with Interrupt disabled by codex\'s own reason and the terminal door refused by name, its record carries backend: codex on disk, and a claude chat\'s record carries no backend key at all']
+      const cLog = []
+      const onC = (_e, _l, m) => { cLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onC)
+      const dirC = mkdtempSync(join(tmpdir(), 'tc panels codex-'))
+      try {
+        // The harness PATH holds no codex; a user preset naming the codex
+        // agent over a command that exists is what makes the row available —
+        // the same door the composer-claude preset uses for claude.
+        layoutStore.addPreset({ id: 'codex-sheet', name: 'Codex (sheet)', cwd: '~', command: '/bin/sh', args: [], agent: 'codex' })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reC
+        await settle()
+        const codexOnPath = await wc.executeJavaScript(`window.canvas.preset.list().then((rows) => rows.some((r) => r.agent === 'codex' && r.available))`)
+        const set = (sel, value) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el) return false
+          const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+          Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, ${JSON.stringify(value)})
+          el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); return true })()`)
+        const submitSheet = () => wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return false; w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const chatCount = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-chat-status]').length`)
+        win.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET)
+        const option = await waitUntil(() => wc.executeJavaScript(`(() => { const o = document.querySelector('[data-sheet-what] option[data-sheet-codex]'); return o ? { text: o.textContent, disabled: o.disabled, value: o.value } : false })()`), 4000)
+        let minted = false
+        if (option && option.disabled === false) {
+          await set('[data-sheet-what]', option.value)
+          await set('[data-sheet-where]', dirC)
+          await submitSheet()
+          minted = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-chat-status]'); if (!p) return false
+            const word = p.querySelector('[data-chat-backend]'); const interrupt = p.querySelector('[data-chat-interrupt]'); const door = p.querySelector('[data-open-in-terminal]')
+            return { id: p.getAttribute('data-panel-id'), backend: word ? word.getAttribute('data-chat-backend') : null, wordText: word ? word.textContent : null, interruptDisabled: interrupt ? interrupt.disabled : null, interruptTitle: interrupt ? interrupt.title : null, doorDisabled: door ? door.disabled : null, doorTitle: door ? door.title : null, empty: p.querySelector('[data-chat-empty]')?.textContent ?? null, refusal: p.querySelector('[data-chat-refusal]')?.textContent ?? null, bodyText: (p.querySelector('.chat__transcript')?.textContent ?? '').slice(0, 160) } })()`), 6000)
+        } else {
+          await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+        }
+        await settle()
+        // A claude chat beside it through the SAME sheet, so the two records can be compared on disk.
+        const before = await chatCount()
+        win.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`), 4000)
+        await set('[data-sheet-what]', '__chat__')
+        await set('[data-sheet-where]', dirC)
+        await submitSheet()
+        const claudeMinted = await waitUntil(async () => (await chatCount()) === before + 1, 6000)
+        await settle()
+        layoutStore.flushSync()
+        const stored = (layoutStore.initial().panels || []).filter((p) => p.kind === 'chat').map((p) => ({ id: p.id, backend: p.chat && p.chat.backend, hasKey: !!(p.chat && Object.prototype.hasOwnProperty.call(p.chat, 'backend')) }))
+        const codexStored = minted === false ? null : stored.find((p) => p.id === minted.id)
+        const claudeStored = stored.find((p) => p.backend === undefined)
+        // The sheet's row is the assertion on EVERY machine; the minted half only where codex is installed.
+        const rowOk = option && /chat with codex/.test(option.text) && option.disabled === !codexOnPath && (codexOnPath || /not on PATH/.test(option.text))
+        const mintedOk = !codexOnPath || (minted && minted.backend === 'codex' && minted.wordText === 'codex' && minted.interruptDisabled === true && /nothing is in flight/.test(minted.interruptTitle || '') && minted.doorDisabled === true && /codex/.test(minted.doorTitle || '') &&
+          codexStored && codexStored.backend === 'codex')
+        ok(IDS[0], rowOk && mintedOk && claudeMinted === true && claudeStored !== undefined && claudeStored.hasKey === false,
+          JSON.stringify({ codexOnPath, option, minted, stored, claudeMinted, log: cLog.slice(-3) }))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reC2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reC2
+        await settle()
+        try { layoutStore.deletePreset('codex-sheet') } catch {}
+      } catch (cErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC)
+        try { rmSync(dirC, { recursive: true, force: true }) } catch {}
       }
     }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, SUPERVISOR_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { buildSpawnRequest, directorySuggestions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
 import { templateHoles } from './template-model'
@@ -45,6 +45,8 @@ export interface SpawnSheetModel {
   submit(values: SheetValues): Promise<SpawnResult>
   /** M73. Whether claude was found — the chat arm is offered disabled by name otherwise. */
   claudeAvailable: boolean
+  /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
+  codexAvailable: boolean
   /** M81. One supervisor per canvas: the row says so rather than vanishing. */
   hasSupervisor?: boolean
 }
@@ -101,7 +103,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   )
 
   const values = (): SheetValues => {
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : { kind: 'preset', id: whatId }
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
@@ -163,7 +165,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // M73. A chat is an agent panel: the how fields apply, with the CLI's own
   // defaults as the placeholders.
   const isSupervisor = whatId === SUPERVISOR_WHAT_ID
-  const isChat = whatId === CHAT_WHAT_ID || isSupervisor
+  const isChat = whatId === CHAT_WHAT_ID || whatId === CODEX_WHAT_ID || isSupervisor
   const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)
@@ -216,6 +218,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           <option value={COMMAND}>type a command…</option>
           {/* M73. The conversation arm, disabled by name when claude is absent. */}
           <option value={CHAT_WHAT_ID} disabled={!model.claudeAvailable}>chat with claude{model.claudeAvailable ? '' : ' — not on PATH'}</option>
+          {/* M90. The second backend behind the same seam, disabled by name when codex is absent. */}
+          <option value={CODEX_WHAT_ID} data-sheet-codex disabled={!model.codexAvailable}>chat with codex{model.codexAvailable ? '' : ' — not on PATH'}</option>
           {/* M81. One per canvas, disabled by name when there already is one. */}
           <option value={SUPERVISOR_WHAT_ID} disabled={!model.claudeAvailable || model.hasSupervisor === true}>
             supervisor of this canvas{!model.claudeAvailable ? ' — not on PATH' : model.hasSupervisor === true ? ' — this canvas already has one' : ''}

@@ -389,6 +389,8 @@ app.whenReady().then(async () => {
         // M73. A chat panel with a recorded conversation in its durable file
         // (seeded below), so the scene shows a transcript with no process.
         { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
+        // M90. The second backend beside the first: the chrome names it, the rest is the same panel.
+        { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api (chat)', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })

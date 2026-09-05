@@ -172,6 +172,14 @@ function replaceTurn(turns: TranscriptTurn[], turn: TranscriptTurn): TranscriptT
  * Rides applyChatEvent, the ONE event door, like the agent-state store's
  * transition fan-out rides applyAgentState.
  */
+type SessionListener = (id: string, sessionId: string) => void
+const sessionListeners = new Set<SessionListener>()
+/** M90. The session id the CLI reported for a chat — what a codex record must store. */
+export function onChatSession(listener: SessionListener): () => void {
+  sessionListeners.add(listener)
+  return () => { sessionListeners.delete(listener) }
+}
+
 type TurnEndListener = (id: string) => void
 const turnEndListeners = new Set<TurnEndListener>()
 export function onChatTurnEnd(listener: TurnEndListener): () => void {
@@ -217,7 +225,10 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       return
     case 'session':
       if (!snap) return
-      update(event.id, { ...prev, snapshot: { ...snap, model: event.model ?? snap.model } })
+      update(event.id, { ...prev, snapshot: { ...snap, model: event.model ?? snap.model, sessionId: event.sessionId } })
+      // M90. codex mints the thread id; the record must learn it or a relaunch
+      // resumes a thread that does not exist. Every subscriber decides by backend.
+      for (const l of sessionListeners) l(event.id, event.sessionId)
       return
     case 'message-start':
       update(event.id, { ...prev, live: { messageId: event.messageId, blocks: [] } })

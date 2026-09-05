@@ -2296,6 +2296,20 @@ const session = (id, over = {}) => ({
   const f = composer(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]), true)
   ok('approve.3 the composer with a question open disables Send naming allow/deny, distinct from the streaming reason, and keeps Interrupt',
     f && f.send.enabled === false && /allow or deny/.test(f.send.reason) && f.send.reason !== a.send.reason && f.interrupt.enabled === true, JSON.stringify(f))
+  // M90. The second backend's named reasons: Interrupt mid-turn is disabled
+  // with codex's own sentence (there is no door), never enabled to a no-op;
+  // with no codex Send names codex, not claude; at rest the idle reason wins.
+  const g = composer(snap('streaming'), true, 'codex')
+  const h = composer(null, false, 'codex')
+  const i = composer(snap('ready'), true, 'codex')
+  const j = composer(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]), true, 'codex')
+  ok('codex-composer.1 on a codex chat Interrupt is disabled mid-turn by a reason naming codex and the panel close, Send names codex when it is absent, the idle reason is unchanged at rest, and a claude chat\'s arms are exactly as before',
+    g && g.send.enabled === false && g.interrupt.enabled === false && /codex/.test(g.interrupt.reason) && /close the panel/.test(g.interrupt.reason) &&
+      h && h.send.enabled === false && /codex/.test(h.send.reason) && /PATH/.test(h.send.reason) && !/claude/.test(h.send.reason) &&
+      i && i.send.enabled === true && i.interrupt.enabled === false && i.interrupt.reason === b.interrupt.reason &&
+      j && j.interrupt.enabled === false && /codex/.test(j.interrupt.reason) &&
+      a.interrupt.enabled === true && composer(snap('streaming'), true, 'claude').interrupt.enabled === true,
+    JSON.stringify({ g, h, i, j }))
   const input = typeof R.chatStateInput === 'function' ? R.chatStateInput : () => null
   const i1 = input(snap('streaming', [{ requestId: 'r', toolName: 'Bash', input: {} }]))
   const i2 = input(null)

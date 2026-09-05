@@ -1,6 +1,6 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
-import { claudeAvailable } from '@renderer/palette/commands'
+import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer } from '@renderer/chat/chat-store'
@@ -14,7 +14,7 @@ import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { templateRefusal } from '@renderer/palette/template-model'
-import { SUPERVISOR_PROMPT } from '@shared/agent-session'
+import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
 import { clearSubagents } from '@renderer/session/subagent-store'
@@ -84,7 +84,7 @@ export interface PaletteActionsDeps {
   beginWatcher: () => void
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
-  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string }) => Promise<SpawnResult>
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>
   /** M80. Instantiate a template: every node and edge in one history entry. */
   instantiateTemplate: (template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>
   /** M74. The two front-end verbs. */
@@ -1196,6 +1196,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           sheet: {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
             claudeAvailable: claudeOk,
+            codexAvailable: codexAvailable(presetRows),
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
             templates,
             ...(templateId === undefined ? {} : { templateId }),
@@ -1210,6 +1211,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               ? beginNewChat({ cwd: values.cwd, title: values.title === '' ? 'supervisor' : values.title, agentOptions: values.agentOptions, appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
               : values.what.kind === 'chat'
                 ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
+                : values.what.kind === 'codex'
+                  ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, backend: 'codex' })
                 : window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
           }
         })

@@ -35,6 +35,13 @@ export interface AgentSpawn {
   args: string[]
   cwd: string
   env: Record<string, string>
+  /**
+   * M90. Close stdin at spawn. codex's `exec` BLOCKS reading an open stdin
+   * ("Reading additional input from stdin…") and its prompt is an argument,
+   * so a per-turn backend has nothing to write and must not leave the pipe
+   * open. Absent is claude's open pipe.
+   */
+  closeStdin?: boolean
 }
 
 export type AgentRunner = (spawn: AgentSpawn) => AgentProcess

@@ -105,6 +105,7 @@ function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
   const chat = getChat(p.rect.id)
   return {
     busy: chat.snapshot !== null && (chat.snapshot.status === 'streaming' || chat.snapshot.pending.length > 0),
+    ...(p.chat.backend === 'codex' ? { backend: 'codex' as const } : {}),
     turns: chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length
   }
 }

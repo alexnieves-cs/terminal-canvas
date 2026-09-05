@@ -1115,6 +1115,176 @@ const isResult = (l) => l.includes('"type":"result"')
       order.includes('flush') && order.includes('shutdown'), order.join(','))
   }
 
+/* ------------------------------------------------------------------------ */
+/* M90. The second headless backend: codex exec --json                       */
+/* ------------------------------------------------------------------------ */
+
+{
+  /* codex.1 — the adapter over three streams recorded from codex-cli 0.153.4. */
+  const C = M.codex
+  const codexFixture = (name) => readFileSync(join(__dirname, 'fixtures', 'agent-session', 'codex', name), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  const pong = C.parseCodexLines(codexFixture('pong.jsonl'))
+  const session = pong.find((e) => e.type === 'session')
+  const assistant = pong.filter((e) => e.type === 'assistant')
+  const result = pong.find((e) => e.type === 'result')
+  ok('codex.1 thread.started is the session (the thread id is the session id), a completed agent_message is one assistant text block, and turn.completed is a result carrying usage in the app\'s totals and NO cost',
+    session !== undefined && /^[0-9a-f-]{36}$/.test(session.sessionId) &&
+      assistant.length === 1 && assistant[0].blocks.length === 1 && assistant[0].blocks[0].type === 'text' && /pong/i.test(assistant[0].blocks[0].text) &&
+      result !== undefined && result.usage !== undefined && result.usage.input > 0 && result.usage.output > 0 && result.costUsd === undefined &&
+      pong.every((e) => e.type !== 'malformed' && e.type !== 'unknown'),
+    JSON.stringify({ session, assistant, result, kinds: pong.map((e) => e.type) }))
+
+  const command = C.parseCodexLines(codexFixture('command.jsonl'))
+  const uses = command.flatMap((e) => (e.type === 'assistant' ? e.blocks.filter((b) => b.type === 'tool_use') : []))
+  const results = command.flatMap((e) => (e.type === 'user' ? e.blocks.filter((b) => b.type === 'tool_result') : []))
+  ok('codex.1.b a completed command_execution is a tool_use block (Bash, the command as input) paired with a tool_result block carrying its output under the SAME id, so the panel\'s existing tool rows render it; item.started is ignored, never unknown',
+    uses.length >= 1 && results.length === uses.length &&
+      uses.every((u) => u.name === 'Bash' && typeof u.input.command === 'string') &&
+      results.every((r, i) => r.toolUseId === uses[i].id && typeof r.content === 'string') &&
+      command.some((e) => e.type === 'ignored') && command.every((e) => e.type !== 'unknown' && e.type !== 'malformed'),
+    JSON.stringify({ uses, results, kinds: command.map((e) => e.type) }))
+
+  const resumed = C.parseCodexLines(codexFixture('resume.jsonl'))
+  const resumedSession = resumed.find((e) => e.type === 'session')
+  ok('codex.1.c a resumed stream repeats thread.started with the SAME thread id, and its result still carries usage',
+    resumedSession !== undefined && resumedSession.sessionId === session.sessionId &&
+      resumed.some((e) => e.type === 'result' && e.usage !== undefined),
+    JSON.stringify({ resumedSession }))
+
+  const bad = ['{not json', '{"type":"telepathy"}', '{"type":"item.completed","item":{"type":"reasoning"}}'].flatMap(C.parseCodexLine)
+  ok('codex.1.d a broken line is malformed, an unknown top-level type is unknown BY KIND, and an item kind this app does not render is ignored by kind — never a throw',
+    bad[0].type === 'malformed' && bad[1].type === 'unknown' && bad[1].kind === 'telepathy' && bad[2].type === 'ignored' && bad[2].kind === 'item:reasoning',
+    JSON.stringify(bad))
+
+  const first = C.codexArgs({ cwd: '/w', text: 'hello there', resume: false, sessionId: '', agentOptions: { sandbox: 'workspace-write', model: 'o4' } })
+  const later = C.codexArgs({ cwd: '/w', text: 'again', resume: true, sessionId: 'thread-1' })
+  ok('codex.1.e the first turn is `exec --json -C <cwd> --skip-git-repo-check` with the knobs and the prompt as the LAST argument; a later turn is `exec resume <id> <prompt> --json`; the prompt is never on stdin',
+    first[0] === 'exec' && first.includes('--json') && first[first.indexOf('-C') + 1] === '/w' && first.includes('--skip-git-repo-check') &&
+      first[first.indexOf('--sandbox') + 1] === 'workspace-write' && first[first.indexOf('--model') + 1] === 'o4' && first[first.length - 1] === 'hello there' &&
+      later[0] === 'exec' && later[1] === 'resume' && later[2] === 'thread-1' && later[3] === 'again' && later.includes('--json'),
+    JSON.stringify({ first, later }))
+}
+
+{
+  /* codex.2 — the manager over a fake runner with backend codex. */
+  const codexFixture = (name) => readFileSync(join(__dirname, 'fixtures', 'agent-session', 'codex', name), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  const { manager, spawns, events } = makeManager({ codex: { command: '/fake/bin/codex' } })
+  manager.create({ id: 'cx', cwd: '/w', backend: 'codex' })
+  const before = manager.get('cx')
+  const r1 = manager.send('cx', 'ping')
+  const s1 = spawns[0]
+  ok('codex.2 a codex session spawns the codex command per send with the text as an argument, `exec` first, nothing written to stdin, and the snapshot names its backend',
+    r1 === 'sent' && spawns.length === 1 && s1.command === '/fake/bin/codex' && s1.args[0] === 'exec' && s1.args[1] !== 'resume' &&
+      s1.args[s1.args.length - 1] === 'ping' && s1.proc.stdin.length === 0 && s1.cwd === '/w' &&
+      before.backend === 'codex' && before.status === 'not-started' && manager.get('cx').status === 'starting',
+    JSON.stringify({ r1, args: s1.args, stdin: s1.proc.stdin, snap: manager.get('cx') }))
+
+  s1.proc.emitLines(codexFixture('pong.jsonl'))
+  const afterResult = manager.get('cx')
+  s1.proc.exit(0, null)
+  const afterExit = manager.get('cx')
+  const threadId = codexFixture('pong.jsonl').map((l) => JSON.parse(l)).find((r) => r.type === 'thread.started').thread_id
+  ok('codex.2.b the thread id from thread.started is adopted as the session id; the process exiting 0 after turn.completed is the turn\'s normal END, so the session reads ready with one turn — never exited, never turn-aborted',
+    afterResult.sessionId === threadId && afterResult.turns === 1 && afterResult.usage.input > 0 && afterResult.costUsd === undefined &&
+      afterExit.status === 'ready' && afterExit.exitCode === undefined && afterExit.pid === undefined &&
+      !events.some((e) => e.id === 'cx' && e.type === 'turn-aborted') &&
+      !events.some((e) => e.id === 'cx' && e.type === 'status' && e.status === 'exited'),
+    JSON.stringify({ afterResult, afterExit, kinds: events.filter((e) => e.id === 'cx').map((e) => e.type) }))
+
+  const r2 = manager.send('cx', 'again')
+  const s2 = spawns[1]
+  ok('codex.2.c the second send spawns a NEW process with `exec resume <thread id> <prompt>`',
+    r2 === 'sent' && spawns.length === 2 && s2.args[0] === 'exec' && s2.args[1] === 'resume' && s2.args[2] === threadId && s2.args[3] === 'again' && s2.args.includes('--json') &&
+      manager.get('cx').status === 'streaming',
+    JSON.stringify({ r2, args: s2 && s2.args, status: manager.get('cx').status }))
+
+  const interrupted = manager.interrupt('cx')
+  const r3 = manager.send('cx', 'queued one')
+  ok('codex.2.d interrupt on a codex session answers false and writes nothing (there is no interrupt door), and a send mid-turn QUEUES exactly as claude\'s does',
+    interrupted === false && s2.proc.stdin.length === 0 && s2.proc.killed === 0 && r3 === 'queued' && manager.get('cx').queued === 1,
+    JSON.stringify({ interrupted, r3, snap: manager.get('cx') }))
+
+  s2.proc.emitLines(codexFixture('resume.jsonl'))
+  s2.proc.exit(0, null)
+  ok('codex.2.e when the turn\'s process ends, the queued message spawns the next process (resume again) and the queue is never dropped as an exit would drop it',
+    spawns.length === 3 && spawns[2].args[1] === 'resume' && spawns[2].args[3] === 'queued one' && manager.get('cx').queued === 0 && manager.get('cx').turns === 2 &&
+      !events.some((e) => e.id === 'cx' && e.type === 'queue-dropped'),
+    JSON.stringify({ n: spawns.length, args: spawns[2] && spawns[2].args, snap: manager.get('cx') }))
+
+  spawns[2].proc.exit(1, null, 'boom')
+  const failed = manager.get('cx')
+  ok('codex.2.f a process that exits BEFORE turn.completed is a real exit: the turn is aborted and the session reads exited with the code and the stderr',
+    failed.status === 'exited' && failed.exitCode === 1 && events.some((e) => e.id === 'cx' && e.type === 'turn-aborted') &&
+      events.some((e) => e.id === 'cx' && e.type === 'status' && e.status === 'exited' && e.stderr === 'boom'),
+    JSON.stringify({ failed }))
+
+  {
+    // The verifier's window: codex flushes its result line BEFORE exiting. A
+    // send in between must queue, never answer `sent` while spawning nothing.
+    const w = makeManager({ codex: { command: '/fake/bin/codex' } })
+    w.manager.create({ id: 'win', cwd: '/w', backend: 'codex' })
+    w.manager.send('win', 'one')
+    w.spawns[0].proc.emitLines(codexFixture('pong.jsonl'))
+    const between = w.manager.send('win', 'two')
+    const spawnedEarly = w.spawns.length
+    w.spawns[0].proc.exit(0, null)
+    ok('codex.2.i a send between turn.completed and the process\'s exit QUEUES (the thread is still held) and is served by the exit — never answered sent with nothing spawned',
+      between === 'queued' && spawnedEarly === 1 && w.spawns.length === 2 && w.spawns[1].args[1] === 'resume' && w.spawns[1].args[3] === 'two',
+      JSON.stringify({ between, spawnedEarly, n: w.spawns.length, args: w.spawns[1] && w.spawns[1].args }))
+  }
+  {
+    // A budget crossing: codex has no interrupt, so the stop is a KILL named budget.
+    let budget = 0
+    const b = makeManager({ codex: { command: '/fake/bin/codex' }, limits: () => ({ maxConcurrent: 0, budgetUsd: budget }) })
+    b.manager.create({ id: 'cl', cwd: '/w' })
+    b.manager.create({ id: 'cx', cwd: '/w', backend: 'codex' })
+    b.manager.send('cx', 'go')
+    b.manager.send('cl', 'go')
+    budget = 0.5
+    b.spawns[1].proc.emitLines(upTo(fixture('turn.jsonl'), isResult).map((l) => l.replace(/"total_cost_usd":[0-9.]+/, '"total_cost_usd":0.75')))
+    const cxKilled = b.spawns[0].proc.killed
+    b.spawns[0].proc.exit(null, 'SIGTERM')
+    const aborted = b.events.find((e) => e.id === 'cx' && e.type === 'turn-aborted')
+    const budgetEvent = b.events.find((e) => e.type === 'budget')
+    ok('codex.2.j when the canvas crosses its budget, a codex turn in flight is KILLED (there is no interrupt door), its turn aborted with reason budget, and the crossing counts it',
+      cxKilled === 1 && aborted !== undefined && aborted.reason === 'budget' && budgetEvent !== undefined && budgetEvent.interrupted >= 1,
+      JSON.stringify({ cxKilled, aborted, budgetEvent }))
+  }
+  {
+    const im = makeManager({ codex: { command: '/fake/bin/codex' } })
+    im.manager.create({ id: 'img', cwd: '/w', backend: 'codex' })
+    const r = im.manager.send('img', 'see this', [{ mediaType: 'image/png', base64: 'aGk=' }])
+    ok('codex.2.k a send with an image on a codex session is refused BY NAME, stores no turn and spawns nothing',
+      r === 'refused-images' && im.spawns.length === 0 && im.manager.transcript('img').length === 0,
+      JSON.stringify({ r, n: im.spawns.length, turns: im.manager.transcript('img').length }))
+  }
+  {
+    // A restored codex chat with turns on disk resumes the thread its record names.
+    const rs = makeManager({ codex: { command: '/fake/bin/codex' }, hasTurns: (id) => id === 'old' })
+    rs.manager.create({ id: 'old', cwd: '/w', backend: 'codex', sessionId: 'thread-from-record' })
+    rs.manager.create({ id: 'new', cwd: '/w', backend: 'codex', sessionId: 'minted' })
+    rs.manager.send('old', 'again')
+    rs.manager.send('new', 'first')
+    ok('codex.2.l a codex session whose panel already has turns resumes the thread its record names on its FIRST send; one with none starts a thread',
+      rs.spawns[0].args[1] === 'resume' && rs.spawns[0].args[2] === 'thread-from-record' && rs.spawns[1].args[1] !== 'resume',
+      JSON.stringify({ old: rs.spawns[0].args, fresh: rs.spawns[1].args }))
+  }
+
+  const plain = makeManager()
+  plain.manager.create({ id: 'nocx', cwd: '/w', backend: 'codex' })
+  const r4 = plain.manager.send('nocx', 'hi')
+  ok('codex.2.g with no codex backend configured a codex session\'s send is refused BY NAME and spawns nothing',
+    r4 === 'refused-backend' && plain.spawns.length === 0 && plain.manager.get('nocx').status === 'not-started',
+    JSON.stringify({ r4, n: plain.spawns.length }))
+
+  const claude = makeManager({ codex: { command: '/fake/bin/codex' } })
+  claude.manager.create({ id: 'cl', cwd: '/w' })
+  claude.manager.send('cl', 'hi')
+  ok('codex.2.h an absent backend is claude: the claude command, the prompt on stdin',
+    claude.spawns.length === 1 && claude.spawns[0].command === '/fake/bin/claude' && claude.spawns[0].proc.stdin.length === 1 && claude.manager.get('cl').backend === 'claude',
+    JSON.stringify({ spawn: claude.spawns[0] && claude.spawns[0].command, backend: claude.manager.get('cl').backend }))
+}
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
