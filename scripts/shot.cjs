@@ -264,6 +264,26 @@ const SCENES = [
       await sleep(500)
       await kit.shot('approval')
     } },
+  { name: 'verbs', intent: 'M96. The verb line: the palette in text mode on `Run a verb…` after a typed step was refused — the refusal and its fix on the palette\'s own feedback line (`step 1: no panel is called zz9 — name a panel by its id…`), the typed line kept for correction. A plan is shown and refused by name before anything runs.',
+    run: async (k) => {
+      await k.press('k', { metaKey: true }); await sleep(500)
+      await k.type('run a verb'); await sleep(400)
+      await k.press('Enter'); await sleep(500)
+      await k.type('close zz9'); await sleep(200)
+      await k.press('Enter'); await sleep(600)
+      await k.shot('verbs')
+      await k.press('Escape'); await sleep(300); await k.press('Escape'); await sleep(300)
+    } },
+  { name: 'auto', intent: 'M97. A chat wearing a running auto chip beside its state pill (`auto · complete · 0/8` with a ring) after the chat\'s `auto` verb opened the palette on the Auto rows and Complete was chosen; the opening prompt drew a permission question, so the approval card is up with its verbs — Allow, Allow for session, Deny. The chip is a projection of main\'s count; the card is the same question every attention surface answers.',
+    run: async (k) => {
+      await k.goTo('api (chat)')
+      await k.click('.panel[data-panel-id="chat"] [data-chat-auto-open]'); await sleep(500)
+      await k.type('auto: complete'); await sleep(400)
+      await k.press('Enter'); await sleep(900)
+      await k.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await sleep(300)
+      await k.shot('auto')
+    } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
     run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
   { name: 'palette', intent: 'The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer.',
