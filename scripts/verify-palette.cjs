@@ -2183,6 +2183,41 @@ const WS = [
     JSON.stringify({ exited: exited && exited.disabledReason, live: live && live.disabledReason, shell: shell && shell.disabledReason, rest: rest && rest.disabledReason, busy: busy && busy.disabledReason, empty: empty && empty.disabledReason, wrongKind: wrongKind && wrongKind.disabledReason }))
 }
 
+// M88 — github.1. THE SECOND WORK PANEL'S DOOR is present at rest and
+//      DISABLED with the Connect reason when no github credential exists —
+//      never absent, the rule the Jira door broke for a milestone (its row
+//      only existed once a credential did) and `verify:palette 31` states.
+//      With a credential it runs the open verb.
+{
+  let opened = 0
+  const actions = { ...spyActions(), openGithub: () => { opened += 1 } }
+  const without = P.buildCommands(ctx({ credentials: [], actions }))
+  const withCred = P.buildCommands(ctx({ credentials: [{ service: 'github', label: 'octocat', addedAt: 'now', verifiedAt: 'now' }], actions }))
+  const rowOff = without.find((c) => c.id === 'github.open')
+  const rowOn = withCred.find((c) => c.id === 'github.open')
+  if (rowOn && rowOn.disabledReason === undefined) rowOn.run()
+  ok('github.1 the Open GitHub work row is present without a credential and disabled with the Connect reason, and enabled with one it opens the panel',
+    rowOff !== undefined && typeof rowOff.disabledReason === 'string' && /not connected/.test(rowOff.disabledReason) && /Credentials/.test(rowOff.disabledReason) &&
+      rowOn !== undefined && rowOn.disabledReason === undefined && opened === 1,
+    JSON.stringify({ rowOff: rowOff && { disabledReason: rowOff.disabledReason }, rowOn: rowOn && { disabledReason: rowOn.disabledReason }, opened }))
+}
+
+// M89 — integrations.1. ONE SENTENCE for a missing service, imported, never
+//      spelled: the GitHub door's reason IS `notConnectedReason('github')`
+//      byte for byte; the Jira rows say the same shape; and the
+//      `Manage integrations…` door is present at rest and enters the
+//      Credentials scope, so the page and the palette share one path.
+{
+  const rows = P.buildCommands(ctx({ credentials: [] }))
+  const gh = rows.find((c) => c.id === 'github.open')
+  const door = rows.find((c) => c.id === 'manage.integrations')
+  const one = typeof P.notConnectedReason === 'function' ? P.notConnectedReason('github') : null
+  ok('integrations.1 the GitHub door\'s reason is notConnectedReason byte for byte, and Manage integrations… is present at rest and enters the Credentials scope',
+    gh !== undefined && one !== null && gh.disabledReason === one &&
+      door !== undefined && door.disabledReason === undefined && door.entersScope === 'credentials',
+    JSON.stringify({ gh: gh && gh.disabledReason, one, door: door && { scope: door.entersScope, reason: door.disabledReason } }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

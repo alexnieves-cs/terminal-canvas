@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -117,6 +117,30 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
+  { name: 'integrations', intent: 'The Integrations page: the navigator\'s fifth pane, every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
+    run: async (kit) => {
+      // Two of the three states on screen: GitHub connected as octocat, Jira
+      // with a token the last verify rejected. Seeded through the harness's
+      // own store and cleared after, so the Jira panel elsewhere keeps its
+      // no-credential arm.
+      credentialStore.set('github', 'ghp_shot_token_000000000000000000000000')
+      credentialStore.setLabel('github', 'octocat')
+      credentialStore.set('jira', JSON.stringify({ site: 'https://acme.atlassian.net', email: 'me@acme.test', token: 'shot' }))
+      credentialStore.markRejected('jira')
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="integrations"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(900)
+      await kit.js(`(() => { const b = document.querySelector('[data-integrations-refresh]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await sleep(900)
+      await kit.shot('integrations')
+      credentialStore.delete('github'); credentialStore.delete('jira')
+      await kit.js(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+    } },
+  { name: 'github', intent: 'The GitHub work panel: the issues assigned to you and the pull requests waiting on your review as one list, each item led by its owner/repo#N in mono with its state, the title, the body\'s first line dim, and two verbs — Start session, which spawns an agent with the item as its opening context, and open on GitHub. Jira\'s shape reached by a second service, through the broker, so the panel\'s reads sit in the same audit as the agents\' own calls.',
+    run: async (kit) => {
+      await kit.goTo('GitHub work')
+      await sleep(900)
+      await kit.shot('github')
+    } },
   { name: 'across', intent: 'A review of every worktree of one repository, in one node: the main tree first, then each worktree this app created, headed by what the user calls it and its branch, each with its own files and counts — and commit and discard blocked by name, because a commit across worktrees would be N commits pretending to be one. The context pane beside it names the repository on its identity line and says where the branch stands against its tracking ref, from the last fetch.',
     run: async (kit) => {
       await kit.goTo('every worktree of repo')
@@ -352,6 +376,8 @@ app.whenReady().then(async () => {
         { id: 'note', kind: 'file', x: 800, y: 310, w: 340, h: 420, z: 5, source: { path: NOTE, prose: true } },
         { id: 'toolbox', kind: 'toolbox', x: 30, y: 570, w: 380, h: 210, z: 6, source: { cwd: REPO } },
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
+        // M88. The GitHub work panel over a recorded broker.
+        { id: 'github', kind: 'github', x: 1800, y: 900, w: 460, h: 440, z: 15 },
         // M86. One review over every worktree of the fixture repository.
         { id: 'across', kind: 'review', x: 1200, y: 1300, w: 560, h: 420, z: 14,
           subject: { subjectId: 'live', repoRoot: REPO_ROOT, baselineSha: REPO_HEAD, label: 'every worktree of repo', across: true } },
@@ -521,6 +547,15 @@ app.whenReady().then(async () => {
       spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
       // M80. Templates: the built-ins plus the store's own.
       presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
+      // M88. GitHub through a recorded broker: the scene shows the list with
+      // an issue and a review request.
+      brokerAudit: (_limit, service) => ({ rows: [{ at: Date.now() - 60000, service: 'github', method: 'GET', path: '/issues?filter=assigned', status: 200, bytes: 2410, panelId: 'github' }, { at: Date.now() - 400000, service: 'github', method: 'POST', path: '/repos/acme/canvas/issues/12/comments', status: 201, bytes: 88, panelId: 'live' }, { at: Date.now() - 900000, service: 'github', method: 'DELETE', path: '/repos/acme/canvas', status: 0, bytes: 0, panelId: 'live', reason: 'the path must stay under /repos — a delete of a repository is not a path the broker performs' }].filter((r) => service === undefined || r.service === service), skipped: 0 }),
+      githubList: (panelId) => listGithubWorkItems({ panelId, broker: { call: async (q) => ({ ok: true, status: 200, truncated: false, body: q.path.includes('/search/')
+        ? JSON.stringify({ total_count: 1, items: [{ number: 77, title: 'Split the flush gate out of onExit', body: 'The timer is the second door. Please review before the release branch cuts.', state: 'open', html_url: 'https://github.com/acme/canvas/pull/77', repository_url: 'https://api.github.com/repos/acme/canvas', pull_request: { url: 'x' }, user: { login: 'worker-a' } }] })
+        : JSON.stringify([
+          { number: 12, title: 'Watchdog fires under load', body: 'The 300s watchdog trips when the suite runs beside a build. Split the suite or raise it once more.', state: 'open', html_url: 'https://github.com/acme/canvas/issues/12', repository: { full_name: 'acme/canvas' }, assignee: { login: 'octocat' } },
+          { number: 31, title: 'Group buttons are mouse-only', body: 'Card and remove on a group frame cannot be reached from the keyboard.', state: 'open', html_url: 'https://github.com/acme/canvas/issues/31', repository: { full_name: 'acme/canvas' }, assignee: { login: 'octocat' } }
+        ]) }) } }),
       vaultRead: (root) => readVault(root),
       memoryList: (root, limit) => shotMemory.list(root, limit),
       memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },

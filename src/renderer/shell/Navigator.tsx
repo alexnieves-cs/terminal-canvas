@@ -8,6 +8,7 @@ import { RailWorkspaceRow } from './RailWorkspaceRow'
 import type { RailRun } from './rail-sections'
 import { FileTree } from './FileTree'
 import { VaultPane, type VaultPaneProps } from './VaultPane'
+import { IntegrationsPane, type IntegrationsPaneProps } from './IntegrationsPane'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
 
@@ -49,6 +50,8 @@ export interface NavigatorProps {
   memoryReason?: string
   /** M85. The vault pane's model — its own three states, built by Canvas. */
   vault: VaultPaneProps
+  /** M89. The integrations page's model. */
+  integrations: IntegrationsPaneProps
 }
 
 /**
@@ -78,10 +81,12 @@ export interface NavigatorProps {
  */
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
-  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
+  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
-      {navigator === 'vault' ? (
+      {navigator === 'integrations' ? (
+        <IntegrationsPane {...props.integrations} onToggle={onToggle} />
+      ) : navigator === 'vault' ? (
         <VaultPane {...props.vault} onToggle={onToggle} />
       ) : navigator === 'files' ? (
         <FileTree

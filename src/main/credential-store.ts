@@ -31,6 +31,8 @@ export interface CredentialStore {
    */
   read(service: string): string | undefined
   setLabel(service: string, label: string): void
+  /** M89. The durable rejection mark: set on a 401/403, cleared by `setLabel` (a success). */
+  markRejected(service: string): void
 }
 
 interface Entry {
@@ -38,6 +40,7 @@ interface Entry {
   cipher: string
   addedAt: string
   verifiedAt?: string
+  rejectedAt?: string
 }
 
 const FILE_VERSION = 1
@@ -80,7 +83,8 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
           label: e.label,
           cipher: e.cipher,
           addedAt: e.addedAt,
-          ...(typeof e.verifiedAt === 'string' ? { verifiedAt: e.verifiedAt } : {})
+          ...(typeof e.verifiedAt === 'string' ? { verifiedAt: e.verifiedAt } : {}),
+          ...(typeof e.rejectedAt === 'string' ? { rejectedAt: e.rejectedAt } : {})
         }
       }
       return out
@@ -121,7 +125,8 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
     service,
     label: e.label,
     addedAt: e.addedAt,
-    ...(e.verifiedAt ? { verifiedAt: e.verifiedAt } : {})
+    ...(e.verifiedAt ? { verifiedAt: e.verifiedAt } : {}),
+    ...(e.rejectedAt ? { rejectedAt: e.rejectedAt } : {})
   })
 
   return {
@@ -188,7 +193,17 @@ export function createCredentialStore(deps: CredentialStoreDeps): CredentialStor
     setLabel(service, label) {
       const e = entries[service]
       if (!e) return
-      entries = { ...entries, [service]: { ...e, label, verifiedAt: new Date().toISOString() } }
+      // A success CLEARS the mark by omission — never `rejectedAt: undefined`,
+      // which reads as present at every `'rejectedAt' in meta` site.
+      const { rejectedAt: _cleared, ...rest } = e
+      entries = { ...entries, [service]: { ...rest, label, verifiedAt: new Date().toISOString() } }
+      flush()
+    },
+
+    markRejected(service) {
+      const e = entries[service]
+      if (!e) return
+      entries = { ...entries, [service]: { ...e, rejectedAt: new Date().toISOString() } }
       flush()
     }
   }

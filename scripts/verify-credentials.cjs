@@ -327,6 +327,59 @@ const TOKEN = 'ghp_supersecrettokenvalue123456'
     JSON.stringify({ encodedDots, upperDots, longPath: longPath && longPath.reason, thrown, thrownJira, colonOk: colonOk.ok, seenGrew: seen.length - seenBefore, ceiling, auditLines, auditNewest, evilSite: evilSite === null, goodSite: goodSite && goodSite.site, paths: rows.map((r) => r.path).slice(0, 6), leak: everything.includes(TOKEN) || everything.includes("jira-secret-token"), rows: rows.length, seen: seen.length }))
 }
 
+// M89 — rejected.1. THE DURABLE REJECTION MARK. `credential:verify` records
+//      a 401/403 as `rejectedAt` and a success CLEARS it: the Integrations
+//      page says what the last verify said, not what the user remembers.
+//      ABSENT stays absent — a spread that wrote `rejectedAt: undefined`
+//      would read as present at every `'rejectedAt' in meta` site — and the
+//      mark never carries the token or the response.
+{
+  const p = join(dir, 'rejected.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  const before = store.list()[0]
+  const rejectedVerify = typeof mod.verifyCredential === 'function'
+    ? await mod.verifyCredential({ store, fetcher: async () => ({ status: 401, body: '{"message":"Bad credentials"}' }) }, 'github')
+    : null
+  const afterReject = store.list()[0]
+  const okVerify = typeof mod.verifyCredential === 'function'
+    ? await mod.verifyCredential({ store, fetcher: async () => ({ status: 200, body: JSON.stringify({ login: 'octocat' }) }) }, 'github')
+    : null
+  const afterOk = store.list()[0]
+  const reread = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() }).list()[0]
+  // M89's verifier: a 403 is NOT a rejection (a rate limit, an SSO org); a
+  // 401 seen by the BROKER marks too, from the one place every call passes;
+  // and the audit's read projects fields, so an extra key on a line never
+  // crosses the bridge.
+  const forbidden = typeof mod.verifyCredential === 'function'
+    ? await mod.verifyCredential({ store, fetcher: async () => ({ status: 403, body: '{"message":"rate limited"}' }) }, 'github')
+    : null
+  const after403 = store.list()[0]
+  const seeing401 = typeof mod.createBroker === 'function'
+    ? mod.createBroker({ store, fetcher: async () => ({ status: 401, body: '{}' }), audit: { append: () => {} }, now: () => 1 })
+    : null
+  if (seeing401) await seeing401.call({ service: 'github', method: 'GET', path: '/user' })
+  const afterBroker401 = store.list()[0]
+  const auditFile2 = join(dir, 'audit2', 'broker-audit.jsonl')
+  const audit2 = typeof mod.createBrokerAudit === 'function' ? mod.createBrokerAudit({ file: auditFile2 }) : null
+  if (audit2) {
+    require('node:fs').mkdirSync(join(dir, 'audit2'), { recursive: true })
+    require('node:fs').appendFileSync(auditFile2, JSON.stringify({ at: 1, service: 'github', method: 'GET', path: '/x', status: 200, bytes: 1, token: 'leaked', extra: { deep: true } }) + '\n')
+  }
+  const projected = audit2 ? audit2.list(10).rows[0] : null
+  const filtered = audit2 ? audit2.list(10, 'jira').rows.length : -1
+  ok('rejected.1 a 401 verify records rejectedAt (and nothing else), a success clears it, absent stays absent, the mark survives a re-read, a 403 marks nothing, a 401 seen by the broker marks, and the audit read projects fields and filters by service',
+    before && !('rejectedAt' in before) &&
+      rejectedVerify && rejectedVerify.ok === false &&
+      afterReject && typeof afterReject.rejectedAt === 'string' && !JSON.stringify(afterReject).includes(TOKEN) &&
+      okVerify && okVerify.ok === true && afterOk && !('rejectedAt' in afterOk) && afterOk.label === 'octocat' &&
+      reread && !('rejectedAt' in reread) &&
+      forbidden && forbidden.ok === false && after403 && !('rejectedAt' in after403) &&
+      afterBroker401 && typeof afterBroker401.rejectedAt === 'string' &&
+      projected && !('token' in projected) && !('extra' in projected) && projected.path === '/x' && filtered === 0,
+    JSON.stringify({ before, afterReject, afterOk, reread, after403, afterBroker401, projected, filtered }))
+}
+
 rmSync(dir, { recursive: true, force: true })
 
 

@@ -4,6 +4,8 @@
    they are the React layer, and pulling them in would drag react into a
    bundle that exists precisely to avoid needing a renderer. */
 module.exports = {
+  /* M89. The one not-connected sentence, so the check can compare bytes. */
+  ...require('../src/shared/credential-schema'),
   ...require('../src/renderer/palette/fuzzy'),
   ...require('../src/renderer/palette/palette-model'),
   ...require('../src/renderer/palette/commands'),

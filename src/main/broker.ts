@@ -1,5 +1,6 @@
 import type { CredentialStore } from './credential-store'
 import { parseJiraCredential } from './jira-client'
+import { NOT_CONNECTED_CODE, notConnectedReason } from '../shared/credential-schema'
 
 /**
  * M87. THE BROKER — an agent in a panel calls a service this app holds a
@@ -33,7 +34,8 @@ export interface BrokerRequest {
 
 export type BrokerAnswer =
   | { ok: true; status: number; body: string; truncated: boolean }
-  | { ok: false; reason: string }
+  /** `code` sorts a refusal without reading its sentence: `not-connected` is the one a caller acts on. */
+  | { ok: false; reason: string; code?: string }
 
 export interface BrokerFetchRequest {
   url: string
@@ -59,7 +61,7 @@ export interface BrokerAuditRow {
 }
 
 export interface BrokerDeps {
-  store: CredentialStore
+  store: Pick<CredentialStore, 'read' | 'markRejected'>
   fetcher: BrokerFetcher
   audit: { append(row: BrokerAuditRow): void }
   now?: () => number
@@ -71,10 +73,7 @@ export interface Broker {
 
 const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 
-/** The one sentence the panel rows already use for a missing credential. */
-export function notConnectedReason(service: string): string {
-  return `not connected — add a ${service} token in ⌘K › Credentials`
-}
+export { notConnectedReason }
 
 /**
  * What a service's request looks like once the credential is in hand. The
@@ -146,9 +145,9 @@ export function createBroker(deps: BrokerDeps): Broker {
       ...(reason === undefined ? {} : { reason })
     })
   }
-  const refuse = (req: BrokerRequest, reason: string): BrokerAnswer => {
+  const refuse = (req: BrokerRequest, reason: string, code?: string): BrokerAnswer => {
     record(req, 0, 0, reason)
-    return { ok: false, reason }
+    return { ok: false, reason, ...(code === undefined ? {} : { code }) }
   }
   return {
     async call(req) {
@@ -160,14 +159,17 @@ export function createBroker(deps: BrokerDeps): Broker {
       if (req.body !== undefined && Buffer.byteLength(req.body) > BROKER_BODY_MAX) return refuse(req, `the body is over the ${BROKER_BODY_MAX / 1024 / 1024} MB cap`)
       if (req.service !== 'github' && req.service !== 'jira') return refuse(req, `unknown service ${JSON.stringify(req.service)} — the broker knows github and jira`)
       const secret = deps.store.read(req.service)
-      if (secret === undefined) return refuse(req, notConnectedReason(req.service))
+      if (secret === undefined) return refuse(req, notConnectedReason(req.service), NOT_CONNECTED_CODE)
       const resolved = resolve(req.service, secret, req.path)
       if ('refused' in resolved) return refuse(req, resolved.refused)
       const normalised = normalise(resolved.url, resolved.origin, resolved.prefix)
       if ('refused' in normalised) return refuse(req, normalised.refused)
       // The audit records the path AS THE WIRE SEES IT, so a page listing the
       // rows shows what was asked, not how it was spelled.
-      const asked = { ...req, path: normalised.path }
+      // Scrubbed of every derived form of the secret: the path is the agent's
+      // own text, and an agent that put a token in a query string would
+      // otherwise write it into the audit (M89's verifier).
+      const asked = { ...req, path: scrub(normalised.path, resolved.secrets) }
       if (inFlight >= BROKER_IN_FLIGHT_MAX) return refuse(asked, `${BROKER_IN_FLIGHT_MAX} calls are already in flight — wait for one to finish`)
       inFlight += 1
       let answer: { status: number; body: string }
@@ -186,6 +188,10 @@ export function createBroker(deps: BrokerDeps): Broker {
       const raw = Buffer.from(answer.body, 'utf8')
       const truncated = raw.length > BROKER_BODY_MAX
       const body = truncated ? raw.subarray(0, BROKER_BODY_MAX).toString('utf8').replace(/\uFFFD$/, '') : answer.body
+      // A 401 seen HERE marks the credential rejected — the one place every
+      // service call passes, so the Integrations page and a work panel cannot
+      // show two states for one token.
+      if (answer.status === 401) deps.store.markRejected(req.service)
       record(asked, answer.status, Buffer.byteLength(body))
       return { ok: true, status: answer.status, body: scrub(body, resolved.secrets), truncated }
     }

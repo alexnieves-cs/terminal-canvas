@@ -25,6 +25,7 @@ const store = (value) => {
   return {
     read: () => value,
     setLabel: (_service, next) => { label = next },
+    markRejected: () => {},
     list: () => value === undefined ? [] : [{ service: 'jira', label, addedAt: 'now', verifiedAt: 'now' }]
   }
 }

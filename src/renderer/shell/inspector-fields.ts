@@ -8,7 +8,7 @@ import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotal
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
-import { isWatcherPanel, isMemoryPanel, isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -411,6 +411,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
   memory: 'A memory node',
+  github: 'A GitHub work panel',
   watcher: 'A watcher',
   review: 'A review node',
   file: 'A file panel',
@@ -617,6 +618,7 @@ export function buildInspectorModel(
       ]
     }
   }
+  if (isGithubPanel(panel)) return { kind: 'github', reviewable: false, state: { kind: 'github', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'github', label: 'source', value: 'issues assigned to you and pull requests waiting on you' }] }
   if (isJiraPanel(panel)) return { kind: 'jira', reviewable: false, state: { kind: 'jira', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'jira', label: 'source', value: 'assigned Jira tickets' }] }
   // M83. The memory node: a document kind whose subject is a repository.
   if (isMemoryPanel(panel)) {

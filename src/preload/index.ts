@@ -233,6 +233,12 @@ const bridge: CanvasBridge = {
     remove: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_DELETE, service),
     verify: (service: string) => ipcRenderer.invoke(IPC.CREDENTIAL_VERIFY, service)
   },
+  broker: {
+    audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)
+  },
+  github: {
+    list: (panelId) => ipcRenderer.invoke(IPC.GITHUB_LIST, panelId)
+  },
   jira: {
     list: () => ipcRenderer.invoke(IPC.JIRA_LIST),
     transitions: (itemId: string) => ipcRenderer.invoke(IPC.JIRA_TRANSITIONS, itemId),

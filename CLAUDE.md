@@ -67,10 +67,11 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
 | `verify:layout` | plain node | ~194 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
-| `verify:credentials` | plain node | 16 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
+| `verify:credentials` | plain node | 17 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:palette` | plain node | ~122 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~158 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:github` | plain node | 5 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
+| `verify:palette` | plain node | ~124 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:rail` | plain node | ~159 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~97 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
 | `verify:file` | plain node | ~44 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
@@ -91,7 +92,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 80 channels as of the newest milestone that added one — re-derive i |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | ~295 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | ~297 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -143,6 +144,7 @@ renderer --invoke--> file:open / file:read / file:close / file:write          --
 renderer --invoke--> file:create                                              --> main
 renderer --invoke--> fs:list                                                  --> main
 renderer --invoke--> toolbox:read / toolbox:permissions                       --> main
+renderer --invoke--> github:list / broker:audit                                   --> main
 renderer --invoke--> jira:list / jira:transitions                             --> main
 renderer --invoke--> jira:comment / jira:transition                           --> main
 renderer --invoke--> machine:sample                                           --> main
@@ -314,6 +316,26 @@ check does not, and should not, cover it.
   loses its turn, and a budget is a stop) and says so once, latched until the ceiling is
   raised above the spend. The spend is the sum of the sessions' own `costUsd`, the CLI's
   cumulative figure; a session with no figure counts as nothing.
+- `src/renderer/shell/integration-model.ts` / `IntegrationsPane.tsx` — M89. The seam
+  DERIVED from Jira and GitHub: one row per DECLARED service (a service that vanished from
+  the page would read as unsupported), three closed states where the durable `rejectedAt`
+  mark — set by `credential:verify` on a 401/403 in both verify paths, cleared by omission
+  on the next success, never written as `undefined` — outranks a verified date, one verb,
+  and the broker audit's rows beneath (`broker:audit`, the FIRST reader of the audit,
+  metadata by construction). `notConnectedReason` in `shared/credential-schema.ts` is the
+  one sentence every door imports, and the broker's refusal carries `code: 'not-connected'`
+  so a client sorts by the code and never by the text.
+- `src/main/github-client.ts` / `src/renderer/github/GithubNode.tsx` — M88. "GitHub through
+  the broker", literally: the client asks the broker for `GET /issues?filter=assigned` and
+  `GET /search/issues?q=is:pr review-requested:@me` and NEVER reads the credential store, so
+  the store keeps its three pinned readers and every read the panel makes is an audit row.
+  Two lists become `WorkItem`s keyed `owner/repo#N` (a PR under the issues list is a PR
+  once; a review request replaces its issue-list twin); the PR search failing alone leaves
+  the issues standing with a `note`. `github:list` is its one invoke. The ninth kind is
+  sessionless like Jira's; both work panels spawn through ONE `spawnWorkItem(item, source)`
+  in `Canvas.tsx`; the palette's `Open GitHub work` row is PRESENT without a credential and
+  disabled with `REASON_NO_GITHUB`, where the Jira door only exists once a credential does.
+  `verify:github` runs under plain node over a fake broker with recorded bodies.
 - `src/main/broker.ts` / `src/main/broker-audit.ts` — M87. The credential store's LAST
   reader (`verify:meta readers.1` pins the set as exactly `credential-verify.ts`,
   `jira-client.ts`, `broker.ts`): `tc api <service> <method> <path> [body]` reaches it through

@@ -53,6 +53,11 @@ export async function verifyCredential(deps: VerifyDeps, service: string): Promi
   }
 
   if (res.status === 401 || res.status === 403) {
+    // M89. The durable mark the Integrations page reads; a success clears it.
+    // Only a 401: a 403 is a rate limit or an SSO organisation with a token
+    // that is fine, and marking it would send the user to replace a working
+    // token (M89's verifier).
+    if (res.status === 401) deps.store.markRejected(service)
     return { ok: false, reason: 'GitHub rejected the token — it may be revoked or lack scope' }
   }
   if (res.status !== 200) {

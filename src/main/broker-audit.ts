@@ -11,7 +11,8 @@ export const BROKER_AUDIT_MAX = 2000
 
 export interface BrokerAudit {
   append(row: BrokerAuditRow): void
-  list(limit: number): { rows: BrokerAuditRow[]; skipped: number }
+  /** Newest first; `service` narrows to one service's rows so a per-service window is a per-service window. */
+  list(limit: number, service?: string): { rows: BrokerAuditRow[]; skipped: number }
 }
 
 export function createBrokerAudit(o: { file: string; max?: number }): BrokerAudit {
@@ -40,7 +41,7 @@ export function createBrokerAudit(o: { file: string; max?: number }): BrokerAudi
         if (appends % 100 === 0) trim()
       } catch { /* an audit that cannot be written must not stop the call; the caller's answer stands */ }
     },
-    list(limit) {
+    list(limit, service) {
       if (!existsSync(o.file)) return { rows: [], skipped: 0 }
       let text = ''
       try { text = readFileSync(o.file, 'utf8') } catch { return { rows: [], skipped: 0 } }
@@ -53,7 +54,16 @@ export function createBrokerAudit(o: { file: string; max?: number }): BrokerAudi
           if (typeof parsed !== 'object' || parsed === null) { skipped += 1; continue }
           const r = parsed as Record<string, unknown>
           if (typeof r.at !== 'number' || typeof r.service !== 'string' || typeof r.method !== 'string' || typeof r.path !== 'string' || typeof r.status !== 'number') { skipped += 1; continue }
-          rows.push(r as unknown as BrokerAuditRow)
+          if (service !== undefined && r.service !== service) continue
+          // FIELD BY FIELD, never the parsed object: a line with an extra key
+          // (another writer, a hand edit) would otherwise cross the bridge
+          // verbatim and the wire type would be a lie (M89's verifier).
+          rows.push({
+            at: r.at, service: r.service, method: r.method, path: r.path, status: r.status,
+            bytes: typeof r.bytes === 'number' ? r.bytes : 0,
+            ...(typeof r.panelId === 'string' ? { panelId: r.panelId } : {}),
+            ...(typeof r.reason === 'string' ? { reason: r.reason } : {})
+          })
         } catch { skipped += 1 }
       }
       return { rows: rows.reverse().slice(0, Math.max(0, limit)), skipped }

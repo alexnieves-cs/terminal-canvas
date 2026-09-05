@@ -1,4 +1,4 @@
-import { isFilePanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -35,6 +35,7 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   if (isReviewPanel(panel)) return `review: ${panel.subject.label}`
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
   if (isJiraPanel(panel)) return 'Jira tickets'
+  if (isGithubPanel(panel)) return 'GitHub work'
   if (isToolboxPanel(panel)) {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
     return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
@@ -59,7 +60,7 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
 
 /** The provenance a row trails: a directory. Absent for a review or Jira panel. */
 export function panelPath(panel: Panel): string | undefined {
-  if (isReviewPanel(panel) || isJiraPanel(panel)) return undefined
+  if (isReviewPanel(panel) || isJiraPanel(panel) || isGithubPanel(panel)) return undefined
   if (isFilePanel(panel)) return panel.source.path.slice(0, Math.max(0, panel.source.path.lastIndexOf('/'))) || '/'
   if (isToolboxPanel(panel)) return panel.source.cwd
   if (isChatPanel(panel)) return panel.chat.cwd

@@ -77,6 +77,8 @@ const credentialStore = require('../src/main/credential-store').createCredential
 
 module.exports = {
   credentialStore,
+  /* M89. The store's directory, so a late block can recreate it after an earlier one removed it. */
+  credentialDir,
   // Task 8's check is the first thing that ever writes through this store, so
   // this directory is empty on every run before it. Once it isn't,
   // 'enc:' + token is a trivially reversible fixture token left behind in the
@@ -178,6 +180,10 @@ module.exports = {
   createWatchRunner: require('../src/main/watch-runner').createWatchRunner,
   /* M85. The vault's reader — node:fs, the tier file-read.ts sits in. */
   readVault: require('../src/main/vault-read').readVault,
+  /* M88. The GitHub client, real over a recorded requester in the suite. */
+  listGithubWorkItems: require('../src/main/github-client').listAssignedWorkItems,
+  /* M89. The broker's audit, for the Integrations pane's rows. */
+  createBrokerAudit: require('../src/main/broker-audit').createBrokerAudit,
   /* M80. Templates: built-ins are code, and a built-in refuses deletion. */
   allTemplates: require('../src/shared/templates').allTemplates,
   isBuiltInTemplate: require('../src/shared/templates').isBuiltInTemplate,

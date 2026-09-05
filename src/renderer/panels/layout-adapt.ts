@@ -1,7 +1,7 @@
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isMemoryPanel, isFilePanel, isJiraPanel,
+import { isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, type Panel } from './panels'
 
 /**
@@ -68,6 +68,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       }
     }
     if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
+    if (p.kind === 'github') return { ...base, kind: 'github' as const }
     if (p.kind === 'toolbox') {
       return {
         ...base,
@@ -154,6 +155,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       }
     }
     if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
+    if (isGithubPanel(panel)) return { ...base, kind: 'github' as const }
     // Same no-cwd/no-args rule as the two branches above, for the same reason.
     if (isToolboxPanel(panel)) {
       return {

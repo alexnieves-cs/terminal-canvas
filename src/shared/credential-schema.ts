@@ -27,6 +27,18 @@ export interface CredentialService {
  * milestone deliberately does not reach that bar — the store is a store, not
  * an integration surface.
  */
+/**
+ * M88. THE one not-connected sentence, for every door that names a missing
+ * credential: the broker's refusal, the palette's disabled rows, the work
+ * panels' arms. Three hand-typed copies drifted into three places in one
+ * milestone; a rewording here reaches all of them, and a client sorting a
+ * refusal by its text sorts by `NOT_CONNECTED_CODE` instead.
+ */
+export const NOT_CONNECTED_CODE = 'not-connected'
+export function notConnectedReason(service: string): string {
+  return `not connected — add a ${service} token in ⌘K › Credentials`
+}
+
 export const SERVICES: readonly CredentialService[] = [
   {
     id: 'github',
@@ -58,6 +70,8 @@ export interface CredentialMeta {
   label: string
   addedAt: string
   verifiedAt?: string
+  /** M89. The last verify was a rejection. Absent stays absent; cleared on the next success. */
+  rejectedAt?: string
 }
 
 export function findService(id: string): CredentialService | undefined {
