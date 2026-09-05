@@ -143,10 +143,72 @@ declined by name" section says what it would take (an ACP agent installed, three
 streams, a JSON-RPC layer over the line seam, one `BACKENDS` row). Declined, not deferred
 silently.
 
-## Findings (critic and verifier)
+## Findings (critic and verifier, two parallel fresh-context subagents)
 
-(At the gate.)
+### The verifier — fourteen findings; nine taken, three declined with a reason, two deferred by name
+
+**Taken.**
+1. **(blocker) A continuation queued behind the user's own message was served after `stopAuto`
+   and past the limit** — the queue was served before the auto decision, and `send` queues
+   behind a turn in flight. Now: the run's own sends are TAGGED (`auto: true` on the queue
+   entry), the decision (`autoDecide`) is made BEFORE the queue is served, the continuation
+   is sent AFTER it, and `resolveAuto` drops the run's tagged entries with one `queue-dropped`.
+   `verify:agent-session auto.4` (stop with a queued continuation), `auto.4.b` (the limit with a
+   user line queued: the user's line still goes, no third auto prompt ever does).
+2. An interrupt by hand mid-run left the chip spinning forever; an interrupted result now
+   resolves `stopped` (`auto.4.c`).
+3. `permission-auto-allowed` left no row: the chat store keeps the tools answered under a
+   grant this launch and the panel says `Bash ran under a session grant — revoke in the
+   pane's Detail` above the composer.
+4. The outward gate was not the only gate: `export.ts` scrubbed on its own and a handoff
+   handed one agent's output to another unscrubbed. Both go through `outward` now;
+   `verify:verbs gate.2` pins `redactSecrets`'s callers as exactly the gate and the memory
+   store's write scrub, and every reader of a tail or a last answer that hands it on calls
+   `outward`.
+5. `interrupt` wrote Ctrl-C into a plain shell; it is gated by kind like `type` and `submit`.
+6. `registry.1`'s sentence claimed more than its grep sees (the sheet's `what.kind`
+   vocabulary is a separate union); the sentence is narrowed and the sheet's kind refactor
+   is deferred to M104, which rebuilds the sheet's seats.
+7. `dismiss` was renderer-only, so a workspace switch resurrected a dismissed chip; a send by
+   hand after a resolved run now clears main's `autoLast`.
+8. `stuck: exit` was used for an errored result and a refused start; `stuck: error` exists.
+9. A grant was recorded even when the answer failed; granted only on a real answer.
+10. Stale prose count in `docs/verify-suites.md`; the spec's `runVerbLine` naming; the last
+    by-name copy site (`useChatSessions.ts`) through `carryBackend`.
+
+**Declined.** (13) `onOpenAuto` opens the whole palette rather than scoped to the Auto rows —
+the palette has no scope for them and a query cannot be preset; the rows are the first
+match for `auto`. Recorded, not changed. (14) `;` inside a `type`/`send` text splits the
+line — fails safe (`then is not a verb`); a plan line is one verb per step by design.
+(Q-a) A grant is keyed by tool NAME: `Allow Bash for session` allows every Bash command — that
+is the spec's design and the load-bearing entry now says so plainly. (Q-b) Every auto turn
+fires the chat's `idle` edge: intended — a turn is a turn, and M78's table decides.
+
+### The critic — eighteen findings; six taken, four deferred by name, the rest declined
+
+**Taken.** The verb mode was unlabelled and its footer said `↵ save` (now `Run a verb — …`
+and `↵ run`, an `InputMode.verb`); the running chip was bare text (now the pill's `badge`
+face with its tone); the auto scene's subject was off-frame (the fixture's chat widened to
+560×360, the scene maximises the chat through the palette — the M92 verb, the user's own
+route — and frames it); the `chat` scene had regressed to selecting the CODEX chat because
+`goTo('api (chat)')` fuzzy-matched `codex — api (chat)` first — the codex fixture is `codex —
+api thread` now, and the claude chat's restored turns, `asleep` pill and `to terminal` verb
+are back in frame.
+
+**Deferred, by name.** The chrome row overflowing to `to termina` once `auto` joined it, the
+composer note clipped at the composer's edge, palette rows naming a chat by its 70-character
+cwd, a disabled reason truncated before its fix — all four are M106's header-discipline
+rule (Act III), which is the frame rule those build logs asked for.
+
+**Declined.** The attention label and the subagents notice floating over other panels are
+the fixture's composition (M91's critic said the same); `Run again` on a working run IS
+disabled with its reason (`REASON_RUN_OPEN`) in both the pane and the rail — the rail verb's
+disabled face is subtle, not absent; `Allow Bash`/`Deny` vs `Deny Bash` is pre-existing
+wording; the links row's glyph controls are pre-existing. The three-verb card is in the code
+(`data-chat-allow-session`) but no picture shows it: the harness's fake agent answers a user
+line with the same request id each time, and the auto scene's opening send lands while that
+request is pending, so the card is not up at shot time — unproven in a picture, recorded.
 
 ## Verification
 
-(At the gate.)
+(The chain's exit line is recorded below at the gate.)

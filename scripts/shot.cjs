@@ -283,9 +283,16 @@ const SCENES = [
       // Back to the chat: the row's run moved nothing, and the card sits under the composer.
       await k.goTo('api (chat)')
       await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
-      // Raise it over the review node an earlier scene opened on top of it.
-      await k.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (c) c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
-      await sleep(500)
+      // Fixture panels sit over this chat: Maximise (the M92 verb, through the
+      // palette on the focused chat) fills the window with it — the chip, the
+      // transcript and the card all in frame. The user's own route.
+      await k.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(200)
+      await k.press('k', { metaKey: true }); await sleep(400)
+      await k.type('maximise panel'); await sleep(300)
+      await k.enter(); await sleep(700)
+      await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await sleep(400)
       await k.shot('auto')
     } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
