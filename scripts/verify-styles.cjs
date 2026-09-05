@@ -431,5 +431,27 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     declared >= 2 && darkBinds && panelUses, JSON.stringify({ declared, darkBinds, panelUses }))
 }
 
+{
+  // M91. The rail was widened from 260px: titles truncated at the old width
+  // (recorded three times across M66–M68). The token is the one place, and
+  // the drawer overlay that stands in for it on narrow shells matches it.
+  const nav = /--shell-nav-w:\s*(\d+)px/.exec(bare)
+  const width = nav ? Number(nav[1]) : 0
+  const drawer = /\.shell--nav-drawer \.shell__rail,[^{]*\{[^}]*width:\s*(\d+)px/.exec(bare)
+  ok('rail-w.1', 'the navigator rail is at least 300px wide and its drawer overlay matches the token',
+    width >= 300 && drawer !== null && Number(drawer[1]) === width, JSON.stringify({ width, drawer: drawer && drawer[1] }))
+}
+
+{
+  // M91. At the far tiers the frame border thickens in world units so it
+  // stays ~1 device pixel: summary enters at 0.26, block at 0.11.
+  const summary = /\.world\[data-detail="summary"\] \.pf \{[^}]*border-width:\s*(\d+)px/.exec(bare)
+  const block = /\.world\[data-detail="block"\] \.pf \{[^}]*border-width:\s*(\d+)px/.exec(bare)
+  const sPx = summary ? Number(summary[1]) * 0.26 : 0
+  const bPx = block ? Number(block[1]) * 0.11 : 0
+  ok('far-line.1', 'the frame border at the summary and block tiers paints about one device pixel at each tier\'s entry scale',
+    sPx >= 0.8 && sPx <= 1.5 && bPx >= 0.8 && bPx <= 1.5, JSON.stringify({ summary: summary && summary[1], block: block && block[1], sPx, bPx }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

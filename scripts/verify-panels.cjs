@@ -17822,6 +17822,29 @@ app.whenReady().then(async () => {
       }
     }
 
+    /* ---------------------------------------------------------------- */
+    /* M91. The launcher's verbs as invitations, and the codex door       */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['launcher-codex.1 on an empty canvas every launcher preset verb reads as an invitation (`Start …`), and the `Chat with codex…` door is PRESENT and disabled by name when codex is absent']
+      try {
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reL
+        await settle()
+        const seen = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('[data-launcher]'); if (!l) return false
+          const presets = [...l.querySelectorAll('[data-launcher-preset] .launcher__verb-name')].map((n) => n.textContent)
+          const codex = l.querySelector('[data-launcher-new-codex]')
+          return { presets, codex: codex ? { disabled: codex.disabled, title: codex.title, hint: codex.querySelector('.launcher__verb-hint')?.textContent ?? '' } : null } })()`), 6000)
+        ok(IDS[0], seen && seen.presets.length > 0 && seen.presets.every((t) => /^Start .+…$/.test(t)) &&
+          seen.codex !== null && seen.codex.disabled === true && /codex/.test(seen.codex.title) && /PATH/.test(seen.codex.hint),
+          JSON.stringify(seen))
+      } catch (lErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(lErr && lErr.message || lErr))
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

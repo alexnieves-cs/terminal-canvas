@@ -265,7 +265,7 @@ body {
    signatures) and measures 0 — which is what verify:panels 73/156 read. */
 .shell {
   --shell-dock-w: 48px;
-  --shell-nav-w: 260px;
+  --shell-nav-w: 300px;
   --shell-ctx-w: 260px;
   --shell-top-h: 56px;
   position: relative;
@@ -293,7 +293,7 @@ body {
   position: absolute;
   top: var(--shell-top-h);
   bottom: 0;
-  width: 260px;
+  width: 300px;
   z-index: 900;
   box-shadow: var(--e-3);
 }
@@ -692,6 +692,16 @@ body {
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
 [data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
 
+/* M91. THE FAR VIEW'S HAIRLINE. The frame border is a world-space pixel, so
+   at the summary tier (below 26%) it paints a quarter of a device pixel and
+   the dark theme's line vanishes into the ground — M67 deferred this to
+   M69, which answered the ring and not the hairline. Geometry, not colour:
+   the border thickens in world units at each far tier so it stays about one
+   device pixel on screen (4px × 0.26 ≈ 1; 9px × 0.11 ≈ 1). The state edge
+   below keeps its own 3px: it is the signature mark and reads at 10%. */
+.world[data-detail="summary"] .pf { border-width: 4px; border-left-width: 3px; }
+.world[data-detail="block"] .pf { border-width: 9px; border-left-width: 3px; }
+
 /* THE STATE EDGE. A 3px left BORDER on every frame, in the tone — the
    app's one signature mark, legible at 100% and at 10%, in both themes and
    in a thumbnail. On the frame rather than the card so it survives the tier
@@ -915,7 +925,7 @@ body {
 .rail-row__tail {
   flex: none;
   /* M67 tried a fixed 6.5em column here so the state would never push the
-     title, and every title lost a third of its room: the rail is 260px and
+     title, and every title lost a third of its room: the rail is 300px (M91; 260 before) and
      `not started` is the widest word. The honest fix is width, not a
      column; the cap stays at 45% so the state can never take the row. */
   min-width: 0;
@@ -2350,7 +2360,9 @@ body {
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
 .launcher__verb-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 500; flex: none; }
 .launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); }
+/* M91. A disabled verb's hint IS the fix: it wraps rather than ending in an
+   ellipsis mid-sentence (the critic saw `check the en…`). */
+.launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); white-space: normal; }
 .launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
 .launcher__env-hint { color: var(--iris); }
 
