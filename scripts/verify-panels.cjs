@@ -18115,6 +18115,63 @@ app.whenReady().then(async () => {
       }
     }
 
+    /* ---------------------------------------------------------------- */
+    /* M94. Keyboard reach: every control this run added that a click     */
+    /* check drives is also reached by a REAL Tab                          */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['reach.1 a real Tab from the context pane\'s first enabled action visits every action the pane offers (restart, lock, pin, fill, front-end, rename, save-preset, link, close) in the bar\'s order, and from the launcher\'s first verb visits every launcher verb — the controls M71–M93 added are in the tab order, not click-only']
+      try {
+        // A terminal focused, so the pane's action bar is the full one.
+        layoutStore.save({ panels: [{ id: 'rkA', x: 200, y: 200, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'rkA', focusedId: 'rkA' })
+        flushLayoutStore()
+        const reR = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reR
+        await settle()
+        await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-inspector-action]').length >= 4`), 6000)
+        // `identity` is a JS expression over `el` naming the focused control; a
+        // repeat of the FIRST identity means the walk wrapped, and stops it.
+        const tabWalk = async (startSel, identity, max) => {
+          const started = await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(startSel)}); if (!b) return 'no control'; if (b.disabled) return 'disabled'; b.focus(); return document.activeElement === b })()`)
+          if (started !== true) return { started, visited: [] }
+          const read = () => wc.executeJavaScript(`(() => { const el = document.activeElement; if (!el) return null; const id = (() => { ${identity} })(); return id ?? ('#' + (el.className || el.tagName)) })()`)
+          const visited = [await read()]
+          for (let i = 0; i < max; i++) {
+            wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' })
+            await sleep(60)
+            const at = await read()
+            if (at === visited[0]) break
+            visited.push(at)
+          }
+          return { started, visited }
+        }
+        // From the bar's FIRST enabled action: the walk proves the order, not a start point.
+        const firstAction = await wc.executeJavaScript(`(() => { const b = [...document.querySelectorAll('[data-inspector-action]')].find((x) => !x.disabled); return b ? b.getAttribute('data-inspector-action') : null })()`)
+        const pane = await tabWalk('[data-inspector-action="' + firstAction + '"]', `return el.getAttribute('data-inspector-action')`, 16)
+        // Every ENABLED action, in DOM order: a disabled one (restart on a panel that has not
+        // started, the front-end verb on a plain shell) is skipped by Tab, and that is right.
+        const wanted = await wc.executeJavaScript(`[...document.querySelectorAll('[data-inspector-action]')].filter((b) => !b.disabled).map((b) => b.getAttribute('data-inspector-action'))`)
+        const paneOk = pane.started === true && wanted.length >= 6 && wanted.every((w) => pane.visited.includes(w)) &&
+          wanted.map((w) => pane.visited.indexOf(w)).every((idx, i, arr) => i === 0 || idx > arr[i - 1]) && ['lock', 'pin', 'maximise'].every((w) => wanted.includes(w))
+        // The launcher: an empty canvas.
+        for (const id of ['rkA']) { try { await ptyManager.kill(id) } catch {} }
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reR2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reR2
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-launcher]') !== null`), 6000)
+        const launcher = await tabWalk('[data-launcher-sheet]', `const n = el.querySelector && el.querySelector('.launcher__verb-name'); return n ? 'verb:' + n.textContent : null`, 30)
+        const verbsInOrder = launcher.visited.filter((v) => typeof v === 'string' && v.startsWith('verb:')).length
+        const verbCount = await wc.executeJavaScript(`document.querySelectorAll('[data-launcher] .launcher__verb:not([disabled])').length`)
+        ok(IDS[0], paneOk && launcher.started === true && verbsInOrder >= verbCount,
+          JSON.stringify({ pane, launcher: { started: launcher.started, verbsInOrder, verbCount, visited: launcher.visited } }))
+      } catch (rErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(rErr && rErr.message || rErr))
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

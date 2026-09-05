@@ -3614,3 +3614,20 @@ The restore adds a workspace and returns its id; the renderer switches through t
 transaction. `parseLayout` never throws — a corrupt file is a default layout with warnings —
 and that is exactly wrong for a restore, where the user asked for THIS file: the JSON is
 checked first and refused by name. `verify:layout snap.1`/`snap.2` pin both halves.
+
+**The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
+the list was automated by M71–M93 — the run added surfaces beside them rather than checks
+beneath them. Added, each confirmed once by hand or not at all, as stated:
+- **A real codex turn (M90).** `verify:agent-session` replays three streams recorded from
+  codex-cli 0.153.4; `closeStdin` in the real runner and the thread's `exec resume` against a
+  live CLI were driven once by hand while recording the fixtures, no more.
+- **The reset dialog's snapshot line (M93)** is a native `showMessageBox` detail string; no
+  suite drives the dialog. Read once by eye.
+- **The snapshot ring's real minute (M93).** The harness runs the ring with `minMs: 0`; that
+  a real session coalesces a drag's saves into one snapshot a minute is arithmetic over an
+  injected clock in `verify:layout snap.1`, not an observation of `Date.now()`.
+- **Annotate mode on a real trackpad (M93).** A real `mouseDown` from `sendInputEvent`
+  places a note; a trackpad tap's click-without-move, and a note's double-click to edit,
+  were confirmed once by hand.
+- **`Cmd+Z` over the note editor (M93)** is the fourth text surface the `edit:undo` entry
+  above already describes; unchanged, unverified, recorded.
