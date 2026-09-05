@@ -268,9 +268,9 @@ const SCENES = [
     run: async (k) => {
       await k.press('k', { metaKey: true }); await sleep(500)
       await k.type('run a verb'); await sleep(400)
-      await k.press('Enter'); await sleep(500)
+      await k.enter(); await sleep(500)
       await k.type('close zz9'); await sleep(200)
-      await k.press('Enter'); await sleep(600)
+      await k.enter(); await sleep(600)
       await k.shot('verbs')
       await k.press('Escape'); await sleep(300); await k.press('Escape'); await sleep(300)
     } },
@@ -279,9 +279,12 @@ const SCENES = [
       await k.goTo('api (chat)')
       await k.click('.panel[data-panel-id="chat"] [data-chat-auto-open]'); await sleep(500)
       await k.type('auto: complete'); await sleep(400)
-      await k.press('Enter'); await sleep(900)
-      await k.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
-      await sleep(300)
+      await k.enter(); await sleep(900)
+      // Back to the chat: the row's run moved nothing, and the card sits under the composer.
+      await k.goTo('api (chat)')
+      await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await k.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(500)
       await k.shot('auto')
     } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
@@ -560,7 +563,12 @@ app.whenReady().then(async () => {
     dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
     answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
     list: () => agentSessions.list(),
-    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } }
+    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } },
+    // M97/M98. The same verbs main wires; grants are a harness-local set.
+    autoStart: (req) => agentSessions.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }),
+    autoStop: (id) => agentSessions.stopAuto(id),
+    grants: () => [],
+    revokeGrants: () => {}
   }
   registerIpcHandlers(
     ptyManager, layoutStore,
@@ -633,6 +641,9 @@ app.whenReady().then(async () => {
     // setter plus a dispatched 'input' is what reaches its state.
     type: (text) => js(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`),
+    // Enter on the palette's INPUT: a window-level keydown never reaches the
+    // palette's handler (the panels suite learned this first).
+    enter: () => js(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`),
     click: (sel) => js(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`),
     theme: async (name) => { await js(`window.canvas.settings.set('appearance.theme', ${JSON.stringify(name)})`); await sleep(700) },
     // The first real layout: the launcher scene runs on an EMPTY store, so

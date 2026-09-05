@@ -1059,8 +1059,15 @@ app.whenReady().then(async () => {
       for (const turn of imported.turns) agentTranscripts.appendTurn(toPanelId, turn)
       agentTranscripts.appendMeta(toPanelId, imported.meta)
       return { kind: 'imported', sessionId, turns: imported.meta.turns }
-    }
+    },
+    // M97/M98. The same verbs main wires; grants are a harness-local map so the
+    // inspector's field and the card's third verb have something to read.
+    autoStart: (req) => agentSessions.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }),
+    autoStop: (id) => agentSessions.stopAuto(id),
+    grants: (id) => [...(harnessGrants.get(id) ?? [])],
+    revokeGrants: (id) => { harnessGrants.delete(id) }
   }
+  const harnessGrants = new Map()
   const frontTranscripts = new Map()
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(

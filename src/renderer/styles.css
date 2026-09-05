@@ -3723,7 +3723,7 @@ body {
    state tone, a ring while running (a rotating hairline, reduced-motion
    still), and a labelled dismiss once resolved. A projection of main's
    count — nothing here decides. */
-.chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); white-space: nowrap; }
 .chat__auto-ring { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; animation: chat-auto-spin 900ms linear infinite; }
 @keyframes chat-auto-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
