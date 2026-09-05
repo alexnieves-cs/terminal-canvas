@@ -211,4 +211,13 @@ request is pending, so the card is not up at shot time — unproven in a picture
 
 ## Verification
 
-(The chain's exit line is recorded below at the gate.)
+`npm run verify` alone on `m96-verbs` at the gate: every suite green, `verify:panels 304/304
+passed`, exit 0 (1584 PASS lines across the chain). The first gate run went red only on the
+panels suite's own 300 s watchdog at check 246 — the suite passing alone and under the chain
+having grown past its timer — and the watchdog is 480 s now, with the reason beside it.
+`npm run shot`: 42 scenes including `verbs` and `auto`, read by eye and by the critic.
+
+**Unproven, by design or by this run:** every outward half named in the manual-only list
+(the verb line's paste into a real agent TUI, Auto and `Allow for session` against a real
+`claude`, the registry against a real codex spawn); the three-verb approval card in a
+picture; ACP entirely (declined, not built).
