@@ -376,7 +376,11 @@ app.on('window-all-closed', () => {})
 // 300s is ~25% headroom over the measured worst case, chosen so a genuine
 // hang still fails in minutes rather than never. Whoever finds themselves
 // raising it a third time should split the suite instead.
-const WATCHDOG_MS = 300000
+// Raised 300s → 480s at M96: with 304 checks (M94's reach walk, M96's verb
+// line, M98's grants) the suite reached check 246 at 300s under the chain
+// while passing alone — the ceiling had become a race against the machine,
+// which is the load-flake rule, not a hang. A real hang still lands here.
+const WATCHDOG_MS = 480000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
