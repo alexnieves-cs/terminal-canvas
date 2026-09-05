@@ -4,7 +4,10 @@ import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
-import { insertIntoComposer } from '@renderer/chat/chat-store'
+import { insertIntoComposer, lastAssistantText } from '@renderer/chat/chat-store'
+import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
+import { outward } from '@shared/outward'
+import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -1513,7 +1516,172 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         }
       })
       palette.openPalette()
-    }
+    }    ,
+    // M96. THE VERB LINE. The palette's text mode takes `verb args; verb
+    // args`; the plan is built against the live canvas (M81's facts plus each
+    // session's agent kind), refused by name with its fix on the same line
+    // (the palette's `feedback` idiom), confirmed once when any step is
+    // destructive, and run by the executor below — the ONLY place a verb's
+    // meaning lives. The table knows what a verb IS; this knows what it DOES.
+    beginRunVerb: () => {
+      const facts = (): PlanFacts => ({
+        panels: panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }) })),
+        presets: presetRows.map((r) => ({ id: r.id })),
+        worktrees: worktreeRows.map((w) => ({ id: w.id }))
+      })
+      const execute = async (step: PlanStep): Promise<StepOutcome> => {
+        const a = step.args
+        const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
+        switch (step.verb) {
+          case 'focus': selectAndRaise(a.panel!); { const p = panelOf(a.panel!); if (p) centreOn(p.rect) } return { kind: 'ran' }
+          case 'start': onSelectPanel(a.panel!); return { kind: 'ran' }
+          case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; void window.canvas.preset.spawnById(a.preset!); return { kind: 'ran' } }
+          case 'type': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) { insertIntoComposer(p.rect.id, a.text ?? ''); return { kind: 'ran', note: 'inserted into the composer' } }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+            // paste, not write: bracketed paste is the one handoff an agent
+            // TUI treats as text rather than keystrokes (the Jira rule).
+            h.paste(a.text ?? '')
+            return { kind: 'ran' }
+          }
+          case 'submit': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) return { kind: 'refused', reason: 'a chat sends with `send <panel> <text>` — submit is for an agent terminal' }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+            h.write('\r')
+            return { kind: 'ran' }
+          }
+          case 'send': {
+            const answer = await window.canvas.agentSession.send(a.panel!, a.text ?? '')
+            if (typeof answer === 'object') return { kind: 'refused', reason: answer.refused }
+            if (answer === 'no-session') return { kind: 'refused', reason: `${a.panel} has no chat session yet — open it first` }
+            if (answer.startsWith('refused')) return { kind: 'refused', reason: `the send was refused: ${answer}` }
+            return { kind: 'ran', note: answer }
+          }
+          case 'interrupt': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) { const did = await window.canvas.agentSession.interrupt(p.rect.id); return did ? { kind: 'ran' } : { kind: 'refused', reason: 'nothing is in flight' } }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session` }
+            h.write('\x03')
+            return { kind: 'ran' }
+          }
+          case 'restart': { const p = panelOf(a.panel!); if (!p || !isTerminalPanel(p)) return { kind: 'refused', reason: 'only a terminal panel restarts' }; restartWithSpec(p.rect.id, p.spec); return { kind: 'ran' } }
+          case 'read': {
+            // Guardrail 2: through the ONE outward gate, whichever front-end.
+            const p = panelOf(a.panel!)
+            const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
+            const gate = outward(raw, `panel ${a.panel}`)
+            return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
+          }
+          case 'set-setting': {
+            const row = settingRows.find((r) => r.id === a.setting)
+            if (!row) return { kind: 'refused', reason: `no setting is called ${a.setting}` }
+            const v = a.value ?? ''
+            const value: SettingValue = row.type === 'boolean' ? v === 'true' || v === 'on' : row.type === 'number' ? Number(v) : row.type === 'list' ? v.split(',').map((x) => x.trim()) : v
+            if (row.type === 'number' && !Number.isFinite(value as number)) return { kind: 'refused', reason: `${a.setting} takes a number` }
+            // Main owns the store and refuses an unknown id or a wrong type; the
+            // reload is what makes a refusal visible (the row keeps its value).
+            await window.canvas.settings.set(a.setting!, value)
+            reloadSettings()
+            return { kind: 'ran' }
+          }
+          case 'lock': lockPanel(a.panel!); return { kind: 'ran' }
+          case 'unlock': unlockPanel(a.panel!); return { kind: 'ran' }
+          case 'pin': pinPanel(a.panel!); return { kind: 'ran' }
+          case 'unpin': unpinPanel(a.panel!); return { kind: 'ran' }
+          case 'maximise': maximisePanel(a.panel!); return { kind: 'ran' }
+          case 'restore': restorePanel(a.panel!); return { kind: 'ran' }
+          case 'tidy': {
+            // The same arithmetic as the `tidyPanels` member above (one history
+            // entry, locked panels stay), repeated rather than called because a
+            // member of this literal cannot name a sibling before the object
+            // exists — and `verify:verbs closure.1` maps this verb to it.
+            const chosen = panelsRef.current.filter((p) => p.locked !== true)
+            if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy — fewer than two unlocked panels' }
+            const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
+            commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
+            return { kind: 'ran' }
+          }
+          case 'zoom-fit': resetViewport(); return { kind: 'ran' }
+          case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
+          case 'review': openReview(a.panel!); return { kind: 'ran' }
+          case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
+          case 'close': onClosePanel(a.panel!); return { kind: 'ran' }
+          case 'reset-canvas': void window.canvas.canvas.requestReset(); return { kind: 'ran', note: 'the reset asks once more in its own dialog' }
+          case 'discard': {
+            const p = panelOf(a.panel!)
+            if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node — open one with \`review <panel>\` first` }
+            const result = await window.canvas.review.at(p.subject)
+            if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard — the review reads ${result.kind}` }
+            const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path) })
+            if (done.kind === 'discarded') return { kind: 'ran', note: `${result.files.length} files` }
+            return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.detail }
+          }
+          case 'remove-worktree': {
+            const done = await window.canvas.worktree.remove(a.worktree!)
+            reloadWorktrees()
+            return done.kind === 'removed' ? { kind: 'ran' } : { kind: 'refused', reason: done.kind === 'unknown' ? `no worktree is called ${a.worktree}` : done.reason }
+          }
+          default: return { kind: 'refused', reason: `${step.verb} has no executor` }
+        }
+      }
+      const open = (initial: string, refused?: string): void => {
+        setInputMode({
+          kind: 'text',
+          label: refused ?? 'verb arguments — e.g. focus n3 · type n3 hello · close n3; several with ;',
+          initial,
+          ...(refused ? { feedback: true as const } : {}),
+          submit: (line) => {
+            const built = buildPlan(parsePlanLine(line), facts())
+            if (built.kind === 'refused') { open(line, `${built.reason} — ${built.fix}`); palette.openPalette(); return }
+            const run = (acknowledged: boolean): void => {
+              void runPlan(built.plan, execute, { acknowledged }).then((report) => {
+                // The report on the same line, in the state vocabulary; a stop
+                // re-prompts with the line so it can be corrected.
+                const stopped = report.steps.some((r) => r.kind === 'refused')
+                const notes = report.steps.filter((r) => r.kind === 'ran' && r.note !== undefined).map((r) => (r as { note: string }).note).join(' · ')
+                open(stopped ? line : '', `${report.summary}${notes === '' ? '' : ' · ' + notes}`)
+                palette.openPalette()
+              })
+            }
+            if (planIsDestructive(built.plan)) {
+              setInputMode({
+                kind: 'confirm',
+                label: `${describePlan(built.plan).join(' · ')} — run it?`,
+                initial: '',
+                submit: () => run(true)
+              })
+              palette.openPalette()
+              return
+            }
+            run(false)
+          }
+        })
+      }
+      open('')
+      palette.openPalette()
+    },
+    // M97. The Auto verbs: main starts and stops; the refusal comes back by
+    // name and is shown on the palette's line rather than swallowed.
+    startAuto: (id, mode, task) => {
+      const begin = (t?: string): void => {
+        void window.canvas.agentSession.autoStart({ id, mode, ...(t === undefined ? {} : { task: t }) }).then((r) => {
+          if (r.kind === 'refused') { setInputMode({ kind: 'text', label: `auto refused — ${r.reason}`, initial: '', feedback: true, submit: () => {} }); palette.openPalette() }
+        })
+      }
+      if (mode === 'custom' && task === undefined) {
+        setInputMode({ kind: 'text', label: 'The task, in a sentence…', initial: '', submit: (v) => { if (v.trim() !== '') begin(v) } })
+        palette.openPalette()
+        return
+      }
+      begin(task)
+    },
+    stopAuto: (id) => { void window.canvas.agentSession.autoStop(id) }
+
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
@@ -1522,5 +1690,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
-       worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
+       worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel])
 }

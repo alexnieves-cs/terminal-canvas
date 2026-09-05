@@ -201,6 +201,8 @@ const spyActions = () => {
   return {
     calls,
     spawnPreset: record('spawnPreset'),
+    // M96–M97
+    beginRunVerb: record('beginRunVerb'), startAuto: record('startAuto'), stopAuto: record('stopAuto'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),

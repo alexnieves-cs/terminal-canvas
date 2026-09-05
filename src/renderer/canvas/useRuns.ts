@@ -7,6 +7,7 @@ import type { PanelUsage } from '@shared/cost'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { railLabel } from '@renderer/shell/rail-rows'
 import { getUsage } from '@renderer/session/usage-store'
+import type { AutoStatus } from '@shared/auto'
 import {
   beginRun, componentOf, finishRun, recordRunEvent, runCostSince, runIsComplete, runName, type RunComponent, type RunEvent
 } from './run-model'
@@ -37,6 +38,8 @@ export interface RunsDeps {
 
 export interface RunsApi {
   onRunEvent: (event: RunEvent) => void
+  /** M97. An auto run IS a run: opened on `running` at turn 0, sealed with its cost on any resolution. */
+  onAutoEvent: (panelId: string, status: AutoStatus) => void
   /** Restart the run's terminal roots in order; a chat root is skipped by name. Returns the sentence. */
   runAgain: (runId: string, runs: readonly PersistedRun[]) => string
   /** Forget every open run's component — a workspace switch replaces the panels. */
@@ -113,6 +116,40 @@ export function useRuns(deps: RunsDeps): RunsApi {
     setRuns(next)
   }, [panelsRef, runsRef, setRuns])
 
+  /**
+   * M97. The recorder observes an auto run the way it observes a handoff:
+   * it never decides. The component is the ONE panel (no edges), the name
+   * says the mode, and the seal prices the panel's usage since the start by
+   * M79's rule. Decided against the refs, never inside an updater.
+   */
+  const onAutoEvent = useCallback((panelId: string, status: AutoStatus) => {
+    const current = runsRef.current
+    let runId: string | undefined
+    for (const [id, open] of openRef.current) if (open.component.panelIds.length === 1 && open.component.panelIds[0] === panelId) { runId = id; break }
+    const at = Date.now()
+    if (status.state === 'running') {
+      if (runId !== undefined || status.turn !== 0) return
+      const component: RunComponent = { panelIds: [panelId], edges: [] }
+      const run = beginRun(component, panelId, at, `auto · ${status.mode}`)
+      openRef.current.set(run.id, { component, baseline: usageOf([panelId]) })
+      const next = [run, ...current].slice(0, RUNS_MAX)
+      runsRef.current = next
+      setRuns(next)
+      return
+    }
+    if (runId === undefined) return
+    const open = openRef.current.get(runId) as OpenRun
+    openRef.current.delete(runId)
+    const outcome = status.state === 'done' ? 'passed' : status.state === 'stopped' ? 'stopped' : `stuck — ${status.reason ?? 'no reason given'}`
+    const next = current.map((r) => {
+      if (r.id !== runId) return r
+      const sealedEntries = r.entries.map((e) => (e.panelId === panelId && e.endedAt === undefined ? { ...e, endedAt: at, outcome } : e))
+      return finishRun({ ...r, entries: sealedEntries }, at, runCostSince([panelId], usageOf([panelId]), open.baseline))
+    })
+    runsRef.current = next
+    setRuns(next)
+  }, [runsRef, setRuns])
+
   const runAgain = useCallback((runId: string, runs: readonly PersistedRun[]): string => {
     const run = runs.find((r) => r.id === runId)
     if (!run) return 'that run is gone'
@@ -136,5 +173,5 @@ export function useRuns(deps: RunsDeps): RunsApi {
   const forgetOpen = useCallback(() => { openRef.current.clear() }, [])
   const hasOpen = useCallback(() => openRef.current.size > 0, [])
 
-  return { onRunEvent, runAgain, forgetOpen, hasOpen }
+  return { onRunEvent, onAutoEvent, runAgain, forgetOpen, hasOpen }
 }

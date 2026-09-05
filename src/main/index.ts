@@ -1120,6 +1120,10 @@ app.whenReady().then(async () => {
     },
     // M74. Open a terminal's session as a chat. Three refusals, each named
     // for its fix; the live check is the one-front-end-at-a-time rule.
+    // M97. Main counts, main stops: the request carries a mode and an optional
+    // task; the limit is the mode's unless the caller lowers it.
+    autoStart: (req) => agentSessions?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
+    autoStop: (id) => agentSessions?.stopAuto(id) ?? false,
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)
       if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }

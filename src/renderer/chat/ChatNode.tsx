@@ -7,9 +7,10 @@ import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { REASON_CODEX_NO_TERMINAL } from '@shared/agent-session'
-import { panelState } from '@renderer/panels/panel-state'
+import { autoChipWords } from '@shared/auto'
+import { panelState, autoTone } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
-import { takeInsert, useChat } from './chat-store'
+import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { MEMORY_CONTEXT_MAX, memoryContext } from './memory-context'
 import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
@@ -64,6 +65,8 @@ export interface ChatNodeProps {
   claudeAvailable: boolean
   /** M74. Continue this conversation in a terminal (`claude --resume`). */
   onOpenInTerminal(id: string): void
+  /** M97. Open the palette on this chat's Auto rows. */
+  onOpenAuto?: (id: string) => void
 }
 
 const shortInput = toolArgument
@@ -472,6 +475,23 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {/* M90. Which CLI this panel talks to — a KIND fact, before the state pill, like the github card's. */}
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
+        {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.
+            A ring while running; `done` / `stuck — why` / `stopped` resolved,
+            with a labelled dismiss. Never a decision — main stops the run. */}
+        {snapshot?.auto !== undefined && (() => {
+          const a = snapshot.auto
+          return <span className={`chat__auto pf__kind${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
+            {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
+            {autoChipWords(a)}
+            {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
+          </span>
+        })()}
+        {/* M97. The door to the Auto rows: opens the palette on them (the
+            rename verb's idiom), so no second menu is grown. */}
+        {props.readOnly !== true && snapshot?.auto?.state !== 'running' && (
+          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto…"
+            {...shellControl(() => props.onOpenAuto?.(id))}>auto</button>
+        )}
         {/* M74. A LABELLED verb after the pill — the terminal's own row shape
             (`title · pill · controls`), and a word rather than the `>_` glyph
             the rail uses as a passive kind mark (M74's critic). Disabled by

@@ -1,7 +1,7 @@
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
-import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
@@ -140,6 +140,9 @@ export interface AgentHandlers {
   transcript(id: string): AgentTranscriptResult
   /** M74. */
   importSession(req: AgentImportRequest): AgentImportResult
+  /** M97. */
+  autoStart(req: AutoStartRequest): AutoStartResult
+  autoStop(id: string): boolean
 }
 
 const INERT_AGENTS: AgentHandlers = {
@@ -151,7 +154,9 @@ const INERT_AGENTS: AgentHandlers = {
   answer: () => false,
   list: () => [],
   transcript: () => ({ turns: [], snapshot: null }),
-  importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' })
+  importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
+  autoStart: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
+  autoStop: () => false
 }
 
 /**
@@ -280,6 +285,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
+  ipcMain.handle(IPC.AGENT_AUTO_START, (_event, req: AutoStartRequest) => agents.autoStart(req))
+  ipcMain.handle(IPC.AGENT_AUTO_STOP, (_event, id: string) => agents.autoStop(id))
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))

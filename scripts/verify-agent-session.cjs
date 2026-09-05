@@ -1310,7 +1310,9 @@ const isResult = (l) => l.includes('"type":"result"')
     ok('auto.1 startAuto sends the opening prompt, a result without the marker sends the continuation, and at the limit NOTHING more is sent whatever arrives after — the run resolves stuck with reason limit and the turn count the manager kept',
       started.kind === 'started' && sentAfterStart === 1 && sentAfterOne === 2 && sentAfterTwo === 2 && proc.stdin.length === 2 &&
         proc.stdin[0].includes(A_MARK()) && autos[0].state === 'running' && autos[0].turn === 0 && autos[0].limit === 2 &&
-        last.state === 'stuck' && last.reason === 'limit' && last.turn === 2 && manager.get('a1').auto === undefined,
+        // The snapshot KEEPS the resolved run (the chip shows `stuck` until
+        // the next start or a dispose); only a live run has state running.
+        last.state === 'stuck' && last.reason === 'limit' && last.turn === 2 && manager.get('a1').auto.state === 'stuck',
       JSON.stringify({ started, sentAfterStart, sentAfterOne, sentAfterTwo, stdin: proc.stdin.length, autos }))
 
     const d = makeManager()
@@ -1363,11 +1365,14 @@ const isResult = (l) => l.includes('"type":"result"')
      keyed by session AND tool, lives in the tracker, answers the request
      before the renderer ever sees it, is cleared on dispose, and is written
      NOWHERE. */
-  {
+  try   {
     const AP = M.approvals
     const sink = { notify() {}, badge() {}, beep() {}, windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false }
     const states = []
     const tracker = AP.createApprovalTracker({ sink, emitState: (id, state) => states.push([id, state]), label: () => 'x' })
+    // Guarded: before M98 lands the tracker has no grant, and a throw here
+    // would abort every check below (verify-suites.md rule 1).
+    if (typeof tracker.grant !== 'function') { ok('grant.1 the tracker has grant/granted/grantsOf/revoke', false, 'no grant on the tracker'); throw new Error('skip-grant') }
     const { manager, spawns, events } = makeManager({ preAnswer: (id, tool) => tracker.granted(id, tool) })
     manager.subscribe((e) => tracker.apply(e))
     manager.create({ id: 'g1', cwd: '/repo' })
@@ -1408,7 +1413,7 @@ const isResult = (l) => l.includes('"type":"result"')
       !/node:fs|writeFile|layout-store|JSON\.stringify/.test(approvalsSrc) && /grant/.test(approvalsSrc) &&
         !/grant/i.test(src('shared/layout-schema.ts')) && !/grant/i.test(src('main/layout-store.ts')) && !/grant/i.test(src('main/agent-transcript-log.ts')),
       '')
-  }
+  } catch (e) { if (String(e && e.message) !== 'skip-grant') throw e }
 
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */

@@ -1,6 +1,6 @@
 import type { WatchTrigger } from './watch-trigger'
 import type { RunRow } from './run-ledger'
-import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from './agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
@@ -551,7 +551,10 @@ export const IPC = {
    */
   AGENT_IMPORT: 'agent:import',
   /** M75. The clipboard's image, for a ⌘V that carried no text. Main's `clipboard.readImage()`. */
-  AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image'
+  AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image',
+  /** M97. A bounded auto run on a chat: main counts, main stops. */
+  AGENT_AUTO_START: 'agent:auto-start',
+  AGENT_AUTO_STOP: 'agent:auto-stop'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1191,6 +1194,10 @@ export interface CanvasBridge {
     /** M74. See AGENT_IMPORT. */
     importSession(req: AgentImportRequest): Promise<AgentImportResult>
     onEvent(listener: (event: AgentSessionEvent) => void): () => void
+    /** M97. Start a bounded run; refused by name (no session, one already live, codex without a marker contract is allowed). */
+    autoStart(req: AutoStartRequest): Promise<AutoStartResult>
+    /** M97. True when a run was live and is now stopped (its turn in flight interrupted). */
+    autoStop(id: string): Promise<boolean>
   }
   /** M85. The vault: a folder of markdown notes, read in main. */
   snapshot: {

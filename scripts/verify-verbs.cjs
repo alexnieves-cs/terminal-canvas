@@ -75,8 +75,12 @@ const FACTS = {
   // spec names carry it; a verb's refusals are sentences with a fix.
   {
     const d = (id) => V.verbById(id)?.destructive === true
-    ok('table.1 close, kill, reset-canvas, discard and remove-worktree are flagged destructive; focus, type, submit, send, read and set-setting are not; every verb has a label and args',
-      d('close') && d('kill') && d('reset-canvas') && d('discard') && d('remove-worktree') &&
+    // There is deliberately NO `kill`: a process's lifetime is its panel's (the
+    // two-lifetimes rule) and pty.kill keeps exactly two callers; `close` is
+    // the dispose and `interrupt` is the stop. Asserted absent, so a later
+    // hand does not add a third pty.kill caller through a verb.
+    ok('table.1 close, reset-canvas, discard and remove-worktree are flagged destructive; focus, type, submit, send, interrupt, read and set-setting are not; there is no kill verb; every verb has a label and args',
+      d('close') && V.verbById('kill') === undefined && !d('interrupt') && d('reset-canvas') && d('discard') && d('remove-worktree') &&
         !d('focus') && !d('type') && !d('submit') && !d('send') && !d('read') && !d('set-setting') &&
         V.VERBS.every((v) => typeof v.label === 'string' && Array.isArray(v.args) && typeof v.destructive === 'boolean'),
       JSON.stringify(V.VERBS.map((v) => `${v.id}${v.destructive ? '!' : ''}`)))

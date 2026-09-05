@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { addTotals } from '@shared/cost'
 import type { AgentSessionEvent, AgentSessionSnapshot } from '@shared/agent-session'
 import type { TranscriptTurn } from '@shared/transcript'
+import type { AutoStatus } from '@shared/auto'
 import { toolArgument, type LiveMessage } from './chat-model'
 import type { PendingApproval } from '@renderer/shell/rail-sections'
 
@@ -147,6 +148,14 @@ export function takeInsert(id: string, seq: number): void {
   update(id, rest)
 }
 
+/** M97. Dismiss a resolved auto chip; a live run is never dismissed from here (stop it). */
+export function dismissAuto(id: string): void {
+  const prev = states.get(id)
+  if (!prev || !prev.snapshot || prev.snapshot.auto === undefined || prev.snapshot.auto.state === 'running') return
+  const { auto: _auto, ...rest } = prev.snapshot
+  update(id, { ...prev, snapshot: rest })
+}
+
 export function clearChat(id: string): void {
   states.delete(id)
   syncApprovals()
@@ -182,6 +191,14 @@ export function onChatSession(listener: SessionListener): () => void {
 
 type TurnEndListener = (id: string) => void
 const turnEndListeners = new Set<TurnEndListener>()
+/** M97. Every auto transition, for the run recorder: `(panelId, status)`. */
+type AutoListener = (id: string, status: AutoStatus) => void
+const autoListeners = new Set<AutoListener>()
+export function onChatAuto(listener: AutoListener): () => void {
+  autoListeners.add(listener)
+  return () => { autoListeners.delete(listener) }
+}
+
 export function onChatTurnEnd(listener: TurnEndListener): () => void {
   turnEndListeners.add(listener)
   return () => { turnEndListeners.delete(listener) }
@@ -307,6 +324,16 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       if (!snap) return
       update(event.id, { ...prev, snapshot: { ...snap, pending: snap.pending.filter((p) => p.requestId !== event.requestId) } })
       return
+    case 'auto': {
+      // M97. A projection of MAIN's count: the chip reads this, nothing
+      // decides from it. The status object is rebuilt by name so an absent
+      // `reason` stays absent.
+      if (!snap) return
+      const status: AutoStatus = { mode: event.mode, turn: event.turn, limit: event.limit, state: event.state, ...(event.reason === undefined ? {} : { reason: event.reason }) }
+      update(event.id, { ...prev, snapshot: { ...snap, auto: status } })
+      for (const l of autoListeners) l(event.id, status)
+      return
+    }
     case 'unknown':
       if (!snap) return
       update(event.id, { ...prev, snapshot: { ...snap, counters: { ...snap.counters, unknown: snap.counters.unknown + 1 } } })

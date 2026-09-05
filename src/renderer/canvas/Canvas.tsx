@@ -128,7 +128,7 @@ import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
-import { onChatSession } from '@renderer/chat/chat-store'
+import { onChatSession, onChatAuto } from '@renderer/chat/chat-store'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
 import { AnnotationLayer } from './AnnotationLayer'
@@ -3309,6 +3309,8 @@ export function Canvas({
   useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
   const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
   useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
+  // M97. An auto run is a run: the store's auto bus feeds the recorder.
+  useEffect(() => onChatAuto((id, status) => runsApi.onAutoEvent(id, status)), [runsApi])
   const anyOpen = runs.some((r) => r.endedAt === undefined)
   useEffect(() => {
     if (!anyOpen) return
@@ -4471,6 +4473,9 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   claudeAvailable={panel.chat.backend === 'codex' ? codexAvailable(presetRows) : claudeAvailable(presetRows)}
                   onOpenInTerminal={openInTerminal}
+                  // M97. Focus first so the palette CAPTURES this chat (its rows act on
+                  // the captured id); the open waits a tick for the focus ref to land.
+                  onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
                 />
               )
             }

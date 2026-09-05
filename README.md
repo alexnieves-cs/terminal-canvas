@@ -388,6 +388,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:answer / agent:list / agent:transcript / agent:import
                        agent:clipboard-image
                        snapshot:list / snapshot:restore
+                       agent:auto-start / agent:auto-stop
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

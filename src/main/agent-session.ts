@@ -62,6 +62,9 @@ import { headlessArgs } from './agent-session-args'
  *     from the new one's stream.
  */
 
+import { autoPlanOf, AUTO_DONE_MARKER, type AutoModeId, type AutoStatus, type AutoStuckReason } from '@shared/auto'
+import type { AutoStartResult } from '@shared/agent-session'
+
 export type {
   AgentSessionStatus,
   AgentSessionSpec,
@@ -107,6 +110,12 @@ export interface AgentSessionDeps {
   now?: () => number
   /** How long an interrupt may go unanswered before the process is killed. */
   interruptGraceMs?: number
+  /**
+   * M97. How long an auto run waits on a permission question before it
+   * resolves `stuck: permission` — the question stays pending for the user;
+   * only the RUN stops. Absent is a minute.
+   */
+  autoPermissionGraceMs?: number
   /** The delta batch window. */
   coalesceMs?: number
 }
@@ -143,7 +152,25 @@ interface Session {
   counters: AgentSessionCounters
   batch: AgentSessionEvent[]
   batchTimer: ReturnType<typeof setTimeout> | null
+  /**
+   * M97. The live auto run, MAIN's own count. `turn` counts results seen
+   * since the start; the limit is enforced here and nowhere else, so the
+   * renderer's chip can be wrong and the stop still lands.
+   */
+  auto?: AutoRun
+  /** M97. The last resolved run, shown on the chip until the next start or a dispose. */
+  autoLast?: AutoStatus
 }
+
+interface AutoRun {
+  mode: AutoModeId
+  turn: number
+  limit: number
+  continuation: string
+  permissionTimer: ReturnType<typeof setTimeout> | null
+}
+
+const AUTO_PERMISSION_GRACE_MS = 60_000
 
 const INTERRUPT_GRACE_MS = 5000
 const COALESCE_MS = 16
@@ -304,8 +331,80 @@ export class AgentSessionManager {
     if (!pending) return false
     session.proc.write(permissionResponseLine(requestId, pending.input, answer))
     session.pending.delete(requestId)
+    if (session.auto !== undefined && session.pending.size === 0 && session.auto.permissionTimer !== null) { clearTimeout(session.auto.permissionTimer); session.auto.permissionTimer = null }
     this.emit({ id, type: 'permission-answered', requestId, allow: answer.allow })
     return true
+  }
+
+  /**
+   * M97. Start a bounded run. The opening prompt goes through the ordinary
+   * `send` — it queues behind `agents.maxConcurrent` and is refused past
+   * `agents.budgetUsd` by name, unchanged — and every result after that is
+   * counted HERE. The limit is the mode's unless the caller lowers it.
+   */
+  startAuto(id: string, opts: { mode: AutoModeId; task?: string; limit?: number }): AutoStartResult {
+    const session = this.sessions.get(id)
+    if (!session) return { kind: 'refused', reason: 'no such session' }
+    if (session.auto !== undefined) return { kind: 'refused', reason: `an auto run is already running here (${session.auto.mode}) — stop it first` }
+    const prompts = autoPlanOf(opts.mode, id, opts.task)
+    const limit = Math.max(1, Math.min(prompts.limit, opts.limit ?? prompts.limit))
+    session.auto = { mode: opts.mode, turn: 0, limit, continuation: prompts.continuation, permissionTimer: null }
+    session.autoLast = undefined
+    this.emitAuto(session, 'running')
+    const sent = this.send(id, prompts.opening)
+    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'no-session') {
+      this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'exit')
+      return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : 'the send was refused' }
+    }
+    return { kind: 'started', limit }
+  }
+
+  /** M97. True when a run was live: it resolves `stopped`, and a turn in flight is interrupted. */
+  stopAuto(id: string): boolean {
+    const session = this.sessions.get(id)
+    if (!session || session.auto === undefined) return false
+    this.resolveAuto(session, 'stopped')
+    if (session.inFlight) this.interrupt(id)
+    return true
+  }
+
+  private emitAuto(session: Session, state: AutoStatus['state'], reason?: AutoStuckReason): void {
+    const run = session.auto
+    const status: AutoStatus = run === undefined
+      ? (session.autoLast ?? { mode: 'complete', turn: 0, limit: 0, state })
+      : { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
+    this.emit({ id: session.id, type: 'auto', ...status })
+  }
+
+  private resolveAuto(session: Session, state: 'done' | 'stuck' | 'stopped', reason?: AutoStuckReason): void {
+    const run = session.auto
+    if (run === undefined) return
+    if (run.permissionTimer !== null) { clearTimeout(run.permissionTimer); run.permissionTimer = null }
+    session.autoLast = { mode: run.mode, turn: run.turn, limit: run.limit, state, ...(reason === undefined ? {} : { reason }) }
+    session.auto = undefined
+    this.emit({ id: session.id, type: 'auto', ...session.autoLast })
+  }
+
+  /**
+   * M97. The decision, on every result of a session with a run live: done if
+   * the last assistant text carries the marker; stuck at the limit; else the
+   * continuation is sent. An interrupted or failed result counts as a turn
+   * but never continues past a failure.
+   */
+  private autoAfterResult(session: Session, event: { ok?: boolean; interrupted: boolean }): void {
+    const run = session.auto
+    if (run === undefined) return
+    run.turn += 1
+    if (event.interrupted) return
+    const last = [...session.turns].reverse().find((t) => t.role === 'assistant')
+    const text = last === undefined ? '' : last.blocks.filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
+    if (text.includes(AUTO_DONE_MARKER)) { this.resolveAuto(session, 'done'); return }
+    if (event.ok === false) { this.resolveAuto(session, 'stuck', 'exit'); return }
+    if (run.turn >= run.limit) { this.resolveAuto(session, 'stuck', 'limit'); return }
+    this.emitAuto(session, 'running')
+    const sent = this.send(session.id, run.continuation)
+    if (sent === 'refused-budget') this.resolveAuto(session, 'stuck', 'budget')
+    else if (sent !== 'sent' && sent !== 'queued') this.resolveAuto(session, 'stuck', 'exit')
   }
 
   dispose(id: string): void {
@@ -314,6 +413,9 @@ export class AgentSessionManager {
     // Deleted FIRST, so the process's late callbacks find nothing to speak to.
     this.sessions.delete(id)
     this.clearInterruptTimer(session)
+    if (session.auto?.permissionTimer) clearTimeout(session.auto.permissionTimer)
+    session.auto = undefined
+    session.autoLast = undefined
     this.dropBatch(session)
     session.queue.length = 0
     session.pending.clear()
@@ -506,6 +608,7 @@ export class AgentSessionManager {
           session.turnEnded = true
           this.setStatus(session, 'ready')
           this.emit({ id, ...event, interrupted })
+          this.autoAfterResult(session, { ok: event.ok, interrupted })
           return
         }
         if (session.proc && session.status !== 'starting') this.setStatus(session, 'ready')
@@ -515,9 +618,22 @@ export class AgentSessionManager {
           this.writeUser(session, next.text, next.images)
           this.emit({ id, type: 'dequeued', text: next.text })
         }
+        // M97. After the queue, so a continuation lands behind what the user
+        // typed during the turn rather than ahead of it.
+        this.autoAfterResult(session, { ok: event.ok, interrupted })
         return
       }
       case 'permission-request':
+        // M97. A question nobody answers stops the RUN (not the question):
+        // after the grace the run is stuck: permission, and the card still asks.
+        if (session.auto !== undefined && session.auto.permissionTimer === null) {
+          const run = session.auto
+          run.permissionTimer = setTimeout(() => {
+            run.permissionTimer = null
+            if (session.auto !== run || session.pending.size === 0) return
+            this.resolveAuto(session, 'stuck', 'permission')
+          }, this.deps.autoPermissionGraceMs ?? AUTO_PERMISSION_GRACE_MS)
+        }
         session.pending.set(event.requestId, {
           requestId: event.requestId,
           toolName: event.toolName,
@@ -557,6 +673,9 @@ export class AgentSessionManager {
     session.exitSignal = info.signal ?? undefined
     session.carry = ''
     this.clearInterruptTimer(session)
+    // M97. A run whose process exited is stuck: exit — a real verdict with a
+    // reason, never a chip that keeps spinning over a dead process.
+    if (session.auto !== undefined) this.resolveAuto(session, 'stuck', 'exit')
     if (session.inFlight) {
       session.inFlight = false
       session.interrupting = false
@@ -698,7 +817,8 @@ export class AgentSessionManager {
       costUsd: session.costUsd,
       pending: [...session.pending.values()],
       queued: session.queue.length,
-      counters: { ...session.counters }
+      counters: { ...session.counters },
+      ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }
 }

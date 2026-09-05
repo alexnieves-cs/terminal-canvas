@@ -3718,3 +3718,13 @@ body {
 /* M93. Far tiers: the label scales in world units like the frame border (M91), so a note stays a word and not a smear. */
 .world[data-detail="summary"] .annotation__label { font-size: calc(var(--t-xs) * 3.5); max-width: 1100px; }
 .world[data-detail="block"] .annotation__label { font-size: calc(var(--t-xs) * 8); max-width: 2400px; }
+
+/* M97. The auto chip beside the chat's pill: the kind mark's face with the
+   state tone, a ring while running (a rotating hairline, reduced-motion
+   still), and a labelled dismiss once resolved. A projection of main's
+   count — nothing here decides. */
+.chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.chat__auto-ring { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; animation: chat-auto-spin 900ms linear infinite; }
+@keyframes chat-auto-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
+.chat__auto-dismiss { margin-left: var(--sp-1); }

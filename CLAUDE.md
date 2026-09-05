@@ -169,6 +169,7 @@ renderer --invoke--> spawn:sheet / spawn:recent                                 
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
 renderer --invoke--> agent:clipboard-image                                       --> main
+renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer

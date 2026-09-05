@@ -19,6 +19,12 @@ export type AgentSessionStatus =
 /** M90. Which headless CLI answers. Absent is claude — every pre-M90 record. */
 export type AgentBackend = 'claude' | 'codex'
 
+import type { AutoModeId, AutoState, AutoStuckReason, AutoStatus } from './auto'
+
+/** M97. `agent:auto-start`'s request and its named answer. */
+export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number }
+export type AutoStartResult = { kind: 'started'; limit: number } | { kind: 'refused'; reason: string }
+
 /** M90. The one sentence every codex door shows when the CLI is absent. */
 export const REASON_NO_CODEX = 'codex was not found on the login PATH — install it, or check the environment report'
 /** M90. What codex cannot do, named where the control is. */
@@ -77,6 +83,8 @@ export interface AgentSessionSnapshot {
   /** M82. Why the last message queued: this session's turn, or the canvas's ceiling. */
   queuedReason?: 'in-flight' | 'concurrency'
   counters: AgentSessionCounters
+  /** M97. Present while an auto run is live or just resolved (until dismissed by a new start or a dispose). */
+  auto?: AutoStatus
 }
 
 export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
@@ -99,6 +107,8 @@ export type AgentSessionEvent = { id: string } & (
   | { type: 'queue-dropped'; count: number }
   | { type: 'permission-answered'; requestId: string; allow: boolean }
   | { type: 'permission-dropped'; requestId: string }
+  /** M97. The bounded run's state, main's own count — the chip is a projection of this. */
+  | { type: 'auto'; mode: AutoModeId; turn: number; limit: number; state: AutoState; reason?: AutoStuckReason }
 )
 
 /**

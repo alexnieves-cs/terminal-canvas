@@ -216,7 +216,8 @@ app.whenReady().then(() => {
   // M85 vault:read (88). M86 git:status and review:across (90).
   // M88 github:list (91).
   // M89 broker:audit (92).
-  const EXPECTED_CHANNELS = 94
+  // M97 agent:auto-start / agent:auto-stop (96).
+  const EXPECTED_CHANNELS = 96
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
