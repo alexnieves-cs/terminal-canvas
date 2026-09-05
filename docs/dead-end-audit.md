@@ -1,8 +1,13 @@
-# The dead-end audit (M59)
+# The dead-end audit (M59, walked again in M94)
 
 Criterion 1 of the 1.0 brief: nothing a user can reach is a dead end — every surface
 finished, every affordance that cannot work present and disabled with a named reason.
-This is the walk, written down so the next one does not repeat it. Walked by source and by
+This is the walk, written down so the next one does not repeat it — walked first at 1.0
+(M59) and again at 2.0 (M94), after M71–M93 added nine panel kinds' worth of surface, a
+second headless backend, a broker, three layout verbs and a time machine. The M94 walk
+kept the M59 entries that still describe the app, folded the per-milestone lines that had
+accreted at the end into their surfaces, and added a section the first walk did not have:
+keyboard reach, checked by a REAL Tab rather than by reading the markup. Walked by source and by
 the suites (the harness drives a real renderer; the palette suite drives every row against
 every context); what a walk by source cannot see is listed at the end as NOT walked.
 
@@ -61,97 +66,100 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 
 ## Surfaces walked, and their states
 
-- **Palette.** Eight sections plus Bookmarks (M56), five scopes (workspaces, credentials,
-  worktrees, environment, search), three input modes (text, confirm, number). Every row
-  is one of: runs; disabled with a reason above; or an informational row (`Environment…`).
-  Dynamic families: presets (spawn/rename/delete/default/worktree; built-ins refuse
-  rename/delete by name), prompts (insert/delete; project prompts refuse delete by name),
-  panels (goto, mode), workspaces (switch/rename/delete/move), credentials
-  (set/verify/delete), worktrees (reveal/remove), bookmarks (go/rename/delete), search hits.
-  **Found:** bookmarks could not be renamed — fixed (M59, `bookmark.rename.*`).
-- **Rail.** Panel rows (rename, close, ▶ start for dormant — always visible), workspace
-  rows, the attention list with its empty state ("nothing wants you"), sections that
-  collapse. Every control is present at rest and revealed on hover or focus-within.
-- **Context pane.** Detail / Work / Tools tabs; six actions (rename, close, link, restart,
-  review, save-preset); restart and review disabled with a reason on a non-terminal or a
-  never-started panel; the runs list (M52) and the changes section (three-state).
-- **Top bar, dock, HUD.** New panel (`⌘N`), Search (`⌘K`), Settings, merged toggle,
-  context toggle, fit / zoom in / zoom out, the attention badge with its popover.
-- **Launcher and hint strip (M48).** Every preset control present; a missing CLI named
-  with what to install; the note verb disabled with a reason without a root; four hints
-  that fade for good.
-- **Menu.** File (new panel from preset, save panel as preset, reset canvas…), Edit (undo,
-  redo, copy, paste), View. Reset confirms; undo cannot remove a running agent without
-  the confirm path applyHistory carries.
-- **Keyboard.** `⌘N ⌘K ⌘F ⌘0 ⌘1 ⌘= ⌘- ⌘J ⇧⌘J ⇧⌘[ ⇧⌘] ⇧⌘A ⌘\ ⌘[ ⌘]`, arrows and
-  Enter on the canvas (M44), Escape as two-stage in the palette.
-- **Drop door.** **Found:** a file dropped over a terminal opened a file panel over it, and a
-  drop with an overlay open minted a panel unseen — both fixed (M59): over a live terminal
-  the path is pasted; with the palette or nav grid open the drop is ignored.
-- **Review node.** Refresh, commit (blocked by name on shared), per-file discard (M53,
-  blocked by name on shared), the armed sentences, outcome lines.
-- **File / Jira / Toolbox nodes.** (M68: the Jira panel's no-credential note now carries a `Connect Jira…` verb that opens the palette's Credentials scope — the one note in this list that named a fix without offering it.) Editor save, comment, transition (Move…), refresh —
-  each with a three-state result.
-- **Integrations page (M89).** The navigator's fifth pane: one section per DECLARED service,
-  present whether or not a credential exists, each with one of three closed sentences in its
-  tone (`connected as <label>`, `not connected — add a … token`, `token rejected — add a new
-  … token`) and ONE verb (`Connect…` / `Verify` / `Reconnect…`), the audit rows beneath with
-  a named empty arm (`no calls yet — an agent reaches … with tc api …`), the skipped count
-  said, and a note saying what the audit does not show (Jira's own panel reads). The palette's
-  `Manage integrations…` door is present at rest and enters the Credentials scope.
-- **GitHub work panel (M88).** Three states in the node — reading, the reason (with
-  `Connect GitHub…` when it is `no-credential`, the same sentence the broker and the
-  credential rows use, `REASON_NO_GITHUB`), and the list with its own empty arm and a note
-  when only the pull requests could not be read. The palette's `Open GitHub work` row is
-  PRESENT at rest and disabled with that reason, where the Jira door only exists once a
-  credential does. `Start session` on every item; `open on GitHub` through the link verb.
-- **The broker (M87).** No surface of its own: `tc api` answers a service with no
-  credential with the same `not connected — add a <service> token in ⌘K › Credentials`
-  sentence the panel rows use, an unknown service or method by name, and a path that could
-  escape the service by name — each answer a row in the audit, so an agent's refused attempt
-  is as visible as a served one. The URL door refuses the verb outright.
-- **Cross-worktree review (M86).** The palette's `Review every worktree…` row is disabled
-  with `REASON_NO_REVIEW_TARGET_ACROSS` when no panel inside a repository is captured and with
-  `REASON_NO_WORKTREES` when this app has made none; inside the node, commit and discard are
-  blocked by name (`one worktree at a time`) rather than absent, a worktree whose directory is
-  gone is a section that says so, and the context pane's branch line is absent until asked,
-  a phrase when git answered, and nothing (the note beneath explains) when it could not.
-- **Vault pane (M85).** Three states before the list — no folder set (names the setting and
-  offers `Choose a folder…`), reading, a folder that is not there (the reason, and the same
-  verb) — then the list with its filter and a named empty arm for no notes and for no match;
-  the cap reported under the list rather than notes silently missing. Inside a note, an
-  unresolved `[[link]]` stays a link (dashed) that offers to create the note; the Backlinks
-  section says `no note points here yet` rather than vanishing. No REASON_* constant: the
-  pane's refusals are its own three arms.
-- **Watcher node (M84).** Run now / Stop (the control is one or the other, never a disabled
-  pair), the close, and three body states — never run (naming its trigger and the manual
-  verb), a run that printed nothing, and the tail. A trigger that could not be armed says so
-  in the body rather than leaving a node that silently never runs. Its palette door,
-  `Watch…`, is disabled with `REASON_NO_WATCH_ROOT` when no panel with a directory is
-  selected, and the trigger line re-prompts by name rather than guessing (a guessed trigger
-  arms a real command against the wrong thing, and the user finds out by watching it never
-  run).
-- **Memory node (M83).** Refresh, the kind select, the add line and its `Add` verb, each
-  refusal from the store rendered by name (`a memory needs text`, an unknown kind, a missing
-  root), the named empty arm, and the skipped-line count. Its two doors — the palette's
-  `Open memory…` row and the Files pane's memory control — are disabled with the SAME named
-  reason (`REASON_NO_REPO_MEMORY`) when no panel with a directory is selected, never hidden;
-  and the chat's first-send context is stated above the composer before it is sent, which is
-  the one place in the app where a dead end would be a disclosure failure rather than a
-  usability one.
-- **Groups, merged view, first run, orphans, `tc`, the URL scheme.** Each refuses by name
-  where it refuses (merged: every geometry write; `tc`: unknown preset / no default /
-  missing cwd; the URL door: anything but `open`).
+### The 1.0 surfaces, still as M59 found them
+
+- **Palette.** Eight sections plus Bookmarks, the scopes (workspaces, credentials, worktrees,
+  environment, search), the input modes (text, confirm, number, secret, sheet). Every row is
+  one of: runs; disabled with a reason above; or informational. Dynamic families: presets,
+  prompts, panels, workspaces, credentials, worktrees, bookmarks, search hits, templates.
+- **Rail.** Panel rows (rename, close, ▶ start for dormant — always visible; M92's lock and
+  pin marks after the label), workspace rows, the attention list with its empty state,
+  sections that collapse. Every control is present at rest and revealed on hover or
+  focus-within.
+- **Context pane.** Detail / Work / Tools tabs; the action bar (restart, lock/unlock,
+  pin/unpin, fill/restore, the front-end verb, rename, save-preset, link, close); restart and
+  the front-end verb disabled with a reason on a non-terminal or a never-started panel; pin
+  disabled with the SAME sentence the palette row shows (`pinRefusal`); the runs list and the
+  changes section, each three-state.
+- **Top bar, dock, HUD.** New panel, Search, Settings, merged toggle, context toggle, fit /
+  zoom in / zoom out, the attention badge with its popover.
+- **Launcher and hint strip.** Every preset control present as an invitation (`Start …`); a
+  missing CLI named with what to install; `Chat with Claude…` and `Chat with Codex…` each
+  disabled by name when its CLI is absent; the note verb disabled with a reason without a
+  root; four hints that fade for good.
+- **Menu.** File, Edit, View. Reset confirms, and since M93 the dialog says how many
+  snapshots exist and where to restore one.
+- **Keyboard.** The chords, arrows and Enter on the canvas, Escape as two-stage in the
+  palette — and see "Keyboard reach" below.
+- **Drop door, review node, file / Jira / toolbox nodes, groups, merged view, first run,
+  orphans, `tc`, the URL scheme.** As M59 recorded them; each refuses by name where it
+  refuses.
+
+### The surfaces this run added (M71–M93)
+
+- **Chat panel (M73–M77).** A process kind: the composer's Send and Interrupt disabled by
+  name (streaming, a question pending, no CLI on the PATH; codex's own interrupt reason),
+  the `@`/`/` completions with a named empty arm, attachments with `remove`, a refused
+  attachment shown whole, the approval question with Allow/Deny in the panel, the card's
+  summary tier, the rail row, the popover and the pane; tool rows with a `diff` verb that
+  is disabled by name without a baseline; `to terminal` disabled by name mid-turn, on an
+  empty chat, and on a codex chat (the door is `claude --resume`).
+- **The second backend (M90).** `chat with codex` in the sheet and the launcher, disabled by
+  name when absent; the chrome names the backend; an image on a codex send is refused by
+  name; a codex send with no codex configured is `refused-backend`, never a bare spawn.
+- **Edges, runs, templates (M78–M80).** An edge's trigger and label in the pane, remove on
+  hover and on the pane, a cycle refused by name; Runs with `Run again` (a chat root skipped
+  by name); templates in the sheet with one field per parameter and a refusal naming the
+  missing preset or CLI; a built-in template refuses deletion by name.
+- **The supervisor and the ceilings (M81–M82).** One supervisor per canvas: the sheet's row
+  says so and the create path refuses; a budget crossing interrupts (kills, for codex) and
+  says so once; a send past the budget is refused with the number and the fix.
+- **Memory node (M83).** Refresh, the kind select, the add line; the store's refusals by
+  name; both doors disabled with `REASON_NO_REPO_MEMORY`, never hidden; the chat's context
+  stated before it is sent.
+- **Watcher node (M84).** Run now / Stop (one or the other), Arm/Disarm with the disarmed
+  reason shown, three body states; `Watch…` disabled with `REASON_NO_WATCH_ROOT`; a trigger
+  line that re-prompts by name.
+- **Vault pane (M85).** Three states before the list, a named empty arm for no notes and no
+  match, the cap reported; an unresolved `[[link]]` offers to create; Backlinks says when
+  none point here.
+- **Git (M86).** `Review every worktree…` disabled with `REASON_NO_REVIEW_TARGET_ACROSS` or
+  `REASON_NO_WORKTREES`; commit and discard blocked by name across worktrees; a worktree
+  whose directory is gone is a section that says so; the branch line absent / a phrase /
+  nothing-with-a-note.
+- **The broker, GitHub, Integrations (M87–M89).** `tc api` refuses by name (no credential
+  with the ONE sentence, an unknown service or method, a path that could escape) and every
+  refusal is an audit row; `Open GitHub work` present without a credential and disabled with
+  `REASON_NO_GITHUB`; the Integrations pane's three closed sentences and one verb per service.
+- **Lock, pin, maximise (M92).** Six palette rows every one present, the half that does not
+  apply disabled naming the state; the ninth pin names the count and the fix; a locked
+  panel's handles stay with the fix in their title; the frame's `fill` disabled by name in
+  the merged view; a group frame says `N locked`.
+- **Snapshots and annotations (M93).** History shows three states (reading, none yet with
+  the rule, a list) and Restore is disabled by name while merged; a corrupt snapshot is
+  refused by name; `Annotate…` present and disabled by name while merged; the strip carries
+  its exit; a note's title says what it is; Delete removes a selected note.
+
+## Keyboard reach
+
+`verify:panels reach.1` presses a REAL Tab (`sendInputEvent`, not a dispatched event) from
+the context pane's first enabled action and asserts every enabled action is visited in the
+bar's order — the three toggles M92 added included — and from the launcher's first verb
+asserts every launcher verb is visited. A disabled action is skipped by Tab, and that is
+right: it is present, titled, and not a stop. What this does NOT cover: the frame's chrome
+controls (`fill`, the marks, close) and the rail rows, whose tab order the M44 keyboard
+work set and no check re-walks; and the note editor, which takes focus on placement and
+returns it on Enter/Escape (a click check drives that in `annot.1`).
 
 ## Not walked
 
 - **Pixels.** No suite sees a stray visual defect; the walk is by source. A pass over a
-  real display at both themes and three widths is manual-only.
-- **Native dialogs.** Reset, orphan recovery, save dialogs: manual-only.
+  real display at both themes and three widths is manual-only; the scenes `npm run shot`
+  renders are a person's and a critic's reading, recorded per milestone.
+- **Native dialogs.** Reset (now with its snapshot line), orphan recovery, save dialogs:
+  manual-only.
 - **Terminal contents.** What an agent CLI draws is its own; the app's accessibility
   statement (M44) says what the panels cannot offer.
-
-- **M90.** `chat with codex` is present and disabled by name when codex is absent (the sheet); a codex chat's Interrupt mid-turn, its terminal door and an image attachment are each refused with a sentence naming the fix; a codex send with no codex configured is `refused-backend`, never a spawn of a bare name.
-- **M91.** The launcher's `Chat with codex…` door is present and disabled by name when codex is absent; every launcher verb is an invitation with a hint naming where it lands.
-- **M92.** Six palette rows for lock/unlock, pin/unpin, maximise/restore, each present and disabled naming the state; the ninth pin names the count and the fix; a locked panel's handles stay with the fix in their title; the frame's `fill` control is disabled by name in the merged view.
-- **M93.** `Annotate…` is present and disabled by name while merged; the strip carries its exit; History shows three states (reading, none yet with the rule, a list) and Restore is disabled by name while merged; a corrupt snapshot is refused by name.
+- **A real network.** Every connector is driven with a fake requester; the Connect verbs
+  and the not-connected sentences are what a person reaches with no token, and a real
+  GitHub or Jira answer was seen once by hand at most.
