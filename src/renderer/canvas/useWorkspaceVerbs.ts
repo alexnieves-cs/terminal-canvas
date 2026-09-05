@@ -1,3 +1,4 @@
+import type { Annotation } from '@shared/annotations'
 import { seedAfter } from '@renderer/panels/recover'
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
@@ -34,6 +35,8 @@ export interface WorkspaceVerbsDeps {
   bookmarksRef: RefObject<PersistedBookmark[]>
   /** M79. The runs, saved with the outgoing workspace like its bookmarks. */
   runsRef: RefObject<PersistedRun[]>
+  /** M93. */
+  annotationsRef: RefObject<Annotation[]>
   viewportRef: RefObject<Viewport>
   nextIdRef: RefObject<number>
   toggleMergedImplRef: RefObject<() => void>
@@ -47,6 +50,8 @@ export interface WorkspaceVerbsDeps {
   setBookmarks: Dispatch<SetStateAction<PersistedBookmark[]>>
   /** M79. The incoming workspace's runs; without this the outgoing history is written into it. */
   setRuns: Dispatch<SetStateAction<PersistedRun[]>>
+  /** M93. */
+  setAnnotations: Dispatch<SetStateAction<Annotation[]>>
   /** M79. Forget every open run's component: the incoming workspace's panels are different ones. */
   forgetOpenRuns: () => void
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -100,9 +105,9 @@ export interface WorkspaceVerbs {
  */
 export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData
   } = deps
@@ -216,6 +221,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
           groups: groupsRef.current,
           bookmarks: bookmarksRef.current,
           runs: runsRef.current,
+          ...(annotationsRef.current.length === 0 ? {} : { annotations: annotationsRef.current }),
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -290,6 +296,9 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         setRuns(sealAbandoned(result.state.runs ?? [], Date.now()))
         forgetOpenRuns()
         setBookmarks(result.state.bookmarks ?? [])
+        // M93. The incoming workspace's notes, or none: the outgoing ones must
+        // not be carried into a workspace that never had them (the verifier).
+        setAnnotations(result.state.annotations ?? [])
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)

@@ -2065,6 +2065,28 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ rect, back }))
 }
 
+// M93. ANNOTATIONS: a panel anchor is the panel's rect plus an offset, so the
+//      note moves with its panel; a click inside a panel resolves to a panel
+//      anchor and outside to a world anchor; pruning drops an orphan.
+{
+  const panels = [{ rect: { id: 'n1', x: 100, y: 100, w: 500, h: 300 } }, { rect: { id: 'n2', x: 1000, y: 100, w: 500, h: 300 } }]
+  const onPanel = { id: 'a', text: 't', anchor: { kind: 'panel', panelId: 'n1', dx: 20, dy: -24 } }
+  const inWorld = { id: 'b', text: 't', anchor: { kind: 'world', x: 5, y: 6 } }
+  const p1 = V.annotationPoint(onPanel, panels)
+  const moved = V.annotationPoint(onPanel, [{ rect: { id: 'n1', x: 400, y: 700, w: 500, h: 300 } }])
+  const p2 = V.annotationPoint(inWorld, panels)
+  const orphan = V.annotationPoint(onPanel, [])
+  const inside = V.resolveAnchor({ x: 150, y: 150 }, panels)
+  const outside = V.resolveAnchor({ x: 5000, y: 5000 }, panels)
+  const pruned = V.pruneAnnotations([onPanel, inWorld, { id: 'c', text: 't', anchor: { kind: 'panel', panelId: 'gone', dx: 0, dy: 0 } }], new Set(['n1', 'n2']))
+  ok('annot.1 a panel-anchored note is the panel rect plus its offset and follows the panel; a world note is its point; an orphan resolves null; a point inside a panel becomes a panel anchor with the offset from its corner, outside a world anchor; pruning drops the orphan only',
+    p1.x === 120 && p1.y === 76 && moved.x === 420 && moved.y === 676 && p2.x === 5 && p2.y === 6 && orphan === null &&
+      inside.kind === 'panel' && inside.panelId === 'n1' && inside.dx === 50 && inside.dy === 50 &&
+      outside.kind === 'world' && outside.x === 5000 &&
+      pruned.length === 2 && pruned.map((a) => a.id).join(',') === 'a,b',
+    JSON.stringify({ p1, moved, p2, orphan, inside, outside, pruned: pruned.map((a) => a.id) }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

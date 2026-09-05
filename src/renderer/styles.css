@@ -3685,3 +3685,36 @@ body {
 .pf__mark svg { width: 14px; height: 14px; }
 .pf__maximise { flex: 0 0 auto; }
 .canvas-group__locked { margin-left: var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* M93. ANNOTATIONS. The layer is a sibling of .link-layer in .world; labels
+   are mono, quiet, on the well colour with a hairline, so a note reads as a
+   margin note and not as a panel. A selected note carries the iris ring the
+   way a selected edge does. The editor is the same box, editable. */
+/* 1px, not 100%: the world has no size of its own (see .link-layer's note — a zero-sized SVG in the compositing layer painted NOTHING of its overflow, and 100% of nothing is nothing). */
+/* Above every panel (a panel's z is a small integer) and under the annotate sheet and the chrome: a margin note hidden under a frame is a note nobody reads. */
+.annotation-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; z-index: 5000; }
+.annotation__leader { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+.annotation__host { pointer-events: none; }
+.annotation__label, .annotation__editor {
+  pointer-events: auto; display: inline-block; max-width: 320px; padding: var(--sp-1) var(--sp-2);
+  font: var(--t-xs) var(--font-mono); color: var(--fg-2); background: var(--well); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; text-align: left;
+}
+.annotation--selected .annotation__label { outline: 2px solid var(--iris); outline-offset: 1px; }
+.annotation__editor { min-width: 160px; outline: 2px solid var(--iris); }
+.canvas--annotating { cursor: crosshair; }
+.canvas--annotating .panel { cursor: crosshair; }
+
+.minimap__mark { position: absolute; width: 2px; height: 2px; border-radius: var(--r-full); background: var(--fg-3); pointer-events: none; }
+
+/* M93. The annotate strip is the link banner's shape, iris rather than the link's tone, so the mode reads as a different one. */
+.link-banner--annotate { border-color: var(--iris); }
+.rail-snapshots { margin-top: var(--sp-3); }
+.rail-snapshot__restore { margin-left: auto; }
+
+/* M93. The annotate sheet: over every panel, under the strip; the host's mousedown places the note. */
+.annotate-sheet { position: absolute; inset: -100000px; z-index: 100000; cursor: crosshair; }
+
+/* M93. Far tiers: the label scales in world units like the frame border (M91), so a note stays a word and not a smear. */
+.world[data-detail="summary"] .annotation__label { font-size: calc(var(--t-xs) * 3.5); max-width: 1100px; }
+.world[data-detail="block"] .annotation__label { font-size: calc(var(--t-xs) * 8); max-width: 2400px; }

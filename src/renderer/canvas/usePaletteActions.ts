@@ -93,6 +93,8 @@ export interface PaletteActionsDeps {
   unpinPanel: (id: string) => void
   maximisePanel: (id: string) => void
   restorePanel: (id: string) => void
+  /** M93. Enter annotate mode; refused by name while merged. */
+  beginAnnotate: () => { kind: string; reason?: string }
   /** M80. Instantiate a template: every node and edge in one history entry. */
   instantiateTemplate: (template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>
   /** M74. The two front-end verbs. */
@@ -154,7 +156,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
-    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
+    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
@@ -1052,6 +1054,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
      */
     // M92. Pass-throughs: the rule lives in Canvas beside the record.
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
+    // M93. The annotate door.
+    beginAnnotate: () => { void beginAnnotate() },
     restartPanel: (id) => {
       const panel = panelsRef.current.find((p) => p.rect.id === id)
       // A sessionless panel has no process to restart. The isRestartable gate
@@ -1517,6 +1521,6 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        onSelectPanel, openReview, linkMode, reloadCredentials,
        movePanelsToWorkspace, toggleMerged, broadcastInput, broadcastReady,
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
-       lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
+       lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef])
 }

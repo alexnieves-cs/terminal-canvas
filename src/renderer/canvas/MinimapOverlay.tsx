@@ -27,6 +27,8 @@ export interface MinimapProps {
   rows: readonly MinimapRow[]
   viewport: Viewport
   goTo: (vp: Viewport) => void
+  /** M93. World points of the annotations — drawn as dots so the map shows the margins too. */
+  marks?: readonly { x: number; y: number }[]
 }
 
 function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number } }): JSX.Element {
@@ -42,7 +44,7 @@ function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: 
   )
 }
 
-export function Minimap({ rects, rows, viewport, goTo }: MinimapProps): JSX.Element | null {
+export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -111,6 +113,10 @@ export function Minimap({ rects, rows, viewport, goTo }: MinimapProps): JSX.Elem
         const row = byId.get(b.id)
         return row === undefined ? null : <Block key={b.id} row={row} box={b} />
       })}
+      {/* M93. Annotations as dots, so the map shows the margins too. */}
+      {(marks ?? []).map((m, i) => (
+        <span key={i} className="minimap__mark" data-minimap-mark style={{ left: m.x * projection.scale + projection.ox, top: m.y * projection.scale + projection.oy }} />
+      ))}
       <div className={`minimap__view${ghost !== null ? ' minimap__view--dragging' : ''}`} data-minimap-view
         style={{ left: viewBox.x, top: viewBox.y, width: Math.max(4, viewBox.w), height: Math.max(4, viewBox.h) }} />
     </div>

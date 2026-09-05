@@ -1,4 +1,5 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
+import { parseAnnotations, type Annotation } from './annotations'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
@@ -400,6 +401,8 @@ export interface CanvasState {
   bookmarks: PersistedBookmark[]
   /** M79. Runs — one execution of a subgraph each. Optional on disk for every layout written before runs existed. */
   runs: PersistedRun[]
+  /** M93. Notes in the margins. ABSENT on every pre-M93 file and stays absent — never normalised to []. */
+  annotations?: Annotation[]
 }
 
 /** M56. A place to come back to: three numbers and a name. */
@@ -1554,7 +1557,8 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     selectedId: pick(raw.selectedId),
     focusedId: pick(raw.focusedId),
     bookmarks: parseBookmarks(raw.bookmarks, warnings),
-    runs: parseRuns(raw.runs, surviving, warnings)
+    runs: parseRuns(raw.runs, surviving, warnings),
+    ...(() => { const a = parseAnnotations(raw.annotations, surviving, warnings, `workspace ${id}`); return a === undefined ? {} : { annotations: a } })()
   }
 }
 

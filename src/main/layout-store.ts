@@ -47,6 +47,8 @@ export interface LayoutStoreDeps {
    */
   schedule?: (fn: () => void, ms: number) => Cancel
   onWarning?: (message: string) => void
+  /** M93. Handed the bytes of every SUCCESSFUL write — the snapshot ring. Absent records nothing. */
+  onWritten?: (bytes: string) => void
 }
 
 export interface LayoutStore {
@@ -130,6 +132,10 @@ export interface LayoutStore {
    * switching is a transaction with its own rules (see activateWorkspace).
    */
   createWorkspace(name: string): string
+  /** M93. The layout as main holds it now — what a restore is computed against. */
+  current(): LayoutSnapshot
+  /** M93. Adds a fully-formed workspace record beside the others without activating it (the renderer switches, as it does for create). */
+  addWorkspaceRecord(workspace: Workspace): void
   /** False when the id names nothing, like renamePreset. */
   renameWorkspace(id: string, name: string): boolean
   /**
@@ -254,12 +260,16 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // so a pre-M6b file migrates on first load — but once this app has
       // written the file, `preferences` is the only record.
       const { settings: _settings, ...onDisk } = snapshot
-      writeFileSync(tmp, JSON.stringify(onDisk, null, 2), 'utf8')
+      const bytes = JSON.stringify(onDisk, null, 2)
+      writeFileSync(tmp, bytes, 'utf8')
       // rename is atomic on macOS. Writing in place would let a crash
       // mid-write leave a truncated file — parseLayout survives that, but it
       // survives it by discarding the whole canvas.
       renameSync(tmp, filePath)
       dirty = false
+      // M93. After the rename, never before: a snapshot of a write that failed
+      // would be history that never happened.
+      try { deps.onWritten?.(bytes) } catch (error) { warn(`snapshot hook failed: ${String(error)}`) }
     } catch (error: unknown) {
       warn(`could not write ${filePath}: ${String(error)}`)
     }
@@ -368,7 +378,8 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // off, since a bookmark on an empty canvas still names where to look.
       bookmarks: (w.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } })),
       // M79. Runs are a history, kept whatever the restore settings say.
-      runs: (w.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) }))
+      runs: (w.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) })),
+      ...(layout && w.annotations !== undefined ? { annotations: w.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } })) } : {})
     }
   }
 
@@ -402,6 +413,10 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // M56. Ungated: a bookmark is a place, kept whatever the restore settings say.
     w.bookmarks = (incoming.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } }))
     w.runs = (incoming.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) }))
+    // M93. Absent stays absent ON DISK: an empty list is no key, so a pre-M93
+    // reader (and the layout check that counts keys) sees the file it knew.
+    if (incoming.annotations !== undefined && incoming.annotations.length > 0) w.annotations = incoming.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } }))
+    else delete w.annotations
     scheduleWrite()
   }
 
@@ -706,6 +721,13 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     createWorkspace(name) {
       return doCreateWorkspace(name)
     },
+    current() {
+      return snapshot
+    },
+    addWorkspaceRecord(workspace) {
+      snapshot.workspaces = [...snapshot.workspaces, workspace]
+      scheduleWrite()
+    },
 
     renameWorkspace(id, name) {
       const found = snapshot.workspaces.find((w) => w.id === id)
@@ -779,6 +801,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       w.camera = { ...fresh.camera }
       w.selectedId = null
       w.focusedId = null
+      delete w.annotations
       scheduleWrite()
     },
 

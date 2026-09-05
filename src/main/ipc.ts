@@ -1,3 +1,4 @@
+import type { SnapshotMeta } from '@shared/ipc-contract'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
@@ -95,6 +96,9 @@ export interface PaletteHandlers {
   githubList(panelId?: string): Promise<GithubListResult>
   /** M85. Every `.md` under the vault root. */
   vaultRead(root: string): { root: string; notes: unknown[]; skipped: number; reason?: string }
+  /** M93. */
+  snapshotList(): SnapshotMeta[]
+  snapshotRestore(at: number, afterId?: number): { kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
   memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
@@ -279,6 +283,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))
+  ipcMain.handle(IPC.SNAPSHOT_LIST, () => palette.snapshotList())
+  ipcMain.handle(IPC.SNAPSHOT_RESTORE, (_event, at: number, afterId?: number) => palette.snapshotRestore(at, afterId))
   ipcMain.handle(IPC.WATCHER_CREATE, (_event, req: WatcherCreateRequest) => watchers.create(req))
   ipcMain.handle(IPC.WATCHER_RUN, (_event, id: string) => watchers.run(id))
   ipcMain.handle(IPC.WATCHER_STOP, (_event, id: string) => watchers.stop(id))

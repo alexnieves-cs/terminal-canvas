@@ -39,6 +39,9 @@ export interface NavigatorProps {
   treeRootPanel: string | null
   /** M68. The Workspaces pane's door to the merged view. */
   onToggleMerged: () => void
+  /** M93. The layout time machine: snapshots of saves, newest first; null = not asked yet, [] = none. */
+  snapshots?: readonly { at: number; panels: number; workspaces: number }[] | null
+  onRestoreSnapshot?: (at: number) => void
   treeRows: FileRow[]
   treeRootPending: boolean
   treeEmptyReason: string
@@ -185,6 +188,23 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                   {run.note !== undefined && <span className="rail-run__note" data-rail-run-note>{run.note}</span>}
                 </li>
               ))}
+                          {/* M93. HISTORY: the last saves, restored as a NEW workspace so the
+                  current one is never overwritten and reset stays final. Three
+                  states: not asked, none yet, a list. */}
+              <li className="rail-row rail-row--heading" data-rail-snapshots><span className="shell__region-title">History</span></li>
+              {props.snapshots === null || props.snapshots === undefined ? (
+                <li className="rail-empty">reading…</li>
+              ) : props.snapshots.length === 0 ? (
+                <li className="rail-empty" data-rail-snapshots-empty>no snapshots yet — one is kept a minute after each save</li>
+              ) : props.snapshots.map((snap) => (
+                <li key={snap.at} className="rail-row rail-snapshot" data-rail-snapshot={snap.at}>
+                  <span className="rail-row__label" title={new Date(snap.at).toLocaleString()}>{ago(snap.at)} · {snap.workspaces} workspace{snap.workspaces === 1 ? '' : 's'} · {snap.panels} panel{snap.panels === 1 ? '' : 's'}</span>
+                  <button type="button" className="rail-row__action rail-snapshot__restore" data-rail-snapshot-restore
+                    disabled={props.merged === true}
+                    title={props.merged === true ? 'the merged view is read-only — leave it to restore' : 'Restore this save as a new workspace beside the current one'}
+                    {...shellControl(() => props.onRestoreSnapshot?.(snap.at))}>Restore</button>
+                </li>
+              ))}
             </ul>
           ) : (
             <ul className="rail-list rail-list--panels" aria-label="Panels">
@@ -215,3 +235,12 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
 }
 
 export const Navigator = memo(NavigatorImpl)
+
+/** M93. A relative time for a snapshot row; the exact time is the title. */
+function ago(at: number): string {
+  const s = Math.max(0, Math.round((Date.now() - at) / 1000))
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.round(s / 60)} min ago`
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`
+  return `${Math.round(s / 86400)} d ago`
+}
