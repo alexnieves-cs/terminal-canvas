@@ -19,7 +19,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 1.1 (M70).** The second run, M61 to M70, was a design
+running a coding-agent CLI. **This is 2.0 (M95).** The third run, M71 to M95, made it an
+agentic super app: a main-process conversation runtime behind one seam (`AgentSessionManager`,
+M71) with claude and codex behind it (M90); the chat panel and its composer, approvals,
+tool objects (M73–M77); the task graph with joins, runs and templates (M78–M80); the
+supervisor and the ceilings (M81–M82); memory, the watcher, the vault, git across worktrees,
+the broker with GitHub and the Integrations seam (M83–M89); the small decisions and the
+recovered load-bearing entries (M91); lock, pin and maximise (M92); snapshots and
+annotations (M93); a second dead-end audit with a real-Tab reach check (M94). Every
+milestone has a spec, a plan, checks written first, a fresh-context verifier (and a critic
+for every surface), and a build log. The second run, M61 to M70, was a design
 pass with a screenshot harness and a design brief behind it: one state vocabulary and a state
 edge, panels found by name and state, a spawn sheet, every control named, a flat frame with no
 resting shadow, the context pane finished, a far view for every kind and a minimap — each with a

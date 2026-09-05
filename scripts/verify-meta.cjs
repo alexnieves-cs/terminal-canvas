@@ -607,14 +607,14 @@ console.log('\n' + '='.repeat(60))
   ok('audit.1 every palette REASON_* constant is named in docs/dead-end-audit.md', names.length >= 20 && missing.length === 0, JSON.stringify({ names: names.length, missing }))
 }
 
-// version.1 (M60; 1.1.0 at M70). package.json says 1.1.0 and the README's status line
+// version.1 (M60; 1.1.0 at M70; 2.0.0 at M95). package.json says 2.0.0 and the README's status line
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 1.1.0 and the README status line names the same version',
-    pkg.version === '1.1.0' && statusLine.includes('v1.1.0') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 2.0.0 and the README status line names the same version',
+    pkg.version === '2.0.0' && statusLine.includes('v2.0.0') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
