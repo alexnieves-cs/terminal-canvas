@@ -1,3 +1,5 @@
+import { BACKENDS, type BackendDef } from './agent-backends'
+
 /**
  * What an agent has spent, in a shape with no vendor in it.
  *
@@ -177,6 +179,16 @@ export interface AgentCapability {
   readonly headless?: { readonly interrupts: boolean; readonly images: boolean; readonly permissions: boolean; readonly terminalDoor: boolean }
 }
 
+/**
+ * M99. `headless` is DERIVED from the registry row, never written a second
+ * time: two tables of the same booleans agree until one is edited, and the
+ * one that drifts is whichever the failing surface did not read.
+ * `verify:agent-session registry.2` compares the two.
+ */
+function headlessOf(row: BackendDef): NonNullable<AgentCapability['headless']> {
+  return { interrupts: row.interrupts, images: row.images, permissions: row.asksPermission, terminalDoor: row.terminalDoor }
+}
+
 export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = {
   'claude-code': {
     flags: {
@@ -186,7 +198,7 @@ export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = 
     },
     sessionIdFlag: '--session-id',
     transcriptAccounting: true,
-    headless: { interrupts: true, images: true, permissions: true, terminalDoor: true }
+    headless: headlessOf(BACKENDS.claude)
   },
   codex: {
     flags: {
@@ -195,6 +207,6 @@ export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = 
       approvalPolicy: '--ask-for-approval'
     },
     transcriptAccounting: false,
-    headless: { interrupts: false, images: false, permissions: false, terminalDoor: false }
+    headless: headlessOf(BACKENDS.codex)
   }
 }

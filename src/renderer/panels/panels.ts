@@ -1,3 +1,4 @@
+import { carryBackend } from '@shared/agent-backends'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
@@ -782,9 +783,10 @@ export function makeChatPanel(
       // M81. A supervisor's flag is copied field-by-field like the rest: it is
       // what makes its next spawn carry the system prompt again.
       ...(chat.supervisor === true ? { supervisor: true as const } : {}),
-      // M90. The backend, the same way: present only when codex, so a claude
-      // record never grows a key (`verify:panels codex.1` reads the file).
-      ...(chat.backend === 'codex' ? { backend: 'codex' as const } : {}),
+      // M90/M99. The backend, the same way, through the registry's one rule:
+      // absent and the default stay absent, so a claude record never grows a
+      // key (`verify:panels codex.1` reads the file).
+      ...carryBackend(chat),
       cwd: chat.cwd,
       sessionId: chat.sessionId,
       ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })
