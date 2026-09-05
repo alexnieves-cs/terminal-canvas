@@ -99,7 +99,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 96 channels as of M98 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 98 channels as of M98 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | ~297 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -416,6 +416,23 @@ check does not, and should not, cover it.
   M82's ceilings apply unchanged; the continuation is sent AFTER the queue. A mode validates as
   a plan (`validateAutoMode`), so a destructive verb without its confirmation is refused. The
   recorder (`useRuns.onAutoEvent`) opens a one-panel run and seals it with its cost.
+- `src/main/approvals.ts`'s grants and `agent-session.ts`'s `preAnswer` — M98. `Allow for
+  session` is a grant keyed by session AND tool, held in main beside pending (main owns
+  pending, so main owns granted), cleared on `disposed` and kept across `exited`, and written
+  NOWHERE (`verify:agent-session grant.2` reads the store, the schema and the transcript log
+  as text). The manager asks `preAnswer` in its `permission-request` arm and answers `allow`
+  to THIS process before the request is ever pending, emitting `permission-auto-allowed`, so no
+  attention surface lights. `agent:answer` carries `scope?: 'session'` — one door; the card
+  alone shows the third verb. The pane's `Session grants` field has four arms, codex's a
+  named reason from the registry.
+- `src/shared/agent-backends.ts` / `src/main/backend-adapters.ts` — M99. `BACKENDS` is the ONE
+  table per backend (capabilities and every named reason); `AGENT_CAPABILITIES.headless` is
+  derived from it and M90's `REASON_*` constants are aliases of its rows. **No consumer
+  switches on the backend name**: `verify:agent-session registry.1` greps `src/` for
+  `backend === '<member>'` and `case '<member>'` and requires the only hit to be the layout
+  parser. The by-name copy sites use `carryBackend`; the sheet's rows come from `BACKEND_IDS`
+  (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
+  Act I spec — no ACP-speaking CLI on this machine to measure.
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`

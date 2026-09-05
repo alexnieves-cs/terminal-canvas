@@ -81,13 +81,67 @@ at the gate.
   turn 0 and seals it with the panel's usage since the start on any resolution; the outcome
   word is `passed`, `stopped` or `stuck — <why>`.
 
-## M98 — Allow for session
+## M98 — Allow for session (track B, a worktree subagent)
 
-(Track B — filled in at the gate.)
+### Red first
 
-## M99 — the backend registry; ACP declined
+`verify:agent-session grant.1`, `grant.1.b`, `grant.2` (the tracker had no `grant`; the block
+is guarded so its throw could not abort the suite); `verify:rail grant.1`.
 
-(Track B — filled in at the gate.)
+### Shape decisions worth recording
+
+- **The grant lives in the tracker, and the manager asks before it emits.** `approvals.ts`
+  gains `grant`/`granted`/`grantsOf`/`revoke` over an in-memory map keyed by session AND
+  tool; the manager takes `preAnswer` and, in the `permission-request` arm, writes the allow
+  line to THIS process and emits `permission-auto-allowed` instead of the request — so the
+  renderer's pending set, the attention union and the badge never hear it. Cleared on
+  `disposed`, kept across `exited` (the conversation resumes), written to no file (`grant.2`
+  reads `approvals.ts`, the layout schema, the store and the transcript log as text).
+- **One door.** `agent:answer` grew `scope?: 'session'`; main grants THEN answers. Two invokes
+  (`agent:grants`, `agent:revoke-grants`) read and drop, appended at the end of the contract
+  and both diagrams; `verify:ipc` pins 98.
+- **The card's third verb is the card's alone**: the popover, the pane, the palette and the
+  summary tier keep Allow / Deny. The pane's Detail gains `Session grants` with four arms —
+  `asking…` before main answers, `none` (Revoke disabled: nothing granted), the tool list
+  with Revoke enabled, and codex's named reason on a disabled control (`codex asks no
+  permission here — its sandbox policy decides`, read from the registry's row).
+- **`verify:panels approve.2` caught the pane's Revoke** wearing `data-inspector-action`,
+  which put it ahead of Allow in the action bar's order; it is a field control with its own
+  attribute now (`d3fd26d`).
+
+## M99 — the backend registry; ACP declined (track B)
+
+### Red first
+
+`verify:agent-session registry.1` (the grep), `registry.2` (the rows), `registry.3`
+(`carryBackend` and the aliased sentences); `verify:palette backends.1`.
+
+### Shape decisions worth recording
+
+- **`BACKENDS` is the one table**: label, binary, `resumes`, `interrupts`, `images`,
+  `reportsCost`, `asksPermission`, `terminalDoor`, `oneProcessPerTurn`, `closeStdin`,
+  `adoptsThreadId`, and every named reason. `AGENT_CAPABILITIES[*].headless` is DERIVED from
+  it; M90's four `REASON_*` constants are aliases of its rows under their old names, so no
+  caller changed and every check that regexes the text reads the same bytes.
+- **The process half lives in main** (`backend-adapters.ts`: argv builder and line parser per
+  id), because the claude builder does; `ensureProcess` and `spawnCodexTurn` collapsed into
+  one `spawn()` reading both from the adapter and `closeStdin` from the row.
+- **`registry.1` finds exactly `shared/layout-schema.ts`** after fourteen switch sites were
+  replaced (the manager ×10, `index.ts`, `chat-model.ts` ×2, `ChatNode.tsx`, `commands.ts`,
+  `Canvas.tsx` ×3, and the three by-name copy sites through `carryBackend`). The parser keeps
+  its literal: absent-vs-malformed needs it.
+- `AgentBackend` moved into `agent-backends.ts` (re-exported from `agent-session.ts`) to
+  avoid a value cycle with `cost.ts`.
+- **The sheet's conversation rows come from `BACKEND_IDS`** (`backendOptions`), disabled with
+  `— not on PATH` when the binary is absent; the model field suggests the models live sessions
+  have REPORTED (`reportedModels()` → a datalist), not a vendor list.
+
+### ACP, declined by name
+
+No ACP-speaking CLI is on this machine (M0), so nothing could be measured; the spec's "ACP,
+declined by name" section says what it would take (an ACP agent installed, three recorded
+streams, a JSON-RPC layer over the line seam, one `BACKENDS` row). Declined, not deferred
+silently.
 
 ## Findings (critic and verifier)
 
