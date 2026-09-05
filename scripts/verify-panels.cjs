@@ -14432,7 +14432,7 @@ app.whenReady().then(async () => {
         const diag = await wc.executeJavaScript(`({ ids: [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.dataset.panelId), sessions: window.__m4aSessions ? window.__m4aSessions() : null })`)
         ok(IDS[0],
           seeded === true && f1.bp === 'standard' && f1.dock !== null && Math.abs(f1.dock - 48) <= 1 &&
-            f1.nav !== null && Math.abs(f1.nav - 260) <= 1 && f1.ctx === 0 &&
+            f1.nav !== null && Math.abs(f1.nav - 300) <= 1 && f1.ctx === 0 &&
             Math.abs(f1.canvas - (f1.window - f1.dock - f1.nav)) <= 1 && f1.live > 0,
           JSON.stringify({ seeded, carded, woke, f1, diag }))
 
