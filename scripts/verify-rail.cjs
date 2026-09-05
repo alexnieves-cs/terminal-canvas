@@ -2733,6 +2733,25 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ gh: gh && { state: gh.state, sentence: gh.sentence, verb: gh.verb, n: gh.rows.length, first: gh.rows[0] }, jira: jira && { state: jira.state, sentence: jira.sentence, verb: jira.verb }, none: none && none.map((r) => [r.id, r.state, r.verb]) }))
 }
 
+// M98 — grant.1. The inspector's `Session grants` field on a chat: three
+// arms — none, the tools with a Revoke verb, and codex's named reason on a
+// disabled control (it cannot ask, so it cannot be granted).
+{
+  const chat = (over = {}) => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/r', sessionId: 'u', ...over } })
+  const usage = { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }
+  const base = { state: { status: 'ready', pending: 0, hasHistory: true }, usage, turns: 2 }
+  const none = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { ...base, grants: [] })
+  const some = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, { ...base, grants: ['Bash', 'Edit'] })
+  const codex = R.buildInspectorModel(chat({ backend: 'codex' }), undefined, undefined, [], undefined, undefined, undefined, false, { ...base, grants: [] })
+  const unknown = R.buildInspectorModel(chat(), undefined, undefined, [], undefined, undefined, undefined, false, base)
+  ok('grant.1 the chat inspector model carries a grants field: `none` with Revoke disabled by name, the tool list with Revoke enabled, codex\'s named reason (sandbox policy) on a disabled control, and `unknown` before main has answered — never a missing field',
+    none.grants !== undefined && none.grants.kind === 'none' && none.grants.revoke.enabled === false && /nothing/.test(none.grants.revoke.reason) &&
+      some.grants.kind === 'some' && some.grants.tools.join(',') === 'Bash,Edit' && some.grants.revoke.enabled === true &&
+      codex.grants.kind === 'cannot' && /codex/.test(codex.grants.reason) && /sandbox/.test(codex.grants.reason) && codex.grants.revoke.enabled === false &&
+      unknown.grants.kind === 'unknown',
+    JSON.stringify({ none: none.grants, some: some.grants, codex: codex.grants, unknown: unknown.grants }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

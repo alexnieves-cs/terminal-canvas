@@ -2251,6 +2251,55 @@ const WS = [
     JSON.stringify({ present, calls, unlock: unlock && unlock.disabledReason, full: byId(r3, 'panel.pin') && byId(r3, 'panel.pin').disabledReason }))
 }
 
+// M96 — verbs.1. ONE palette row takes a verb and its arguments: present at
+// rest, never hidden, and it opens the palette's text mode through the one
+// appended action rather than running anything itself.
+{
+  const c = ctx({ capturedId: 'n1', panels: [{ id: 'n1', label: '/bin/zsh', kind: 'terminal' }] })
+  const row = byId(P.buildCommands(c), 'canvas.run-verb')
+  if (row) row.run()
+  const none = byId(P.buildCommands(ctx()), 'canvas.run-verb')
+  ok('verbs.1 `Run a verb…` is present at rest with no focus and with one, is never hidden, names its example in the subtitle, and runs through beginRunVerb',
+    row !== undefined && row.disabledReason === undefined && row.hiddenAtRest === undefined && /verb/i.test(row.title) && /close|focus|type/.test(row.subtitle || '') &&
+      c.actions.calls.some((call) => call[0] === 'beginRunVerb') && none !== undefined && none.disabledReason === undefined,
+    JSON.stringify({ row: row && { title: row.title, subtitle: row.subtitle, reason: row.disabledReason }, calls: c.actions.calls }))
+}
+
+// M97 — auto.1. The Auto rows on the captured chat: four modes and a stop,
+// every one PRESENT, disabled by name on a terminal or with no focus.
+{
+  const chat = ctx({ capturedId: 'c1', panels: [{ id: 'c1', label: 'chat', kind: 'chat' }] })
+  const rows = P.buildCommands(chat)
+  const ids = ['panel.auto.complete', 'panel.auto.harden', 'panel.auto.review', 'panel.auto.custom', 'panel.auto.stop']
+  const present = ids.every((id) => byId(rows, id) !== undefined)
+  const complete = byId(rows, 'panel.auto.complete')
+  if (complete) complete.run()
+  const running = P.buildCommands(ctx({ capturedId: 'c1', panels: [{ id: 'c1', label: 'chat', kind: 'chat', auto: { mode: 'complete', turn: 1, limit: 8, state: 'running' } }] }))
+  const terminal = P.buildCommands(ctx({ capturedId: 'n1', panels: [{ id: 'n1', label: '/bin/zsh', kind: 'terminal' }] }))
+  const none = P.buildCommands(ctx())
+  ok('auto.1 the five Auto rows are present on a chat and the modes run startAuto with the mode; while a run is live the modes are disabled naming it and Stop is enabled; on a terminal every row names the chat fix; with no focus every row names the focus fix',
+    present && complete.disabledReason === undefined && chat.actions.calls.some((c) => c[0] === 'startAuto' && c[1] === 'c1' && c[2] === 'complete') &&
+      byId(chat.actions.calls.length ? rows : [], 'panel.auto.stop').disabledReason !== undefined &&
+      /running|already/.test(byId(running, 'panel.auto.complete').disabledReason || '') && byId(running, 'panel.auto.stop').disabledReason === undefined &&
+      ids.every((id) => /chat/.test(byId(terminal, id).disabledReason || '')) &&
+      ids.every((id) => typeof byId(none, id).disabledReason === 'string'),
+    JSON.stringify({ present, calls: chat.actions.calls, stop: byId(rows, 'panel.auto.stop') && byId(rows, 'panel.auto.stop').disabledReason, running: byId(running, 'panel.auto.complete') && byId(running, 'panel.auto.complete').disabledReason }))
+}
+
+// M99 — backends.1. The sheet's conversation rows come from the registry:
+// one per backend, disabled by name when its CLI is absent, never hidden.
+{
+  // Guarded: a throw here would abort every check below it (verify-suites.md rule 1).
+  const has = typeof P.backendOptions === 'function' && Array.isArray(P.BACKEND_IDS)
+  const rows = has ? P.backendOptions({ claude: true, codex: false }) : []
+  const all = has ? P.backendOptions({ claude: true, codex: true }) : []
+  ok('backends.1 backendOptions lists every registered backend in registry order with its id and label; an absent CLI disables its row naming PATH; a present one is enabled with no suffix',
+    has && rows.length === P.BACKEND_IDS.length && rows[0].id === 'claude' && rows[0].disabled === false && rows[0].label === 'chat with claude' &&
+      rows[1].id === 'codex' && rows[1].disabled === true && /PATH/.test(rows[1].label) &&
+      all.every((r) => r.disabled === false && !/PATH/.test(r.label)),
+    JSON.stringify({ rows, all }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)
