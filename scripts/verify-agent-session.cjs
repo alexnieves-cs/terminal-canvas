@@ -56,6 +56,7 @@ const FIX = join(__dirname, 'fixtures', 'agent-session')
 const fixture = (name) =>
   readFileSync(join(FIX, name), 'utf8').split('\n').filter((l) => l.trim() !== '')
 const tick = (ms) => new Promise((r) => setTimeout(r, ms))
+const A_MARK = () => (M.auto && M.auto.AUTO_DONE_MARKER) || 'AUTO-DONE'
 const has = (events, pred) => events.some(pred)
 const count = (events, pred) => events.filter(pred).length
 
@@ -1284,6 +1285,227 @@ const isResult = (l) => l.includes('"type":"result"')
     claude.spawns.length === 1 && claude.spawns[0].command === '/fake/bin/claude' && claude.spawns[0].proc.stdin.length === 1 && claude.manager.get('cl').backend === 'claude',
     JSON.stringify({ spawn: claude.spawns[0] && claude.spawns[0].command, backend: claude.manager.get('cl').backend }))
 }
+
+  /* M97 — auto.1–.3. A bounded run: MAIN counts and MAIN stops. The renderer
+     never holds a count the manager reads, so nothing on screen can move the
+     limit; the check replays more turns than the limit and counts the sends
+     that actually left the manager. */
+  {
+    const withMarker = (lines, text) => lines.map((l) => l.split('"text":"pong"').join(`"text":"${text}"`))
+    const { manager, spawns, events } = makeManager()
+    manager.create({ id: 'a1', cwd: '/repo' })
+    const started = manager.startAuto('a1', { mode: 'complete', limit: 2 })
+    const proc = spawns[0].proc
+    const sentAfterStart = proc.stdin.length
+    proc.emitLines(fixture('turn.jsonl'))
+    await tick(10)
+    const sentAfterOne = proc.stdin.length
+    proc.emitLines(fixture('turn.jsonl'))
+    await tick(10)
+    const sentAfterTwo = proc.stdin.length
+    proc.emitLines(fixture('turn.jsonl'))
+    await tick(10)
+    const autos = events.filter((e) => e.id === 'a1' && e.type === 'auto')
+    const last = autos[autos.length - 1]
+    ok('auto.1 startAuto sends the opening prompt, a result without the marker sends the continuation, and at the limit NOTHING more is sent whatever arrives after — the run resolves stuck with reason limit and the turn count the manager kept',
+      started.kind === 'started' && sentAfterStart === 1 && sentAfterOne === 2 && sentAfterTwo === 2 && proc.stdin.length === 2 &&
+        proc.stdin[0].includes(A_MARK()) && autos[0].state === 'running' && autos[0].turn === 0 && autos[0].limit === 2 &&
+        // The snapshot KEEPS the resolved run (the chip shows `stuck` until
+        // the next start or a dispose); only a live run has state running.
+        last.state === 'stuck' && last.reason === 'limit' && last.turn === 2 && manager.get('a1').auto.state === 'stuck',
+      JSON.stringify({ started, sentAfterStart, sentAfterOne, sentAfterTwo, stdin: proc.stdin.length, autos }))
+
+    const d = makeManager()
+    d.manager.create({ id: 'a2', cwd: '/repo' })
+    d.manager.startAuto('a2', { mode: 'review', limit: 4 })
+    d.spawns[0].proc.emitLines(withMarker(fixture('turn.jsonl'), 'all read. ' + A_MARK()))
+    await tick(10)
+    const dAutos = d.events.filter((e) => e.id === 'a2' && e.type === 'auto')
+    ok('auto.2 a result whose text carries the done marker ends the run as done before the limit, and no continuation is sent',
+      d.spawns[0].proc.stdin.length === 1 && dAutos[dAutos.length - 1].state === 'done' && dAutos[dAutos.length - 1].turn === 1,
+      JSON.stringify({ stdin: d.spawns[0].proc.stdin.length, dAutos }))
+
+    // Stuck for a reason a person can act on: a permission nobody answered
+    // inside the grace, a non-zero exit, a budget refusal, a stop by hand.
+    const p = makeManager({ autoPermissionGraceMs: 20 })
+    p.manager.create({ id: 'a3', cwd: '/repo' })
+    p.manager.startAuto('a3', { mode: 'harden', limit: 4 })
+    p.spawns[0].proc.emitLines(upTo(fixture('permission.jsonl'), (l) => l.includes('"can_use_tool"')))
+    await tick(60)
+    const pAutos = p.events.filter((e) => e.id === 'a3' && e.type === 'auto')
+    const x = makeManager()
+    x.manager.create({ id: 'a4', cwd: '/repo' })
+    x.manager.startAuto('a4', { mode: 'complete', limit: 4 })
+    x.spawns[0].proc.exit(1, null, 'boom')
+    await tick(10)
+    const xAutos = x.events.filter((e) => e.id === 'a4' && e.type === 'auto')
+    const b = makeManager({ limits: () => ({ maxConcurrent: 0, budgetUsd: 0.05 }) })
+    b.manager.create({ id: 'a5', cwd: '/repo' })
+    b.manager.startAuto('a5', { mode: 'complete', limit: 4 })
+    b.spawns[0].proc.emitLines(fixture('turn.jsonl')) // total_cost_usd 0.13 > 0.05
+    await tick(10)
+    const bAutos = b.events.filter((e) => e.id === 'a5' && e.type === 'auto')
+    const st = makeManager()
+    st.manager.create({ id: 'a6', cwd: '/repo' })
+    st.manager.startAuto('a6', { mode: 'complete', limit: 4 })
+    const stopped = st.manager.stopAuto('a6')
+    const stAutos = st.events.filter((e) => e.id === 'a6' && e.type === 'auto')
+    const twice = st.manager.startAuto('a6', { mode: 'complete', limit: 4 })
+    const again = st.manager.startAuto('a6', { mode: 'harden', limit: 4 })
+    ok('auto.3 a permission unanswered past the grace is stuck: permission (the question stays pending for the user); a non-zero exit is stuck: exit; a send refused by the budget is stuck: budget; stopAuto resolves stopped and interrupts the turn in flight; a second start while one runs is refused by name',
+      pAutos[pAutos.length - 1].state === 'stuck' && pAutos[pAutos.length - 1].reason === 'permission' && p.manager.get('a3').pending.length === 1 &&
+        xAutos[xAutos.length - 1].state === 'stuck' && xAutos[xAutos.length - 1].reason === 'exit' &&
+        bAutos[bAutos.length - 1].state === 'stuck' && bAutos[bAutos.length - 1].reason === 'budget' && b.spawns[0].proc.stdin.length === 1 &&
+        stopped === true && stAutos[stAutos.length - 1].state === 'stopped' && st.spawns[0].proc.stdin.some((l) => l.includes('interrupt')) &&
+        twice.kind === 'started' && again.kind === 'refused' && /running/.test(again.reason),
+      JSON.stringify({ pAutos, xAutos, bAutos, stAutos, stopped, again }))
+  }
+
+  /* auto.4 — the verifier's window. A message the user typed mid-turn queues
+     AHEAD of the continuation; the stop must still land, the limit must
+     still land, and the run's own continuation must leave with the run. */
+  {
+    const q = makeManager()
+    q.manager.create({ id: 'q1', cwd: '/repo' })
+    q.manager.startAuto('q1', { mode: 'complete', limit: 4 })
+    const proc = q.spawns[0].proc
+    proc.emitLines(fixture('turn.jsonl'))      // turn 1: the continuation goes out
+    await tick(10)
+    const typed = q.manager.send('q1', 'a question from the user')  // queued behind the turn in flight
+    proc.emitLines(fixture('turn.jsonl'))      // turn 2: the user's line is served; the continuation queues behind it
+    await tick(10)
+    const queuedBefore = q.manager.get('q1').queued
+    const stopped = q.manager.stopAuto('q1')
+    const writesAtStop = proc.stdin.length
+    proc.emitLines(fixture('turn.jsonl'))      // the (interrupted) turn ends: NOTHING of the run's may be served
+    await tick(10)
+    const later = proc.stdin.slice(writesAtStop)
+    const dropped = q.events.filter((e) => e.id === 'q1' && e.type === 'queue-dropped')
+    ok('auto.4 a continuation queued behind the user\'s own message is dropped with the run on stopAuto — no write after the stop carries the auto prompt — and the drop is said once',
+      typed === 'queued' && queuedBefore === 1 && stopped === true && later.every((l) => !l.includes(A_MARK())) && dropped.length === 1 && dropped[0].count === 1 && q.manager.get('q1').queued === 0,
+      JSON.stringify({ typed, queuedBefore, stopped, later, dropped, snap: q.manager.get('q1') }))
+
+    const l = makeManager()
+    l.manager.create({ id: 'l1', cwd: '/repo' })
+    l.manager.startAuto('l1', { mode: 'complete', limit: 2 })
+    const lp = l.spawns[0].proc
+    lp.emitLines(fixture('turn.jsonl'))       // turn 1 → continuation sent (turn 2 in flight)
+    await tick(10)
+    l.manager.send('l1', 'user line')          // queued behind turn 2
+    lp.emitLines(fixture('turn.jsonl'))       // turn 2 = the limit: stuck first, THEN the user's line served, and no continuation
+    await tick(10)
+    const lAutos = l.events.filter((e) => e.id === 'l1' && e.type === 'auto')
+    const autoWrites = lp.stdin.filter((w) => w.includes(A_MARK())).length
+    ok('auto.4.b at the limit the decision is made BEFORE the queue is served: the user\'s queued line still goes, no third auto prompt ever does, and the chip reads stuck — limit',
+      lAutos[lAutos.length - 1].state === 'stuck' && lAutos[lAutos.length - 1].reason === 'limit' && autoWrites === 2 && lp.stdin.length === 3 && lp.stdin[2].includes('user line'),
+      JSON.stringify({ lAutos, stdin: lp.stdin.length, autoWrites }))
+
+    const h = makeManager()
+    h.manager.create({ id: 'h1', cwd: '/repo' })
+    h.manager.startAuto('h1', { mode: 'complete', limit: 4 })
+    h.manager.interrupt('h1')
+    h.spawns[0].proc.emitLines(fixture('turn.jsonl'))
+    await tick(10)
+    const hAutos = h.events.filter((e) => e.id === 'h1' && e.type === 'auto')
+    ok('auto.4.c an interrupt by hand mid-run resolves the run as stopped — never a chip that spins forever over a turn nobody continues',
+      hAutos[hAutos.length - 1].state === 'stopped' && h.spawns[0].proc.stdin.filter((w) => w.includes(A_MARK())).length === 1,
+      JSON.stringify({ hAutos }))
+  }
+
+  /* M98 — grant.1–.2. Main owns pending, so main owns granted: a grant is
+     keyed by session AND tool, lives in the tracker, answers the request
+     before the renderer ever sees it, is cleared on dispose, and is written
+     NOWHERE. */
+  try   {
+    const AP = M.approvals
+    const sink = { notify() {}, badge() {}, beep() {}, windowFocused: () => true, notifyEnabled: () => false, soundEnabled: () => false }
+    const states = []
+    const tracker = AP.createApprovalTracker({ sink, emitState: (id, state) => states.push([id, state]), label: () => 'x' })
+    // Guarded: before M98 lands the tracker has no grant, and a throw here
+    // would abort every check below (verify-suites.md rule 1).
+    if (typeof tracker.grant !== 'function') { ok('grant.1 the tracker has grant/granted/grantsOf/revoke', false, 'no grant on the tracker'); throw new Error('skip-grant') }
+    const { manager, spawns, events } = makeManager({ preAnswer: (id, tool) => tracker.granted(id, tool) })
+    manager.subscribe((e) => tracker.apply(e))
+    manager.create({ id: 'g1', cwd: '/repo' })
+    tracker.grant('g1', 'Bash')
+    manager.send('g1', 'cat hosts')
+    const proc = spawns[0].proc
+    proc.emitLines(upTo(fixture('permission.jsonl'), (l) => l.includes('"can_use_tool"')))
+    await tick(10)
+    const autoAllowed = events.find((e) => e.id === 'g1' && e.type === 'permission-auto-allowed')
+    const asked = events.find((e) => e.id === 'g1' && e.type === 'permission-request')
+    const answered = proc.stdin.find((l) => l.includes('control_response'))
+    const otherTool = upTo(fixture('permission.jsonl'), (l) => l.includes('"can_use_tool"')).map((l) => l.split('"tool_name":"Bash"').join('"tool_name":"Edit"').split('"request_id":"0dd6eeca').join('"request_id":"1dd6eeca'))
+    proc.emitLines(otherTool.filter((l) => l.includes('"can_use_tool"')))
+    await tick(10)
+    const editAsked = events.find((e) => e.id === 'g1' && e.type === 'permission-request' && e.toolName === 'Edit')
+    ok('grant.1 a granted tool is answered allow by main before any request event reaches the renderer, and the transcript hears it as permission-auto-allowed naming the tool; a different tool still asks; the pending set never held the granted one; attention never lit for it',
+      autoAllowed !== undefined && autoAllowed.toolName === 'Bash' && asked === undefined && answered !== undefined && /"allow"/.test(answered) &&
+        editAsked !== undefined && manager.get('g1').pending.length === 1 && manager.get('g1').pending[0].toolName === 'Edit' &&
+        states.filter(([id]) => id === 'g1').length === 1 && tracker.granted('g1', 'Bash') && !tracker.granted('g1', 'Edit') && !tracker.granted('g2', 'Bash'),
+      JSON.stringify({ autoAllowed, asked, editAsked: editAsked && editAsked.toolName, states, stdin: proc.stdin }))
+
+    proc.exit(0, null)
+    const afterExit = tracker.granted('g1', 'Bash')
+    tracker.grant('g1', 'Edit')
+    const listed = tracker.grantsOf('g1')
+    tracker.revoke('g1')
+    const afterRevoke = tracker.grantsOf('g1')
+    tracker.grant('g1', 'Bash')
+    manager.dispose('g1')
+    await tick(5)
+    ok('grant.1.b a grant survives the process exiting (the conversation resumes), grantsOf lists the tools, revoke clears them by name, and dispose clears them — never a relaunch, which no arm here persists',
+      afterExit === true && listed.join(',') === 'Bash,Edit' && afterRevoke.length === 0 && tracker.grantsOf('g1').length === 0,
+      JSON.stringify({ afterExit, listed, afterRevoke, after: tracker.grantsOf('g1') }))
+
+    const src = (f) => readFileSync(join(__dirname, '..', 'src', f), 'utf8')
+    const approvalsSrc = src('main/approvals.ts')
+    ok('grant.2 grants are never persisted: approvals.ts imports no filesystem and no store, and neither the layout schema, the layout store nor the transcript log mentions a grant',
+      !/node:fs|writeFile|layout-store|JSON\.stringify/.test(approvalsSrc) && /grant/.test(approvalsSrc) &&
+        !/grant/i.test(src('shared/layout-schema.ts')) && !/grant/i.test(src('main/layout-store.ts')) && !/grant/i.test(src('main/agent-transcript-log.ts')),
+      '')
+  } catch (e) { if (String(e && e.message) !== 'skip-grant') throw e }
+
+  /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
+     name. The grep is the check that makes a fourth backend cheap. */
+  {
+    const { readdirSync, statSync } = require('node:fs')
+    const root = join(__dirname, '..', 'src')
+    const files = []
+    const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p) } }
+    walk(root)
+    const pattern = /backend\s*[!=]==\s*'(?:claude|codex)'|case '(?:claude|codex)':/
+    const hits = files.filter((f) => pattern.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
+    const expected = ['shared/layout-schema.ts']
+    ok('registry.1 no file compares a `backend` field to a literal member of the union, and no `case` names one, except the layout parser (absent-vs-malformed needs the literal) — the sheet\'s own `what.kind` vocabulary is outside this grep and is named in the act log',
+      JSON.stringify(hits) === JSON.stringify(expected), JSON.stringify(hits))
+    const B = M.backends
+    const ids = B.BACKEND_IDS
+    const rows = ids.map((id) => B.BACKENDS[id])
+    ok('registry.2 BACKENDS has a row per member of the union with a label, a binary, every capability the manager reads and every named reason; AGENT_CAPABILITIES.headless is DERIVED from it; codex is one process per turn with stdin closed and adopts its thread id, claude is neither',
+      ids.join(',') === 'claude,codex' && rows.every((r) => typeof r.label === 'string' && typeof r.binary === 'string' &&
+        ['resumes', 'interrupts', 'images', 'reportsCost', 'asksPermission', 'terminalDoor', 'oneProcessPerTurn', 'closeStdin', 'adoptsThreadId'].every((k) => typeof r[k] === 'boolean') &&
+        ['noCli', 'noInterrupt', 'noImages', 'noTerminal', 'noPermissions'].every((k) => typeof r.reasons[k] === 'string')) &&
+        B.BACKENDS.codex.oneProcessPerTurn && B.BACKENDS.codex.closeStdin && B.BACKENDS.codex.adoptsThreadId && !B.BACKENDS.codex.interrupts && !B.BACKENDS.codex.asksPermission &&
+        !B.BACKENDS.claude.oneProcessPerTurn && B.BACKENDS.claude.interrupts && B.BACKENDS.claude.asksPermission &&
+        M.cost.AGENT_CAPABILITIES.codex.headless.interrupts === B.BACKENDS.codex.interrupts && M.cost.AGENT_CAPABILITIES['claude-code'].headless.permissions === B.BACKENDS.claude.asksPermission,
+      JSON.stringify(rows.map((r) => r.id)))
+    // registry.3 — the copy sites' one rule, and M90's names. `carryBackend`
+    // writes NOTHING for an absent backend and nothing for the default, so a
+    // claude record never grows a key through a by-name rebuild (panels.ts,
+    // layout-adapt.ts, useRailModels.ts, Canvas's create all spread it). And
+    // the four M90 constants are ALIASES of the registry's rows — pinned as
+    // text, the way grant.2 pins the absence of a store — so a check that
+    // regexes REASON_CODEX_NO_TERMINAL and a panel reading
+    // `reasons.noTerminal` are reading one sentence.
+    const carried = [B.carryBackend({}), B.carryBackend({ backend: 'claude' }), B.carryBackend({ backend: 'codex' })]
+    const aliasSrc = readFileSync(join(root, 'shared', 'agent-session.ts'), 'utf8')
+    ok('registry.3 carryBackend writes no key for an absent or default backend and the member for any other; the M90 reason constants are aliases of the registry rows',
+      Object.keys(carried[0]).length === 0 && Object.keys(carried[1]).length === 0 && carried[2].backend === 'codex' &&
+        /REASON_NO_CODEX = BACKENDS\.codex\.reasons\.noCli/.test(aliasSrc) && /REASON_CODEX_NO_INTERRUPT = BACKENDS\.codex\.reasons\.noInterrupt/.test(aliasSrc) &&
+        /REASON_CODEX_NO_IMAGES = BACKENDS\.codex\.reasons\.noImages/.test(aliasSrc) && /REASON_CODEX_NO_TERMINAL = BACKENDS\.codex\.reasons\.noTerminal/.test(aliasSrc),
+      JSON.stringify({ carried }))
+  }
 
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)

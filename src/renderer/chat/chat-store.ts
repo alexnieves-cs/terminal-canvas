@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { addTotals } from '@shared/cost'
 import type { AgentSessionEvent, AgentSessionSnapshot } from '@shared/agent-session'
 import type { TranscriptTurn } from '@shared/transcript'
+import type { AutoStatus } from '@shared/auto'
 import { toolArgument, type LiveMessage } from './chat-model'
 import type { PendingApproval } from '@renderer/shell/rail-sections'
 
@@ -35,7 +36,16 @@ export interface ChatState {
    * sequence number so an identical request twice is two insertions; the
    * component takes it and clears it.
    */
+  /** M98. Tools main answered from a session grant this launch, in order — the quiet row's source. */
+  granted?: string[]
   insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
+  /**
+   * M98. The tools main has granted for this session, in grant order. A
+   * CACHE of `agent:grants` — main's tracker is the author — refreshed after
+   * a scoped answer and a revoke; absent until main has answered once, which
+   * the inspector renders as `unknown` rather than `none`.
+   */
+  grants?: string[]
 }
 
 const states = new Map<string, ChatState>()
@@ -80,6 +90,28 @@ function syncApprovals(): void {
 export function approvals(): PendingApproval[] {
   return approvalSnapshot
 }
+
+/** M98. Main's answer to `agent:grants`, mirrored. A never-seeded id mints nothing (the recycled-id door). */
+export function setChatGrants(id: string, grants: readonly string[]): void {
+  const prev = states.get(id)
+  if (!prev) return
+  update(id, { ...prev, grants: [...grants] })
+}
+
+/**
+ * M99. The models live sessions have REPORTED, first seen first — the spawn
+ * sheet's suggestions. Never a vendor list: a fixed list rots the day a
+ * model ships (`MODEL_PATTERN`'s own argument), and what a session reported
+ * is a model that exists.
+ */
+export function reportedModels(): string[] {
+  const out: string[] = []
+  for (const state of states.values()) {
+    const model = state.snapshot?.model
+    if (model !== undefined && !out.includes(model)) out.push(model)
+  }
+  return out
+}
 export function useApprovals(): PendingApproval[] {
   return useSyncExternalStore(
     (cb) => { approvalListeners.add(cb); return () => { approvalListeners.delete(cb) } },
@@ -120,7 +152,9 @@ export function seedChat(
     turns: input.turns ?? prev.turns,
     live: prev.live,
     refusal: input.refusal === undefined ? prev.refusal : input.refusal,
-    ...(input.meta === undefined ? (prev.meta === undefined ? {} : { meta: prev.meta }) : { meta: input.meta })
+    ...(input.meta === undefined ? (prev.meta === undefined ? {} : { meta: prev.meta }) : { meta: input.meta }),
+    // M98. Carried, never re-seeded: a seed is main's snapshot, and grants are asked for separately.
+    ...(prev.grants === undefined ? {} : { grants: prev.grants })
   })
 }
 
@@ -145,6 +179,14 @@ export function takeInsert(id: string, seq: number): void {
   if (!prev || !prev.insert || prev.insert.seq !== seq) return
   const { insert: _taken, ...rest } = prev
   update(id, rest)
+}
+
+/** M97. Dismiss a resolved auto chip; a live run is never dismissed from here (stop it). */
+export function dismissAuto(id: string): void {
+  const prev = states.get(id)
+  if (!prev || !prev.snapshot || prev.snapshot.auto === undefined || prev.snapshot.auto.state === 'running') return
+  const { auto: _auto, ...rest } = prev.snapshot
+  update(id, { ...prev, snapshot: rest })
 }
 
 export function clearChat(id: string): void {
@@ -182,6 +224,14 @@ export function onChatSession(listener: SessionListener): () => void {
 
 type TurnEndListener = (id: string) => void
 const turnEndListeners = new Set<TurnEndListener>()
+/** M97. Every auto transition, for the run recorder: `(panelId, status)`. */
+type AutoListener = (id: string, status: AutoStatus) => void
+const autoListeners = new Set<AutoListener>()
+export function onChatAuto(listener: AutoListener): () => void {
+  autoListeners.add(listener)
+  return () => { autoListeners.delete(listener) }
+}
+
 export function onChatTurnEnd(listener: TurnEndListener): () => void {
   turnEndListeners.add(listener)
   return () => { turnEndListeners.delete(listener) }
@@ -306,6 +356,23 @@ export function applyChatEvent(event: AgentSessionEvent): void {
     case 'permission-dropped':
       if (!snap) return
       update(event.id, { ...prev, snapshot: { ...snap, pending: snap.pending.filter((p) => p.requestId !== event.requestId) } })
+      return
+    case 'auto': {
+      // M97. A projection of MAIN's count: the chip reads this, nothing
+      // decides from it. The status object is rebuilt by name so an absent
+      // `reason` stays absent.
+      if (!snap) return
+      const status: AutoStatus = { mode: event.mode, turn: event.turn, limit: event.limit, state: event.state, ...(event.reason === undefined ? {} : { reason: event.reason }) }
+      update(event.id, { ...prev, snapshot: { ...snap, auto: status } })
+      for (const l of autoListeners) l(event.id, status)
+      return
+    }
+    case 'permission-auto-allowed':
+      // M98. Main answered it from a session grant before it was ever
+      // pending: nothing to remove, nothing to light — but the panel says so
+      // in a quiet row, or a call that ran under a grant is indistinguishable
+      // from one the user allowed by hand.
+      update(event.id, { ...prev, granted: [...(prev.granted ?? []), event.toolName] })
       return
     case 'unknown':
       if (!snap) return

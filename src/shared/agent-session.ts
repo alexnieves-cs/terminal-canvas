@@ -1,5 +1,6 @@
 import type { AgentOptions, TokenTotals } from './cost'
 import type { TranscriptEvent, TranscriptTurn } from './transcript'
+import { BACKENDS, type AgentBackend } from './agent-backends'
 
 /**
  * M73. The agent-session runtime's PUBLIC shapes — what crosses the bridge.
@@ -16,15 +17,25 @@ export type AgentSessionStatus =
   | 'exited'
   | 'disposed'
 
-/** M90. Which headless CLI answers. Absent is claude — every pre-M90 record. */
-export type AgentBackend = 'claude' | 'codex'
+/** M90. Which headless CLI answers. M99: the union lives in the registry; re-exported so every M90 import still resolves. */
+export type { AgentBackend } from './agent-backends'
 
-/** M90. The one sentence every codex door shows when the CLI is absent. */
-export const REASON_NO_CODEX = 'codex was not found on the login PATH — install it, or check the environment report'
-/** M90. What codex cannot do, named where the control is. */
-export const REASON_CODEX_NO_INTERRUPT = 'codex has no interrupt — close the panel to stop it'
-export const REASON_CODEX_NO_IMAGES = 'codex takes no images here — reference a file by its path instead'
-export const REASON_CODEX_NO_TERMINAL = 'a codex chat continues only here — the terminal door is claude --resume'
+import type { AutoModeId, AutoState, AutoStuckReason, AutoStatus } from './auto'
+
+/** M97. `agent:auto-start`'s request and its named answer. */
+export interface AutoStartRequest { id: string; mode: AutoModeId; task?: string; limit?: number }
+export type AutoStartResult = { kind: 'started'; limit: number } | { kind: 'refused'; reason: string }
+
+/**
+ * M90's sentences, M99: ALIASES of the registry's rows, kept under their old
+ * names so no caller changed and every check that regexes the text still
+ * reads the same bytes. New code reads `BACKENDS[backend].reasons.*` and
+ * never names a vendor.
+ */
+export const REASON_NO_CODEX = BACKENDS.codex.reasons.noCli
+export const REASON_CODEX_NO_INTERRUPT = BACKENDS.codex.reasons.noInterrupt
+export const REASON_CODEX_NO_IMAGES = BACKENDS.codex.reasons.noImages
+export const REASON_CODEX_NO_TERMINAL = BACKENDS.codex.reasons.noTerminal
 
 export interface AgentSessionSpec {
   /** M90. Absent is claude. Fixed at create; a session never changes vendor. */
@@ -77,6 +88,8 @@ export interface AgentSessionSnapshot {
   /** M82. Why the last message queued: this session's turn, or the canvas's ceiling. */
   queuedReason?: 'in-flight' | 'concurrency'
   counters: AgentSessionCounters
+  /** M97. Present while an auto run is live or just resolved (until dismissed by a new start or a dispose). */
+  auto?: AutoStatus
 }
 
 export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
@@ -99,6 +112,10 @@ export type AgentSessionEvent = { id: string } & (
   | { type: 'queue-dropped'; count: number }
   | { type: 'permission-answered'; requestId: string; allow: boolean }
   | { type: 'permission-dropped'; requestId: string }
+  /** M97. The bounded run's state, main's own count — the chip is a projection of this. */
+  | { type: 'auto'; mode: AutoModeId; turn: number; limit: number; state: AutoState; reason?: AutoStuckReason }
+  /** M98. A request main answered `allow` itself, from a session grant: it was never pending, and attention never lit. */
+  | { type: 'permission-auto-allowed'; requestId: string; toolName: string }
 )
 
 /**

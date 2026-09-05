@@ -14,7 +14,7 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ScrollbackLog } from './scrollback-log'
 import { stripAnsi } from '../shared/ansi'
-import { redactSecrets } from '../shared/redact'
+import { outward } from '../shared/outward'
 import type { CanvasPngExportResult, PanelTextExportResult } from '../shared/export'
 
 export interface ExporterDeps {
@@ -62,7 +62,8 @@ export function createExporters(deps: ExporterDeps): Exporters {
       }
       if (raw.length === 0) return { kind: 'empty' }
       const stripped = stripAnsi(raw)
-      const { text, count } = redactSecrets(stripped)
+      // M96. Through the ONE outward gate (the scrubber plus its note).
+      const { text, redacted: count } = outward(stripped, `panel ${panelId}`)
       const path = await deps.askPath(`${panelId}-${stamp(now())}.txt`)
       if (path === null) return { kind: 'cancelled' }
       try {

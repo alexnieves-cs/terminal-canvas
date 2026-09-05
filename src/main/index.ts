@@ -51,6 +51,7 @@ import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
 import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
+import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
 import { spawn as spawnChild } from 'node:child_process'
@@ -759,7 +760,11 @@ app.whenReady().then(async () => {
     limits: () => ({
       maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
       budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0
-    })
+    }),
+    // M98. Resolved at CALL time through the module-level `approvals`: the
+    // tracker is created after the manager (it subscribes to it), so a
+    // captured reference here would be null for the life of the app.
+    preAnswer: (id, toolName) => approvals?.granted(id, toolName) ?? false
   })
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
@@ -1063,8 +1068,11 @@ app.whenReady().then(async () => {
     create: (spec: AgentSessionSpec): AgentCreateResult => {
       const manager = agentSessions
       if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
-      if (spec.backend === 'codex' && codexPath === null) return { kind: 'refused', reason: REASON_NO_CODEX }
-      if (spec.backend !== 'codex' && claudePath === null) return { kind: 'refused', reason: 'claude was not found on the login PATH — install it, or check the environment report' }
+      // M99. Refused by the backend's ROW: the probe's path for that binary,
+      // and the row's own `noCli` sentence. A lookup, never a switch.
+      const backend = backendOf(spec)
+      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
+      if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
       const cwd = resolveCwd(spec.cwd)
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
@@ -1112,7 +1120,20 @@ app.whenReady().then(async () => {
       agentSessions?.dispose(id)
       if (drop) { agentTranscripts.drop(id); dropBaseline(id) }
     },
-    answer: ({ id, requestId, answer }) => agentSessions?.answerPermission(id, requestId, answer) ?? false,
+    // M98. `scope: 'session'` GRANTS the pending request's tool first, then
+    // answers through the one `answerPermission` — the grant is keyed by the
+    // tool name main holds in its own pending record, never by a name the
+    // renderer sent. A deny never grants, whatever the scope says.
+    answer: ({ id, requestId, answer, scope }) => {
+      const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
+      const answered = agentSessions?.answerPermission(id, requestId, answer) ?? false
+      // Granted only for a request that was really answered: a grant for a
+      // question the process never heard would outlive it invisibly.
+      if (answered && toolName !== undefined) approvals?.grant(id, toolName)
+      return answered
+    },
+    grants: (id) => approvals?.grantsOf(id) ?? [],
+    revokeGrants: (id) => { approvals?.revoke(id) },
     list: () => agentSessions?.list() ?? [],
     transcript: (id) => {
       const read = agentTranscripts.read(id)
@@ -1120,6 +1141,10 @@ app.whenReady().then(async () => {
     },
     // M74. Open a terminal's session as a chat. Three refusals, each named
     // for its fix; the live check is the one-front-end-at-a-time rule.
+    // M97. Main counts, main stops: the request carries a mode and an optional
+    // task; the limit is the mode's unless the caller lowers it.
+    autoStart: (req) => agentSessions?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
+    autoStop: (id) => agentSessions?.stopAuto(id) ?? false,
     importSession: ({ fromPanelId, toPanelId }) => {
       const sessionId = layoutStore.session(fromPanelId)
       if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }

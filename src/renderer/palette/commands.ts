@@ -10,6 +10,7 @@ import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
+import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@shared/auto'
 import type { EnvReport } from '@shared/env-report'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import { shortPath } from './panel-name'
@@ -90,6 +91,8 @@ export interface PanelRow {
   /** M92. Layout facts, absent unless set. */
   locked?: boolean
   pinned?: boolean
+  /** M97. The chat's auto run, when one is live or just resolved. */
+  auto?: AutoStatus
   maximised?: boolean
   /** M90. A chat's backend; absent is claude. */
   backend?: AgentBackend
@@ -129,8 +132,8 @@ export interface PaletteActions {
   setDefaultPreset(id: string): void
   goToPanel(id: string): void
   insertPrompt(id: string): void
-  /** M76. Answer a chat's pending permission request from anywhere. */
-  answerApproval(id: string, requestId: string, allow: boolean): void
+  /** M76. Answer a chat's pending permission request from anywhere. M98: `scope: 'session'` also grants the tool. */
+  answerApproval(id: string, requestId: string, allow: boolean, scope?: 'session'): void
   beginSavePrompt(): void
   deletePrompt(id: string): void
   beginRenamePanel(id: string, currentTitle: string): void
@@ -417,6 +420,15 @@ export interface PaletteActions {
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
   openInTerminal(id: string): void
   openJira(): void
+  /**
+   * M96. The verb line: opens the palette's text mode on `Run a verb…`,
+   * parses and builds the plan against the live canvas, confirms a
+   * destructive step, runs, and re-prompts with the refusal and its fix.
+   */
+  beginRunVerb(): void
+  /** M97. Start a bounded auto run on a chat; refused by name when one is live. */
+  startAuto(id: string, mode: AutoModeId, task?: string): void
+  stopAuto(id: string): void
 }
 
 export interface PaletteContext {
@@ -599,7 +611,8 @@ export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal pan
 export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
-import { REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
+import type { AgentBackend } from '@shared/agent-session'
+import { BACKENDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
@@ -637,6 +650,12 @@ export function claudeAvailable(presets: readonly PresetRow[]): boolean {
 /** M90. The same fact for codex — the built-in codex preset's probe. */
 export function codexAvailable(presets: readonly PresetRow[]): boolean {
   return presets.some((p) => p.agent === 'codex' && p.available)
+}
+
+/** M99. The fact by ROW: a panel asks for its own backend's availability without naming one. */
+export function backendAvailable(presets: readonly PresetRow[], backend: AgentBackend): boolean {
+  const probes: Record<AgentBackend, (rows: readonly PresetRow[]) => boolean> = { claude: claudeAvailable, codex: codexAvailable }
+  return probes[backend](presets)
 }
 
 /** Present-means-unrunnable, so an undefined reason must not become a key. */
@@ -840,7 +859,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         },
         ctx.capturedId === null ? REASON_NO_FOCUS
           : target === undefined || target.kind !== 'chat' ? REASON_NOT_CHAT
-            : target.backend === 'codex' ? REASON_CODEX_NO_TERMINAL
+            : target.backend !== undefined && !BACKENDS[target.backend].terminalDoor ? BACKENDS[target.backend].reasons.noTerminal
             : target.busy === true ? REASON_CHAT_BUSY
               : (target.turns ?? 0) === 0 ? REASON_CHAT_EMPTY : undefined
       )
@@ -1955,6 +1974,54 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         })
       }
     }
+  }
+
+  // --- M96: the verb line ------------------------------------------------------
+  // ONE row takes a verb and its arguments. Present at rest, never hidden,
+  // never disabled: the plan builder is what refuses, by name, once a line
+  // is typed — a row that hid when no panel was focused would hide `tidy`
+  // and `spawn`, which need none.
+  out.push({
+    id: 'canvas.run-verb',
+    title: 'Run a verb…',
+    subtitle: 'e.g. focus n3 · type n3 hello · close n3 — destructive verbs ask first',
+    group: 'canvas',
+    searchText: 'run verb plan command automate script',
+    run: () => actions.beginRunVerb()
+  })
+
+  // --- M97: Auto ---------------------------------------------------------------
+  // Four modes and a stop on the CAPTURED chat. Every row present; a mode is
+  // disabled naming the live run, Stop is disabled naming the absence of
+  // one, a terminal names the chat fix, no focus names the focus fix.
+  {
+    const target = ctx.panels.find((p) => p.id === ctx.capturedId)
+    const live = target?.auto !== undefined && target.auto.state === 'running'
+    const need = ctx.capturedId === null || target === undefined ? REASON_NO_FOCUS
+      : target.kind !== 'chat' ? 'auto runs in a chat panel — open one with New chat…'
+      : undefined
+    for (const modeId of AUTO_MODE_IDS) {
+      const mode = AUTO_MODES[modeId]
+      out.push(withReason({
+        id: `panel.auto.${modeId}`,
+        title: `Auto: ${mode.label}`,
+        subtitle: `${mode.hint} · up to ${mode.turnLimit} turns`,
+        // `canvas`, not `panel`: in the panel section `Auto: Harden` outranks a
+        // panel titled `auth refactor` for the query `auth` (a subsequence of
+        // both) and steals Enter — palette check 33.
+        group: 'canvas',
+        searchText: `auto autonomous ${modeId} run bounded ${mode.label}`,
+        run: () => actions.startAuto(ctx.capturedId!, modeId)
+      }, need ?? (live ? `an auto run is already running here (${target!.auto!.mode}) — stop it first` : undefined)))
+    }
+    out.push(withReason({
+      id: 'panel.auto.stop',
+      title: 'Stop auto',
+      subtitle: live ? `stop the ${target!.auto!.mode} run after this turn` : 'no auto run is live here',
+      group: 'canvas',
+      searchText: 'auto stop cancel autonomous',
+      run: () => actions.stopAuto(ctx.capturedId!)
+    }, need ?? (live ? undefined : 'no auto run is live in this chat')))
   }
 
   return out

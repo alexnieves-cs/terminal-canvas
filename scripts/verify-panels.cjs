@@ -376,7 +376,11 @@ app.on('window-all-closed', () => {})
 // 300s is ~25% headroom over the measured worst case, chosen so a genuine
 // hang still fails in minutes rather than never. Whoever finds themselves
 // raising it a third time should split the suite instead.
-const WATCHDOG_MS = 300000
+// Raised 300s → 480s at M96: with 304 checks (M94's reach walk, M96's verb
+// line, M98's grants) the suite reached check 246 at 300s under the chain
+// while passing alone — the ceiling had become a race against the machine,
+// which is the load-flake rule, not a hang. A real hang still lands here.
+const WATCHDOG_MS = 480000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -1059,8 +1063,15 @@ app.whenReady().then(async () => {
       for (const turn of imported.turns) agentTranscripts.appendTurn(toPanelId, turn)
       agentTranscripts.appendMeta(toPanelId, imported.meta)
       return { kind: 'imported', sessionId, turns: imported.meta.turns }
-    }
+    },
+    // M97/M98. The same verbs main wires; grants are a harness-local map so the
+    // inspector's field and the card's third verb have something to read.
+    autoStart: (req) => agentSessions.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }),
+    autoStop: (id) => agentSessions.stopAuto(id),
+    grants: (id) => [...(harnessGrants.get(id) ?? [])],
+    revokeGrants: (id) => { harnessGrants.delete(id) }
   }
+  const harnessGrants = new Map()
   const frontTranscripts = new Map()
   registerIpcHandlers(ptyManager, layoutStore, () => ({ kind: backend.kind, reason: backend.reason }), {
     list: () => presetRows(
@@ -18169,6 +18180,57 @@ app.whenReady().then(async () => {
           JSON.stringify({ pane, launcher: { started: launcher.started, verbsInOrder, verbCount, visited: launcher.visited } }))
       } catch (rErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(rErr && rErr.message || rErr))
+      }
+    }
+
+    // M96 — verbs.1. THE VERB LINE END TO END in the real renderer: the
+    // palette row enters text mode, a typed step is refused BY NAME with its
+    // fix on the palette's own feedback line (the line kept for correction),
+    // and a correct step reaches the panel through the executor — `lock`
+    // paints the frame's lock mark. Nothing here reaches into React state.
+    {
+      const IDS = ['verbs.1 Run a verb… enters text mode; `close zz9` is refused naming zz9 with the fix on the feedback line and the line kept; `lock vbA` locks the panel and the report reads `ran lock vbA · 1 step`; a destructive step opens confirm mode naming the verb']
+      try {
+        for (const id of ['rkA']) { try { await ptyManager.kill(id) } catch {} }
+        layoutStore.save({ panels: [{ id: 'vbA', x: 200, y: 200, w: 520, h: 340, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'vbA', focusedId: 'vbA' })
+        flushLayoutStore()
+        const reV = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reV
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="vbA"]') !== null`), 6000)
+        const openV = async () => {
+          await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+          return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        }
+        const typeV = (text) => wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
+          const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        const enterV = () => wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+        const escV = () => wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })()`)
+        const feedback = () => wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); const f = document.querySelector('.palette__number-error'); const c = document.querySelector('.palette__confirm'); return { placeholder: i ? i.placeholder : null, value: i ? i.value : null, feedback: f ? f.textContent : null, confirm: c ? c.textContent : null } })()`)
+        await openV()
+        await typeV('run a verb'); await sleep(150)
+        const rowV = await wc.executeJavaScript(`(() => { const r = [...document.querySelectorAll('.palette__row')].find((x) => x.textContent.includes('Run a verb')); return r ? { disabled: r.getAttribute('aria-disabled') } : null })()`)
+        await enterV(); await sleep(200)
+        const mode = await feedback()
+        await typeV('close zz9'); await enterV(); await sleep(400)
+        const refused = await feedback()
+        await typeV('lock vbA'); await enterV(); await sleep(500)
+        const locked = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="vbA"] [data-panel-locked]') !== null`)
+        const report = await feedback()
+        await typeV('close vbA'); await enterV(); await sleep(300)
+        const confirm = await feedback()
+        await escV(); await sleep(100); await escV(); await sleep(100); await escV(); await sleep(200)
+        const stillThere = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="vbA"]') !== null`)
+        const refusedText = (refused.feedback || refused.placeholder || '')
+        const reportText = (report.feedback || report.placeholder || '')
+        const confirmText = (confirm.confirm || confirm.feedback || confirm.placeholder || '')
+        ok(IDS[0], rowV !== null && rowV.disabled !== 'true' && /verb/.test(mode.placeholder || '') &&
+            /zz9/.test(refusedText) && /name a panel/.test(refusedText) && refused.value === 'close zz9' &&
+            locked === true && /ran lock vbA/.test(reportText) && /1 step/.test(reportText) &&
+            /close vbA/.test(confirmText) && /run it\?/.test(confirmText) && stillThere === true,
+          JSON.stringify({ rowV, mode, refused, locked, report, confirm, stillThere }))
+      } catch (vErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr))
       }
     }
 

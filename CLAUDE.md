@@ -91,6 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
 | `verify:agent-session` | plain node | ~89 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
+| `verify:verbs` | plain node | 10 checks (M96–M97): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `shot` (`npm run shot`) | real Electron, **not in `npm run verify`**, asserts nothing | M61. 23 PNGs of the real renderer plus a `manifest.json` of intents, from a seeded fixture canvas — the visual loop. Read the images; hand them to a fresh-context critic. See `docs/build-log/m61-visual-loop.md` |
@@ -98,7 +99,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 94 channels as of M93 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 98 channels as of M98 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | ~297 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -169,6 +170,8 @@ renderer --invoke--> spawn:sheet / spawn:recent                                 
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
 renderer --invoke--> agent:clipboard-image                                       --> main
+renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
+renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
@@ -394,6 +397,42 @@ check does not, and should not, cover it.
   the seventh panel kind — sessionless, three states, an add line writing through the same
   store — and `renderer/chat/memory-context.ts` is the bound the chat's first message carries
   (`MEMORY_CONTEXT_MAX`, 4 KB) and states above the composer before it sends it.
+- `src/shared/verb-table.ts` / `src/shared/plan.ts` / `src/shared/outward.ts` — M96. The
+  closed verb table (each verb: args, `destructive`, the `PaletteActions` members it runs
+  through) and `EXCLUDED_ACTIONS`, the members no plan may reach with a reason each;
+  `verify:verbs closure.1` reads the interface as TEXT and fails for a member on neither list,
+  so a verb appended later must be chosen. A plan is data: `buildPlan` binds and refuses by
+  name (unknown verb, missing argument, a panel that is not an agent for `type` — decided by
+  KIND through `acceptsTyping`, never a string check on the command; a setting without
+  `planWritable`), and gives a destructive step its `confirm`, which `runPlan` will not skip.
+  `outward` is the ONE gate pane content leaves through (`redactSecrets` + a note naming the
+  source and the count). The executor is `usePaletteActions`' `beginRunVerb` — the only place
+  a verb's meaning lives. There is no `kill` (two lifetimes; `pty.kill`'s two callers).
+- `src/shared/auto.ts` and `AgentSessionManager.startAuto`/`stopAuto` — M97. A mode is a prompt
+  vocabulary and a turn limit MAIN enforces on every result (the renderer's chip is a
+  projection of the `auto` event and can never move the stop); `done` on `AUTO_DONE_MARKER`,
+  `stuck` with a reason (`limit`, `permission` after a grace with the question still pending,
+  `exit`, `budget`), `stopped` by hand. The opening prompt goes through the ordinary `send`, so
+  M82's ceilings apply unchanged; the continuation is sent AFTER the queue. A mode validates as
+  a plan (`validateAutoMode`), so a destructive verb without its confirmation is refused. The
+  recorder (`useRuns.onAutoEvent`) opens a one-panel run and seals it with its cost.
+- `src/main/approvals.ts`'s grants and `agent-session.ts`'s `preAnswer` — M98. `Allow for
+  session` is a grant keyed by session AND tool, held in main beside pending (main owns
+  pending, so main owns granted), cleared on `disposed` and kept across `exited`, and written
+  NOWHERE (`verify:agent-session grant.2` reads the store, the schema and the transcript log
+  as text). The manager asks `preAnswer` in its `permission-request` arm and answers `allow`
+  to THIS process before the request is ever pending, emitting `permission-auto-allowed`, so no
+  attention surface lights. `agent:answer` carries `scope?: 'session'` — one door; the card
+  alone shows the third verb. The pane's `Session grants` field has four arms, codex's a
+  named reason from the registry.
+- `src/shared/agent-backends.ts` / `src/main/backend-adapters.ts` — M99. `BACKENDS` is the ONE
+  table per backend (capabilities and every named reason); `AGENT_CAPABILITIES.headless` is
+  derived from it and M90's `REASON_*` constants are aliases of its rows. **No consumer
+  switches on the backend name**: `verify:agent-session registry.1` greps `src/` for
+  `backend === '<member>'` and `case '<member>'` and requires the only hit to be the layout
+  parser. The by-name copy sites use `carryBackend`; the sheet's rows come from `BACKEND_IDS`
+  (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
+  Act I spec — no ACP-speaking CLI on this machine to measure.
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`

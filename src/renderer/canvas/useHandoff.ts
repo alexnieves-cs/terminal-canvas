@@ -1,3 +1,4 @@
+import { outward } from '@shared/outward'
 import { useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import type { AgentState } from '@shared/types'
@@ -185,13 +186,16 @@ export function useHandoff(deps: HandoffDeps): void {
         const trigger = event.kind === 'idle' ? 'idle' : 'exit'
         if (isChatPanel(source)) {
           // A chat source's payload is its last answer, from the store.
-          const text = lastAssistantText(sourceId)
+          // M96. A handoff is one agent's context reaching another: through the
+          // outward gate, like every other reader of pane text.
+          const text = outward(lastAssistantText(sourceId), `panel ${sourceId}`).text
           if (text === '') { setResult(key, 'skipped — the chat has no answer to hand off'); continue }
           const lines = text.split('\n')
           dispatch(link.to, sourceId, trigger, wrap(railLabel(source, undefined), trigger, lines.slice(-HANDOFF_MAX_LINES)), Math.min(lines.length, HANDOFF_MAX_LINES), detail)
           continue
         }
-        void window.canvas.scrollback.tail({ panelId: sourceId, lines: HANDOFF_MAX_LINES }).then((tail) => {
+        void window.canvas.scrollback.tail({ panelId: sourceId, lines: HANDOFF_MAX_LINES }).then((rawTail) => {
+          const tail = rawTail.length === 0 ? rawTail : outward(rawTail.join('\n'), `panel ${sourceId}`).text.split('\n')
           if (tail.length === 0) {
             setResult(key, scrollbackEnabled()
               ? 'skipped — no output recorded'

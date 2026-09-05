@@ -1,5 +1,6 @@
 import type { ContentBlock, TranscriptTurn } from '@shared/transcript'
-import { REASON_NO_CODEX, REASON_CODEX_NO_INTERRUPT, type AgentBackend, type AgentSessionSnapshot } from '@shared/agent-session'
+import type { AgentBackend, AgentSessionSnapshot } from '@shared/agent-session'
+import { BACKENDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import type { ChatStateInput } from '@renderer/panels/panel-state'
 import { toolFilePath } from '@shared/tool-index'
 import { shortPath } from '@renderer/palette/panel-name'
@@ -138,9 +139,10 @@ export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns
 export const DENY_MESSAGE = 'denied from the canvas'
 /** M76. A question is open: the composer names the fix, which is above it. */
 export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'
-export const REASON_CHAT_NO_CLAUDE = 'claude was not found on the login PATH — install it, or check the environment report'
+/** M99: claude's own `noCli` row, under the name every M73 door imports. */
+export const REASON_CHAT_NO_CLAUDE = BACKENDS.claude.reasons.noCli
 export const REASON_CHAT_IDLE = 'nothing is in flight'
-export { REASON_NO_CODEX as REASON_CHAT_NO_CODEX, REASON_CODEX_NO_INTERRUPT }
+export { REASON_NO_CODEX as REASON_CHAT_NO_CODEX, REASON_CODEX_NO_INTERRUPT } from '@shared/agent-session'
 
 export interface ComposerArm {
   enabled: boolean
@@ -159,16 +161,17 @@ export interface ComposerArm {
 export function composerState(
   snapshot: AgentSessionSnapshot | null,
   claudeAvailable: boolean,
-  backend: AgentBackend = 'claude'
+  backend: AgentBackend = DEFAULT_BACKEND
 ): { send: ComposerArm; interrupt: ComposerArm } {
+  const row = BACKENDS[backend]
   // M90. `claudeAvailable` is the panel's OWN backend's availability: the
-  // caller passes codex's for a codex panel. The reason names the vendor.
+  // caller passes codex's for a codex panel. The reason is the row's.
   if (!claudeAvailable) {
-    return { send: { enabled: false, reason: backend === 'codex' ? REASON_NO_CODEX : REASON_CHAT_NO_CLAUDE }, interrupt: { enabled: false, reason: REASON_CHAT_IDLE } }
+    return { send: { enabled: false, reason: row.reasons.noCli }, interrupt: { enabled: false, reason: REASON_CHAT_IDLE } }
   }
-  // M90. codex has no interrupt door: mid-turn the verb stays, disabled with
-  // the fix (closing the panel kills the process), never enabled to a no-op.
-  const noInterrupt: ComposerArm = backend === 'codex' ? { enabled: false, reason: REASON_CODEX_NO_INTERRUPT } : { enabled: true }
+  // M90. A backend with no interrupt door: mid-turn the verb stays, disabled
+  // with the fix (closing the panel kills the process), never enabled to a no-op.
+  const noInterrupt: ComposerArm = row.interrupts ? { enabled: true } : { enabled: false, reason: row.reasons.noInterrupt }
   const streaming = snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
   if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: REASON_CHAT_PENDING }, interrupt: noInterrupt }
   if (streaming) return { send: { enabled: false, reason: REASON_CHAT_STREAMING }, interrupt: noInterrupt }

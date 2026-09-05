@@ -6,10 +6,12 @@ import type { DirResult } from '@shared/fs-tree'
 import type { ReviewDiff } from '@shared/review'
 import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { REASON_CODEX_NO_TERMINAL } from '@shared/agent-session'
-import { panelState } from '@renderer/panels/panel-state'
+import { BACKENDS, backendOf } from '@shared/agent-backends'
+import { autoChipWords } from '@shared/auto'
+import { panelState, autoTone } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
-import { takeInsert, useChat } from './chat-store'
+import { takeInsert, useChat, dismissAuto } from './chat-store'
+import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext } from './memory-context'
 import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
@@ -64,6 +66,8 @@ export interface ChatNodeProps {
   claudeAvailable: boolean
   /** M74. Continue this conversation in a terminal (`claude --resume`). */
   onOpenInTerminal(id: string): void
+  /** M97. Open the palette on this chat's Auto rows. */
+  onOpenAuto?: (id: string) => void
 }
 
 const shortInput = toolArgument
@@ -192,7 +196,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const state = panelState({ kind: 'chat', status: undefined, dormant: false, ...(stateInput === undefined ? {} : { chat: stateInput }) }, undefined)
   // M90. The backend from the record (absent is claude); the snapshot's word
   // agrees once main answers. Every codex difference is a named reason.
-  const backend = props.panel.chat.backend ?? 'claude'
+  const backend = backendOf(props.panel.chat)
   const composer = composerState(snapshot, props.claudeAvailable, backend)
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
@@ -373,8 +377,13 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     if (!composer.interrupt.enabled) return
     void window.canvas.agentSession.interrupt(id)
   }
-  const answer = (requestId: string, allow: boolean): void => {
-    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE } })
+  // M98. `scope: 'session'` is the third verb: main grants the tool, then
+  // answers through the same door. The scope is written only when given —
+  // an `undefined` key would cross IPC as present. The mirror is refreshed
+  // after, so the inspector's field reads the grant main now holds.
+  const answer = (requestId: string, allow: boolean, scope?: 'session'): void => {
+    void window.canvas.agentSession.answer({ id, requestId, answer: allow ? { allow: true } : { allow: false, message: DENY_MESSAGE }, ...(scope === undefined ? {} : { scope }) })
+      .then(() => { if (scope !== undefined) refreshChatGrants(id) })
   }
 
   const alive = snapshot !== null && snapshot.pid !== undefined && snapshot.status !== 'exited' && snapshot.status !== 'disposed'
@@ -451,6 +460,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
           <span className="chat__far-question"><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow ${p.toolName}`} {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+          <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
           <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
         </div>) })() : undefined}
       onSelect={props.onSelect}
@@ -472,13 +482,31 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {/* M90. Which CLI this panel talks to — a KIND fact, before the state pill, like the github card's. */}
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
+        {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.
+            A ring while running; `done` / `stuck — why` / `stopped` resolved,
+            with a labelled dismiss. Never a decision — main stops the run. */}
+        {snapshot?.auto !== undefined && (() => {
+          const a = snapshot.auto
+          return <span className={`badge pf__word chat__auto${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
+            {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
+            {autoChipWords(a)}
+            {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
+          </span>
+        })()}
+        {/* M97. The door to the Auto rows: opens the palette on them (the
+            rename verb's idiom), so no second menu is grown. */}
+        {props.readOnly !== true && snapshot?.auto?.state !== 'running' && (
+          <button type="button" className="pf__verb pf__verb--word" data-chat-auto-open title="Run this chat on its own for a bounded number of turns — Complete, Harden, Review, or a task of yours" aria-label="Auto…"
+            {...shellControl(() => props.onOpenAuto?.(id))}>auto</button>
+        )}
         {/* M74. A LABELLED verb after the pill — the terminal's own row shape
             (`title · pill · controls`), and a word rather than the `>_` glyph
             the rail uses as a passive kind mark (M74's critic). Disabled by
             name while answering or empty, never hidden. */}
         {props.readOnly !== true && (() => {
           const busy = snapshot !== null && (snapshot.status === 'streaming' || snapshot.pending.length > 0)
-          const reason = backend === 'codex' ? REASON_CODEX_NO_TERMINAL : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
+          // M99. The door is the ROW's: a backend with no terminal door names why, from the registry.
+          const reason = !BACKENDS[backend].terminalDoor ? BACKENDS[backend].reasons.noTerminal : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
           return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
             title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
             {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>to terminal</button>
@@ -531,6 +559,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · {shortInput(p.input)}</span>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
+                {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
+                <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session — it will not ask again`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
                 <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title="Deny this tool call" {...shellControl(() => answer(p.requestId, false))}>Deny</button>
               </div>
             </div>
@@ -541,6 +571,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
             <>
+              {chat.granted !== undefined && chat.granted.length > 0 && (
+                <p className="pf__note chat__grant-note" data-chat-grant-note>{chat.granted[chat.granted.length - 1]} ran under a session grant{chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail</p>
+              )}
               {memoryBlock !== null && turnCount === 0 && (
                 <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from this repository will go with your first message</p>
               )}

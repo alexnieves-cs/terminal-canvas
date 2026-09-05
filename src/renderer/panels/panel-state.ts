@@ -192,3 +192,18 @@ function chatState(chat: ChatStateInput | undefined): PanelStateWord {
     default: return { word: 'not started', tone: 'none' }
   }
 }
+
+/**
+ * M97. The auto chip's tone, in the one vocabulary: a live run works, a
+ * finished one is idle, a stuck one needs you, a stopped one has exited.
+ * Here rather than in the chat node because `verify:rail state.2` keeps
+ * every state word inside this file.
+ */
+export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone {
+  switch (state) {
+    case 'running': return 'working'
+    case 'done': return 'idle'
+    case 'stuck': return 'needs-you'
+    case 'stopped': return 'exited'
+  }
+}

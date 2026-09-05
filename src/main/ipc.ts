@@ -1,7 +1,7 @@
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
-import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
+import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
@@ -135,11 +135,19 @@ export interface AgentHandlers {
   clipboardImage(): ClipboardImage
   interrupt(id: string): boolean
   dispose(req: { id: string; drop: boolean }): void
-  answer(req: { id: string; requestId: string; answer: PermissionAnswer }): boolean
+  /** M98. `scope: 'session'` grants the request's tool for the rest of the session before answering. */
+  answer(req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }): boolean
   list(): AgentSessionSnapshot[]
   transcript(id: string): AgentTranscriptResult
   /** M74. */
   importSession(req: AgentImportRequest): AgentImportResult
+  /** M97. */
+  autoStart(req: AutoStartRequest): AutoStartResult
+  autoStop(id: string): boolean
+  /** M98. The tools granted for a session, in grant order. */
+  grants(id: string): string[]
+  /** M98. Drop every grant for a session; it asks again. */
+  revokeGrants(id: string): void
 }
 
 const INERT_AGENTS: AgentHandlers = {
@@ -151,7 +159,11 @@ const INERT_AGENTS: AgentHandlers = {
   answer: () => false,
   list: () => [],
   transcript: () => ({ turns: [], snapshot: null }),
-  importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' })
+  importSession: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
+  autoStart: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
+  autoStop: () => false,
+  grants: () => [],
+  revokeGrants: () => {}
 }
 
 /**
@@ -276,10 +288,15 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_CLIPBOARD_IMAGE, () => agents.clipboardImage())
   ipcMain.handle(IPC.AGENT_INTERRUPT, (_event, id: string) => agents.interrupt(id))
   ipcMain.handle(IPC.AGENT_DISPOSE, (_event, req: { id: string; drop: boolean }) => agents.dispose(req))
-  ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer }) => agents.answer(req))
+  ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }) => agents.answer(req))
   ipcMain.handle(IPC.AGENT_LIST, () => agents.list())
   ipcMain.handle(IPC.AGENT_TRANSCRIPT, (_event, id: string) => agents.transcript(id))
   ipcMain.handle(IPC.AGENT_IMPORT, (_event, req: AgentImportRequest) => agents.importSession(req))
+  ipcMain.handle(IPC.AGENT_AUTO_START, (_event, req: AutoStartRequest) => agents.autoStart(req))
+  ipcMain.handle(IPC.AGENT_AUTO_STOP, (_event, id: string) => agents.autoStop(id))
+  // M98. Grants are main's (the tracker's), read and dropped by panel id.
+  ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
+  ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))

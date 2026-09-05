@@ -1,7 +1,8 @@
+import { carryBackend } from '@shared/agent-backends'
 import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
-import { applyChatEvent, clearChat, getChat, seedChat } from './chat-store'
+import { applyChatEvent, clearChat, getChat, seedChat, setChatGrants } from './chat-store'
 import { SUPERVISOR_PROMPT } from '@shared/agent-session'
 
 /**
@@ -42,7 +43,7 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
     // M81. A restored SUPERVISOR carries its system prompt again: the CLI
     // keeps no record of an appended prompt, so a resume without it would
     // leave a panel that looks like a supervisor and is not one.
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...(panel.chat.backend === undefined ? {} : { backend: panel.chat.backend }), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {
@@ -50,6 +51,9 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
         return
       }
       seedChat(id, { snapshot: result.snapshot, refusal: null })
+      // M98. Grants are main's; asked once here and again after every scoped
+      // answer or revoke. Until it answers the inspector reads `unknown`.
+      refreshChatGrants(id)
       return window.canvas.agentSession.transcript(id).then((t) => {
         if (!created.has(id)) return
         seedChat(id, { snapshot: t.snapshot ?? result.snapshot, turns: t.turns, ...(t.meta === undefined ? {} : { meta: t.meta }) })
@@ -61,6 +65,19 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
       if (!created.has(id)) return
       seedChat(id, { snapshot: null, refusal: `the agent runtime did not answer: ${String(error)}` })
     })
+}
+
+/** M98. Re-read main's grants for a chat into the store's mirror. Guarded like every resolve arm. */
+export function refreshChatGrants(id: string): void {
+  void window.canvas.agentSession.grants(id).then((grants) => {
+    if (!created.has(id)) return
+    setChatGrants(id, grants)
+  }).catch(() => {})
+}
+
+/** M98. Drop every grant for a chat — it asks again — then mirror main's (empty) answer. */
+export function revokeChatGrants(id: string): void {
+  void window.canvas.agentSession.revokeGrants(id).then(() => refreshChatGrants(id)).catch(() => {})
 }
 
 /** The one disposal verb: main's session (and, on an explicit close, its file), then the store. */

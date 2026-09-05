@@ -86,6 +86,14 @@ export interface SettingDef {
    */
   min?: number
   max?: number
+  /**
+   * M96. Present means a PLAN may write this key (`set-setting`). A closed
+   * list, and short on purpose: cosmetic and attention keys only. Never a
+   * ceiling (`agents.*` — a plan that can raise its own has none), never a
+   * path (`vault.root` reads disk), never what survives quit. Absent refuses
+   * by name in `shared/plan.ts`.
+   */
+  planWritable?: true
 }
 
 /**
@@ -125,6 +133,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'agent.glow',
+    planWritable: true,
     label: 'Show agent state on panels',
     description: 'colour a panel’s border by what its agent is doing',
     keywords: ['glow', 'border', 'colour', 'color', 'status', 'busy', 'idle', 'state', 'highlight'],
@@ -158,6 +167,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'agent.bell',
+    planWritable: true,
     label: 'Detect the terminal bell',
     description: 'treat a bell as “this panel wants you” — your CLI must be set to ring it; Claude Code’s notification channel defaults to auto',
     keywords: ['bell', 'alert', 'notify', 'notification', 'attention', 'ping', 'sound'],
@@ -167,6 +177,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'attention.notify',
+    planWritable: true,
     label: 'Notify me when a panel needs me',
     description: 'post an OS notification when a panel wants you and this window is behind another; clicking it flies here to that panel',
     keywords: ['notify', 'notification', 'os', 'alert', 'attention', 'background', 'dock', 'badge'],
@@ -176,6 +187,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'attention.sound',
+    planWritable: true,
     label: 'Play a sound when a panel needs me',
     description: 'ring the system alert sound when a panel wants you — off by default; it uses your own alert sound and volume, and works when this window is hidden',
     keywords: ['sound', 'beep', 'alert', 'audio', 'attention', 'ping', 'chime'],
@@ -194,6 +206,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'appearance.theme',
+    planWritable: true,
     label: 'Theme',
     description: 'follow the system appearance, or force light or dark; the terminal follows the theme too',
     // "dark" and "light" are what a user types looking for this; the label
@@ -224,6 +237,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'agent.edgeIndicators',
+    planWritable: true,
     label: 'Point at off-screen panels that want you',
     description: 'draw an arrow on the edge of the canvas for each panel that wants you but is out of view',
     keywords: ['edge', 'arrow', 'pip', 'indicator', 'offscreen', 'off-screen', 'attention', 'pointer', 'wants'],
@@ -233,6 +247,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'canvas.minimap',
+    planWritable: true,
     label: 'Show the overview',
     description: 'draw every panel as a block in its state colour in the top corner of the canvas, with the camera as a rectangle; click or drag it to move',
     keywords: ['minimap', 'overview', 'map', 'thumbnail', 'status board', 'blocks'],
@@ -280,6 +295,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'terminal.fontSize',
+    planWritable: true,
     label: 'Terminal font size',
     // M49. A font size change is a RESIZE wearing a hat: bigger cells mean
     // fewer columns, which is a pty:resize, which is a SIGWINCH, which is a
@@ -309,6 +325,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'placement.snap',
+    planWritable: true,
     label: 'Snap panels while dragging',
     description: 'snap a dragged panel’s edges and centre to nearby panels, with a guide line; off, you align by eye',
     keywords: ['snap', 'snapping', 'align', 'guides', 'grid', 'placement', 'drag'],
@@ -351,6 +368,7 @@ export const SETTINGS: readonly SettingDef[] = [
   },
   {
     id: 'files.showHidden',
+    planWritable: true,
     label: 'Show hidden files',
     description: 'list dotfiles and dot-directories in the file tree',
     keywords: ['hidden', 'dotfiles', 'dot files', 'invisible', 'git', 'files', 'tree'],

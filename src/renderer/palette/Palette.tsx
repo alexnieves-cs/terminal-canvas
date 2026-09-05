@@ -80,6 +80,11 @@ export interface InputMode {
    */
   kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet'
   label: string
+  /**
+   * M96. What Enter DOES in this mode, for the footer: `run` for the verb
+   * line, where `save` would call closing a panel harmless. Absent is `save`.
+   */
+  verb?: string
   initial: string
   submit(value: string): void
   /**
@@ -528,7 +533,7 @@ export function Palette(props: PaletteProps): JSX.Element {
   const footer = inputMode
     ? confirming
       ? '↵ confirm · esc cancel'
-      : '↵ save · esc cancel'
+      : `↵ ${inputMode.verb ?? 'save'} · esc cancel`
     // The footer is the palette's only affordance list, so a shortcut absent
     // from it is a shortcut nobody finds — the same reasoning hiddenAtRest
     // obeys for rows. Which arrow is named depends on which one is reachable

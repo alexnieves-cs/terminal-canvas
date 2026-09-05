@@ -24,5 +24,10 @@ module.exports = {
   /* M75. The attachment resolver: node:fs over a path, pure over data. */
   attachments: require('../src/main/attachments'),
   /* M76. The approval tracker and the badge union: pure over an injected sink. */
-  approvals: require('../src/main/approvals')
+  approvals: require('../src/main/approvals'),
+  /* M97. The auto modes: pure. */
+  auto: require('../src/shared/auto'),
+  /* M99. The backend registry, and the capability table derived from it. */
+  backends: require('../src/shared/agent-backends'),
+  cost: require('../src/shared/cost')
 }

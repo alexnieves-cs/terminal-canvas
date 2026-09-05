@@ -3615,6 +3615,77 @@ transaction. `parseLayout` never throws — a corrupt file is a default layout w
 and that is exactly wrong for a restore, where the user asked for THIS file: the JSON is
 checked first and refused by name. `verify:layout snap.1`/`snap.2` pin both halves.
 
+**The verb table is DATA and its closure is a text check; a plan's confirmation is a step
+the runtime refuses to skip (`shared/verb-table.ts`, `shared/plan.ts`, `usePaletteActions`'
+`beginRunVerb`, M96).** Three later milestones ask "is this destructive?" — M97's Auto modes,
+M101's routines, M102's spend card — and if each answered at its own call site they would
+disagree in exactly the case nobody tests. So `destructive` is a boolean on the table, and a
+plan built from it CARRIES its confirmation (`confirm: { reason }`) rather than being refused:
+`runPlan` refuses an unacknowledged destructive step by name and stops, with nothing before it
+undone and nothing after it run. The closure rule is the long-term half: `verify:verbs
+closure.1` reads the `PaletteActions` interface as TEXT (the interface is the authority; a
+mirror list would drift) and fails the build for a member on neither the table's `actions`
+nor `EXCLUDED_ACTIONS` — so a verb a later milestone appends cannot become plan-reachable
+silently, and cannot be forgotten silently either; both lists are also checked against the
+interface, so a stale name fails too. Two rules inside the table fail silently if undone:
+`type` strips every C0 byte and DEL (`stripControl`) and Enter is `submit`, its own
+confirmable verb — a plan that could type `\r` into a shell could run anything; and who may
+be typed into is decided by the panel's KIND through `acceptsTyping` (a chat, or a terminal
+whose session spec names an `AgentKind`) — never by inspecting the command string, which a
+preset renames at will. There is deliberately no `kill` verb (`table.1` asserts its absence):
+a process's lifetime is its panel's, and `pty.kill` keeps exactly two renderer callers.
+
+**Pane content leaves the app through ONE gate, and the gate is a function with a note
+(`shared/outward.ts`, M96).** `redactSecrets` already scrubbed the text export and the
+diagnostics bundle; M96 makes it the single door for every later reader — a plan's `read`, an
+agent's context, M103's browser-pane read — because a reader added later that forgets the
+call has no symptom at all: the token simply goes with the text. `outward(text, source)`
+returns the scrubbed text, the count, and a note naming the source and the count, so the
+caller shows the provenance beside what it shows. `verify:verbs gate.1` plants a GitHub
+token in a REAL scrollback log and reads it back through the gate; a reader that bypasses
+the gate is found by grep for `scrollback.tail`/`lastAssistantText` without `outward`.
+
+**Auto's counter is main's; the chip is a projection, and the snapshot keeps the resolved
+run (`agent-session.ts`'s `startAuto`, `shared/auto.ts`, M97).** The rule is M82's from the
+other side: the renderer's count can be wrong — stale after a reload, behind a batched
+delta — and the stop must land anyway, so the `auto` run lives on the SESSION, counts
+results in `autoAfterResult`, and nothing reads a renderer number. `verify:agent-session
+auto.1` replays more turns than the limit and counts the writes that left the manager. Three
+smaller rules: the continuation is sent AFTER the queue is served, so a message the user
+typed mid-turn lands ahead of it; a permission question stops the RUN after a grace but never
+the question (the card still asks; the chip says why); and the snapshot KEEPS `auto` as
+`done`/`stuck`/`stopped` until a new start, a dismiss or a dispose — the first draft cleared
+it on resolution, and a chip that vanished on resolution would be a run that ended silently.
+An auto run is a run in M79's sense: `useRuns.onAutoEvent` opens a one-panel component on
+`running` at turn 0 and seals with the panel's usage since — it observes, never decides.
+
+**A session grant is answered in main BEFORE the request is pending, is keyed by session AND
+tool, and is written nowhere (`main/approvals.ts`, `agent-session.ts`'s `preAnswer`, M98).**
+Three ways the obvious version fails silently. Answering from the renderer after the request
+arrives would flash `needs you` on every surface, ring the bell and bump the badge for a
+question the user already answered for the session — so the manager asks the tracker in its
+`permission-request` arm and writes the allow line to the process that asked, emitting
+`permission-auto-allowed` (a quiet transcript row, nothing pending). Keying by session alone
+would let `Allow for session` on `Bash` silently allow `Edit`; the key is the pair. And
+persisting the grant — the natural "remember my choice" — would grant a permission to a
+conversation that no longer exists, invisibly, after a relaunch: `verify:agent-session
+grant.2` reads `approvals.ts`, the layout schema, the layout store and the transcript log as
+text and fails if any of them mentions a grant or `approvals.ts` imports a filesystem. A grant
+survives `exited` (the conversation resumes on the next send) and dies on `disposed`.
+
+**A backend is a ROW in `BACKENDS`, and no consumer may switch on its name
+(`shared/agent-backends.ts`, `verify:agent-session registry.1`, M99).** M90's build log
+records `backend` dropped silently by two field-by-field copy sites before anyone noticed, and
+every `=== 'codex'` in the manager was one more place a third backend would have to be
+remembered. The table declares, per id, everything a consumer decides on (`oneProcessPerTurn`,
+`closeStdin`, `adoptsThreadId`, `interrupts`, `images`, `asksPermission`, `terminalDoor`,
+`reportsCost`) and every named reason; `registry.1` greps `src/` for a literal comparison to a
+member and requires the only hit to be the layout parser (absent-vs-malformed needs the
+literal there). The copy sites use `carryBackend` (`registry.3`: no key for absent or the
+default). `AGENT_CAPABILITIES.headless` is derived from the rows and M90's `REASON_*` constants
+are aliases of them — the text checks regex is the same bytes. A fourth backend is one row
+plus one adapter entry, which is the whole point.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3631,3 +3702,17 @@ beneath them. Added, each confirmed once by hand or not at all, as stated:
   were confirmed once by hand.
 - **`Cmd+Z` over the note editor (M93)** is the fourth text surface the `edit:undo` entry
   above already describes; unchanged, unverified, recorded.
+- **The verb line against a real agent TUI (M96).** `type` pastes through the terminal's
+  bracketed-paste path and `submit` writes one CR; `verify:verbs` proves the plan and
+  `verify:panels verbs.1` proves the executor reaches the panel, but that a real `claude`
+  TUI takes the paste as text and the CR as Enter was confirmed once by hand.
+- **Auto against a real `claude` (M97).** Every suite drives a fake runner: that a real
+  session prints `AUTO-DONE` when told to, and that a real permission question stops the run
+  after the grace with the card still asking, are one machine, one day, by hand. The modes'
+  prompts are vocabulary, not a contract the CLI signs.
+- **`Allow for session` against a real `claude` (M98).** The suite proves the allow line is
+  written to the fake process before the request is pending; that the real CLI accepts an
+  answer it did not wait for the host to render is the same bytes M76 sends, unobserved here.
+- **The registry against a real codex spawn (M99).** `spawn()` reads argv, parser and
+  `closeStdin` from the adapter and the row; the fake runner sees the same values the real
+  one would, and the real one was not driven again.

@@ -264,6 +264,37 @@ const SCENES = [
       await sleep(500)
       await kit.shot('approval')
     } },
+  { name: 'verbs', intent: 'M96. The verb line: the palette in text mode on `Run a verb…` after a typed step was refused — the refusal and its fix on the palette\'s own feedback line (`step 1: no panel is called zz9 — name a panel by its id…`), the typed line kept for correction. A plan is shown and refused by name before anything runs.',
+    run: async (k) => {
+      await k.press('k', { metaKey: true }); await sleep(500)
+      await k.type('run a verb'); await sleep(400)
+      await k.enter(); await sleep(500)
+      await k.type('close zz9'); await sleep(200)
+      await k.enter(); await sleep(600)
+      await k.shot('verbs')
+      await k.press('Escape'); await sleep(300); await k.press('Escape'); await sleep(300)
+    } },
+  { name: 'auto', intent: 'M97. A chat wearing a running auto chip beside its state pill (`auto · complete · 0/8` with a ring) after the chat\'s `auto` verb opened the palette on the Auto rows and Complete was chosen; the opening prompt drew a permission question, so the approval card is up with its verbs — Allow, Allow for session, Deny. The chip is a projection of main\'s count; the card is the same question every attention surface answers.',
+    run: async (k) => {
+      await k.goTo('api (chat)')
+      await k.click('.panel[data-panel-id="chat"] [data-chat-auto-open]'); await sleep(500)
+      await k.type('auto: complete'); await sleep(400)
+      await k.enter(); await sleep(900)
+      // Back to the chat: the row's run moved nothing, and the card sits under the composer.
+      await k.goTo('api (chat)')
+      await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      // Fixture panels sit over this chat: Maximise (the M92 verb, through the
+      // palette on the focused chat) fills the window with it — the chip, the
+      // transcript and the card all in frame. The user's own route.
+      await k.js(`(() => { const body = document.querySelector('.panel[data-panel-id="chat"] .chat__body'); if (body) body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return !!body })()`)
+      await sleep(200)
+      await k.press('k', { metaKey: true }); await sleep(400)
+      await k.type('maximise panel'); await sleep(300)
+      await k.enter(); await sleep(700)
+      await k.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await sleep(400)
+      await k.shot('auto')
+    } },
   { name: 'subagents', intent: 'Two live terminals share one repository, so the app cannot attribute subagents; the notice beside them should read as a deliberate card, not a rendering error.',
     run: async (k) => { await k.goTo('claude — api (2)'); await k.shot('subagents') } },
   { name: 'palette', intent: 'The command palette at rest (Cmd+K) over the canvas: sections, rows, disabled rows with their reasons, and the footer.',
@@ -388,9 +419,9 @@ app.whenReady().then(async () => {
         { id: 'memory', kind: 'memory', x: 1200, y: 570, w: 460, h: 420, z: 12, source: { root: REPO } },
         // M73. A chat panel with a recorded conversation in its durable file
         // (seeded below), so the scene shows a transcript with no process.
-        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 340, h: 300, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
+        { id: 'chat', kind: 'chat', x: 770, y: 570, w: 560, h: 360, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
         // M90. The second backend beside the first: the chrome names it, the rest is the same panel.
-        { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api (chat)', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
+        { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })
@@ -540,7 +571,12 @@ app.whenReady().then(async () => {
     dispose: ({ id, drop }) => { agentSessions.dispose(id); if (drop) agentTranscripts.drop(id) },
     answer: ({ id, requestId, answer }) => agentSessions.answerPermission(id, requestId, answer),
     list: () => agentSessions.list(),
-    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } }
+    transcript: (id) => { const r = agentTranscripts.read(id); return { turns: r.turns, snapshot: agentSessions.get(id) ?? null, ...(r.meta === undefined ? {} : { meta: r.meta }) } },
+    // M97/M98. The same verbs main wires; grants are a harness-local set.
+    autoStart: (req) => agentSessions.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }),
+    autoStop: (id) => agentSessions.stopAuto(id),
+    grants: () => [],
+    revokeGrants: () => {}
   }
   registerIpcHandlers(
     ptyManager, layoutStore,
@@ -613,6 +649,9 @@ app.whenReady().then(async () => {
     // setter plus a dispatched 'input' is what reaches its state.
     type: (text) => js(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, ${JSON.stringify(text)}); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`),
+    // Enter on the palette's INPUT: a window-level keydown never reaches the
+    // palette's handler (the panels suite learned this first).
+    enter: () => js(`(() => { const i = document.querySelector('.palette__input'); if (!i) return false; i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`),
     click: (sel) => js(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`),
     theme: async (name) => { await js(`window.canvas.settings.set('appearance.theme', ${JSON.stringify(name)})`); await sleep(700) },
     // The first real layout: the launcher scene runs on an EMPTY store, so

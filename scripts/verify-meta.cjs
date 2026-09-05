@@ -629,7 +629,12 @@ console.log('\n' + '='.repeat(60))
 {
   const { readdirSync } = require('node:fs')
   const logs = readdirSync(join(ROOT, 'docs', 'build-log'))
-    .map((f) => /^m(\d+)[a-z]?-.*\.md$/.exec(f)).filter(Boolean).map((m) => Number(m[1]))
+    // M96: a log may cover an ACT — `m96-m99-act1-control.md` names a range,
+    // and every number in it counts as logged (the v5 run keeps one log per
+    // act, a section per milestone; a per-milestone stub would be ceremony
+    // that says nothing).
+    .map((f) => /^m(\d+)(?:-m(\d+))?[a-z]?-.*\.md$/.exec(f)).filter(Boolean)
+    .flatMap((m) => { const a = Number(m[1]); const b = m[2] === undefined ? a : Number(m[2]); const out = []; for (let n = a; n <= b; n += 1) out.push(n); return out })
   const readme = read('README.md') ?? ''
   const rows = [...readme.matchAll(/^\| M(\d+)[a-z]? \|/gm)].map((m) => Number(m[1]))
   const rowSet = new Set(rows)
