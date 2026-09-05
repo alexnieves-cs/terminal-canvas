@@ -40,7 +40,7 @@ import { useInspectorDetail } from './useInspectorDetail'
 import {
   DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
-  MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel } from './canvas-constants'
+  MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
@@ -90,7 +90,7 @@ import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import { makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
-  makePanel, makeReviewPanel, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
+  makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
   type Panel, type TerminalPanel as TerminalPanelModel
 } from '@renderer/panels/panels'
@@ -129,6 +129,8 @@ import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { onChatSession } from '@renderer/chat/chat-store'
+import { pinCount, pinRefusal } from '@renderer/canvas/lod'
+import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
 // will eventually need (paletteActions, the camera verbs, presetRows) is state
 // that lives inside Canvas — an App-owned frame would mean lifting all of it up
@@ -1729,7 +1731,9 @@ export function Canvas({
           ? { growsX: state.mode.edge === 'e' || state.mode.edge === 'se', growsY: state.mode.edge === 's' || state.mode.edge === 'se' }
           : undefined
         const snapped = snapNow(rect, new Set([id]), resize)
-        setPanels((current) => setPanelRect(current, id, snapped))
+        // M92. The first move or resize clears the maximised mark: its
+        // restore rect would lie once the user has placed the panel by hand.
+        setPanels((current) => setPanelRect(current, id, snapped).map((p) => (p.rect.id === id && p.maximised !== undefined ? (({ maximised: _m, ...rest }) => rest as Panel)(p) : p)))
       },
       [snapNow]
     ),
@@ -1823,6 +1827,10 @@ export function Canvas({
       // un-offset by a well-meaning later change, write a wrong coordinate
       // into a workspace record nobody was looking at.
       if (mergedRef.current) return
+      // M92. LOCK is one early return, here, at the gate every move and
+      // resize passes through: the handles still render (a control that
+      // vanishes reads as a bug) and say why in their title.
+      if (panelsRef.current.find((p) => p.rect.id === state.panelId)?.locked === true) return
       const host = hostRef.current
       if (!host) return
       const bounds = host.getBoundingClientRect()
@@ -2098,6 +2106,8 @@ export function Canvas({
       viewport,
       size: { width: bounds.width, height: bounds.height },
       focusedId,
+      // M92. Pins, counted inside the budget by the tier function itself.
+      pinnedIds: new Set(panels.filter((p) => p.pinned === true).map((p) => p.rect.id)),
       lastFocusedAt: registry.lastFocusedAt(),
       dormantIds,
       cardIds: collapsedPanelIds
@@ -3460,6 +3470,55 @@ export function Canvas({
   }, [commitHistory, selectOnly, addToSelection])
   instantiateTemplateRef.current = instantiateTemplate
 
+  // M92. Lock, pin and maximise are LAYOUT facts, each one history entry.
+  // Absent stays absent: the field is deleted, never set to undefined, so the
+  // record on disk has no key. Maximise stores the rect to go back to; the
+  // first drag or resize clears the mark (usePanelDrag's onDrag), since the
+  // restore rect would lie once the user moved it.
+  const setPanelFlag = useCallback((id: string, patch: (panel: Panel) => Panel | null): void => {
+    if (mergedRef.current) return
+    setPanels((current) => {
+      const panel = current.find((p) => p.rect.id === id)
+      if (!panel) return current
+      const next = patch(panel)
+      if (next === null) return current
+      const out = current.map((p) => (p === panel ? next : p))
+      commitHistory(out)
+      return out
+    })
+  }, [commitHistory])
+  const strip = (panel: Panel, key: 'locked' | 'pinned' | 'maximised'): Panel => {
+    const { [key]: _gone, ...rest } = panel
+    return rest as Panel
+  }
+  const lockPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.locked === true ? null : { ...p, locked: true })), [setPanelFlag])
+  const unlockPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.locked === true ? strip(p, 'locked') : null)), [setPanelFlag])
+  const pinPanel = useCallback((id: string) => setPanelFlag(id, (p) => (pinRefusal(p.kind, p.pinned === true, pinCount(panelsRef.current)) !== undefined ? null : { ...p, pinned: true })), [setPanelFlag])
+  const unpinPanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.pinned === true ? strip(p, 'pinned') : null)), [setPanelFlag])
+  const maximisePanel = useCallback((id: string) => {
+    const host = hostRef.current
+    if (!host) return
+    const bounds = host.getBoundingClientRect()
+    const rect = maximiseRect(viewportRef.current, { width: bounds.width, height: bounds.height }, MAXIMISE_MARGIN)
+    // The raise rides the same patch (one history entry, one setState).
+    setPanelFlag(id, (p) => (p.maximised !== undefined ? null : { ...p, maximised: { restore: p.rect }, rect: { ...rect, id }, z: nextZ(panelsRef.current) }))
+  }, [setPanelFlag])
+  const restorePanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.maximised === undefined ? null : { ...strip(p, 'maximised'), rect: p.maximised.restore })), [setPanelFlag])
+
+  // Frozen on a SIGNATURE of the marks, not on `panels`: a drag rebuilds the
+  // array at 60Hz, and a context value that changed with it would re-render
+  // every frame consuming it (the rail's own freeze, applied here).
+  const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}` : '')).filter((s) => s !== '').join(',')
+  const panelMarks = useMemo<PanelMarks>(() => ({
+    marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
+      const [id, flags] = entry.split(':') as [string, string]
+      return [id, { locked: flags.includes('L'), pinned: flags.includes('P'), maximised: flags.includes('M') }] as const
+    })),
+    maximise: maximisePanel,
+    restore: restorePanel,
+    readOnly: merged
+  }), [marksSignature, maximisePanel, restorePanel, merged])
+
   const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
@@ -3805,6 +3864,7 @@ export function Canvas({
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -4104,6 +4164,8 @@ export function Canvas({
       >
         {/* M69. The far-view tier, provided once for every kind's frame. */}
         <CardDetailContext.Provider value={cardDetail}>
+        {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}
+        <PanelMarksContext.Provider value={panelMarks}>
         <div
           className="world"
           data-detail={cardDetail}
@@ -4345,6 +4407,7 @@ export function Canvas({
               outside assignTiers' input. */}
           <SubagentLayer panels={terminalPanels} />
         </div>
+        </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
         {pipsEnabled && (
           <EdgeIndicators rects={rects} viewport={viewport} ids={waitingIds} labelOf={(id) => { const p = panels.find((x) => x.rect.id === id); return p === undefined ? id : panelName(p) }} />
@@ -4467,6 +4530,7 @@ export function Canvas({
             // and asking it to recompute one here would make it a second
             // author of a fact this side already folds correctly.
             attentionIds={waitingIds}
+            pinnedCount={pinCount(panels)}
             approvals={paletteApprovals}
             templates={paletteTemplates}
             hasSelection={hasSelection()}
@@ -4493,6 +4557,7 @@ export function Canvas({
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}
         onRestart={paletteActions.restartPanel}
+        onLock={paletteActions.lockPanel} onUnlock={paletteActions.unlockPanel} onPin={paletteActions.pinPanel} onUnpin={paletteActions.unpinPanel} onMaximise={paletteActions.maximisePanel} onRestore={paletteActions.restorePanel} pinnedCount={pinCount(panels)}
         onFrontEnd={onFrontEnd}
         onAnswer={paletteActions.answerApproval}
         onOpenReview={paletteActions.openReview}

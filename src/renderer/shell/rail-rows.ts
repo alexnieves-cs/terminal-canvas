@@ -14,6 +14,9 @@ import { panelState, type StateInput } from '@renderer/panels/panel-state'
 
 export interface RailRow {
   id: string
+  /** M92. Layout marks, absent unless set. */
+  locked?: boolean
+  pinned?: boolean
   /** The honest chain's answer. See railLabel. */
   label: string
   /**
@@ -150,7 +153,8 @@ export function buildRailRows(
     // several callers reach with nothing else in hand.
     const tailKind: RailTailKind =
       isFilePanel(panel) && panel.source.prose === true ? 'note' : panel.kind
-    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant, state: { kind: tailKind, status, dormant } }
+    // M92. The marks, absent unless set, so a plain row's shape is unchanged.
+    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant, state: { kind: tailKind, status, dormant }, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
   })
 }
 

@@ -3406,6 +3406,31 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ warnings: out.warnings, c1: by('c1').chat, c2: by('c2').chat, c3: by('c3').chat, c4: by('c4').chat }))
 }
 
+{
+  // M92. Lock, pin and maximise are layout facts on the panel record: absent
+  // is every pre-M92 file and stays absent; `true` round-trips; a present
+  // value that is not `true` (or a restore rect that is not four finite
+  // numbers) warns by panel id and is dropped, the panel kept.
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [], locked: true, pinned: true, maximised: { restore: { x: 5, y: 6, w: 300, h: 200 } } },
+      { id: 'n2', x: 0, y: 0, w: 520, h: 340, z: 2, cwd: '~', command: 'sh', args: [] },
+      { id: 'n3', x: 0, y: 0, w: 520, h: 340, z: 3, cwd: '~', command: 'sh', args: [], locked: 'yes', pinned: 1, maximised: { restore: { x: 'a' } } },
+      { id: 'n4', x: 0, y: 0, w: 520, h: 340, z: 4, cwd: '~', command: 'sh', args: [], locked: false, pinned: false }
+    ] }]
+  }))
+  const ws = out.snapshot.workspaces[0]
+  const by = (id) => (ws && ws.panels.find((p) => p.id === id)) || {}
+  const n1 = by('n1'), n2 = by('n2'), n3 = by('n3'), n4 = by('n4')
+  ok('lockpin.1 locked, pinned and a maximised restore rect round-trip; absent stays absent; a malformed value warns by id and is dropped with the panel kept; an explicit false is stored as absent',
+    ws !== undefined && ws.panels.length === 4 &&
+      n1.locked === true && n1.pinned === true && n1.maximised && n1.maximised.restore.x === 5 && n1.maximised.restore.h === 200 &&
+      !('locked' in n2) && !('pinned' in n2) && !('maximised' in n2) &&
+      !('locked' in n3) && !('pinned' in n3) && !('maximised' in n3) && out.warnings.filter((w) => /n3/.test(w)).length >= 1 &&
+      !('locked' in n4) && !('pinned' in n4) && !out.warnings.some((w) => /n1|n2|n4/.test(w)),
+    JSON.stringify({ warnings: out.warnings, n1, n3 }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

@@ -384,6 +384,16 @@ check does not, and should not, cover it.
   the seventh panel kind — sessionless, three states, an add line writing through the same
   store — and `renderer/chat/memory-context.ts` is the bound the chat's first message carries
   (`MEMORY_CONTEXT_MAX`, 4 KB) and states above the composer before it sends it.
+- `src/renderer/canvas/lod.ts`'s `pinnedIds`/`PIN_MAX`/`pinRefusal`, `panels.ts`'s
+  `maximiseRect`/`carryMarks` — M92. Lock, pin and maximise are LAYOUT facts on the panel
+  record (`locked`, `pinned`, `maximised.restore`, each absent unless set and carried through
+  every by-name rebuild by `carryMarks`). Lock is ONE early return at `onBeginDrag`, the gate
+  every move and resize passes; a group drag skips locked members in `groupDragState`; Arrange
+  skips them. Pins are promoted FIRST inside `assignTiers`, counted inside the budget; the
+  verb refuses at `PIN_MAX` (one below the budget) and focus is never carded — it evicts the
+  last pin if pins ever fill the budget. Maximise is a rect and a restore rect, one history
+  entry each way, cleared by the first move. The marks reach every frame through ONE context
+  (`PanelMarksContext`) beside the tier's.
 - `src/shared/codex-transcript.ts` — M90. The second headless backend behind M71's seam:
   codex's JSONL to the SAME `TranscriptEvent` union (one line yields zero to two events — a
   completed command is claude's tool_use/tool_result pair), and `codexArgs` — the prompt is an

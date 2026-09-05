@@ -68,6 +68,12 @@ export interface PersistedPanelBase {
   w: number
   h: number
   z: number
+  /** M92. Drag and resize refuse. Absent unless true. */
+  locked?: true
+  /** M92. Kept live inside the budget. Absent unless true. */
+  pinned?: true
+  /** M92. Filling the viewport, with the rect to restore. */
+  maximised?: { restore: { x: number; y: number; w: number; h: number } }
   /**
    * User-set panel name, set from the command palette's rename row and
    * persisted here since M6a (`layout-adapt.ts`'s `fromPanels`/`toPanels`).
@@ -735,6 +741,12 @@ function parsePanel(
     h: Math.max(MIN_PANEL_H, h),
     z,
     ...(isStr(title) ? { title } : {}),
+    // M92. Three layout facts, each absent unless set: `true` round-trips, an
+    // explicit false is stored as absent, anything else warns by id and costs
+    // the field. A restore rect must be four finite numbers or it is dropped.
+    ...(parseFlag(raw.locked, 'locked', id, warnings) ? { locked: true as const } : {}),
+    ...(parseFlag(raw.pinned, 'pinned', id, warnings) ? { pinned: true as const } : {}),
+    ...(parseMaximised(raw.maximised, id, warnings)),
     // M49. Absent stays absent; present-but-unusable costs the FIELD, never
     // the panel — a per-entry failure at one level down.
     ...(fontSize === undefined ? {} : (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= 9 && fontSize <= 24
@@ -1686,4 +1698,23 @@ export function parseLayout(raw: string): {
     warnings,
     futureVersion: false
   }
+}
+
+/** M92. A boolean flag on a panel record: true, absent/false as absent, else warned and dropped. */
+function parseFlag(value: unknown, name: string, id: string, warnings: string[]): boolean {
+  if (value === undefined || value === false) return false
+  if (value === true) return true
+  warnings.push(`dropped panel ${id}'s ${name}: ${JSON.stringify(value)} is not true or false`)
+  return false
+}
+
+function parseMaximised(value: unknown, id: string, warnings: string[]): { maximised?: { restore: { x: number; y: number; w: number; h: number } } } {
+  if (value === undefined) return {}
+  const restore = isRecord(value) ? value.restore : undefined
+  const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+  if (isRecord(restore) && num(restore.x) && num(restore.y) && num(restore.w) && num(restore.h)) {
+    return { maximised: { restore: { x: restore.x, y: restore.y, w: restore.w, h: restore.h } } }
+  }
+  warnings.push(`dropped panel ${id}'s maximised: its restore rect is not four finite numbers`)
+  return {}
 }

@@ -35,9 +35,11 @@ export interface GroupDragState {
 export function groupDragState(group: CanvasGroup, panels: readonly Panel[], originWorld: Point): GroupDragState {
   return {
     groupId: group.id,
+    // M92. A locked member is skipped: it stays where it is and the others
+    // move around it. Skipped HERE, so applyGroupDrag has no state for it.
     members: group.panelIds.flatMap((id) => {
       const panel = panels.find((candidate) => candidate.rect.id === id)
-      return panel === undefined ? [] : [{
+      return panel === undefined || panel.locked === true ? [] : [{
         panelId: id,
         mode: { kind: 'move' as const },
         originRect: panel.rect,
@@ -96,4 +98,9 @@ export function expandGroup(groups: CanvasGroup[], id: string): CanvasGroup[] {
 
 export function removeGroup(groups: CanvasGroup[], id: string): CanvasGroup[] {
   return groups.filter((group) => group.id !== id)
+}
+
+/** M92. How many of a group's members are locked — the frame says `N locked`. */
+export function lockedCount(group: CanvasGroup, panels: readonly Panel[]): number {
+  return group.panelIds.filter((id) => panels.find((p) => p.rect.id === id)?.locked === true).length
 }

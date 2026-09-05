@@ -114,3 +114,6 @@ export function panelLabel(panel: Panel): string {
   // the fuller argument this is a corner of.
   return `${command} — ${panel.spec.cwd} (${panel.rect.id})`
 }
+
+/** M92. Screen pixels a maximised panel leaves around itself, so its frame reads as a panel and not as the window. */
+export const MAXIMISE_MARGIN = 16

@@ -1,6 +1,6 @@
 import type { JSX, MouseEvent as ReactMouseEvent } from 'react'
 import type { CanvasGroup } from './groups'
-import { groupRect } from './groups'
+import { groupRect, lockedCount } from './groups'
 import type { Panel } from '@renderer/panels/panels'
 import { shellControl } from '@renderer/shell/shell-control'
 
@@ -50,6 +50,8 @@ export function GroupLayer({
           }}
         >
           <span className="canvas-group__label">{group.label}</span>
+          {/* M92. A locked member stays put under a group drag; the frame says so. */}
+          {lockedCount(group, panels) > 0 && <span className="canvas-group__locked" data-group-locked title="locked panels stay where they are when the group is dragged">{lockedCount(group, panels)} locked</span>}
           <span className="canvas-group__count">{group.panelIds.length}</span>
           {!readOnly && <button
             type="button"

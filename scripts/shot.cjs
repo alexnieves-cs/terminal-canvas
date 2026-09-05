@@ -367,10 +367,10 @@ app.whenReady().then(async () => {
         // M78. Two ruled edges INTO `twin` (the second terminal): a join of the
         // chat (after a turn) and worker a (on exit 0); every ruled edge says
         // what it does. Twin sits in open space, so the edges are visible.
-        term('live', 30, 30, 380, 250, 1, { title: 'claude — api' }),
+        term('live', 30, 30, 380, 250, 1, { locked: true, title: 'claude — api' }),
         // M74. Marked a claude session so the frame shows the terminal-side
         // front-end verb (it is dormant: no live process, the precondition).
-        { id: 'dormant', x: 660, y: 30, w: 440, h: 250, z: 2, cwd: REPO, command: '/bin/sh', args: ['-c', 'sleep 600'], agent: 'claude-code', title: 'tests' },
+        { id: 'dormant', pinned: true, x: 660, y: 30, w: 440, h: 250, z: 2, cwd: REPO, command: '/bin/sh', args: ['-c', 'sleep 600'], agent: 'claude-code', title: 'tests' },
         { id: 'review', kind: 'review', x: 30, y: 310, w: 350, h: 230, z: 3, subject: { subjectId: 'live', repoRoot: REPO, baselineSha, label: 'claude — api' } },
         { id: 'file', kind: 'file', x: 410, y: 310, w: 360, h: 230, z: 4, source: { path: join(REPO, 'src', 'server.ts') } },
         { id: 'note', kind: 'file', x: 800, y: 310, w: 340, h: 420, z: 5, source: { path: NOTE, prose: true } },

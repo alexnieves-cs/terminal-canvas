@@ -45,6 +45,10 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       rect: { id: p.id, x: p.x, y: p.y, w: p.w, h: p.h },
       z: p.z,
       ...(p.title === undefined ? {} : { title: p.title }),
+      // M92. Absent stays absent through the copy, like title.
+      ...(p.locked === true ? { locked: true as const } : {}),
+      ...(p.pinned === true ? { pinned: true as const } : {}),
+      ...(p.maximised === undefined ? {} : { maximised: { restore: { id: p.id, ...p.maximised.restore } } }),
       // Absent stays absent, the rule `title` above and `command` below obey.
       // Copied element-wise rather than by reference so a parsed record and
       // the live Panel cannot share a mutable array.
@@ -133,6 +137,9 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       z: panel.z,
       // Same absent-stays-absent rule as `command`, and for the same reason.
       ...(panel.title === undefined ? {} : { title: panel.title }),
+      ...(panel.locked === true ? { locked: true as const } : {}),
+      ...(panel.pinned === true ? { pinned: true as const } : {}),
+      ...(panel.maximised === undefined ? {} : { maximised: { restore: { x: panel.maximised.restore.x, y: panel.maximised.restore.y, w: panel.maximised.restore.w, h: panel.maximised.restore.h } } }),
       ...(panel.links === undefined
         ? {}
         : { links: panel.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })

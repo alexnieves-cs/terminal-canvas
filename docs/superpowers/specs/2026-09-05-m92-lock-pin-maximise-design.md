@@ -48,6 +48,16 @@ committed on entry and on exit, undoable, and it does not pin.
   budget are carded in array order (the tier function's own arithmetic, so the verb's
   refusal and the tier agree).
 
+### Amended after the verifier
+
+- The verb refuses at `PIN_MAX = LIVE_BUDGET − 1`, keeping one slot for the focused panel;
+  should pins ever fill the budget, focus EVICTS the last-promoted pin rather than becoming
+  a card. `pinCount` counts terminal panels (the only kind that tiers) and `pinRefusal` is
+  the one sentence every door reads.
+- Lock is a rule about gestures (drag, resize, arrange), not about every rect write: a
+  locked panel can be maximised and restored.
+- `carryMarks(p)` is the spread every by-name rebuild of a panel adds.
+
 ### Maximise (`Canvas.tsx`, `panels.ts`'s `maximiseRect`)
 
 - `maximiseRect(viewport, size, margin)` → the world rect that fills the visible viewport

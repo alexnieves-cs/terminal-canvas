@@ -44,6 +44,12 @@ export interface PanelLink {
 
 export interface PanelBase {
   rect: WorldRect
+  /** M92. Drag and resize refuse; close still arms. Absent unless set. */
+  locked?: true
+  /** M92. Kept live by assignTiers, counted inside the budget. Absent unless set. */
+  pinned?: true
+  /** M92. Filling the viewport, with the rect to go back to. Cleared by the first move or resize. */
+  maximised?: { restore: WorldRect }
   /**
    * Paint order, rendered as style.zIndex. Stacking is NOT the array's order:
    * React reconciles a reordered keyed list by MOVING DOM nodes, and a move is
@@ -827,4 +833,28 @@ export function makeGithubPanel(id: string, centre: Point, z: number): GithubPan
 
 export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
   return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
+}
+
+/**
+ * M92. The world rect that fills the VISIBLE viewport at the current scale,
+ * inset by `margin` screen pixels. Pure over the camera: a check pins that
+ * mapping it back through the viewport lands on the margin exactly.
+ */
+export function maximiseRect(viewport: { x: number; y: number; scale: number }, size: { width: number; height: number }, margin: number): WorldRect {
+  const x = (margin - viewport.x) / viewport.scale
+  const y = (margin - viewport.y) / viewport.scale
+  return { id: '', x, y, w: (size.width - margin * 2) / viewport.scale, h: (size.height - margin * 2) / viewport.scale }
+}
+
+/**
+ * M92. The three marks, carried through a field-by-field rebuild the way
+ * `title` is: present only when set. Every site that rebuilds a Panel by
+ * name spreads this, or a rename silently unlocks (the verifier's find).
+ */
+export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?: { restore: WorldRect } } {
+  return {
+    ...(p.locked === true ? { locked: true as const } : {}),
+    ...(p.pinned === true ? { pinned: true as const } : {}),
+    ...(p.maximised === undefined ? {} : { maximised: { restore: { ...p.maximised.restore } } })
+  }
 }

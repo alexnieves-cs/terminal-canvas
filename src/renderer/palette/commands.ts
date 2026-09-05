@@ -87,6 +87,10 @@ export interface PanelRow {
   claude?: boolean
   /** M74. A chat panel with a turn in flight or a permission waiting — the open-in-terminal row's named refusal. */
   busy?: boolean
+  /** M92. Layout facts, absent unless set. */
+  locked?: boolean
+  pinned?: boolean
+  maximised?: boolean
   /** M90. A chat's backend; absent is claude. */
   backend?: AgentBackend
   /** M74. A chat panel's completed turns; zero refuses open-in-terminal by name. */
@@ -210,6 +214,13 @@ export interface PaletteActions {
    * row is the only way to reach it without the inspector open.
    */
   restartPanel(id: string): void
+  /** M92. Lock, pin and maximise, each with its opposite. */
+  lockPanel(id: string): void
+  unlockPanel(id: string): void
+  pinPanel(id: string): void
+  unpinPanel(id: string): void
+  maximisePanel(id: string): void
+  restorePanel(id: string): void
   /** M49. Commit a per-panel font size; undefined returns the panel to the global. */
   setPanelFontSize(id: string, size: number | undefined): void
   /** M50. Arrange these panels compactly, one undoable step, never reordering. */
@@ -407,6 +418,8 @@ export interface PaletteActions {
 }
 
 export interface PaletteContext {
+  /** M92. How many panels are pinned on this canvas — the ninth pin is refused by count. */
+  pinnedCount?: number
   presets: PresetRow[]
   prompts: PromptRow[]
   panels: PanelRow[]
@@ -585,6 +598,7 @@ export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in 
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
 import { REASON_CODEX_NO_TERMINAL, type AgentBackend } from '@shared/agent-session'
+import { pinRefusal } from '@renderer/canvas/lod'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
 export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
@@ -859,6 +873,23 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     // expressed as N command rows inside a scope needs no such type at all, so
     // that decision stays closed. These are per-PANEL anyway, not global, so a
     // setting would have been the wrong shape even if the type existed.
+    // M92. Six rows, three pairs, every one PRESENT: the half that does not
+    // apply is disabled naming the state, so a user who does not know a panel
+    // is locked learns it from the row rather than from a drag that refuses.
+    {
+      const need = ctx.capturedId === null || target === undefined ? REASON_NO_FOCUS : undefined
+      const pins = ctx.pinnedCount ?? 0
+      const pair = (id: string, title: string, run: (pid: string) => void, reason: string | undefined): void => {
+        out.push(withReason({ id, title, subtitle: target ? (target.title ?? target.label) : 'no panel', group: 'panel', run: () => run(ctx.capturedId!) }, need ?? reason))
+      }
+      pair('panel.lock', 'Lock panel', actions.lockPanel, target?.locked === true ? 'already locked — Unlock panel is the row' : undefined)
+      pair('panel.unlock', 'Unlock panel', actions.unlockPanel, target?.locked === true ? undefined : 'not locked')
+      pair('panel.pin', 'Pin panel live', actions.pinPanel, target === undefined ? undefined : pinRefusal(target.kind, target.pinned === true, pins))
+      pair('panel.unpin', 'Unpin panel', actions.unpinPanel, target?.pinned === true ? undefined : 'not pinned')
+      pair('panel.maximise', 'Maximise panel', actions.maximisePanel, target?.maximised === true ? 'already maximised — Restore panel is the row' : undefined)
+      pair('panel.restore', 'Restore panel', actions.restorePanel, target?.maximised === true ? undefined : 'not maximised')
+    }
+
     out.push(
       withReason(
         {

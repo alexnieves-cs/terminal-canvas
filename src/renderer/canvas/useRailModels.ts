@@ -158,6 +158,10 @@ export function useRailModels(deps: RailModelsDeps) {
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 title: p.title,
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                // M92. Layout facts on the row, absent unless set.
+                ...(p.locked === true ? { locked: true } : {}),
+                ...(p.pinned === true ? { pinned: true } : {}),
+                ...(p.maximised === undefined ? {} : { maximised: true }),
                 ...reviewFields(p),
                 // M20. From the SESSION's spec, like everything else that
                 // reports what a panel is actually running.
@@ -172,6 +176,10 @@ export function useRailModels(deps: RailModelsDeps) {
                 kind: p.kind,
                 ...(isTerminalPanel(p) && p.fontSize !== undefined ? { fontSize: p.fontSize } : {}),
                 restartable: isTerminalPanel(p) ? isRestartable(registry.get(p.rect.id)?.status) : false,
+                // M92. Layout facts on the row, absent unless set.
+                ...(p.locked === true ? { locked: true } : {}),
+                ...(p.pinned === true ? { pinned: true } : {}),
+                ...(p.maximised === undefined ? {} : { maximised: true }),
                 ...reviewFields(p),
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
                 ...frontEndFields(p),

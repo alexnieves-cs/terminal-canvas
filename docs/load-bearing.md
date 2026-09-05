@@ -3588,3 +3588,17 @@ once on this machine, and the fake runner only records the flag. And the adapter
 codex's `input_tokens` as INCLUSIVE of `cached_input_tokens` and `cache_write_input_tokens`
 (it subtracts both to reach the app's fresh-input figure) is consistent with the recorded
 numbers, not confirmed against codex's own definition.
+
+**A pin is counted INSIDE `assignTiers`, and the focused panel is never carded
+(`renderer/canvas/lod.ts`, M92).** Two arithmetics that must agree: the verb's refusal
+(`pinRefusal`, at `PIN_MAX`) and the tier function's promotion (pins first, in array
+order). They agree because both read `pinCount` over TERMINAL panels — the only kind the
+tier function is ever handed — and because `PIN_MAX` is one below the budget, so a pinned
+canvas still has a slot for whatever is focused. The first cut gated focus on a free slot
+and the comment above it ("keystrokes must never land in a card") became false with eight
+pins: a click into a panel typed into nothing. Focus evicts the last-promoted pin now, and
+`verify:viewport pin.1` drives a full budget with an unpinned focus. The other silent
+failure here was the by-name rebuild: a rename rebuilt the panel with `title` and `links`
+and dropped `locked`, so renaming unlocked; `carryMarks` is the spread every such rebuild
+adds, and the verifier's grep for field-by-field copies is the check to repeat when a
+field joins `PanelBase`.

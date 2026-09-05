@@ -201,6 +201,8 @@ const spyActions = () => {
   return {
     calls,
     spawnPreset: record('spawnPreset'),
+    // M92
+    lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
     deletePreset: record('deletePreset'),
     setDefaultPreset: record('setDefaultPreset'),
@@ -2216,6 +2218,37 @@ const WS = [
     gh !== undefined && one !== null && gh.disabledReason === one &&
       door !== undefined && door.disabledReason === undefined && door.entersScope === 'credentials',
     JSON.stringify({ gh: gh && gh.disabledReason, one, door: door && { scope: door.entersScope, reason: door.disabledReason } }))
+}
+
+// M92. Six rows, each PRESENT: lock/unlock, pin/unpin, maximise/restore. The
+// pair's second half is the one that applies; the other is disabled with a
+// reason naming the state (`already locked`), never hidden.
+{
+  const plain = ctx({ capturedId: 'n1', panels: [{ id: 'n1', label: '/bin/zsh', kind: 'terminal' }], pinnedCount: 0 })
+  const rows = P.buildCommands(plain)
+  const ids = ['panel.lock', 'panel.unlock', 'panel.pin', 'panel.unpin', 'panel.maximise', 'panel.restore']
+  const present = ids.every((id) => byId(rows, id) !== undefined)
+  const lock = byId(rows, 'panel.lock'), unlock = byId(rows, 'panel.unlock'), pin = byId(rows, 'panel.pin'), unpin = byId(rows, 'panel.unpin'), max = byId(rows, 'panel.maximise'), restore = byId(rows, 'panel.restore')
+  if (lock) lock.run()
+  if (pin) pin.run()
+  if (max) max.run()
+  const calls = plain.actions.calls.map((c) => c[0] + ':' + c[1])
+  const locked = ctx({ capturedId: 'n1', panels: [{ id: 'n1', label: '/bin/zsh', kind: 'terminal', locked: true, pinned: true, maximised: true }], pinnedCount: 1 })
+  const r2 = P.buildCommands(locked)
+  const full = ctx({ capturedId: 'n2', panels: [{ id: 'n2', label: '/bin/zsh', kind: 'terminal' }], pinnedCount: 7 })
+  const sessionless = P.buildCommands(ctx({ capturedId: 'r1', panels: [{ id: 'r1', label: 'review', kind: 'review' }] }))
+  const r3 = P.buildCommands(full)
+  const none = P.buildCommands(ctx({ capturedId: null, panels: [] }))
+  ok('lockpin.1 all six rows are present; on a plain panel lock/pin/maximise run against the captured id and their opposites are disabled naming the state; on a locked, pinned, maximised panel the reverse; the ninth pin is refused naming the count; with no panel every row names the focus fix',
+    present && lock.disabledReason === undefined && pin.disabledReason === undefined && max.disabledReason === undefined &&
+      /locked/.test(unlock.disabledReason || '') && /pinned/.test(unpin.disabledReason || '') && /maximised/.test(restore.disabledReason || '') &&
+      calls.join(',') === 'lockPanel:n1,pinPanel:n1,maximisePanel:n1' &&
+      byId(r2, 'panel.unlock').disabledReason === undefined && byId(r2, 'panel.unpin').disabledReason === undefined && byId(r2, 'panel.restore').disabledReason === undefined &&
+      /locked/.test(byId(r2, 'panel.lock').disabledReason || '') &&
+      /7/.test(byId(r3, 'panel.pin').disabledReason || '') && /unpin/.test(byId(r3, 'panel.pin').disabledReason || '') &&
+      /never carded/.test(byId(sessionless, 'panel.pin').disabledReason || '') && byId(sessionless, 'panel.lock').disabledReason === undefined &&
+      ids.every((id) => byId(none, id) !== undefined && typeof byId(none, id).disabledReason === 'string'),
+    JSON.stringify({ present, calls, unlock: unlock && unlock.disabledReason, full: byId(r3, 'panel.pin') && byId(r3, 'panel.pin').disabledReason }))
 }
 
 const failed = results.filter((r) => !r.pass)

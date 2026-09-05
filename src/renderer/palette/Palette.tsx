@@ -121,6 +121,8 @@ export interface PaletteProps {
   cameraTrail: { back: boolean; forward: boolean }
   /** Panel ids currently in wants-you, from the renderer's own attention set. */
   attentionIds: readonly string[]
+  /** M92. How many panels are pinned — the pin row's refusal reads it. */
+  pinnedCount?: number
   /** M80. Saved shapes of work, for the New-from rows. */
   templates: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /** M76. Every pending permission request, for the Allow/Deny rows. */
@@ -211,6 +213,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         // true of a panel that has one.
         ...(props.noteRoot === null ? {} : { memoryRoot: props.noteRoot }),
         attentionIds: props.attentionIds,
+        ...(props.pinnedCount === undefined ? {} : { pinnedCount: props.pinnedCount }),
         templates: props.templates,
         approvals: props.approvals,
         capturedId: controller.capturedId,

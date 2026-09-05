@@ -8,6 +8,7 @@ import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
 import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
+import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
 import { Close, Pencil, RotateCw } from '@renderer/icons'
 import type { ContextTab } from './useShellChrome'
@@ -74,6 +75,15 @@ export interface InspectorProps {
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  /** M92. Lock, pin and maximise toggles beside Restart. */
+  onLock: (id: string) => void
+  onUnlock: (id: string) => void
+  onPin: (id: string) => void
+  onUnpin: (id: string) => void
+  onMaximise: (id: string) => void
+  onRestore: (id: string) => void
+  /** M92. The canvas's pin count — the pane's Pin refuses by the same sentence the palette does. */
+  pinnedCount?: number
   /** M74. The panel's front-end verb (open as chat / open in terminal). */
   onFrontEnd: (id: string) => void
   /** M76. Answer the chat's pending permission request. */
@@ -140,7 +150,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview,
+  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -169,6 +179,7 @@ function InspectorImpl({
             onClose={onClose}
             onSavePreset={onSavePreset}
             onRestart={onRestart}
+            onLock={onLock} onUnlock={onUnlock} onPin={onPin} onUnpin={onUnpin} onMaximise={onMaximise} onRestore={onRestore} pinnedCount={pinnedCount}
             onFrontEnd={onFrontEnd}
             onAnswer={onAnswer}
             panelRun={panelRun ?? null}
@@ -382,7 +393,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, panelRun, onRunAgain,
+  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   tab: ContextTab
@@ -399,6 +410,15 @@ function InspectorPanel({
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
   onRestart: (id: string) => void
+  /** M92. Lock, pin and maximise toggles beside Restart. */
+  onLock: (id: string) => void
+  onUnlock: (id: string) => void
+  onPin: (id: string) => void
+  onUnpin: (id: string) => void
+  onMaximise: (id: string) => void
+  onRestore: (id: string) => void
+  /** M92. The canvas's pin count — the pane's Pin refuses by the same sentence the palette does. */
+  pinnedCount?: number
   onFrontEnd: (id: string) => void
   onAnswer: (id: string, requestId: string, allow: boolean) => void
   panelRun: PanelRunLine | null
@@ -843,6 +863,17 @@ function InspectorPanel({
         >
           Restart
         </button>
+        {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
+        <button type="button" className="inspector__action" data-inspector-action={model.marks?.locked ? 'unlock' : 'lock'}
+          title={model.marks?.locked ? 'Unlock — drag and resize work again' : 'Lock — drag and resize refuse; close still works'}
+          {...shellControl(() => (model.marks?.locked ? onUnlock : onLock)(model.id))}>{model.marks?.locked ? 'Unlock' : 'Lock'}</button>
+        <button type="button" className="inspector__action" data-inspector-action={model.marks?.pinned ? 'unpin' : 'pin'}
+          disabled={!model.marks?.pinned && pinRefusal(model.kind, false, pinnedCount ?? 0) !== undefined}
+          title={model.marks?.pinned ? 'Unpin — tiering decides again' : (pinRefusal(model.kind, false, pinnedCount ?? 0) ?? 'Pin — kept live wherever the camera is, inside the live budget')}
+          {...shellControl(() => (model.marks?.pinned ? onUnpin : onPin)(model.id))}>{model.marks?.pinned ? 'Unpin' : 'Pin'}</button>
+        <button type="button" className="inspector__action" data-inspector-action={model.marks?.maximised ? 'restore' : 'maximise'}
+          title={model.marks?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
+          {...shellControl(() => (model.marks?.maximised ? onRestore : onMaximise)(model.id))}>{model.marks?.maximised ? 'Restore' : 'Fill'}</button>
         {/* M74. The front-end verb — present only on the two kinds that have
             a conversation, disabled by name when it cannot apply. */}
         {model.frontEnd !== undefined && (
