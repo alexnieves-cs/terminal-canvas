@@ -2419,6 +2419,25 @@ const WS = [
     JSON.stringify({ threw, cp, acp, reason }))
 }
 
+// M120 — sandbox.1. A CHAT WITH NO PLACE. The door is a canvas-group row per
+// row (`New chat (no folder)`), disabled by the row's own `noSandbox` sentence
+// for a row without `sandboxArgs`; `modelChoices(backend)` is the row's
+// closed list or null (free text).
+{
+  let rows = [], choices = {}, threw = null
+  try {
+    const c = ctx({ presets: [{ id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', agent: 'claude-code' }] })
+    rows = P.buildCommands(c).filter((r) => r.id.startsWith('chat.sandbox.'))
+    choices = { copilot: P.modelChoices('copilot'), claude: P.modelChoices('claude') }
+  } catch (e) { threw = String(e) }
+  const claude = rows.find((r) => r.id === 'chat.sandbox.claude'), acp = rows.find((r) => r.id === 'chat.sandbox.acp'), codex = rows.find((r) => r.id === 'chat.sandbox.codex')
+  ok('sandbox.1 New chat (no folder) is one canvas-group row per registered backend: enabled for claude when it is on the PATH, disabled by name for codex when it is not, and disabled with the row\'s noSandbox sentence for acp whatever the PATH says; modelChoices is copilot\'s closed list and null for claude',
+    threw === null && claude && claude.group === 'canvas' && claude.disabledReason === undefined && /no folder/.test(claude.title) &&
+      codex && /PATH/.test(codex.disabledReason || '') && acp && /read-only/.test(acp.disabledReason || '') &&
+      Array.isArray(choices.copilot) && choices.copilot.includes('auto') && choices.claude === null,
+    JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

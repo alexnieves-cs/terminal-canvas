@@ -3737,6 +3737,22 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('work.5 (threw)', false, String(e)) }
 }
 
+// M120 — chat.sandbox.1. The sandbox mark on a chat's record: `sandbox: true`
+// round-trips through the ONE parser and `carryChatMarks` carries it beside
+// `dispatch`; absent stays absent.
+{
+  let stored, carried, bare, threw = null
+  try {
+    const out = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [{ id: 'c1', kind: 'chat', x: 0, y: 0, w: 560, h: 360, z: 1, chat: { cwd: '/s/c1', sessionId: 'u-1', sandbox: true } }, { id: 'c2', kind: 'chat', x: 0, y: 0, w: 560, h: 360, z: 2, chat: { cwd: '/w', sessionId: 'u-2' } }], camera: { x: 0, y: 0, scale: 1 } }], activeWorkspaceId: 'w1' }))
+    stored = out.snapshot.workspaces[0].panels.map((p) => p.chat)
+    carried = L.carryChatMarks({ sandbox: true, dispatch: true })
+    bare = L.carryChatMarks({})
+  } catch (e) { threw = String(e) }
+  ok('chat.sandbox.1 a chat record\'s sandbox mark round-trips, a plain chat gains no key, and carryChatMarks carries sandbox beside dispatch and writes nothing for an absent one',
+    threw === null && stored && stored[0].sandbox === true && !('sandbox' in stored[1]) && carried && carried.sandbox === true && carried.dispatch === true && Object.keys(bare).length === 0,
+    JSON.stringify({ threw, stored, carried, bare }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
