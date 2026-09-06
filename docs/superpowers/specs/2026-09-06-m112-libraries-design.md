@@ -111,7 +111,7 @@ parsed grid, not a second copy of every byte).
 
 ### Checks
 
-- `verify:file export.2` (plain node, beside the existing exporter checks): the four arms over a
+- `verify:file export.4` (plain node, beside the existing `export.1–.3`): the four arms over a
   fake log and a supplied buffer; a token planted in the buffer is gone from the written text and
   the note names the panel; the log is preferred when both exist.
 - `verify:panels export.1` (real renderer): persistence off, a live panel prints a token, the
