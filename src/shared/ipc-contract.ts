@@ -99,7 +99,7 @@ export interface ControlCanvasModel {
   runs: Array<{ id: string; name: string; outcome: string; panels: number; cost?: number }>
 }
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
+import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult , LaneStatus } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
@@ -583,10 +583,37 @@ export const IPC = {
    * text is capped inside the guest, and it passes the outward gate before
    * it crosses back. Reading the pane is leaving the app.
    */
-  BROWSER_READ: 'browser:read'
+  BROWSER_READ: 'browser:read',
+  /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
+  BOARD_LANE: 'board:lane',
+  /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
+  BOARD_LANE_STATUS: 'board:lane-status',
+  /** M115. The return path: push the lane, POST the PR through the broker behind the teammate's spend card; the comment on the issue. */
+  BOARD_OPEN_PR: 'board:open-pr',
+  BOARD_COMMENT_PR: 'board:comment-pr'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
+/** M114. What `dispatch` asks main for: a worktree lane for the chat it is about to mint. `repo` is `owner/repo` from a GitHub key; `root` is the place the sheet chose for an item with no repository. */
+export interface BoardLaneRequest { itemId: string; chatPanelId: string; teammateId: string; repo?: string; root?: string }
+export type BoardLaneResult =
+  | { kind: 'lane'; path: string; worktreeId: string; branch: string; root: string }
+  | { kind: 'refused'; reason: string }
+
+/** M115. What `Open PR` hands main: ids, never paths — main resolves the worktree record and runs the push itself. */
+export interface BoardOpenPrRequest { itemId: string; panelId: string; teammateId: string; worktreeId: string; repo: string; title: string; body: string }
+export type BoardOpenPrResult =
+  | { kind: 'opened' | 'exists'; number: number; url: string }
+  | { kind: 'push-failed' | 'no-lane' | 'no-credential' | 'rejected' | 'unavailable' | 'malformed' | 'refused'; reason: string }
+export interface BoardCommentRequest { panelId: string; teammateId: string; repo: string; number: number; body: string }
+export type BoardCommentResult =
+  | { kind: 'commented'; url: string }
+  | { kind: 'no-credential' | 'rejected' | 'unavailable' | 'malformed' | 'refused'; reason: string }
+
+/** M113. What `tc board` asks the renderer, and what it answers. */
+export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
+export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
+
 export const IPC_EVENTS = {
   PTY_DATA: 'pty:data',
   PTY_EXIT: 'pty:exit',
@@ -755,7 +782,9 @@ export const IPC_EVENTS = {
   ROUTINE_FIRE: 'routine:fire',
   /** M106. The Workspace menu's two verbs: Tidy Panes and Flip Terminals (a view state, never persisted). */
   CANVAS_TIDY: 'canvas:tidy',
-  CANVAS_FLIP: 'canvas:flip'
+  CANVAS_FLIP: 'canvas:flip',
+  /** M113. `tc board` asks the RENDERER over an ephemeral reply channel (canvas:model's shape) — main writes no record itself. */
+  BOARD_ADD: 'board:add'
 } as const
 
 export interface FileReadRequest {
@@ -1138,6 +1167,8 @@ export interface CanvasBridge {
     onCounts(provide: () => { panels: number; running: number }): () => void
     /** M81. The canvas model for `tc status`. Same ephemeral-reply shape as onCounts. */
     onModel(provide: () => ControlCanvasModel): () => void
+    /** M113. `tc board add/done`: main sends the request and a reply channel; the renderer answers with the surviving id or a refusal. */
+    onBoard(handle: (req: BoardControlRequest) => BoardControlReply): () => void
     onReset(listener: () => void): () => void
     /** M106. The menu's Tidy Panes and Flip Terminals. */
     onTidy(listener: () => void): () => void
@@ -1452,6 +1483,13 @@ export interface CanvasBridge {
   /** M103. See BROWSER_READ. Three arms; never rejects. */
   browser: {
     read(req: BrowserReadRequest): Promise<BrowserReadResult>
+  }
+  /** M114. The board's main-side verbs. */
+  board: {
+    lane(req: BoardLaneRequest): Promise<BoardLaneResult>
+    laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
+    openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
+    commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

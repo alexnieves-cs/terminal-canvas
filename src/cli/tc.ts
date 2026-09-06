@@ -23,6 +23,7 @@ export interface CliIo {
 
 export const USAGE = [
   'usage: tc open [--preset <name|id>] [--cwd <dir>]',
+  '       tc board add <title…> | tc board done <id>',
   '       tc list',
   '       tc focus <panel-id>',
   '       tc ping',
@@ -75,6 +76,20 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     // parsed here rather than passed through, so a typo is a usage error with
     // an exit code rather than a refusal from the app that reads like the
     // memory itself was rejected.
+    case 'board': {
+      // M113. `board add <title words…>` joins the rest as the title — a title
+      // is prose, and quoting it is the shell's job, not the user's memory.
+      const [op, ...words] = rest
+      if (op !== 'add' && op !== 'done') return { kind: 'usage', error: 'board takes add or done' }
+      if (op === 'add') {
+        const title = words.join(' ').trim()
+        if (title === '') return { kind: 'usage', error: 'board add needs a title' }
+        return { kind: 'ok', line: JSON.stringify({ verb: 'board', op: 'add', title }) }
+      }
+      const id = words[0]
+      if (id === undefined || id === '' || words.length > 1) return { kind: 'usage', error: 'board done takes one item id' }
+      return { kind: 'ok', line: JSON.stringify({ verb: 'board', op: 'done', id }) }
+    }
     case 'memory': {
       const [op, ...flags] = rest
       if (op !== 'list' && op !== 'add') return { kind: 'usage', error: 'memory takes list or add' }

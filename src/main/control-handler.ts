@@ -46,6 +46,12 @@ export interface ControlHandlerDeps {
   panelOfToken?: (token: string) => string | undefined
   /** M87. The broker: the one verb that can spend a credential. Absent means refused by name. */
   broker?: { call(req: { service: string; method: string; path: string; body?: string; panelId?: string }): Promise<{ ok: true; status: number; body: string; truncated: boolean } | { ok: false; reason: string }> }
+  /**
+   * M113. The board, asked of the RENDERER (it owns the workspace it renders;
+   * a main-side write would be overwritten by its next coalesced save).
+   * `null` is "no window answered" — a named refusal, never a silent ok.
+   */
+  board?: (req: { op: 'add'; title: string } | { op: 'done'; id: string }) => Promise<{ kind: 'ok'; id: string } | { kind: 'refused'; reason: string } | null>
   /** M83. The project memory store: the only thing a control verb may write. */
   memory?: {
     list(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
@@ -103,6 +109,14 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
         const teammateId = panelId === undefined ? undefined : deps.teammateOf?.(panelId)
         const answer = await deps.broker.call({ service: req.service, method: req.method, path: req.path, ...(req.body === undefined ? {} : { body: req.body }), ...(panelId === undefined ? {} : { panelId }), ...(teammateId === undefined ? {} : { teammateId }), ...(req.cost === undefined ? {} : { cost: req.cost }) })
         return answer.ok ? { ok: true, status: answer.status, body: answer.body, truncated: answer.truncated } : { ok: false, error: answer.reason }
+      }
+      case 'board': {
+        // Writes NOTHING here: the renderer upserts through its ordinary
+        // path and answers with the surviving id. No spawn, focus or kill.
+        if (deps.board === undefined) return { ok: false, error: 'the board is not available here' }
+        const answer = await deps.board(req.op === 'add' ? { op: 'add', title: req.title } : { op: 'done', id: req.id }).catch(() => null)
+        if (answer === null) return { ok: false, error: 'no canvas is open to add to — open the app first' }
+        return answer.kind === 'ok' ? { ok: true, id: answer.id } : { ok: false, error: answer.reason }
       }
       case 'status': {
         // READ-ONLY by construction: this arm has no spawn, focus, write or

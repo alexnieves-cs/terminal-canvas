@@ -368,6 +368,44 @@ const ok = (n, pass, detail = '') => {
       JSON.stringify({ add, listed, status, noKind, badLimit, badOpCli, zeroLimit }))
   }
 
+  // M113 — board.1. THE BOARD VERB. `tc board add <title>` and `tc board done
+  // <id>` are READ-WRITE, so the URL door refuses them the way it refuses
+  // status (a URL can only open). Main does not write the store itself —
+  // the renderer owns the workspace it is rendering and would overwrite a
+  // main-side write on its next coalesced save — so the handler asks the
+  // RENDERER over the ephemeral reply channel canvas:model already uses; a
+  // window that does not answer is a named refusal, never a silent ok.
+  {
+    let add, done, empty, badOp, url, cliAdd, cliDone, cliNoTitle, answered, noWindow
+    const spawns = []
+    try {
+      add = C.parseControlLine('{"verb":"board","op":"add","title":"Fix the thing"}')
+      done = C.parseControlLine('{"verb":"board","op":"done","id":"wi1"}')
+      empty = C.parseControlLine('{"verb":"board","op":"add","title":""}')
+      badOp = C.parseControlLine('{"verb":"board","op":"drag","id":"wi1"}')
+      url = C.parseControlUrl('terminal-canvas://board?op=add&title=x')
+      const build = C.buildRequest
+      const line = (argv) => { const b = build(argv, {}); return b.kind === 'ok' ? JSON.parse(b.line) : b }
+      cliAdd = line(['board', 'add', 'Fix', 'the', 'thing'])
+      cliDone = line(['board', 'done', 'wi1'])
+      cliNoTitle = line(['board', 'add'])
+      const handler = C.createControlHandler({ presets: () => [], defaultId: () => null, exists: () => true, spawn: (p) => spawns.push(p), list: () => [], focus: () => true, board: async (req) => ({ kind: 'ok', id: req.op === 'add' ? 'wi-new' : req.id }) })
+      answered = await handler(add.req)
+      const quiet = C.createControlHandler({ presets: () => [], defaultId: () => null, exists: () => true, spawn: (p) => spawns.push(p), list: () => [], focus: () => true, board: async () => null })
+      noWindow = await quiet(done.req)
+    } catch (e) { answered = { threw: String(e) } }
+    ok('board.1 board add/done parse from the socket line (an empty title and an unknown op refused by name), the URL door refuses board, the CLI builds both from argv (add joins the title words; add with no title is a usage error), the handler answers the renderer\'s id and spawns nothing, and a window that does not answer is a named refusal',
+      add && add.kind === 'ok' && add.req.verb === 'board' && add.req.op === 'add' && add.req.title === 'Fix the thing' &&
+        done && done.kind === 'ok' && done.req.op === 'done' && done.req.id === 'wi1' &&
+        empty && empty.kind === 'bad' && /title/.test(empty.error) && badOp && badOp.kind === 'bad' && /add or done/.test(badOp.error) &&
+        url && url.kind === 'bad' && /can only open/.test(url.error) &&
+        cliAdd && cliAdd.verb === 'board' && cliAdd.op === 'add' && cliAdd.title === 'Fix the thing' && cliDone && cliDone.op === 'done' && cliDone.id === 'wi1' &&
+        cliNoTitle && cliNoTitle.kind === 'usage' && /title/.test(cliNoTitle.error) &&
+        answered && answered.ok === true && answered.id === 'wi-new' && spawns.length === 0 &&
+        noWindow && noWindow.ok === false && /no canvas/.test(noWindow.error),
+      JSON.stringify({ add, done, empty, badOp, url, cliAdd, cliDone, cliNoTitle, answered, noWindow }))
+  }
+
   // M83 — memory.1. THE MEMORY VERBS. `list` reads and `add` writes — the
   //      first control verb that writes anything, and it writes ONLY into the
   //      store: a command key is refused here as everywhere, an unusable op

@@ -8,6 +8,8 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult } from '../shared/ipc-contract'
+import type { LaneStatus } from '../shared/review'
 import type { RunRow } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -208,6 +210,20 @@ const INERT_BROWSER: BrowserHandlers = {
   read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
 }
 
+/** M114. The board's main-side verbs; see board-lane.ts. Inert by default like every collaborator before it. */
+export interface BoardHandlers {
+  lane(req: BoardLaneRequest): Promise<BoardLaneResult>
+  laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
+  openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
+  commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
+}
+const INERT_BOARD: BoardHandlers = {
+  lane: async () => ({ kind: 'refused', reason: 'dispatch is not available here' }),
+  laneStatus: async () => ({ kind: 'unreadable', detail: 'the lane is not available here' }),
+  openPr: async () => ({ kind: 'refused', reason: 'the PR door is not available here' }),
+  commentPr: async () => ({ kind: 'refused', reason: 'the PR door is not available here' })
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -303,7 +319,9 @@ export function registerIpcHandlers(
   /** M84. The watcher runtime; see WatcherHandlers. */
   watchers: WatcherHandlers = INERT_WATCHERS,
   /** M103. Appended last, like every collaborator before it. */
-  browser: BrowserHandlers = INERT_BROWSER
+  browser: BrowserHandlers = INERT_BROWSER,
+  /** M114. Appended last, like every collaborator before it. */
+  board: BoardHandlers = INERT_BOARD
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -333,6 +351,10 @@ export function registerIpcHandlers(
   // the scheme on its live url, the cap, the outward gate — the renderer
   // only names which panel.
   ipcMain.handle(IPC.BROWSER_READ, (_event, req: BrowserReadRequest) => browser.read(req))
+  ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
+  ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
+  ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))
+  ipcMain.handle(IPC.BOARD_COMMENT_PR, (_event, req: BoardCommentRequest) => board.commentPr(req))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())
@@ -698,6 +720,33 @@ export function requestFromRenderer<T>(
       resolve(payload)
     })
     webContents.send(channel, replyChannel)
+  })
+}
+
+/**
+ * M113. The same one-shot reply as above, with a PAYLOAD beside the reply
+ * channel: `tc board add` carries a title where counts and model carry
+ * nothing. A sibling rather than a widened parameter so the two existing
+ * callers' wire shape (a bare channel string) stays byte-identical.
+ */
+export function requestFromRendererWith<T, P>(
+  webContents: WebContents,
+  channel: string,
+  payload: P,
+  fallback: T,
+  timeoutMs = 1000
+): Promise<T> {
+  return new Promise((resolve) => {
+    const replyChannel = `${channel}:reply:${Date.now()}:${(replySeq += 1)}`
+    const timer = setTimeout(() => {
+      ipcMain.removeAllListeners(replyChannel)
+      resolve(fallback)
+    }, timeoutMs)
+    ipcMain.once(replyChannel, (_event, reply: T) => {
+      clearTimeout(timer)
+      resolve(reply)
+    })
+    webContents.send(channel, { replyChannel, req: payload })
   })
 }
 

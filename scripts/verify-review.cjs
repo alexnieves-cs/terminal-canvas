@@ -1756,6 +1756,39 @@ const committerOn = (run, removed = []) => R.createReviewCommitter({
     JSON.stringify({ noFetch, ab, up, wl, mb, parsed, trees }))
 }
 
+// M115 — lane.1. AHEAD OF THE ROOT. A dispatched lane's branch has no
+//      upstream until it is pushed, so `status`'s ahead/behind (against @{u})
+//      is null for exactly the branch the card asks about. The lane arm asks
+//      `rev-list --left-right --count <base>...HEAD` in the lane, base being
+//      the ROOT's branch — left is base, right is HEAD, so the parser's arms
+//      are swapped on purpose. NO FETCH, still (git.1's text rule covers the
+//      new builder by construction). Three arms, never two.
+{
+  const has = (n) => typeof R[n] === 'function'
+  let args, parsed, laneOk, laneMissing, laneBad, laneNoRoot
+  try {
+    args = has('buildAheadOfArgs') ? R.buildAheadOfArgs('/app/wt/lane', 'main') : null
+    parsed = has('parseAheadOf') ? { tab: R.parseAheadOf('1\t3\n'), junk: R.parseAheadOf('fatal: bad\n') } : null
+    const mk = (answers) => R.createReviewEngine({ run: async (argv) => { const key = argv.join(' '); const a = answers.find(([re]) => re.test(key)); return a ? a[1] : { ok: false, stdout: '', stderr: 'unexpected ' + key, notFound: false, status: 1 } }, baselineOf: () => undefined, peersInRepo: () => 0, gitPath: () => '/usr/bin/git' })
+    const good = mk([[/rev-parse --abbrev-ref HEAD/, { ok: true, stdout: 'main\n', stderr: '', notFound: false, status: 0 }], [/rev-list --left-right --count main\.\.\.HEAD/, { ok: true, stdout: '0\t2\n', stderr: '', notFound: false, status: 0 }]])
+    laneOk = await good.laneStatus('/app/wt/lane', '/home/u/repo')
+    const missing = R.createReviewEngine({ run: async () => ({ ok: false, stdout: '', stderr: '', notFound: true, status: -1 }), baselineOf: () => undefined, peersInRepo: () => 0, gitPath: () => null })
+    laneMissing = await missing.laneStatus('/app/wt/lane', '/home/u/repo')
+    const bad = mk([[/rev-parse --abbrev-ref HEAD/, { ok: true, stdout: 'main\n', stderr: '', notFound: false, status: 0 }], [/rev-list/, { ok: false, stdout: '', stderr: 'fatal: bad revision\n', notFound: false, status: 128 }]])
+    laneBad = await bad.laneStatus('/app/wt/lane', '/home/u/repo')
+    const noRoot = mk([[/rev-parse --abbrev-ref HEAD/, { ok: false, stdout: '', stderr: 'fatal: not a git repository\n', notFound: false, status: 128 }]])
+    laneNoRoot = await noRoot.laneStatus('/app/wt/lane', '/home/u/repo')
+  } catch (e) { laneOk = { threw: String(e) } }
+  ok('lane.1 buildAheadOfArgs is rev-list --left-right --count <base>...HEAD in the LANE; parseAheadOf reads left as behind and right as ahead (junk is null); the engine answers lane with the root\'s branch as base, git-missing when git is absent, and unreadable with git\'s own line for a failed count or an unreadable root',
+    args && args.join(' ') === '-C /app/wt/lane rev-list --left-right --count main...HEAD' &&
+      parsed && parsed.tab && parsed.tab.ahead === 3 && parsed.tab.behind === 1 && parsed.junk === null &&
+      laneOk && laneOk.kind === 'lane' && laneOk.base === 'main' && laneOk.ahead === 2 && laneOk.behind === 0 &&
+      laneMissing && laneMissing.kind === 'git-missing' &&
+      laneBad && laneBad.kind === 'unreadable' && /bad revision/.test(laneBad.detail) &&
+      laneNoRoot && laneNoRoot.kind === 'unreadable' && /not a git repository/.test(laneNoRoot.detail),
+    JSON.stringify({ args, parsed, laneOk, laneMissing, laneBad, laneNoRoot }))
+}
+
 // M86 — git.2. AGAINST REAL GIT: a bare remote, a clone with a tracking
 //      branch, commits on both sides, and two worktrees the app "created".
 //      (a) `status` reads ahead 1 / behind 1 from the LOCAL tracking ref after

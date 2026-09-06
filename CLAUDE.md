@@ -75,23 +75,23 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | 205 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | 211 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 17 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
-| `verify:github` | plain node | 5 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
-| `verify:palette` | plain node | 133 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~159 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
-| `verify:review` | plain node | ~97 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
+| `verify:github` | plain node | 7 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
+| `verify:palette` | plain node | 134 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:rail` | plain node | ~164 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:review` | plain node | ~98 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
-| `verify:file` | plain node | 52 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
+| `verify:file` | plain node | 53 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
 | `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
-| `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
+| `verify:control` | plain node | 15 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
-| `verify:agent-session` | plain node | ~89 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
-| `verify:teammates` | plain node | 6 checks (M100) against `shared/places.ts` and `main/places.ts` over a FAKE realpath: `..` walking out of a typed prefix, a symlink inside a place pointing out, a relative/`~`/`./` path refused outright, no places = nothing, a missing path outside, and the gate's named refusal with the fix (and an unknown teammate refused, a request with no teammate untouched); `carryTeammate`/`emptyTeammate` |
+| `verify:agent-session` | plain node | ~103 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
+| `verify:teammates` | plain node | 7 checks (M100, M114) against `shared/places.ts` and `main/places.ts` over a FAKE realpath: `..` walking out of a typed prefix, a symlink inside a place pointing out, a relative/`~`/`./` path refused outright, no places = nothing, a missing path outside, and the gate's named refusal with the fix (and an unknown teammate refused, a request with no teammate untouched); `carryTeammate`/`emptyTeammate` |
 | `verify:electron` | plain node | 4 checks (M112): Electronegativity over `src/` with the installed Electron version pinned (`eneg.1` — without `-e` the tool assumes v0.1.0 defaults, silently), a closed `ACCEPTED` list of seven deliberate findings where a NEW finding fails (`eneg.2`) and a row that stopped firing fails too (`eneg.3` — the sentence beside it now describes nothing), and the webview guest's hardening pinned as text because the tool cannot see the tag (`eneg.4`) |
 | `verify:verbs` | plain node | 13 checks (M96–M97, M103): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
@@ -101,7 +101,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 99 channels as of M103 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 111 channels as of M115 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 9 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | 309 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -179,6 +179,8 @@ renderer --invoke--> teammate:choose-place                                      
 renderer --invoke--> routine:list / routine:save / routine:delete / routine:run   --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer --invoke--> browser:read                                                --> main
+renderer --invoke--> board:lane / board:lane-status                              --> main
+renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer
@@ -195,6 +197,7 @@ main     --send-->   agent:event (batched ~16ms)                                
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
 main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
+main     --send-->   board:add                                                    --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -614,6 +617,33 @@ check does not, and should not, cover it.
   it returns one **detached**. `src/renderer/terminal/session-factory.ts` implements
   `SessionHandle` over `attachTerminal`/`detachTerminal` from the same module, and is what the
   registry's session-factory dependency actually is at runtime.
+
+- `src/shared/work-items.ts` / `src/main/board-lane.ts` / `src/main/board-repo.ts` — M113–M115.
+  The board's record: four states as DATA, two of them the RUNTIME's (`working` from the lane
+  chat's first message start, `review` from a PR opened) and two the user's (`USER_SET_STATES`
+  drives every drop target and verb); the dedupe by key (`upsertWorkItem` keeps what the
+  runtime set); `carryWorkItem` at every by-name copy; `prRefusal` as the ONE list of the PR
+  door's refusals. The record lives on the workspace beside annotations and is absent on disk
+  when empty; it is NOT in history (records like runs and bookmarks, not layout). `tc board`
+  writes nothing in main: the renderer owns the workspace it renders, so main asks it over the
+  ephemeral reply channel `canvas:model` uses (`board:add`, `requestFromRendererWith`).
+  `board-lane.ts` is the dispatch's main half in order — teammate, repository under the
+  places (`board-repo.ts`: a place or its immediate children, by origin), the Places gate on
+  the ROOT (a lane under `userData/worktrees` is outside every place by construction, so the
+  gate's `worktreeRootOf` dep judges it by its record's root and names the root in a refusal),
+  then M37's `ensureForPanel` for the chat's id. `DISPATCH_PROMPT` rides every spawn from
+  `ChatSource.dispatch` (`carryChatMarks` at both copy sites). The edge card → chat is a plain
+  M78 edge labelled `dispatched` with NO automation. `Open PR` is two outward things behind
+  one spend card: `git push -u origin <branch>` in the lane with the user's own credentials
+  (the app holds none for git; `buildPushArgs` is the one push built), then the POST through
+  the broker, never the credential store (`openPullRequest` in `github-client.ts`; 422
+  already-exists → one GET → `exists`). Every outward half is on the manual-only list.
+- `src/renderer/work/WorkNode.tsx` / `src/renderer/shell/BoardPane.tsx` — M116. The twelfth
+  kind (`work`, sessionless, `work: { itemId }` its only identity — the record lives on the
+  workspace, never on the panel) and the Board pane. A dispatched card FOLLOWS its lane: the
+  world layer re-derives its rect from the chat's every render (`anchoredPanels`) and never
+  writes it back; a move of the card drops the anchor. Drop targets exist on the two
+  `USER_SET_STATES` columns only.
 
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different

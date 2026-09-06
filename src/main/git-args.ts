@@ -131,6 +131,30 @@ export function parseAheadBehind(stdout: string): { ahead: number; behind: numbe
   return { ahead, behind }
 }
 
+/**
+ * M115. A dispatched lane's branch has no upstream until it is pushed, so
+ * `HEAD...@{u}` is null for exactly the branch the card asks about. Ask the
+ * lane how far it is past the ROOT's branch instead. Still NO FETCH.
+ */
+export function buildAheadOfArgs(path: string, base: string): string[] {
+  return ['-C', path, 'rev-list', '--left-right', '--count', `${base}...HEAD`]
+}
+
+/** `<base>...HEAD` prints `BEHIND<TAB>AHEAD` — left is the base's side — so the arms are the mirror of parseAheadBehind's. */
+export function parseAheadOf(stdout: string): { ahead: number; behind: number } | null {
+  const parsed = parseAheadBehind(stdout)
+  return parsed === null ? null : { ahead: parsed.behind, behind: parsed.ahead }
+}
+
+/**
+ * M115. The ONE push this app builds: the lane's branch to origin, with the
+ * user's own git credentials (the app holds none for git and passes nothing).
+ * Not a fetch — git.1's rule is about reads that look passive.
+ */
+export function buildPushArgs(path: string, branch: string): string[] {
+  return ['-C', path, 'push', '-u', 'origin', branch]
+}
+
 export function buildWorktreeListArgs(root: string): string[] {
   return ['-C', root, 'worktree', 'list', '--porcelain']
 }

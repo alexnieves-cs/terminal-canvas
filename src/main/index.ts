@@ -1,12 +1,14 @@
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync, readdirSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
-import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
+import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
 import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { buildPushArgs } from './git-args'
+import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
@@ -31,11 +33,11 @@ import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
 import { createBroker } from './broker'
-import { listAssignedWorkItems as listGithubWorkItems } from './github-client'
+import { listAssignedWorkItems as listGithubWorkItems, openPullRequest, commentIssue } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
 import { createBrokerAudit } from './broker-audit'
 import { readVault } from './vault-read'
-import type { ControlCanvasModel } from '../shared/ipc-contract'
+import type { ControlCanvasModel , BoardControlReply, BoardControlRequest } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
@@ -61,7 +63,7 @@ import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type A
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
-import { spawn as spawnChild } from 'node:child_process'
+import { spawn as spawnChild, execFileSync } from 'node:child_process'
 import { watch as fsWatch, realpathSync, type FSWatcher } from 'node:fs'
 import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './watch-runner'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
@@ -563,7 +565,22 @@ const tokenOfPanel = (id: string): string => {
   return t
 }
 const panelOfToken = (token: string): string | undefined => { for (const [id, t] of panelTokens) if (t === token) return id; return undefined }
-const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
+const placesGate = createPlacesGate({
+  realpath: fsRealpath,
+  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+  // M114. A lane under userData/worktrees is judged by the repository it forks.
+  worktreeRootOf: (path) => layoutStore.worktrees().find((w) => w.path === path)?.root
+})
+// M114. The lane a dispatch mints: the repository under the teammate's places
+// (origin read by git, one level deep), the gate on its root, the worktree.
+const boardLane = createBoardLane({
+  gate: placesGate,
+  worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
+  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+  recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+  originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim() || null } catch { return null } },
+  subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+})
 
 /**
  * M85. Main's OWN watch on the vault root, so a note an agent writes into the
@@ -668,6 +685,12 @@ const controlHandler = createControlHandler({
     const wc = mainWindow?.webContents
     if (!wc) return null
     return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
+  },
+  // M113. The board verb asks the renderer, which owns the workspace it renders.
+  board: async (req) => {
+    const wc = mainWindow?.webContents
+    if (!wc) return null
+    return requestFromRendererWith<BoardControlReply | null, BoardControlRequest>(wc, IPC_EVENTS.BOARD_ADD, req, null, 2000)
   },
   // Running sessions only: a dormant card has no session here, and `list`
   // says so in its note.
@@ -1654,7 +1677,26 @@ app.whenReady().then(async () => {
     watcherHandlers,
     // M103. The guest is resolved by the id the node learned on did-attach;
     // main checks it is a webview before reading anything.
-    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
+    {
+      ...boardLane,
+      laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
+      // M115. The return path, in order: the lane's record (ids in, never a
+      // path from the renderer), `git push -u origin <branch>` in the lane
+      // with the USER's own git credentials (the app holds none for git),
+      // then the POST through the broker — whose own write gate asks M102's
+      // spend card on the teammate's chat before the token is read.
+      openPr: async (req) => {
+        const lane = layoutStore.worktrees().find((w) => w.id === req.worktreeId)
+        if (lane === undefined) return { kind: 'no-lane', reason: 'the lane\'s worktree record is gone — check the Worktrees list' }
+        const pushed = await gitRunner(buildPushArgs(lane.path, lane.branch))
+        if (!pushed.ok) return { kind: 'push-failed', reason: pushed.notFound ? 'git could not be run' : (pushed.stderr.split('\n').map((l) => l.trim()).filter((l) => l !== '').find((l) => /^(fatal|error):/i.test(l)) ?? pushed.stderr.trim().split('\n').pop() ?? 'git push failed') }
+        const root = await reviewEngine.status(lane.root)
+        const base = root.kind === 'status' ? root.branch : 'main'
+        return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
+      },
+      commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
+    }
   )
   createWindow()
 

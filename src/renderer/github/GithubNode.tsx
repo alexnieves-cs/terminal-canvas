@@ -26,6 +26,10 @@ export interface GithubNodeProps {
   onBeginDrag: (state: DragState) => void
   onClose: (id: string) => void
   onSpawn: (item: WorkItem) => void
+  /** M113. Add to board — an upsert by the item's key. */
+  onAddToBoard: (item: WorkItem) => void
+  /** M113. Keys already on the board: the row reads `On board`, still pressable. */
+  boardKeys?: ReadonlySet<string>
   readOnly?: boolean
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   linkTarget: boolean
@@ -38,6 +42,15 @@ const isPullRequest = (item: WorkItem): boolean => item.state === 'pull request'
 export function GithubNode(props: GithubNodeProps): JSX.Element {
   const { panel } = props
   const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.github.list>> | null>(null)
+  // M113. `Added` for two seconds, per row — a useState, never a store: the
+  // board's records are the source of truth and this is only the button's
+  // own acknowledgement of a press.
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    if (added.size === 0) return
+    const t = setTimeout(() => setAdded(new Set()), 2000)
+    return () => clearTimeout(t)
+  }, [added])
   const load = (): void => {
     setResult(null)
     void window.canvas.github.list(panel.rect.id).then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'GitHub could not be reached.' }))
@@ -96,6 +109,9 @@ export function GithubNode(props: GithubNodeProps): JSX.Element {
                       <button type="button" className="pf__verb pf__verb--word" data-github-start disabled={props.readOnly === true}
                         title={props.readOnly === true ? 'leave merged view to start' : `Start an agent on ${item.id}`}
                         onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); if (props.readOnly !== true) props.onSpawn(item) }}>Start session</button>
+                      <button type="button" className="pf__verb pf__verb--word" data-work-add={item.id} disabled={props.readOnly === true}
+                        title={props.readOnly === true ? 'leave merged view to add' : `Put ${item.id} on the board — a second press updates it`}
+                        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); if (props.readOnly === true) return; props.onAddToBoard(item); setAdded((s) => new Set(s).add(item.id)) }}>{added.has(item.id) ? 'Added' : props.boardKeys?.has(item.id) ? 'On board' : 'Add to board'}</button>
                       <a className="github-item__link" href={item.url} data-github-link onMouseDown={(e) => e.stopPropagation()}
                         onAuxClick={(e) => { e.preventDefault() }}
                         onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: panel.rect.id, target: item.url }) }}>Open on GitHub</a>

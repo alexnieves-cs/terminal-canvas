@@ -82,7 +82,13 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'close', label: 'Close', args: [panel()], destructive: true, actions: ['closePanel'], target: 'panel', hint: 'close the panel and end its process' },
   { id: 'reset-canvas', label: 'Reset canvas', args: [], destructive: true, actions: ['resetCanvas'], target: 'canvas', hint: 'close every panel on this canvas' },
   { id: 'discard', label: 'Discard changes', args: [panel()], destructive: true, actions: [], target: 'panel', hint: 'discard every change a review node lists' },
-  { id: 'remove-worktree', label: 'Remove worktree', args: [{ name: 'worktree', kind: 'key' }], destructive: true, actions: ['beginRemoveWorktree'], target: 'canvas', hint: 'remove a worktree this app created' }
+  { id: 'remove-worktree', label: 'Remove worktree', args: [{ name: 'worktree', kind: 'key' }], destructive: true, actions: ['beginRemoveWorktree'], target: 'canvas', hint: 'remove a worktree this app created' },
+  // M113/M114. The board's two verbs. `dispatch` is NOT destructive: it spends
+  // nothing itself — the lane is a worktree, the chat is the teammate's, and
+  // the one outward write (Open PR) asks its own spend card and is excluded
+  // below by name.
+  { id: 'dispatch', label: 'Dispatch', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }], destructive: false, actions: ['dispatchWorkItem'], target: 'canvas', hint: 'hand a work item to a teammate in a fresh worktree lane' },
+  { id: 'board', label: 'Board', args: [{ name: 'op', kind: 'key' }, { name: 'what', kind: 'text', rest: true }], destructive: false, actions: ['addWorkItem', 'markDone'], target: 'canvas', hint: 'board add <title> · board done <id>' }
 ]
 
 /**
@@ -91,6 +97,11 @@ export const VERBS: readonly VerbDef[] = [
  * list, so adding an action means choosing.
  */
 export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+  // M113/M115. The board's excluded three.
+  beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
+  openBoard: 'opens a navigator pane — a view, not an action on the canvas',
+  openPr: 'a broker write asks its own spend card — a plan has no teammate to answer it',
+  commentPr: 'a broker write asks its own spend card — a plan has no teammate to answer it',
   beginRenamePreset: 'opens the palette\'s text mode — a plan has no typist',
   deletePreset: 'preset administration is the user\'s, not a plan\'s',
   setDefaultPreset: 'preset administration is the user\'s, not a plan\'s',

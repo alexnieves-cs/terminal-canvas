@@ -78,6 +78,7 @@ const {
   createReviewEngine,
   createGitRunner,
   createWorktreeManager,
+  createBoardLane, createPlacesGate,
   createScrollbackLog,
   createRunLedger,
   createBaselineCapture,
@@ -1262,7 +1263,20 @@ app.whenReady().then(async () => {
     capture: async () => (await win.webContents.capturePage()).toPNG()
   }), agentHandlers, watcherHandlers,
   // M103. The real read over the real guest, the same adapter main/index.ts wires.
-  createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }))
+  createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
+  // M114. The REAL lane over the harness's own worktree manager and a real
+  // Places gate, so dispatch.1 mints a real worktree in a fixture repository.
+  { laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
+    // M115. The harness's PR door never pushes and never reaches GitHub: a fake success with a fixed number, so the record's `pr` and the `review` word can be asserted offline.
+    openPr: async () => ({ kind: 'opened', number: 42, url: 'https://github.com/acme/canvas/pull/42' }), commentPr: async () => ({ kind: 'commented', url: 'https://github.com/acme/canvas/issues/1#issuecomment-1' }),
+    ...createBoardLane({
+    gate: createPlacesGate({ realpath: (p) => realpathSync(p), teammate: (id) => layoutStore.teammates().find((t) => t.id === id), worktreeRootOf: (p) => layoutStore.worktrees().find((w) => w.path === p)?.root }),
+    worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
+    teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+    recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+    originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
+    subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+  }) })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -17982,6 +17996,90 @@ app.whenReady().then(async () => {
     }
 
     /* ---------------------------------------------------------------- */
+    /* M114. Dispatch — the one verb, end to end through the fake runner  */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['dispatch.1 a GitHub item dispatched to a teammate whose place holds a clone of its repository mints a REAL worktree lane (the record names the chat and the worktree, the chat\'s record carries dispatch: true on disk and its cwd is the lane), the chat paints its backend word, the item reads working after the fake runner\'s first turn — never from the click — and closing the lane chat leaves the state working with the note `lane closed` and the panel id kept, never silently back to todo']
+      const cLog = []
+      const onC = (_e, _l, m) => { cLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onC)
+      const repoD = mkdtempSync(join(tmpdir(), 'tc panels board repo '))
+      try {
+        const g = (...args) => execFileSync('git', ['-C', repoD, ...args], { encoding: 'utf8' })
+        g('init', '-q', '.'); g('config', 'user.email', 'v@e.com'); g('config', 'user.name', 'v')
+        writeFileSync(join(repoD, 'a.txt'), 'a\n'); g('add', '-A'); g('commit', '-qm', 'init')
+        g('remote', 'add', 'origin', 'git@github.com:Acme/Canvas.git')
+        layoutStore.saveTeammate({ id: 'tm-ada', name: 'ada', brief: 'You are ada.', places: [repoD], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+        const chatCount = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-chat-status]').length`)
+        const before = await chatCount()
+        const itemId = await wc.executeJavaScript(`window.__m113 ? window.__m113.add({ source: 'github', key: 'acme/canvas#1', title: 'Fix the thing', url: 'https://github.com/acme/canvas/issues/1', description: 'do it' }) : null`)
+        const stateAtClick = await wc.executeJavaScript(`window.__m113 ? (window.__m113.items().find((i) => i.id === ${JSON.stringify(itemId)}) || {}).state : null`)
+        // The card on the canvas FIRST, so the dispatch has a source for its edge.
+        await wc.executeJavaScript(`window.__m113 ? window.__m113.show(${JSON.stringify(itemId)}) : null`)
+        const cardId = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-kind="work"]'); return c ? c.getAttribute('data-panel-id') : false })()`), 4000)
+        await wc.executeJavaScript(`window.__m113 ? window.__m113.dispatch(${JSON.stringify(itemId)}, 'tm-ada') : null`)
+        const chat = await waitUntil(async () => {
+          if ((await chatCount()) !== before + 1) return false
+          return wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-chat-status]')].pop(); if (!p) return false
+            const word = p.querySelector('[data-chat-backend]'); return { id: p.getAttribute('data-panel-id'), backend: word ? word.getAttribute('data-chat-backend') : null } })()`)
+        }, 8000)
+        // The record, on disk: the chat and the worktree named; the lane's record in the worktree list.
+        const recorded = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.panelId && it.worktreeId ? it : false
+        }, 6000)
+        const lane = chat ? layoutStore.worktrees().find((w) => w.panelId === chat.id) : undefined
+        // The edge: card → chat, labelled `dispatched`, with NO automation — a statement, not a trigger.
+        const cardStored = cardId ? (layoutStore.initial().panels || []).find((p) => p.id === cardId) : undefined
+        const edge = cardStored && Array.isArray(cardStored.links) ? cardStored.links.find((l) => chat && l.to === chat.id) : undefined
+        const anchored = recorded && recorded.anchor && chat && recorded.anchor.panelId === chat.id
+        const storedChat = chat ? (layoutStore.initial().panels || []).find((p) => p.id === chat.id) : undefined
+        // `working` comes from the runtime: the fake runner answers the first send, and the first message-start flips the word.
+        const working = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.state === 'working' ? it : false
+        }, 8000)
+        // Close the lane chat through the ordinary close path.
+        if (chat) await wc.executeJavaScript(`window.__m113.close(${JSON.stringify(chat.id)})`)
+        const closed = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.note ? it : false
+        }, 6000)
+        // done is the user's: the verb, then the word.
+        await wc.executeJavaScript(`window.__m113.done(${JSON.stringify(itemId)})`)
+        const done = await waitUntil(() => { layoutStore.flushSync(); const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId); return it && it.state === 'done' ? it : false }, 4000)
+        ok(IDS[0],
+          typeof itemId === 'string' && stateAtClick === 'todo' && typeof cardId === 'string' && chat && chat.backend === 'claude' &&
+            edge && edge.label === 'dispatched' && edge.automation === undefined && anchored &&
+            recorded && recorded.panelId === chat.id && recorded.teammateId === 'tm-ada' && lane !== undefined && recorded.worktreeId === lane.id && realpathSync(lane.root) === realpathSync(repoD) &&
+            storedChat && storedChat.kind === 'chat' && storedChat.chat.dispatch === true && storedChat.chat.teammateId === 'tm-ada' && storedChat.chat.cwd === lane.path &&
+            working && working.state === 'working' &&
+            closed && closed.note === 'lane closed' && closed.state === 'working' && closed.panelId === chat.id && closed.anchor === undefined &&
+            done && done.state === 'done',
+          JSON.stringify({ itemId, stateAtClick, cardId, edge, anchored, done: done && done.state, chat, recorded, lane: lane && { id: lane.id, root: lane.root, path: lane.path }, storedChat: storedChat && storedChat.chat, working: working && working.state, closed, log: cLog.slice(-4) }))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        try { layoutStore.deleteTeammate('tm-ada') } catch {}
+        const reD2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD2
+        await settle()
+      } catch (dErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(dErr && dErr.message || dErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC)
+        try { rmSync(repoD, { recursive: true, force: true }) } catch {}
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
     /* M91. The launcher's verbs as invitations, and the codex door       */
     /* ---------------------------------------------------------------- */
     {
@@ -18472,6 +18570,72 @@ app.whenReady().then(async () => {
         ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true, JSON.stringify({ liveB, flipped, summaryTitle, back, slotBack }))
       } catch (hErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr))
+      }
+    }
+
+    // M116 — board.1. THE BOARD PANE END TO END: seeded records become the
+    // pane's rows (by title); exactly two columns carry `data-board-drop` and
+    // they are the FIRST and the LAST of the four (todo and done — the
+    // user's, read structurally so this file spells no state word); a card
+    // on the canvas carries its item's state in `data-work-state` and the
+    // frame's state pill; a row click moves the CAMERA and leaves the focus
+    // exactly where it was (the minimap's rule — navigating is not
+    // interacting); the item with no card offers Show on canvas.
+    {
+      const IDS = ['board.1 the Board pane lists every seeded item under its state column, marks exactly the first and last columns droppable, a working card carries data-work-state and the state pill, a row click flies the camera without moving the focus, and an uncarded item offers Show on canvas']
+      try {
+        const WORKING = 'working', TODO = 'todo'
+        layoutStore.save({
+          panels: [
+            { id: 'bdT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'lane' },
+            { id: 'bdA', kind: 'work', x: 2400, y: 2400, w: 640, h: 180, z: 2, title: 'Fix the flush gate', work: { itemId: 'wi-a' } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: 'bdT',
+          workItems: [
+            { id: 'wi-a', source: 'github', key: 'acme/canvas#7', title: 'Fix the flush gate', url: 'https://github.com/acme/canvas/issues/7', state: WORKING, teammateId: 'nobody', panelId: 'bdT', createdAt: 10, updatedAt: 20 },
+            { id: 'wi-b', source: 'typed', title: 'Write the release note', state: TODO, createdAt: 5, updatedAt: 6 }
+          ]
+        })
+        flushLayoutStore()
+        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reB
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="board"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const pane = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const p = document.querySelector('[data-board-pane]'); if (!p) return false
+          const cols = [...p.querySelectorAll('[data-board-column]')]
+          if (cols.length !== 4) return false
+          const rowOf = (id) => p.querySelector('[data-board-row="' + id + '"]')
+          const a = rowOf('wi-a'), b = rowOf('wi-b'); if (!a || !b) return false
+          return {
+            columns: cols.map((c) => c.getAttribute('data-board-column')),
+            drops: cols.map((c) => c.hasAttribute('data-board-drop')),
+            aColumn: a.closest('[data-board-column]').getAttribute('data-board-column'),
+            bColumn: b.closest('[data-board-column]').getAttribute('data-board-column'),
+            aLabel: a.querySelector('.rail-row__label')?.textContent ?? null,
+            aTail: a.querySelector('.board-row__facts')?.textContent ?? null,
+            aShow: a.querySelector('[data-board-show]') !== null,
+            bShow: b.querySelector('[data-board-show]') !== null
+          }
+        })()`), 6000)
+        const card = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="bdA"]'); if (!n) return null
+          return { kind: n.getAttribute('data-panel-kind'), state: n.getAttribute('data-work-state'), word: n.querySelector('[data-work-word]')?.textContent ?? null, verbs: [...n.querySelectorAll('[data-work-verb]')].map((v) => [v.getAttribute('data-work-verb'), v.disabled, v.getAttribute('title')]) }
+        })()`)
+        const before = await wc.executeJavaScript(`({ vp: window.__m4aViewport(), focus: window.__m4aFocusedId() })`)
+        await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-board-row="wi-a"] .rail-row__main'); if (r) r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!r })()`)
+        const moved = await waitUntil(() => wc.executeJavaScript(`(() => { const v = window.__m4aViewport(); return (Math.abs(v.x - ${before ? before.vp.x : 0}) > 1 || Math.abs(v.y - ${before ? before.vp.y : 0}) > 1) ? v : false })()`), 3000)
+        const after = await wc.executeJavaScript(`({ vp: window.__m4aViewport(), focus: window.__m4aFocusedId() })`)
+        ok(IDS[0],
+          pane && pane.columns.length === 4 && new Set(pane.columns).size === 4 &&
+            pane.drops.join(',') === 'true,false,false,true' && pane.columns[0] === TODO && pane.columns[1] === WORKING &&
+            pane.aColumn === WORKING && pane.bColumn === TODO && pane.aLabel === 'Fix the flush gate' && /acme\/canvas#7/.test(pane.aTail ?? '') && /lane/.test(pane.aTail ?? '') &&
+            pane.aShow === false && pane.bShow === true &&
+            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 4 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
+          JSON.stringify({ pane, card, before, after, moved }))
+      } catch (bdErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(bdErr && bdErr.message || bdErr))
       }
     }
 

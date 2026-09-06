@@ -92,6 +92,46 @@ const served = (q) => ({ ok: true, status: 200, truncated: false, body: q.path.i
       r && r.kind === 'items' && r.items.length === 1 && r.items[0].description.length === 2000 && typeof r.note === 'string' && /pull request/.test(r.note),
       JSON.stringify(r && { n: r.items && r.items.length, note: r.note })) }
 
+  // M115 — pr.1. OPEN PR THROUGH THE BROKER, literally: one POST to
+  //      /repos/{owner}/{repo}/pulls with the branch, base, title and body,
+  //      the teammate and panel riding so the broker's OWN write gate asks
+  //      M102's spend card; a 422 "already exists" is not a failure — one GET
+  //      finds the open PR for that head and the card gets its number anyway;
+  //      every other arm in the credential rows' words. The comment door is
+  //      the same shape at /issues/{n}/comments.
+  {
+    const req = { repo: 'acme/canvas', head: 'tc/c9-2026', base: 'main', title: 'Fix the thing', body: 'Dispatched from the board.' }
+    const has2 = typeof G.openPullRequest === 'function' && typeof G.commentIssue === 'function'
+    let opened, calls = [], exists, existsCalls = [], noCred, rejected, down, junk, refused, commented, commentCalls = []
+    try {
+      const b1 = broker(() => ({ ok: true, status: 201, truncated: false, body: JSON.stringify({ number: 42, html_url: 'https://github.com/acme/canvas/pull/42' }) }), calls)
+      opened = has2 ? await G.openPullRequest({ broker: b1, panelId: 'c9', teammateId: 'tm-ada' }, req) : null
+      const b2 = broker((q) => q.method === 'POST'
+        ? { ok: true, status: 422, truncated: false, body: JSON.stringify({ message: 'Validation Failed', errors: [{ message: 'A pull request already exists for acme:tc/c9-2026.' }] }) }
+        : { ok: true, status: 200, truncated: false, body: JSON.stringify([{ number: 41, html_url: 'https://github.com/acme/canvas/pull/41' }]) }, existsCalls)
+      exists = has2 ? await G.openPullRequest({ broker: b2 }, req) : null
+      noCred = has2 ? await G.openPullRequest({ broker: broker(() => ({ ok: false, code: 'not-connected', reason: 'not connected — add a github token in ⌘K › Credentials' })) }, req) : null
+      rejected = has2 ? await G.openPullRequest({ broker: broker(() => ({ ok: true, status: 401, truncated: false, body: '{}' })) }, req) : null
+      down = has2 ? await G.openPullRequest({ broker: broker(() => ({ ok: false, reason: 'the request failed — ENOTFOUND' })) }, req) : null
+      junk = has2 ? await G.openPullRequest({ broker: broker(() => ({ ok: true, status: 201, truncated: false, body: '<html>' })) }, req) : null
+      refused = has2 ? await G.openPullRequest({ broker: broker(() => ({ ok: false, code: 'not-answered', reason: 'ada did not approve the write' })) }, req) : null
+      const b3 = broker(() => ({ ok: true, status: 201, truncated: false, body: JSON.stringify({ id: 1, html_url: 'https://github.com/acme/canvas/issues/7#issuecomment-1' }) }), commentCalls)
+      commented = has2 ? await G.commentIssue({ broker: b3, teammateId: 'tm-ada' }, { repo: 'acme/canvas', number: 7, body: 'PR: https://github.com/acme/canvas/pull/42' }) : null
+    } catch (e) { opened = { threw: String(e) } }
+    const post = calls[0]
+    const postBody = post && post.body ? JSON.parse(post.body) : null
+    ok('pr.1 openPullRequest POSTs /repos/{owner}/{repo}/pulls through the broker with title/head/base/body, teammate and panel riding; 201 is opened with number and url; a 422 already-exists is one GET by head and `exists` with the found PR; not-connected, 401, a failed request, an unreadable body and a teammate\'s unanswered write are each their own arm in the credential rows\' words; commentIssue POSTs /issues/{n}/comments',
+      opened && opened.kind === 'opened' && opened.number === 42 && /pull\/42/.test(opened.url) &&
+        post && post.service === 'github' && post.method === 'POST' && post.path === '/repos/acme/canvas/pulls' && post.teammateId === 'tm-ada' && post.panelId === 'c9' &&
+        postBody && postBody.title === req.title && postBody.head === req.head && postBody.base === req.base && postBody.body === req.body &&
+        exists && exists.kind === 'exists' && exists.number === 41 && existsCalls.length === 2 && existsCalls[1].method === 'GET' && /\/repos\/acme\/canvas\/pulls\?/.test(existsCalls[1].path) && /head=acme(%3A|:)tc/.test(existsCalls[1].path) &&
+        noCred && noCred.kind === 'no-credential' && /add a github token/.test(noCred.reason) &&
+        rejected && rejected.kind === 'rejected' && down && down.kind === 'unavailable' && junk && junk.kind === 'malformed' &&
+        refused && refused.kind === 'refused' && /did not approve/.test(refused.reason) &&
+        commented && commented.kind === 'commented' && commentCalls[0] && commentCalls[0].path === '/repos/acme/canvas/issues/7/comments' && commentCalls[0].method === 'POST' && JSON.parse(commentCalls[0].body).body === 'PR: https://github.com/acme/canvas/pull/42',
+      JSON.stringify({ opened, post, exists, existsCalls: existsCalls.map((c) => [c.method, c.path]), noCred, rejected, down, junk, refused, commented }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

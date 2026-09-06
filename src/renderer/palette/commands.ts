@@ -1,3 +1,4 @@
+import type { PersistedWorkItem } from '@shared/work-items'
 import type { Command } from './palette-model'
 import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
@@ -69,7 +70,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -448,6 +449,20 @@ export interface PaletteActions {
   beginBrowser(): void
   /** M106. Flip every terminal to its far view, and back. */
   toggleFlip(): void
+  /** M113. Upsert a board record (the dedupe by key); returns the surviving id. */
+  addWorkItem(item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): string
+  /** M113. The typed door: the palette's text mode asks for a title. */
+  beginNewWorkItem(): void
+  /** M114. The one verb: a lane, a chat as the teammate, an edge meaning dispatched. */
+  dispatchWorkItem(itemId: string, teammateId: string, root?: string): void
+  /** M115. A broker WRITE behind the teammate's spend card — excluded from plans by name. */
+  openPr(itemId: string): void
+  /** M115. The optional comment on the issue after done — the second card. */
+  commentPr(itemId: string): void
+  /** M115. done is the user's. */
+  markDone(itemId: string): void
+  /** M116. Open the navigator on the Board pane. */
+  openBoard(): void
 }
 
 export interface PaletteContext {
@@ -1345,6 +1360,23 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     title: 'Reset canvas…',
     group: 'canvas',
     run: () => actions.resetCanvas()
+  })
+  // M113. The typed door onto the board. A canvas-group row (a panel-group
+  // row competes with Go-to rows by fuzzy score) and never disabled: a typed
+  // item needs no service, no place and no CLI — it is a title on a board.
+  out.push({
+    id: 'board.open',
+    title: 'Open board',
+    searchText: 'board kanban columns todo working review done dispatch',
+    group: 'canvas',
+    run: () => actions.openBoard()
+  })
+  out.push({
+    id: 'board.new',
+    title: 'New work item…',
+    searchText: 'board work item task card todo kanban new',
+    group: 'canvas',
+    run: () => actions.beginNewWorkItem()
   })
 
   // --- Placement (M50) -------------------------------------------------------

@@ -1,5 +1,6 @@
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { AgentState } from '@shared/types'
+import { WORK_ITEM_STATES, type WorkItemState } from '@shared/work-items'
 
 /**
  * M63. THE ONE STATE VOCABULARY.
@@ -21,7 +22,7 @@ import type { AgentState } from '@shared/types'
  */
 
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
-export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser'
+export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work'
 
 export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'exited'
 
@@ -44,6 +45,11 @@ export interface StateInput {
    * answered for yet — which reads `not started`, the honest word.
    */
   watch?: WatchStateInput
+  /**
+   * M116. A work card's item state, from the board's record. Absent when
+   * the record is gone (dropped from the list), which reads as the kind.
+   */
+  work?: { state: WorkItemState }
 }
 
 /** M84. What the vocabulary needs from a watcher's last run. */
@@ -108,6 +114,9 @@ export function panelState(input: StateInput, agent: AgentState | undefined): Pa
   // person reads its pass or fail without opening it — so it speaks the
   // process words and no new one is invented for it.
   if (input.kind === 'watcher') return watchState(input.watch)
+  // M116. A work card speaks its ITEM's state — the one kind whose word is
+  // neither its kind nor a process's, because the card IS the board's row.
+  if (input.kind === 'work') return workState(input.work)
   if (input.kind !== 'terminal') return { word: input.kind, tone: 'kind' }
   if (input.dormant) return { word: 'asleep', tone: 'asleep' }
   const status = input.status
@@ -174,6 +183,26 @@ function watchState(watch: WatchStateInput | undefined): PanelStateWord {
         ? { word: `exited ${watch.signal}`, tone: 'exited' }
         : { word: `exited ${watch.exitCode ?? 0}`, tone: 'exited' }
   }
+}
+
+/**
+ * M116. The item's state in the one vocabulary. The four words are the
+ * record's own (`WORK_ITEM_STATES`), read by INDEX so a renamed state moves
+ * here with it (`verify:rail state.2` bans the `'working'` literal outside
+ * this file; the other three words are read by index here so a rename moves
+ * them too); the tones are the existing four the states mean — a todo is a
+ * document at rest (kind), a working lane works, a review is in flight
+ * elsewhere (`starting`: amber is the attention union's, and a PR waiting on
+ * someone else asks this user for nothing), a done item is idle — so no rule
+ * and no token is new for the card. With no
+ * record the card names its kind, like every document kind.
+ */
+const WORK_TONES: readonly Tone[] = ['kind', 'working', 'starting', 'idle']
+function workState(work: { state: WorkItemState } | undefined): PanelStateWord {
+  if (work === undefined) return { word: 'work', tone: 'kind' }
+  const i = WORK_ITEM_STATES.indexOf(work.state)
+  const word = WORK_ITEM_STATES[i], tone = WORK_TONES[i]
+  return word === undefined || tone === undefined ? { word: 'work', tone: 'kind' } : { word, tone }
 }
 
 function chatState(chat: ChatStateInput | undefined): PanelStateWord {

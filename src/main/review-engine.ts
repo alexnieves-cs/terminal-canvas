@@ -1,3 +1,4 @@
+import type { LaneStatus } from '../shared/review'
 import {
   buildBaselineArgs,
   buildFileDiffArgs,
@@ -19,8 +20,7 @@ import {
   buildCommonDirArgs,
   parseCommonRoot,
   buildWorktreeListArgs,
-  parseWorktreeList
-} from './git-args'
+  parseWorktreeList, buildAheadOfArgs, parseAheadOf } from './git-args'
 import type { RepoStatus, ReviewAcross, ReviewSection, ReviewBaseline, ReviewDiff, ReviewDiffRequest, ReviewFile, ReviewResult } from '@shared/review'
 
 export interface GitResult {
@@ -99,6 +99,8 @@ export interface WorktreeRecordRow {
 export interface ReviewEngine {
   /** M86. The branch and its tracking ref, from the local ref alone. */
   status(root: string): Promise<RepoStatus>
+  /** M115. A lane's ahead/behind of the ROOT's branch — its upstream does not exist until pushed. */
+  laneStatus(path: string, root: string): Promise<LaneStatus>
   /** M86. The main tree, then one section per worktree record; a worktree's diff is since its FORK. */
   reviewAcross(root: string): Promise<ReviewAcross>
   resolveRepo(cwd: string): Promise<RepoAnswer>
@@ -351,6 +353,22 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'status', root, repository, branch, upstream: { name, ...parsed } }
   }
 
+  // M115. The root's branch is the base; the count runs in the LANE. A lane
+  // whose root cannot name a branch is unreadable with git's line, never
+  // `ahead 0` — a confident zero beside real commits is the wrong answer.
+  const laneStatus = async (path: string, root: string): Promise<LaneStatus> => {
+    if (gitMissing) return { kind: 'git-missing' }
+    const branchResult = await run(buildBranchArgs(root))
+    if (gitMissing) return { kind: 'git-missing' }
+    if (!branchResult.ok) return { kind: 'unreadable', detail: firstLine(branchResult.stderr) }
+    const base = trimmed(branchResult.stdout) ?? 'HEAD'
+    const counts = await run(buildAheadOfArgs(path, base))
+    if (gitMissing) return { kind: 'git-missing' }
+    const parsed = counts.ok ? parseAheadOf(counts.stdout) : null
+    if (parsed === null) return { kind: 'unreadable', detail: firstLine(counts.stderr) || 'rev-list gave no counts' }
+    return { kind: 'lane', base, ...parsed }
+  }
+
   /**
    * M86. A worktree's section is its diff since its FORK from the main tree
    * (`merge-base HEAD <root HEAD>` in the worktree), NEVER a panel's baseline:
@@ -415,5 +433,5 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'across', root, sections }
   }
 
-  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross }
+  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus }
 }

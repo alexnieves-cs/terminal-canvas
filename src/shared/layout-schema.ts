@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
 import { parseAnnotations, type Annotation } from './annotations'
+import { parseWorkItems, type PersistedWorkItem } from './work-items'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
@@ -308,6 +309,19 @@ export interface PersistedBrowserPanel extends PersistedPanelBase {
   url: string
 }
 
+/**
+ * M116. The work card — the twelfth kind, sessionless like Jira's. The
+ * record it renders lives on the workspace's `workItems` list and the panel
+ * carries the item's id ALONE: a card that copied the state would be a second
+ * author of a fact the board owns, wrong after the next dispatch. (The
+ * title is the base's, stamped at mint for the rail; nothing reads it as the
+ * item's.) No cwd, no args.
+ */
+export interface PersistedWorkPanel extends PersistedPanelBase {
+  kind: 'work'
+  work: { itemId: string }
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -319,6 +333,7 @@ export type PersistedPanel =
   | PersistedChatPanel
   | PersistedWatcherPanel
   | PersistedBrowserPanel
+  | PersistedWorkPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -423,6 +438,8 @@ export interface CanvasState {
   runs: PersistedRun[]
   /** M93. Notes in the margins. ABSENT on every pre-M93 file and stays absent — never normalised to []. */
   annotations?: Annotation[]
+  /** M113. The board's records. ABSENT on every pre-M113 file and stays absent, for M93's reason. */
+  workItems?: PersistedWorkItem[]
 }
 
 /** M56. A place to come back to: three numbers and a name. */
@@ -696,6 +713,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   // M81. A supervisor keeps its job across a relaunch: the flag is what makes
   // its next spawn carry the system prompt again (the CLI keeps no record).
   if (raw.supervisor === true) chat.supervisor = true
+  // M114. A dispatched lane keeps its prompt across a relaunch, the same way.
+  if (raw.dispatch === true) chat.dispatch = true
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {
@@ -845,6 +864,17 @@ function parsePanel(
       return null
     }
     return { ...base, kind: 'browser', url }
+  }
+  if (kind === 'work') {
+    // M116. The item id is the card's only identity, so an unusable one
+    // drops the PANEL by name: a card naming no record would sit on the
+    // canvas saying "no longer on the board" about an item that never was.
+    const work = (raw as Record<string, unknown>).work
+    if (!isRecord(work) || !isStr(work.itemId) || work.itemId.trim() === '') {
+      warnings.push(`dropped work panel ${id}: work.itemId was not a string`)
+      return null
+    }
+    return { ...base, kind: 'work', work: { itemId: work.itemId } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
@@ -1668,7 +1698,11 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     focusedId: pick(raw.focusedId),
     bookmarks: parseBookmarks(raw.bookmarks, warnings),
     runs: parseRuns(raw.runs, surviving, warnings),
-    ...(() => { const a = parseAnnotations(raw.annotations, surviving, warnings, `workspace ${id}`); return a === undefined ? {} : { annotations: a } })()
+    ...(() => { const a = parseAnnotations(raw.annotations, surviving, warnings, `workspace ${id}`); return a === undefined ? {} : { annotations: a } })(),
+    // M113. Work items are records, not layout: an item naming a panel that
+    // did not survive keeps its id (the note says `lane closed`), so the
+    // parser takes no panel set — unlike annotations, whose anchor is geometry.
+    ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })()
   }
 }
 

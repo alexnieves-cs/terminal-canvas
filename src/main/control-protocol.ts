@@ -34,6 +34,13 @@ export type ControlRequest =
    * verb that can SPEND a credential — refused at the URL door outright.
    */
   | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string; cost?: string; token?: string }
+  /**
+   * M113. The board: READ-WRITE (it adds a record, or marks one done), so the
+   * URL door refuses it like `status`. It writes nothing itself — main asks
+   * the renderer, which owns the workspace it is rendering.
+   */
+  | { verb: 'board'; op: 'add'; title: string }
+  | { verb: 'board'; op: 'done'; id: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -100,6 +107,20 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
         return { kind: 'ok', req }
       }
       return { kind: 'bad', error: `unknown memory op ${JSON.stringify(op)} — use list or add` }
+    }
+    case 'board': {
+      const op = fields['op']
+      if (op === 'add') {
+        const title = optionalString(fields['title'])
+        if (title === null || title === undefined || title.trim() === '') return { kind: 'bad', error: 'board add needs a title' }
+        return { kind: 'ok', req: { verb: 'board', op: 'add', title: title.trim() } }
+      }
+      if (op === 'done') {
+        const id = optionalString(fields['id'])
+        if (id === null || id === undefined) return { kind: 'bad', error: 'board done needs the item id' }
+        return { kind: 'ok', req: { verb: 'board', op: 'done', id } }
+      }
+      return { kind: 'bad', error: `unknown board op ${JSON.stringify(op)} — use add or done` }
     }
     case 'api': {
       const service = optionalString(fields['service'])

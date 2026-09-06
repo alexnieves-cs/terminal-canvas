@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
 import { applyChatEvent, clearChat, getChat, seedChat, setChatGrants } from './chat-store'
-import { SUPERVISOR_PROMPT } from '@shared/agent-session'
+import { DISPATCH_PROMPT, SUPERVISOR_PROMPT } from '@shared/agent-session'
 
 /**
  * M73. The renderer's side of the two lifetimes for a chat panel.
@@ -43,7 +43,7 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
     // M81. A restored SUPERVISOR carries its system prompt again: the CLI
     // keeps no record of an appended prompt, so a resume without it would
     // leave a panel that looks like a supervisor and is not one.
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId }), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : {}) })
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId }), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : panel.chat.dispatch === true ? { appendSystemPrompt: DISPATCH_PROMPT } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {

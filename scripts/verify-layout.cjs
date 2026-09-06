@@ -3073,8 +3073,9 @@ const filePanelOnDisk = (id, over = {}) => ({
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
-  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
-    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates']) &&
+  // M116 added `board` as the seventh.
+  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
       tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
@@ -3622,6 +3623,118 @@ console.log('\n' + '='.repeat(60))
       b3 && b3.title === 'docs' && b3.url === 'https://example.com/docs' &&
       named('b2') && named('b4') && named('b5') && !named('b1') && !named('b3'),
     JSON.stringify({ ids: panels.map((p) => p.id), b1, warnings: out.warnings }))
+}
+
+// M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
+// malformed entry is dropped by name; the cap keeps the newest; the dedupe is
+// by key and never resets a working item; every absent optional stays absent
+// through the carry. The four state words are DATA here, never a provider's
+// string — a board whose column a drag can set is a board that lies.
+{
+  const W = L
+  const good = { id: 'wi1', source: 'github', key: 'acme/canvas#7', title: 'Fix the thing', url: 'https://github.com/acme/canvas/issues/7', state: 'todo', createdAt: 5, updatedAt: 10 }
+  let absent, replaced, dropped, capped
+  const warnings = [], w2 = [], w3 = []
+  try {
+    absent = W.parseWorkItems(undefined, warnings)
+    replaced = W.parseWorkItems('nope', w2)
+    dropped = W.parseWorkItems([good, { ...good, id: 'x', state: 'doing' }, { ...good, id: 'y', source: 'trello' }, { ...good, id: 'z', pr: { number: 'four', url: 'u' } }, { ...good, id: 'ok', pr: { number: 4, url: 'u' } }, 'junk'], w3)
+    const many = Array.from({ length: W.WORK_ITEMS_MAX + 5 }, (_, i) => ({ ...good, id: `m${i}`, key: `k#${i}`, updatedAt: i }))
+    capped = W.parseWorkItems(many, [])
+    ok('work.1 an absent workItems field is undefined with no warning; a non-array is replaced with one warning; an unknown state, an unknown source, a pr with a non-numeric number and a non-object entry each drop their own entry by name and the rest survive; the cap keeps the newest by updatedAt',
+      absent === undefined && warnings.length === 0 && Array.isArray(replaced) && replaced.length === 0 && w2.length === 1
+        && dropped.map((i) => i.id).join(',') === 'wi1,ok' && w3.length === 4 && w3.every((t) => /dropped work item/.test(t))
+        && capped.length === W.WORK_ITEMS_MAX && capped[0].id === `m${W.WORK_ITEMS_MAX + 4}`,
+      JSON.stringify({ absent, replaced, w2, ids: dropped && dropped.map((i) => i.id), w3, cappedFirst: capped && capped[0] && capped[0].id }))
+  } catch (e) { ok('work.1 (threw)', false, String(e)) }
+  try {
+    const one = W.upsertWorkItem([], { ...good }, 100)
+    const again = W.upsertWorkItem(one.map((i) => ({ ...i, state: 'working', panelId: 'n9' })), { ...good, title: 'Fix the thing (edited)', remoteState: 'open' }, 200)
+    const typedA = W.upsertWorkItem([], { id: 't1', source: 'typed', title: 'same', state: 'todo' }, 1)
+    const typedB = W.upsertWorkItem(typedA, { id: 't2', source: 'typed', title: 'same', state: 'todo' }, 2)
+    ok('work.2 upsert by key updates title/remoteState/updatedAt and keeps state, panelId and createdAt — adding twice never duplicates and never resets a working item; two typed items with one title are two items',
+      one.length === 1 && one[0].createdAt === 100 && again.length === 1 && again[0].title === 'Fix the thing (edited)' && again[0].state === 'working' && again[0].panelId === 'n9' && again[0].createdAt === 100 && again[0].updatedAt === 200 && again[0].remoteState === 'open' && typedB.length === 2,
+      JSON.stringify({ one, again, typedB }))
+  } catch (e) { ok('work.2 (threw)', false, String(e)) }
+  try {
+    const bare = { id: 'b', source: 'typed', title: 'bare', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const carried = W.carryWorkItem(bare)
+    const full = { ...bare, key: 'K', url: 'u', description: 'd', remoteState: 'r', teammateId: 't', panelId: 'p', worktreeId: 'w', pr: { number: 1, url: 'pu' }, note: 'n', anchor: { panelId: 'p', dx: 1, dy: 2 } }
+    const carriedFull = W.carryWorkItem(full)
+    ok('work.3 carryWorkItem writes exactly the six required keys for a bare item and every present optional for a full one, never an undefined key, with pr and anchor as fresh objects',
+      Object.keys(carried).sort().join(',') === 'createdAt,id,source,state,title,updatedAt' && JSON.stringify(carriedFull) === JSON.stringify(full) && carriedFull.pr !== full.pr && carriedFull.anchor !== full.anchor,
+      JSON.stringify({ keys: Object.keys(carried), carriedFull }))
+  } catch (e) { ok('work.3 (threw)', false, String(e)) }
+  // The workspace: absent stays absent ON DISK, and a list round-trips.
+  try {
+    const parsedAbsent = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }], activeWorkspaceId: 'w1' }))
+    const parsedWith = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, workItems: [good, 'junk'] }], activeWorkspaceId: 'w1' }))
+    const wsA = parsedAbsent.snapshot.workspaces[0], wsB = parsedWith.snapshot.workspaces[0]
+    ok('work.1.b the workspace parse keeps workItems ABSENT for a pre-M113 file and carries a list through the ONE parser with the junk entry dropped by name',
+      !('workItems' in wsA) && Array.isArray(wsB.workItems) && wsB.workItems.length === 1 && wsB.workItems[0].key === 'acme/canvas#7' && parsedWith.warnings.some((t) => /dropped work item/.test(t)),
+      JSON.stringify({ wsAKeys: Object.keys(wsA), wsB: wsB.workItems, warnings: parsedWith.warnings }))
+  } catch (e) { ok('work.1.b (threw)', false, String(e)) }
+}
+
+// M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE
+// function every Open PR button and the palette row read, so the five arms
+// are named once: no lane, nothing ahead, a source with no repository, GitHub
+// not connected (the credential rows' own sentence), the teammate lacking
+// the github service. And a `pr` field survives the carry.
+{
+  const W = L
+  const base = { id: 'w', source: 'github', key: 'acme/canvas#1', title: 't', state: 'todo', createdAt: 1, updatedAt: 1, teammateId: 't1', panelId: 'c1', worktreeId: 'wt1' }
+  const mate = { id: 't1', name: 'ada', brief: '', places: ['/r'], services: ['github'], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+  let okArm, noLane, zero, jira, notConnected, noService, carried
+  try {
+    const lane = { kind: 'lane', base: 'main', ahead: 2, behind: 0 }
+    okArm = W.prRefusal(base, lane, true, mate)
+    noLane = W.prRefusal({ ...base, panelId: undefined, worktreeId: undefined }, undefined, true, mate)
+    zero = W.prRefusal(base, { ...lane, ahead: 0 }, true, mate)
+    jira = W.prRefusal({ ...base, source: 'jira', key: 'PROJ-1' }, lane, true, mate)
+    notConnected = W.prRefusal(base, lane, false, mate)
+    noService = W.prRefusal(base, lane, true, { ...mate, services: [] })
+    carried = W.carryWorkItem({ ...base, pr: { number: 4, url: 'https://github.com/acme/canvas/pull/4' } })
+  } catch (e) { okArm = String(e) }
+  ok('work.4 prRefusal answers null when a lane is ahead, GitHub is connected and the teammate may spend github; and names no lane, nothing ahead of the base, a source with no repository, not connected (the credential rows\' sentence) and a teammate without the github service each by its own sentence; a pr field is carried',
+    okArm === null && typeof noLane === 'string' && /lane/.test(noLane) && typeof zero === 'string' && /ahead|commits/.test(zero) && /main/.test(zero) &&
+      typeof jira === 'string' && /jira/.test(jira) && typeof notConnected === 'string' && /github token/.test(notConnected) &&
+      typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Teammates pane/.test(noService) &&
+      carried && carried.pr && carried.pr.number === 4,
+    JSON.stringify({ okArm, noLane, zero, jira, notConnected, noService, pr: carried && carried.pr }))
+}
+
+// M116 — work.5. THE TWELFTH KIND ON DISK. A work card is `kind: 'work'`
+// plus `work: { itemId }` and nothing else — no cwd and no args, like every
+// sessionless kind, so the terminal reader cannot mistake it for a process.
+// The itemId is the card's ONLY identity (the record it renders lives on the
+// workspace's workItems list, never on the panel), so a missing or non-string
+// one is a malformed panel dropped BY NAME with the neighbours kept — a card
+// that names no item would sit on the canvas saying `no longer on the board`
+// about an item that never existed. An absent title stays absent.
+{
+  try {
+    const out = L.parseLayout(JSON.stringify({
+      workspaces: [{ id: 'w1', name: 'Main', panels: [
+        { id: 'k1', kind: 'work', x: 1, y: 2, w: 640, h: 180, z: 3, work: { itemId: 'wi-7' } },
+        { id: 'k2', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 4, work: { itemId: 7 } },
+        { id: 'k3', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 5, title: 'Fix the thing', work: { itemId: 'wi-8' } },
+        { id: 'k4', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 6 },
+        { id: 'k5', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 7, work: { itemId: '' } },
+        { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 8, cwd: '~', args: [] }
+      ] }],
+      activeWorkspaceId: 'w1'
+    }))
+    const panels = out.snapshot.workspaces[0].panels
+    const named = (id) => out.warnings.some((w) => w.includes(id))
+    const k1 = panels.find((p) => p.id === 'k1'), k3 = panels.find((p) => p.id === 'k3')
+    ok('work.5 a work panel round-trips as kind + work.itemId with no cwd/args and an absent title kept absent; a numeric, an empty and a missing itemId each drop their own panel by name; the neighbours survive',
+      panels.length === 3 && panels.map((p) => p.id).join(',') === 'k1,k3,n1' &&
+        k1 && k1.kind === 'work' && k1.work && k1.work.itemId === 'wi-7' && Object.keys(k1.work).length === 1 && !('title' in k1) && !('cwd' in k1) && !('args' in k1) &&
+        k3 && k3.title === 'Fix the thing' && k3.work.itemId === 'wi-8' &&
+        named('k2') && named('k4') && named('k5') && !named('k1') && !named('k3'),
+      JSON.stringify({ ids: panels.map((p) => p.id), k1, warnings: out.warnings }))
+  } catch (e) { ok('work.5 (threw)', false, String(e)) }
 }
 
 const failed = results.filter((r) => !r.pass)

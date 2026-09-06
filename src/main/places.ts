@@ -16,6 +16,12 @@ import type { PersistedTeammate } from '@shared/teammates'
 export interface PlacesGateDeps {
   realpath: Realpath
   teammate: (id: string) => PersistedTeammate | undefined
+  /**
+   * M114. The repository a worktree LANE forks, by the lane's path; undefined
+   * for a path that is no lane. A lane lives under `userData/worktrees`,
+   * outside every place by construction, so the gate judges it by its root.
+   */
+  worktreeRootOf?: (path: string) => string | undefined
 }
 
 export type PlacesAnswer = { ok: true } | { ok: false; reason: string }
@@ -30,8 +36,12 @@ export function createPlacesGate(deps: PlacesGateDeps): PlacesGate {
       if (teammateId === undefined) return { ok: true }
       const t = deps.teammate(teammateId)
       if (t === undefined) return { ok: false, reason: `no teammate is called ${teammateId} — it may have been deleted; open the Teammates pane` }
-      if (insidePlace(path, t.places, deps.realpath)) return { ok: true }
-      return { ok: false, reason: placeRefusal(t.name, path) }
+      // M114. A lane is judged by the repository it forks; the refusal names
+      // that root, because "add /Library/…/worktrees/lane to ada's places"
+      // is a fix nobody should ever apply.
+      const subject = deps.worktreeRootOf?.(path) ?? path
+      if (insidePlace(subject, t.places, deps.realpath)) return { ok: true }
+      return { ok: false, reason: placeRefusal(t.name, subject) }
     }
   }
 }

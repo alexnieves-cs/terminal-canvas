@@ -87,13 +87,12 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
-  type Panel, type TerminalPanel as TerminalPanelModel
-} from '@renderer/panels/panels'
+  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, setLinkLabel, CHAT_W } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
 import { shellQuote } from '@renderer/shell/file-tree-model'
@@ -106,7 +105,7 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
-import { getChat, insertIntoComposer, attachToComposer } from '@renderer/chat/chat-store'
+import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
@@ -114,12 +113,13 @@ import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/u
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
-import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
+import { DISPATCH_PROMPT, SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
+import { WorkNode } from '@renderer/work/WorkNode'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -138,6 +138,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
+import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -211,6 +212,11 @@ function edgeWord(automation: LinkAutomation): string {
   return TRIGGER_WORDS[automation.trigger]
 }
 
+/** M114. The item a work card renders, or undefined for every other kind. */
+function workCardItemId(p: Panel): string | undefined {
+  return isWorkPanel(p) ? p.work.itemId : undefined
+}
+
 export function Canvas({
   initial,
   liveSessionIds,
@@ -254,6 +260,24 @@ export function Canvas({
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
   const annotationsRef = useRef(annotations)
   annotationsRef.current = annotations
+  // M113. The board's records: saved with the workspace, absent on disk when
+  // empty, and NOT in history — records like runs and bookmarks, not layout.
+  const [workItems, setWorkItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
+  const workItemsRef = useRef(workItems)
+  workItemsRef.current = workItems
+  // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
+  const markLaneClosed = useCallback((chatId: string) => {
+    setWorkItems((current) => current.some((i) => i.panelId === chatId)
+      ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
+      : current)
+  }, [])
+  // M114. `working` from the RUNTIME: the lane chat's first message start.
+  useEffect(() => onChatTurnStart((chatId) => {
+    setWorkItems((current) => current.some((i) => i.panelId === chatId && i.state === WORK_ITEM_STATES[0])
+      ? current.map((i) => (i.panelId === chatId && i.state === WORK_ITEM_STATES[0] ? carryWorkItem({ ...i, state: WORK_ITEM_STATES[1] as PersistedWorkItem['state'], updatedAt: Date.now() }) : i))
+      : current)
+  }), [])
   // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
   // or the strip's Done. A selected note is the canvas's, like a selected
   // edge; the editing note is the one whose input is open.
@@ -324,7 +348,22 @@ export function Canvas({
    * one's — producing a well-formed layout.json with wrong coordinates in
    * it, found launches later with nothing naming the drag that caused it.
    */
-  const displayPanels = merged && mergedView ? mergedView.panels : panels
+  // M114. A dispatched card FOLLOWS its lane: its rect is re-derived from the
+  // lane chat's every render (an M93 panel anchor, reached from the other
+  // side) and never written back — the record keeps the offset, the panel
+  // keeps the rect it had, and a drag of the card clears the anchor.
+  const anchoredPanels = useMemo(() => {
+    if (workItems.every((i) => i.anchor === undefined)) return panels
+    return panels.map((p) => {
+      const itemId = workCardItemId(p)
+      if (itemId === undefined) return p
+      const item = workItems.find((i) => i.anchor !== undefined && i.id === itemId)
+      const lane = item?.anchor === undefined ? undefined : panels.find((q) => q.rect.id === item.anchor?.panelId)
+      if (item?.anchor === undefined || lane === undefined) return p
+      return { ...p, rect: { ...p.rect, x: lane.rect.x + item.anchor.dx, y: lane.rect.y + item.anchor.dy } }
+    })
+  }, [panels, workItems])
+  const displayPanels = merged && mergedView ? mergedView.panels : anchoredPanels
   // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
   // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
   // after a pan would turn ordinary navigation into motion. The id is removed
@@ -561,11 +600,31 @@ export function Canvas({
     onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
   const spawnJiraTicket = useCallback((item: WorkItem) => spawnWorkItem(item, 'Jira ticket'), [spawnWorkItem])
+  // M113. `Add to board` on a work panel's row. The key is the provider's own
+  // id (`owner/repo#N`, `PROJ-12`) — the identity the dedupe reads, so a
+  // second press updates rather than duplicates. Declared after the palette
+  // memo exists (it calls addWorkItem), which is why these are functions of
+  // a ref rather than closures over paletteActions.
+  const addToBoardRef = useRef<(item: WorkItem, source: 'github' | 'jira') => void>(() => undefined)
+  const addGithubToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'github'), [])
+  // M113. The keys already on the board, so a row reads `On board` (still pressable — a second press updates).
+  const boardKeys = useMemo(() => new Set(workItems.flatMap((i) => (i.key === undefined ? [] : [i.key]))), [workItems])
+  const addJiraToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'jira'), [])
   const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
   const openGithubPanel = useCallback(() => {
     const id = `g${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeGithubPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
   }, [commitHistory])
+  // M116. A work card for an item, at the viewport's centre. The title is
+  // the item's at mint (the rail's `work · <title>`); a card for an item the
+  // board does not hold is refused by name — it would render "no longer on
+  // the board" from its first frame.
+  const spawnWorkCard = useCallback((itemId: string): void => {
+    const item = workItems.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const id = `k${nextIdRef.current++}`
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), item.id, item.title)]; commitHistory(next); return next })
+  }, [commitHistory, workItems])
   const openJiraPanel = useCallback(() => {
     const id = `j${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
@@ -1120,6 +1179,18 @@ export function Canvas({
   useEffect(() => window.canvas.canvas.onFlip(() => setFlipped((v) => !v)), [])
   // `paletteActionsRef` is the existing ref, assigned after the actions are built; read inside the listener only.
   useEffect(() => window.canvas.canvas.onTidy(() => paletteActionsRef.current?.tidyPanels(panelsRef.current.map((p) => p.rect.id))), [])
+  // M113. `tc board add/done`: the renderer answers because it OWNS the
+  // workspace it renders — a main-side write would be overwritten by the next
+  // coalesced save. Answered synchronously from refs, like the model.
+  useEffect(() => window.canvas.canvas.onBoard((req) => {
+    const actions = paletteActionsRef.current
+    if (actions === null || actions === undefined) return { kind: 'refused', reason: 'the canvas is still starting' }
+    if (req.op === 'add') return { kind: 'ok', id: actions.addWorkItem({ source: 'typed', title: req.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] }) }
+    const item = workItemsRef.current.find((i) => i.id === req.id)
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${req.id} — tc status lists the board` }
+    actions.markDone(req.id)
+    return { kind: 'ok', id: req.id }
+  }), [])
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -1502,6 +1573,7 @@ export function Canvas({
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
         disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
+        markLaneClosed(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1786,6 +1858,10 @@ export function Canvas({
         commitHistory(current)
         return current
       })
+      // M114. A card the user MOVED chose its own place: its anchor to the
+      // lane is dropped, or the next render would snap it back beside the chat.
+      const movedCards = states.filter((state) => state.mode.kind === 'move').map((state) => workCardItemId(panelsRef.current.find((p) => p.rect.id === state.panelId) ?? ({ kind: 'terminal' } as unknown as Panel))).filter((id): id is string => id !== undefined)
+      if (movedCards.length > 0) setWorkItems((current) => current.map((i) => (movedCards.includes(i.id) && i.anchor !== undefined ? carryWorkItem({ ...i, anchor: undefined }) : i)))
       // A move changes no terminal dimension, so it has nothing to commit.
       const resized = states.filter((state) => state.mode.kind === 'resize')
       if (resized.length === 0) return
@@ -1937,6 +2013,9 @@ export function Canvas({
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
       disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
+      // M114. The lane's card stays, its state stays: `lane closed` is a note,
+      // never a silent trip back to todo.
+      markLaneClosed(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -2249,9 +2328,10 @@ export function Canvas({
       focusedId: merged && before ? before.focusedId : focusedId,
       bookmarks,
       runs,
-      ...(annotations.length === 0 ? {} : { annotations })
+      ...(annotations.length === 0 ? {} : { annotations }),
+      ...(workItems.length === 0 ? {} : { workItems })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -3104,6 +3184,17 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M113/M114. The board's doors for verify:panels — the SAME verbs the
+    // palette rows and the card call, through the palette ref.
+    w.__m113 = {
+      add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
+        paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
+      dispatch: (itemId: string, teammateId: string, root?: string): void => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root),
+      items: (): PersistedWorkItem[] => workItemsRef.current,
+      close: (id: string): void => onClosePanel(id),
+      show: (itemId: string): void => spawnWorkCard(itemId),
+      done: (itemId: string): void => paletteActionsRef.current?.markDone(itemId)
+    }
     // M59. The drop door, by screen point — see dropPath.
     // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
     // and subtracts the host's origin, exactly as the real onDrop does — the
@@ -3747,6 +3838,118 @@ export function Canvas({
     return { kind: 'spawned', id }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat
+  /**
+   * M114. DISPATCH — the one verb. In order, each step refusing by name into
+   * the record's `note` and minting nothing when it does: main's `board:lane`
+   * (the repository under the teammate's places, the gate on its root, the
+   * worktree), then `agent:create` in the lane as the teammate under
+   * DISPATCH_PROMPT, then the chat panel beside the card with a plain edge
+   * labelled `dispatched` (no trigger — the edge is a statement, not an
+   * automation), then the first message SENT (a dispatch is a hand-off, not
+   * a draft — the M80 insert rule is for templates a person finishes). The
+   * state stays `todo` here: `working` is the runtime's word (the turn-start
+   * effect above), never the click's.
+   */
+  const dispatchWorkItem = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<void> => {
+    if (mergedRef.current) return
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) =>
+      setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
+    const chatId = `c${nextIdRef.current++}`
+    const repo = item.key === undefined ? null : repoOfKey(item.key)
+    const lane = await window.canvas.board.lane({ itemId, chatPanelId: chatId, teammateId, ...(repo === null ? {} : { repo }), ...(root === undefined ? {} : { root }) })
+    if (lane.kind === 'refused') { patch({ note: lane.reason }); return }
+    const sessionId = crypto.randomUUID()
+    const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
+    if (created.kind === 'refused') { patch({ note: created.reason }); return }
+    const GAP = 48
+    // The card and the offset are computed HERE, from the ref, not inside the
+    // updater: React runs the updater after this function's next line, and
+    // the first cut assigned the anchor inside it — the record was patched
+    // with no anchor every time, and the check said so.
+    const before = panelsRef.current
+    const card = before.find((p) => workCardItemId(p) === itemId)
+    const centre = card === undefined
+      ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
+      : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
+    const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true }), title: item.key ?? item.title }
+    const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
+    setPanels((current) => {
+      let next: Panel[] = [...current, { ...chatPanel, z: nextZ(current) }]
+      if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
+      commitHistory(next)
+      return next
+    })
+    // A re-dispatch of a done or review item starts over: todo now, working when the lane's first turn says so.
+    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: undefined, anchor, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+    selectOnly(chatId)
+    const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
+    const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
+    await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
+  }, [commitHistory, selectOnly])
+  boardVerbsRef.current.dispatch = (itemId, teammateId, root) => { void dispatchWorkItem(itemId, teammateId, root) }
+  /**
+   * M115. THE RETURN PATH. `openPr` refuses by name through `prRefusal` (the
+   * one function the card's disabled title also reads) BEFORE main is asked;
+   * main pushes the lane and POSTs through the broker, whose write gate asks
+   * the teammate's spend card. `opened` and `exists` alike give the card its
+   * `pr` and the state `review` — the runtime's word, from the event. Every
+   * refusal lands in the record's `note`, where the card shows it.
+   */
+  const patchWorkItem = useCallback((itemId: string, fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) => {
+    setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
+  }, [])
+  const openPr = useCallback(async (itemId: string): Promise<void> => {
+    if (mergedRef.current) return
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const mate = item.teammateId === undefined ? undefined : teammatesRef.current?.find((t) => t.id === item.teammateId)
+    const connected = credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined)
+    const lanes = await window.canvas.worktree.list()
+    const lane = lanes.find((w) => w.id === item.worktreeId)
+    const standing = lane === undefined ? undefined : await window.canvas.board.laneStatus({ path: lane.path, root: lane.root })
+    const refusal = prRefusal(item, standing, connected, mate)
+    if (refusal !== null || lane === undefined || item.teammateId === undefined || item.panelId === undefined || item.key === undefined) { patchWorkItem(itemId, { note: refusal ?? 'no lane yet — dispatch the item first' }); return }
+    const repo = repoOfKey(item.key)
+    if (repo === null) return
+    const body = [`Dispatched from the Terminal Canvas board.`, item.url === undefined ? '' : `Closes ${item.url}`, item.description ?? ''].filter((l) => l !== '').join('\n\n')
+    const result = await window.canvas.board.openPr({ itemId, panelId: item.panelId, teammateId: item.teammateId, worktreeId: lane.id, repo, title: item.title, body })
+    if (result.kind === 'opened' || result.kind === 'exists') {
+      patchWorkItem(itemId, { pr: { number: result.number, url: result.url }, state: WORK_ITEM_STATES[2] as PersistedWorkItem['state'], note: undefined })
+      return
+    }
+    if ('reason' in result) patchWorkItem(itemId, { note: `${result.kind === 'push-failed' ? 'push failed — ' : ''}${result.reason}` })
+  }, [credentialRows, patchWorkItem])
+  const commentPr = useCallback(async (itemId: string): Promise<void> => {
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined || item.pr === undefined || item.key === undefined || item.panelId === undefined || item.teammateId === undefined) return
+    const repo = repoOfKey(item.key)
+    const number = /#(\d+)$/.exec(item.key)
+    if (repo === null || number === null) return
+    const result = await window.canvas.board.commentPr({ panelId: item.panelId, teammateId: item.teammateId, repo, number: Number(number[1]), body: `Pull request: ${item.pr.url}` })
+    // A success is not a note (a note is what went wrong, or what to do next); the refusal is.
+    patchWorkItem(itemId, { note: result.kind === 'commented' ? undefined : result.reason })
+  }, [patchWorkItem])
+  /**
+   * M115. `done` is the USER's. On a GitHub item with a PR the comment is
+   * offered as a second card and declining it still marks done. A Jira item
+   * marks done here and moves in Jira from its ticket row (M24's transition
+   * list) — recorded as the owed follow-up rather than a second Jira write.
+   */
+  const markDone = useCallback((itemId: string): void => {
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const laneOpen = item.panelId !== undefined && item.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === item.panelId)
+    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'], note: laneOpen ? 'lane still open — close the chat to stop it' : undefined })
+    if (item.source === 'github' && item.pr !== undefined) {
+      setInputMode({ kind: 'confirm', label: `Comment the PR on ${item.key ?? 'the issue'}?`, initial: '', submit: () => { void commentPr(itemId) } })
+      palette.openPalette()
+    }
+  }, [patchWorkItem, commentPr, palette])
+  boardVerbsRef.current.openPr = (itemId) => { void openPr(itemId) }
+  boardVerbsRef.current.commentPr = (itemId) => { void commentPr(itemId) }
+  boardVerbsRef.current.markDone = markDone
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -4097,8 +4300,12 @@ export function Canvas({
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput, openBrowserPanel,
-    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v)
+    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v),
+    workItemsRef, setWorkItems, boardVerbsRef
   })
+  addToBoardRef.current = (item, source) => {
+    paletteActions.addWorkItem({ source, key: item.id, title: item.title, url: item.url, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...(item.description === '' ? {} : { description: item.description }), ...(item.state === null ? {} : { remoteState: item.state }) })
+  }
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
   // changes, so handing `paletteActions.removeLink` straight to LinkLayer
@@ -4186,7 +4393,9 @@ export function Canvas({
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId, globalFontSize
+    workspaceRows, waitingIds, selectedId, globalFontSize,
+    // M116. A work card's row speaks its item's state; absent when the board is empty.
+    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) })
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -4251,6 +4460,43 @@ export function Canvas({
   })()
   // M100. The Teammates pane's model. Every write goes to main and reloads
   // the roster from the answer — never an optimistic local flip.
+  // M116. The Board pane's model. A row click flies through `centreOn` and
+  // NOTHING else — no focus, no raise (the minimap's rule: navigating is not
+  // interacting). A drop sets a state the USER may set and refuses the rest
+  // by the record's own list, so the pane's drop targets and this setter
+  // agree by construction. The card set is a signature so a drag's 60Hz
+  // rect churn does not rebuild the pane's props.
+  const cardItemIds = panels.filter(isWorkPanel).map((p) => p.work.itemId).sort().join('\u0000')
+  // M116. A drop on a user-set column. `done` goes through the SAME verb the
+  // card's button and `tc board done` reach (the PR-comment offer included);
+  // a drop that leaves a lane mid-turn says so in the note rather than
+  // pretending the runtime stopped — the next turn will say `working` again.
+  const setWorkItemState = useCallback((itemId: string, state: WorkItemState): void => {
+    if (!USER_SET_STATES.includes(state)) return
+    if (state === WORK_ITEM_STATES[3]) { markDone(itemId); return }
+    setWorkItems((current) => current.map((i) => {
+      if (i.id !== itemId) return i
+      const laneOpen = i.panelId !== undefined && i.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === i.panelId)
+      return carryWorkItem({ ...i, state, ...(laneOpen ? { note: 'lane still open — close the chat to stop it' } : {}), updatedAt: Date.now() })
+    }))
+  }, [markDone])
+  const goToWorkItem = useCallback((itemId: string): void => {
+    const card = panelsRef.current.find((p): p is WorkPanelModel => isWorkPanel(p) && p.work.itemId === itemId)
+    if (card !== undefined) centreOn(card.rect)
+  }, [centreOn])
+  const boardPaneProps = useMemo(() => {
+    const cards = new Set(cardItemIds.split('\u0000'))
+    return {
+      items: workItems,
+      teammates: teammates ?? [],
+      laneLabelOf: (panelId: string) => railRows.find((r) => r.id === panelId)?.label,
+      hasCard: (itemId: string) => cards.has(itemId),
+      onGoTo: goToWorkItem,
+      onSetState: setWorkItemState,
+      onShowOnCanvas: spawnWorkCard,
+      onToggle: chrome.toggleNavigator
+    }
+  }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator])
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
     teammates: teammates ?? [],
@@ -4263,6 +4509,7 @@ export function Canvas({
     },
     onSave: (t: PersistedTeammate) => { void window.canvas.teammate.save(t).then(reloadTeammates) },
     onDelete: (id: string) => { void window.canvas.teammate.remove(id).then(() => { reloadTeammates(); setSelectedTeammateId(null) }) },
+    onDispatch: (itemId: string, teammateId: string) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId),
     onAddPlace: (id: string) => {
       void window.canvas.teammate.choosePlace().then((folder) => {
         if (folder === null) return
@@ -4363,6 +4610,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
+        board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
         navigator={chrome.navigator}
@@ -4663,8 +4911,31 @@ export function Canvas({
                 />
               )
             }
-            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} onAddToBoard={addGithubToBoard} boardKeys={boardKeys} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            // M116. The work card: the record by id from the board's list, the
+            // lane's rail label (the chat the item was dispatched to, when it
+            // is still here), the roster for Assign. The verbs are Track A's
+            // (M114/M115) and arrive as props after the merge; absent they
+            // render disabled by name.
+            if (isWorkPanel(panel)) {
+              const item = workItems.find((i) => i.id === panel.work.itemId)
+              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
+                // M114/M115. The verbs, through the SAME palette members the rows call.
+                onDispatch={(itemId, teammateId) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId)}
+                teammateReason={teammateRefusal}
+                onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
+                prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}
+                onReview={(itemId) => {
+                  const it = workItemsRef.current.find((i) => i.id === itemId)
+                  if (it?.panelId === undefined) return
+                  // A closed lane keeps its panel id (the note says so); the review of its worktree is one door over.
+                  if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still listed under Review every worktree' }); return }
+                  openReviewAcross(it.panelId)
+                }}
+                onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
+            }
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

@@ -29,5 +29,9 @@ module.exports = {
   auto: require('../src/shared/auto'),
   /* M99. The backend registry, and the capability table derived from it. */
   backends: require('../src/shared/agent-backends'),
+  /* M114. ChatSource's carry for the dispatch mark. */
+  chatPanel: require('../src/shared/chat-panel'),
+  /* M114. DISPATCH_PROMPT lives beside SUPERVISOR_PROMPT in the shared module. */
+  sharedSession: require('../src/shared/agent-session'),
   cost: require('../src/shared/cost')
 }

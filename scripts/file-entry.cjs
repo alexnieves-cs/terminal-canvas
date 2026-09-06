@@ -41,5 +41,8 @@ module.exports = {
   ...require('../src/shared/browser-panel.ts'),
   ...require('../src/main/browser-read.ts'),
   /* M112. Telemetry's decision and its scrubber: pure over injected paths. */
-  ...require('../src/main/telemetry.ts')
+  ...require('../src/main/telemetry.ts'),
+  /* M114. The lane: pure over injected origin/subdir readers, a fake gate and a fake worktree manager. */
+  ...require('../src/main/board-repo.ts'),
+  ...require('../src/main/board-lane.ts')
 }

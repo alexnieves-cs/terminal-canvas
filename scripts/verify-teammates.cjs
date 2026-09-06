@@ -93,6 +93,28 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
         unknown.ok === false && /t9/.test(unknown.reason) && noId.ok === true,
       JSON.stringify({ okAns, bad, unknown, noId }))
   }
+  // M114 — dispatch.1. THE LANE RULE. A worktree lane lives under
+  // userData/worktrees, outside every place BY CONSTRUCTION; the place that
+  // matters is the repository the lane forks. The gate judges a known lane
+  // by its record's ROOT and names the root, never the lane path, in a
+  // refusal — a sentence about /Library/Application Support/… would send the
+  // user to add a folder no teammate should ever have.
+  {
+    const ada = { id: 't1', name: 'ada', brief: 'x', places: ['/home/u/work'], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+    const bo = { id: 't2', name: 'bo', brief: 'x', places: ['/elsewhere'], services: [], skills: [], memory: 'bo', chats: [], messaging: false, scheduling: false }
+    const lanes = { '/app/worktrees/lane': '/home/u/work/api' }
+    const rp = (p) => { if (p.startsWith('/app/worktrees/lane') || p.startsWith('/home/u/work') || p.startsWith('/elsewhere')) return p; return realpath(p) }
+    let inside, outside, plain
+    try {
+      const gate = G.createPlacesGate({ realpath: rp, teammate: (id) => (id === 't1' ? ada : id === 't2' ? bo : undefined), worktreeRootOf: (p) => lanes[p] })
+      inside = gate.check('t1', '/app/worktrees/lane')
+      outside = gate.check('t2', '/app/worktrees/lane')
+      plain = gate.check('t1', '/app/worktrees/other')
+    } catch (e) { inside = { ok: false, reason: String(e) } }
+    ok('dispatch.1 a lane whose repository root is inside a place passes; one whose root is not is refused naming the ROOT and never the lane path; a path that is no known lane is judged as itself',
+      inside && inside.ok === true && outside && outside.ok === false && /\/home\/u\/work\/api/.test(outside.reason) && !/worktrees/.test(outside.reason) && plain && plain.ok === false && /worktrees\/other/.test(plain.reason),
+      JSON.stringify({ inside, outside, plain }))
+  }
   // record.1 — the copy helper: an absent optional stays absent; the
   // required lists are always arrays.
   {

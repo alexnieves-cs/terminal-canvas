@@ -1,3 +1,4 @@
+import type { PersistedWorkItem } from '@shared/work-items'
 import { carryBackend } from '@shared/agent-backends'
 import { useMemo, type RefObject } from 'react'
 import { useChat, getChat } from '@renderer/chat/chat-store'
@@ -8,7 +9,7 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
@@ -16,6 +17,7 @@ import { panelName, panelPath } from '@renderer/palette/panel-name'
 import { REASON_CHAT_NO_BASELINE, type PanelRow } from '@renderer/palette/commands'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { WorkspaceRow } from '@shared/ipc-contract'
+import type { WorkItemState } from '@shared/work-items'
 import { buildRailRows, railSignature } from '../shell/rail-rows'
 import {
   attentionSignature, buildAttentionRows, buildWorkspaceRows, workspaceSignature, type PendingApproval
@@ -40,6 +42,10 @@ export interface RailModelsDeps {
   selectedId: string | null
   /** M49. The global terminal font size, for the inspector's Detail field. */
   globalFontSize: number
+  /** M116. A work card's item state by item id; absent when the board is empty. See buildRailRows. */
+  workStateOf?: (itemId: string) => WorkItemState | undefined
+  /** M116. The record itself, for the inspector's five facts. */
+  workItemOf?: (itemId: string) => PersistedWorkItem | undefined
 }
 
 /**
@@ -232,7 +238,7 @@ export function useRailModels(deps: RailModelsDeps) {
   // panels beside a canvas showing everyone's would be the two disagreeing on
   // screen at once. goToPanel reads the same array, which is what keeps every
   // row it renders navigable.
-  const railBuilt = buildRailRows(displayPanels, (id) => registry.get(id)?.status, dormantIds)
+  const railBuilt = buildRailRows(displayPanels, (id) => registry.get(id)?.status, dormantIds, deps.workStateOf)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 
@@ -357,7 +363,9 @@ export function useRailModels(deps: RailModelsDeps) {
             // M98. Main's grants, mirrored; absent until it has answered (the field reads `unknown`).
             ...(selectedChat.grants === undefined ? {} : { grants: selectedChat.grants })
           }
-        })()
+        })(),
+        // M116. The work card's record, for its word and its five facts.
+        isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId) : undefined
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])
