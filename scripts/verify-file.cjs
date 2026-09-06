@@ -992,6 +992,8 @@ const p = (name) => join(DIR, name)
       saved.filter((s) => s.id === 'r2').slice(-1)[0].missed === undefined,
     JSON.stringify({ has, armedCount, missed, firedAfterTick, rearmed, armedAfterRearm, ran, ranUnknown, stampedR1, saved: saved.map((s) => [s.id, s.missed, s.lastRun && s.lastRun.outcome]) }))
   if (runner) runner.disposeAll()
+}
+
 // M103 — browser.1. READING THE PANE IS LEAVING THE APP. The read is driven
 //      over injected `getUrl`/`evaluate` so no webview is in earshot: a
 //      `file:`, a `data:` and an `about:` page are each refused BY NAME before

@@ -2321,6 +2321,8 @@ const WS = [
     has && rows.length === 2 && rows[0].id === 't1' && rows[0].label === 'chat as ada' && rows[0].disabled === false &&
       rows[1].disabled === true && /place/.test(rows[1].reason) && door !== undefined,
     JSON.stringify({ has, rows, door: door && door.title }))
+}
+
 // M103 — browser.1. THE PAGE DOOR IS ALWAYS PRESENT. `Open a page…` needs no
 // captured panel and no directory (a URL is typed, not derived), so the row
 // is in the list with no reason on an EMPTY context, and running it enters

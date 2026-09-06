@@ -217,6 +217,8 @@ const FACTS = {
         /bo/.test(noSchedule) && /schedul/.test(noSchedule) && /minute/.test(tooFast) && /prompt/.test(empty) &&
         missed[0] === 100 + 600000 && missed[1] === null && missed[2] === null && missed[3] === null && R.ROUTINE_PROMPT.includes('irreversible actions stay behind confirmation'),
       JSON.stringify({ okR, destructive, benign, unknownVerb, noSchedule, tooFast, empty, missed }))
+  }
+
   // gate.3 (M103) — the browser pane's read is a reader too, and the only
   // module that evaluates script in a guest. `executeJavaScript(` appears in
   // exactly one source file, and that file calls `outward(` — so a second

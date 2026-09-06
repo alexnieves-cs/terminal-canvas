@@ -3579,6 +3579,8 @@ console.log('\n' + '='.repeat(60))
       by('r4') !== undefined && !('plan' in by('r4')) && !('lastRun' in by('r4')) && !('missed' in by('r4')) && by('r4').paused === false &&
       Array.isArray(absent.snapshot.routines) && absent.snapshot.routines.length === 0 && absent.warnings.length === 0 && L.ROUTINES_MAX > 0,
     JSON.stringify({ rs, warnings: out.warnings }))
+}
+
 // M103 — browser.1. THE ELEVENTH KIND ON DISK. A browser panel is `kind:
 // 'browser'` plus a `url` and nothing else — no cwd and no args, like every
 // sessionless kind, so a reader keyed on the top-level cwd cannot mistake it
