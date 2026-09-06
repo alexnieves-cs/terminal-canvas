@@ -2818,6 +2818,52 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('board.1 (threw)', false, String(e)) }
 }
 
+/* ---- M126: the Skills pane. The pane's columns over one inventory.
+   Every check lands on the PURE model: the component owns only the tabs, the
+   search box and the drag handlers. The three facts that fail silently if
+   undone are the three the pane's promise rests on — a column that vanishes
+   when it empties reads as a broken pane, a card that vanishes when its file
+   is gone reads as a shelf a `git pull` edited, and an empty pane and "no
+   skill matches zzzz" are different renderings that lead to different fixes. */
+{
+  try {
+    const entries = [
+      { kind: 'skill', scope: 'user', name: 'superpowers:brainstorming', description: 'd1',
+        resources: { kind: 'none' }, pluginId: 'superpowers@x' },
+      { kind: 'skill', scope: 'project', name: 'audit', description: 'd2',
+        resources: { kind: 'some', n: 3 } },
+      { kind: 'command', scope: 'user', name: 'review', description: 'd3' }
+    ]
+    const shelf = { columns: [{ id: 'c1', title: 'mobile', keys: ['["project","audit"]'] }] }
+    const cols = R.buildSkillColumns(entries, shelf, { kind: 'skill', query: '', scopes: null, placedOnly: false })
+
+    ok('skills.1a only the asked KIND appears',
+       cols.every((c) => c.cards.every((k) => k.name !== 'review')), 'a command is not a skill')
+    ok('skills.1b a placed skill sits in its column and says `placed`',
+       cols.find((c) => c.id === 'c1').cards[0].why === 'placed', '')
+    ok('skills.1c a plugin skill derives its own column',
+       cols.some((c) => c.id === 'plugin:superpowers'), cols.map((c) => c.id).join(','))
+    ok('skills.1d Ungrouped is ALWAYS present, even when it holds nothing',
+       cols.some((c) => c.id === R.UNGROUPED_COLUMN_ID),
+       'a column that vanishes when empty reads as a broken pane')
+
+    const shelfWithGhost = { columns: [{ id: 'c1', title: 'mobile', keys: ['["user","gone"]'] }] }
+    const ghost = R.buildSkillColumns(entries, shelfWithGhost, { kind: 'skill', query: '', scopes: null, placedOnly: false })
+    ok('skills.1e a key whose skill is gone KEEPS its slot, marked not installed',
+       ghost.find((c) => c.id === 'c1').cards.some((k) => k.installed === false),
+       'the shelf is the user arrangement; a git pull does not get to edit it')
+
+    const none = R.buildSkillColumns(entries, shelf, { kind: 'skill', query: 'zzzz', scopes: null, placedOnly: false })
+    ok('skills.1f a search matching nothing yields NO columns, so the pane can say so',
+       none.length === 0, 'an empty pane and "no skill matches zzzz" are different renderings')
+
+    const placed = R.buildSkillColumns(entries, shelf, { kind: 'skill', query: '', scopes: null, placedOnly: true })
+    ok('skills.1g placedOnly hides derived cards but never the Ungrouped column',
+       placed.every((c) => c.cards.every((k) => k.why === 'placed')) &&
+       placed.some((c) => c.id === R.UNGROUPED_COLUMN_ID), JSON.stringify(placed.map((c) => c.id)))
+  } catch (e) { ok('skills.1 (threw)', false, String(e)) }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
