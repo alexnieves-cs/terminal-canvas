@@ -399,6 +399,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        board:open-pr / board:comment-pr
                        shelf:list / shelf:save
                        plugin:details
+                       skill:write / skill:create / skill:rename / skill:delete
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

@@ -105,6 +105,7 @@ import type { CredentialMeta } from './credential-schema'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
 import type { ToolInventoryResult } from './toolbox'
+import type { ReadStamp, SkillWriteResult } from './skill-edit'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
 import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
@@ -600,6 +601,26 @@ export const IPC = {
    */
   PLUGIN_DETAILS: 'plugin:details',
   /**
+   * M128. The four writers — the ONLY channels in this contract that put
+   * bytes into `~/.claude`.
+   *
+   * The line is spec §5.1's and main enforces it rather than trusting the
+   * caller: a skill's `SKILL.md` is writable because a skill is INVOKED
+   * DELIBERATELY, while a hook fires by itself, a permission grants without
+   * asking, an MCP server is a process with its own reach, an agent's
+   * `tools:` line is a permission surface and a slash command can carry
+   * shell. Containment is M100's `insidePlace` REUSED (never a second
+   * path check at a security boundary), a target under an enabled plugin's
+   * installPath is refused NAMING the plugin, every write carries the
+   * `mtime`/`size` the panel READ and a mismatch is refused rather than
+   * merged, and `skill:delete` trashes the DIRECTORY — never an unlink,
+   * because the Finder is this feature's undo (a file write is not history).
+   */
+  SKILL_WRITE: 'skill:write',
+  SKILL_CREATE: 'skill:create',
+  SKILL_RENAME: 'skill:rename',
+  SKILL_DELETE: 'skill:delete',
+  /**
    * M103. The browser pane's text, read in MAIN: the scheme is checked on
    * the guest's LIVE url (not the record's, not only at navigation), the
    * text is capped inside the guest, and it passes the outward gate before
@@ -828,6 +849,40 @@ export interface ToolboxReadRequest {
    * key — see TOOLBOX_READ.
    */
   panelId: PanelId
+}
+
+/**
+ * M128. What the four writers are asked. `cwd` is the asking panel's,
+ * UNEXPANDED — main expands it with `resolveCwd` and derives the writable
+ * roots itself, so the renderer can neither name a root nor widen one.
+ */
+export interface SkillWriteRequest {
+  cwd: string
+  /** The `SKILL.md` itself, as the entry's `sourcePath` gave it. */
+  path: string
+  text: string
+  /** The `mtime`/`size` the panel READ. A mismatch on disk is refused. */
+  stamp: ReadStamp
+}
+
+export interface SkillCreateRequest {
+  cwd: string
+  /** `user` writes under the home root, `project` under the repository's. */
+  scope: 'user' | 'project'
+  name: string
+}
+
+export interface SkillRenameRequest {
+  cwd: string
+  /** The skill's DIRECTORY, not its SKILL.md: a rename moves the folder. */
+  dir: string
+  name: string
+}
+
+export interface SkillDeleteRequest {
+  cwd: string
+  /** The DIRECTORY, so bundled resources go to the trash with the skill. */
+  dir: string
 }
 
 /** What `toolbox:permissions` is asked. */
@@ -1510,6 +1565,17 @@ export interface CanvasBridge {
     permissions(
       req: ToolboxPermissionsRequest
     ): Promise<{ rules: string[]; total: number; status: string }>
+  }
+  /**
+   * M128. The four writers. Every arm answers a RESULT — `refused` (a rule
+   * said no, before disk), `failed` (the rules passed, the filesystem did
+   * not), or the write's own arm — and none of them rejects.
+   */
+  skill: {
+    write(req: SkillWriteRequest): Promise<SkillWriteResult>
+    create(req: SkillCreateRequest): Promise<SkillWriteResult>
+    rename(req: SkillRenameRequest): Promise<SkillWriteResult>
+    remove(req: SkillDeleteRequest): Promise<SkillWriteResult>
   }
   /** M103. See BROWSER_READ. Three arms; never rejects. */
   browser: {

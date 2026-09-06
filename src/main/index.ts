@@ -7,6 +7,8 @@ import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestF
 import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { skillWriteHandlers } from './skill-write'
+import { resolveToolboxHome } from './toolbox-read'
 import { buildPushArgs } from './git-args'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
@@ -1753,7 +1755,27 @@ app.whenReady().then(async () => {
     () => listPlugins(runClaudePluginList),
     // M127. The same CLI, the same login env and the same timeout as the
     // list above — two calls onto one binary, kept in step deliberately.
-    (id) => describePlugin(runClaudePluginDetails(id), id)
+    (id) => describePlugin(runClaudePluginDetails(id), id),
+    // M128. The four writers, with every dependency resolved HERE and none
+    // of them nameable by the renderer: the writable roots are derived from
+    // the asking panel's own cwd (through `resolveCwd`, the same expansion a
+    // spawn gets) and the home the toolbox reads, the plugin paths are the
+    // CLI's own answer, and `trash` is `shell.trashItem` so a delete is
+    // recoverable in the Finder rather than gone.
+    skillWriteHandlers({
+      resolveCwd,
+      home: resolveToolboxHome,
+      realpath: realpathSync,
+      plugins: async () => {
+        const listed = await listPlugins(runClaudePluginList)
+        // `unknown` reads as NO plugin paths, which only ever makes the
+        // plugin refusal miss — never a write into a plugin's folder that
+        // the containment check would then have to be trusted to catch, so
+        // the roots below are what actually bound this.
+        return listed.kind === 'ok' ? listed.plugins : []
+      },
+      trash: (path) => shell.trashItem(path)
+    })
   )
   createWindow()
 

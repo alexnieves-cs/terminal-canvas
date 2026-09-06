@@ -4021,6 +4021,23 @@ body {
 .skill-node__verbatim { margin: 0; padding: var(--sp-2); max-height: 240px; overflow: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); white-space: pre; }
 .skill-node__read-at { margin: 0; display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
 
+/* M128. The editor. The reason sentence beside read-only fields is TEXT and
+   not a tooltip: a field the user cannot type into with no visible
+   explanation is the dead control this repo refuses everywhere else. */
+.skill-node__tabs { display: flex; align-items: center; gap: var(--sp-2); }
+.skill-node__tabs .pf__verb[data-selected] { color: var(--fg-2); border-color: var(--line-strong); }
+.skill-editor { display: flex; flex-direction: column; gap: var(--sp-2); }
+.skill-editor__why { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.skill-editor__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.skill-editor__label { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-3); }
+.skill-editor__input { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
+.skill-editor__input:read-only { color: var(--fg-3); }
+.skill-editor__body { min-height: 160px; resize: vertical; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2); white-space: pre; }
+.skill-editor__bar { display: flex; align-items: center; gap: var(--sp-2); }
+.skill-editor__result { font-size: var(--t-xs); color: var(--fg-3); }
+.skill-editor__result[data-skill-edit-result="failed"] { color: var(--red); }
+.skill-editor__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+
 /* M103. The browser pane: the app's chrome above a guest that fills the
    rest. The guest is `display: block` and sized to its host — a <webview>
    is inline by default and an inline guest paints at 300x150 whatever its

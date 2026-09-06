@@ -6,6 +6,8 @@ import { panelState } from '@renderer/panels/panel-state'
 import type { NamedToolEntry, ToolInventoryResult } from '@shared/toolbox'
 import type { PluginDetailsResult } from '@shared/skills'
 import { skillNodeSections, REASON_NO_SOURCE, type SkillPanelSighting, type SkillTextState } from './skill-node-model'
+import { SkillEditor } from './SkillEditor'
+import type { ReadStamp } from '@shared/skill-edit'
 
 /**
  * M127. THE SKILL PANEL — the thirteenth kind, sessionless like the work
@@ -68,6 +70,19 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
   const [details, setDetails] = useState<PluginDetailsResult | undefined>(undefined)
   const [detailsAt, setDetailsAt] = useState<number | undefined>(undefined)
   const [refreshTick, setRefreshTick] = useState(0)
+  // M128. The Edit tab. `read` is the default: this panel's first job is
+  // still to answer "what is this skill", and a panel that opened straight
+  // into a text area would put a write one stray keystroke away.
+  const [tab, setTab] = useState<'read' | 'edit'>('read')
+  // The stamp the text was READ with, carried on every save. It comes from
+  // the SAME `file:read` that produced the text — never a second stat, which
+  // could be taken after a change the panel has not seen.
+  const [stamp, setStamp] = useState<ReadStamp | undefined>(undefined)
+  const [readTick, setReadTick] = useState(0)
+  // The cwd whose inventory ANSWERED. Main derives the writable roots from
+  // it, so a project skill must be written against the repository that holds
+  // it rather than against whichever panel happens to be first in the list.
+  const [entryCwd, setEntryCwd] = useState('')
 
   // One read per DISTINCT cwd — main's cache is keyed by resolved cwd, and
   // asking twice for one directory would spend a parse to learn nothing.
@@ -95,7 +110,9 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
           e.kind === 'skill' && e.name === name && e.scope === scope)
       }
       setSightings(sources.map((s) => ({ panelId: s.panelId, label: '', sees: found(s.cwd) !== undefined })))
-      setEntry(sources.map((s) => found(s.cwd)).find((e) => e !== undefined))
+      const hit = sources.find((s) => found(s.cwd) !== undefined)
+      setEntryCwd(hit?.cwd ?? '')
+      setEntry(hit === undefined ? undefined : found(hit.cwd))
     })
     return () => { live = false }
   }, [cwdKey, id, name, scope])
@@ -105,17 +122,25 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
   // file panel's exactly in the cases nobody tests.
   const sourcePath = entry?.sourcePath
   useEffect(() => {
-    if (sourcePath === undefined) { setText({ kind: 'pending' }); return }
+    if (sourcePath === undefined) { setText({ kind: 'pending' }); setStamp(undefined); return }
     let live = true
     void window.canvas.file.read({ panelId: id, path: sourcePath })
       .then((r) => {
         if (!live) return
-        if (r.kind === 'text') { setText({ kind: 'some', text: r.content, truncated: r.truncatedLines > 0 }); return }
+        if (r.kind === 'text') {
+          setText({ kind: 'some', text: r.content, truncated: r.truncatedLines > 0 })
+          // M128. Both halves of the stamp come off this one answer — the
+          // mtime is taken AFTER the read, so it describes the content in
+          // hand rather than whatever was on disk before it started.
+          setStamp({ mtimeMs: r.mtimeMs, size: r.bytes })
+          return
+        }
+        setStamp(undefined)
         setText({ kind: 'unknown', why: r.kind === 'missing' ? 'the file is gone from disk' : r.kind === 'too-large' ? `the file is ${r.bytes} bytes, past the read cap` : r.kind === 'binary' ? 'the file is not text' : r.detail })
       })
-      .catch(() => { if (live) setText({ kind: 'unknown', why: 'the file could not be read' }) })
+      .catch(() => { if (live) { setStamp(undefined); setText({ kind: 'unknown', why: 'the file could not be read' }) } })
     return () => { live = false; void window.canvas.file.close(id) }
-  }, [sourcePath, id])
+  }, [sourcePath, id, readTick])
 
   // Asked ONLY for a plugin skill, and only while one is on screen: a details
   // call folded into the toolbox read would spend a CLI call for every panel
@@ -150,6 +175,14 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
         title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })}>{label}</button>
     )
   }
+  // Spec §5.1's line, at the tab: a plugin's skills belong to the installer.
+  const editReason = readOnly ? REASON_MERGED_VIEW
+    : pluginId !== undefined ? `${pluginId} owns this folder; claude plugin install will discard the edit on the next upgrade`
+      : sourcePath === undefined ? REASON_NO_SOURCE
+        : null
+  const editWhy = text.kind === 'pending' ? 'reading the file…'
+    : text.kind === 'unknown' ? text.why
+      : 'there is nothing to edit yet'
   const state = panelState({ kind: 'skill', status: undefined, dormant: false }, undefined)
   return (
     <PanelFrame
@@ -182,7 +215,38 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
           {door('write', 'Help me write', sourcePath === undefined ? REASON_NO_SOURCE : null,
             () => { if (sourcePath !== undefined) props.onChat(dirOf(sourcePath), `Help me write ${sourcePath}`) })}
         </div>
-        {sections.map((section) => (
+        {/* M128. The Edit tab. It is PRESENT for every skill and disabled by
+            NAME when it cannot run — a plugin's folder is owned by `claude
+            plugin install` and an edit there vanishes on the next upgrade,
+            which is the sentence worth saying. A removed tab would read as a
+            feature that was never built. */}
+        <div className="skill-node__tabs" data-skill-tabs>
+          {(['read', 'edit'] as const).map((which) => {
+            const reason = which === 'edit' ? editReason : null
+            return (
+              <button key={which} type="button" className="pf__verb pf__verb--word"
+                data-skill-tab={which} data-selected={tab === which ? '' : undefined}
+                disabled={reason !== null} title={reason ?? (which === 'read' ? 'Read this skill' : 'Edit this skill’s SKILL.md')}
+                onMouseDown={press(() => { if (reason === null) setTab(which) })}>
+                {which === 'read' ? 'Read' : 'Edit'}
+              </button>
+            )
+          })}
+        </div>
+        {tab === 'edit' && sourcePath !== undefined && text.kind === 'some' ? (
+          <SkillEditor
+            panelId={id}
+            sourcePath={sourcePath}
+            cwd={entryCwd}
+            text={text.text}
+            stamp={stamp}
+            truncated={text.truncated}
+            frozen={readOnly ? REASON_MERGED_VIEW : null}
+            onReload={() => setReadTick((t) => t + 1)}
+          />
+        ) : tab === 'edit' ? (
+          <p className="skill-node__line" data-skill-edit-why>{editWhy}</p>
+        ) : sections.map((section) => (
           <section key={section.id} className="skill-node__section" data-skill-section={section.id} data-skill-state={section.state}>
             <h3 className="skill-node__heading">{section.heading}</h3>
             {section.id === 'plugin' && section.state === 'some' ? (

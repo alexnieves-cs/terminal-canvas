@@ -1,4 +1,6 @@
 import type { SnapshotMeta } from '@shared/ipc-contract'
+import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
+import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
@@ -216,6 +218,24 @@ const INERT_BROWSER: BrowserHandlers = {
   read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
 }
 
+/** M128. The four writers; see main/skill-write.ts for every rule they enforce. */
+export interface SkillWriteHandlers {
+  write(req: SkillWriteRequest): Promise<SkillWriteResult>
+  create(req: SkillCreateRequest): Promise<SkillWriteResult>
+  rename(req: SkillRenameRequest): Promise<SkillWriteResult>
+  remove(req: SkillDeleteRequest): Promise<SkillWriteResult>
+}
+const NOT_WIRED: SkillWriteResult = {
+  kind: 'refused',
+  why: 'editing skills is not available here'
+}
+const INERT_SKILL_WRITERS: SkillWriteHandlers = {
+  write: async () => NOT_WIRED,
+  create: async () => NOT_WIRED,
+  rename: async () => NOT_WIRED,
+  remove: async () => NOT_WIRED
+}
+
 /** M114. The board's main-side verbs; see board-lane.ts. Inert by default like every collaborator before it. */
 export interface BoardHandlers {
   lane(req: BoardLaneRequest): Promise<BoardLaneResult>
@@ -347,7 +367,14 @@ export function registerIpcHandlers(
   pluginDetails: (id: string) => Promise<PluginDetailsResult> = async (id) => ({
     kind: 'unknown',
     why: `plugin details for ${id} is not wired`
-  })
+  }),
+  /**
+   * M128. The four writers. Inert by default for every collaborator's
+   * reason, and here the default matters more than most: a harness that did
+   * not wire the writers gets a NAMED REFUSAL rather than a write, so no
+   * suite can reach the real `~/.claude` through a channel it forgot about.
+   */
+  skillWriters: SkillWriteHandlers = INERT_SKILL_WRITERS
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -718,6 +745,15 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TOOLBOX_PERMISSIONS, (_event, req: ToolboxPermissionsRequest) => {
     return readPermissionRules(req.path, req.bucket)
   })
+
+  // M128. The four writers — the only handlers in this file that put bytes
+  // into ~/.claude. Every rule they enforce lives in main/skill-write.ts;
+  // nothing here decides anything, for credential-store.ts's own division
+  // between deciding and writing.
+  ipcMain.handle(IPC.SKILL_WRITE, (_event, req: SkillWriteRequest) => skillWriters.write(req))
+  ipcMain.handle(IPC.SKILL_CREATE, (_event, req: SkillCreateRequest) => skillWriters.create(req))
+  ipcMain.handle(IPC.SKILL_RENAME, (_event, req: SkillRenameRequest) => skillWriters.rename(req))
+  ipcMain.handle(IPC.SKILL_DELETE, (_event, req: SkillDeleteRequest) => skillWriters.remove(req))
   ipcMain.handle(IPC.FILE_WRITE, (_event, req: FileWriteRequest) =>
     // No sender capture, unlike FILE_READ: this is a plain request/response
     // with nothing to push afterwards. Our own write lands back through the

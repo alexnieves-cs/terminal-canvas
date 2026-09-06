@@ -18838,7 +18838,11 @@ app.whenReady().then(async () => {
         // Into the Edit tab, through the control rather than a state poke:
         // the tab must be REACHABLE, not merely renderable.
         await waitUntil(() => wc.executeJavaScript(
-          `(() => { const b = document.querySelector('${sel} [data-skill-tab="edit"]'); if (!b || b.disabled) return false; b.click(); return true })()`), 10000)
+          // MOUSEDOWN, not click: every control in this panel arms on
+          // mousedown (PanelFrame's own rule, so a press cannot be lost to a
+          // drag), and `.click()` dispatches no mousedown at all — the check
+          // would then time out against a perfectly working tab.
+          `(() => { const b = document.querySelector('${sel} [data-skill-tab="edit"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`), 10000)
 
         const snap = await waitUntil(async () => wc.executeJavaScript(`(() => {
           const n = document.querySelector('${sel}'); if (!n) return false

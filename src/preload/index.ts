@@ -331,6 +331,14 @@ const bridge: CanvasBridge = {
     read: (req: ToolboxReadRequest) => ipcRenderer.invoke(IPC.TOOLBOX_READ, req),
     permissions: (req: ToolboxPermissionsRequest) => ipcRenderer.invoke(IPC.TOOLBOX_PERMISSIONS, req)
   },
+  // M128. The four writers. Main derives the writable roots itself — the
+  // renderer names a path, never a root.
+  skill: {
+    write: (req) => ipcRenderer.invoke(IPC.SKILL_WRITE, req),
+    create: (req) => ipcRenderer.invoke(IPC.SKILL_CREATE, req),
+    rename: (req) => ipcRenderer.invoke(IPC.SKILL_RENAME, req),
+    remove: (req) => ipcRenderer.invoke(IPC.SKILL_DELETE, req)
+  },
   browser: {
     read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
   },
