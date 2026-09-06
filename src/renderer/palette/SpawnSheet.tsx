@@ -51,7 +51,7 @@ export interface SpawnSheetModel {
   /** M100. The roster, for the `chat as <name>` rows. */
   teammates?: readonly PersistedTeammate[]
   /** M104. The ceiling as read live, for the lineup preview's queue line. */
-  ceiling?: { maxConcurrent: number; liveAgents: number }
+  ceiling?: { maxConcurrent: number; liveAgents: number; queued?: number }
   /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
   codexAvailable: boolean
   /** M99. The models live sessions have REPORTED — the model field's suggestions. Absent suggests nothing. */
@@ -317,7 +317,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         {(() => {
           const lid = parseLineupWhatId(whatId)
           if (lid === null) return null
-          const plan = lineupPlan(LINEUPS[lid], { cwd: cwd.trim() === '' ? '~' : cwd.trim(), worktrees: request.worktree === true, maxConcurrent: model.ceiling?.maxConcurrent ?? 0, liveAgents: model.ceiling?.liveAgents ?? 0 })
+          const plan = lineupPlan(LINEUPS[lid], { cwd: cwd.trim() === '' ? '~' : cwd.trim(), worktrees: request.worktree === true, maxConcurrent: model.ceiling?.maxConcurrent ?? 0, liveAgents: model.ceiling?.liveAgents ?? 0, queued: model.ceiling?.queued ?? 0 })
           return (
             <div className="sheet__lineup" data-sheet-lineup-preview>
               <div className="sheet__lineup-line">{plan.sessions} session{plan.sessions === 1 ? '' : 's'} will open · {plan.agents} agent{plan.agents === 1 ? '' : 's'}</div>

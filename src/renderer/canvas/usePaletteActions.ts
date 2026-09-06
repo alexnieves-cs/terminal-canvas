@@ -1278,7 +1278,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             instantiate: instantiateTemplate,
             teammates: teammatesRef.current,
             // M104. The ceiling as read live: the preview says who queues before Enter.
-            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length },
+            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
+              // M121. Sends already waiting behind the ceiling take room too.
+              queued: panelsRef.current.reduce((n, p) => n + (isChatPanel(p) ? (getChat(p.rect.id).snapshot?.queued ?? 0) : 0), 0) },
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.

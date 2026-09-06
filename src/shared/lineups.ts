@@ -64,11 +64,18 @@ export interface LineupPlan {
   ceilingLine: string
 }
 
-export function lineupPlan(lineup: Lineup, input: { cwd: string; worktrees: boolean; maxConcurrent: number; liveAgents: number }): LineupPlan {
+/**
+ * M121. `queued` is the sends ALREADY WAITING behind the ceiling (the chat
+ * store's queued count, summed): they take room before a new seat does,
+ * so a preview that counted the live agents alone said one would queue
+ * when two would. Absent is none — every pre-M121 caller.
+ */
+export function lineupPlan(lineup: Lineup, input: { cwd: string; worktrees: boolean; maxConcurrent: number; liveAgents: number; queued?: number }): LineupPlan {
   const seats: PlannedSeat[] = lineup.seats.map((s) => ({ ...s, lane: input.worktrees && s.kind === 'agent', cwd: input.cwd }))
   const agents = seats.filter((s) => s.kind === 'agent').length
-  const room = input.maxConcurrent <= 0 ? Number.POSITIVE_INFINITY : Math.max(0, input.maxConcurrent - input.liveAgents)
+  const waiting = Math.max(0, input.queued ?? 0)
+  const room = input.maxConcurrent <= 0 ? Number.POSITIVE_INFINITY : Math.max(0, input.maxConcurrent - input.liveAgents - waiting)
   const queued = Number.isFinite(room) ? Math.max(0, agents - room) : 0
-  const ceilingLine = queued === 0 ? '' : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now) — raise agents.maxConcurrent, or launch fewer`
+  const ceilingLine = queued === 0 ? '' : `${queued} of these ${agents} agents will queue behind the ceiling of ${input.maxConcurrent} (${input.liveAgents} live now${waiting > 0 ? `, ${waiting} already waiting` : ''}) — raise agents.maxConcurrent, or launch fewer`
   return { seats, sessions: seats.length, agents, queued, ceilingLine }
 }
