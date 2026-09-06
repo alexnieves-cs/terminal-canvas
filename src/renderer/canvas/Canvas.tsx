@@ -131,7 +131,7 @@ import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
-import { onChatSession, onChatAuto, onChatTurnEnd, lastAssistantText } from '@renderer/chat/chat-store'
+import { onChatSession, onChatAuto, onChatTurnEnd, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine } from '@renderer/session/last-line-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
@@ -3379,6 +3379,11 @@ export function Canvas({
   useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
   const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
   useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
+  // M105. The capsules count ACROSS chats from the chat store (the rail's
+  // rows re-derive a chat's state per row and carry none); the store's one
+  // version is what re-renders this when any chat moves.
+  const chatsVersion = useChatsVersion()
+  const capsules = useMemo(() => railCapsules(panels.filter(isChatPanel).map((p) => { const c = getChat(p.rect.id); return { id: p.rect.id, kind: 'chat', state: { kind: 'chat' as const, status: undefined, dormant: false, chat: chatStateInput(c.snapshot, c.turns.length > 0 || (c.meta?.turns ?? 0) > 0) ?? { status: 'not-started' as const, pending: 0 } } } })), [panels, chatsVersion])
   // M105. A chat's turn end sets its LAST LINE SAID and, when the user was
   // elsewhere, the unread mark — per id, in its own store, never on version().
   useEffect(() => onChatTurnEnd((id) => { setLastLine(id, lastLineOf(lastAssistantText(id)), focusedIdRef.current !== id) }), [])
@@ -4337,7 +4342,7 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
-        capsules={railCapsules(railRows.map((r) => ({ id: r.id, kind: r.state.kind, state: r.state })))}
+        capsules={capsules}
       />
       <TopBar
         presets={presetRows}

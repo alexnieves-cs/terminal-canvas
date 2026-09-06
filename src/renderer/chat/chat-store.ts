@@ -59,9 +59,26 @@ function notify(id: string): void {
   for (const cb of set) cb()
 }
 
+/**
+ * M105. One version for every chat at once, for the few readers that count
+ * ACROSS chats (the dock's capsules) — a primitive, so useSyncExternalStore
+ * re-renders only when some chat's state object was replaced.
+ */
+let chatsVersion = 0
+const versionListeners = new Set<() => void>()
+export function useChatsVersion(): number {
+  return useSyncExternalStore(
+    (cb) => { versionListeners.add(cb); return () => { versionListeners.delete(cb) } },
+    () => chatsVersion,
+    () => chatsVersion
+  )
+}
+
 function update(id: string, next: ChatState): void {
   states.set(id, next)
+  chatsVersion += 1
   notify(id)
+  for (const cb of versionListeners) cb()
   syncApprovals()
 }
 
