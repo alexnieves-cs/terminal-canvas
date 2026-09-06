@@ -31,6 +31,7 @@ import {
   MARKDOWN_HEAD_BYTES,
   MCP_MAX,
   PLUGINS_MAX,
+  RESOURCES_MAX,
   SETTINGS_MAX_BYTES,
   SKILLS_MAX,
   TOOL_NAME_MAX,
@@ -39,6 +40,7 @@ import {
   type McpToolEntry,
   type NamedToolEntry,
   type PermissionCounts,
+  type SkillResources,
   type SourceRead,
   type ToolActive,
   type ToolEntry,
@@ -141,6 +143,31 @@ function listDir(path: string): { status: SourceRead['status']; names: string[];
   }
 }
 
+/**
+ * Files beside SKILL.md, counted at the boundary and capped.
+ *
+ * Recurses one level only — deep enough for `references/foo.md`, shallow
+ * enough that a skill that vendored a node_modules cannot turn a pane read
+ * into a filesystem crawl. A depth this app cannot bound is a hang, not a
+ * slow read.
+ */
+function countResources(skillDir: string): SkillResources {
+  const listed = listDir(skillDir)
+  if (listed.status !== 'read') return { kind: 'unknown', why: listed.detail ?? 'could not list' }
+  let n = 0
+  for (const entry of listed.names) {
+    if (entry === 'SKILL.md') continue
+    if (n >= RESOURCES_MAX) break
+    const child = join(skillDir, entry)
+    const sub = listDir(child)
+    // A directory contributes its children; an unreadable one contributes
+    // itself, so the count never silently shrinks.
+    n += sub.status === 'read' ? Math.min(sub.names.length, RESOURCES_MAX - n) : 1
+  }
+  if (n === 0) return { kind: 'none' }
+  return { kind: 'some', n: Math.min(n, RESOURCES_MAX) }
+}
+
 /* ------------------------------------------------------------ readers -- */
 
 function readNamed(
@@ -199,7 +226,10 @@ function readSkills(
     )
     // One unreadable skill costs that skill — parseLayout's individual-drop
     // rule, which this whole module inherits.
-    if (entry !== null) out.push(entry)
+    if (entry !== null) {
+      entry.resources = countResources(join(dir, name))
+      out.push(entry)
+    }
   }
   return out
 }

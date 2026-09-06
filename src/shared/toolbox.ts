@@ -159,7 +159,27 @@ export interface NamedToolEntry extends ToolEntryBase {
    * applied to a string instead of to an array.
    */
   descriptionTruncated: boolean
+  /** Skills only — a command and an agent are one file each. */
+  resources?: SkillResources
 }
+
+/**
+ * A skill's bundled files — `references/`, `scripts/`, `assets/` — counted,
+ * never listed. Capped HERE, at the read boundary, so every consumer inherits
+ * the bound rather than the one that remembered it (this module's own rule).
+ */
+export const RESOURCES_MAX = 50
+
+export type SkillResources =
+  | { kind: 'none' }
+  | { kind: 'some'; n: number }
+  /**
+   * The directory could not be listed. A `0` printed here is the confident
+   * wrong answer `costOf`'s `undefined` already refuses to give: "this skill
+   * ships nothing" and "we could not look" are different sentences and lead
+   * the user to different fixes.
+   */
+  | { kind: 'unknown'; why: string }
 
 export type McpTransport = 'stdio' | 'http' | 'sse' | 'unknown'
 
