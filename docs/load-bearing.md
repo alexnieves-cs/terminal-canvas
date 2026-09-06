@@ -3686,6 +3686,40 @@ default). `AGENT_CAPABILITIES.headless` is derived from the rows and M90's `REAS
 are aliases of them — the text checks regex is the same bytes. A fourth backend is one row
 plus one adapter entry, which is the whole point.
 
+**The browser pane's address bar reads the guest's own `getURL()` and nothing a page can
+write (`renderer/browser/BrowserNode.tsx`, `data-browser-url`, M103).** A hostile page's first
+move is a false address, and a `<webview>` hands a host three things it could paint one from:
+`document.title` (through `page-title-updated`), a posted message, and its own `location`
+(which lives in the guest and is the page's word). The readout and the record's url are set in
+ONE function, `readAddress`, from `did-navigate` and `did-navigate-in-page`, and the title is
+deliberately nowhere on the frame — not in the chrome, not as the heading's fallback (that is
+the HOST, from the url). `verify:panels browser.1` serves a page that rewrites its title to a
+bank's sign-in and `history.replaceState`s to another path, and asserts the readout is the real
+`http://127.0.0.1:…` address (the replaced path is fine: that IS a navigation, and main's read
+reports the same url) with the title appearing nowhere in the frame's text. A second, quieter
+rule sits beside it: the guest element is created imperatively and keyed on the panel id ALONE.
+Every navigation writes the url back onto the record (no history entry, M90's thread-id rule),
+so an effect keyed on `panel.url` would tear the guest down and rebuild it on every page,
+navigating it to where it already was — visible only as a flash and a lost scroll position.
+
+**The scheme check is MAIN's, on the READ path, against the guest's LIVE url
+(`main/browser-read.ts`, `browser:read`, M103).** Three places could have checked that a page
+is `http(s)` and only one of them is the pane's security: the parser (`layout-schema.ts` drops
+a `file:` record by name — a canvas fact), `will-attach-webview` (main refuses a non-http(s)
+`src` — a navigation fact), and the read. The first two are not the read's: a page can redirect
+itself to `data:`, and `about:blank` is what a guest reads as between pages, so a read that
+trusted the navigation gate would evaluate script in a page nobody navigated to. So
+`readBrowserPage` reads `getURL()` first and refuses `file:`, `data:`, `about:` and `chrome:`
+BY NAME before `executeJavaScript` runs (`verify:file browser.1` counts evaluations and
+requires zero for the refusals); the id the renderer sends is a hint, resolved through
+`webContents.fromId` and checked to be a webview (the main window's own id is refused, and
+`verify:panels browser.1` sends it); the cap rides INSIDE the evaluated expression so a
+megabyte never crosses the process boundary, then is re-applied in bytes (the guest's slice is
+UTF-16 units); and the text passes `outward(text, 'a remote page at <host>')` so the plan's
+confirmation says the content is a remote page's. `verify:verbs gate.3` pins
+`browser-read.ts` as the only file in `src/` that calls `executeJavaScript`, so a second reader
+added later without the gate fails the build rather than handing a page out unscrubbed.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3716,3 +3750,11 @@ beneath them. Added, each confirmed once by hand or not at all, as stated:
 - **The registry against a real codex spawn (M99).** `spawn()` reads argv, parser and
   `closeStdin` from the adapter and the row; the fake runner sees the same values the real
   one would, and the real one was not driven again.
+- **A real remote site in the guest (M103).** Every check drives a page served by the
+  harness's own `http.createServer` on 127.0.0.1. That a real `https:` site paints inside the
+  frame, that its permission asks are refused by the partition's handler, and that a
+  `target=_blank` link is denied by the guest's window-open handler were NOT opened by hand in
+  this milestone: the five properties are pinned as source text (`verify:meta browser.1`) and
+  the read path is proven over a local page, and that is all `green` says. Also unobserved: a
+  `<webview>` under a far tier's hidden body — whether Chromium keeps the guest painted or
+  re-creates it when the body is shown again is a flash at most, and was not looked for.

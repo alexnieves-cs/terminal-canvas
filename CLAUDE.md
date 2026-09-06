@@ -70,7 +70,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:meta` | plain node | 30 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
+| `verify:meta` | plain node | 31 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
 | `verify:viewport` | plain node | ~129 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
@@ -91,7 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
 | `verify:agent-session` | plain node | ~89 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
-| `verify:verbs` | plain node | 10 checks (M96–M97): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
+| `verify:verbs` | plain node | 12 checks (M96–M97, M103): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
 | `shot` (`npm run shot`) | real Electron, **not in `npm run verify`**, asserts nothing | M61. 23 PNGs of the real renderer plus a `manifest.json` of intents, from a seeded fixture canvas — the visual loop. Read the images; hand them to a fresh-context critic. See `docs/build-log/m61-visual-loop.md` |
@@ -99,7 +99,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 98 channels as of M98 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 99 channels as of M103 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 7 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | ~297 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -434,6 +434,27 @@ check does not, and should not, cover it.
   parser. The by-name copy sites use `carryBackend`; the sheet's rows come from `BACKEND_IDS`
   (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
   Act I spec — no ACP-speaking CLI on this machine to measure.
+- `src/main/browser-read.ts` / `src/renderer/browser/BrowserNode.tsx` / `shared/browser-panel.ts` —
+  M103. The browser pane is a `<webview>` GUEST — the one shape that pans, zooms, clips and
+  z-orders with the world (M0 measured it; an iframe is refused by the renderer's CSP, which is
+  NOT relaxed, and a `WebContentsView` does not follow the transform, M91). `webviewTag: true`
+  is the setting Electron's docs discourage, and every property they warn about is closed by
+  name in `main/index.ts` — `will-attach-webview` strips `preload` and forces nodeIntegration
+  off / contextIsolation on and refuses a non-http(s) `src`; the `persist:tc-browser`
+  partition's permission handler answers `false` to every ask; the attached guest's
+  `setWindowOpenHandler` denies every new window — and `verify:meta browser.1` reads all five
+  as text. The node creates the guest IMPERATIVELY, keyed on the panel id alone (an effect
+  keyed on the record's url would rebuild the guest on every navigation), and the readout
+  (`data-browser-url`) and the record's url are set from the guest's own `getURL()` on
+  `did-navigate`/`did-navigate-in-page` and from nothing a page can write. Reading the pane
+  is LEAVING THE APP: `browser:read` is main's — the guest resolved by the id the node
+  registered and checked to be a webview, the scheme checked on the LIVE url (a navigation
+  gate alone leaves `about:blank` and a `data:` redirect readable), the text capped inside
+  the guest, then `outward(text, 'a remote page at <host>')`; `browser-read.ts` is the only
+  file in `src/` that calls `executeJavaScript` (`verify:verbs gate.3`). `browser-store.ts`
+  is the per-panel guest record (id and reload), cleared at the four panel-removing sites
+  beside `disposeWatcher`; an `exit-ok` edge into the pane reloads it through it, with a
+  named skip when no guest is live.
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`
