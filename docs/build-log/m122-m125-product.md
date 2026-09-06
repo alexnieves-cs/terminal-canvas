@@ -133,7 +133,7 @@ in search (true by construction — the reader is a file). `reach.2`'s first run
 mistake: the walk started at the working column's row and Tab left the pane at once — it
 starts at the todo column's row now, the first in DOM order.
 
-The chain: see the last line of this log.
+The chain: `npm run verify` alone on the branch tip — `EXIT=0`, 0 `FAIL` lines, 1684 `PASS` lines, `verify:panels` 314/314 (reach.2 among them), `verify:ipc` 1/1 at 112 channels.
 
 ## What green does not prove
 
