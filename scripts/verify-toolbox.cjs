@@ -413,6 +413,21 @@ const write = (rel, text) => {
   }))
   write('proj/.claude/skills/graphify/SKILL.md', '---\nname: graphify\ndescription: Project copy.\n---\n')
   write('proj/.claude/agents/reviewer.md', '---\nname: reviewer\ndescription: Reviews things.\n---\n')
+
+  // M125: resources fixtures — a skill with two sibling files, a skill with
+  // none, and a skill whose OWN directory cannot be listed but whose
+  // SKILL.md can still be read (execute-only: traversal survives, readdir
+  // does not — chmod 0o000 would also fail the SKILL.md read itself, which
+  // would drop the entry entirely rather than exercise the `unknown` arm).
+  write('proj/.claude/skills/has-resources/SKILL.md',
+    '---\nname: has-resources\ndescription: Ships two files.\n---\n')
+  write('proj/.claude/skills/has-resources/references/one.md', '# one\n')
+  write('proj/.claude/skills/has-resources/scripts/run.sh', '#!/bin/sh\n')
+  write('proj/.claude/skills/bare/SKILL.md',
+    '---\nname: bare\ndescription: Ships nothing beside itself.\n---\n')
+  write('proj/.claude/skills/locked/SKILL.md',
+    '---\nname: locked\ndescription: Its own directory cannot be listed.\n---\n')
+  chmodSync(join(CWD, '.claude', 'skills', 'locked'), 0o100)
   write('proj/.mcp.json', JSON.stringify({
     mcpServers: { approved: { command: 'node' }, unapproved: { command: 'node' } }
   }))
@@ -718,6 +733,33 @@ const write = (rel, text) => {
     }
   } catch (e) {
     ok('shelf.1 (threw)', false, String(e))
+  }
+
+  /* ---- M125: resources, counted at the boundary ---- */
+  try {
+    const skills = inv.entries.filter((e) => e.kind === 'skill')
+    const withRes = skills.find((e) => e.name === 'has-resources')
+    const bare = skills.find((e) => e.name === 'bare')
+    const locked = skills.find((e) => e.name === 'locked')
+    ok('skill.1a a skill with siblings counts them',
+       withRes.resources.kind === 'some' && withRes.resources.n === 2,
+       JSON.stringify(withRes.resources))
+    ok('skill.1b SKILL.md alone is `none`, not `some: 0`',
+       bare.resources.kind === 'none', JSON.stringify(bare.resources))
+    ok('skill.1c an unlistable directory is `unknown`, NEVER 0',
+       locked.resources.kind === 'unknown' && typeof locked.resources.why === 'string',
+       JSON.stringify(locked.resources))
+    ok('skill.1d the count is capped at the boundary',
+       skills.every((e) => e.resources.kind !== 'some' || e.resources.n <= T.RESOURCES_MAX), '')
+    ok('skill.1e only skills carry resources',
+       inv.entries.filter((e) => e.kind !== 'skill').every((e) => e.resources === undefined),
+       'a command has no resources folder')
+  } catch (e) {
+    ok('skill.1 (threw)', false, String(e))
+  } finally {
+    // Restore listability before cleanup — an execute-only directory refuses
+    // rmSync's own recursive readdir just as it refused ours.
+    chmodSync(join(CWD, '.claude', 'skills', 'locked'), 0o755)
   }
 
   /* ------------------------------------------------------- report ----- */
