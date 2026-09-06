@@ -29,7 +29,22 @@ moved to it.
 
 ## M123 — the update notice (Track B)
 
-<!-- filled from Track B's report at the merge -->
+Track B's own log is `docs/build-log/m123-update-notice.md` (`verify:meta milestones.1`
+wants a log per row, so the pair exists twice; this section is the act's summary and points
+there). `main/update-check.ts` is pure over an injected fetcher — no `https` in the module,
+the real `https.get` (10 s deadline, `User-Agent: terminal-canvas`, no redirects) lives in
+`index.ts` and is called by no suite (`verify:meta update.1` greps for it). One GET of the
+releases LIST, the newest NON-prerelease compared by a small numeric semver (`3.10.0 >
+3.9.1`, a string compare says the opposite), three states and never two: `current`, `newer`
+with the url, `could-not-check` with the reason. Two things the critic added after the
+merge: an EMPTY feed (this repository today) is `could not check — no releases are published
+for <repo>`, not `up to date`; and a `newer` answer reaches a user WITH panels through the
+status strip (`3.1.0 is out`, a link), where the launcher's footer only reaches an empty
+canvas. The setting `update.checkOnLaunch` is off by default, in the Updates category,
+never `planWritable`; `Check for updates…` is a canvas row never disabled offline (the third
+state is the answer) and disabled `checking…` while in flight; the environment rows carry
+`not checked` as the rest state. Auto-swap is declined by name in the launcher's own
+sentence (`the app does not install it — download from the release page`).
 
 ## M124 — the third audit, and the owed hand checks
 
@@ -86,7 +101,39 @@ name), Track B's `verify:file update.1` and `verify:meta update.1`, `verify:pane
 
 ## The gate
 
-<!-- filled at the gate -->
+**The critic** (fresh context) found two blockers and fifteen more; taken, every one but
+two. A REAL search defect no check reached: a chat that filled its per-panel cap set
+`capped` and broke out of every other chat — five lines from one chat, and the row said
+`the first 50 matches`; `psearch.1` now seeds a chat that fills its cap and asserts the
+next chat still answers, uncapped. The cap and redaction rows were runnable rows that ran
+nothing — information now, disabled with their own sentence so stepping skips them. A
+transcript hit and a scrollback hit were the same row — the title carries the kind (`api ·
+chat turn 3`, `api · line 120`). An empty releases feed read `up to date` — `could not
+check — no releases are published`. A user with panels never saw `newer` — the HUD strip
+carries it. Offline, Node's raw `ENOTFOUND` reached the palette — mapped to a sentence in
+the fetcher. `Check for updates…` while checking was a silent no-op — `checking…`. `No
+matches` was suppressed with persistence off — both rows stand. Three names for one
+setting — its label. The README's M125 row read done before the tag — `shipping`.
+**Declined:** opening M42's in-panel search at a scrollback hit's line (M42's door was only
+ever `goToPanel`; the sentence is struck from the spec and the contract's comment, and
+`lineIndex` stays on the wire for the day that door exists), and seeding the shot fixture's
+transcript so the `search` scene shows a chat hit (the scene's intent says what the picture
+shows).
+
+**The verifier** proved written-first from git for every spec check, the network rule, the
+gate's fourth caller by name, the IPC count at 112, the setting's guard, and the CI fix by
+REPLAYING the fixture under `init.defaultBranch=master` — and named one real defect the
+critic did not: the search handler read `layoutStore.initial()`, which applies
+`restore.layout` and answers NO panels with it off, so search went quiet with nothing to say
+why; both handler sites read the active row of `mergedWorkspaces()` now, and
+`verify:layout search.active.1` pins the store's fact and both sites as text. Recorded and
+accepted: the spec's `context` field was dropped (the line is the context); `verify:palette
+update.1` landed in its feat commit; no check distinguishes a dormant panel from a live one
+in search (true by construction — the reader is a file). `reach.2`'s first run found its own
+mistake: the walk started at the working column's row and Tab left the pane at once — it
+starts at the todo column's row now, the first in DOM order.
+
+The chain: see the last line of this log.
 
 ## What green does not prove
 
