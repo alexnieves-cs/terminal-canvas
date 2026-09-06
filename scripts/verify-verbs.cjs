@@ -196,6 +196,29 @@ const FACTS = {
       JSON.stringify({ callers, readers, unguarded }))
   }
 
+  // routine.1 (M101) — the save-time refusal against M96's table: a
+  // destructive verb in the plan line, a teammate that may not be
+  // scheduled, an interval under the floor, an empty prompt — each by name.
+  {
+    const R = M.routines
+    const has = R && typeof R.routineRefusal === 'function'
+    const ada = { name: 'ada', scheduling: true }
+    const base = { id: 'r', name: 'nightly', teammateId: 't1', everyMs: 600000, prompt: 'summarise the day', paused: false }
+    const okR = has ? R.routineRefusal(base, ada) : 'no module'
+    const destructive = has ? R.routineRefusal({ ...base, plan: 'close ch1' }, ada) : 'no module'
+    const benign = has ? R.routineRefusal({ ...base, plan: 'focus ch1' }, ada) : 'no module'
+    const unknownVerb = has ? R.routineRefusal({ ...base, plan: 'frobnicate ch1' }, ada) : 'no module'
+    const noSchedule = has ? R.routineRefusal(base, { name: 'bo', scheduling: false }) : 'no module'
+    const tooFast = has ? R.routineRefusal({ ...base, everyMs: 1000 }, ada) : 'no module'
+    const empty = has ? R.routineRefusal({ ...base, prompt: '  ' }, ada) : 'no module'
+    const missed = has ? [R.missedAt({ ...base, lastRun: { at: 100, outcome: 'started' } }, 100 + 600000 + 1), R.missedAt({ ...base, lastRun: { at: 100, outcome: 'started' } }, 100 + 10), R.missedAt({ ...base, paused: true, lastRun: { at: 100, outcome: 'started' } }, 1e9), R.missedAt(base, 1e9)] : []
+    ok('routine.1 a plain routine saves; a destructive verb in its plan line is refused naming the verb; a benign verb line passes; an unknown verb is refused as itself; a teammate without scheduling is refused naming it; an interval under the floor and an empty prompt are refused by name; missedAt answers the due tick that fell in the past, null when on time, paused, or never run',
+      has && okR === null && /close/.test(destructive) && /destructive/.test(destructive) && benign === null && /frobnicate/.test(unknownVerb) &&
+        /bo/.test(noSchedule) && /schedul/.test(noSchedule) && /minute/.test(tooFast) && /prompt/.test(empty) &&
+        missed[0] === 100 + 600000 && missed[1] === null && missed[2] === null && missed[3] === null && R.ROUTINE_PROMPT.includes('irreversible actions stay behind confirmation'),
+      JSON.stringify({ okR, destructive, benign, unknownVerb, noSchedule, tooFast, empty, missed }))
+  }
+
   // auto.1 (M97) — a mode is a plan with a turn limit; a mode holding a
   // destructive verb without its confirmation is refused by name.
   {

@@ -16,6 +16,7 @@ import type {
 import type { CanvasState } from '../shared/layout-schema'
 import type { PersistedTemplate } from '../shared/templates'
 import type { PersistedTeammate } from '../shared/teammates'
+import type { PersistedRoutine } from '../shared/routines'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
@@ -108,6 +109,11 @@ export interface PaletteHandlers {
   saveTeammate(teammate: PersistedTeammate): PersistedTeammate
   removeTeammate(id: string): boolean
   choosePlace(): Promise<string | null>
+  /** M101. */
+  listRoutines(): PersistedRoutine[]
+  saveRoutine(routine: PersistedRoutine): { kind: 'saved'; routine: PersistedRoutine } | { kind: 'refused'; reason: string }
+  removeRoutine(id: string): boolean
+  runRoutine(id: string): boolean
   saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
   removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
@@ -433,6 +439,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate) => palette.saveTeammate(teammate))
   ipcMain.handle(IPC.TEAMMATE_DELETE, (_event, id: string) => palette.removeTeammate(id))
   ipcMain.handle(IPC.TEAMMATE_CHOOSE_PLACE, () => palette.choosePlace())
+  ipcMain.handle(IPC.ROUTINE_LIST, () => palette.listRoutines())
+  ipcMain.handle(IPC.ROUTINE_SAVE, (_event, routine: PersistedRoutine) => palette.saveRoutine(routine))
+  ipcMain.handle(IPC.ROUTINE_DELETE, (_event, id: string) => palette.removeRoutine(id))
+  ipcMain.handle(IPC.ROUTINE_RUN, (_event, id: string) => palette.runRoutine(id))
 
   // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
   // the renderer has no process.env to do it with — the same boundary

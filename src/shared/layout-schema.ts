@@ -11,6 +11,9 @@ import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
 import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
+import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from './routines'
+export { ROUTINES_MAX } from './routines'
+export type { PersistedRoutine } from './routines'
 export { TEAMMATES_MAX } from './teammates'
 export type { PersistedTeammate } from './teammates'
 export { TEMPLATES_MAX } from './templates'
@@ -453,6 +456,8 @@ export interface LayoutSnapshot {
   templates: PersistedTemplate[]
   /** M100. The roster. Optional on disk for every layout written before teammates existed. */
   teammates: PersistedTeammate[]
+  /** M101. Scheduled runs. Optional on disk for every layout written before routines existed. */
+  routines: PersistedRoutine[]
   /**
    * Every setting the user has actually CHANGED, keyed by SettingDef.id.
    * Sparse on purpose: an absent id means "still at the schema default", which
@@ -515,6 +520,7 @@ export function defaultSnapshot(): LayoutSnapshot {
     prompts: [],
     templates: [],
     teammates: [],
+    routines: [],
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
@@ -1367,6 +1373,37 @@ export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeamm
   return out.slice(0, TEAMMATES_MAX)
 }
 
+/**
+ * M101. Routines, with the record rules. The interval floor is enforced
+ * here too (a file edited by hand must not arm a busy loop); `lastRun` and
+ * `missed` are rebuilt by name so an absent optional stays absent.
+ */
+export function parseRoutines(raw: unknown, warnings: string[]): PersistedRoutine[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a routines field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const out: PersistedRoutine[] = []
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || entry.id.trim() === '' || seen.has(entry.id)) { warnings.push(`dropped routine ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped routine ${entry.id}: name was unusable`); return }
+    if (!isStr(entry.teammateId) || entry.teammateId.trim() === '') { warnings.push(`dropped routine ${entry.id}: it names no teammate`); return }
+    if (!isNum(entry.everyMs) || entry.everyMs < ROUTINE_MIN_MS) { warnings.push(`dropped routine ${entry.id}: the interval was under ${ROUTINE_MIN_MS / 1000}s or not a number`); return }
+    if (!isStr(entry.prompt)) { warnings.push(`dropped routine ${entry.id}: prompt was unusable`); return }
+    const r: PersistedRoutine = { id: entry.id, name: entry.name, teammateId: entry.teammateId, everyMs: entry.everyMs, prompt: entry.prompt, paused: entry.paused === true }
+    if (isStr(entry.plan) && entry.plan.trim() !== '') r.plan = entry.plan
+    if (isRecord(entry.lastRun) && isNum(entry.lastRun.at) && (entry.lastRun.outcome === 'started' || entry.lastRun.outcome === 'refused')) {
+      r.lastRun = { at: entry.lastRun.at, outcome: entry.lastRun.outcome, ...(isStr(entry.lastRun.panelId) ? { panelId: entry.lastRun.panelId } : {}), ...(isStr(entry.lastRun.error) ? { error: entry.lastRun.error } : {}) }
+    }
+    if (isRecord(entry.missed) && isNum(entry.missed.at)) r.missed = { at: entry.missed.at }
+    seen.add(entry.id)
+    out.push(r)
+  })
+  return out.slice(0, ROUTINES_MAX)
+}
+
 /** Never throws; drops entries individually, like every other parser here. */
 export function parsePrompts(raw: unknown, warnings: string[]): Prompt[] {
   if (raw === undefined) return []
@@ -1742,6 +1779,7 @@ export function parseLayout(raw: string): {
       prompts: parsePrompts(parsed.prompts, warnings),
       templates: parseTemplates(parsed.templates, warnings),
       teammates: parseTeammates(parsed.teammates, warnings),
+      routines: parseRoutines(parsed.routines, warnings),
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),

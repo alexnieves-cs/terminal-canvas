@@ -6,7 +6,9 @@ import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from '.
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { createPlacesGate, fsRealpath } from './places'
-import { parseTeammates } from '@shared/layout-schema'
+import { createRoutineRunner } from './routine-runner'
+import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
+import { parseTeammates, parseRoutines } from '@shared/layout-schema'
 import { emptyTeammate } from '@shared/teammates'
 import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
@@ -532,6 +534,17 @@ const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memo
 const teammateMemory = createMemoryStore({ dir: join(app.getPath('userData'), 'memory', 'teammates') })
 const TEAMMATE_ROOT = 'teammate:'
 const teammateSlug = (root: string): string => { const id = root.slice(TEAMMATE_ROOT.length); return layoutStore.teammates().find((t) => t.id === id)?.memory ?? id }
+// M101. The routine runner: intervals in main, the tick answered by the
+// renderer (only it mints panels). Re-armed on every save and delete; a tick
+// that fell while the app was closed is marked MISSED at arm, never fired.
+const routineRunner = createRoutineRunner({
+  now: () => Date.now(),
+  setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref?.(); return t },
+  clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
+  fire: (routine) => { mainWindow?.webContents.send(IPC_EVENTS.ROUTINE_FIRE, routine) },
+  save: (routine) => layoutStore.saveRoutine(routine)
+})
+const armRoutines = (): string[] => routineRunner.arm(layoutStore.routines())
 const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
 
 /**
@@ -983,6 +996,9 @@ app.whenReady().then(async () => {
     }
   })
   watchRunnerRef = watchRunner
+  // M101. Arm every routine the layout holds; a tick that fell while the app
+  // was closed is marked missed here, never fired.
+  armRoutines()
   const disarmWatch = (id: string): void => {
     watchFileWatchers.close(id)
     const dir = watchDirWatchers.get(id)
@@ -1343,6 +1359,21 @@ app.whenReady().then(async () => {
         return saved
       },
       removeTeammate: (id) => layoutStore.deleteTeammate(id),
+      // M101. A save is refused BY NAME against M96's table and the teammate's
+      // schedule permission; a saved or deleted routine re-arms the runner.
+      listRoutines: () => layoutStore.routines(),
+      saveRoutine: (routine) => {
+        const parsed = parseRoutines([routine], [])[0]
+        if (parsed === undefined) return { kind: 'refused' as const, reason: `the routine could not be kept — the interval is at least ${ROUTINE_MIN_MS / 60_000} minute and it needs a name, a teammate and a prompt` }
+        const mate = layoutStore.teammates().find((t) => t.id === parsed.teammateId)
+        const refusal = routineRefusal(parsed, mate === undefined ? undefined : { name: mate.name, scheduling: mate.scheduling })
+        if (refusal !== null) return { kind: 'refused' as const, reason: refusal }
+        layoutStore.saveRoutine(parsed)
+        armRoutines()
+        return { kind: 'saved' as const, routine: parsed }
+      },
+      removeRoutine: (id) => { const r = layoutStore.deleteRoutine(id); armRoutines(); return r },
+      runRoutine: (id) => routineRunner.runNow(id),
       // A place is chosen in the OS dialog: the answer is absolute and real,
       // which is the only kind the record keeps.
       choosePlace: async () => {

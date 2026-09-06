@@ -3559,6 +3559,28 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ absentWarnings: absent.warnings, notListWarnings: notList.warnings }))
 }
 
+// M101 — routine.1. THE ROUTINE RECORD: round-trip whole; absent optionals
+// absent; an interval under the floor drops the record by id; no teammate
+// drops it; `lastRun` and `missed` rebuilt by name; absent field = no warning.
+{
+  const good = { id: 'r1', name: 'nightly', teammateId: 't1', everyMs: 600000, prompt: 'summarise', plan: 'focus n1', paused: false, lastRun: { at: 5, outcome: 'started', panelId: 'c9' }, missed: { at: 4 } }
+  const out = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [] }], routines: [
+    good,
+    { id: 'r2', name: 'fast', teammateId: 't1', everyMs: 1000, prompt: 'x', paused: false },
+    { id: 'r3', name: 'orphan', everyMs: 600000, prompt: 'x', paused: false },
+    { id: 'r4', name: 'bare', teammateId: 't1', everyMs: 600000, prompt: 'x', paused: 'yes', lastRun: { at: 'now', outcome: 'started' } }
+  ] }))
+  const rs = Array.isArray(out.snapshot.routines) ? out.snapshot.routines : []
+  const by = (id) => rs.find((r) => r.id === id)
+  const named = (t) => out.warnings.some((w) => w.includes(t))
+  const absent = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [] }] }))
+  ok('routine.1 a good routine round-trips whole; an interval under the floor and a missing teammate each drop the record by id; a bare record keeps no plan, no lastRun (a malformed one is dropped, not coerced) and no missed; paused falls to false; an absent routines field warns nothing',
+    rs.length === 2 && JSON.stringify(Object.fromEntries(Object.entries(by('r1') || {}).sort())) === JSON.stringify(Object.fromEntries(Object.entries(good).sort())) && named('r2') && named('r3') &&
+      by('r4') !== undefined && !('plan' in by('r4')) && !('lastRun' in by('r4')) && !('missed' in by('r4')) && by('r4').paused === false &&
+      Array.isArray(absent.snapshot.routines) && absent.snapshot.routines.length === 0 && absent.warnings.length === 0 && L.ROUTINES_MAX > 0,
+    JSON.stringify({ rs, warnings: out.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

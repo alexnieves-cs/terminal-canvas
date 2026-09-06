@@ -3744,3 +3744,8 @@ body {
 .teammates-pane__flags { gap: var(--sp-2); }
 .teammates-pane__actions { flex-direction: row; gap: var(--sp-2); }
 .chat__teammate { font-weight: 600; }
+
+/* M101. A routine row and the form beneath the roster's detail. */
+.teammates-pane__routine { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__routine-form { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__minutes { width: 64px; font: inherit; }

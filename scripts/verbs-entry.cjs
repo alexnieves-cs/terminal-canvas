@@ -8,6 +8,7 @@ module.exports = {
   plan: require('../src/shared/plan'),
   outward: require('../src/shared/outward'),
   auto: require('../src/shared/auto'),
+  routines: require('../src/shared/routines'),
   settings: require('../src/shared/settings-schema'),
   scrollback: require('../src/main/scrollback-log')
 }

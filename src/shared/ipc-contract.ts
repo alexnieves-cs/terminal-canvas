@@ -26,6 +26,7 @@ import type {
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 import type { PersistedTeammate } from './teammates'
+import type { PersistedRoutine } from './routines'
 
 /** M83. One memory as the renderer reads it. */
 /**
@@ -569,7 +570,12 @@ export const IPC = {
   TEAMMATE_SAVE: 'teammate:save',
   TEAMMATE_DELETE: 'teammate:delete',
   /** M100. The OS folder dialog: a place is chosen, never typed. Answers the absolute path or null. */
-  TEAMMATE_CHOOSE_PLACE: 'teammate:choose-place'
+  TEAMMATE_CHOOSE_PLACE: 'teammate:choose-place',
+  /** M101. Routines: list, save (refused by name — a destructive plan, no schedule permission), delete, run now. */
+  ROUTINE_LIST: 'routine:list',
+  ROUTINE_SAVE: 'routine:save',
+  ROUTINE_DELETE: 'routine:delete',
+  ROUTINE_RUN: 'routine:run'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -736,7 +742,9 @@ export const IPC_EVENTS = {
    * rides a slow tick and an unconditional send would be a message per tick
    * per panel describing a fact that changes once per agent turn.
    */
-  USAGE_PANEL: 'usage:panel'
+  USAGE_PANEL: 'usage:panel',
+  /** M101. A routine's tick: the renderer mints the fresh chat and sends the prompt. */
+  ROUTINE_FIRE: 'routine:fire'
 } as const
 
 export interface FileReadRequest {
@@ -1178,6 +1186,15 @@ export interface CanvasBridge {
     remove(id: string): Promise<boolean>
     /** The folder dialog; null when cancelled. */
     choosePlace(): Promise<string | null>
+  }
+  /** M101. Routines. `save` answers the record as saved or a named refusal; `run` fires now. */
+  routine: {
+    list(): Promise<PersistedRoutine[]>
+    save(routine: PersistedRoutine): Promise<{ kind: 'saved'; routine: PersistedRoutine } | { kind: 'refused'; reason: string }>
+    remove(id: string): Promise<boolean>
+    run(id: string): Promise<boolean>
+    /** Main's tick; the renderer answers by minting the chat and reporting through `save`. */
+    onFire(listener: (routine: PersistedRoutine) => void): () => void
   }
   /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
   template: {

@@ -131,6 +131,7 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto } from '@renderer/chat/chat-store'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
+import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
 import { AnnotationLayer } from './AnnotationLayer'
@@ -2266,6 +2267,37 @@ export function Canvas({
     void window.canvas.teammate.list().then((rows) => { teammatesRef.current = rows; setTeammates(rows) })
   }, [])
   useEffect(() => { reloadTeammates() }, [reloadTeammates])
+  // M101. Routines: the list for the pane, and the TICK — main fires, the
+  // renderer mints a fresh chat as the teammate, sends the prompt (a routine
+  // is scheduled work: the send is the point — the design rule rides its
+  // system prompt), inserts the plan line for the record, and reports the
+  // run back through the one save door so the row says what happened.
+  const [routines, setRoutines] = useState<PersistedRoutine[] | null>(null)
+  const reloadRoutines = useCallback(() => { void window.canvas.routine.list().then(setRoutines) }, [])
+  useEffect(() => { reloadRoutines() }, [reloadRoutines])
+  // `beginNewChatRef` is declared further down (the M80/M81 mint ref) and is
+  // read only inside the listener, after every render has assigned it.
+  useEffect(() => window.canvas.routine.onFire((routine) => {
+    const mint = beginNewChatRef.current
+    void (async () => {
+      const mate = teammatesRef.current.find((t) => t.id === routine.teammateId)
+      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT })
+      const at = Date.now()
+      if (result.kind === 'refused') {
+        await window.canvas.routine.save({ ...routine, lastRun: { at, outcome: 'refused', error: result.reason } })
+        reloadRoutines()
+        return
+      }
+      const panelId = panelsRef.current.filter(isChatPanel).map((p) => p.rect.id).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)))[0]
+      if (panelId !== undefined) {
+        const answer = await window.canvas.agentSession.send(panelId, routine.prompt)
+        const refused = typeof answer === 'object' ? answer.refused : answer.startsWith('refused') || answer === 'no-session' ? answer : undefined
+        if (routine.plan !== undefined && routine.plan.trim() !== '') insertIntoComposer(panelId, routine.plan)
+        await window.canvas.routine.save({ ...routine, lastRun: { at, outcome: refused === undefined ? 'started' : 'refused', panelId, ...(refused === undefined ? {} : { error: refused }) } })
+      }
+      reloadRoutines()
+    })()
+  }), [reloadRoutines])
   // M80. The saved shapes of work, for the palette's rows (the sheet asks main
   // itself when it opens, so a template saved while the palette is shut is
   // offered the moment the sheet opens either way).
@@ -3040,7 +3072,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3652,7 +3684,7 @@ export function Canvas({
     const agentOptions = opts?.agentOptions !== undefined && Object.keys(opts.agentOptions).length > 0 ? opts.agentOptions : undefined
     // M81. ONE supervisor per canvas, refused HERE as well as in the sheet's
     // disabled row: the row is the affordance, this is the rule.
-    if (opts?.appendSystemPrompt !== undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
+    if (opts?.appendSystemPrompt !== undefined && opts.teammateId === undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
     // M90. The backend rides the create and the record; absent stays absent.
@@ -3664,7 +3696,7 @@ export function Canvas({
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -4172,8 +4204,13 @@ export function Canvas({
       if (!t) return
       void beginNewChat({ cwd: t.places[0] ?? '', title: t.name, teammateId: id })
     },
-    services: SERVICES.map((svc) => ({ id: svc.id, label: svc.label, connected: credentialRows.some((c) => c.service === svc.id) }))
-  }), [chrome.toggleNavigator, teammates, selectedTeammateId, reloadTeammates, beginNewChat, credentialRows])
+    services: SERVICES.map((svc) => ({ id: svc.id, label: svc.label, connected: credentialRows.some((c) => c.service === svc.id) })),
+    routines: routines ?? [],
+    onSaveRoutine: async (r: PersistedRoutine) => { const a = await window.canvas.routine.save(r); reloadRoutines(); return a.kind === 'refused' ? a.reason : null },
+    onDeleteRoutine: (id: string) => { void window.canvas.routine.remove(id).then(reloadRoutines) },
+    onRunRoutine: (id: string) => { void window.canvas.routine.run(id) },
+    onOpenLast: (panelId: string) => { selectAndRaise(panelId); const p = panelsRef.current.find((x) => x.rect.id === panelId); if (p) centreOn(p.rect) }
+  }), [chrome.toggleNavigator, teammates, selectedTeammateId, reloadTeammates, beginNewChat, credentialRows, routines, reloadRoutines, selectAndRaise, centreOn])
 
   const vaultPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,

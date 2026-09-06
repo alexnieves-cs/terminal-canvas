@@ -174,6 +174,7 @@ renderer --invoke--> agent:auto-start / agent:auto-stop                         
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
 renderer --invoke--> teammate:list / teammate:save / teammate:delete             --> main
 renderer --invoke--> teammate:choose-place                                       --> main
+renderer --invoke--> routine:list / routine:save / routine:delete / routine:run   --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
@@ -189,6 +190,7 @@ main     --send-->   settings:changed                                          -
 main     --send-->   spawn:open-sheet                                          --> renderer
 main     --send-->   agent:event (batched ~16ms)                                 --> renderer
 main     --send-->   watcher:state / vault:changed                                --> renderer
+main     --send-->   routine:fire                                                 --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this

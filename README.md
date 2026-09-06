@@ -393,12 +393,14 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:auto-start / agent:auto-stop
                        teammate:list / teammate:save / teammate:delete
                        teammate:choose-place
+                       routine:list / routine:save / routine:delete / routine:run
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
+                       routine:fire
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset
                        preset:spawn / preset:default / preset:capture

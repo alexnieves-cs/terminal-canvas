@@ -955,6 +955,45 @@ const p = (name) => join(DIR, name)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 
+// M101 — routine.1. THE RUNNER over injected timers: arm fires on the
+// interval, a save re-arms without a double tick, pause disarms, runNow
+// fires whatever the schedule says and stamps the run, and a routine whose
+// due tick fell while the app was closed is marked MISSED at arm with the
+// time — and NOT fired.
+{
+  const has = typeof F.createRoutineRunner === 'function'
+  const timers = new Map(); let seq = 0; let now = 1_000_000
+  const fired = [], saved = []
+  const runner = has ? F.createRoutineRunner({
+    now: () => now,
+    setInterval: (fn, ms) => { const h = ++seq; timers.set(h, { fn, ms }); return h },
+    clearInterval: (h) => { timers.delete(h) },
+    fire: (r) => fired.push(r.id),
+    save: (r) => saved.push(r)
+  }) : null
+  const r1 = { id: 'r1', name: 'a', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false }
+  const stale = { id: 'r2', name: 'b', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false, lastRun: { at: now - 5 * 60000, outcome: 'started' } }
+  const paused = { id: 'r3', name: 'c', teammateId: 't', everyMs: 60000, prompt: 'p', paused: true }
+  const missed = runner ? runner.arm([r1, stale, paused]) : []
+  const armedCount = timers.size
+  const tick = () => { for (const t of [...timers.values()]) t.fn() }
+  now += 60000; tick()
+  const firedAfterTick = fired.slice()
+  const rearmed = runner ? runner.arm([r1, { ...stale, missed: { at: stale.lastRun.at + 60000 } }, paused]) : []
+  const armedAfterRearm = timers.size
+  const ran = runner ? runner.runNow('r3') : null
+  const ranUnknown = runner ? runner.runNow('zz') : null
+  const stampedR1 = saved.filter((s) => s.id === 'r1' && s.lastRun && s.lastRun.outcome === 'started').length
+  ok('routine.1 arming fires each unpaused routine on its interval (a paused one is known but not armed); a stale routine is marked missed with the DUE time and fires only on its interval; a re-arm keeps one timer per routine and re-marks nothing already marked; runNow fires a paused routine by hand and stamps the run; an unknown id answers false',
+    has && armedCount === 2 && missed.join() === 'r2' && saved.some((s) => s.id === 'r2' && s.missed && s.missed.at === stale.lastRun.at + 60000) &&
+      firedAfterTick.length === 2 && firedAfterTick.includes('r1') && firedAfterTick.includes('r2') &&
+      rearmed.length === 0 && armedAfterRearm === 2 && ran === true && fired.includes('r3') && ranUnknown === false && stampedR1 === 1 &&
+      // The fire's stamp clears the missed mark: the LAST r2 saved carries none.
+      saved.filter((s) => s.id === 'r2').slice(-1)[0].missed === undefined,
+    JSON.stringify({ has, armedCount, missed, firedAfterTick, rearmed, armedAfterRearm, ran, ranUnknown, stampedR1, saved: saved.map((s) => [s.id, s.missed, s.lastRun && s.lastRun.outcome]) }))
+  if (runner) runner.disposeAll()
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
