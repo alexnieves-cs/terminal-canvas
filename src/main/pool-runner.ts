@@ -68,13 +68,29 @@ export function startPool(node: PoolNode, deps: PoolDeps): PoolHandle {
   const announcedQueued = new Set<number>()
   let stopped = false
   let pumping = false
+  // Set when a pump() is REQUESTED (by `finished`/`tick`) while one is
+  // already running and gets guarded off. Dropping that request outright is
+  // a real stall: a `finished(id)` reacted to re-entrantly from inside
+  // `onEvent` (a consumer synchronously starting its next step off a
+  // 'started' or 'queued' event still being delivered by an active pump())
+  // can free capacity AFTER this call's own while loop has already left it
+  // behind for good — the loop only rechecks its own condition, it does not
+  // get invoked again by anyone else. Without this flag that freed capacity
+  // and the pending items behind it sit until an UNRELATED finished/tick
+  // happens to arrive later, which may be never.
+  let pumpRequested = false
 
   const pump = async (): Promise<void> => {
     if (stopped) return
     // Re-entrancy guard: `finished` and `tick` can each call pump() while an
     // earlier pump() is still awaiting createWorker. A second concurrent
-    // pass would double-dequeue pending items against the same ceiling.
-    if (pumping) return
+    // pass would double-dequeue pending items against the same ceiling —
+    // so it is deferred (`pumpRequested`), not dropped, and run once this
+    // pump() finishes.
+    if (pumping) {
+      pumpRequested = true
+      return
+    }
     pumping = true
     try {
       const { maxConcurrent, budgetUsd } = deps.limits() // LIVE, every pump
@@ -105,6 +121,12 @@ export function startPool(node: PoolNode, deps: PoolDeps): PoolHandle {
       }
     } finally {
       pumping = false
+    }
+    // A pump requested while this one ran is honoured now instead of lost —
+    // the deferred counterpart of the guard above.
+    if (pumpRequested) {
+      pumpRequested = false
+      await pump()
     }
   }
 

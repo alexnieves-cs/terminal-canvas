@@ -1672,24 +1672,64 @@ const isResult = (l) => l.includes('"type":"result"')
       const interrupted = []
       let nextId = 0
       let spendValue = 0
-      const handle = M.pool.startPool(poolNode(4), {
+      const deps1f = {
         readList: () => ({ kind: 'ok', items: itemsOf(4) }),
         limits: () => ({ maxConcurrent: 4, budgetUsd: 1 }),
         spend: () => spendValue,
         createWorker: async () => ({ id: `w${++nextId}` }),
         interrupt: (id) => interrupted.push(id),
         onEvent: (e) => events.push(e)
-      })
+      }
+      const handle = M.pool.startPool(poolNode(4), deps1f)
       await tick(10)
       const startedBefore = events.filter((e) => e.kind === 'started').length
       spendValue = 5 // crosses budgetUsd: 1
       handle.tick()
       await tick(10)
-      const kills = 0 // interrupt is the only door this module has
+      // The module has no kill door at all: the deps object we handed it
+      // carries no `kill` field for it to have reached even if it tried,
+      // and the source text never calls one — read as text the way
+      // registry.1/registry.3 pin their own claims.
+      const poolSrc = readFileSync(join(__dirname, '..', 'src', 'main', 'pool-runner.ts'), 'utf8')
+      const depsHaveNoKill = !Object.prototype.hasOwnProperty.call(deps1f, 'kill')
       ok('pool.1f a budget crossing INTERRUPTS every worker and never kills one',
-        startedBefore === 4 && interrupted.length === 4 && kills === 0 &&
+        startedBefore === 4 && interrupted.length === 4 && depsHaveNoKill &&
+          !/\.kill\(/.test(poolSrc) &&
           events.some((e) => e.kind === 'stopped' && e.why === 'budget'),
         'a killed agent loses its turn, and a budget is a stop — M82, unchanged')
+    }
+
+    // pool.1g — a `finished` reacted to re-entrantly from inside an active
+    // pump()'s own onEvent delivery (here, off a 'queued' event the fill
+    // phase emits — a 'started' event self-heals in this implementation's
+    // while loop, which always rechecks its own condition fresh before
+    // exiting; it is the CODE AFTER that loop, still inside the same
+    // pumping=true call, where a dropped re-pump would otherwise strand
+    // freed capacity) still pulls the next pending item rather than
+    // stalling until an unrelated finished/tick arrives.
+    {
+      const events = []
+      let nextId = 0
+      let reentered = false
+      const handle = M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'ok', items: itemsOf(4) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => {
+          events.push(e)
+          if (e.kind === 'queued' && !reentered) {
+            reentered = true
+            handle.finished('w1') // re-entrant: pump() is still active here
+          }
+        }
+      })
+      await tick(30)
+      const started = events.filter((e) => e.kind === 'started').map((e) => e.id)
+      ok('pool.1g a finished() reacted to re-entrantly while pump() is still active still pulls the next item, rather than dropping the request and stalling with freed capacity and pending work',
+        started.length === 3 && started.includes('w3'),
+        JSON.stringify(events))
     }
   }
 
