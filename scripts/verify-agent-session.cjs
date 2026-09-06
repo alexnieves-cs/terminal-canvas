@@ -1866,6 +1866,7 @@ const isResult = (l) => l.includes('"type":"result"')
       const opened = manager.get('ng')
       s1.proc.emitLines([answerTo('pong.log', 3)])
       await tick(10)
+      const turnsBeforeRefusal = manager.transcript('ng').length
       const withImage = manager.send('ng', 'see', [{ mediaType: 'image/png', base64: 'aGk=' }])
       const turnsAfterRefusal = manager.transcript('ng').length
       s1.proc.exit(0, null)
@@ -1877,10 +1878,10 @@ const isResult = (l) => l.includes('"type":"result"')
       const secondOpen = parsed(s2.proc)[1]
       ok('acp.2 initialize answering loadSession: false / image: false lands on the snapshot as negotiated { loadSession: false, image: false } (the row still says true for both); a send with an image is then refused by name and stores nothing; and the second spawn writes session/new — never session/load — because the negotiated fact outranks the row\'s resumes',
         opened.negotiated !== undefined && opened.negotiated.loadSession === false && opened.negotiated.image === false && M.backends.BACKENDS.acp.resumes === true && M.backends.BACKENDS.acp.images === true &&
-          withImage === 'refused-images' && turnsAfterRefusal === 2 &&
+          withImage === 'refused-images' && turnsAfterRefusal === turnsBeforeRefusal &&
           spawns.length === 2 && secondOpen !== undefined && secondOpen.method === 'session/new' && secondOpen.params.cwd === '/w' &&
           !s2.proc.stdin.some((l) => l.includes('session/load')),
-        JSON.stringify({ negotiated: opened.negotiated, withImage, turnsAfterRefusal, secondOpen, stdin2: s2.proc.stdin }))
+        JSON.stringify({ negotiated: opened.negotiated, withImage, turnsBeforeRefusal, turnsAfterRefusal, secondOpen, stdin2: s2.proc.stdin }))
       manager.dispose('ng')
 
       // The pure helper the composer reads: negotiated when present, the row otherwise.

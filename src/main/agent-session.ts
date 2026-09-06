@@ -11,8 +11,10 @@ import {
 } from '@shared/transcript'
 import { BACKEND_ADAPTERS } from './backend-adapters'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
+import { imagesAllowed } from '@shared/agent-session'
 import type {
   AgentBackend,
+  NegotiatedCapabilities,
   AgentSessionStatus,
   AgentSessionSpec,
   PendingPermission,
@@ -171,6 +173,12 @@ interface Session {
   /** Whether the pending handshake should load the session it names rather than mint one. */
   handshakeResume: boolean
   heldPrompt?: { text: string; images: OutgoingImage[] }
+  /**
+   * M119. What the LAST handshake answered. Kept across an exit (the next
+   * spawn's own answer replaces it), so a snapshot between processes still
+   * states the fact; never persisted — a relaunch asks again.
+   */
+  negotiated?: NegotiatedCapabilities
   turns: TranscriptTurn[]
   inFlight: boolean
   interrupting: boolean
@@ -285,8 +293,9 @@ export class AgentSessionManager {
     // panel is open must take effect on the next send, not the next launch).
     if (this.binaryFor(session.backend) === undefined) return 'refused-backend'
     // M90. A prompt that is an argument has no block to carry an image.
-    // Refused whole and stored nowhere, like the budget's refusal.
-    if (!BACKENDS[session.backend].images && images.length > 0) return 'refused-images'
+    // Refused whole and stored nowhere, like the budget's refusal. M119: the
+    // handshake's answer outranks the row when this process gave one.
+    if (images.length > 0 && !imagesAllowed(session, BACKENDS[session.backend])) return 'refused-images'
     // M97. A send by hand after a resolved run supersedes its chip: the next
     // snapshot no longer carries it (the renderer's dismiss is local; this is
     // main's half, so a workspace switch does not resurrect a dismissed chip).
@@ -679,12 +688,17 @@ export class AgentSessionManager {
     switch (event.type) {
       case 'session':
         session.model = event.model ?? session.model
+        if (event.negotiated !== undefined) session.negotiated = { ...event.negotiated }
         if (event.sessionId === '') {
           // M119. The handshake's first answer (ACP's initialize): no session
           // yet. Open one now — the adapter decides whether that is a new
           // session or a load of the one this session names.
           if (session.awaitingHandshake && session.proc) {
-            const open = BACKEND_ADAPTERS[session.backend].openSession?.(session, session.handshakeResume)
+            // M119. The row promised a resume; the agent's own answer decides.
+            // A load on an agent that said loadSession: false errors — or
+            // silently starts fresh under the old id, which is worse.
+            const resume = session.handshakeResume && (session.negotiated?.loadSession ?? true)
+            const open = BACKEND_ADAPTERS[session.backend].openSession?.(session, resume)
             if (open !== undefined) session.proc.write(open)
           }
           this.emit({ id, ...event })
@@ -1002,6 +1016,7 @@ export class AgentSessionManager {
       pending: [...session.pending.values()],
       queued: session.queue.length,
       counters: { ...session.counters },
+      ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
       ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }

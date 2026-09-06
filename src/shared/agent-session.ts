@@ -1,6 +1,6 @@
 import type { AgentOptions, TokenTotals } from './cost'
 import type { TranscriptEvent, TranscriptTurn } from './transcript'
-import { BACKENDS, type AgentBackend } from './agent-backends'
+import { BACKENDS, type AgentBackend, type BackendDef } from './agent-backends'
 
 /**
  * M73. The agent-session runtime's PUBLIC shapes — what crosses the bridge.
@@ -92,6 +92,29 @@ export interface AgentSessionSnapshot {
   counters: AgentSessionCounters
   /** M97. Present while an auto run is live or just resolved (until dismissed by a new start or a dispose). */
   auto?: AutoStatus
+  /**
+   * M119. What the process's handshake ANSWERED (ACP's initialize): the
+   * measured fact for this process, which outranks the row's promise. Absent
+   * for every backend without a handshake, and until the handshake answers.
+   */
+  negotiated?: NegotiatedCapabilities
+}
+
+/** M119. The capabilities a handshake states live; each absent when the agent said nothing about it. */
+export interface NegotiatedCapabilities {
+  loadSession?: boolean
+  image?: boolean
+}
+
+/**
+ * M119. Whether a message may carry an image: the handshake's answer when
+ * this process gave one, the row's promise otherwise. Pure, so the composer
+ * and the manager's `send` decide the same way — a composer that read the
+ * row alone would attach an image the runtime then refuses, and the user
+ * would see a refusal for a control that looked enabled.
+ */
+export function imagesAllowed(snapshot: { negotiated?: NegotiatedCapabilities } | null | undefined, row: BackendDef): boolean {
+  return snapshot?.negotiated?.image ?? row.images
 }
 
 export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
