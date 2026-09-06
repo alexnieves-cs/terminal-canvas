@@ -3765,3 +3765,9 @@ body {
 .browser-node__failure { margin: var(--sp-2) var(--sp-3) 0; }
 .browser-node__host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--well); }
 .browser-node__guest { display: block; width: 100%; height: 100%; border: 0; }
+
+/* M100. The roster keeps its own height above the open record; the record
+   scrolls, so a long brief or many routines never squeeze the rows to nothing
+   (the list's flex basis would otherwise yield to the detail in the column). */
+.rail-list--teammates { flex: 0 0 auto; }
+.teammates-pane__detail { flex: 1 1 auto; min-height: 0; overflow: auto; }

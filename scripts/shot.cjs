@@ -187,6 +187,19 @@ const SCENES = [
       await sleep(1800)
       await kit.shot('browser')
     } },
+  { name: 'teammate', intent: 'M100. The Teammates pane: the roster as rail rows (`ada · 1 place · 1 service · scheduled`, `bo · 0 places · 0 services · messaging`) with ada\'s record open beneath — her brief, her one place as a mono path with `remove` and `add a place…` (a folder dialog, never a typed path), the services with `grant`/`revoke` per service and `not connected` said where it is, the two permission checkboxes as separate controls, and `Chat as ada` / `Delete`. An identity with an explicit scope, three permissions kept apart.',
+    run: async (k) => {
+      await k.click('[data-dock="teammates"]'); await sleep(500)
+      await k.click('[data-teammate-row="ada"] .rail-row__main'); await sleep(500)
+      await k.shot('teammate')
+    } },
+  { name: 'routine', intent: 'M101. The same record\'s routines: `nightly review · every 10m` whose row says `missed at <time> — the app was closed` because its due tick fell while the app was closed and it was NOT fired, and `weekly tidy · every 1h · paused`; each with `Run now`, `Pause`/`Resume`, `Open last` (disabled by name when no run opened a chat) and `Delete`; the section header says `runs while the app is open — not while it is closed`; the form beneath to add one, its Add button enabled because ada may be scheduled.',
+    run: async (k) => {
+      await k.js(`(() => { const d = document.querySelector('[data-teammate-routines]'); if (d) d.scrollIntoView({ block: 'start' }); return !!d })()`)
+      await sleep(300)
+      await k.shot('routine')
+      await k.click('[data-dock="panels"]'); await sleep(300)
+    } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
       await kit.goTo('memory · repo')
@@ -466,6 +479,17 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
+    // M100/M101. The roster and a routine: ada may work in the repo and spend
+    // GitHub; her nightly routine last ran an hour ago at a ten-minute interval,
+    // so arming marks it MISSED — the row must say so with the time.
+    teammates: [
+      { id: 'ada', name: 'ada', brief: 'You review pull requests for the api repository and never merge them yourself.', places: [REPO], services: ['github'], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: true },
+      { id: 'bo', name: 'bo', brief: '', places: [], services: [], skills: [], memory: 'bo', chats: [], messaging: true, scheduling: false }
+    ],
+    routines: [
+      { id: 'nightly', name: 'nightly review', teammateId: 'ada', everyMs: 600000, prompt: 'Summarise what changed in the repository since the last run and list anything that looks unfinished.', plan: 'focus chat', paused: false, lastRun: { at: Date.now() - 3600000, outcome: 'started', panelId: 'chat' }, missed: { at: Date.now() - 3000000 } },
+      { id: 'weekly', name: 'weekly tidy', teammateId: 'ada', everyMs: 3600000, prompt: 'Draft a tidy-up plan.', paused: true }
+    ],
     worktrees: [
       { id: 'wt-a', root: REPO_ROOT, path: WT_A, branch: 'tc/api-20260904-1100', createdAt: Date.now() - 3600000, panelId: 'live' },
       { id: 'wt-b', root: REPO_ROOT, path: WT_B, branch: 'tc/tests-20260904-1102', createdAt: Date.now() - 3000000, panelId: 'dormant' }
@@ -625,6 +649,16 @@ app.whenReady().then(async () => {
       memoryList: (root, limit) => shotMemory.list(root, limit),
       memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
       listTemplates: () => allTemplates(layoutStore.templates()),
+      // M100/M101. The roster and routines over the harness's own store; the
+      // folder dialog and the runner are main's and stay out of a harness.
+      listTeammates: () => layoutStore.teammates(),
+      saveTeammate: (t) => { layoutStore.saveTeammate(t); return t },
+      removeTeammate: (id) => layoutStore.deleteTeammate(id),
+      choosePlace: async () => null,
+      listRoutines: () => layoutStore.routines(),
+      saveRoutine: (r) => { layoutStore.saveRoutine(r); return { kind: 'saved', routine: r } },
+      removeRoutine: (id) => layoutStore.deleteRoutine(id),
+      runRoutine: () => false,
       saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
       spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories()

@@ -3720,6 +3720,42 @@ confirmation says the content is a remote page's. `verify:verbs gate.3` pins
 `browser-read.ts` as the only file in `src/` that calls `executeJavaScript`, so a second reader
 added later without the gate fails the build rather than handing a page out unscrubbed.
 
+**Places decide on the REAL path, in MAIN, before `resolveCwd` — and they bound the app, not
+the CLI (`shared/places.ts`, `main/places.ts`, M100).** Three traversals each fail silently if
+undone and each is a check: `..` (the typed prefix matches the place, the normalised path does
+not — M87's `%2e%2e` lesson), a symlink inside the place that points out (only the real path
+knows), and a relative path (`api/src`), which is REFUSED rather than resolved — every root the
+app could pick (cwd, home, the place) is a guess the user did not make. The gate is asked at
+`agent:create` and `spawn:sheet` on the EXPANDED path BEFORE `resolveCwd`, because `resolveCwd`
+falls back to home for a folder that does not exist and would turn a refused folder into an
+allowed home with no symptom. No places is nothing, never everything; a place is chosen in the
+OS folder dialog, never typed, so the record only ever holds an absolute real folder. The honest
+limit is written on the spec and the pane: Places govern what THIS APP does on the teammate's
+behalf (the cwd it spawns into, the memory it reads); the CLI's own tool calls are the CLI's
+permission system's, which this app cannot see into. The brief is main's too: it is appended
+from the roster on every spawn, so the renderer never carries it and a relaunch gets it again.
+
+**The spend card is an EXTERNAL question on the teammate's chat, and the teammate is never the
+CLI's claim (`main/broker.ts`, `AgentSessionManager.askExternal`, `control-handler.ts`, M102).**
+`tc api` has no teammate field; the handler derives the teammate from the PANEL that asked,
+using main's own records, so an agent cannot borrow an identity it is not. The grant is checked
+BEFORE `store.read` (the three readers stay three and a refused attempt is an audit row with no
+token behind it), `READ_ONLY_METHODS` is data, and a write asks through `askExternal` — a
+question on the session's pending set that every surface answers through the one
+`answerPermission`, honours M98's `Allow for session`, writes NOTHING to the process, and dies
+`false` with the session. A write nobody can approve (no live chat for the teammate) is refused
+`not-answered`, never performed.
+
+**A routine's missed tick is MARKED, never fired, and its plan line is refused at save
+(`main/routine-runner.ts`, `shared/routines.ts`, M101).** The app is not a daemon: at arm, a
+routine whose due tick fell while the app was closed gets `missed: { at }` and the row says so;
+firing it would run work at a time nobody chose. A paused routine is KNOWN (no interval; `Run
+now` works) rather than dropped from the runner, or `Run now` on a paused routine would answer
+"no such routine". The save-time refusal reads M96's table (`planIsDestructive`) — the reason
+`destructive` is data — and the teammate's `scheduling` permission; the tick is main's, the
+mint is the renderer's (only it mints panels), and the run is reported back through the one
+save door so the row is never a guess.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3758,3 +3794,10 @@ beneath them. Added, each confirmed once by hand or not at all, as stated:
   the read path is proven over a local page, and that is all `green` says. Also unobserved: a
   `<webview>` under a far tier's hidden body — whether Chromium keeps the guest painted or
   re-creates it when the body is shown again is a flash at most, and was not looked for.
+- **The OS folder dialog (M100).** `teammate:choose-place` opens `showOpenDialog` with
+  `openDirectory`; no suite drives a native dialog. Confirmed once by hand or not at all.
+- **A real tick over minutes (M101).** `verify:file routine.1` drives the runner with injected
+  timers; that an unref'd `setInterval` in a running app fires a `routine:fire` after ten real
+  minutes, and that the renderer's mint answers it, was not watched.
+- **A real write through the broker with a card (M102).** The card and its refusal are driven
+  over fake fetchers and a fake session; no real GitHub write was made, by constraint 1.

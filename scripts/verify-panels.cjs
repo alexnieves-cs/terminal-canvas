@@ -1185,6 +1185,16 @@ app.whenReady().then(async () => {
     memoryList: (root, limit) => memoryStore.list(root, limit),
     memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
+    // M100/M101. The roster and routines over the harness's own store; the
+    // folder dialog and the runner are main's and stay out of a harness.
+    listTeammates: () => layoutStore.teammates(),
+    saveTeammate: (t) => { layoutStore.saveTeammate(t); return t },
+    removeTeammate: (id) => layoutStore.deleteTeammate(id),
+    choosePlace: async () => null,
+    listRoutines: () => layoutStore.routines(),
+    saveRoutine: (r) => { layoutStore.saveRoutine(r); return { kind: 'saved', routine: r } },
+    removeRoutine: (id) => layoutStore.deleteRoutine(id),
+    runRoutine: () => false,
     saveTemplate: (template) => {
       const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id) ? template.id : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
       const saved = { ...template, id }
