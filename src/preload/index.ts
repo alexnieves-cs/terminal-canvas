@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import type { WatcherStateEvent } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
+import type { PersistedRoutine } from '../shared/routines'
 import {
   IPC,
   IPC_EVENTS,
@@ -115,6 +116,19 @@ const bridge: CanvasBridge = {
   memory: {
     list: (root: string, limit: number) => ipcRenderer.invoke(IPC.MEMORY_LIST, root, limit),
     add: (req) => ipcRenderer.invoke(IPC.MEMORY_ADD, req)
+  },
+  teammate: {
+    list: () => ipcRenderer.invoke(IPC.TEAMMATE_LIST),
+    save: (teammate) => ipcRenderer.invoke(IPC.TEAMMATE_SAVE, teammate),
+    remove: (id: string) => ipcRenderer.invoke(IPC.TEAMMATE_DELETE, id),
+    choosePlace: () => ipcRenderer.invoke(IPC.TEAMMATE_CHOOSE_PLACE)
+  },
+  routine: {
+    list: () => ipcRenderer.invoke(IPC.ROUTINE_LIST),
+    save: (routine) => ipcRenderer.invoke(IPC.ROUTINE_SAVE, routine),
+    remove: (id: string) => ipcRenderer.invoke(IPC.ROUTINE_DELETE, id),
+    run: (id: string) => ipcRenderer.invoke(IPC.ROUTINE_RUN, id),
+    onFire: (listener) => subscribe<PersistedRoutine>(IPC_EVENTS.ROUTINE_FIRE, listener)
   },
   template: {
     list: () => ipcRenderer.invoke(IPC.TEMPLATE_LIST),
@@ -265,6 +279,9 @@ const bridge: CanvasBridge = {
   toolbox: {
     read: (req: ToolboxReadRequest) => ipcRenderer.invoke(IPC.TOOLBOX_READ, req),
     permissions: (req: ToolboxPermissionsRequest) => ipcRenderer.invoke(IPC.TOOLBOX_PERMISSIONS, req)
+  },
+  browser: {
+    read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
   },
   platform: process.platform
 }

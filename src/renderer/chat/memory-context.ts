@@ -19,7 +19,17 @@ export const MEMORY_CONTEXT_BYTES = 4 * 1024
  * bytes are measured with `TextEncoder`, not `String.length`, so a memory
  * written in any script is measured in the units the bound is named in.
  */
-export function memoryContext(entries: readonly MemoryEntryRow[]): { text: string; count: number } {
+/** M100. The root a teammate's own memory is asked by: main maps it to its file under memory/teammates. */
+export function teammateMemoryRoot(teammateId: string): string { return `teammate:${teammateId}` }
+
+export function memoryContext(entries: readonly MemoryEntryRow[], own?: { entries: readonly MemoryEntryRow[]; who: string }): { text: string; count: number } {
+  const repo = memoryBlock(entries, 'what this repository has already decided, tried and failed')
+  if (own === undefined) return repo
+  const mine = memoryBlock(own.entries, `what ${own.who} has already learned`)
+  return { text: repo.text + mine.text, count: repo.count + mine.count }
+}
+
+function memoryBlock(entries: readonly MemoryEntryRow[], heading: string): { text: string; count: number } {
   const encoder = new TextEncoder()
   const lines: string[] = []
   let bytes = 0
@@ -31,7 +41,7 @@ export function memoryContext(entries: readonly MemoryEntryRow[]): { text: strin
   }
   if (lines.length === 0) return { text: '', count: 0 }
   return {
-    text: `[what this repository has already decided, tried and failed — ${lines.length} memories]\n${lines.join('\n')}\n\n`,
+    text: `[${heading} — ${lines.length} memories]\n${lines.join('\n')}\n\n`,
     count: lines.length
   }
 }

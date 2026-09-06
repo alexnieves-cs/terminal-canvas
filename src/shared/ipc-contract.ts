@@ -5,6 +5,7 @@ import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
+import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 /**
  * Single source of truth for the IPC surface.
  *
@@ -25,6 +26,8 @@ import type {
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
+import type { PersistedTeammate } from './teammates'
+import type { PersistedRoutine } from './routines'
 
 /** M83. One memory as the renderer reads it. */
 /**
@@ -562,7 +565,25 @@ export const IPC = {
    * relaunch asks again.
    */
   AGENT_GRANTS: 'agent:grants',
-  AGENT_REVOKE_GRANTS: 'agent:revoke-grants'
+  AGENT_REVOKE_GRANTS: 'agent:revoke-grants',
+  /** M100. The roster: list, save (upsert), delete. Places are checked in main, never here. */
+  TEAMMATE_LIST: 'teammate:list',
+  TEAMMATE_SAVE: 'teammate:save',
+  TEAMMATE_DELETE: 'teammate:delete',
+  /** M100. The OS folder dialog: a place is chosen, never typed. Answers the absolute path or null. */
+  TEAMMATE_CHOOSE_PLACE: 'teammate:choose-place',
+  /** M101. Routines: list, save (refused by name — a destructive plan, no schedule permission), delete, run now. */
+  ROUTINE_LIST: 'routine:list',
+  ROUTINE_SAVE: 'routine:save',
+  ROUTINE_DELETE: 'routine:delete',
+  ROUTINE_RUN: 'routine:run',
+  /**
+   * M103. The browser pane's text, read in MAIN: the scheme is checked on
+   * the guest's LIVE url (not the record's, not only at navigation), the
+   * text is capped inside the guest, and it passes the outward gate before
+   * it crosses back. Reading the pane is leaving the app.
+   */
+  BROWSER_READ: 'browser:read'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -729,7 +750,9 @@ export const IPC_EVENTS = {
    * rides a slow tick and an unconditional send would be a message per tick
    * per panel describing a fact that changes once per agent turn.
    */
-  USAGE_PANEL: 'usage:panel'
+  USAGE_PANEL: 'usage:panel',
+  /** M101. A routine's tick: the renderer mints the fresh chat and sends the prompt. */
+  ROUTINE_FIRE: 'routine:fire'
 } as const
 
 export interface FileReadRequest {
@@ -877,8 +900,11 @@ export interface SpawnRequest {
   title?: string
   agentOptions?: AgentOptions
   worktree?: boolean
+  /** M100. The teammate the panel speaks as; main checks its places before resolving the cwd. */
+  teammateId?: string
 }
-export type SpawnResult = { kind: 'spawned' } | { kind: 'refused'; reason: string }
+/** `id` is present when the caller minted the panel itself (a chat); main's spawn answers without one. */
+export type SpawnResult = { kind: 'spawned'; id?: string } | { kind: 'refused'; reason: string }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
 export interface CapturedPanel {
@@ -1162,6 +1188,23 @@ export interface CanvasBridge {
     /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
     add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   }
+  /** M100. Teammates: the roster. `save` upserts by id and answers the record as saved; `remove` answers whether it held the id. */
+  teammate: {
+    list(): Promise<PersistedTeammate[]>
+    save(teammate: PersistedTeammate): Promise<PersistedTeammate>
+    remove(id: string): Promise<boolean>
+    /** The folder dialog; null when cancelled. */
+    choosePlace(): Promise<string | null>
+  }
+  /** M101. Routines. `save` answers the record as saved or a named refusal; `run` fires now. */
+  routine: {
+    list(): Promise<PersistedRoutine[]>
+    save(routine: PersistedRoutine): Promise<{ kind: 'saved'; routine: PersistedRoutine } | { kind: 'refused'; reason: string }>
+    remove(id: string): Promise<boolean>
+    run(id: string): Promise<boolean>
+    /** Main's tick; the renderer answers by minting the chat and reporting through `save`. */
+    onFire(listener: (routine: PersistedRoutine) => void): () => void
+  }
   /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
   template: {
     list(): Promise<PersistedTemplate[]>
@@ -1397,6 +1440,10 @@ export interface CanvasBridge {
     permissions(
       req: ToolboxPermissionsRequest
     ): Promise<{ rules: string[]; total: number; status: string }>
+  }
+  /** M103. See BROWSER_READ. Three arms; never rejects. */
+  browser: {
+    read(req: BrowserReadRequest): Promise<BrowserReadResult>
   }
   platform: NodeJS.Platform
 }

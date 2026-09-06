@@ -646,6 +646,32 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ logs: logs.length, rows: rowSet.size, missingRows, missingLogs }))
 }
 
+// M103 — browser.1. THE GUEST'S FIVE PROPERTIES, AS TEXT. `webviewTag: true`
+// is the one setting Electron's own docs discourage, and the argument for it
+// is that every property the docs warn about is closed by name in
+// main/index.ts: the tag itself; `will-attach-webview` stripping any
+// `preload` a page could set and forcing nodeIntegration OFF and
+// contextIsolation ON; the browser partition's permission handler answering
+// `false` (camera, mic, geolocation, notifications — every ask); the guest's
+// own `setWindowOpenHandler` denying every new window; and the http(s) gate
+// on the guest's `src`. None of these has a runtime symptom when removed —
+// a page that reaches node prints nothing — so the source text is the check.
+{
+  const src = stripComments(read('src/main/index.ts') ?? '')
+  const at = src.indexOf("'will-attach-webview'")
+  const attach = at < 0 ? '' : src.slice(at, at + 900)
+  const webviewTag = /webviewTag:\s*true/.test(src)
+  const stripsPreload = /delete\s+webPreferences\.preload/.test(attach)
+  const noNode = /webPreferences\.nodeIntegration\s*=\s*false/.test(attach) && /webPreferences\.contextIsolation\s*=\s*true/.test(attach)
+  const srcGate = /\^https\?:/.test(attach) && /event\.preventDefault\(\)/.test(attach)
+  const permission = /fromPartition\(\s*'persist:tc-browser'\s*\)[\s\S]{0,80}setPermissionRequestHandler\(\s*\([^)]*\)\s*=>\s*\w+\(false\)\s*\)/.test(src)
+  const da = src.indexOf("'did-attach-webview'")
+  const guestDeny = da >= 0 && /setWindowOpenHandler\(\s*\(\)\s*=>\s*\(\{\s*action:\s*'deny'\s*\}\)\s*\)/.test(src.slice(da, da + 600))
+  ok('browser.1 main/index.ts turns the webview tag on and closes every property the docs warn about by name: will-attach-webview strips preload and forces nodeIntegration false / contextIsolation true, the guest src is gated to http(s), the persist:tc-browser partition denies every permission ask, and the attached guest denies every new window',
+    webviewTag && stripsPreload && noNode && srcGate && permission && guestDeny,
+    JSON.stringify({ webviewTag, stripsPreload, noNode, srcGate, permission, guestDeny }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

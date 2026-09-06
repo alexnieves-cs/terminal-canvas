@@ -30,6 +30,34 @@ export interface BrokerRequest {
   path: string
   body?: string
   panelId?: string
+  /** M102. The teammate spending: its grant is checked BEFORE the credential is read, and a write asks first. */
+  teammateId?: string
+  /** M102. What the caller says the call costs (credits, dollars, a quota) — shown on the card as said, `unknown` when absent. */
+  cost?: string
+}
+
+/**
+ * M102. READ-ONLY methods run uninterrupted; anything else is a WRITE and
+ * asks first. Data, not a heuristic on the path: a `GET` that mutates is a
+ * service's bug, a `POST` that only reads still spends the user's standing,
+ * and the method is the one thing every REST service agrees on.
+ */
+export const READ_ONLY_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+export const NOT_GRANTED_CODE = 'not-granted'
+export const NOT_ANSWERED_CODE = 'not-answered'
+
+/** M102. What the spend card names: service, account, action, target, cost. */
+export interface SpendApproval {
+  teammateId: string
+  service: string
+  method: string
+  path: string
+  /** The connected account's label (`credential:list`'s), never the token. */
+  account: string
+  cost: string
+  /** The panel that asked, so the card lands on ITS chat and its session grant answers it. */
+  panelId?: string
 }
 
 export type BrokerAnswer =
@@ -58,6 +86,8 @@ export interface BrokerAuditRow {
   bytes: number
   panelId?: string
   reason?: string
+  /** M102. Which teammate spent, when one did. */
+  teammateId?: string
 }
 
 export interface BrokerDeps {
@@ -65,6 +95,20 @@ export interface BrokerDeps {
   fetcher: BrokerFetcher
   audit: { append(row: BrokerAuditRow): void }
   now?: () => number
+  /**
+   * M102. The services a teammate may spend, or undefined for a teammate the
+   * roster does not hold. Absent (every pre-M102 caller and every check) means
+   * no teammate scoping: a request naming a teammate is then refused, because
+   * a grant nobody can answer for is not a grant.
+   */
+  services?: (teammateId: string) => readonly string[] | undefined
+  /**
+   * M102. Ask before a WRITE. Resolves the user's answer; absent means every
+   * write by a teammate is refused by name (`not-answered`), never performed.
+   */
+  approve?: (req: SpendApproval) => Promise<boolean>
+  /** M102. The connected account's label for the card, from the store's METADATA. */
+  account?: (service: string) => string | undefined
 }
 
 export interface Broker {
@@ -142,6 +186,7 @@ export function createBroker(deps: BrokerDeps): Broker {
     deps.audit.append({
       at: now(), service: req.service, method: req.method, path: req.path, status, bytes,
       ...(req.panelId === undefined ? {} : { panelId: req.panelId }),
+      ...(req.teammateId === undefined ? {} : { teammateId: req.teammateId }),
       ...(reason === undefined ? {} : { reason })
     })
   }
@@ -158,6 +203,14 @@ export function createBroker(deps: BrokerDeps): Broker {
       if (pathProblem !== null) return refuse(req, pathProblem)
       if (req.body !== undefined && Buffer.byteLength(req.body) > BROKER_BODY_MAX) return refuse(req, `the body is over the ${BROKER_BODY_MAX / 1024 / 1024} MB cap`)
       if (req.service !== 'github' && req.service !== 'jira') return refuse(req, `unknown service ${JSON.stringify(req.service)} — the broker knows github and jira`)
+      // M102. The grant, BEFORE the credential is read: a refused teammate
+      // never causes a read, so the store's readers stay what they are and
+      // the audit shows the attempt with no token behind it.
+      if (req.teammateId !== undefined) {
+        const granted = deps.services?.(req.teammateId)
+        if (granted === undefined) return refuse(req, `no teammate is called ${req.teammateId}, or this window scopes no services — open the Teammates pane`, NOT_GRANTED_CODE)
+        if (!granted.includes(req.service)) return refuse(req, `${req.service} is not granted to this teammate — grant ${req.service} to it in the Teammates pane`, NOT_GRANTED_CODE)
+      }
       const secret = deps.store.read(req.service)
       if (secret === undefined) return refuse(req, notConnectedReason(req.service), NOT_CONNECTED_CODE)
       const resolved = resolve(req.service, secret, req.path)
@@ -170,6 +223,13 @@ export function createBroker(deps: BrokerDeps): Broker {
       // own text, and an agent that put a token in a query string would
       // otherwise write it into the audit (M89's verifier).
       const asked = { ...req, path: scrub(normalised.path, resolved.secrets) }
+      // M102. A write asks first, by NAME: service, account, action, target,
+      // cost. Read-only methods run uninterrupted (the table above). The
+      // answer comes through M98's door, `Allow for session` included.
+      if (req.teammateId !== undefined && !READ_ONLY_METHODS.has(method)) {
+        const allowed = deps.approve === undefined ? false : await deps.approve({ teammateId: req.teammateId, service: req.service, method, path: asked.path, account: deps.account?.(req.service) ?? req.service, cost: req.cost ?? 'unknown', ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
+        if (!allowed) return refuse(asked, `${method} ${asked.path} on ${req.service} was not allowed — a write through the broker asks first, on the teammate's chat`, NOT_ANSWERED_CODE)
+      }
       if (inFlight >= BROKER_IN_FLIGHT_MAX) return refuse(asked, `${BROKER_IN_FLIGHT_MAX} calls are already in flight — wait for one to finish`)
       inFlight += 1
       let answer: { status: number; body: string }

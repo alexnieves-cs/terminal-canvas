@@ -40,6 +40,10 @@ export interface ControlHandlerDeps {
    * answer in time" — a third state, never an empty model with no note.
    */
   canvas?: () => Promise<ControlCanvasModel | null>
+  /** M102. The teammate a panel speaks as, from main's own records — never the CLI's claim. */
+  teammateOf?: (panelId: string) => string | undefined
+  /** M102. The panel a session token was minted for; undefined for a token this window never minted. */
+  panelOfToken?: (token: string) => string | undefined
   /** M87. The broker: the one verb that can spend a credential. Absent means refused by name. */
   broker?: { call(req: { service: string; method: string; path: string; body?: string; panelId?: string }): Promise<{ ok: true; status: number; body: string; truncated: boolean } | { ok: false; reason: string }> }
   /** M83. The project memory store: the only thing a control verb may write. */
@@ -87,7 +91,17 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
       }
       case 'api': {
         if (deps.broker === undefined) return { ok: false, error: 'this window has no broker' }
-        const answer = await deps.broker.call({ service: req.service, method: req.method, path: req.path, ...(req.body === undefined ? {} : { body: req.body }), ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
+        // M102. A token names the panel that REALLY asked — main minted it into
+        // that session's environment — and overrides any claimed panelId; a
+        // token this window never minted is refused, never trusted.
+        let panelId = req.panelId
+        if (req.token !== undefined) {
+          const owner = deps.panelOfToken?.(req.token)
+          if (owner === undefined) return { ok: false, error: 'the panel token is not one this window minted — run tc from inside a panel this app opened' }
+          panelId = owner
+        }
+        const teammateId = panelId === undefined ? undefined : deps.teammateOf?.(panelId)
+        const answer = await deps.broker.call({ service: req.service, method: req.method, path: req.path, ...(req.body === undefined ? {} : { body: req.body }), ...(panelId === undefined ? {} : { panelId }), ...(teammateId === undefined ? {} : { teammateId }), ...(req.cost === undefined ? {} : { cost: req.cost }) })
         return answer.ok ? { ok: true, status: answer.status, body: answer.body, truncated: answer.truncated } : { ok: false, error: answer.reason }
       }
       case 'status': {

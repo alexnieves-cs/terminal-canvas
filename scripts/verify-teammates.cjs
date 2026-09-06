@@ -1,0 +1,109 @@
+/* Verifies M100's Places — a teammate's authority over the filesystem as an
+   explicit list of approved folders, checked in MAIN before any spawn
+   resolves a cwd (the file verbs are the user's own and carry no teammate).
+   Run with: npm run verify:teammates
+
+   Plain node over a FAKE realpath. The three traversal cases are the whole
+   milestone: `..` walking out, a symlink inside a place pointing out, and a
+   relative path resolved against the wrong root. M87's broker learned the
+   first one the hard way (`%2e%2e` under the Jira prefix) — every check
+   here runs on the NORMALISED, REAL path, never the typed one. */
+const { buildSync } = require('esbuild')
+const { join } = require('node:path')
+const { mkdirSync } = require('node:fs')
+
+const OUT = join(__dirname, '..', 'out', 'verify', 'teammates.cjs')
+mkdirSync(join(__dirname, '..', 'out', 'verify'), { recursive: true })
+buildSync({
+  entryPoints: [join(__dirname, 'teammates-entry.cjs')],
+  outfile: OUT, bundle: true, platform: 'node', format: 'cjs',
+  external: ['electron', 'node-pty'],
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared'), '@renderer': join(__dirname, '..', 'src', 'renderer') }
+})
+const M = require(OUT)
+const P = M.places, T = M.teammates, G = M.gate
+
+const results = []
+const ok = (n, pass, detail) => {
+  results.push({ n, pass, detail })
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
+}
+
+/* A fake filesystem: realpath resolves the one symlink and collapses `..`;
+   anything under /nowhere does not exist. */
+const LINKS = { '/home/u/work/api/link': '/etc', '/home/u/work/api/inner': '/home/u/work/api/src' }
+const realpath = (p) => {
+  const { posix } = require('node:path')
+  const norm = posix.normalize(p)
+  for (const [from, to] of Object.entries(LINKS)) if (norm === from || norm.startsWith(from + '/')) return to + norm.slice(from.length)
+  if (norm.startsWith('/nowhere')) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+  return norm
+}
+const PLACES = ['/home/u/work/api', '/home/u/notes/']
+
+;(async () => {
+  // places.1 — `..` walks out. The typed path looks like it is under the
+  // place; the normalised one is not.
+  {
+    const inside = P.insidePlace('/home/u/work/api/src/index.ts', PLACES, realpath)
+    const dotdot = P.insidePlace('/home/u/work/api/../../.ssh/id_rsa', PLACES, realpath)
+    const sneaky = P.insidePlace('/home/u/work/api/src/../../api2/x', PLACES, realpath)
+    const prefix = P.insidePlace('/home/u/work/api2/x', PLACES, realpath)
+    const exact = P.insidePlace('/home/u/work/api', PLACES, realpath)
+    const trailing = P.insidePlace('/home/u/notes/plan.md', PLACES, realpath)
+    ok('places.1 a path under a place is inside; `..` walking out is not, even when the typed prefix matches; a sibling sharing the place\'s prefix as a string (api2) is not; the place itself is; a place written with a trailing slash still holds its files',
+      inside === true && dotdot === false && sneaky === false && prefix === false && exact === true && trailing === true,
+      JSON.stringify({ inside, dotdot, sneaky, prefix, exact, trailing }))
+  }
+  // places.2 — a symlink inside the place pointing OUT resolves out; one
+  // pointing within stays within.
+  {
+    const out = P.insidePlace('/home/u/work/api/link/passwd', PLACES, realpath)
+    const within = P.insidePlace('/home/u/work/api/inner/a.ts', PLACES, realpath)
+    ok('places.2 a symlink inside a place that points outside it is OUTSIDE (the real path decides); one that points within is inside',
+      out === false && within === true, JSON.stringify({ out, within }))
+  }
+  // places.3 — a relative path is REFUSED, never resolved against any root.
+  {
+    const rel = P.insidePlace('api/src', PLACES, realpath)
+    const tilde = P.insidePlace('~/work/api/src', PLACES, realpath)
+    const dot = P.insidePlace('./src', PLACES, realpath)
+    ok('places.3 a relative path, a `~` path and a `./` path are outside every place — never resolved against cwd, home or the place',
+      rel === false && tilde === false && dot === false, JSON.stringify({ rel, tilde, dot }))
+  }
+  // places.4 — no places is NO filesystem, never everything; a path that does
+  // not exist is outside (nothing to grant).
+  {
+    const none = P.insidePlace('/home/u/work/api/src', [], realpath)
+    const missing = P.insidePlace('/nowhere/x', PLACES, realpath)
+    ok('places.4 a teammate with no places may touch nothing; a path that does not exist is outside',
+      none === false && missing === false, JSON.stringify({ none, missing }))
+  }
+  // gate.1 — the gate answers by NAME with the fix, and is what main asks
+  // BEFORE resolving a cwd: a refusal carries the place to add.
+  {
+    const ada = { id: 't1', name: 'ada', brief: 'x', places: ['/home/u/work/api'], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+    const gate = G.createPlacesGate({ realpath, teammate: (id) => (id === 't1' ? ada : undefined) })
+    const okAns = gate.check('t1', '/home/u/work/api/src')
+    const bad = gate.check('t1', '/home/u/.ssh')
+    const unknown = gate.check('t9', '/home/u/work/api')
+    const noId = gate.check(undefined, '/anywhere')
+    ok('gate.1 the gate allows a path inside, refuses one outside naming the teammate, the path and the fix (add <folder> to this teammate\'s places), refuses an unknown teammate by name, and lets a request with NO teammate through untouched (a plain panel is the user\'s own hands)',
+      okAns.ok === true && bad.ok === false && /ada/.test(bad.reason) && /\.ssh/.test(bad.reason) && /add .*places/.test(bad.reason) &&
+        unknown.ok === false && /t9/.test(unknown.reason) && noId.ok === true,
+      JSON.stringify({ okAns, bad, unknown, noId }))
+  }
+  // record.1 — the copy helper: an absent optional stays absent; the
+  // required lists are always arrays.
+  {
+    const t = T.carryTeammate({ id: 't1', name: 'ada', brief: '', places: ['/a'], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: true })
+    const empty = T.emptyTeammate('t2', 'bo')
+    ok('record.1 carryTeammate copies every list by value and writes no undefined key; emptyTeammate has no places, no services, no schedule, and its memory slug is its id',
+      t.places.join() === '/a' && t.scheduling === true && Object.values(t).every((v) => v !== undefined) &&
+        empty.places.length === 0 && empty.services.length === 0 && empty.scheduling === false && empty.memory === 't2' && T.TEAMMATES_MAX > 0,
+      JSON.stringify({ t, empty }))
+  }
+  const failed = results.filter((r) => !r.pass)
+  console.log(`\n${results.length - failed.length}/${results.length} passed`)
+  process.exit(failed.length ? 1 : 0)
+})().catch((e) => { console.error(e); process.exit(1) })

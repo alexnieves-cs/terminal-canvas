@@ -933,6 +933,138 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ n: read && read.notes.map((x) => [x.path, x.title]), skipped: read && read.skipped, capped: capped && { n: capped.notes.length, skipped: capped.skipped }, missing }))
 }
 
+// M100 — memory.3. TWO MEMORIES, TWO AXES. A teammate's memory is its own file
+// under memory/teammates, through the SAME store (a second instance over a
+// second dir), BESIDE the repository's — neither sees the other's rows, and
+// the teammate's root is its slug, never a path.
+{
+  const { mkdtempSync, rmSync, readdirSync, existsSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'tc memory two '))
+  try {
+    const repo = F.createMemoryStore({ dir })
+    const mates = F.createMemoryStore({ dir: join(dir, 'teammates') })
+    repo.add({ root: '/r', kind: 'decided', text: 'sessions live in tmux' })
+    mates.add({ root: 'ada', kind: 'note', text: 'ada prefers short answers' })
+    const r = repo.list('/r', 10), m = mates.list('ada', 10), cross = repo.list('ada', 10)
+    const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
+    const mateFiles = existsSync(join(dir, 'teammates')) ? readdirSync(join(dir, 'teammates')) : []
+    ok('memory.3 a teammate store over memory/teammates writes its own file, the repository store never lists it, and each answers only its own rows',
+      r.entries.length === 1 && m.entries.length === 1 && cross.entries.length === 0 && files.length === 1 && mateFiles.length === 1 && /ada/.test(mateFiles[0]),
+      JSON.stringify({ r: r.entries.length, m: m.entries.length, cross: cross.entries.length, files, mateFiles }))
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+}
+
+// M101 — routine.1. THE RUNNER over injected timers: arm fires on the
+// interval, a save re-arms without a double tick, pause disarms, runNow
+// fires whatever the schedule says and stamps the run, and a routine whose
+// due tick fell while the app was closed is marked MISSED at arm with the
+// time — and NOT fired.
+{
+  const has = typeof F.createRoutineRunner === 'function'
+  const timers = new Map(); let seq = 0; let now = 1_000_000
+  const fired = [], saved = []
+  const runner = has ? F.createRoutineRunner({
+    now: () => now,
+    setInterval: (fn, ms) => { const h = ++seq; timers.set(h, { fn, ms }); return h },
+    clearInterval: (h) => { timers.delete(h) },
+    fire: (r) => fired.push(r.id),
+    save: (r) => saved.push(r)
+  }) : null
+  const r1 = { id: 'r1', name: 'a', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false }
+  const stale = { id: 'r2', name: 'b', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false, lastRun: { at: now - 5 * 60000, outcome: 'started' } }
+  const paused = { id: 'r3', name: 'c', teammateId: 't', everyMs: 60000, prompt: 'p', paused: true }
+  const missed = runner ? runner.arm([r1, stale, paused], { startup: true }) : []
+  const armedCount = timers.size
+  const tick = () => { for (const t of [...timers.values()]) t.fn() }
+  now += 60000; tick()
+  const firedAfterTick = fired.slice()
+  const rearmed = runner ? runner.arm([r1, { ...stale, missed: { at: stale.lastRun.at + 60000 } }, paused]) : []
+  const armedAfterRearm = timers.size
+  const ran = runner ? runner.runNow('r3') : null
+  const ranUnknown = runner ? runner.runNow('zz') : null
+  const stampedR1 = saved.filter((s) => s.id === 'r1' && s.lastRun && s.lastRun.outcome === 'started').length
+  ok('routine.1 arming fires each unpaused routine on its interval (a paused one is known but not armed); a stale routine is marked missed with the DUE time and fires only on its interval; a re-arm keeps one timer per routine and re-marks nothing already marked; runNow fires a paused routine by hand and stamps the run; an unknown id answers false',
+    has && armedCount === 2 && missed.join() === 'r2' && saved.some((s) => s.id === 'r2' && s.missed && s.missed.at === stale.lastRun.at + 60000) &&
+      firedAfterTick.length === 2 && firedAfterTick.includes('r1') && firedAfterTick.includes('r2') &&
+      rearmed.length === 0 && armedAfterRearm === 2 && ran === true && fired.includes('r3') && ranUnknown === false && stampedR1 === 1 &&
+      // The fire's stamp clears the missed mark: the LAST r2 saved carries none.
+      saved.filter((s) => s.id === 'r2').slice(-1)[0].missed === undefined,
+    JSON.stringify({ has, armedCount, missed, firedAfterTick, rearmed, armedAfterRearm, ran, ranUnknown, stampedR1, saved: saved.map((s) => [s.id, s.missed, s.lastRun && s.lastRun.outcome]) }))
+  if (runner) runner.disposeAll()
+}
+
+// M101 — routine.2. A SAVE KEEPS THE PHASE. Re-arming with an unchanged schedule
+// keeps the routine's timer (a frequent routine's saves must not restart a
+// slower one forever — the verifier's finding); a changed interval re-arms;
+// the missed mark is computed only at STARTUP, so a resume after a long
+// pause is never "the app was closed".
+{
+  const has = typeof F.createRoutineRunner === 'function'
+  const timers = new Map(); let seq = 0; let now = 5_000_000
+  const fired = [], saved = []
+  const runner = has ? F.createRoutineRunner({
+    now: () => now,
+    setInterval: (fn, ms) => { const h = ++seq; timers.set(h, { fn, ms }); return h },
+    clearInterval: (h) => { timers.delete(h) },
+    fire: (r) => fired.push(r.id),
+    save: (r) => saved.push(r)
+  }) : null
+  const a = { id: 'a', name: 'a', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false }
+  const b = { id: 'b', name: 'b', teammateId: 't', everyMs: 300000, prompt: 'p', paused: false }
+  if (runner) runner.arm([a, b], { startup: true })
+  const handlesBefore = [...timers.keys()].join(',')
+  if (runner) runner.arm([{ ...a, name: 'a renamed' }, b]) // a save with the same schedule
+  const handlesAfter = [...timers.keys()].join(',')
+  if (runner) runner.arm([{ ...a, everyMs: 120000 }, b]) // a changed interval
+  const handlesChanged = [...timers.keys()].join(',')
+  const stale = { id: 's', name: 's', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false, lastRun: { at: now - 3600000, outcome: 'started' } }
+  const notStartup = runner ? runner.arm([a, b, stale]) : ['x']
+  const stale2 = { ...stale, id: 's2' }
+  const atStartup = runner ? runner.arm([a, b, stale, stale2], { startup: true }) : []
+  ok('routine.2 an unchanged schedule keeps its timer across a save; a changed interval re-arms; the missed mark is computed only at startup — a later arm marks nothing',
+    has && handlesBefore === handlesAfter && handlesChanged !== handlesAfter && notStartup.length === 0 && atStartup.join() === 's2' && saved.some((s) => s.id === 's2' && s.missed) && !saved.some((s) => s.id === 's' && s.missed),
+    JSON.stringify({ handlesBefore, handlesAfter, handlesChanged, notStartup, atStartup }))
+  if (runner) runner.disposeAll()
+}
+
+// M103 — browser.1. READING THE PANE IS LEAVING THE APP. The read is driven
+//      over injected `getUrl`/`evaluate` so no webview is in earshot: a
+//      `file:`, a `data:` and an `about:` page are each refused BY NAME before
+//      anything is evaluated (the scheme check is main's, on the READ path —
+//      a navigation gate alone leaves `about:blank` and a page's own
+//      `data:` redirect readable); an `https:` page is read, capped at the
+//      byte ceiling, and passed through the outward gate — a token planted
+//      in the page's text is gone and the note says the content is a remote
+//      page's at that host. A guest that answers with something other than a
+//      string is refused, never coerced to `[object Object]`.
+{
+  const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let evaluated = 0
+  const drive = async (url, body) => typeof F.readBrowserPage === 'function'
+    ? F.readBrowserPage({ getUrl: () => url, evaluate: async () => { evaluated += 1; return body } })
+    : { kind: 'missing' }
+  const file = await drive('file:///etc/passwd', 'root:x:0:0')
+  const data = await drive('data:text/html,hi', 'hi')
+  const blank = await drive('about:blank', '')
+  const chrome = await drive('chrome://gpu', 'gpu')
+  const refusedBeforeEvaluating = evaluated === 0
+  const cap = typeof F.BROWSER_READ_MAX_BYTES === 'number' ? F.BROWSER_READ_MAX_BYTES : 0
+  const page = await drive('https://example.com/docs?q=1', `Welcome to the docs\nGITHUB_TOKEN=${token}\n` + 'x'.repeat(cap + 100))
+  const notText = await drive('https://example.com/', { not: 'text' })
+  ok('browser.1 file:, data:, about: and chrome: pages are refused by name before anything is evaluated; an https: page is read, capped at BROWSER_READ_MAX_BYTES, scrubbed (a planted token is gone, the note names a remote page at its host), and a non-string answer is refused',
+    file.kind === 'refused' && /file:/.test(file.reason) &&
+      data.kind === 'refused' && /data:/.test(data.reason) &&
+      blank.kind === 'refused' && /about:/.test(blank.reason) &&
+      chrome.kind === 'refused' && /chrome:/.test(chrome.reason) &&
+      refusedBeforeEvaluating && cap > 0 &&
+      page.kind === 'read' && page.url === 'https://example.com/docs?q=1' && page.text.includes('Welcome to the docs') &&
+      !page.text.includes(token) && /redacted/.test(page.note) && /remote page/.test(page.note) && /example\.com/.test(page.note) &&
+      Buffer.byteLength(page.text, 'utf8') <= cap + 64 && page.truncated === true &&
+      notText.kind === 'refused' && /text/.test(notText.reason),
+    JSON.stringify({ file, data, blank, chrome, evaluated, cap, page: page && { kind: page.kind, url: page.url, note: page.note, bytes: page.text && Buffer.byteLength(page.text, 'utf8'), truncated: page.truncated }, notText }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

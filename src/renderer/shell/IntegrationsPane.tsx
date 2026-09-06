@@ -27,6 +27,8 @@ export interface IntegrationsPaneProps {
   onConnect: (service: string) => void
   onVerify: (service: string) => void
   onRefresh: () => void
+  /** M102. Which teammates may spend each service, by name — the roster's grants, read here. */
+  grants?: Readonly<Record<string, readonly string[]>>
 }
 
 function when(at: number, now: number): string {
@@ -74,6 +76,13 @@ function IntegrationsPaneImpl(props: IntegrationsPaneProps): JSX.Element {
                   {row.verb === 'verify' ? 'Verify' : row.verb === 'reconnect' ? 'Reconnect…' : 'Connect…'}
                 </button>
               </div>
+              {/* M102. Who may spend it: the roster's grants, said here so a
+                  refused `tc api` has its fix on the same page as the token. */}
+              {props.grants !== undefined && (
+                <p className="integration__grants" data-integration-grants={row.id}>
+                  {(props.grants[row.id] ?? []).length === 0 ? 'granted to no teammate — grant it in the Teammates pane' : `granted to ${(props.grants[row.id] ?? []).join(', ')}`}
+                </p>
+              )}
               {row.rows.length === 0 ? (
                 <p className="integration__empty" data-integration-audit-arm="empty">no calls yet — an agent reaches {row.label} with <code className="integration__code">tc api {row.id} &lt;path&gt;</code></p>
               ) : (

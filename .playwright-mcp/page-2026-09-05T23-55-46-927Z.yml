@@ -1,0 +1,566 @@
+- generic [ref=e2]:
+  - banner [ref=e3]:
+    - paragraph [ref=e4]: design review Â· terminal-canvas 2.0 Â· branch m96-verbs Â· 5 Sep 2026
+    - heading "Terminal Canvas, redrawn" [level=1] [ref=e5]
+    - paragraph [ref=e6]: What the interface is today, why it reads as a well-engineered instrument rather than a premium one, what must survive any redesign, and four visual directions to choose between. Nothing here changes code. Pick a direction at the bottom and the page writes your brief back to you.
+    - navigation [ref=e7]:
+      - link "1 Â· What it is now" [ref=e8] [cursor=pointer]:
+        - /url: "#now"
+      - link "2 Â· Why it does not feel premium yet" [ref=e9] [cursor=pointer]:
+        - /url: "#why"
+      - link "3 Â· What has to stay" [ref=e10] [cursor=pointer]:
+        - /url: "#keep"
+      - link "4 Â· Four directions" [ref=e11] [cursor=pointer]:
+        - /url: "#directions"
+      - link "5 Â· Refinements for any direction" [ref=e12] [cursor=pointer]:
+        - /url: "#refine"
+      - link "6 Â· Choose" [ref=e13] [cursor=pointer]:
+        - /url: "#choose"
+      - link "7 Â· Questions for you" [ref=e14] [cursor=pointer]:
+        - /url: "#ask"
+  - generic [ref=e15]:
+    - generic [ref=e16]:
+      - heading "What it is now" [level=2] [ref=e17]
+      - paragraph [ref=e18]: "Two real frames from the M61 screenshot harness. The design is disciplined: an eight-step spacing scale, a six-step type scale, one accent (iris), one hue per agent state, hairline boundaries, and a \"quiet instrument\" brief that every milestone since M62 has been judged against. That discipline is the asset. It is also why it looks like a lab bench and not a flagship product."
+    - generic [ref=e19]:
+      - figure "Light theme, the overview fixture. Flat grey ground, white panels with a hairline, the one amber panel is the only thing that pulls the eye." [ref=e20]:
+        - 'img "The light theme: a canvas with a chat panel, terminal panels and a review panel, the panels rail on the left and a needs-you panel in amber" [ref=e21]'
+      - figure "Dark theme, every panel kind. Every card sits at the same depth, so the eye has no order to follow." [ref=e23]:
+        - 'img "The dark theme: nine panel kinds arranged on the canvas, each a flat charcoal card with a hairline border" [ref=e24]'
+  - generic [ref=e26]:
+    - generic [ref=e27]:
+      - heading "Why it does not feel premium yet" [level=2] [ref=e28]
+      - paragraph [ref=e29]: "Premium is mostly a depth story and a light story. This interface has neither: every surface sits at the same distance from the viewer and nothing in it appears to be lit. The specific gaps, each with where to see it."
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "Everything is one layer deep" [level=3] [ref=e32]
+        - paragraph [ref=e33]: The ground, the chrome, the panels and the palette are separated only by a 1px line and a two-step change in lightness. A raised palette casts a shadow, but a panel, a rail and the top bar are the same plane. The eye has no way to order the scene.
+        - generic [ref=e34]: "--s-0 #0e1015 Â· --s-1 #171a21 Â· --s-2 #1b1f27 â€” a 6 to 10 point spread"
+      - generic [ref=e35]:
+        - heading "The chrome is grey on grey" [level=3] [ref=e36]
+        - paragraph [ref=e37]: Dock icons, the rail's section heading, the strip's meta text and disabled rows are all rendered in the same mid grey. Nothing in the chrome has a material. Premium interfaces give chrome a faint inner light, a tint or a translucency so it reads as a physical thing the content sits inside.
+        - generic [ref=e38]: dock, PANELS heading, "hints fade once you have used them"
+      - generic [ref=e39]:
+        - heading "The state edge is a stripe, not a signal" [level=3] [ref=e40]
+        - paragraph [ref=e41]: The 3px left edge is the app's one signature mark and it is flat paint. A "needs you" panel should feel like it is emitting something. A soft glow in the state hue turns the same mark into the futuristic cue you are asking for, with no new vocabulary.
+        - generic [ref=e42]: ".panel--agent-wants-you Â· border-color: var(--amber)"
+      - generic [ref=e43]:
+        - heading "The well and the frame are two unrelated boxes" [level=3] [ref=e44]
+        - paragraph [ref=e45]: "The terminal well is pure white (light) or #14161c (dark) inside a frame of a different tone with no transition. The frame should look like a bezel around a screen: a hairline of inner light on the chrome, the well a half-step deeper than the frame."
+        - generic [ref=e46]: "--well vs --s-1, no inset at the seam"
+      - generic [ref=e47]:
+        - heading "The far view is a pile of rectangles" [level=3] [ref=e48]
+        - paragraph [ref=e49]: At 22% the canvas becomes a cluster of same-grey outlines. The brief wanted a status board. The zoomed-out block needs a solid tinted fill in its state hue, a large mono title and nothing else, so the minimap and the far view both read as a wall of lights.
+        - generic [ref=e50]: zoomed-out-dark.png at 22%
+      - generic [ref=e51]:
+        - heading "Controls are outlined, never filled" [level=3] [ref=e52]
+        - paragraph [ref=e53]: "Every button is a hairline rectangle. There is no primary action anywhere: \"Send\", \"Run again\", \"Restart\", \"Commit\", \"Connect Jira\" all look like each other. One filled control per surface is how a product tells you what it wants you to do."
+        - generic [ref=e54]: Send Â· Interrupt Â· Run again Â· Restart
+      - generic [ref=e55]:
+        - heading "The launcher is a text list" [level=3] [ref=e56]
+        - paragraph [ref=e57]: The first thing a stranger sees is seven mono lines with a chevron. It is honest, and it is the single most important surface to make feel designed. It should be the one place the app is allowed a moment.
+        - generic [ref=e58]: launcher.png
+      - generic [ref=e59]:
+        - heading "The two themes are inversions, not siblings" [level=3] [ref=e60]
+        - paragraph [ref=e61]: The dark theme is tuned; the light theme is a lift of the same values onto a grey ground and reads flatter than the dark. A premium light theme is warm white, frosted, with tinted shadows, and it is usually the one that appears in screenshots.
+        - generic [ref=e62]: overview.png vs kinds-dark.png
+  - generic [ref=e63]:
+    - generic [ref=e64]:
+      - heading "What has to stay" [level=2] [ref=e65]
+      - paragraph [ref=e66]: The repository pins several visual facts with checks or with hard constraints, and a redesign that ignores them fails silently in the build or in a screenshot nobody was looking at. Every direction below is drawn inside these.
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e69]: One hue per state, everywhere
+        - text: Blue working, amber needs-you, green idle, red exited, grey not-started, dashed asleep. A direction may re-tune the hues; it may not repurpose one. Contrast is checked at 3:1 on two surfaces by verify:styles 11.
+      - generic [ref=e70]:
+        - generic [ref=e71]: One interface accent, not an agent colour
+        - text: Selection, focus rings and links share one accent. Blue is reserved for "working", so the accent cannot be blue. Cyan, violet, periwinkle and teal are all open.
+      - generic [ref=e72]:
+        - generic [ref=e73]: Theme token parity
+        - text: Both theme blocks must declare exactly the same token names or the build fails. Any new token (a glow, a glass fill, a highlight) is added to both themes at once.
+      - generic [ref=e74]:
+        - generic [ref=e75]: The amber literal and the well
+        - text: The amber must stay a literal colour and the well must equal the xterm theme's background byte for byte. Two checks compare resolved values.
+      - generic [ref=e76]:
+        - generic [ref=e77]: No remote fonts, by CSP
+        - text: The renderer forbids remote assets. A distinctive typeface has to be bundled with the app, which the brief declined once. It is a real decision, so it is a question below rather than an assumption.
+      - generic [ref=e78]:
+        - generic [ref=e79]: Structural tokens outside theme blocks
+        - text: Radius, spacing and motion live in the structural block. Rounder corners or a slower ease are one-line changes; they must not be introduced per theme.
+  - generic [ref=e80]:
+    - generic [ref=e81]:
+      - heading "Four directions" [level=2] [ref=e82]
+      - paragraph [ref=e83]: "Each mockup is the same scene: the top bar, the dock, the panels rail, a working panel, a needs-you panel, an asleep panel, a handoff edge, the palette and the status strip. What changes is the material. Every direction keeps the state vocabulary and the single accent. Press \"Pick this\" to select one; the choice is remembered on this device."
+    - article [ref=e84]:
+      - generic [ref=e85]:
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - generic [ref=e88]: A
+            - heading "Obsidian" [level=3] [ref=e89]
+          - paragraph [ref=e90]: Glass panels over a deep ground with a slow colour aura behind them. Surfaces are translucent and blurred, so a panel over another panel shows depth by what leaks through. State edges glow. The most "futuristic" of the four, and the one that most reads as a product rather than a tool.
+        - button "Pick this" [ref=e91] [cursor=pointer]
+      - generic [ref=e92]:
+        - generic "Obsidian mockup" [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e95]: terminal.
+            - generic [ref=e96]: New panelâ€¦âŒ˜â‡§N
+            - generic [ref=e97]: SearchâŒ˜K
+          - generic [ref=e98]:
+            - generic [ref=e104]:
+              - heading "PANELS" [level=5] [ref=e105]
+              - generic [ref=e106]:
+                - generic [ref=e108]: claude â€” api
+                - generic [ref=e109]: working
+              - generic [ref=e110]:
+                - generic [ref=e112]: claude â€” api (2)
+                - generic [ref=e113]: needs you
+              - generic [ref=e114]:
+                - generic [ref=e116]: watcher Â· sh
+                - generic [ref=e117]: idle
+              - generic [ref=e118]:
+                - generic [ref=e120]: tests
+                - generic [ref=e121]: asleep
+              - generic [ref=e122]:
+                - generic [ref=e124]: worker b
+                - generic [ref=e125]: asleep
+            - generic [ref=e126]:
+              - generic [ref=e128]:
+                - generic [ref=e129]: tests
+                - generic [ref=e131]: click to start
+              - generic [ref=e132]:
+                - generic [ref=e133]:
+                  - generic [ref=e134]: claude â€” api
+                  - generic [ref=e135]: working
+                - generic [ref=e136]: $ claude Reading src/server.ts Editing src/server.ts â€¦
+              - generic [ref=e137]:
+                - generic [ref=e138]:
+                  - generic [ref=e139]: claude â€” api (2)
+                  - generic [ref=e140]: needs you
+                - generic [ref=e141]:
+                  - text: $ claude Waiting for input
+                  - generic [ref=e142]: "? Allow Edit on src/server.ts (y/n)"
+              - generic [ref=e147]:
+                - textbox [ref=e148]: Type a commandâ€¦
+                - generic [ref=e149]:
+                  - generic [ref=e150]: claude â€” api (2)
+                  - generic [ref=e151]: needs you
+                - generic [ref=e152]:
+                  - generic [ref=e153]: claude â€” api
+                  - generic [ref=e154]: working
+                - generic [ref=e155]: "review: every worktree"
+              - generic [ref=e157]:
+                - generic [ref=e158]: 100%
+                - generic [ref=e159]: fit
+                - generic [ref=e160]: claude â€” api (2) needs you
+                - generic [ref=e161]: CPU 0% Â· RAM 4 MB
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - generic [ref=e164]: ground
+            - generic [ref=e166]: glass
+            - generic [ref=e168]: accent
+            - generic [ref=e170]: aura
+            - generic [ref=e172]: needs you
+            - generic [ref=e174]: text
+          - paragraph [ref=e176]: What changes. Panel, rail and palette fills become rgba over a blur. Two radial aura gradients sit under the world layer and move with the camera at a fraction of its speed. The 3px state edge gains a 12px outer glow in its own hue. Radius 12 on panels, 7 on controls.
+          - paragraph [ref=e177]: Cost. Medium. Mostly the two theme blocks plus a background layer in Canvas.tsx. Backdrop blur over a WebGL terminal is a compositing cost to measure on a 20-panel canvas before committing; the far-view cards are the fallback if it is expensive.
+          - generic [ref=e178]:
+            - generic [ref=e179]: futuristic
+            - generic [ref=e180]: aura
+            - generic [ref=e181]: glass
+            - generic [ref=e182]: measure blur over WebGL
+    - article [ref=e183]:
+      - generic [ref=e184]:
+        - generic [ref=e185]:
+          - generic [ref=e186]:
+            - generic [ref=e187]: B
+            - heading "Graphite" [level=3] [ref=e188]
+          - paragraph [ref=e189]: "The current brief taken to its finish. No hairlines at all: depth comes from tonal steps, a one-pixel line of inner light along every top edge, and soft, tight shadows. Warm charcoal instead of blue-black, a periwinkle accent. The quietest option and the closest to how a Linear or Arc-class product feels at rest."
+        - button "Pick this" [ref=e190] [cursor=pointer]
+      - generic [ref=e191]:
+        - generic "Graphite mockup" [ref=e192]:
+          - generic [ref=e193]:
+            - generic [ref=e194]: terminal.
+            - generic [ref=e195]: New panelâ€¦âŒ˜â‡§N
+            - generic [ref=e196]: SearchâŒ˜K
+          - generic [ref=e197]:
+            - generic [ref=e203]:
+              - heading "PANELS" [level=5] [ref=e204]
+              - generic [ref=e205]:
+                - generic [ref=e207]: claude â€” api
+                - generic [ref=e208]: working
+              - generic [ref=e209]:
+                - generic [ref=e211]: claude â€” api (2)
+                - generic [ref=e212]: needs you
+              - generic [ref=e213]:
+                - generic [ref=e215]: watcher Â· sh
+                - generic [ref=e216]: idle
+              - generic [ref=e217]:
+                - generic [ref=e219]: tests
+                - generic [ref=e220]: asleep
+              - generic [ref=e221]:
+                - generic [ref=e223]: worker b
+                - generic [ref=e224]: asleep
+            - generic [ref=e225]:
+              - generic [ref=e227]:
+                - generic [ref=e228]: tests
+                - generic [ref=e230]: click to start
+              - generic [ref=e231]:
+                - generic [ref=e232]:
+                  - generic [ref=e233]: claude â€” api
+                  - generic [ref=e234]: working
+                - generic [ref=e235]: $ claude Reading src/server.ts Editing src/server.ts â€¦
+              - generic [ref=e236]:
+                - generic [ref=e237]:
+                  - generic [ref=e238]: claude â€” api (2)
+                  - generic [ref=e239]: needs you
+                - generic [ref=e240]:
+                  - text: $ claude Waiting for input
+                  - generic [ref=e241]: "? Allow Edit on src/server.ts (y/n)"
+              - generic [ref=e246]:
+                - textbox [ref=e247]: Type a commandâ€¦
+                - generic [ref=e248]:
+                  - generic [ref=e249]: claude â€” api (2)
+                  - generic [ref=e250]: needs you
+                - generic [ref=e251]:
+                  - generic [ref=e252]: claude â€” api
+                  - generic [ref=e253]: working
+                - generic [ref=e254]: "review: every worktree"
+              - generic [ref=e256]:
+                - generic [ref=e257]: 100%
+                - generic [ref=e258]: fit
+                - generic [ref=e259]: claude â€” api (2) needs you
+                - generic [ref=e260]: CPU 0% Â· RAM 4 MB
+        - generic [ref=e261]:
+          - generic [ref=e262]:
+            - generic [ref=e263]: ground
+            - generic [ref=e265]: panel
+            - generic [ref=e267]: raised
+            - generic [ref=e269]: accent
+            - generic [ref=e271]: needs you
+            - generic [ref=e273]: text
+          - paragraph [ref=e275]: What changes. The line tokens go to transparent in dark and the boundary moves into a shadow ring plus an inset top highlight. The surface ramp widens from a 10-point spread to a 16-point spread so five levels are legible. Controls gain a filled primary variant.
+          - paragraph [ref=e276]: Cost. Low. Almost entirely token values and two shadow tokens; nothing structural moves. Principle 4 of the brief ("a line marks a boundary") is amended to "a lit edge marks a boundary", which the critic doc needs to record.
+          - generic [ref=e277]:
+            - generic [ref=e278]: premium-minimal
+            - generic [ref=e279]: tonal depth
+            - generic [ref=e280]: lowest risk
+    - article [ref=e281]:
+      - generic [ref=e282]:
+        - generic [ref=e283]:
+          - generic [ref=e284]:
+            - generic [ref=e285]: C
+            - heading "Signal" [level=3] [ref=e286]
+          - paragraph [ref=e287]: "Sharp corners, a faint grid on the ground, mono titles everywhere, and one luminous violet accent that glows on the palette and the pressed dock item. Near-black ground so the state hues become the brightest things on screen. A control-room look: closer to an instrument panel than to a consumer app."
+        - button "Pick this" [ref=e288] [cursor=pointer]
+      - generic [ref=e289]:
+        - generic "Signal mockup" [ref=e290]:
+          - generic [ref=e291]:
+            - generic [ref=e292]: terminal.
+            - generic [ref=e293]: New panelâ€¦âŒ˜â‡§N
+            - generic [ref=e294]: SearchâŒ˜K
+          - generic [ref=e295]:
+            - generic [ref=e301]:
+              - heading "PANELS" [level=5] [ref=e302]
+              - generic [ref=e303]:
+                - generic [ref=e305]: claude â€” api
+                - generic [ref=e306]: working
+              - generic [ref=e307]:
+                - generic [ref=e309]: claude â€” api (2)
+                - generic [ref=e310]: needs you
+              - generic [ref=e311]:
+                - generic [ref=e313]: watcher Â· sh
+                - generic [ref=e314]: idle
+              - generic [ref=e315]:
+                - generic [ref=e317]: tests
+                - generic [ref=e318]: asleep
+              - generic [ref=e319]:
+                - generic [ref=e321]: worker b
+                - generic [ref=e322]: asleep
+            - generic [ref=e323]:
+              - generic [ref=e325]:
+                - generic [ref=e326]: tests
+                - generic [ref=e328]: click to start
+              - generic [ref=e329]:
+                - generic [ref=e330]:
+                  - generic [ref=e331]: claude â€” api
+                  - generic [ref=e332]: working
+                - generic [ref=e333]: $ claude Reading src/server.ts Editing src/server.ts â€¦
+              - generic [ref=e334]:
+                - generic [ref=e335]:
+                  - generic [ref=e336]: claude â€” api (2)
+                  - generic [ref=e337]: needs you
+                - generic [ref=e338]:
+                  - text: $ claude Waiting for input
+                  - generic [ref=e339]: "? Allow Edit on src/server.ts (y/n)"
+              - generic [ref=e344]:
+                - textbox [ref=e345]: Type a commandâ€¦
+                - generic [ref=e346]:
+                  - generic [ref=e347]: claude â€” api (2)
+                  - generic [ref=e348]: needs you
+                - generic [ref=e349]:
+                  - generic [ref=e350]: claude â€” api
+                  - generic [ref=e351]: working
+                - generic [ref=e352]: "review: every worktree"
+              - generic [ref=e354]:
+                - generic [ref=e355]: 100%
+                - generic [ref=e356]: fit
+                - generic [ref=e357]: claude â€” api (2) needs you
+                - generic [ref=e358]: CPU 0% Â· RAM 4 MB
+        - generic [ref=e359]:
+          - generic [ref=e360]:
+            - generic [ref=e361]: ground
+            - generic [ref=e363]: panel
+            - generic [ref=e365]: accent
+            - generic [ref=e367]: working
+            - generic [ref=e369]: needs you
+            - generic [ref=e371]: text
+          - paragraph [ref=e373]: What changes. Radius drops to 3px. The ground gets a 14px grid at 3.5% white, which also gives the camera something to move against. The palette and popover carry a violet ring and glow instead of a shadow. Titles and every value are mono, which the brief already half-does.
+          - paragraph [ref=e374]: "Cost. Low to medium. Token values, a ground pattern, and a small light-theme problem: a grid and glows do not translate to a light ground, so this direction implies the dark theme is primary and light is a plain sibling."
+          - generic [ref=e375]:
+            - generic [ref=e376]: control room
+            - generic [ref=e377]: sharp
+            - generic [ref=e378]: dark-first
+    - article [ref=e379]:
+      - generic [ref=e380]:
+        - generic [ref=e381]:
+          - generic [ref=e382]:
+            - generic [ref=e383]: D
+            - heading "Porcelain" [level=3] [ref=e384]
+          - paragraph [ref=e385]: "The light theme rebuilt as the flagship: warm white frosted surfaces, teal accent, tinted blue-grey shadows and a faint colour wash in the ground. This is what the app looks like in a screenshot in daylight. It pairs naturally with Obsidian as its dark sibling, and less naturally with Signal."
+        - button "Pick this" [ref=e386] [cursor=pointer]
+      - generic [ref=e387]:
+        - generic "Porcelain mockup" [ref=e388]:
+          - generic [ref=e389]:
+            - generic [ref=e390]: terminal.
+            - generic [ref=e391]: New panelâ€¦âŒ˜â‡§N
+            - generic [ref=e392]: SearchâŒ˜K
+          - generic [ref=e393]:
+            - generic [ref=e399]:
+              - heading "PANELS" [level=5] [ref=e400]
+              - generic [ref=e401]:
+                - generic [ref=e403]: claude â€” api
+                - generic [ref=e404]: working
+              - generic [ref=e405]:
+                - generic [ref=e407]: claude â€” api (2)
+                - generic [ref=e408]: needs you
+              - generic [ref=e409]:
+                - generic [ref=e411]: watcher Â· sh
+                - generic [ref=e412]: idle
+              - generic [ref=e413]:
+                - generic [ref=e415]: tests
+                - generic [ref=e416]: asleep
+              - generic [ref=e417]:
+                - generic [ref=e419]: worker b
+                - generic [ref=e420]: asleep
+            - generic [ref=e421]:
+              - generic [ref=e423]:
+                - generic [ref=e424]: tests
+                - generic [ref=e426]: click to start
+              - generic [ref=e427]:
+                - generic [ref=e428]:
+                  - generic [ref=e429]: claude â€” api
+                  - generic [ref=e430]: working
+                - generic [ref=e431]: $ claude Reading src/server.ts Editing src/server.ts â€¦
+              - generic [ref=e432]:
+                - generic [ref=e433]:
+                  - generic [ref=e434]: claude â€” api (2)
+                  - generic [ref=e435]: needs you
+                - generic [ref=e436]:
+                  - text: $ claude Waiting for input
+                  - generic [ref=e437]: "? Allow Edit on src/server.ts (y/n)"
+              - generic [ref=e442]:
+                - textbox [ref=e443]: Type a commandâ€¦
+                - generic [ref=e444]:
+                  - generic [ref=e445]: claude â€” api (2)
+                  - generic [ref=e446]: needs you
+                - generic [ref=e447]:
+                  - generic [ref=e448]: claude â€” api
+                  - generic [ref=e449]: working
+                - generic [ref=e450]: "review: every worktree"
+              - generic [ref=e452]:
+                - generic [ref=e453]: 100%
+                - generic [ref=e454]: fit
+                - generic [ref=e455]: claude â€” api (2) needs you
+                - generic [ref=e456]: CPU 0% Â· RAM 4 MB
+        - generic [ref=e457]:
+          - generic [ref=e458]:
+            - generic [ref=e459]: ground
+            - generic [ref=e461]: frost
+            - generic [ref=e463]: accent
+            - generic [ref=e465]: wash
+            - generic [ref=e467]: needs you
+            - generic [ref=e469]: text
+          - paragraph [ref=e471]: What changes. The ground gets a soft wash and panels become 78% white over a blur, with a bright top edge. Shadows are tinted by the accent family, never neutral grey. The amber is deepened so it still clears 3:1 on white.
+          - paragraph [ref=e472]: Cost. Medium, same mechanics as Obsidian. Worth doing only as one half of a pair, since the app already ships both themes and a user on "system" sees both in a day.
+          - generic [ref=e473]:
+            - generic [ref=e474]: light flagship
+            - generic [ref=e475]: frosted
+            - generic [ref=e476]: pairs with A
+  - generic [ref=e477]:
+    - generic [ref=e478]:
+      - heading "Refinements for any direction" [level=2] [ref=e479]
+      - paragraph [ref=e480]: These stand on their own and each one moves the product toward "premium" regardless of which material you choose. Ordered by return on effort. Cost is a rough size against the milestone shape this repo uses.
+    - generic [ref=e481]:
+      - generic [ref=e482]:
+        - generic [ref=e483]: "1"
+        - generic [ref=e484]:
+          - text: Give the state edge a glow
+          - generic [ref=e485]: and let "needs you" breathe once
+        - generic [ref=e486]: A soft outer glow in the state hue on the 3px edge, and a single slow pulse when a panel enters "needs you", then still. This is the whole "aura" ask in one token and one keyframe, and the far view inherits it.
+        - generic [ref=e487]: small
+      - generic [ref=e488]:
+        - generic [ref=e489]: "2"
+        - generic [ref=e490]:
+          - text: A primary control
+          - generic [ref=e491]: one filled button per surface
+        - generic [ref=e492]: Send, Run again, Restart, Commit and Connect become filled in the accent; everything else stays quiet. The composer's Send is the first place it lands.
+        - generic [ref=e493]: small
+      - generic [ref=e494]:
+        - generic [ref=e495]: "3"
+        - generic [ref=e496]:
+          - text: A bezel around the well
+          - generic [ref=e497]: the frame reads as hardware
+        - generic [ref=e498]: A 1px inner highlight on the frame's top edge, the well one half-step darker than the frame, and 2px of inset at the seam so the terminal looks like a screen set into a housing.
+        - generic [ref=e499]: small
+      - generic [ref=e500]:
+        - generic [ref=e501]: "4"
+        - generic [ref=e502]:
+          - text: Far view as a status wall
+          - generic [ref=e503]: the minimap too
+        - generic [ref=e504]: Below the card tier, a block is a solid fill tinted by state, its title in large mono, nothing else. The minimap uses the same fills so it reads as a wall of lights in a glance.
+        - generic [ref=e505]: small
+      - generic [ref=e506]:
+        - generic [ref=e507]: "5"
+        - generic [ref=e508]:
+          - text: The launcher gets its moment
+          - generic [ref=e509]: the one allowed flourish
+        - generic [ref=e510]: "A centred wordmark with a slow aura behind it, three large doors (New panel, Chat, Open a file) as real cards, the rest as a quiet list underneath, and the environment line as a footer. Still principle 8: no huge type in the app afterwards."
+        - generic [ref=e511]: medium
+      - generic [ref=e512]:
+        - generic [ref=e513]: "6"
+        - generic [ref=e514]:
+          - text: Chrome gets a material
+          - generic [ref=e515]: dock, rail, top bar, strip
+        - generic [ref=e516]: Chrome surfaces a step apart from the canvas with an inner top light, icons at 1.5px stroke instead of 1px, the pressed dock item a filled accent square with a glow, and the rail's section headings smaller and dimmer than the rows they label.
+        - generic [ref=e517]: medium
+      - generic [ref=e518]:
+        - generic [ref=e519]: "7"
+        - generic [ref=e520]:
+          - text: Motion with intent
+          - generic [ref=e521]: three moments, nothing else
+        - generic [ref=e522]: Palette opens with a 160ms scale from 98%, a panel entering "needs you" pulses once, and a camera flight eases with the existing curve. No hover transitions on cards; the brief is right about that.
+        - generic [ref=e523]: small
+      - generic [ref=e524]:
+        - generic [ref=e525]: "8"
+        - generic [ref=e526]:
+          - text: A typeface decision
+          - generic [ref=e527]: bundled or system
+        - generic [ref=e528]: The CSP forbids remote fonts, so a distinctive face means bundling one (Geist, Inter Display class, or a grotesk with character) and the mono its twin. The system face is the honest choice; a bundled one is the premium one. Question 3 below.
+        - generic [ref=e529]: medium
+      - generic [ref=e530]:
+        - generic [ref=e531]: "9"
+        - generic [ref=e532]:
+          - text: The empty canvas
+          - generic [ref=e533]: a place, not a void
+        - generic [ref=e534]: A faint radial wash centred on the world origin and a quiet dot grid at the finest zoom give the camera something to move against and the first frame something to look at.
+        - generic [ref=e535]: small
+      - generic [ref=e536]:
+        - generic [ref=e537]: "10"
+        - generic [ref=e538]:
+          - text: Chat panel rhythm
+          - generic [ref=e539]: the loudest new surface
+        - generic [ref=e540]: YOU and CLAUDE rows as full-width bands with a hairline between turns rather than a labelled column, tool objects as chips with an icon, and the composer a raised field with a filled Send. The chat is where a new user will judge the app.
+        - generic [ref=e541]: medium
+  - generic [ref=e542]:
+    - generic [ref=e543]:
+      - heading "Choose" [level=2] [ref=e544]
+      - paragraph [ref=e545]: Pick one from each row. The brief at the bottom updates as you go and can be copied straight into the next message.
+    - generic [ref=e546]:
+      - generic [ref=e547]:
+        - heading "Direction" [level=4] [ref=e548]
+        - paragraph [ref=e549]: Picked above, or here.
+        - generic [ref=e550]:
+          - button "A Â· Obsidian" [ref=e551] [cursor=pointer]
+          - button "B Â· Graphite" [ref=e552] [cursor=pointer]
+          - button "C Â· Signal" [ref=e553] [cursor=pointer]
+          - button "D Â· Porcelain" [ref=e554] [cursor=pointer]
+          - button "A dark + D light" [ref=e555] [cursor=pointer]
+      - generic [ref=e556]:
+        - heading "Depth model" [level=4] [ref=e557]
+        - paragraph [ref=e558]: How surfaces separate from each other.
+        - generic [ref=e559]:
+          - button "glass and blur" [ref=e560] [cursor=pointer]
+          - button "tonal steps and lit edges" [ref=e561] [cursor=pointer]
+          - button "hairlines, as now" [ref=e562] [cursor=pointer]
+      - generic [ref=e563]:
+        - heading "Aura and glow" [level=4] [ref=e564]
+        - paragraph [ref=e565]: How much light the state edges and the accent emit.
+        - generic [ref=e566]:
+          - button "strong" [ref=e567] [cursor=pointer]
+          - button "subtle" [ref=e568] [cursor=pointer]
+          - button "none" [ref=e569] [cursor=pointer]
+      - generic [ref=e570]:
+        - heading "Interface accent" [level=4] [ref=e571]
+        - paragraph [ref=e572]: Blue is taken by "working"; these are all clear of the state hues.
+        - generic [ref=e573]:
+          - button "cyan" [ref=e574] [cursor=pointer]
+          - button "periwinkle" [ref=e575] [cursor=pointer]
+          - button "violet" [ref=e576] [cursor=pointer]
+          - button "teal" [ref=e577] [cursor=pointer]
+          - button "keep iris" [ref=e578] [cursor=pointer]
+      - generic [ref=e579]:
+        - heading "Corners" [level=4] [ref=e580]
+        - paragraph [ref=e581]: Nested corners step down with the inset.
+        - generic [ref=e582]:
+          - button "sharp (3px)" [ref=e583] [cursor=pointer]
+          - button "soft (8px)" [ref=e584] [cursor=pointer]
+          - button "round (12px)" [ref=e585] [cursor=pointer]
+      - generic [ref=e586]:
+        - heading "Typeface" [level=4] [ref=e587]
+        - paragraph [ref=e588]: Bundled means a font file ships in the app.
+        - generic [ref=e589]:
+          - button "system SF, as now" [ref=e590] [cursor=pointer]
+          - button "bundle a grotesk + mono" [ref=e591] [cursor=pointer]
+          - button "mono-forward, system" [ref=e592] [cursor=pointer]
+      - generic [ref=e593]:
+        - heading "Motion" [level=4] [ref=e594]
+        - paragraph [ref=e595]: Three moments is the ceiling in every option.
+        - generic [ref=e596]:
+          - button "three moments" [ref=e597] [cursor=pointer]
+          - button "palette only" [ref=e598] [cursor=pointer]
+          - button "none" [ref=e599] [cursor=pointer]
+      - generic [ref=e600]:
+        - heading "Which theme is the flagship" [level=4] [ref=e601]
+        - paragraph [ref=e602]: The one screenshots get taken in.
+        - generic [ref=e603]:
+          - button "dark" [ref=e604] [cursor=pointer]
+          - button "light" [ref=e605] [cursor=pointer]
+          - button "both equal" [ref=e606] [cursor=pointer]
+      - generic [ref=e607]:
+        - heading "Anything else" [level=4] [ref=e608]
+        - textbox "Apps you want it to feel like, things you never want to see, surfaces that matter most to youâ€¦" [ref=e609]
+      - generic [ref=e610]:
+        - generic [ref=e611]:
+          - generic [ref=e612]: "Terminal Canvas redesign brief Direction: â€” Depth model: â€” Aura and glow: â€” Interface accent: â€” Corners: â€” Typeface: â€” Motion: â€” Flagship theme: â€”"
+          - paragraph [ref=e613]: Saved on this device only. Copy and paste it into the chat.
+        - button "Copy brief" [ref=e614] [cursor=pointer]
+  - generic [ref=e615]:
+    - generic [ref=e616]:
+      - heading "Questions for you" [level=2] [ref=e617]
+      - paragraph [ref=e618]: Answers to these change the plan more than any single visual choice.
+    - generic [ref=e619]:
+      - generic [ref=e621]:
+        - text: Is this a design-only run, or a design run with new surfaces?
+        - generic [ref=e622]: The M61 to M70 run rebuilt surfaces under a brief. A pure retheme (B) is a fortnight; A or D with the launcher and chat redone is a run.
+      - generic [ref=e624]:
+        - text: May the "quiet instrument" brief be amended?
+        - generic [ref=e625]: Principle 4 (lines, never shadows) and the shadow ban are what stop the app feeling premium. Every direction here bends it. The critic doc should be rewritten alongside, not worked around.
+      - generic [ref=e627]:
+        - text: Bundle a typeface, or stay on the system face?
+        - generic [ref=e628]: A bundled face is the single largest "this is a product" signal available and the brief declined it once for weight. It is a yes or no.
+      - generic [ref=e630]:
+        - text: How heavy is your daily canvas?
+        - generic [ref=e631]: Glass and blur over a WebGL terminal are cheap at five panels and worth measuring at twenty. If you routinely run twelve agents, that decides A versus B.
+      - generic [ref=e633]:
+        - text: Which surfaces do you look at most?
+        - generic [ref=e634]: Chat, the rail, the far view and the inspector each deserve a full pass; ranking them tells me where a milestone spends its critic budget.

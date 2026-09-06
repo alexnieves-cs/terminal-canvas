@@ -3728,3 +3728,49 @@ body {
 @keyframes chat-auto-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
 .chat__auto-dismiss { margin-left: var(--sp-1); }
+
+/* M100. The Teammates pane: the roster as rail rows, one record open beneath
+   it. A place is a mono path with its remove beside it; the three
+   permissions are three separate controls. */
+.teammates-pane__new { display: flex; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); align-items: center; }
+.teammates-pane__name { flex: 1; min-width: 0; font: inherit; }
+.teammates-pane__detail { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); }
+.teammates-pane__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__label { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.teammates-pane__brief { min-height: 72px; resize: vertical; font: inherit; font-size: var(--t-xs); }
+.teammates-pane__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__item { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.teammates-pane__path { font-family: var(--font-mono); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.teammates-pane__flags { gap: var(--sp-2); }
+.teammates-pane__actions { flex-direction: row; gap: var(--sp-2); }
+.chat__teammate { font-weight: 600; }
+
+/* M101. A routine row and the form beneath the roster's detail. */
+.teammates-pane__routine { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__routine-form { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__minutes { width: 64px; font: inherit; }
+/* M103. The browser pane: the app's chrome above a guest that fills the
+   rest. The guest is `display: block` and sized to its host — a <webview>
+   is inline by default and an inline guest paints at 300x150 whatever its
+   host measures, silently. The host is `position: relative; overflow:
+   hidden` so the guest clips at the frame's edge like every other body.
+   No transform anywhere below `.pf__body` (the frame's rule). */
+.browser-node__body { display: flex; flex-direction: column; min-height: 0; }
+.browser-node__bar { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line); background: var(--s-1); }
+.browser-node__address { flex: 1 1 auto; min-width: 0; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-xs); }
+.browser-node__address:focus { outline: none; border-color: var(--focus); }
+.browser-node__address:disabled { color: var(--fg-3); }
+.browser-node__loading { flex: none; min-width: 48px; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); text-align: right; }
+.browser-node__live { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-node__failure { margin: var(--sp-2) var(--sp-3) 0; }
+.browser-node__host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--well); }
+.browser-node__guest { display: block; width: 100%; height: 100%; border: 0; }
+
+/* M100. The roster keeps its own height above the open record; the record
+   scrolls, so a long brief or many routines never squeeze the rows to nothing
+   (the list's flex basis would otherwise yield to the detail in the column). */
+.rail-list--teammates { flex: 0 0 auto; }
+.teammates-pane__detail { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+
+/* M102. The grant line is a sentence beside `connected as`, never a heading over the service. */
+.integration__grants { margin: 0; font-size: var(--t-xs); }

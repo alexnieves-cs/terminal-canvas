@@ -157,7 +157,12 @@ export const KindGithub = (p: IconProps): JSX.Element => (
   <Svg {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="8" cy="8" r="1.5" /></Svg>
 )
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher } as const
+/** M103. The browser pane: a globe — a circle with its meridian and equator. */
+export const KindBrowser = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c2 2 2 9 0 11M8 2.5c-2 2-2 9 0 11" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

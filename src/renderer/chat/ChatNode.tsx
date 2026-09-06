@@ -12,7 +12,7 @@ import { panelState, autoTone } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
-import { MEMORY_CONTEXT_MAX, memoryContext } from './memory-context'
+import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
 import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
@@ -68,6 +68,8 @@ export interface ChatNodeProps {
   onOpenInTerminal(id: string): void
   /** M97. Open the palette on this chat's Auto rows. */
   onOpenAuto?: (id: string) => void
+  /** M100. The teammate this chat speaks as, by name — absent for a plain chat. */
+  teammateName?: string
 }
 
 const shortInput = toolArgument
@@ -429,13 +431,19 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   useEffect(() => {
     if (turnCount > 0 || memorySentRef.current) { setMemoryBlock(null); return }
     let live = true
-    void window.canvas.memory.list(panel.chat.cwd, MEMORY_CONTEXT_MAX).then((answer) => {
+    // M100. Both memories, both bounded, both stated: the repository's and,
+    // for a teammate's chat, its own — two axes, never one list.
+    const mate = panel.chat.teammateId
+    void Promise.all([
+      window.canvas.memory.list(panel.chat.cwd, MEMORY_CONTEXT_MAX),
+      mate === undefined ? Promise.resolve(null) : window.canvas.memory.list(teammateMemoryRoot(mate), MEMORY_CONTEXT_MAX)
+    ]).then(([repo, own]) => {
       if (!live) return
-      const block = memoryContext(answer.entries)
+      const block = memoryContext(repo.entries, own === null ? undefined : { entries: own.entries, who: props.teammateName ?? mate ?? '' })
       setMemoryBlock(block.count === 0 ? null : block)
     })
     return () => { live = false }
-  }, [panel.chat.cwd, turnCount])
+  }, [panel.chat.cwd, panel.chat.teammateId, props.teammateName, turnCount])
 
   const fillStep = popup?.fill
   const insertFilled = (): void => { if (fillStep) insertPromptBody(fillPlaceholders(fillStep.prompt.body, fillStep.values)) }
@@ -480,6 +488,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // in the inspector's Detail and on the root as data.
       chrome={<>
         {/* M90. Which CLI this panel talks to — a KIND fact, before the state pill, like the github card's. */}
+        {/* M100. The identity leads the kind word: `ada · claude`. */}
+        {props.teammateName !== undefined && <span className="pf__kind chat__teammate" data-chat-teammate title={`speaking as ${props.teammateName}`}>{props.teammateName}</span>}
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.

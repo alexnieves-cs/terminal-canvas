@@ -62,7 +62,7 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'interrupt', label: 'Interrupt', args: [panel()], destructive: false, actions: [], target: 'agent', hint: 'interrupt the turn in flight' },
   { id: 'restart', label: 'Restart', args: [panel()], destructive: false, actions: ['restartPanel'], target: 'panel', hint: 'restart the panel\'s process in place' },
   // Guardrail 2: what `read` hands back has passed the outward gate.
-  { id: 'read', label: 'Read', args: [panel()], destructive: false, actions: [], target: 'panel', hint: 'the panel\'s recent output, secrets redacted' },
+  { id: 'read', label: 'Read', args: [panel()], destructive: false, actions: [], target: 'panel', hint: 'the panel\'s recent output — or a browser panel\'s page text — secrets redacted' },
   // Guardrail 1: the closed list of settings a plan may write.
   { id: 'set-setting', label: 'Set setting', args: [{ name: 'setting', kind: 'setting' }, { name: 'value', kind: 'value' }], destructive: false, actions: ['toggleSetting'], target: 'setting', hint: 'a cosmetic or attention setting — never a ceiling' },
   { id: 'lock', label: 'Lock', args: [panel()], destructive: false, actions: ['lockPanel'], target: 'panel', hint: 'keep the panel where it is' },
@@ -141,7 +141,9 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   openJira: 'a work panel is opened by the user',
   beginRunVerb: 'the verb line itself — a plan that ran plans would be a loop with no ceiling',
   startAuto: 'M97\'s door: an auto run is started by the user, never by a plan (a plan that starts runs has no turn limit of its own)',
-  stopAuto: 'M97\'s door, the stop half'
+  stopAuto: 'M97\'s door, the stop half',
+  openTeammates: 'opens a navigator pane — a view',
+  beginBrowser: 'opens the palette\'s text mode'
 }
 
 export function verbById(id: string): VerbDef | undefined {

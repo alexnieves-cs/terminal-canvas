@@ -1,5 +1,6 @@
 import type { AgentOptions } from '@shared/cost'
 import type { SpawnRequest } from '@shared/ipc-contract'
+import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { BACKENDS, BACKEND_IDS, type AgentBackend } from '@shared/agent-backends'
 
 /** M99. The registry's order is the sheet's row order. */
@@ -15,7 +16,7 @@ export { BACKEND_IDS }
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' }
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' } | { kind: 'teammate'; id: string }
 
 /**
  * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
@@ -29,6 +30,25 @@ export const CHAT_WHAT_ID = '__chat__'
 export const CODEX_WHAT_ID = '__codex__'
 /** M81. A chat whose subject is the canvas: created with the supervisor's system prompt. */
 export const SUPERVISOR_WHAT_ID = '__supervisor__'
+/** M100. A chat AS a teammate: the sheet's value is this prefix plus the teammate's id. */
+export const TEAMMATE_WHAT_PREFIX = '__teammate__:'
+export function teammateWhatId(id: string): string { return TEAMMATE_WHAT_PREFIX + id }
+export function parseTeammateWhatId(value: string): string | null { return value.startsWith(TEAMMATE_WHAT_PREFIX) ? value.slice(TEAMMATE_WHAT_PREFIX.length) : null }
+
+/**
+ * M100. One `chat as <name>` row per teammate, in roster order. A teammate
+ * with NO places is offered disabled naming the fix — a chat it could spawn
+ * would be refused by main's gate anyway, and a row that vanished would read
+ * as a teammate that was never made. Without claude every row names the CLI.
+ */
+export function teammateOptions(teammates: readonly PersistedTeammate[], claudeAvailable: boolean): { id: string; label: string; disabled: boolean; reason?: string }[] {
+  return teammates.map((t) => {
+    const label = `chat as ${teammateWord(t)}`
+    if (!claudeAvailable) return { id: t.id, label: `${label} — claude not on PATH`, disabled: true, reason: 'claude was not found on the login PATH' }
+    if (t.places.length === 0) return { id: t.id, label: `${label} — no places yet`, disabled: true, reason: `${teammateWord(t)} has no places — add a folder in the Teammates pane before it can work anywhere` }
+    return { id: t.id, label, disabled: false }
+  })
+}
 
 /** M99. Each backend's value in the `what` select — the two M73/M90 ids, by row. */
 export const WHAT_ID_BY_BACKEND: Readonly<Record<AgentBackend, string>> = { claude: CHAT_WHAT_ID, codex: CODEX_WHAT_ID }
@@ -91,6 +111,13 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   const what = values.what
   if (what.kind === 'supervisor') {
     const req: SpawnRequest = { presetId: SUPERVISOR_WHAT_ID, cwd }
+    if (title !== '') req.title = title
+    return req
+  }
+  if (what.kind === 'teammate') {
+    // Minted in the renderer like the other conversation arms; the id only
+    // names which, and reaches main only if that branch is lost — refused there.
+    const req: SpawnRequest = { presetId: teammateWhatId(what.id), cwd, teammateId: what.id }
     if (title !== '') req.title = title
     return req
   }

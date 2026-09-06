@@ -203,6 +203,10 @@ const spyActions = () => {
     spawnPreset: record('spawnPreset'),
     // M96–M97
     beginRunVerb: record('beginRunVerb'), startAuto: record('startAuto'), stopAuto: record('stopAuto'),
+    // M100
+    openTeammates: record('openTeammates'),
+    // M103
+    beginBrowser: record('beginBrowser'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
@@ -2300,6 +2304,38 @@ const WS = [
       rows[1].id === 'codex' && rows[1].disabled === true && /PATH/.test(rows[1].label) &&
       all.every((r) => r.disabled === false && !/PATH/.test(r.label)),
     JSON.stringify({ rows, all }))
+}
+
+// M100 — teammate.1. The sheet's `chat as <name>` rows come from the roster
+// (one per teammate, in roster order, the id carried), a teammate with no
+// places is offered DISABLED naming the fix, and the palette's Manage
+// teammates… door is present at rest.
+{
+  const has = typeof P.teammateOptions === 'function'
+  const rows = has ? P.teammateOptions([
+    { id: 't1', name: 'ada', brief: '', places: ['/w'], services: [], skills: [], memory: 't1', chats: [], messaging: false, scheduling: false },
+    { id: 't2', name: 'bo', brief: '', places: [], services: [], skills: [], memory: 't2', chats: [], messaging: false, scheduling: false }
+  ], true) : []
+  const door = byId(P.buildCommands(ctx()), 'manage.teammates')
+  ok('teammate.1 teammateOptions lists every teammate as `chat as <name>` with its id, disables one with no places naming the fix, and Manage teammates… is present at rest',
+    has && rows.length === 2 && rows[0].id === 't1' && rows[0].label === 'chat as ada' && rows[0].disabled === false &&
+      rows[1].disabled === true && /place/.test(rows[1].reason) && door !== undefined,
+    JSON.stringify({ has, rows, door: door && door.title }))
+}
+
+// M103 — browser.1. THE PAGE DOOR IS ALWAYS PRESENT. `Open a page…` needs no
+// captured panel and no directory (a URL is typed, not derived), so the row
+// is in the list with no reason on an EMPTY context, and running it enters
+// the palette's text mode through `beginBrowser` — never mints a panel here,
+// because a panel minted from the row would carry no URL.
+{
+  const c = ctx({})
+  const row = byId(P.buildCommands(c), 'canvas.browser')
+  if (row) row.run()
+  ok('browser.1 the Open a page… row is present with no reason on an empty context and runs beginBrowser',
+    row !== undefined && row.disabledReason === undefined && /Open a page/.test(row.title) && row.group === 'spawn' &&
+      c.actions.calls.length === 1 && c.actions.calls[0][0] === 'beginBrowser',
+    JSON.stringify({ row: row && { id: row.id, title: row.title, group: row.group, disabledReason: row.disabledReason }, calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

@@ -25,7 +25,7 @@ const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync 
 const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, webContents } = require('electron')
 
 const OUT = process.env.SHOT_DIR || join(__dirname, '..', 'out', 'shots')
 mkdirSync(OUT, { recursive: true })
@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -98,6 +98,18 @@ writeFileSync(join(scrollbackDir, 'dormant.log'), [
 ].join('\r\n'))
 
 const layoutPath = join(mkdtempSync(join(tmpdir(), 'tc shot layout ')), 'layout.json')
+
+// M103. A dev server the browser panel opens to — the harness's own, so the
+// scene needs no network and the address bar reads a real 127.0.0.1 url.
+// The page looks like a preview (a heading, a status line, a list) rather
+// than a placeholder, because the scene's claim is "the guest painted inside
+// the frame", and a blank page proves nothing.
+const SHOT_HTTP = require('node:http').createServer((_req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+  res.end(`<!doctype html><html><head><title>api — preview</title><style>body{margin:0;padding:24px 28px;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#1d2433;background:#fff}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 14px;color:#5b6472}code{background:#f1f3f6;padding:2px 6px;border-radius:4px}ul{margin:0;padding-left:18px}li{margin:4px 0}.ok{color:#1a7f37}</style></head><body><h1>api — preview</h1><p>served by <code>npm run dev</code> · <span class="ok">listening</span></p><ul><li>GET /health → <code>200 ok</code></li><li>GET /users → <code>200</code> (3 rows)</li><li>POST /users → <code>201</code></li></ul></body></html>`)
+})
+const shotHttpReady = new Promise((resolve) => SHOT_HTTP.listen(0, '127.0.0.1', resolve))
+const shotHttpUrl = () => `http://127.0.0.1:${SHOT_HTTP.address().port}/`
 
 const term = (id, x, y, w, h, z, extra = {}) => ({ id, x, y, w, h, z, cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "$ claude"; echo "Reading src/server.ts"; echo "Editing src/server.ts"; sleep 600'], ...extra })
 
@@ -168,6 +180,25 @@ const SCENES = [
       await kit.goTo('watcher · sh')
       await sleep(900)
       await kit.shot('watcher')
+    } },
+  { name: 'browser', intent: 'The browser pane beside the terminal that started its dev server: a live page painted INSIDE the panel frame, panned and clipped with the world like every other node. The chrome reads the page\'s real address (`http://127.0.0.1:…`, from the guest itself — never the page\'s title) beside one labelled verb, `Open in browser`; below it the app\'s own bar — `Back`, `Forward`, `Reload` as words, disabled with their reasons, and the address input — and then the page. A ruled edge from the dev server says `on exit 0`: the page reloads when the server comes back. The kind word `browser` sits in the rail and on the frame; no state is invented for a document.',
+    run: async (kit) => {
+      await kit.goTo('browser · 127.0.0.1')
+      await sleep(1800)
+      await kit.shot('browser')
+    } },
+  { name: 'teammate', intent: 'M100. The Teammates pane: the roster as rail rows (`ada · 1 place · 1 service · scheduled`, `bo · 0 places · 0 services · messaging`) with ada\'s record open beneath — her brief, her one place as a mono path with `remove` and `add a place…` (a folder dialog, never a typed path), the services with `grant`/`revoke` per service and `not connected` said where it is, the two permission checkboxes as separate controls, and `Chat as ada` / `Delete`. An identity with an explicit scope, three permissions kept apart.',
+    run: async (k) => {
+      await k.click('[data-dock="teammates"]'); await sleep(500)
+      await k.click('[data-teammate-row="ada"] .rail-row__main'); await sleep(500)
+      await k.shot('teammate')
+    } },
+  { name: 'routine', intent: 'M101. The same record\'s routines: `nightly review · every 10m` whose row says `missed at <time> — the app was closed` because its due tick fell while the app was closed and it was NOT fired, and `weekly tidy · every 1h · paused`; each with `Run now`, `Pause`/`Resume`, `Open last` (disabled by name when no run opened a chat) and `Delete`; the section header says `runs while the app is open — not while it is closed`; the form beneath to add one, its Add button enabled because ada may be scheduled.',
+    run: async (k) => {
+      await k.js(`(() => { const d = document.querySelector('[data-teammate-routines]'); if (d) d.scrollIntoView({ block: 'start' }); return !!d })()`)
+      await sleep(300)
+      await k.shot('routine')
+      await k.click('[data-dock="panels"]'); await sleep(300)
     } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
@@ -345,6 +376,7 @@ const SCENES = [
 ]
 
 app.whenReady().then(async () => {
+  await shotHttpReady
   const win = new BrowserWindow({
     show: false,
     width: 1440,
@@ -354,7 +386,9 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      // M103. The browser pane is a <webview>; the tag on, as production has it.
+      webviewTag: true
     }
   })
   const wc = win.webContents
@@ -409,6 +443,10 @@ app.whenReady().then(async () => {
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
         // M88. The GitHub work panel over a recorded broker.
         { id: 'github', kind: 'github', x: 1800, y: 900, w: 460, h: 440, z: 15 },
+        // M103. A dev server beside the browser pane that shows it, with a
+        // ruled edge from the one into the other: on exit 0, reload.
+        term('dev', 1550, 120, 360, 250, 16, { title: 'dev server', args: ['-c', 'echo "$ npm run dev"; echo "listening on http://127.0.0.1:3000"; sleep 600'], links: [{ to: 'browser', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
+        { id: 'browser', kind: 'browser', x: 1950, y: 120, w: 560, h: 420, z: 17, url: shotHttpUrl() },
         // M86. One review over every worktree of the fixture repository.
         { id: 'across', kind: 'review', x: 1200, y: 1300, w: 560, h: 420, z: 14,
           subject: { subjectId: 'live', repoRoot: REPO_ROOT, baselineSha: REPO_HEAD, label: 'every worktree of repo', across: true } },
@@ -441,6 +479,17 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
+    // M100/M101. The roster and a routine: ada may work in the repo and spend
+    // GitHub; her nightly routine last ran an hour ago at a ten-minute interval,
+    // so arming marks it MISSED — the row must say so with the time.
+    teammates: [
+      { id: 'ada', name: 'ada', brief: 'You review pull requests for the api repository and never merge them yourself.', places: [REPO], services: ['github'], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: true },
+      { id: 'bo', name: 'bo', brief: '', places: [], services: [], skills: [], memory: 'bo', chats: [], messaging: true, scheduling: false }
+    ],
+    routines: [
+      { id: 'nightly', name: 'nightly review', teammateId: 'ada', everyMs: 600000, prompt: 'Summarise what changed in the repository since the last run and list anything that looks unfinished.', plan: 'focus chat', paused: false, lastRun: { at: Date.now() - 3600000, outcome: 'started', panelId: 'chat' }, missed: { at: Date.now() - 3000000 } },
+      { id: 'weekly', name: 'weekly tidy', teammateId: 'ada', everyMs: 3600000, prompt: 'Draft a tidy-up plan.', paused: true }
+    ],
     worktrees: [
       { id: 'wt-a', root: REPO_ROOT, path: WT_A, branch: 'tc/api-20260904-1100', createdAt: Date.now() - 3600000, panelId: 'live' },
       { id: 'wt-b', root: REPO_ROOT, path: WT_B, branch: 'tc/tests-20260904-1102', createdAt: Date.now() - 3000000, panelId: 'dormant' }
@@ -589,7 +638,7 @@ app.whenReady().then(async () => {
       presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
       // M88. GitHub through a recorded broker: the scene shows the list with
       // an issue and a review request.
-      brokerAudit: (_limit, service) => ({ rows: [{ at: Date.now() - 60000, service: 'github', method: 'GET', path: '/issues?filter=assigned', status: 200, bytes: 2410, panelId: 'github' }, { at: Date.now() - 400000, service: 'github', method: 'POST', path: '/repos/acme/canvas/issues/12/comments', status: 201, bytes: 88, panelId: 'live' }, { at: Date.now() - 900000, service: 'github', method: 'DELETE', path: '/repos/acme/canvas', status: 0, bytes: 0, panelId: 'live', reason: 'the path must stay under /repos — a delete of a repository is not a path the broker performs' }].filter((r) => service === undefined || r.service === service), skipped: 0 }),
+      brokerAudit: (_limit, service) => ({ rows: [{ at: Date.now() - 60000, service: 'github', method: 'GET', path: '/issues?filter=assigned', status: 200, bytes: 2410, panelId: 'github' }, { at: Date.now() - 400000, service: 'github', method: 'POST', path: '/repos/acme/canvas/issues/12/comments', status: 201, bytes: 88, panelId: 'live' }, { at: Date.now() - 900000, service: 'github', method: 'DELETE', path: '/repos/acme/canvas', status: 0, bytes: 0, panelId: 'live', reason: 'a delete of a repository is not a path the broker performs' }].filter((r) => service === undefined || r.service === service), skipped: 0 }),
       githubList: (panelId) => listGithubWorkItems({ panelId, broker: { call: async (q) => ({ ok: true, status: 200, truncated: false, body: q.path.includes('/search/')
         ? JSON.stringify({ total_count: 1, items: [{ number: 77, title: 'Split the flush gate out of onExit', body: 'The timer is the second door. Please review before the release branch cuts.', state: 'open', html_url: 'https://github.com/acme/canvas/pull/77', repository_url: 'https://api.github.com/repos/acme/canvas', pull_request: { url: 'x' }, user: { login: 'worker-a' } }] })
         : JSON.stringify([
@@ -600,6 +649,16 @@ app.whenReady().then(async () => {
       memoryList: (root, limit) => shotMemory.list(root, limit),
       memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
       listTemplates: () => allTemplates(layoutStore.templates()),
+      // M100/M101. The roster and routines over the harness's own store; the
+      // folder dialog and the runner are main's and stay out of a harness.
+      listTeammates: () => layoutStore.teammates(),
+      saveTeammate: (t) => { layoutStore.saveTeammate(t); return t },
+      removeTeammate: (id) => layoutStore.deleteTeammate(id),
+      choosePlace: async () => null,
+      listRoutines: () => layoutStore.routines(),
+      saveRoutine: (r) => { layoutStore.saveRoutine(r); return { kind: 'saved', routine: r } },
+      removeRoutine: (id) => layoutStore.deleteRoutine(id),
+      runRoutine: () => false,
       saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
       spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories()
@@ -626,7 +685,9 @@ app.whenReady().then(async () => {
     undefined,
     undefined,
     agentHandlers,
-    watcherHandlers
+    watcherHandlers,
+    // M103. The real read over the real guest.
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

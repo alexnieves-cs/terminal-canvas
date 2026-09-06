@@ -391,12 +391,17 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:grants / agent:revoke-grants
                        snapshot:list / snapshot:restore
                        agent:auto-start / agent:auto-stop
+                       teammate:list / teammate:save / teammate:delete
+                       teammate:choose-place
+                       routine:list / routine:save / routine:delete / routine:run
+                       browser:read
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
                        session:recover
                        settings:changed / spawn:open-sheet
                        agent:event (batched ~16ms) / watcher:state / vault:changed
+                       routine:fire
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset
                        preset:spawn / preset:default / preset:capture
@@ -880,6 +885,10 @@ price of not killing something.
 | M97 | Auto — a bounded autonomous run: `Complete`, `Harden`, `Review`, `Custom task…` as prompt vocabularies with a turn limit MAIN enforces beside M82's ceilings (the renderer's chip is a projection; the stop lands whatever the screen says); `Done` on the marker, `Stuck` with a reason (limit, an unanswered permission, an exit, a budget refusal), `stopped` by hand; a run in M79's sense, recorded and priced; a mode validates as a plan so a destructive verb without its confirmation is refused; the chip with its ring and dismiss, the chat's `auto` door, five palette rows | ✅ done |
 | M98 | Approvals grow up: `Allow for session` — a grant keyed by session AND tool, held in main beside pending, answered before the renderer ever sees the request, cleared on dispose, never persisted; the card's third verb through the one answer door; the pane's `Session grants` field with `Revoke`, and codex's named reason (its sandbox policy decides) on a disabled control | ✅ done |
 | M99 | The backend registry: one table declaring, per backend, what it can do and every named reason; every consumer reads the table and a check greps `src/` so no consumer switches on the backend name (the layout parser alone keeps its literal); the spawn sheet's conversation rows from the registry, disabled by name when a CLI is absent; ACP declined by name — no ACP-speaking CLI on this machine to measure, and what it would take written down | ✅ done |
+| M100 | Teammates, and Places: a persistent identity — name, brief, its own memory, skills, PLACES (explicit folders, chosen in the OS dialog, never typed), services, chats, messaging and scheduling as three separate permissions because they fail differently — saved top level with the record rules; the Places gate in MAIN before any spawn resolves a cwd (`..`, a symlink pointing out and a relative path each refused on the real path), a path outside every place refused with the fix; a Teammates pane; `chat as <name>` in the sheet with the brief appended by main on every spawn; a teammate's memory beside the repository's, both bounds stated above the composer | ✅ done |
+| M101 | Routines: a scheduled fresh chat as a teammate — main arms the intervals, the renderer mints the chat and sends the prompt under a system prompt that says the rule (gather, analyze, draft, prepare; irreversible actions stay behind confirmation); `Run now` / `Pause` / `Resume` / `Open last` with the last run's error on the row; in-app only, said on the row; a tick that fell while the app was closed is marked missed with the time, never skipped silently; a destructive verb in a routine's plan line refused at save against M96's table | ✅ done |
+| M102 | Service scope per teammate and the spend card: a service is granted per teammate and checked BY CODE before the credential is read (the store's three readers unchanged); read-only methods (data, not a path heuristic) run uninterrupted, a write raises a card on the teammate's chat naming service, connected account, action, target and stated cost, answered through the one approval door with `Allow for session`; the audit row names the teammate; the Integrations pane says who may spend each service; OAuth declined by name | ✅ done |
+| M103 | The browser pane: an eleventh kind, a `<webview>` guest in the one frame with the app's chrome above it — the address readout set only from the guest's own `getURL()` (never a page's title), Back/Forward/Reload/Open in browser as labelled verbs, `persist:tc-browser` as its own partition; `browser:read` in MAIN with the scheme checked on the live url (`file:`, `data:`, `about:`, `chrome:` refused by name), the text capped inside the guest and passed through the outward gate so a plan's `read` says the content is a remote page's; the five guest properties Electron's docs warn about closed by name in `main/index.ts` and pinned as text; an `exit-ok` edge into the pane reloads it (M78's table, no new trigger); `Open a page…` always present in the palette | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

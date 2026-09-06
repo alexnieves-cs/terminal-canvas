@@ -9,6 +9,9 @@ module.exports = {
   /* M83. The project memory store: node:fs against an injected directory,
      the scrollback log's own shape, with the M39 scrubber on every write. */
   ...require('../src/main/memory-store'),
+  /* M101. The routine runner over injected timers, and the record's own rules. */
+  ...require('../src/main/routine-runner'),
+  ...require('../src/shared/routines'),
   ...require('../src/shared/file-panel'),
   ...require('../src/main/file-read.ts'),
   ...require('../src/main/file-watch.ts'),
@@ -30,5 +33,9 @@ module.exports = {
   ...require('../src/main/vault-read.ts'),
   ...require('../src/shared/watch-trigger.ts'),
   ...require('../src/main/watch-runner.ts'),
-  ...require('../src/shared/redact.ts')
+  ...require('../src/shared/redact.ts'),
+  /* M103. The browser pane's read, over injected getUrl/evaluate: the scheme
+     check and the cap and the outward gate, with no webview in earshot. */
+  ...require('../src/shared/browser-panel.ts'),
+  ...require('../src/main/browser-read.ts')
 }

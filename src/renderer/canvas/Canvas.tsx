@@ -87,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -121,6 +121,8 @@ import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
+import { BrowserNode } from '@renderer/browser/BrowserNode'
+import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
 import type { PersistedTemplate } from '@shared/templates'
@@ -130,6 +132,8 @@ import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto } from '@renderer/chat/chat-store'
+import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
+import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
 import { AnnotationLayer } from './AnnotationLayer'
@@ -766,7 +770,7 @@ export function Canvas({
         // panel can be redone, and the redone panel carries the same session
         // id — its transcript must still be there to render. Only an
         // explicit close, a reset and a workspace delete drop the file.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id) }
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1485,7 +1489,7 @@ export function Canvas({
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
-        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id)
+        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1919,7 +1923,7 @@ export function Canvas({
       // is still not a registry.dispose call site: the close ends the
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
-      disposeChat(id, true); disposeWatcher(id)
+      disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -2256,6 +2260,52 @@ export function Canvas({
   // palette-only, and the comment here still said so — see that effect for why
   // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  // M100. The roster: loaded once, reloaded after every save; a ref for the
+  // sheet's submit and the palette's actions, state for the pane.
+  const [teammates, setTeammates] = useState<PersistedTeammate[] | null>(null)
+  const teammatesRef = useRef<PersistedTeammate[]>([])
+  const [selectedTeammateId, setSelectedTeammateId] = useState<string | null>(null)
+  const reloadTeammates = useCallback(() => {
+    void window.canvas.teammate.list().then((rows) => { teammatesRef.current = rows; setTeammates(rows) })
+  }, [])
+  useEffect(() => { reloadTeammates() }, [reloadTeammates])
+  // M101. Routines: the list for the pane, and the TICK — main fires, the
+  // renderer mints a fresh chat as the teammate, sends the prompt (a routine
+  // is scheduled work: the send is the point — the design rule rides its
+  // system prompt), inserts the plan line for the record, and reports the
+  // run back through the one save door so the row says what happened.
+  const [routines, setRoutines] = useState<PersistedRoutine[] | null>(null)
+  const reloadRoutines = useCallback(() => { void window.canvas.routine.list().then(setRoutines) }, [])
+  useEffect(() => { reloadRoutines() }, [reloadRoutines])
+  // `beginNewChatRef` is declared further down (the M80/M81 mint ref) and is
+  // read only inside the listener, after every render has assigned it.
+  useEffect(() => window.canvas.routine.onFire((routine) => {
+    const mint = beginNewChatRef.current
+    void (async () => {
+      const mate = teammatesRef.current.find((t) => t.id === routine.teammateId)
+      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT })
+      const at = Date.now()
+      if (result.kind === 'refused') {
+        const latestR = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
+        await window.canvas.routine.save({ ...latestR, lastRun: { at, outcome: 'refused', error: result.reason } })
+        reloadRoutines()
+        return
+      }
+      // The id the mint answered — never "the newest chat", which a user's own
+      // chat could be (the verifier's finding).
+      const panelId = result.id
+      // Merge onto the LATEST record: a pause saved while the mint was in flight
+      // must not be overwritten by the fire's stale payload.
+      const latest = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
+      if (panelId !== undefined) {
+        const answer = await window.canvas.agentSession.send(panelId, routine.prompt)
+        const refused = typeof answer === 'object' ? answer.refused : answer.startsWith('refused') || answer === 'no-session' ? answer : undefined
+        if (routine.plan !== undefined && routine.plan.trim() !== '') insertIntoComposer(panelId, routine.plan)
+        await window.canvas.routine.save({ ...latest, lastRun: { at, outcome: refused === undefined ? 'started' : 'refused', panelId, ...(refused === undefined ? {} : { error: refused }) } })
+      }
+      reloadRoutines()
+    })()
+  }), [reloadRoutines])
   // M80. The saved shapes of work, for the palette's rows (the sheet asks main
   // itself when it opens, so a template saved while the palette is shut is
   // offered the moment the sheet opens either way).
@@ -3030,7 +3080,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3629,7 +3679,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3642,17 +3692,19 @@ export function Canvas({
     const agentOptions = opts?.agentOptions !== undefined && Object.keys(opts.agentOptions).length > 0 ? opts.agentOptions : undefined
     // M81. ONE supervisor per canvas, refused HERE as well as in the sheet's
     // disabled row: the row is the affordance, this is the rule.
-    if (opts?.appendSystemPrompt !== undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
+    if (opts?.appendSystemPrompt !== undefined && opts.teammateId === undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
     // M90. The backend rides the create and the record; absent stays absent.
     const backend = carryBackend(opts ?? {})
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M100. The identity rides the create (main reads the brief and checks the places) and the record.
+    const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -3660,7 +3712,7 @@ export function Canvas({
     selectOnly(id)
     // M81/M80's rule: a first message is INSERTED, never sent.
     if (opts?.message !== undefined && opts.message !== '') void deliverToComposer(id, opts.message)
-    return { kind: 'spawned' }
+    return { kind: 'spawned', id }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
@@ -3719,7 +3771,7 @@ export function Canvas({
     // move restores the chat panel, and it must render its turns. The
     // ordinary close path would drop the file, so this is the one removal
     // that does not go through it.
-    disposeChat(id, false); disposeWatcher(id)
+    disposeChat(id, false); disposeWatcher(id); clearBrowser(id)
     setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
     setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))
@@ -3968,6 +4020,38 @@ export function Canvas({
     selectOnly(memoryId)
   }, [commitHistory, selectOnly])
 
+  /**
+   * M103. Mint a browser panel at the world centre. The url is already
+   * http(s) by the caller's rule (`normaliseTypedUrl`); the record holds
+   * where the page OPENS, and every later navigation is written back onto it
+   * through `onBrowserNavigated` so a relaunch returns to the last page.
+   */
+  const openBrowserPanel = useCallback((url: string): void => {
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const browserId = `b${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeBrowserPanel(browserId, cascadeCentre(centre, current), nextZ(current), url)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(browserId)
+  }, [commitHistory, selectOnly])
+  /**
+   * M103. The guest navigated: the record follows, with NO history entry
+   * (M90's thread-id rule — a Cmd+Z that un-navigated a page would remove a
+   * panel two presses later with nothing on screen explaining why). The
+   * url written is the guest's own `getURL()`, never the page's word for it.
+   * Same array back when nothing changed, so a reload to the same page
+   * writes nothing.
+   */
+  const onBrowserNavigated = useCallback((id: string, url: string): void => {
+    setPanels((current) => {
+      const panel = current.find((p) => p.rect.id === id)
+      if (!panel || !isBrowserPanel(panel) || panel.url === url) return current
+      return current.map((p) => (p === panel ? { ...panel, url } : p))
+    })
+  }, [])
+
   const paletteActions = usePaletteActions({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
@@ -3980,7 +4064,8 @@ export function Canvas({
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput
+    setInputMode, setBroadcastInput, openBrowserPanel,
+    teammatesRef, chooseNavigator: chrome.chooseNavigator
   })
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
@@ -4112,8 +4197,10 @@ export function Canvas({
     // fifteen-second request (M89's verifier). A failure is the palette's
     // line, as the credential rows already do it.
     onVerify: (service: string) => { void window.canvas.credential.verify(service).then((res) => { if (!res.ok) paletteActions.verifyCredential(service); reloadIntegrations() }).catch(() => reloadIntegrations()) },
-    onRefresh: reloadIntegrations
-  }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations])
+    onRefresh: reloadIntegrations,
+    // M102. The roster's grants per service, by teammate name.
+    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => t.name)]))
+  }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations, teammates])
 
   /**
    * M85. ONE object each for the pane and for every in-vault note, memoised
@@ -4130,6 +4217,41 @@ export function Canvas({
     if (!p || !isFilePanel(p) || noteVault === null) return null
     return p.source.path.startsWith(`${noteVault.root}/`) ? p.source.path.slice(noteVault.root.length + 1) : null
   })()
+  // M100. The Teammates pane's model. Every write goes to main and reloads
+  // the roster from the answer — never an optimistic local flip.
+  const teammatesPaneProps = useMemo(() => ({
+    onToggle: chrome.toggleNavigator,
+    teammates: teammates ?? [],
+    loaded: teammates !== null,
+    selectedId: selectedTeammateId,
+    onSelect: setSelectedTeammateId,
+    onCreate: (name: string) => {
+      const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+      void window.canvas.teammate.save(emptyTeammate(id, name)).then(() => { reloadTeammates(); setSelectedTeammateId(id) })
+    },
+    onSave: (t: PersistedTeammate) => { void window.canvas.teammate.save(t).then(reloadTeammates) },
+    onDelete: (id: string) => { void window.canvas.teammate.remove(id).then(() => { reloadTeammates(); setSelectedTeammateId(null) }) },
+    onAddPlace: (id: string) => {
+      void window.canvas.teammate.choosePlace().then((folder) => {
+        if (folder === null) return
+        const t = teammatesRef.current.find((x) => x.id === id)
+        if (!t || t.places.includes(folder)) return
+        void window.canvas.teammate.save({ ...t, places: [...t.places, folder] }).then(reloadTeammates)
+      })
+    },
+    onChat: (id: string) => {
+      const t = teammatesRef.current.find((x) => x.id === id)
+      if (!t) return
+      void beginNewChat({ cwd: t.places[0] ?? '', title: t.name, teammateId: id })
+    },
+    services: SERVICES.map((svc) => ({ id: svc.id, label: svc.label, connected: credentialRows.some((c) => c.service === svc.id) })),
+    routines: routines ?? [],
+    onSaveRoutine: async (r: PersistedRoutine) => { const a = await window.canvas.routine.save(r); reloadRoutines(); return a.kind === 'refused' ? a.reason : null },
+    onDeleteRoutine: (id: string) => { void window.canvas.routine.remove(id).then(reloadRoutines) },
+    onRunRoutine: (id: string) => { void window.canvas.routine.run(id) },
+    onOpenLast: (panelId: string) => { selectAndRaise(panelId); const p = panelsRef.current.find((x) => x.rect.id === panelId); if (p) centreOn(p.rect) }
+  }), [chrome.toggleNavigator, teammates, selectedTeammateId, reloadTeammates, beginNewChat, credentialRows, routines, reloadRoutines, selectAndRaise, centreOn])
+
   const vaultPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
     root: vault.root,
@@ -4243,6 +4365,7 @@ export function Canvas({
         memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
         vault={vaultPaneProps}
         integrations={integrationsPaneProps}
+        teammates={teammatesPaneProps}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -4420,6 +4543,25 @@ export function Canvas({
                 />
               )
             }
+            // M103. The eleventh kind: a live page in a guest process, its
+            // chrome ours and its state the kind word.
+            if (isBrowserPanel(panel)) {
+              return (
+                <BrowserNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  onNavigated={onBrowserNavigated}
+                />
+              )
+            }
             // M83. The seventh kind, sessionless like the four before it.
             if (isMemoryPanel(panel)) {
               return (
@@ -4478,6 +4620,7 @@ export function Canvas({
                   // M97. Focus first so the palette CAPTURES this chat (its rows act on
                   // the captured id); the open waits a tick for the focus ref to land.
                   onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
+                  teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
                 />
               )
             }
@@ -4663,6 +4806,7 @@ export function Canvas({
             pinnedCount={pinCount(panels)}
             approvals={paletteApprovals}
             templates={paletteTemplates}
+            teammateCount={teammates === null ? undefined : teammates.length}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             groups={groups}

@@ -383,6 +383,55 @@ const TOKEN = 'ghp_supersecrettokenvalue123456'
 rmSync(dir, { recursive: true, force: true })
 
 
+// M102 — scope.1. SERVICE SCOPE PER TEAMMATE, and the spend card. A teammate
+// without the grant is refused by CODE before the store is read (the three
+// readers stay three, and no token is behind the audit row); a granted GET
+// runs uninterrupted; a granted POST asks first with service, account,
+// action, target and cost, and a `false` is refused by code, never performed;
+// the audit row carries the teammate; a request with no teammate is
+// exactly the pre-M102 broker.
+{
+  // Its own directory: the suite's shared one is cleaned by an earlier check.
+  const scopeDir = require('node:fs').mkdtempSync(join(require('node:os').tmpdir(), 'tc scope '))
+  const p = join(scopeDir, 'scope.json')
+  const store = mod.createCredentialStore({ filePath: p, crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  const reads = []
+  const readOnce = store.read.bind(store)
+  const countingStore = { read: (svc) => { reads.push(svc); return readOnce(svc) }, markRejected: () => {} }
+  const seen = [], rows = [], asked = []
+  let answer = true
+  const has = typeof mod.createBroker === 'function' && typeof mod.READ_ONLY_METHODS === 'object'
+  const broker = has ? mod.createBroker({
+    store: countingStore, fetcher: async (req) => { seen.push(req); return { status: 200, body: '{}' } }, audit: { append: (r) => rows.push(r) }, now: () => 7,
+    services: (id) => (id === 'ada' ? ['github'] : id === 'bo' ? [] : undefined),
+    account: () => 'octocat',
+    approve: async (ask) => { asked.push(ask); return answer }
+  }) : null
+  const call = async (req) => (broker ? broker.call(req) : { ok: false, reason: 'no broker' })
+  const ungranted = await call({ service: 'github', method: 'GET', path: '/user', teammateId: 'bo' })
+  const readsAfterUngranted = reads.length
+  const unknown = await call({ service: 'github', method: 'GET', path: '/user', teammateId: 'zed' })
+  const get = await call({ service: 'github', method: 'GET', path: '/user', teammateId: 'ada', panelId: 'c1' })
+  const askedAfterGet = asked.length
+  const post = await call({ service: 'github', method: 'POST', path: '/repos/o/r/issues', body: '{}', teammateId: 'ada', cost: '1 issue' })
+  const askedAfterPost = asked.length
+  answer = false
+  const seenBeforeDenied = seen.length
+  const denied = await call({ service: 'github', method: 'DELETE', path: '/repos/o/r/issues/1', teammateId: 'ada' })
+  const seenBeforePlain = seen.length
+  const plain = await call({ service: 'github', method: 'POST', path: '/repos/o/r/issues', body: '{}' })
+  ok('scope.1 an ungranted teammate is refused by code not-granted BEFORE the store is read; an unknown teammate likewise; a granted GET runs with no question; a granted POST asks with service, account, action, target and cost and runs on true; a false is refused by code not-answered and never fetched; every row names the teammate; no teammate is the old broker',
+    has && ungranted.ok === false && ungranted.code === mod.NOT_GRANTED_CODE && /grant github/.test(ungranted.reason) && readsAfterUngranted === 0 &&
+      unknown.ok === false && unknown.code === mod.NOT_GRANTED_CODE &&
+      get.ok === true && askedAfterGet === 0 &&
+      post.ok === true && askedAfterPost === 1 && asked[0].service === 'github' && asked[0].account === 'octocat' && asked[0].method === 'POST' && asked[0].path === '/repos/o/r/issues' && asked[0].cost === '1 issue' && asked[0].teammateId === 'ada' &&
+      denied.ok === false && denied.code === mod.NOT_ANSWERED_CODE && seenBeforePlain === seenBeforeDenied && !seen.some((r) => r.method === 'DELETE') &&
+      plain.ok === true && seen.length === seenBeforePlain + 1 &&
+      rows.filter((r) => r.teammateId === 'ada').length === 3 && rows.filter((r) => r.teammateId === 'bo').length === 1 && !rows.some((r) => JSON.stringify(r).includes(TOKEN)),
+    JSON.stringify({ has, ungranted, unknown, get: get.ok, post: post.ok, asked, denied, plain: plain.ok, rows: rows.map((r) => [r.method, r.teammateId, r.status]) }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length ? 1 : 0)

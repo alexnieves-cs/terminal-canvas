@@ -1,10 +1,16 @@
 import { homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
-import { BrowserWindow, Notification, app, dialog, shell, clipboard } from 'electron'
+import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
+import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { createPlacesGate, fsRealpath } from './places'
+import { createRoutineRunner } from './routine-runner'
+import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
+import { parseTeammates, parseRoutines } from '@shared/layout-schema'
 import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
@@ -521,6 +527,37 @@ const sendToRenderer = (channel: string, payload: unknown): void => {
   win.show()
 }
 const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
+// M100. THE PLACES GATE: asked before any spawn resolves a cwd and before a
+// file verb answers for a request that names a teammate. Main's, never the
+// renderer's — a UI affordance is not an authority boundary.
+// M100. A teammate's memory is its own file through the SAME store, a second
+// instance over memory/teammates — beside the repository's, never inside it.
+const teammateMemory = createMemoryStore({ dir: join(app.getPath('userData'), 'memory', 'teammates') })
+const TEAMMATE_ROOT = 'teammate:'
+const teammateSlug = (root: string): string => { const id = root.slice(TEAMMATE_ROOT.length); return layoutStore.teammates().find((t) => t.id === id)?.memory ?? id }
+// M101. The routine runner: intervals in main, the tick answered by the
+// renderer (only it mints panels). Re-armed on every save and delete; a tick
+// that fell while the app was closed is marked MISSED at arm, never fired.
+const routineRunner = createRoutineRunner({
+  now: () => Date.now(),
+  setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref?.(); return t },
+  clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
+  fire: (routine) => { mainWindow?.webContents.send(IPC_EVENTS.ROUTINE_FIRE, routine) },
+  save: (routine) => layoutStore.saveRoutine(routine)
+})
+const armRoutines = (startup = false): string[] => routineRunner.arm(layoutStore.routines(), { startup })
+// M102. A session TOKEN per chat, minted into its environment: `tc api` from
+// inside the chat carries it, and the control handler maps it back to the
+// panel that really asked — a claimed panelId beside it is ignored. Memory
+// only; a relaunch mints fresh ones, which is right (the old shells are gone).
+const panelTokens = new Map<string, string>()
+const tokenOfPanel = (id: string): string => {
+  let t = panelTokens.get(id)
+  if (t === undefined) { t = randomBytes(16).toString('hex'); panelTokens.set(id, t) }
+  return t
+}
+const panelOfToken = (token: string): string | undefined => { for (const [id, t] of panelTokens) if (t === token) return id; return undefined }
+const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
 
 /**
  * M85. Main's OWN watch on the vault root, so a note an agent writes into the
@@ -561,7 +598,29 @@ let watchRunnerRef: { disposeAll(): void } | null = null
  * neither spend a credential nor see what an agent spent.
  */
 const brokerAudit = createBrokerAudit({ file: join(app.getPath('userData'), 'broker-audit.jsonl') })
-const broker = createBroker({ store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit })
+// M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
+// never the CLI's claim; the grant is the roster's; a write asks on the
+// teammate's chat through the manager's external question — the one door.
+const teammateOfPanel = (panelId: string): string | undefined => {
+  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.id === panelId && p.kind === 'chat') return p.chat.teammateId
+  return undefined
+}
+const chatOfTeammate = (teammateId: string, preferred?: string): string | undefined => {
+  const live = agentSessions?.list().map((s) => s.id) ?? []
+  if (preferred !== undefined && live.includes(preferred)) return preferred
+  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.kind === 'chat' && p.chat.teammateId === teammateId && live.includes(p.id)) return p.id
+  return undefined
+}
+const broker = createBroker({
+  store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit,
+  services: (teammateId) => layoutStore.teammates().find((t) => t.id === teammateId)?.services,
+  account: (service) => credentialStore.list().find((c) => c.service === service)?.label,
+  approve: async (ask) => {
+    const chatId = chatOfTeammate(ask.teammateId, ask.panelId)
+    if (chatId === undefined || agentSessions === null) return false
+    return agentSessions.askExternal(chatId, ask.service, { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost} (as stated by the caller)`)
+  }
+})
 
 /** M83. A directory's repository root, or the directory itself when git does not own it. */
 const memoryRoot = async (path: string): Promise<string> => {
@@ -573,6 +632,8 @@ const memoryRoot = async (path: string): Promise<string> => {
 const controlHandler = createControlHandler({
   // M87. The one verb that can spend a credential.
   broker,
+  teammateOf: teammateOfPanel,
+  panelOfToken,
   presets: () => allPresets(layoutStore.presets()),
   defaultId: () => layoutStore.defaultPresetId() || null,
   spawn: (preset, cwd) => {
@@ -593,8 +654,9 @@ const controlHandler = createControlHandler({
   // the node and the chat never read, and every door still shows a plausible
   // non-empty list (M83's verifier).
   memory: {
-    list: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
-    add: async (req) => memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+    // M100. The teammate prefix routes here as it does at the IPC door.
+    list: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
+    add: async (req) => req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
   },
   canvas: async () => {
     const wc = mainWindow?.webContents
@@ -635,7 +697,15 @@ function createWindow(): void {
       nodeIntegration: false,
       // node-pty lives in main, but the preload still needs `require('electron')`
       // to reach contextBridge/ipcRenderer.
-      sandbox: false
+      sandbox: false,
+      // M103. The browser pane is a <webview> — a guest PROCESS, the one shape
+      // that pans, zooms, clips and z-orders with the world (M0 measured it;
+      // an iframe is refused by the renderer's CSP and a WebContentsView does
+      // not follow the transform, M91). Electron's docs discourage the tag,
+      // and every property they warn about is closed by name below:
+      // will-attach-webview, the partition's permission handler, the guest's
+      // window-open handler. verify:meta browser.1 reads all five as text.
+      webviewTag: true
     }
   })
 
@@ -683,6 +753,38 @@ function createWindow(): void {
     void shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  // M103. THE GUEST'S PROPERTIES, CLOSED BEFORE IT EXISTS. A page cannot set
+  // them, and the node does not need to remember to: whatever the tag's
+  // attributes say, the guest gets no preload, no node integration and
+  // context isolation — and only an http(s) src ever attaches, so a record
+  // that slipped past the parser with a file: url still opens nothing.
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    if (!/^https?:/.test(params.src)) {
+      console.warn(`[browser] refused a guest at ${params.src}: http(s) only`)
+      event.preventDefault()
+    }
+  })
+  // Once attached, the guest's own new windows are denied — a page's
+  // `window.open` or a target=_blank link would otherwise mint a BrowserWindow
+  // with no chrome of ours and no handler on it. `link:open` stays the door
+  // for a page that should leave the app, and it is a labelled verb.
+  mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
+    guest.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A navigation to anything but the web is refused too; the READ path
+    // checks the live url again on its own (browser-read.ts).
+    guest.on('will-navigate', (event, url) => {
+      if (!/^https?:/.test(url)) { console.warn(`[browser] refused navigation to ${url}`); event.preventDefault() }
+    })
+  })
+  // Every permission ask — camera, microphone, geolocation, notifications,
+  // the lot — answered no by default. The partition is the pane's own, so
+  // the main window's session (which never sees a page) is untouched.
+  session.fromPartition('persist:tc-browser').setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  session.fromPartition('persist:tc-browser').setPermissionCheckHandler(() => false)
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
@@ -765,6 +867,17 @@ app.whenReady().then(async () => {
     // tracker is created after the manager (it subscribes to it), so a
     // captured reference here would be null for the life of the app.
     preAnswer: (id, toolName) => approvals?.granted(id, toolName) ?? false
+    ,
+    // M102. Each headless session gets the door and its OWN panel id and token
+    // — the same block PtyManager gives a terminal — so `tc api` from a chat
+    // is that chat's, never a claim.
+    envFor: (id) => ({
+      ...env,
+      TC_CONTROL_SOCKET: controlSocketPath,
+      TC_PANEL_ID: id,
+      TC_PANEL_TOKEN: tokenOfPanel(id),
+      PATH: env['PATH'] === undefined || env['PATH'] === '' ? launcherDir : `${launcherDir}:${env['PATH']}`
+    })
   })
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
@@ -948,6 +1061,9 @@ app.whenReady().then(async () => {
     }
   })
   watchRunnerRef = watchRunner
+  // M101. Arm every routine the layout holds; a tick that fell while the app
+  // was closed is marked missed here (startup only), never fired.
+  armRoutines(true)
   const disarmWatch = (id: string): void => {
     watchFileWatchers.close(id)
     const dir = watchDirWatchers.get(id)
@@ -1073,11 +1189,20 @@ app.whenReady().then(async () => {
       const backend = backendOf(spec)
       const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
+      // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
+      // to home could turn a refused folder into an allowed one silently.
+      const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
+      if (!place.ok) return { kind: 'refused', reason: place.reason }
       const cwd = resolveCwd(spec.cwd)
+      // M100. The brief rides EVERY spawn from the roster main holds — the
+      // renderer never carries it, and a relaunch's re-create gets it again
+      // (the M81 supervisor rule, reached for an identity).
+      const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
+      const brief = mate !== undefined && mate.brief.trim() !== '' ? { appendSystemPrompt: [spec.appendSystemPrompt, `You are ${mate.name}. ${mate.brief.trim()}`].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
-      const snapshot = manager.create({ ...spec, cwd })
+      const snapshot = manager.create({ ...spec, cwd, ...brief })
       // M77. The SAME capture PtyManager fires, keyed by the chat's panel id,
       // so review:panel / review:baseline / review:at answer for a chat with
       // no change to the engine. The store's once-only guard makes a
@@ -1195,6 +1320,9 @@ app.whenReady().then(async () => {
         onSpawnPreset(id)
       },
       spawnWith: (req) => {
+        // M100. A teammate's terminal is gated the same way its chat is.
+        const place = placesGate.check(req.teammateId, expandTilde(req.cwd))
+        if (!place.ok) return { kind: 'refused' as const, reason: place.reason }
         // One pure resolver, shared with the verify harness — see
         // spawn-request.ts for the rules (absent command stays absent, a
         // file is refused like a missing path, a typed command is a task).
@@ -1280,12 +1408,46 @@ app.whenReady().then(async () => {
         armVaultWatch(real)
         return readVault(real)
       },
-      memoryList: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
+      memoryList: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
       memoryAdd: async (req) => {
-        const r = memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+        const r = req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
         return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
+      // M100. The roster. A save is an upsert by id; the record is parsed by
+      // the same rules the file is (a relative place never lands).
+      listTeammates: () => layoutStore.teammates(),
+      saveTeammate: (teammate) => {
+        // A record the parser drops is REFUSED, never replaced with an empty one
+        // (which would wipe its places and services silently — the verifier).
+        const warnings: string[] = []
+        const parsed = parseTeammates([teammate], warnings)[0]
+        if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
+        layoutStore.saveTeammate(parsed)
+        return parsed
+      },
+      removeTeammate: (id) => layoutStore.deleteTeammate(id),
+      // M101. A save is refused BY NAME against M96's table and the teammate's
+      // schedule permission; a saved or deleted routine re-arms the runner.
+      listRoutines: () => layoutStore.routines(),
+      saveRoutine: (routine) => {
+        const parsed = parseRoutines([routine], [])[0]
+        if (parsed === undefined) return { kind: 'refused' as const, reason: `the routine could not be kept — the interval is at least ${ROUTINE_MIN_MS / 60_000} minute and it needs a name, a teammate and a prompt` }
+        const mate = layoutStore.teammates().find((t) => t.id === parsed.teammateId)
+        const refusal = routineRefusal(parsed, mate === undefined ? undefined : { name: mate.name, scheduling: mate.scheduling, places: mate.places })
+        if (refusal !== null) return { kind: 'refused' as const, reason: refusal }
+        layoutStore.saveRoutine(parsed)
+        armRoutines()
+        return { kind: 'saved' as const, routine: parsed }
+      },
+      removeRoutine: (id) => { const r = layoutStore.deleteRoutine(id); armRoutines(); return r },
+      runRoutine: (id) => routineRunner.runNow(id),
+      // A place is chosen in the OS dialog: the answer is absolute and real,
+      // which is the only kind the record keeps.
+      choosePlace: async () => {
+        const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Choose a folder this teammate may touch' })
+        return r.canceled || r.filePaths.length === 0 ? null : (r.filePaths[0] ?? null)
+      },
       saveTemplate: (template) => {
         const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id)
           ? template.id
@@ -1378,7 +1540,10 @@ app.whenReady().then(async () => {
       }
     }),
     agentHandlers,
-    watcherHandlers
+    watcherHandlers,
+    // M103. The guest is resolved by the id the node learned on did-attach;
+    // main checks it is a webview before reading anything.
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
   )
   createWindow()
 

@@ -1,4 +1,5 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
+import { isReadableUrl } from './browser-panel'
 import { parseAnnotations, type Annotation } from './annotations'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
@@ -10,6 +11,12 @@ import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
+import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
+import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from './routines'
+export { ROUTINES_MAX } from './routines'
+export type { PersistedRoutine } from './routines'
+export { TEAMMATES_MAX } from './teammates'
+export type { PersistedTeammate } from './teammates'
 export { TEMPLATES_MAX } from './templates'
 export type { PersistedTemplate, TemplateEdge, TemplateNode } from './templates'
 export { RUNS_MAX } from './runs'
@@ -289,6 +296,18 @@ export interface PersistedChatPanel extends PersistedPanelBase {
   chat: ChatSource
 }
 
+/**
+ * M103's browser pane. Sessionless like the file panel: no top-level cwd
+ * and no args, just the page it opens to. `url` is http(s) BY PARSE RULE —
+ * a `file:` or `data:` url is a malformed record, dropped with a warning,
+ * because a guest opened on the user's disk is not a smaller feature but a
+ * different one.
+ */
+export interface PersistedBrowserPanel extends PersistedPanelBase {
+  kind: 'browser'
+  url: string
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -299,6 +318,7 @@ export type PersistedPanel =
   | PersistedToolboxPanel
   | PersistedChatPanel
   | PersistedWatcherPanel
+  | PersistedBrowserPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -448,6 +468,10 @@ export interface LayoutSnapshot {
   prompts: Prompt[]
   /** M80. Saved shapes of work. Optional on disk for every layout written before templates existed. */
   templates: PersistedTemplate[]
+  /** M100. The roster. Optional on disk for every layout written before teammates existed. */
+  teammates: PersistedTeammate[]
+  /** M101. Scheduled runs. Optional on disk for every layout written before routines existed. */
+  routines: PersistedRoutine[]
   /**
    * Every setting the user has actually CHANGED, keyed by SettingDef.id.
    * Sparse on purpose: an absent id means "still at the schema default", which
@@ -509,6 +533,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     defaultPresetId: DEFAULT_PRESET_ID,
     prompts: [],
     templates: [],
+    teammates: [],
+    routines: [],
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
@@ -678,6 +704,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   }
   const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
   if (agentOptions !== undefined) chat.agentOptions = agentOptions
+  // M100. The identity rides the record; absent stays absent.
+  if (isStr(raw.teammateId) && raw.teammateId.trim() !== '') chat.teammateId = raw.teammateId
   return chat
 }
 
@@ -806,6 +834,17 @@ function parsePanel(
     const chat = parseChatSource((raw as Record<string, unknown>).chat, id, warnings)
     if (chat === null) return null
     return { ...base, kind: 'chat', chat }
+  }
+  if (kind === 'browser') {
+    // M103. The url is checked HERE, not only when the guest attaches: a
+    // record with a file: url would otherwise sit on the canvas as a panel
+    // whose guest main refused, blank, with the reason in main's log only.
+    const url = (raw as Record<string, unknown>).url
+    if (!isStr(url) || !isReadableUrl(url)) {
+      warnings.push(`dropped browser panel ${id}: url ${JSON.stringify(url)} is not an http(s) page`)
+      return null
+    }
+    return { ...base, kind: 'browser', url }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
@@ -1319,6 +1358,77 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
   return out.slice(0, TEMPLATES_MAX)
 }
 
+/**
+ * M100. The roster, with the record rules: absent is every pre-existing
+ * file (no warning); a record whose lists are not lists, whose name is empty
+ * or whose id repeats is dropped BY NAME; inside a good record a place that
+ * is not absolute is dropped (a relative place would be resolved against a
+ * root nobody chose — `shared/places.ts`) and a flag that is not a boolean
+ * falls to false, the teammate kept.
+ */
+export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeammate[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a teammates field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const out: PersistedTeammate[] = []
+  const strList = (v: unknown): string[] | null => (Array.isArray(v) && v.every(isStr) ? (v as string[]) : null)
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || entry.id.trim() === '' || seen.has(entry.id)) { warnings.push(`dropped teammate ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped teammate ${entry.id}: name was unusable`); return }
+    const places = strList(entry.places), services = strList(entry.services), skills = strList(entry.skills), chats = strList(entry.chats)
+    if (places === null || services === null || skills === null || chats === null) { warnings.push(`dropped teammate ${entry.id}: a list field was not a list of strings`); return }
+    const absolute = places.filter((p) => { const keep = p.startsWith('/'); if (!keep) warnings.push(`teammate ${entry.id}: dropped place ${p} — a place must be an absolute folder`); return keep })
+    seen.add(entry.id)
+    out.push({
+      id: entry.id,
+      name: entry.name,
+      brief: isStr(entry.brief) ? entry.brief : '',
+      places: absolute,
+      services,
+      skills,
+      memory: isStr(entry.memory) && entry.memory.trim() !== '' ? entry.memory : entry.id,
+      chats,
+      messaging: entry.messaging === true,
+      scheduling: entry.scheduling === true
+    })
+  })
+  return out.slice(0, TEAMMATES_MAX)
+}
+
+/**
+ * M101. Routines, with the record rules. The interval floor is enforced
+ * here too (a file edited by hand must not arm a busy loop); `lastRun` and
+ * `missed` are rebuilt by name so an absent optional stays absent.
+ */
+export function parseRoutines(raw: unknown, warnings: string[]): PersistedRoutine[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a routines field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const out: PersistedRoutine[] = []
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || entry.id.trim() === '' || seen.has(entry.id)) { warnings.push(`dropped routine ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped routine ${entry.id}: name was unusable`); return }
+    if (!isStr(entry.teammateId) || entry.teammateId.trim() === '') { warnings.push(`dropped routine ${entry.id}: it names no teammate`); return }
+    if (!isNum(entry.everyMs) || entry.everyMs < ROUTINE_MIN_MS) { warnings.push(`dropped routine ${entry.id}: the interval was under ${ROUTINE_MIN_MS / 1000}s or not a number`); return }
+    if (!isStr(entry.prompt)) { warnings.push(`dropped routine ${entry.id}: prompt was unusable`); return }
+    const r: PersistedRoutine = { id: entry.id, name: entry.name, teammateId: entry.teammateId, everyMs: entry.everyMs, prompt: entry.prompt, paused: entry.paused === true }
+    if (isStr(entry.plan) && entry.plan.trim() !== '') r.plan = entry.plan
+    if (isRecord(entry.lastRun) && isNum(entry.lastRun.at) && (entry.lastRun.outcome === 'started' || entry.lastRun.outcome === 'refused')) {
+      r.lastRun = { at: entry.lastRun.at, outcome: entry.lastRun.outcome, ...(isStr(entry.lastRun.panelId) ? { panelId: entry.lastRun.panelId } : {}), ...(isStr(entry.lastRun.error) ? { error: entry.lastRun.error } : {}) }
+    }
+    if (isRecord(entry.missed) && isNum(entry.missed.at)) r.missed = { at: entry.missed.at }
+    seen.add(entry.id)
+    out.push(r)
+  })
+  return out.slice(0, ROUTINES_MAX)
+}
+
 /** Never throws; drops entries individually, like every other parser here. */
 export function parsePrompts(raw: unknown, warnings: string[]): Prompt[] {
   if (raw === undefined) return []
@@ -1693,6 +1803,8 @@ export function parseLayout(raw: string): {
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
       templates: parseTemplates(parsed.templates, warnings),
+      teammates: parseTeammates(parsed.teammates, warnings),
+      routines: parseRoutines(parsed.routines, warnings),
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),

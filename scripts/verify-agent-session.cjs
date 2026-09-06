@@ -1466,6 +1466,45 @@ const isResult = (l) => l.includes('"type":"result"')
       '')
   } catch (e) { if (String(e && e.message) !== 'skip-grant') throw e }
 
+  /* M102 — external.1. A question that is OURS (the broker's spend card) on
+     the session's pending set: every surface answers it through the one door,
+     the process is never written to for it, a grant answers it before the
+     renderer sees it, and it dies with the session as false. */
+  {
+    if (typeof S.AgentSessionManager.prototype.askExternal !== 'function') {
+      ok('external.1 the manager has askExternal', false, 'no askExternal')
+    } else {
+      const granted = new Set()
+      const { manager, spawns, events } = makeManager({ preAnswer: (id, tool) => granted.has(`${id}:${tool}`) })
+      manager.create({ id: 'x1', cwd: '/repo' })
+      manager.send('x1', 'hello')
+      const proc = spawns[0].proc
+      const writesBefore = proc.stdin.length
+      const p1 = manager.askExternal('x1', 'github', { command: 'POST /repos/o/r/issues', account: 'octocat', cost: 'unknown' }, 'POST /repos/o/r/issues as octocat')
+      await tick(5)
+      const req = events.find((e) => e.id === 'x1' && e.type === 'permission-request' && e.toolName === 'github')
+      const pendingNow = manager.get('x1').pending.length
+      const answered = manager.answerPermission('x1', req.requestId, { allow: true })
+      const r1 = await p1
+      const p2 = manager.askExternal('x1', 'github', { command: 'DELETE /x' }, 'DELETE /x')
+      await tick(5)
+      const req2 = events.filter((e) => e.id === 'x1' && e.type === 'permission-request' && e.toolName === 'github')[1]
+      manager.answerPermission('x1', req2.requestId, { allow: false, message: 'no' })
+      const r2 = await p2
+      granted.add('x1:github')
+      const r3 = await manager.askExternal('x1', 'github', { command: 'PATCH /y' }, 'PATCH /y')
+      const autoAllowed = events.some((e) => e.id === 'x1' && e.type === 'permission-auto-allowed' && e.toolName === 'github')
+      granted.clear()
+      const p4 = manager.askExternal('x1', 'github', { command: 'PUT /z' }, 'PUT /z')
+      await tick(5)
+      manager.dispose('x1')
+      const r4 = await p4
+      ok('external.1 askExternal puts a question on the pending set (an event the renderer renders as a card), the one answerPermission resolves it true or false and writes NOTHING to the process, a session grant answers it before any event, and a dispose resolves it false',
+        req !== undefined && pendingNow === 1 && answered === true && r1 === true && proc.stdin.length === writesBefore && r2 === false && r3 === true && autoAllowed && r4 === false && manager.get('x1') === undefined,
+        JSON.stringify({ req: req && req.toolName, pendingNow, answered, r1, r2, r3, autoAllowed, r4, writes: proc.stdin.length - writesBefore }))
+    }
+  }
+
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */
   {

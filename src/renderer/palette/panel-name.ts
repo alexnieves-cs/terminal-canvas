@@ -1,4 +1,5 @@
-import { isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel } from '@renderer/panels/panels'
+import { isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { browserHost } from '@shared/browser-panel'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -54,6 +55,9 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   // M84. `watcher · <command>` — the name is what it runs; the trigger is
   // the row's trailing phrase, not part of its identity.
   if (isWatcherPanel(panel)) return `watcher · ${panel.watch.command.split('/').pop() ?? panel.watch.command}`
+  // M103. `browser · <host>` — the rail's own label, so the Go-to row and
+  // the rail agree on the name.
+  if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -66,5 +70,7 @@ export function panelPath(panel: Panel): string | undefined {
   if (isChatPanel(panel)) return panel.chat.cwd
   if (isMemoryPanel(panel)) return panel.source.root
   if (isWatcherPanel(panel)) return panel.watch.cwd
+  // A page has no directory; the url is the inspector's identity line.
+  if (isBrowserPanel(panel)) return undefined
   return panel.spec.cwd
 }

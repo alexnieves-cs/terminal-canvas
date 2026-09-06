@@ -184,7 +184,20 @@ export interface WatcherPanel extends PanelBase {
   watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel
+/**
+ * M103. The browser pane — the ELEVENTH kind, a document kind whose
+ * document is a live page in a guest process. Sessionless: no spec, so it
+ * never reaches assignTiers, registry.ensure or the live budget, and
+ * isTerminalPanel's clause below is the one line that keeps that
+ * structural. The record holds the page it opens to; the ADDRESS BAR reads
+ * the guest's own `getURL()` and never this field or the page's title.
+ */
+export interface BrowserPanel extends PanelBase {
+  kind: 'browser'
+  url: string
+}
+
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -229,6 +242,10 @@ export function isWatcherPanel(panel: Panel): panel is WatcherPanel {
   return panel.kind === 'watcher'
 }
 
+export function isBrowserPanel(panel: Panel): panel is BrowserPanel {
+  return panel.kind === 'browser'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -250,7 +267,7 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
-    !isChatPanel(panel) && !isWatcherPanel(panel)
+    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel)
   )
 }
 
@@ -756,6 +773,19 @@ export function makeMemoryPanel(id: string, centre: Point, z: number, source: { 
   }
 }
 
+export const BROWSER_W = 640
+export const BROWSER_H = 480
+
+/** M103. A browser panel at the cascade centre, opening to `url` (already http(s) by the caller's rule). */
+export function makeBrowserPanel(id: string, centre: Point, z: number, url: string): BrowserPanel {
+  return {
+    kind: 'browser',
+    rect: { id, x: centre.x - BROWSER_W / 2, y: centre.y - BROWSER_H / 2, w: BROWSER_W, h: BROWSER_H },
+    z,
+    url
+  }
+}
+
 export const CHAT_W = 560
 export const CHAT_H = 620
 
@@ -787,6 +817,8 @@ export function makeChatPanel(
       // absent and the default stay absent, so a claude record never grows a
       // key (`verify:panels codex.1` reads the file).
       ...carryBackend(chat),
+      // M100. The identity, absent unless set — the same rule as the backend.
+      ...(chat.teammateId === undefined ? {} : { teammateId: chat.teammateId }),
       cwd: chat.cwd,
       sessionId: chat.sessionId,
       ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })
