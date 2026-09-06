@@ -24,7 +24,7 @@
  */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, chmodSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'toolbox.cjs')
@@ -790,6 +790,193 @@ const write = (rel, text) => {
        skills2.length <= T.SKILLS_MAX, `${skills2.length} skills, cap ${T.SKILLS_MAX}`)
   } catch (e) {
     ok('skill.2 (threw)', false, String(e))
+  }
+
+
+  /* ================= M128: the editor ================================== */
+  //
+  // Every block is wrapped in its own try/catch that records a FAILING ok()
+  // rather than letting the throw abort the IIFE. A suite that dies at the
+  // first `applySkillEdit is not a function` prints no tally, and its silence
+  // is not evidence about the checks below it — this suite's own
+  // `skill.1 (threw)` arm is the standing shape.
+
+  /* ---- M128: the frontmatter round-trip. THE check of this milestone. ---- */
+  try {
+    const { applySkillEdit, frontmatterGrammatical } = T
+    const HOSTILE = [
+      '---',
+      'name: demo',
+      '# a comment the grammar does not read',
+      'description: before',
+      'body: |',
+      '  a block scalar',
+      '  the small grammar returns null for',
+      'anchor: &a value',
+      '---',
+      '',
+      'old body'
+    ].join('\n')
+
+    const res = applySkillEdit(HOSTILE, { meta: { description: 'after' }, body: 'new body' })
+    ok('edit.1a the save succeeds even though the block is ungrammatical', res.kind === 'ok', res.why)
+    const out = res.text
+    ok('edit.1b the understood line is rewritten', /^description: after$/m.test(out), out)
+    ok('edit.1c the COMMENT survives byte for byte',
+       out.includes('# a comment the grammar does not read'), out)
+    ok('edit.1d the BLOCK SCALAR survives byte for byte',
+       out.includes('body: |\n  a block scalar\n  the small grammar returns null for'), out)
+    ok('edit.1e the ANCHOR survives byte for byte', out.includes('anchor: &a value'), out)
+    ok('edit.1f ordering is preserved',
+       out.indexOf('name: demo') < out.indexOf('description: after') &&
+       out.indexOf('description: after') < out.indexOf('anchor:'), out)
+    ok('edit.1g the body below the fence is replaced wholesale',
+       out.endsWith('new body') && !out.includes('old body'), out)
+    ok('edit.1h an ungrammatical block makes METADATA read-only, body still editable',
+       frontmatterGrammatical(HOSTILE) === false, 'the three-state rule, applied to editability')
+    // A key the block does not carry is APPENDED just above the closing
+    // fence — never prepended, which would reorder a block somebody authored.
+    const added = applySkillEdit('---\nname: demo\n---\n\nbody\n', { meta: { description: 'new' } })
+    ok('edit.1i a missing key is appended above the closing fence, never at the top',
+       added.kind === 'ok' && /^---\nname: demo\ndescription: new\n---/.test(added.text),
+       added.kind === 'ok' ? JSON.stringify(added.text) : added.why)
+    ok('edit.1j a wholly grammatical block is editable',
+       frontmatterGrammatical('---\nname: demo\ndescription: x\n---\n\nbody\n') === true, '')
+  } catch (e) {
+    ok('edit.1 (threw)', false, String(e && e.stack || e))
+  }
+
+  /* ---- M128: atomic — no partial SKILL.md after a failed rename ---- */
+  try {
+    const { writeSkill } = T
+    const ORIGINAL = '---\nname: atomic\ndescription: before\n---\n\nbefore body\n'
+    const file = write(join('edit', '.claude', 'skills', 'atomic', 'SKILL.md'), ORIGINAL)
+    const dir = join(DIR, 'edit', '.claude', 'skills', 'atomic')
+    const st = statSync(file)
+    const deps = {
+      realpath: (x) => x,
+      skillRoots: [join(DIR, 'edit', '.claude', 'skills')],
+      pluginPaths: [],
+      trash: async () => {},
+      // The rename is the LAST step, so a failure here is the only way to
+      // reach the half-written state this check is about.
+      rename: () => { throw new Error('EIO simulated') }
+    }
+    const r = await writeSkill(file, '---\nname: atomic\ndescription: after\n---\n\nafter body\n', { mtimeMs: st.mtimeMs, size: st.size }, deps)
+    ok('edit.2a a failed rename is a named failure, never a silent success',
+       r.kind === 'failed' && typeof r.why === 'string' && r.why.length > 0, JSON.stringify(r))
+    ok('edit.2b the user\'s file still holds every byte it held before',
+       readFileSync(file, 'utf8') === ORIGINAL, JSON.stringify(readFileSync(file, 'utf8')))
+    ok('edit.2c no temp file is left beside it',
+       readdirSync(dir).join(',') === 'SKILL.md', readdirSync(dir).join(','))
+    // And the ordinary path writes, atomically, answering the NEW stamp so
+    // the panel's next save is not instantly stale against its own write.
+    const r2 = await writeSkill(file, '---\nname: atomic\ndescription: after\n---\n\nafter body\n',
+      { mtimeMs: st.mtimeMs, size: st.size }, { ...deps, rename: undefined })
+    ok('edit.2d the ordinary write lands and answers the new stamp',
+       r2.kind === 'written' && readFileSync(file, 'utf8').includes('after body') &&
+       typeof r2.stamp.mtimeMs === 'number' && r2.stamp.size === Buffer.byteLength(readFileSync(file, 'utf8')),
+       JSON.stringify(r2))
+  } catch (e) {
+    ok('edit.2 (threw)', false, String(e && e.stack || e))
+  }
+
+  /* ---- M128: containment, over a FAKE realpath ---- */
+  try {
+    const { writeSkill } = T
+    const ROOT = '/roots/user/.claude/skills'
+    // Identity except for the one symlink, which points OUT of the root: the
+    // real path decides, which is `insidePlace`'s own rule (places.2), reused
+    // here rather than re-implemented at a second security boundary.
+    const realpath = (x) => x.startsWith('/roots/user/.claude/skills/evil')
+      ? x.replace('/roots/user/.claude/skills/evil', '/elsewhere/evil')
+      : x
+    const deps = { realpath, skillRoots: [ROOT], pluginPaths: [{ id: 'superpowers', installPath: '/plugins/superpowers' }], trash: async () => {} }
+    const stamp = { mtimeMs: 1, size: 1 }
+    const dots = await writeSkill(`${ROOT}/../../../etc/skills/x/SKILL.md`, 'x', stamp, deps)
+    ok('edit.3a `..` walking out of a root that looked right is refused',
+       dots.kind === 'refused' && /outside/i.test(dots.why), JSON.stringify(dots))
+    const link = await writeSkill(`${ROOT}/evil/SKILL.md`, 'x', stamp, deps)
+    ok('edit.3b a symlink inside the root pointing OUT is refused on the real path',
+       link.kind === 'refused' && /outside/i.test(link.why), JSON.stringify(link))
+    const rel = await writeSkill('skills/x/SKILL.md', 'x', stamp, deps)
+    ok('edit.3c a relative path is refused outright, never resolved against a guess',
+       rel.kind === 'refused' && /absolute/i.test(rel.why), JSON.stringify(rel))
+    const plug = await writeSkill('/plugins/superpowers/skills/foo/SKILL.md', 'x', stamp, deps)
+    ok('edit.3d a target under a plugin installPath is refused NAMING the plugin',
+       plug.kind === 'refused' && plug.why.includes('superpowers') && /upgrade|install/i.test(plug.why),
+       JSON.stringify(plug))
+    const agent = await writeSkill(`${ROOT}/../agents/reviewer.md`, 'x', stamp, deps)
+    ok('edit.3e only a SKILL.md is writable — an agent file is refused by name',
+       agent.kind === 'refused', JSON.stringify(agent))
+  } catch (e) {
+    ok('edit.3 (threw)', false, String(e && e.stack || e))
+  }
+
+  /* ---- M128: the stale write ---- */
+  try {
+    const { writeSkill, staleRefusal } = T
+    const file = write(join('edit', '.claude', 'skills', 'stale', 'SKILL.md'), '---\nname: stale\n---\n\nas read\n')
+    const readStamp = { mtimeMs: statSync(file).mtimeMs, size: statSync(file).size }
+    // The ordinary case in this application, not an edge case: `Help me
+    // write` is an agent editing this very file while the panel holds it.
+    writeFileSync(file, '---\nname: stale\n---\n\nthe agent wrote this\n')
+    const r = await writeSkill(file, '---\nname: stale\n---\n\nthe user typed this\n', readStamp, {
+      realpath: (x) => x, skillRoots: [join(DIR, 'edit', '.claude', 'skills')], pluginPaths: [], trash: async () => {}
+    })
+    ok('edit.4a a write whose stamp no longer matches disk is REFUSED',
+       r.kind === 'refused', JSON.stringify(r))
+    ok('edit.4b the refusal names the fix and says the text is still there',
+       r.kind === 'refused' && r.why === staleRefusal() && /reload/i.test(r.why) && /still here/i.test(r.why),
+       r.kind === 'refused' ? r.why : '')
+    ok('edit.4c never last-write-wins: the agent\'s bytes are untouched',
+       readFileSync(file, 'utf8').includes('the agent wrote this'), readFileSync(file, 'utf8'))
+  } catch (e) {
+    ok('edit.4 (threw)', false, String(e && e.stack || e))
+  }
+
+  /* ---- M128: create, rename, delete ---- */
+  try {
+    const { createSkill, renameSkill, deleteSkill, renameInShelf, skillKey } = T
+    const root = join(DIR, 'edit', '.claude', 'skills')
+    const trashed = []
+    const deps = { realpath: (x) => x, skillRoots: [root], pluginPaths: [], trash: async (path) => { trashed.push(path) } }
+
+    const made = await createSkill(root, 'fresh-one', deps)
+    ok('edit.5a create scaffolds <root>/<name>/SKILL.md with a frontmatter stub',
+       made.kind === 'created' && readFileSync(join(root, 'fresh-one', 'SKILL.md'), 'utf8').startsWith('---\n'),
+       JSON.stringify(made))
+    const again = await createSkill(root, 'fresh-one', deps)
+    ok('edit.5b an existing name is refused BY THAT NAME, never overwritten',
+       again.kind === 'refused' && again.why.includes('fresh-one'), JSON.stringify(again))
+
+    const moved = await renameSkill(join(root, 'fresh-one'), join(root, 'fresh-two'), deps)
+    ok('edit.5c rename moves the directory', moved.kind === 'renamed' &&
+       readdirSync(root).includes('fresh-two') && !readdirSync(root).includes('fresh-one'), JSON.stringify(moved))
+    await createSkill(root, 'occupied', deps)
+    const collide = await renameSkill(join(root, 'fresh-two'), join(root, 'occupied'), deps)
+    ok('edit.5d a rename onto an existing name is REFUSED, never an overwrite',
+       collide.kind === 'refused' && readdirSync(root).includes('fresh-two'), JSON.stringify(collide))
+
+    // The shelf key is `scope:name`, so the rename changes it; a rename that
+    // could not be carried leaves the old key rendering `not installed here`.
+    const before = { columns: [{ id: 'c', title: 't', keys: [skillKey('user', 'fresh-one')] }] }
+    const after = renameInShelf(before, skillKey('user', 'fresh-one'), skillKey('user', 'fresh-two'))
+    ok('edit.5e renameInShelf carries the slot rather than dropping the entry',
+       after.columns[0].keys.length === 1 && after.columns[0].keys[0] === skillKey('user', 'fresh-two'),
+       JSON.stringify(after.columns[0].keys))
+
+    const gone = await deleteSkill(join(root, 'fresh-two'), deps)
+    ok('edit.5f delete calls the injected trash on the skill\'s DIRECTORY',
+       gone.kind === 'deleted' && trashed.length === 1 && trashed[0] === join(root, 'fresh-two'),
+       JSON.stringify({ gone, trashed }))
+    // Pinned as TEXT: the Finder is the undo, and an unlink would remove that
+    // recovery path with nothing on screen saying it had.
+    const src = readFileSync(join(__dirname, '..', 'src', 'main', 'skill-write.ts'), 'utf8')
+    ok('edit.5g skill-write.ts never unlinks — the trash is the only removal',
+       !/unlink/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'unlink found in source')
+  } catch (e) {
+    ok('edit.5 (threw)', false, String(e && e.stack || e))
   }
 
   /* ------------------------------------------------------- report ----- */

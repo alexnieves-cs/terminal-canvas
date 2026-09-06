@@ -18793,6 +18793,97 @@ app.whenReady().then(async () => {
       }
     }
 
+    /* ========== M128: the editor's three-state editability ============== */
+    //
+    // The frontmatter round-trip is verify:toolbox's (edit.1). What is only
+    // observable HERE is the consequence §5.2 draws from it: a block the
+    // small grammar cannot read makes the METADATA fields read-only WITH the
+    // reason on screen while the body stays editable — rather than a dead
+    // Save button that explains nothing, which is the shape this repo has
+    // refused at every other disabled control.
+    {
+      const IDS = [
+        'editor.1a an ungrammatical frontmatter block renders the metadata fields read-only WITH the reason on screen',
+        'editor.1b the BODY stays editable under the same block — three-state editability, never all-or-nothing',
+        'editor.1c Save is disabled with a NAMED reason, never silently, and becomes live once the body changes'
+      ]
+      try {
+        const ED_DIR = mkdtempSync(join(tmpdir(), 'tc skill editor '))
+        mkdirSync(join(ED_DIR, '.claude', 'skills', 'hostile-fm'), { recursive: true })
+        // The same hostile block verify:toolbox edit.1 plants: a comment, a
+        // block scalar and an anchor, none of which parseFrontmatter reads.
+        writeFileSync(join(ED_DIR, '.claude', 'skills', 'hostile-fm', 'SKILL.md'),
+          '---\nname: hostile-fm\n# a comment the grammar does not read\ndescription: before\nbody: |\n  a block scalar\nanchor: &a value\n---\n\nold body\n')
+
+        layoutStore.save({
+          panels: [{ id: 'edT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: ED_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'editor host' }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: 'edT', focusedId: 'edT'
+        })
+        flushLayoutStore()
+        const reE = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reE
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="edT"]') !== null`), 8000)
+
+        await wc.executeJavaScript(`(() => {
+          const host = document.querySelector('[role="application"]'); if (!host) return false
+          const r = host.getBoundingClientRect()
+          const dt = new DataTransfer(); dt.setData('application/x-tc-skill', ${JSON.stringify(JSON.stringify(['project', 'hostile-fm']))})
+          return host.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 200, clientY: r.top + 400 })) || true
+        })()`)
+        const edId = await waitUntil(() => wc.executeJavaScript(
+          `(() => { const n = document.querySelector('.panel[data-panel-kind="skill"]'); return n ? n.getAttribute('data-panel-id') : false })()`), 8000)
+        const sel = `.panel[data-panel-id=${JSON.stringify(edId)}]`
+
+        // Into the Edit tab, through the control rather than a state poke:
+        // the tab must be REACHABLE, not merely renderable.
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('${sel} [data-skill-tab="edit"]'); if (!b || b.disabled) return false; b.click(); return true })()`), 10000)
+
+        const snap = await waitUntil(async () => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('${sel}'); if (!n) return false
+          const desc = n.querySelector('[data-skill-edit-field="description"]')
+          const body = n.querySelector('[data-skill-edit-body]')
+          const save = n.querySelector('[data-skill-edit-save]')
+          const why = n.querySelector('[data-skill-edit-meta-why]')
+          if (!desc || !body || !save) return false
+          if (body.value === '') return false
+          return { descRO: desc.readOnly === true || desc.disabled === true,
+                   why: why ? why.textContent : null,
+                   bodyRO: body.readOnly === true || body.disabled === true,
+                   bodyValue: body.value,
+                   saveDisabled: save.disabled === true, saveTitle: save.getAttribute('title') }
+        })()`), 12000)
+
+        ok(IDS[0], snap !== false && snap.descRO === true && typeof snap.why === 'string' && snap.why.length > 10,
+          JSON.stringify(snap))
+        ok(IDS[1], snap !== false && snap.bodyRO === false && /old body/.test(String(snap.bodyValue)),
+          JSON.stringify(snap && snap.bodyValue))
+
+        const after = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('${sel}')
+          const body = n.querySelector('[data-skill-edit-body]')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          setter.call(body, 'a body the user typed')
+          body.dispatchEvent(new Event('input', { bubbles: true }))
+          const save = n.querySelector('[data-skill-edit-save]')
+          return { saveDisabled: save.disabled === true, saveTitle: save.getAttribute('title') }
+        })()`)
+        ok(IDS[2],
+          snap !== false && snap.saveDisabled === true && typeof snap.saveTitle === 'string' && snap.saveTitle.length > 10 &&
+            after.saveDisabled === false,
+          JSON.stringify({ before: snap && { d: snap.saveDisabled, t: snap.saveTitle }, after }))
+
+        await clickPanelClose(wc, edId)
+        await clickPanelClose(wc, 'edT')
+        await settle()
+        try { rmSync(ED_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (edErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(edErr && edErr.message || edErr))
+      }
+    }
+
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
