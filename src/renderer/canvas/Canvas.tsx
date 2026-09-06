@@ -171,6 +171,8 @@ import { describeAutomation, isRestartable, isRunning } from '../shell/inspector
 import type { LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from './trigger-words'
 import type { ScrollbackSearchHit } from '@shared/ipc-contract'
+// M128. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
+import { skillEditorFocused } from '../skills/editor-focus'
 
 
 const registry = createRegistry({
@@ -1164,7 +1166,11 @@ export function Canvas({
   // tear that listener down and reinstall it on every mousemove over the
   // canvas (Canvas re-renders on setCursor).
   const shouldIgnoreKeys = useCallback(
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current,
+    // M128. A skill-editor field having the keyboard is the same situation as
+    // an open palette: the user is looking at a text field, `focusedId` still
+    // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
+    // the clipboard into a running agent the user is not looking at.
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused(),
     [palette.isOpen]
   )
 

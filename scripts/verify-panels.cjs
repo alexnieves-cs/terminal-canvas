@@ -18805,7 +18805,8 @@ app.whenReady().then(async () => {
       const IDS = [
         'editor.1a an ungrammatical frontmatter block renders the metadata fields read-only WITH the reason on screen',
         'editor.1b the BODY stays editable under the same block — three-state editability, never all-or-nothing',
-        'editor.1c Save is disabled with a NAMED reason, never silently, and becomes live once the body changes'
+        'editor.1c Save is disabled with a NAMED reason, never silently, and becomes live once the body changes',
+        'editor.1d a menu paste with an editor field focused reaches the editor and NOT the focused terminal\'s agent — and the same paste with the editor blurred DOES reach it'
       ]
       try {
         const ED_DIR = mkdtempSync(join(tmpdir(), 'tc skill editor '))
@@ -18816,7 +18817,10 @@ app.whenReady().then(async () => {
           '---\nname: hostile-fm\n# a comment the grammar does not read\ndescription: before\nbody: |\n  a block scalar\nanchor: &a value\n---\n\nold body\n')
 
         layoutStore.save({
-          panels: [{ id: 'edT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: ED_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'editor host' }],
+          // `cat -v` rather than a sleep: the negative half of editor.1d is
+          // "the paste did not reach the agent", and a shell that echoes
+          // nothing would satisfy that with no guard in place at all.
+          panels: [{ id: 'edT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: ED_DIR, command: '/bin/cat', args: ['-v'], title: 'editor host' }],
           camera: { x: 0, y: 0, scale: 1 }, selectedId: 'edT', focusedId: 'edT'
         })
         flushLayoutStore()
@@ -18877,6 +18881,70 @@ app.whenReady().then(async () => {
           snap !== false && snap.saveDisabled === true && typeof snap.saveTitle === 'string' && snap.saveTitle.length > 10 &&
             after.saveDisabled === false,
           JSON.stringify({ before: snap && { d: snap.saveDisabled, t: snap.saveTitle }, after }))
+
+        // 1d — the clipboard hazard, at the fifth surface to inherit it.
+        // main's menu accelerator sends edit:paste unconditionally and
+        // Canvas routes it into registry.get(focusedId) — the RUNNING AGENT
+        // — gated only on shouldIgnoreKeys(). The POSITIVE control at the
+        // end is what keeps the negative from being vacuous: the same paste
+        // with the editor blurred must actually reach the terminal, which
+        // proves focusedId names it and the echo is observable.
+        const MARK = 'M128EDITORMARK'
+        const CONTROL = 'M128CONTROLMARK'
+        // The paste target has to be a LIVE terminal, and `edT` is not one:
+        // a panel restored from layout is DORMANT until something wakes it,
+        // so `registry.get(focusedId)` is undefined and both halves of this
+        // check would pass against nothing at all (measured — the first cut
+        // of this check reported focus: 'edT', session: false). Cmd+N spawns
+        // one, which is the same door check 35's terminal came through.
+        const panelsBefore = await wc.executeJavaScript(
+          `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        await wc.executeJavaScript(
+          `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        const liveId = await waitUntil(async () => {
+          const now = await wc.executeJavaScript(
+            `[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.find((id) => !panelsBefore.includes(id)) ?? false
+        }, 8000)
+        if (typeof liveId !== 'string') throw new Error('editor.1d: Cmd+N spawned no panel to paste into')
+        const liveSel = `.panel[data-panel-id=${JSON.stringify(liveId)}]`
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('${liveSel} .xterm') !== null`), 8000)
+        const liveBox = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('${liveSel} .panel__slot') || document.querySelector('${liveSel}')
+          if (!n) return null
+          const r = n.getBoundingClientRect()
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (liveBox !== null) await clickPanelAt(liveBox.x, liveBox.y)
+        const focusedBefore = await waitUntil(async () => {
+          const id = await wc.executeJavaScript(`window.__m4aFocusedId()`)
+          return id === liveId ? id : false
+        }, 8000)
+        await settle()
+        // DOM focus into the editor while focusedId still names the terminal:
+        // that is the hazard exactly, not a contrived arrangement.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('${sel} [data-skill-edit-body]'); if (b) b.focus(); return document.activeElement === b })()`)
+        wc.send(IPC_EVENTS.EDIT_PASTE, MARK)
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('${sel} [data-skill-edit-body]'); return b !== null && b.value.includes(${JSON.stringify(MARK)}) })()`), 4000)
+        // Settle before the negative read: reading immediately would find the
+        // terminal clean because no echo could have arrived yet, guard or no
+        // guard — check 35's own recorded lesson.
+        await sleep(600)
+        const guarded = await wc.executeJavaScript(`(() => ({
+          inEditor: (document.querySelector('${sel} [data-skill-edit-body]') || {}).value?.includes(${JSON.stringify(MARK)}) === true,
+          inTerminal: window.__m4aCellToScreen(${JSON.stringify(MARK)}) !== null
+        }))()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('${sel} [data-skill-edit-body]'); if (b) b.blur(); return true })()`)
+        await settle()
+        wc.send(IPC_EVENTS.EDIT_PASTE, CONTROL)
+        await waitUntil(() => wc.executeJavaScript(
+          `window.__m4aCellToScreen(${JSON.stringify(CONTROL)}) !== null`), 4000)
+        await sleep(300)
+        const control = await wc.executeJavaScript(`window.__m4aCellToScreen(${JSON.stringify(CONTROL)}) !== null`)
+        ok(IDS[3],
+          typeof focusedBefore === 'string' && guarded.inEditor === true &&
+            guarded.inTerminal === false && control === true,
+          JSON.stringify({ liveId, focusedBefore, guarded, control }))
 
         await clickPanelClose(wc, edId)
         await clickPanelClose(wc, 'edT')

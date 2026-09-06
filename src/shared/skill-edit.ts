@@ -30,6 +30,61 @@
  */
 const KEY_LINE = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/
 
+/**
+ * The value a `key: value` line carries, unquoted the way
+ * `parseFrontmatter` unquotes it — trim, then strip ONE matching pair of
+ * surrounding quotes. Exported so the editor's draft seeds through it: one
+ * grammar, not three. Three readers of the same line is how a value the
+ * panel SHOWS and a value it COMPARES come to disagree, and the disagreement
+ * is invisible until a save rewrites a line it should not have touched.
+ *
+ * A block-scalar indicator answers `''`, as `parseFrontmatter` does: `|` is a
+ * promise about the next lines, and putting the punctuation mark on screen
+ * where a sentence belongs would be the confident wrong answer.
+ */
+export function frontmatterValue(raw: string): string {
+  const value = raw.trim()
+  if (value === '>' || value === '|' || value === '>-' || value === '|-') return ''
+  if (value.length >= 2) {
+    const q = value[0]
+    if ((q === '"' || q === "'") && value.endsWith(q)) return value.slice(1, -1)
+  }
+  return value
+}
+
+/**
+ * Does this value need quoting to stay the same value when the CLI reads it?
+ *
+ * `description: Use when: X` is not `description: "Use when: X"` — it is
+ * invalid YAML, and this milestone's own failure mode reached through a line
+ * the small grammar DID read: the panel reports a successful save either way
+ * and the file quietly means something else. The list is the constructs a
+ * bare scalar cannot carry.
+ */
+function needsQuoting(value: string): boolean {
+  if (value === '') return true
+  if (value !== value.trim()) return true
+  if (value.includes(': ') || value.endsWith(':') || value.includes(' #')) return true
+  if (value.includes('\n')) return true
+  return '"\'&*!|>%@`[]{},#?-'.includes(value[0])
+}
+
+/**
+ * The written form of a value. Double quotes, with `"` and `\` escaped for
+ * the CLI's real YAML parser.
+ *
+ * A note for anyone reading a round trip in a check: this app's own
+ * `parseFrontmatter` does NOT unescape, so a value containing a literal `"`
+ * comes back from it with the backslashes still in it. That is the small
+ * grammar's known bound, not a bug introduced here — the file is correct for
+ * the reader that matters, and re-quoting is only ever reached for a value
+ * the user CHANGED.
+ */
+function writeValue(value: string): string {
+  if (!needsQuoting(value)) return value
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
 export interface SkillMetaEdit {
   name?: string
   description?: string
@@ -92,15 +147,20 @@ export function applySkillEdit(
         // including a line whose key happens to match inside a block scalar —
         // is left exactly as it was.
         if (m !== null && m[1] === key) {
-          lines[i] = `${key}: ${value}`
           found = true
+          // UNCHANGED IS UNTOUCHED. A save that rewrote every understood
+          // line would strip the quotes off `description: "Use when: X"` on
+          // a BODY-ONLY edit — the same "the file still loads, it just means
+          // something else" failure the re-serialisation refusal exists to
+          // prevent, reached through a line the grammar could read.
+          if (frontmatterValue(m[2]) !== value) lines[i] = `${key}: ${writeValue(value)}`
           break
         }
       }
       // A key the block does not have is APPENDED just above the closing
       // fence, never at the top: prepending would reorder a block the user or
       // an agent authored deliberately.
-      if (!found) lines.splice(f.close, 0, `${key}: ${value}`)
+      if (!found) lines.splice(f.close, 0, `${key}: ${writeValue(value)}`)
     }
   }
   // Re-found rather than reused: a splice above moved the closing fence, and

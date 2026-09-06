@@ -67,7 +67,7 @@ export function skillStub(name: string): string {
  * writable folder" instead of "`superpowers` owns this folder and your edit
  * will vanish on the next upgrade", which is the useful sentence.
  */
-function gate(candidate: string, deps: SkillWriteDeps): string | null {
+function absoluteOrPlugin(candidate: string, deps: SkillWriteDeps): string | null {
   const norm = normalisePath(candidate)
   if (norm === null) {
     return `${candidate} is not an absolute path — a skill is written by its own full path, never resolved against a root this app would have to guess`
@@ -77,6 +77,13 @@ function gate(candidate: string, deps: SkillWriteDeps): string | null {
       return `${plugin.id} owns this folder; claude plugin install will discard the edit on the next upgrade`
     }
   }
+  return null
+}
+
+function gate(candidate: string, deps: SkillWriteDeps): string | null {
+  const early = absoluteOrPlugin(candidate, deps)
+  if (early !== null) return early
+  const norm = normalisePath(candidate) as string
   if (!insidePlace(norm, deps.skillRoots, deps.realpath)) {
     return `${norm} is outside every skills folder this app may write — only ~/.claude/skills and a repository's own .claude/skills are writable`
   }
@@ -169,6 +176,28 @@ export async function createSkill(
 ): Promise<SkillWriteResult> {
   if (name === '' || name.includes('/') || name === '.' || name === '..') {
     return { kind: 'refused', why: `${name === '' ? '(no name)' : name} is not a skill name — a skill is one folder, so its name carries no separator` }
+  }
+  // A FIRST-EVER skill. `~/.claude/skills` does not exist on a machine that
+  // has never had one, `realpath` throws for it, and `insidePlace` answers
+  // false for a path with no real form — so without this the containment
+  // sentence refuses the one case this feature exists for, and blames the
+  // user's path for it. Only the ROOT is created, never a deeper chain: the
+  // root is a name this app derived itself, and creating anything past it
+  // would be creating a directory the caller named.
+  //
+  // Ordered AFTER the plugin arm below would be wrong (nothing here is under
+  // a plugin) but before the containment gate is essential: the gate is what
+  // needs the directory to exist.
+  const early = absoluteOrPlugin(root, deps)
+  if (early !== null) return { kind: 'refused', why: early }
+  try {
+    readdirSync(root)
+  } catch {
+    try {
+      mkdirSync(root, { recursive: true })
+    } catch (error) {
+      return { kind: 'failed', why: `the skills folder could not be created — ${String(error)}` }
+    }
   }
   // The ROOT is what is gated, not the target: the target does not exist yet,
   // and `insidePlace` answers false for a path with no real form (nothing to

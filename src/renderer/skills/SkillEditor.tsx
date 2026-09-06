@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as Reac
 import {
   applySkillEdit,
   frontmatterGrammatical,
+  frontmatterValue,
   type ReadStamp,
   type SkillWriteResult
 } from '@shared/skill-edit'
+import { setSkillEditorFocused } from './editor-focus'
 
 /**
  * M128. THE EDITOR — the first surface in this app that writes into
@@ -169,6 +171,27 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
     fn()
   }
 
+  /**
+   * Serving our own input is only HALF the fix. `Canvas.tsx`'s own
+   * edit:copy/edit:paste listeners gate on `shouldIgnoreKeys()` alone, so
+   * without this flag a Cmd+V with the body focused would land in the editor
+   * AND in `registry.get(focusedId)` — a running agent — and with a metadata
+   * input focused it would land ONLY there, invisibly. The flag covers all
+   * three fields; `relatedTarget` keeps it set while focus moves BETWEEN
+   * them, since blur fires before the next focus.
+   */
+  const focusProps = {
+    onFocus: () => setSkillEditorFocused(true),
+    onBlur: (e: import('react').FocusEvent<HTMLElement>) => {
+      const next = e.relatedTarget as Node | null
+      if (next !== null && e.currentTarget.closest('[data-skill-editor]')?.contains(next) === true) return
+      setSkillEditorFocused(false)
+    }
+  }
+  // A panel closed or carded with a field focused would otherwise leave the
+  // whole canvas's keyboard standing down for the rest of the session.
+  useEffect(() => () => setSkillEditorFocused(false), [])
+
   return (
     <div className="skill-editor" data-skill-editor onMouseDown={(e) => e.stopPropagation()}>
       {metaReason !== null && (
@@ -180,6 +203,7 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
           type="text"
           className="skill-editor__input"
           data-skill-edit-field="name"
+          {...focusProps}
           value={name}
           readOnly={metaReason !== null}
           title={metaReason ?? 'the skill’s frontmatter name'}
@@ -192,6 +216,7 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
           type="text"
           className="skill-editor__input"
           data-skill-edit-field="description"
+          {...focusProps}
           value={description}
           readOnly={metaReason !== null}
           title={metaReason ?? 'the sentence the CLI matches a request against'}
@@ -202,6 +227,7 @@ export function SkillEditor(props: SkillEditorProps): JSX.Element {
         ref={bodyRef}
         className="skill-editor__body"
         data-skill-edit-body
+        {...focusProps}
         value={body}
         readOnly={props.frozen !== null}
         spellCheck={false}
@@ -257,7 +283,7 @@ function splitDraft(text: string): { name: string; description: string; body: st
   const field = (key: string): string => {
     for (let i = 1; i < close; i++) {
       const m = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/.exec(lines[i])
-      if (m !== null && m[1] === key) return m[2].replace(/^["'](.*)["']$/, '$1')
+      if (m !== null && m[1] === key) return frontmatterValue(m[2])
     }
     return ''
   }

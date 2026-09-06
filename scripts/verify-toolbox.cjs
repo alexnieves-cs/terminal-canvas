@@ -837,11 +837,36 @@ const write = (rel, text) => {
     // A key the block does not carry is APPENDED just above the closing
     // fence — never prepended, which would reorder a block somebody authored.
     const added = applySkillEdit('---\nname: demo\n---\n\nbody\n', { meta: { description: 'new' } })
-    ok('edit.1i a missing key is appended above the closing fence, never at the top',
+    ok('edit.1k a missing key is appended above the closing fence, never at the top',
        added.kind === 'ok' && /^---\nname: demo\ndescription: new\n---/.test(added.text),
        added.kind === 'ok' ? JSON.stringify(added.text) : added.why)
-    ok('edit.1j a wholly grammatical block is editable',
+    ok('edit.1l a wholly grammatical block is editable',
        frontmatterGrammatical('---\nname: demo\ndescription: x\n---\n\nbody\n') === true, '')
+    /* Fix round 1. THE quoting arm, and it is the milestone's own failure
+       mode reached through a line the grammar DID read: `description: "Use
+       when: X"` unquoted on save is invalid YAML, and the panel would
+       report a successful save either way. */
+    const QUOTED = '---\nname: demo\ndescription: "Use when: X"\n---\n\nold body\n'
+    const same = applySkillEdit(QUOTED, { meta: { name: 'demo', description: 'Use when: X' }, body: 'a new body' })
+    ok('edit.1i a quoted value survives a body-only save BYTE FOR BYTE',
+       same.kind === 'ok' && same.text.includes('description: "Use when: X"') && same.text.endsWith('a new body'),
+       same.kind === 'ok' ? JSON.stringify(same.text) : same.why)
+    const changed = applySkillEdit(QUOTED, { meta: { description: 'Use when: the user asks' }, body: 'b' })
+    const back = changed.kind === 'ok' ? T.parseFrontmatter(changed.text) : null
+    ok('edit.1j a CHANGED value that needs quoting is written quoted and round-trips through parseFrontmatter',
+       changed.kind === 'ok' && /^description: "Use when: the user asks"$/m.test(changed.text) &&
+       back !== null && back.description === 'Use when: the user asks',
+       changed.kind === 'ok' ? JSON.stringify(changed.text) : changed.why)
+    const plain = applySkillEdit(QUOTED, { meta: { description: 'a plain sentence' }, body: 'b' })
+    ok('edit.1m a value that needs no quoting is not gratuitously quoted',
+       plain.kind === 'ok' && /^description: a plain sentence$/m.test(plain.text),
+       plain.kind === 'ok' ? JSON.stringify(plain.text) : plain.why)
+    // One grammar, not three: the editor seeds its draft through this same
+    // reader, so a value it shows and a value it compares cannot disagree.
+    ok('edit.1n frontmatterValue is exported and unquotes the way parseFrontmatter does',
+       typeof T.frontmatterValue === 'function' && T.frontmatterValue('  "Use when: X"  ') === 'Use when: X' &&
+       T.frontmatterValue('bare') === 'bare' && T.frontmatterValue('|') === '',
+       String(typeof T.frontmatterValue))
   } catch (e) {
     ok('edit.1 (threw)', false, String(e && e.stack || e))
   }
@@ -972,6 +997,17 @@ const write = (rel, text) => {
        JSON.stringify({ gone, trashed }))
     // Pinned as TEXT: the Finder is the undo, and an unlink would remove that
     // recovery path with nothing on screen saying it had.
+    // Fix round 1. A FIRST-EVER skill: `~/.claude/skills` does not exist on a
+    // machine that has never had one, `realpath` throws for it, and
+    // `insidePlace` answers false for a path with no real form — so the
+    // containment sentence would refuse the one case the feature exists for.
+    const absent = join(DIR, 'edit-fresh', '.claude', 'skills')
+    const freshDeps = { realpath: (x) => require('node:fs').realpathSync(x), skillRoots: [absent], pluginPaths: [], trash: async () => {} }
+    const first = await createSkill(absent, 'first-ever', freshDeps)
+    ok('edit.5h a first-ever skill creates its absent root rather than refusing containment',
+       first.kind === 'created' && readFileSync(join(absent, 'first-ever', 'SKILL.md'), 'utf8').startsWith('---\n'),
+       JSON.stringify(first))
+
     const src = readFileSync(join(__dirname, '..', 'src', 'main', 'skill-write.ts'), 'utf8')
     ok('edit.5g skill-write.ts never unlinks — the trash is the only removal',
        !/unlink/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'unlink found in source')
