@@ -717,6 +717,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (raw.dispatch === true) chat.dispatch = true
   // M120. A chat with no place keeps its sandbox across a relaunch, the same way.
   if (raw.sandbox === true) chat.sandbox = true
+  // M121. A routine's chat keeps its rule prompt across a relaunch, the same way.
+  if (raw.routine === true) chat.routine = true
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {

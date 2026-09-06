@@ -350,19 +350,27 @@ const ok = (n, pass, detail = '') => {
     const noKind = line(['memory', 'add', '--text', 'x'], { TC_PANEL_CWD: '/repo' })
     const badLimit = line(['memory', 'list', '--limit', '0'], { TC_PANEL_CWD: '/repo' })
     const badOpCli = line(['memory', 'forget'], {})
+    // M121. --teammate names a teammate's OWN memory: the root becomes the
+    // `teammate:<id>` prefix main already sorts by, so the CLI and the pane
+    // reach the same list. A --root beside it is refused (two subjects).
+    const mate = line(['memory', 'add', '--kind', 'note', '--text', 'x', '--teammate', 't1'], { TC_PANEL_CWD: '/repo' })
+    const mateList = line(['memory', 'list', '--teammate', 't1'], { TC_PANEL_CWD: '/repo' })
+    const twoSubjects = line(['memory', 'list', '--teammate', 't1', '--root', '/repo'], {})
     const handler2 = C.createControlHandler({
       presets: () => [], defaultId: () => null, exists: () => true,
       spawn: () => {}, list: () => [], focus: () => true,
       memory: { list: async (root, limit) => ({ root, entries: [], skipped: 0, limit }), add: async () => ({ ok: true, entry: {} }) }
     })
     const zeroLimit = await handler2({ verb: 'memory', op: 'list', root: '/repo', limit: 0 })
-    ok('memory.2 the CLI builds the memory and status verbs, defaults the root to the panel\'s own directory, refuses a missing --kind and a non-positive --limit by name, and the handler refuses limit 0 rather than answering empty',
+    ok('memory.2 the CLI builds the memory and status verbs, defaults the root to the panel\'s own directory, refuses a missing --kind and a non-positive --limit by name, the handler refuses limit 0 rather than answering empty, and (M121) --teammate <id> makes the root teammate:<id> for add and list while --root beside it is refused',
       build !== null &&
         add && add.verb === 'memory' && add.op === 'add' && add.kind === 'decided' && add.text === 'we use tmux' && add.root === '/repo/sub' &&
         listed && listed.op === 'list' && listed.limit === 5 && listed.root === '/repo' &&
         status && status.verb === 'status' &&
         noKind && noKind.kind === 'usage' && /--kind/.test(noKind.error) &&
         badLimit && badLimit.kind === 'usage' && /limit/.test(badLimit.error) &&
+        mate && mate.op === 'add' && mate.root === 'teammate:t1' && mateList && mateList.op === 'list' && mateList.root === 'teammate:t1' &&
+        twoSubjects && twoSubjects.kind === 'usage' && /--teammate/.test(twoSubjects.error) &&
         badOpCli && badOpCli.kind === 'usage' && /list or add/.test(badOpCli.error) &&
         zeroLimit.ok === false && /limit/.test(zeroLimit.error),
       JSON.stringify({ add, listed, status, noKind, badLimit, badOpCli, zeroLimit }))

@@ -13,6 +13,8 @@ module.exports = {
   codex: require('../src/shared/codex-transcript'),
   /* M118. copilot's JSONL door. Absent until Task 2 lands — the check guards on it. */
   copilot: (() => { try { return require('../src/shared/copilot-transcript') } catch { return undefined } })(),
+  /* M119. The ACP codec: JSON-RPC over the line seam to the same union, both directions. */
+  acp: require('../src/shared/acp-transcript'),
   session: require('../src/main/agent-session'),
   args: require('../src/main/agent-session-args'),
   quit: require('../src/main/quit'),

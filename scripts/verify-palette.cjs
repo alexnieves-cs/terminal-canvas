@@ -2372,16 +2372,23 @@ const WS = [
   const bench = has ? P.lineupPlan(P.LINEUPS.workbench, { cwd: '/w', worktrees: true, maxConcurrent: 0, liveAgents: 0 }) : null
   const swarm = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: true, maxConcurrent: 2, liveAgents: 1 }) : null
   const solo = has ? P.lineupPlan(P.LINEUPS.solo, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 0 }) : null
+  // M121. Sends ALREADY WAITING behind the ceiling take room too: a ceiling
+  // of 3 with one live and one queued has room for ONE more, so a Swarm of
+  // three queues two — the preview said one (verifier 9, second half).
+  const queuedAhead = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 3, liveAgents: 1, queued: 1 }) : null
+  const queuedNoCeiling = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 1, queued: 5 }) : null
   ok('lineup.1 the four lineups exist (solo, pair, workbench, swarm); in a Workbench launched into worktrees only the AGENT seat gets a lane and the shell and browser seats stay in the checkout; without worktrees no seat gets one',
     has && ids.join(',') === 'solo,pair,workbench,swarm' && bench !== null && bench.seats.length === 3 &&
       bench.seats.filter((s) => s.kind === 'agent').every((s) => s.lane === true) && bench.seats.filter((s) => s.kind !== 'agent').every((s) => s.lane === false) &&
       bench.seats.some((s) => s.kind === 'browser' && /localhost:3000/.test(s.url || '')) &&
       solo !== null && solo.seats.every((s) => s.lane === false),
     JSON.stringify({ ids, bench, solo }))
-  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing',
+  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing; (M121) sends already waiting take room too — one live and one queued under a ceiling of three queues two of three, the sentence names the waiting send, and with no ceiling a queue changes nothing',
     swarm !== null && swarm.sessions === 4 && swarm.agents === 3 && swarm.queued === 2 && /2 .*queue/.test(swarm.ceilingLine) && /ceiling of 2/.test(swarm.ceilingLine) &&
-      bench !== null && bench.queued === 0 && bench.ceilingLine === '',
-    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine }))
+      bench !== null && bench.queued === 0 && bench.ceilingLine === '' &&
+      queuedAhead !== null && queuedAhead.queued === 2 && /1 (already )?waiting/.test(queuedAhead.ceilingLine) &&
+      queuedNoCeiling !== null && queuedNoCeiling.queued === 0 && queuedNoCeiling.ceilingLine === '',
+    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine, queuedAhead: queuedAhead && { queued: queuedAhead.queued, line: queuedAhead.ceilingLine }, queuedNoCeiling: queuedNoCeiling && queuedNoCeiling.queued }))
 }
 
 // M113 — board.1. THE TYPED DOOR. `New work item…` is a canvas-group row (a
