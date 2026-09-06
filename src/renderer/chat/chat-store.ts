@@ -39,6 +39,8 @@ export interface ChatState {
   /** M98. Tools main answered from a session grant this launch, in order — the quiet row's source. */
   granted?: string[]
   insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
+  /** M122. Ask the panel to scroll a stored turn into view — a search hit's flight. */
+  scrollTo?: { seq: number; turnIndex: number }
   /**
    * M98. The tools main has granted for this session, in grant order. A
    * CACHE of `agent:grants` — main's tracker is the author — refreshed after
@@ -183,6 +185,13 @@ export function insertIntoComposer(id: string, text: string): void {
   const prev = states.get(id)
   if (!prev) return
   update(id, { ...prev, insert: { seq: ++insertSeq, text } })
+}
+
+/** M122. Ask the chat panel of `id` to scroll the turn at `turnIndex` into view. */
+export function scrollToTurn(id: string, turnIndex: number): void {
+  const prev = states.get(id)
+  if (!prev) return
+  update(id, { ...prev, scrollTo: { seq: ++insertSeq, turnIndex } })
 }
 
 /** M75. Ask the composer of `id` to attach an image. */

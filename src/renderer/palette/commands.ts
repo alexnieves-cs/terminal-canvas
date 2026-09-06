@@ -8,7 +8,7 @@ import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@shared/auto'
@@ -465,6 +465,8 @@ export interface PaletteActions {
   openBoard(): void
   /** M120. A chat with no folder, in the app's own sandbox directory, on the row's read-only mode. */
   newSandboxChat(backend: AgentBackend): void
+  /** M122. Scroll a chat's stored turn into view — a search hit's flight. */
+  scrollChatTurn(panelId: string, turnIndex: number): void
 }
 
 export interface PaletteContext {
@@ -509,7 +511,8 @@ export interface PaletteContext {
    * empty state from []), and `scrollbackEnabled` decides the "off" state.
    */
   searchQuery: string
-  searchResults: ScrollbackSearchHit[] | null
+  /** M122. The whole answer: hits over both logs, the cap stated, the redaction count. */
+  searchResults: PanelSearchResult | null
   scrollbackEnabled: boolean
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
@@ -615,7 +618,7 @@ export const REASON_NO_GITHUB = notConnectedReason('github')
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
-export const REASON_SEARCH_OFF = 'scrollback is off — turn on Keep output for search to read'
+export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep output; chats still answer'
 export const REASON_SEARCH_NO_MATCHES = 'try another word'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
@@ -2063,16 +2066,22 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M42 — the search scope. Rows exist only in scope 'search'; the view shows
   // them only when the user has opened that scope. Three empty states, never
   // one — a folded pair tells the user the wrong fix.
+  // M122. Persistence off is no longer the whole answer: the chat transcript
+  // logs answer regardless, so the reason says so and the hits that came
+  // still render beneath it. Only a query with an answer of NOTHING says
+  // "no matches"; before the first keystroke the scope is quiet.
   if (!ctx.scrollbackEnabled) {
     out.push(withReason(
-      { id: 'search.off', title: 'Search is unavailable', subtitle: 'turn on Keep output', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+      { id: 'search.off', title: 'Terminal output is not being kept', subtitle: 'turn on Keep output — chats still answer', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
       REASON_SEARCH_OFF
     ))
-  } else if (ctx.searchResults !== null) {
-    if (ctx.searchResults.length === 0) {
+  }
+  if (ctx.searchResults !== null) {
+    const result = ctx.searchResults
+    if (result.hits.length === 0) {
       // Only once a query has been typed: an empty query answers null above,
       // not [], so "no matches" never shows before the first keystroke.
-      if (ctx.searchQuery.trim() !== '') {
+      if (ctx.searchQuery.trim() !== '' && ctx.scrollbackEnabled) {
         out.push(withReason(
           // M64. Names the term, once — the old row said "No matches" in the
           // title and "no matches" in the hint and never the word typed.
@@ -2081,11 +2090,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ))
       }
     } else {
+      // M122. What the answer LEFT OUT comes first: the cap, and the secrets the gate replaced.
+      if (result.capped) out.push({ id: 'search.cap', title: `the first ${result.cap} matches — narrow the search`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} })
+      if (result.redacted > 0) out.push({ id: 'search.redacted', title: `${result.redacted} secret${result.redacted === 1 ? '' : 's'} redacted from these lines`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} })
       // M64. The hit leads with the panel's NAME, not its path-and-id label.
       const labelOf = new Map(ctx.panels.map((row) => [row.id, row.title ?? row.name ?? row.label]))
-      for (const hit of ctx.searchResults) {
+      for (const hit of result.hits) {
+        const isTurn = hit.kind === 'transcript'
         out.push({
-          id: `search.hit.${hit.panelId}.${hit.lineIndex}`,
+          id: isTurn ? `search.hit.${hit.panelId}.t${hit.turnIndex ?? 0}` : `search.hit.${hit.panelId}.${hit.lineIndex ?? 0}`,
           title: labelOf.get(hit.panelId) ?? hit.panelId,
           mono: true,
           // The matched line, and the haystack: the palette's own filter runs
@@ -2095,7 +2108,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           group: 'panel',
           scope: 'search',
           hiddenAtRest: true,
-          run: () => actions.goToPanel(hit.panelId)
+          // A transcript hit flies to the chat AND to the turn; a scrollback hit keeps M42's door.
+          run: () => { actions.goToPanel(hit.panelId); if (isTurn) actions.scrollChatTurn(hit.panelId, hit.turnIndex ?? 0) }
         })
       }
     }

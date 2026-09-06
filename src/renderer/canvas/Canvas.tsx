@@ -158,7 +158,7 @@ import { railLabel } from '../shell/rail-rows'
 import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from './trigger-words'
-import type { ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { PanelSearchResult } from '@shared/ipc-contract'
 
 
 const registry = createRegistry({
@@ -3425,7 +3425,7 @@ export function Canvas({
   // is `search`; Canvas debounces 120ms, asks main, and holds the answer.
   // Both are CLEARED when the scope leaves search, so a reopened palette
   // starts from no answer (null), not stale hits.
-  const [searchResults, setSearchResults] = useState<ScrollbackSearchHit[] | null>(null)
+  const [searchResults, setSearchResults] = useState<PanelSearchResult | null>(null)
   const searchQueryRef = useRef('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onSearchQuery = useCallback((query: string) => {

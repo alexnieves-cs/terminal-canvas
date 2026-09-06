@@ -29,7 +29,7 @@ import { type ApprovalRow,
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
@@ -148,7 +148,7 @@ export interface PaletteProps {
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
   /** M42. Hits from main for the current search query; null before the first answer. */
-  searchResults: ScrollbackSearchHit[] | null
+  searchResults: PanelSearchResult | null
   /** M42. scrollback.persist — decides the "search is off" empty state. */
   scrollbackEnabled: boolean
   /** M42. Called with the live query WHILE the scope is `search`, so Canvas can ask main. */

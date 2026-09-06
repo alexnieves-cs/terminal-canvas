@@ -961,6 +961,24 @@ export interface ScrollbackSearchHit {
   lineIndex: number
 }
 
+/** M122. One hit of Find in panels: a scrollback line or a transcript line, REDACTED. */
+export interface PanelSearchHit {
+  panelId: PanelId
+  kind: 'scrollback' | 'transcript'
+  line: string
+  /** A scrollback hit: the line's index in the log, for the in-panel search. */
+  lineIndex?: number
+  /** A transcript hit: the turn's index, for the chat's flight to it. */
+  turnIndex?: number
+}
+/** M122. The answer STATES its cap and how many secrets the gate replaced. */
+export interface PanelSearchResult {
+  hits: PanelSearchHit[]
+  capped: boolean
+  cap: number
+  redacted: number
+}
+
 export interface PromptBridgeRow {
   id: string
   name: string
@@ -1217,7 +1235,8 @@ export interface CanvasBridge {
     tail(req: { panelId: PanelId; lines: number }): Promise<string[]>
     clear(): Promise<void>
     /** M42. Hits across every panel's log, newest-first within a panel, capped. [] for an empty query. */
-    search(query: string): Promise<ScrollbackSearchHit[]>
+    /** M122. Find in panels: the scrollback AND transcript logs of the active workspace, capped and redacted, the counts on the result. */
+    search(query: string): Promise<PanelSearchResult>
   }
   /** M83. The project memory: what this repository has decided, tried and failed. */
   memory: {

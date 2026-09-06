@@ -1234,7 +1234,7 @@ app.whenReady().then(async () => {
     clear: () => scrollbackLog.clearAll(),
     // M42. The same shape main/index.ts wires, so the SCROLLBACK_SEARCH handler
     // registerIpcHandlers installs has a real implementation to call.
-    search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
+    search: async (panelIds, query) => ({ hits: (await scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })).map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 })
   },
   // M48. The environment report, as a fixture the checks can swap: env.1
   // needs a FAILED probe, which no harness machine should produce for real.

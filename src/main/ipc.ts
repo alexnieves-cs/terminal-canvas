@@ -8,7 +8,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import type { RunRow } from '../shared/run-ledger'
 import type {
@@ -21,7 +21,7 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { PersistedTemplate } from '../shared/templates'
 import type { PersistedTeammate } from '../shared/teammates'
 import type { PersistedRoutine } from '../shared/routines'
-import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
+import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { PanelTextExportRequest } from '../shared/export'
@@ -136,8 +136,8 @@ export interface WorktreeHandlers {
 export interface ScrollbackHandlers {
   tail(panelId: PanelId, lines: number): Promise<string[]>
   clear(): Promise<void>
-  /** M42. panelIds are supplied by the handler from the layout, never by the renderer. */
-  search(panelIds: PanelId[], query: string): Promise<ScrollbackSearchHit[]>
+  /** M42/M122. panelIds are supplied by the handler from the ACTIVE workspace's layout, never by the renderer; the answer covers both logs. */
+  search(panelIds: PanelId[], query: string): Promise<PanelSearchResult>
 }
 
 /**
@@ -227,7 +227,7 @@ const INERT_BOARD: BoardHandlers = {
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
-  search: async () => []
+  search: async () => ({ hits: [], capped: false, cap: 0, redacted: 0 })
 }
 
 const INERT_WORKTREES: WorktreeHandlers = {
@@ -361,12 +361,10 @@ export function registerIpcHandlers(
   // M42. The id list is MAIN's — every panel in every workspace — never a
   // renderer argument: a closed panel's log is already dropped, and a search
   // that accepted ids could ask for one the layout no longer holds.
-  ipcMain.handle(IPC.SCROLLBACK_SEARCH, (_event, query: string): Promise<ScrollbackSearchHit[]> => {
-    const ids = new Set<PanelId>()
-    for (const ws of layoutStore.mergedWorkspaces()) {
-      for (const panel of ws.panels) ids.add(panel.id)
-    }
-    return scrollback.search([...ids], query)
+  ipcMain.handle(IPC.SCROLLBACK_SEARCH, (_event, query: string): Promise<PanelSearchResult> => {
+    // M122. The ACTIVE workspace's panels: a hit in another workspace would fly
+    // nowhere (goToPanel names a panel on this canvas). A second scope later.
+    return scrollback.search(layoutStore.initial().panels.map((p) => p.id), query)
   })
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => {
     // M65. Every spawn's directory joins the recent list, here rather than

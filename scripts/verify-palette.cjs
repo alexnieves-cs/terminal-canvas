@@ -1788,7 +1788,7 @@ const WS = [
     { panelId: 'n1', line: 'Error: cannot read foo', lineIndex: 12 },
     { panelId: 'n2', line: 'Error: undefined bar', lineIndex: 3 }
   ]
-  const c = ctx({ searchQuery: 'error', searchResults: hits, panels: [{ id: 'n1', label: 'claude — api (n1)' }] })
+  const c = ctx({ searchQuery: 'error', searchResults: { hits: hits.map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 }, panels: [{ id: 'n1', label: 'claude — api (n1)' }] })
   const rows = P.buildCommands(c).filter((r) => r.scope === 'search')
   const r1 = byId(rows, 'search.hit.n1.12')
   const r2 = byId(rows, 'search.hit.n2.3')
@@ -1810,7 +1810,7 @@ const WS = [
 //      before the first keystroke) is NO row at all.
 {
   const off = P.buildCommands(ctx({ scrollbackEnabled: false, searchQuery: 'x', searchResults: null })).filter((r) => r.scope === 'search')
-  const none = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: 'zzz', searchResults: [] })).filter((r) => r.scope === 'search')
+  const none = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: 'zzz', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } })).filter((r) => r.scope === 'search')
   const blankBefore = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: '', searchResults: null })).filter((r) => r.scope === 'search')
   ok('search.2 the three empty states are three distinct rows: off (its reason), no-match (names the query), and nothing before the first keystroke',
     off.length === 1 && off[0].disabledReason === P.REASON_SEARCH_OFF &&
@@ -1824,7 +1824,7 @@ const WS = [
 //      is scope 'search', and a hit row never leaks into the top level.
 {
   const hits = [{ panelId: 'n1', line: 'match here', lineIndex: 1 }]
-  const all = P.buildCommands(ctx({ searchQuery: 'match', searchResults: hits, panels: [{ id: 'n1', label: 'n1' }] }))
+  const all = P.buildCommands(ctx({ searchQuery: 'match', searchResults: { hits: hits.map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 }, panels: [{ id: 'n1', label: 'n1' }] }))
   const searchRows = all.filter((r) => r.id.startsWith('search.'))
   ok('search.3 every search row is scope search and none leaks to the top level',
     searchRows.length >= 1 && searchRows.every((r) => r.scope === 'search'),
@@ -1937,7 +1937,7 @@ const WS = [
     nothing: ctx({}),
     sessionless: ctx({ panels: [{ id: 'r1', label: 'review', kind: 'review' }], capturedId: 'r1' }),
     merged: ctx({ merged: true, selectedIds: ['n1'], panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1' }),
-    scrollbackOff: ctx({ scrollbackEnabled: false, panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1', searchQuery: 'x', searchResults: [] }),
+    scrollbackOff: ctx({ scrollbackEnabled: false, panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1', searchQuery: 'x', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } }),
     noNoteRoot: ctx({ noteRoot: null }),
     envMissing: ctx({ envReport: null })
   }
@@ -2033,8 +2033,8 @@ const WS = [
       all.length === 4 && all[0] === 'panel.goto.p1' && all[1] === 'panel.goto.p2' && all[2] === 'panel.goto.p3' && all[3] === 'panel.goto.r1',
     JSON.stringify({ needs, all }))
 
-  const empty = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: [] })), 'search.none')
-  const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: [{ panelId: 'p2', lineIndex: 3, line: 'FAIL 3 the writer' }] })), 'search.hit.p2.3')
+  const empty = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } })), 'search.none')
+  const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: { hits: [{ panelId: 'p2', kind: 'scrollback', lineIndex: 3, line: 'FAIL 3 the writer' }], capped: false, cap: 50, redacted: 0 } })), 'search.hit.p2.3')
   ok('find.4 the empty search names the term once and a hit row leads with the panel\'s name',
     empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
       hit && hit.title === 'web front' && hit.subtitle === 'FAIL 3 the writer',

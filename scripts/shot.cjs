@@ -712,7 +712,7 @@ app.whenReady().then(async () => {
     {
       tail: (panelId, lines) => scrollbackLog.tail(panelId, lines),
       clear: () => scrollbackLog.clearAll(),
-      search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
+      search: async (panelIds, query) => ({ hits: (await scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })).map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 })
     },
     () => ({
       probedAt: Date.now(), shell: { path: '/bin/zsh', ok: true }, pathEntries: ['/usr/bin', '/bin'],

@@ -261,6 +261,14 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     if (insert.attach !== undefined) addAttachment(insert.attach)
     takeInsert(id, insert.seq)
   }, [chat.insert, id, insertAtCaret, addAttachment])
+  // M122. A search hit's flight: the stored turn's row scrolled into view by the turn's id (a row's id is its turn's).
+  useEffect(() => {
+    const target = chat.scrollTo
+    if (target === undefined) return
+    const turn = chat.turns[target.turnIndex]
+    const el = turn === undefined ? null : bodyRef.current?.querySelector(`[data-chat-row-id="${turn.id}"]`) ?? null
+    if (el !== null) el.scrollIntoView({ block: 'center' })
+  }, [chat.scrollTo, chat.turns])
 
   // The menu's paste and copy, served only while this textarea is focused.
   // A paste with NO text asks main for a clipboard image (M75).
@@ -546,9 +554,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           {rows.map((row) => {
             switch (row.kind) {
               case 'user':
-                return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user"><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre></div>
+                return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user" data-chat-row-id={row.id}><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre></div>
               case 'text':
-                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant"><span className="chat__role">claude</span><pre className="chat__text" data-chat-assistant-text>{row.text}</pre></div>
+                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><pre className="chat__text" data-chat-assistant-text>{row.text}</pre></div>
               case 'thinking':
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':

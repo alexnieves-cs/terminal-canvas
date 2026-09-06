@@ -5,7 +5,7 @@ import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/pal
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
-import { insertIntoComposer, lastAssistantText, reportedModels } from '@renderer/chat/chat-store'
+import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
@@ -1846,7 +1846,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M116. A view, like openTeammates.
     openBoard: () => chooseNavigator('board'),
     // M120. The sandbox flag rides the create; the backend by NAME from the row, absent is claude.
-    newSandboxChat: (backend) => { void beginNewChat({ sandbox: true, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }) }
+    newSandboxChat: (backend) => { void beginNewChat({ sandbox: true, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }) },
+    // M122. The chat store's bus; the panel scrolls the turn's row into view.
+    scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,

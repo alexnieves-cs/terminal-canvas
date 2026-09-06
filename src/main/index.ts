@@ -9,6 +9,7 @@ import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { buildPushArgs } from './git-args'
 import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
+import { searchPanels } from './panel-search'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { createRoutineRunner } from './routine-runner'
@@ -1633,10 +1634,17 @@ app.whenReady().then(async () => {
       // Gated on the SAME setting as tail: search reads the same files, so a
       // user who turned persistence off must get nothing rather than stale
       // hits from a log they asked not to keep.
-      search: (panelIds, query) =>
-        layoutStore.getSetting('scrollback.persist') === true
-          ? scrollbackLog.search(panelIds, query, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
-          : Promise.resolve([])
+      // M122. Both logs. The scrollback half stays gated on the setting; the
+      // transcript half is a chat's own durable file and answers regardless
+      // — the palette's off reason says so.
+      search: (panelIds, query) => {
+        const kinds = new Map(layoutStore.initial().panels.map((p) => [p.id, p.kind ?? 'terminal'] as const))
+        const panels = panelIds.map((id) => ({ id, kind: kinds.get(id) ?? 'terminal' }))
+        return searchPanels(query, panels, {
+          scrollback: (ids, q, caps) => layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.search(ids, q, caps) : Promise.resolve([]),
+          transcript: (id) => agentTranscripts.read(id).turns
+        }, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
+      }
     },
     // M48. The environment report, built on demand from facts this file
     // already holds: the probe's outcome, the login env, the same which()
