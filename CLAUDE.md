@@ -439,7 +439,9 @@ check does not, and should not, cover it.
   `backend === '<member>'` and `case '<member>'` and requires the only hit to be the layout
   parser. The by-name copy sites use `carryBackend`; the sheet's rows come from `BACKEND_IDS`
   (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
-  Act I spec — no ACP-speaking CLI on this machine to measure.
+  Act I spec — no ACP-speaking CLI on this machine to measure. M112 re-read that premise (an
+  ACP agent is now one `npx` away) and diffed ACP's methods against the table in
+  `docs/acp-registry-diff.md`; no field added.
 - `src/shared/teammates.ts` / `src/shared/places.ts` / `src/main/places.ts` — M100. A teammate
   is a record saved top level with the record rules (`parseTeammates`; `carryTeammate` at every
   by-name copy); a chat carries `teammateId` and MAIN appends the brief from its own roster on
