@@ -18306,7 +18306,8 @@ app.whenReady().then(async () => {
             read && read.kind === 'read' && read.url === expectUrl && /Hello from the fixture server/.test(read.text) && !read.text.includes(token) &&
             /remote page at 127\.0\.0\.1/.test(read.note) && /redacted/.test(read.note) &&
             bogus && bogus.kind === 'refused' && /not a page in a browser panel/.test(bogus.reason) &&
-            dropped === true && parsedIds.join(',') === 'bA' && parsed.warnings.some((w) => w.includes('bB') && /file:/.test(w)) &&
+            // The store carries every earlier block's panels: presence and absence by id, never the whole list.
+            dropped === true && parsedIds.includes('bA') && !parsedIds.includes('bB') && parsed.warnings.some((w) => w.includes('bB') && /file:/.test(w)) &&
             rail && /127\.0\.0\.1/.test(rail.label ?? ''),
           JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, droppedFacts, parsedIds, warnings: parsed.warnings, rail }))
       } catch (bErr) {
