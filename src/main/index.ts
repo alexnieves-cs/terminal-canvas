@@ -51,6 +51,8 @@ import { claudeCliRunner } from './claude-cli-runner'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
+import { init as sentryInit, IPCMode, onUncaughtExceptionIntegration, onUnhandledRejectionIntegration, electronMinidumpIntegration, linkedErrorsIntegration, functionToStringIntegration } from '@sentry/electron/main'
+import { telemetryPlan, scrubEvent } from './telemetry'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
@@ -138,6 +140,9 @@ const layoutStore = createLayoutStore({
   filePath: join(app.getPath('userData'), 'layout.json'),
   onWritten: (bytes) => { layoutSnapshots.record(bytes) }
 })
+
+/** M112. Decided once, after the store loads; read by createWindow for the renderer's flag. */
+let telemetryOn = false
 
 // Its own file, deliberately not a key in layout.json. That file is rewritten
 // in full on a 500ms debounce, CLAUDE.md documents hand-editing it as a
@@ -707,7 +712,11 @@ function createWindow(): void {
       // and every property they warn about is closed by name below:
       // will-attach-webview, the partition's permission handler, the guest's
       // window-open handler. verify:meta browser.1 reads all five as text.
-      webviewTag: true
+      webviewTag: true,
+      // M112. The renderer's one fact about telemetry, as an argv flag the
+      // preload reads: no channel, no store read from the renderer, and the
+      // SDK is never loaded in a process that will not send.
+      additionalArguments: telemetryOn ? ['--tc-telemetry=1'] : []
     }
   })
 
@@ -941,6 +950,42 @@ app.whenReady().then(async () => {
   // settings, and the renderer's first act is layout:load, which needs a
   // resolved store to answer from.
   layoutStore.load()
+
+  // M112. Telemetry, if and only if a DSN is here. Decided AFTER the store
+  // loads (the setting lives there) and BEFORE the window exists (the
+  // renderer learns the decision as an argv flag, not a channel). The ~100 ms
+  // of boot above this line is uncovered, and that is the trade. The
+  // minidump integration — process memory — rides only on its own setting.
+  {
+    const plan = telemetryPlan((id) => layoutStore.getSetting(id))
+    if (plan.on) {
+      const paths = { userData: app.getPath('userData'), home: app.getPath('home') }
+      const integrations = [onUncaughtExceptionIntegration(), onUnhandledRejectionIntegration(), linkedErrorsIntegration(), functionToStringIntegration()]
+      if (plan.nativeCrashes) integrations.push(electronMinidumpIntegration())
+      sentryInit({
+        dsn: plan.dsn,
+        release: `terminal-canvas@${app.getVersion()}`,
+        sendDefaultPii: false,
+        defaultIntegrations: false,
+        integrations,
+        // Classic rides Electron IPC to main, which holds the DSN and the
+        // scrubber. Protocol mode registers a `sentry-ipc://` handler the
+        // renderer CSP (`default-src 'self'`) would refuse with no error —
+        // so the mode is named here, never left at the SDK's own default
+        // (`Both`). This is a MAIN-only option in the real 7.18.0 types
+        // (`ElectronMainOptions`, not `ElectronRendererOptions`): it decides
+        // how main LISTENS, so the renderer- and preload-side `init()` calls
+        // below take no `ipcMode` at all — passing one there does not typecheck.
+        ipcMode: IPCMode.Classic,
+        beforeSend: (event) => scrubEvent(event, paths) as typeof event | null,
+        beforeBreadcrumb: () => null
+      })
+      telemetryOn = true
+      console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)
+    } else {
+      console.log(`[startup] telemetry=off (${plan.reason})`)
+    }
+  }
 
   // M55. A tmux session with no panel to reach it holds a process and a
   // shell the user cannot see, close, or type into — possible if a crash

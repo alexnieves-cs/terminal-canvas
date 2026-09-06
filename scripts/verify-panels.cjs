@@ -16209,6 +16209,16 @@ app.whenReady().then(async () => {
       rmSync(exportDir, { recursive: true, force: true })
     }
 
+    // telemetry.4 (M112). OFF BY DEFAULT, OBSERVABLY. The harness passes no
+    //   --tc-telemetry flag (main's plan is no-dsn), so the bridge field is
+    //   false and the renderer never loaded the SDK: no __SENTRY__ global.
+    //   Red first: the field did not exist.
+    {
+      const t = await wc.executeJavaScript(`({ field: window.canvas && window.canvas.telemetry ? window.canvas.telemetry.enabled : 'absent', sentry: typeof window.__SENTRY__ })`)
+      ok('telemetry.4 with no DSN the bridge says telemetry is off and the renderer has no Sentry global',
+        t.field === false && t.sentry === 'undefined', JSON.stringify(t))
+    }
+
     // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
     //   at the default zoom, `summary` (naming its panel) once the camera is
     //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with

@@ -1454,4 +1454,6 @@ export interface CanvasBridge {
     read(req: BrowserReadRequest): Promise<BrowserReadResult>
   }
   platform: NodeJS.Platform
+  /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */
+  telemetry: { enabled: boolean }
 }

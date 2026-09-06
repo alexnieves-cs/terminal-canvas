@@ -65,6 +65,7 @@
     "verify:electron": "node scripts/verify-electron.cjs"
   },
   "dependencies": {
+    "@sentry/electron": "7.18.0",
     "node-pty": "1.1.0"
   },
   "devDependencies": {

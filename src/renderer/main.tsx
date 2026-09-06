@@ -51,6 +51,21 @@ window.canvas.preset.onDefault((template) => {
 // state can be mounted by verify:panels against a known layout, instead of
 // against whatever a hardcoded constant happens to say.
 async function boot(): Promise<void> {
+  // M112. The renderer's Sentry, gated on the bridge field main stamped. Off
+  // (the default) installs nothing — no global handlers, no console patching
+  // — so a process that will never send never sees a byte. Inside boot()
+  // rather than a top-level await: main.tsx is a module evaluated before
+  // React exists, and a top-level await here would delay the Cmd+N
+  // subscription above by an unknown amount, reopening the exact race that
+  // subscription's own comment documents.
+  if (window.canvas.telemetry.enabled) {
+    // No `ipcMode` here: it is a main-process-only option (real 7.18.0
+    // types put it on `ElectronMainOptions`, not `ElectronRendererOptions`)
+    // and main already pinned Classic in its own sentryInit call.
+    const { init } = await import('@sentry/electron/renderer')
+    init({ defaultIntegrations: false, beforeBreadcrumb: () => null })
+  }
+
   // A failed load must still open a WORKING canvas. parseLayout never throws
   // and the store's initial() is built not to throw, precisely so a corrupt
   // file degrades instead of failing — but the IPC hop between them had no

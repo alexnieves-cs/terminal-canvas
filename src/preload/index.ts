@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import { init as sentryRendererInit } from '@sentry/electron/renderer'
 import type { WatcherStateEvent } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PersistedRoutine } from '../shared/routines'
@@ -43,6 +44,20 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
   const wrapped = (_event: IpcRendererEvent, payload: T): void => listener(payload)
   ipcRenderer.on(channel, wrapped)
   return () => ipcRenderer.removeListener(channel, wrapped)
+}
+
+// M112. The flag main stamped on this window's argv. sandbox is false, so
+// process.argv is readable here; the renderer itself never sees argv, which
+// is why the fact crosses as a bridge FIELD. When on, the preload inits too:
+// with contextIsolation the SDK cannot see this world otherwise.
+const telemetryEnabled = process.argv.includes('--tc-telemetry=1')
+if (telemetryEnabled) {
+  // `ipcMode` is decided once, in main/index.ts's own sentryInit call — it is
+  // a MAIN-only option in this SDK's real types (ElectronMainOptions), not
+  // part of ElectronRendererOptions, so it is never passed here. Main having
+  // pinned Classic is what keeps this process off the sentry-ipc:// protocol
+  // the renderer CSP would silently refuse.
+  sentryRendererInit({ defaultIntegrations: false, beforeBreadcrumb: () => null })
 }
 
 const bridge: CanvasBridge = {
@@ -286,7 +301,8 @@ const bridge: CanvasBridge = {
   browser: {
     read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
   },
-  platform: process.platform
+  platform: process.platform,
+  telemetry: { enabled: telemetryEnabled }
 }
 
 contextBridge.exposeInMainWorld('canvas', bridge)
