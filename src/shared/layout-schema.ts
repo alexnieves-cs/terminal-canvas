@@ -715,6 +715,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (raw.supervisor === true) chat.supervisor = true
   // M114. A dispatched lane keeps its prompt across a relaunch, the same way.
   if (raw.dispatch === true) chat.dispatch = true
+  // M121. A routine's chat keeps its rule prompt across a relaunch, the same way.
+  if (raw.routine === true) chat.routine = true
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {
