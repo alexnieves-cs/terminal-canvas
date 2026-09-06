@@ -18101,7 +18101,7 @@ app.whenReady().then(async () => {
     /* M124 — reach.2. A real Tab through the Board pane and the card    */
     /* ---------------------------------------------------------------- */
     {
-      const IDS = ['reach.2 a real Tab from the Board pane\'s first row visits the uncarded row\'s Show on canvas and the second row, and from the card\'s first verb visits every ENABLED verb in order (a disabled Open PR is skipped, which is right) — the surfaces M113–M116 added are in the tab order, not click-only']
+      const IDS = ['reach.2 a real Tab from the Board pane\'s first row (the todo column\'s) visits its Show on canvas and then the working row, and from the card\'s first verb visits every ENABLED verb in order (a disabled Open PR is skipped, which is right) — the surfaces M113–M116 added are in the tab order, not click-only']
       try {
         const now = Date.now()
         layoutStore.save({
@@ -18133,10 +18133,11 @@ app.whenReady().then(async () => {
           return { started, visited }
         }
         const identity = `const row = el.closest('[data-board-row]'); if (row && el.classList.contains('rail-row__main')) return 'row:' + row.getAttribute('data-board-row'); if (el.hasAttribute('data-board-show')) return 'show:' + (row ? row.getAttribute('data-board-row') : '?'); if (el.hasAttribute('data-work-verb')) return 'verb:' + el.getAttribute('data-work-verb'); return null`
-        const pane = await tabWalk2('[data-board-row="wi-r1"] .rail-row__main', identity, 10)
+        // The FIRST row in DOM order: the todo column comes first, and Tab walks forward — starting at the working row would leave the pane at once.
+        const pane = await tabWalk2('[data-board-row="wi-r2"] .rail-row__main', identity, 10)
         const card = await tabWalk2('[data-work-verb="assign"]', identity, 10)
         const enabledVerbs = await wc.executeJavaScript(`[...document.querySelectorAll('[data-work-verb]')].filter((b) => !b.disabled).map((b) => 'verb:' + b.getAttribute('data-work-verb'))`)
-        ok(IDS[0], pane.started === true && pane.visited[0] === 'row:wi-r1' && pane.visited.includes('row:wi-r2') && pane.visited.includes('show:wi-r2') && pane.visited.indexOf('row:wi-r2') < pane.visited.indexOf('show:wi-r2') &&
+        ok(IDS[0], pane.started === true && pane.visited[0] === 'row:wi-r2' && pane.visited.includes('show:wi-r2') && pane.visited.includes('row:wi-r1') && pane.visited.indexOf('show:wi-r2') < pane.visited.indexOf('row:wi-r1') &&
           card.started === true && Array.isArray(enabledVerbs) && enabledVerbs.length >= 3 && enabledVerbs.every((v) => card.visited.includes(v)) && enabledVerbs.map((v) => card.visited.indexOf(v)).every((idx, i, arr) => i === 0 || idx > arr[i - 1]),
           JSON.stringify({ pane, card, enabledVerbs }))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
