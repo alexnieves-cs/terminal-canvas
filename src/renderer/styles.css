@@ -3728,3 +3728,19 @@ body {
 @keyframes chat-auto-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
 .chat__auto-dismiss { margin-left: var(--sp-1); }
+
+/* M100. The Teammates pane: the roster as rail rows, one record open beneath
+   it. A place is a mono path with its remove beside it; the three
+   permissions are three separate controls. */
+.teammates-pane__new { display: flex; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); align-items: center; }
+.teammates-pane__name { flex: 1; min-width: 0; font: inherit; }
+.teammates-pane__detail { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-top: 1px solid var(--line); }
+.teammates-pane__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__label { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+.teammates-pane__brief { min-height: 72px; resize: vertical; font: inherit; font-size: var(--t-xs); }
+.teammates-pane__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.teammates-pane__item { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.teammates-pane__path { font-family: var(--font-mono); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.teammates-pane__flags { gap: var(--sp-2); }
+.teammates-pane__actions { flex-direction: row; gap: var(--sp-2); }
+.chat__teammate { font-weight: 600; }

@@ -45,6 +45,8 @@ import type { LinkMode } from './useLinkMode'
 import type { Point, WorldRect } from './viewport'
 import type { Viewport } from './viewport'
 import type { PersistedBookmark } from '@shared/layout-schema'
+import type { PersistedTeammate } from '@shared/teammates'
+import type { NavigatorPane } from '@renderer/shell/useShellChrome'
 
 export interface PaletteActionsDeps {
   registry: Registry
@@ -89,7 +91,7 @@ export interface PaletteActionsDeps {
   beginWatcher: () => void
   beginNewNote: () => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
-  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }) => Promise<SpawnResult>
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>
   /** M92. Lock, pin and maximise, each with its opposite. */
   lockPanel: (id: string) => void
   unlockPanel: (id: string) => void
@@ -125,6 +127,9 @@ export interface PaletteActionsDeps {
   setGroups: Dispatch<SetStateAction<CanvasGroup[]>>
   setInputMode: Dispatch<SetStateAction<InputMode | null>>
   setBroadcastInput: Dispatch<SetStateAction<boolean>>
+  /** M100. The roster as loaded (a ref: the sheet's submit reads it once), and the navigator's chooser. */
+  teammatesRef: RefObject<PersistedTeammate[]>
+  chooseNavigator: (pane: NavigatorPane) => void
 }
 
 /**
@@ -164,7 +169,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator
   } = deps
 
   return useMemo<PaletteActions>(() => ({
@@ -1224,6 +1229,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             templates,
             ...(templateId === undefined ? {} : { templateId }),
             instantiate: instantiateTemplate,
+            teammates: teammatesRef.current,
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.
@@ -1236,6 +1242,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                 ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
                 : values.what.kind === 'codex'
                   ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, backend: 'codex' })
+                : values.what.kind === 'teammate'
+                  // M100. A chat AS a teammate: the id rides the create; main reads
+                  // the brief from its roster and checks the places before the cwd.
+                  ? beginNewChat({ cwd: values.cwd, title: values.title === '' ? (teammatesRef.current.find((t) => t.id === (values.what as { id: string }).id)?.name ?? '') : values.title, agentOptions: values.agentOptions, teammateId: (values.what as { id: string }).id })
                 : window.canvas.spawn.sheet(buildSpawnRequest(values, presets))
           }
         })
@@ -1690,6 +1700,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       begin(task)
     },
     stopAuto: (id) => { void window.canvas.agentSession.autoStop(id) }
+    ,
+    // M100. The roster's door: the navigator's pane, chosen the way the dock chooses it.
+    openTeammates: () => chooseNavigator('teammates')
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
@@ -1700,5 +1713,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator])
 }

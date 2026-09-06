@@ -933,6 +933,28 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ n: read && read.notes.map((x) => [x.path, x.title]), skipped: read && read.skipped, capped: capped && { n: capped.notes.length, skipped: capped.skipped }, missing }))
 }
 
+// M100 — memory.3. TWO MEMORIES, TWO AXES. A teammate's memory is its own file
+// under memory/teammates, through the SAME store (a second instance over a
+// second dir), BESIDE the repository's — neither sees the other's rows, and
+// the teammate's root is its slug, never a path.
+{
+  const { mkdtempSync, rmSync, readdirSync, existsSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'tc memory two '))
+  try {
+    const repo = F.createMemoryStore({ dir })
+    const mates = F.createMemoryStore({ dir: join(dir, 'teammates') })
+    repo.add({ root: '/r', kind: 'decided', text: 'sessions live in tmux' })
+    mates.add({ root: 'ada', kind: 'note', text: 'ada prefers short answers' })
+    const r = repo.list('/r', 10), m = mates.list('ada', 10), cross = repo.list('ada', 10)
+    const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
+    const mateFiles = existsSync(join(dir, 'teammates')) ? readdirSync(join(dir, 'teammates')) : []
+    ok('memory.3 a teammate store over memory/teammates writes its own file, the repository store never lists it, and each answers only its own rows',
+      r.entries.length === 1 && m.entries.length === 1 && cross.entries.length === 0 && files.length === 1 && mateFiles.length === 1 && /ada/.test(mateFiles[0]),
+      JSON.stringify({ r: r.entries.length, m: m.entries.length, cross: cross.entries.length, files, mateFiles }))
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

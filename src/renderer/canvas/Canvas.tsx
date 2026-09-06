@@ -130,6 +130,7 @@ import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto } from '@renderer/chat/chat-store'
+import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
 import { AnnotationLayer } from './AnnotationLayer'
@@ -2256,6 +2257,15 @@ export function Canvas({
   // palette-only, and the comment here still said so — see that effect for why
   // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  // M100. The roster: loaded once, reloaded after every save; a ref for the
+  // sheet's submit and the palette's actions, state for the pane.
+  const [teammates, setTeammates] = useState<PersistedTeammate[] | null>(null)
+  const teammatesRef = useRef<PersistedTeammate[]>([])
+  const [selectedTeammateId, setSelectedTeammateId] = useState<string | null>(null)
+  const reloadTeammates = useCallback(() => {
+    void window.canvas.teammate.list().then((rows) => { teammatesRef.current = rows; setTeammates(rows) })
+  }, [])
+  useEffect(() => { reloadTeammates() }, [reloadTeammates])
   // M80. The saved shapes of work, for the palette's rows (the sheet asks main
   // itself when it opens, so a template saved while the palette is shut is
   // offered the moment the sheet opens either way).
@@ -3629,7 +3639,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3647,12 +3657,14 @@ export function Canvas({
     }
     // M90. The backend rides the create and the record; absent stays absent.
     const backend = carryBackend(opts ?? {})
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M100. The identity rides the create (main reads the brief and checks the places) and the record.
+    const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -3980,7 +3992,8 @@ export function Canvas({
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput
+    setInputMode, setBroadcastInput,
+    teammatesRef, chooseNavigator: chrome.chooseNavigator
   })
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
@@ -4130,6 +4143,36 @@ export function Canvas({
     if (!p || !isFilePanel(p) || noteVault === null) return null
     return p.source.path.startsWith(`${noteVault.root}/`) ? p.source.path.slice(noteVault.root.length + 1) : null
   })()
+  // M100. The Teammates pane's model. Every write goes to main and reloads
+  // the roster from the answer — never an optimistic local flip.
+  const teammatesPaneProps = useMemo(() => ({
+    onToggle: chrome.toggleNavigator,
+    teammates: teammates ?? [],
+    loaded: teammates !== null,
+    selectedId: selectedTeammateId,
+    onSelect: setSelectedTeammateId,
+    onCreate: (name: string) => {
+      const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+      void window.canvas.teammate.save(emptyTeammate(id, name)).then(() => { reloadTeammates(); setSelectedTeammateId(id) })
+    },
+    onSave: (t: PersistedTeammate) => { void window.canvas.teammate.save(t).then(reloadTeammates) },
+    onDelete: (id: string) => { void window.canvas.teammate.remove(id).then(() => { reloadTeammates(); setSelectedTeammateId(null) }) },
+    onAddPlace: (id: string) => {
+      void window.canvas.teammate.choosePlace().then((folder) => {
+        if (folder === null) return
+        const t = teammatesRef.current.find((x) => x.id === id)
+        if (!t || t.places.includes(folder)) return
+        void window.canvas.teammate.save({ ...t, places: [...t.places, folder] }).then(reloadTeammates)
+      })
+    },
+    onChat: (id: string) => {
+      const t = teammatesRef.current.find((x) => x.id === id)
+      if (!t) return
+      void beginNewChat({ cwd: t.places[0] ?? '', title: t.name, teammateId: id })
+    },
+    services: SERVICES.map((svc) => ({ id: svc.id, label: svc.label, connected: credentialRows.some((c) => c.service === svc.id) }))
+  }), [chrome.toggleNavigator, teammates, selectedTeammateId, reloadTeammates, beginNewChat, credentialRows])
+
   const vaultPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
     root: vault.root,
@@ -4243,6 +4286,7 @@ export function Canvas({
         memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
         vault={vaultPaneProps}
         integrations={integrationsPaneProps}
+        teammates={teammatesPaneProps}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
           host, never a `scale` prop threaded into every TerminalPanel. Ports
@@ -4478,6 +4522,7 @@ export function Canvas({
                   // M97. Focus first so the palette CAPTURES this chat (its rows act on
                   // the captured id); the open waits a tick for the focus ref to land.
                   onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
+                  teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
                 />
               )
             }
@@ -4663,6 +4708,7 @@ export function Canvas({
             pinnedCount={pinCount(panels)}
             approvals={paletteApprovals}
             templates={paletteTemplates}
+            teammateCount={teammates === null ? undefined : teammates.length}
             hasSelection={hasSelection()}
             selectedIds={selectedPanelIds}
             groups={groups}

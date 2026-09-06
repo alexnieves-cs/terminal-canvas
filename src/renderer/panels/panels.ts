@@ -787,6 +787,8 @@ export function makeChatPanel(
       // absent and the default stay absent, so a claude record never grows a
       // key (`verify:panels codex.1` reads the file).
       ...carryBackend(chat),
+      // M100. The identity, absent unless set — the same rule as the backend.
+      ...(chat.teammateId === undefined ? {} : { teammateId: chat.teammateId }),
       cwd: chat.cwd,
       sessionId: chat.sessionId,
       ...(chat.agentOptions === undefined ? {} : { agentOptions: { ...chat.agentOptions } })

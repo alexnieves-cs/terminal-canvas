@@ -25,6 +25,7 @@ import type {
 } from './types'
 import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
+import type { PersistedTeammate } from './teammates'
 
 /** M83. One memory as the renderer reads it. */
 /**
@@ -562,7 +563,13 @@ export const IPC = {
    * relaunch asks again.
    */
   AGENT_GRANTS: 'agent:grants',
-  AGENT_REVOKE_GRANTS: 'agent:revoke-grants'
+  AGENT_REVOKE_GRANTS: 'agent:revoke-grants',
+  /** M100. The roster: list, save (upsert), delete. Places are checked in main, never here. */
+  TEAMMATE_LIST: 'teammate:list',
+  TEAMMATE_SAVE: 'teammate:save',
+  TEAMMATE_DELETE: 'teammate:delete',
+  /** M100. The OS folder dialog: a place is chosen, never typed. Answers the absolute path or null. */
+  TEAMMATE_CHOOSE_PLACE: 'teammate:choose-place'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -877,6 +884,8 @@ export interface SpawnRequest {
   title?: string
   agentOptions?: AgentOptions
   worktree?: boolean
+  /** M100. The teammate the panel speaks as; main checks its places before resolving the cwd. */
+  teammateId?: string
 }
 export type SpawnResult = { kind: 'spawned' } | { kind: 'refused'; reason: string }
 
@@ -1161,6 +1170,14 @@ export interface CanvasBridge {
     list(root: string, limit: number): Promise<{ root: string; entries: MemoryEntryRow[]; skipped: number }>
     /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
     add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
+  }
+  /** M100. Teammates: the roster. `save` upserts by id and answers the record as saved; `remove` answers whether it held the id. */
+  teammate: {
+    list(): Promise<PersistedTeammate[]>
+    save(teammate: PersistedTeammate): Promise<PersistedTeammate>
+    remove(id: string): Promise<boolean>
+    /** The folder dialog; null when cancelled. */
+    choosePlace(): Promise<string | null>
   }
   /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
   template: {

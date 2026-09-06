@@ -107,6 +107,7 @@ function frontEndFields(p: Panel): { busy?: boolean; turns?: number } {
   return {
     busy: chat.snapshot !== null && (chat.snapshot.status === 'streaming' || chat.snapshot.pending.length > 0),
     ...carryBackend(p.chat),
+    ...(p.chat.teammateId === undefined ? {} : { teammateId: p.chat.teammateId }),
     // M97. Absent unless a run is live or just resolved — the palette's Auto rows read it.
     ...(chat.snapshot?.auto === undefined ? {} : { auto: chat.snapshot.auto }),
     turns: chat.turns.filter((t) => t.role === 'user' && t.blocks.some((b) => b.type === 'text')).length

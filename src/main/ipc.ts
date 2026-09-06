@@ -15,6 +15,7 @@ import type {
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
 import type { PersistedTemplate } from '../shared/templates'
+import type { PersistedTeammate } from '../shared/teammates'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
@@ -102,6 +103,11 @@ export interface PaletteHandlers {
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
   memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
+  /** M100. */
+  listTeammates(): PersistedTeammate[]
+  saveTeammate(teammate: PersistedTeammate): PersistedTeammate
+  removeTeammate(id: string): boolean
+  choosePlace(): Promise<string | null>
   saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
   removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
@@ -423,6 +429,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
   ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }) => palette.saveTemplate(template))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
+  ipcMain.handle(IPC.TEAMMATE_LIST, () => palette.listTeammates())
+  ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate) => palette.saveTeammate(teammate))
+  ipcMain.handle(IPC.TEAMMATE_DELETE, (_event, id: string) => palette.removeTeammate(id))
+  ipcMain.handle(IPC.TEAMMATE_CHOOSE_PLACE, () => palette.choosePlace())
 
   // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
   // the renderer has no process.env to do it with — the same boundary

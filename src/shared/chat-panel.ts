@@ -29,4 +29,6 @@ export interface ChatSource {
   agentOptions?: AgentOptions
   /** M90. Absent is claude — every pre-M90 record and every claude chat. */
   backend?: AgentBackend
+  /** M100. The teammate this chat speaks as; absent for every pre-existing chat and every plain one. */
+  teammateId?: string
 }

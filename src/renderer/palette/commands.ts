@@ -93,6 +93,8 @@ export interface PanelRow {
   pinned?: boolean
   /** M97. The chat's auto run, when one is live or just resolved. */
   auto?: AutoStatus
+  /** M100. The teammate a chat speaks as, when one. */
+  teammateId?: string
   maximised?: boolean
   /** M90. A chat's backend; absent is claude. */
   backend?: AgentBackend
@@ -429,6 +431,8 @@ export interface PaletteActions {
   /** M97. Start a bounded auto run on a chat; refused by name when one is live. */
   startAuto(id: string, mode: AutoModeId, task?: string): void
   stopAuto(id: string): void
+  /** M100. Open the navigator on the Teammates pane. */
+  openTeammates(): void
 }
 
 export interface PaletteContext {
@@ -484,6 +488,8 @@ export interface PaletteContext {
   /** M83. The captured panel's repository, when it has one — the memory row's subject. */
   memoryRoot?: string
   /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
+  /** M100. How many teammates the roster holds, for the door's hint. */
+  teammateCount?: number
   templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /**
    * M76. Every pending permission request on this renderer, with the panel's
@@ -2023,6 +2029,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => actions.stopAuto(ctx.capturedId!)
     }, need ?? (live ? undefined : 'no auto run is live in this chat')))
   }
+
+  // --- M100: the roster's door --------------------------------------------------
+  out.push({
+    id: 'manage.teammates',
+    title: 'Manage teammates…',
+    subtitle: ctx.teammateCount === undefined || ctx.teammateCount === 0 ? 'identities with a brief, their own memory and explicit places' : `${ctx.teammateCount} teammate${ctx.teammateCount === 1 ? '' : 's'}`,
+    group: 'manage',
+    searchText: 'teammates agents roster identity places brief memory manage',
+    run: () => actions.openTeammates()
+  })
 
   return out
 }

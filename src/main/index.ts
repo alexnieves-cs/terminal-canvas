@@ -5,6 +5,9 @@ import { BrowserWindow, Notification, app, dialog, shell, clipboard } from 'elec
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { createPlacesGate, fsRealpath } from './places'
+import { parseTeammates } from '@shared/layout-schema'
+import { emptyTeammate } from '@shared/teammates'
 import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
@@ -521,6 +524,15 @@ const sendToRenderer = (channel: string, payload: unknown): void => {
   win.show()
 }
 const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
+// M100. THE PLACES GATE: asked before any spawn resolves a cwd and before a
+// file verb answers for a request that names a teammate. Main's, never the
+// renderer's — a UI affordance is not an authority boundary.
+// M100. A teammate's memory is its own file through the SAME store, a second
+// instance over memory/teammates — beside the repository's, never inside it.
+const teammateMemory = createMemoryStore({ dir: join(app.getPath('userData'), 'memory', 'teammates') })
+const TEAMMATE_ROOT = 'teammate:'
+const teammateSlug = (root: string): string => { const id = root.slice(TEAMMATE_ROOT.length); return layoutStore.teammates().find((t) => t.id === id)?.memory ?? id }
+const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
 
 /**
  * M85. Main's OWN watch on the vault root, so a note an agent writes into the
@@ -1073,11 +1085,20 @@ app.whenReady().then(async () => {
       const backend = backendOf(spec)
       const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
+      // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
+      // to home could turn a refused folder into an allowed one silently.
+      const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
+      if (!place.ok) return { kind: 'refused', reason: place.reason }
       const cwd = resolveCwd(spec.cwd)
+      // M100. The brief rides EVERY spawn from the roster main holds — the
+      // renderer never carries it, and a relaunch's re-create gets it again
+      // (the M81 supervisor rule, reached for an identity).
+      const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
+      const brief = mate !== undefined && mate.brief.trim() !== '' ? { appendSystemPrompt: [spec.appendSystemPrompt, `You are ${mate.name}. ${mate.brief.trim()}`].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
-      const snapshot = manager.create({ ...spec, cwd })
+      const snapshot = manager.create({ ...spec, cwd, ...brief })
       // M77. The SAME capture PtyManager fires, keyed by the chat's panel id,
       // so review:panel / review:baseline / review:at answer for a chat with
       // no change to the engine. The store's once-only guard makes a
@@ -1195,6 +1216,9 @@ app.whenReady().then(async () => {
         onSpawnPreset(id)
       },
       spawnWith: (req) => {
+        // M100. A teammate's terminal is gated the same way its chat is.
+        const place = placesGate.check(req.teammateId, expandTilde(req.cwd))
+        if (!place.ok) return { kind: 'refused' as const, reason: place.reason }
         // One pure resolver, shared with the verify harness — see
         // spawn-request.ts for the rules (absent command stays absent, a
         // file is refused like a missing path, a typed command is a task).
@@ -1280,12 +1304,28 @@ app.whenReady().then(async () => {
         armVaultWatch(real)
         return readVault(real)
       },
-      memoryList: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
+      memoryList: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
       memoryAdd: async (req) => {
-        const r = memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+        const r = req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
         return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
+      // M100. The roster. A save is an upsert by id; the record is parsed by
+      // the same rules the file is (a relative place never lands).
+      listTeammates: () => layoutStore.teammates(),
+      saveTeammate: (teammate) => {
+        const parsed = parseTeammates([teammate], [])
+        const saved = parsed[0] ?? emptyTeammate(teammate.id, teammate.name)
+        layoutStore.saveTeammate(saved)
+        return saved
+      },
+      removeTeammate: (id) => layoutStore.deleteTeammate(id),
+      // A place is chosen in the OS dialog: the answer is absolute and real,
+      // which is the only kind the record keeps.
+      choosePlace: async () => {
+        const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Choose a folder this teammate may touch' })
+        return r.canceled || r.filePaths.length === 0 ? null : (r.filePaths[0] ?? null)
+      },
       saveTemplate: (template) => {
         const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id)
           ? template.id

@@ -116,6 +116,12 @@ const bridge: CanvasBridge = {
     list: (root: string, limit: number) => ipcRenderer.invoke(IPC.MEMORY_LIST, root, limit),
     add: (req) => ipcRenderer.invoke(IPC.MEMORY_ADD, req)
   },
+  teammate: {
+    list: () => ipcRenderer.invoke(IPC.TEAMMATE_LIST),
+    save: (teammate) => ipcRenderer.invoke(IPC.TEAMMATE_SAVE, teammate),
+    remove: (id: string) => ipcRenderer.invoke(IPC.TEAMMATE_DELETE, id),
+    choosePlace: () => ipcRenderer.invoke(IPC.TEAMMATE_CHOOSE_PLACE)
+  },
   template: {
     list: () => ipcRenderer.invoke(IPC.TEMPLATE_LIST),
     save: (template) => ipcRenderer.invoke(IPC.TEMPLATE_SAVE, template),

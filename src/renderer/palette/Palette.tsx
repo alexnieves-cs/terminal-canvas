@@ -128,6 +128,8 @@ export interface PaletteProps {
   attentionIds: readonly string[]
   /** M92. How many panels are pinned — the pin row's refusal reads it. */
   pinnedCount?: number
+  /** M100. How many teammates the roster holds. */
+  teammateCount?: number
   /** M80. Saved shapes of work, for the New-from rows. */
   templates: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /** M76. Every pending permission request, for the Allow/Deny rows. */
@@ -220,6 +222,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         attentionIds: props.attentionIds,
         ...(props.pinnedCount === undefined ? {} : { pinnedCount: props.pinnedCount }),
         templates: props.templates,
+        ...(props.teammateCount === undefined ? {} : { teammateCount: props.teammateCount }),
         approvals: props.approvals,
         capturedId: controller.capturedId,
         hasSelection: props.hasSelection,

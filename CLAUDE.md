@@ -172,6 +172,8 @@ renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import
 renderer --invoke--> agent:clipboard-image                                       --> main
 renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
+renderer --invoke--> teammate:list / teammate:save / teammate:delete             --> main
+renderer --invoke--> teammate:choose-place                                       --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer

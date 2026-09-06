@@ -50,6 +50,8 @@ export interface AgentSessionSpec {
   resume?: string
   /** M81. Text appended to the CLI's own system prompt — a supervisor's job. */
   appendSystemPrompt?: string
+  /** M100. The teammate this chat speaks as; main's Places gate reads it before the cwd resolves. */
+  teammateId?: string
 }
 
 export interface PendingPermission {

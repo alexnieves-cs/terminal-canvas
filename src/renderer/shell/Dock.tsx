@@ -42,7 +42,9 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
     // M85. The fourth pane the dock's own comment said would be cheap.
     { id: 'vault', label: 'Vault', icon: <KindNote /> },
     // M89. Every service on one page.
-    { id: 'integrations', label: 'Integrations', icon: <Link /> }
+    { id: 'integrations', label: 'Integrations', icon: <Link /> },
+    // M100. The roster: identities with a brief, their own memory and explicit places.
+    { id: 'teammates', label: 'Teammates', icon: <Grid /> }
   ]
   return (
     <nav className="shell__dock" aria-label="Dock">

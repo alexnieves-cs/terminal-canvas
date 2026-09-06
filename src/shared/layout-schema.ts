@@ -10,6 +10,9 @@ import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
+import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
+export { TEAMMATES_MAX } from './teammates'
+export type { PersistedTeammate } from './teammates'
 export { TEMPLATES_MAX } from './templates'
 export type { PersistedTemplate, TemplateEdge, TemplateNode } from './templates'
 export { RUNS_MAX } from './runs'
@@ -448,6 +451,8 @@ export interface LayoutSnapshot {
   prompts: Prompt[]
   /** M80. Saved shapes of work. Optional on disk for every layout written before templates existed. */
   templates: PersistedTemplate[]
+  /** M100. The roster. Optional on disk for every layout written before teammates existed. */
+  teammates: PersistedTeammate[]
   /**
    * Every setting the user has actually CHANGED, keyed by SettingDef.id.
    * Sparse on purpose: an absent id means "still at the schema default", which
@@ -509,6 +514,7 @@ export function defaultSnapshot(): LayoutSnapshot {
     defaultPresetId: DEFAULT_PRESET_ID,
     prompts: [],
     templates: [],
+    teammates: [],
     // Empty means "everything at its schema default" — exactly what a default
     // snapshot is.
     preferences: {},
@@ -678,6 +684,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   }
   const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
   if (agentOptions !== undefined) chat.agentOptions = agentOptions
+  // M100. The identity rides the record; absent stays absent.
+  if (isStr(raw.teammateId) && raw.teammateId.trim() !== '') chat.teammateId = raw.teammateId
   return chat
 }
 
@@ -1319,6 +1327,46 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
   return out.slice(0, TEMPLATES_MAX)
 }
 
+/**
+ * M100. The roster, with the record rules: absent is every pre-existing
+ * file (no warning); a record whose lists are not lists, whose name is empty
+ * or whose id repeats is dropped BY NAME; inside a good record a place that
+ * is not absolute is dropped (a relative place would be resolved against a
+ * root nobody chose — `shared/places.ts`) and a flag that is not a boolean
+ * falls to false, the teammate kept.
+ */
+export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeammate[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push('replaced a teammates field that was not an array')
+    return []
+  }
+  const seen = new Set<string>()
+  const out: PersistedTeammate[] = []
+  const strList = (v: unknown): string[] | null => (Array.isArray(v) && v.every(isStr) ? (v as string[]) : null)
+  raw.forEach((entry, i) => {
+    if (!isRecord(entry) || !isStr(entry.id) || entry.id.trim() === '' || seen.has(entry.id)) { warnings.push(`dropped teammate ${i}: not an object or an unusable id`); return }
+    if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped teammate ${entry.id}: name was unusable`); return }
+    const places = strList(entry.places), services = strList(entry.services), skills = strList(entry.skills), chats = strList(entry.chats)
+    if (places === null || services === null || skills === null || chats === null) { warnings.push(`dropped teammate ${entry.id}: a list field was not a list of strings`); return }
+    const absolute = places.filter((p) => { const keep = p.startsWith('/'); if (!keep) warnings.push(`teammate ${entry.id}: dropped place ${p} — a place must be an absolute folder`); return keep })
+    seen.add(entry.id)
+    out.push({
+      id: entry.id,
+      name: entry.name,
+      brief: isStr(entry.brief) ? entry.brief : '',
+      places: absolute,
+      services,
+      skills,
+      memory: isStr(entry.memory) && entry.memory.trim() !== '' ? entry.memory : entry.id,
+      chats,
+      messaging: entry.messaging === true,
+      scheduling: entry.scheduling === true
+    })
+  })
+  return out.slice(0, TEAMMATES_MAX)
+}
+
 /** Never throws; drops entries individually, like every other parser here. */
 export function parsePrompts(raw: unknown, warnings: string[]): Prompt[] {
   if (raw === undefined) return []
@@ -1693,6 +1741,7 @@ export function parseLayout(raw: string): {
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
       templates: parseTemplates(parsed.templates, warnings),
+      teammates: parseTeammates(parsed.teammates, warnings),
       preferences,
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),

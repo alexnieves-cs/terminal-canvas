@@ -3060,8 +3060,8 @@ const filePanelOnDisk = (id, over = {}) => ({
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
-  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
-    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations']) &&
+  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
       tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
@@ -3519,6 +3519,44 @@ console.log('\n' + '='.repeat(60))
       out.warnings.filter((m) => /a3|a4|a5|annotation/.test(m)).length >= 3 &&
       !('annotations' in v) && u.annotations.length === 200 && u.annotations[0].id === 'a5' && u.annotations[199].id === 'a204',
     JSON.stringify({ w: w.annotations, v: Object.keys(v), u: u.annotations && [u.annotations.length, u.annotations[0].id], warnings: out.warnings }))
+}
+
+// M100 — teammate.1/.2. THE TEAMMATE RECORD on disk, with the record rules:
+// absent is every pre-existing file (no warning), a malformed record is
+// dropped BY NAME and the rest survive, an absent optional stays absent, and
+// a chat's `teammateId` rides its record and stays absent when absent.
+{
+  const good = { id: 't1', name: 'ada', brief: 'be brief', places: ['/home/u/work/api'], services: ['github'], skills: [], memory: 't1', chats: ['c1'], messaging: true, scheduling: false }
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 'c1', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 1, chat: { cwd: '/r', sessionId: 'u-1', teammateId: 't1' } },
+      { id: 'c2', kind: 'chat', x: 0, y: 0, w: 560, h: 620, z: 2, chat: { cwd: '/r', sessionId: 'u-2' } }
+    ] }],
+    teammates: [
+      good,
+      { id: 't2', name: 'bo', brief: '', places: 'not-a-list', services: [], skills: [], memory: 't2', chats: [], messaging: false, scheduling: false },
+      { id: 't3', name: '', brief: '', places: [], services: [], skills: [], memory: 't3', chats: [], messaging: false, scheduling: false },
+      { id: 't1', name: 'dup', brief: '', places: [], services: [], skills: [], memory: 'x', chats: [], messaging: false, scheduling: false },
+      { id: 't4', name: 'cy', brief: 'x', places: ['relative/path', '/ok'], services: [], skills: [], memory: 't4', chats: [], messaging: 'yes', scheduling: true }
+    ]
+  }))
+  // Guarded: before the record exists the field is absent, and a throw here would abort the suite.
+  const ts = Array.isArray(out.snapshot.teammates) ? out.snapshot.teammates : []
+  const by = (id) => ts.find((t) => t.id === id)
+  const named = (s) => out.warnings.some((w) => w.includes(s))
+  const ws = out.snapshot.workspaces[0]
+  const chat = (id) => (ws && ws.panels.find((p) => p.id === id)) || {}
+  ok('teammate.1 a good record round-trips whole; a places field that is not a list drops the record by id; an empty name drops it; a duplicate id drops the later one; a relative place is dropped from an otherwise good record (the teammate kept) and a non-boolean flag falls to false; a chat\'s teammateId rides and an absent one stays absent',
+    ts.length === 2 && JSON.stringify(by('t1')) === JSON.stringify(good) &&
+      named('t2') && named('t3') && by('t4') !== undefined && by('t4').places.join() === '/ok' && by('t4').messaging === false && by('t4').scheduling === true && named('relative/path') &&
+      chat('c1').chat && chat('c1').chat.teammateId === 't1' && chat('c2').chat && !('teammateId' in chat('c2').chat),
+    JSON.stringify({ ts, warnings: out.warnings }))
+  const absent = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [] }] }))
+  const notList = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [] }], teammates: 'nope' }))
+  ok('teammate.2 an absent teammates field is every pre-existing file: empty and NO warning; a non-array field is replaced with a warning; the cap holds',
+    Array.isArray(absent.snapshot.teammates) && absent.snapshot.teammates.length === 0 && absent.warnings.length === 0 &&
+      Array.isArray(notList.snapshot.teammates) && notList.snapshot.teammates.length === 0 && notList.warnings.some((w) => /teammates/.test(w)) && L.TEAMMATES_MAX > 0,
+    JSON.stringify({ absentWarnings: absent.warnings, notListWarnings: notList.warnings }))
 }
 
 const failed = results.filter((r) => !r.pass)

@@ -13,6 +13,7 @@ import {
   type Workspace,
   type WorktreeRecord, RECENT_DIRECTORIES_CAP, TEMPLATES_MAX, type PersistedTemplate } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
+import { TEAMMATES_MAX, carryTeammate, type PersistedTeammate } from '../shared/teammates'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
 
@@ -99,6 +100,10 @@ export interface LayoutStore {
   /** M80. Saved templates (the user's; built-ins are code). */
   templates(): PersistedTemplate[]
   saveTemplate(template: PersistedTemplate): void
+  /** M100. The roster, copied out; saved newest-first at TEAMMATES_MAX; a delete answers whether it held the id. */
+  teammates(): PersistedTeammate[]
+  saveTeammate(teammate: PersistedTeammate): void
+  deleteTeammate(id: string): boolean
   /** False when the id names nothing — including every built-in id. */
   deleteTemplate(id: string): boolean
   addPrompt(prompt: Prompt): void
@@ -541,6 +546,19 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
 
     templates: () => snapshot.templates.map((t) => ({ ...t, nodes: t.nodes.map((n) => ({ ...n })), edges: t.edges.map((e) => ({ ...e })) })),
 
+    teammates: () => snapshot.teammates.map(carryTeammate),
+    saveTeammate(teammate) {
+      const copy = carryTeammate(teammate)
+      snapshot.teammates = [copy, ...snapshot.teammates.filter((t) => t.id !== teammate.id)].slice(0, TEAMMATES_MAX)
+      scheduleWrite()
+    },
+    deleteTeammate(id) {
+      const before = snapshot.teammates.length
+      snapshot.teammates = snapshot.teammates.filter((t) => t.id !== id)
+      if (snapshot.teammates.length === before) return false
+      scheduleWrite()
+      return true
+    },
     saveTemplate(template) {
       const copy = { ...template, nodes: template.nodes.map((n) => ({ ...n })), edges: template.edges.map((e) => ({ ...e })) }
       snapshot.templates = [copy, ...snapshot.templates.filter((t) => t.id !== template.id)].slice(0, TEMPLATES_MAX)

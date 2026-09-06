@@ -1,7 +1,8 @@
+import type { PersistedTeammate } from '@shared/teammates'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -46,6 +47,8 @@ export interface SpawnSheetModel {
   submit(values: SheetValues): Promise<SpawnResult>
   /** M73. Whether claude was found — the chat arm is offered disabled by name otherwise. */
   claudeAvailable: boolean
+  /** M100. The roster, for the `chat as <name>` rows. */
+  teammates?: readonly PersistedTeammate[]
   /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
   codexAvailable: boolean
   /** M99. The models live sessions have REPORTED — the model field's suggestions. Absent suggests nothing. */
@@ -106,7 +109,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   )
 
   const values = (): SheetValues => {
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
+    const teammateId = parseTeammateWhatId(whatId)
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : teammateId !== null ? { kind: 'teammate', id: teammateId } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
@@ -225,6 +229,10 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               codex row keeps its `data-sheet-codex` mark (`verify:panels codex.1`). */}
           {backendOptions({ claude: model.claudeAvailable, codex: model.codexAvailable }).map((row) => (
             <option key={row.id} value={WHAT_ID_BY_BACKEND[row.id]} disabled={row.disabled} data-sheet-backend={row.id} data-sheet-codex={row.id === BACKENDS.codex.id ? '' : undefined}>{row.label}</option>
+          ))}
+          {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
+          {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
+            <option key={row.id} value={teammateWhatId(row.id)} disabled={row.disabled} data-sheet-teammate={row.id} title={row.reason}>{row.label}</option>
           ))}
           {/* M81. One per canvas, disabled by name when there already is one. */}
           <option value={SUPERVISOR_WHAT_ID} disabled={!model.claudeAvailable || model.hasSupervisor === true}>

@@ -9,6 +9,7 @@ import type { RailRun } from './rail-sections'
 import { FileTree } from './FileTree'
 import { VaultPane, type VaultPaneProps } from './VaultPane'
 import { IntegrationsPane, type IntegrationsPaneProps } from './IntegrationsPane'
+import { TeammatesPane, type TeammatesPaneProps } from './TeammatesPane'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
 
@@ -55,6 +56,8 @@ export interface NavigatorProps {
   vault: VaultPaneProps
   /** M89. The integrations page's model. */
   integrations: IntegrationsPaneProps
+  /** M100. The roster pane's model. */
+  teammates: TeammatesPaneProps
 }
 
 /**
@@ -84,10 +87,12 @@ export interface NavigatorProps {
  */
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
-  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
+  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'teammates' ? 'Teammates' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
-      {navigator === 'integrations' ? (
+      {navigator === 'teammates' ? (
+        <TeammatesPane {...props.teammates} onToggle={onToggle} />
+      ) : navigator === 'integrations' ? (
         <IntegrationsPane {...props.integrations} onToggle={onToggle} />
       ) : navigator === 'vault' ? (
         <VaultPane {...props.vault} onToggle={onToggle} />
