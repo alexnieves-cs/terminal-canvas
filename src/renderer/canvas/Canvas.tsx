@@ -3818,6 +3818,10 @@ export function Canvas({
     if (opts?.appendSystemPrompt !== undefined && opts.teammateId === undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
+    // M118. A row that cannot carry an appended prompt refuses the three doors
+    // that append one (supervisor, routine, dispatch) BY NAME: a copilot
+    // supervisor would silently not be one.
+    if (opts?.appendSystemPrompt !== undefined && !BACKENDS[backendOf(opts ?? {})].appendsPrompt) return { kind: 'refused', reason: BACKENDS[backendOf(opts ?? {})].reasons.noPrompt }
     // M90. The backend rides the create and the record; absent stays absent.
     const backend = carryBackend(opts ?? {})
     // M100. The identity rides the create (main reads the brief and checks the places) and the record.

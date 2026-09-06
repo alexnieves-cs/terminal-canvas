@@ -1,6 +1,7 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
-import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { BACKEND_IDS } from '@shared/agent-backends'
+import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
@@ -1270,6 +1271,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
             claudeAvailable: claudeOk,
             codexAvailable: codexAvailable(presetRows),
+            // M118. Every row's availability from the registry's order — a third row needs no new boolean.
+            available: Object.fromEntries(BACKEND_IDS.map((id) => [id, backendAvailable(presetRows, id)])),
             // M99. What live sessions have reported, for the model field's suggestions.
             reportedModels: reportedModels(),
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),

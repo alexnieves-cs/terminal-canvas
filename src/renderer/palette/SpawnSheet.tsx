@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as R
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId } from './spawn-sheet'
-import { BACKENDS } from '@shared/agent-backends'
+import { type AgentBackend, BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
 import { templateHoles } from './template-model'
@@ -54,6 +54,8 @@ export interface SpawnSheetModel {
   ceiling?: { maxConcurrent: number; liveAgents: number }
   /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
   codexAvailable: boolean
+  /** M118. Availability by ROW, for every registered backend; the two booleans above stay for their older readers. */
+  available?: Partial<Record<AgentBackend, boolean>>
   /** M99. The models live sessions have REPORTED — the model field's suggestions. Absent suggests nothing. */
   reportedModels?: readonly string[]
   /** M81. One supervisor per canvas: the row says so rather than vanishing. */
@@ -233,7 +235,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           {/* M90/M99. One conversation row per registered backend, from the
               registry's order, disabled by name when its CLI is absent. The
               codex row keeps its `data-sheet-codex` mark (`verify:panels codex.1`). */}
-          {backendOptions({ claude: model.claudeAvailable, codex: model.codexAvailable }).map((row) => (
+          {backendOptions(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).map((row) => (
             <option key={row.id} value={WHAT_ID_BY_BACKEND[row.id]} disabled={row.disabled} data-sheet-backend={row.id} data-sheet-codex={row.id === BACKENDS.codex.id ? '' : undefined}>{row.label}</option>
           ))}
           {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}

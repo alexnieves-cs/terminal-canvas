@@ -82,6 +82,15 @@ export interface BackendOption {
  * vanishes reads as a backend that was never built. `available` is keyed by
  * backend so a third row needs no new parameter.
  */
+/**
+ * M118. Why a row cannot carry an appended prompt — the ONE sentence the
+ * supervisor row, the routine mint and the dispatch verb read; null for a
+ * row that can. A copilot supervisor would silently not be one.
+ */
+export function supervisorRowReason(backend: AgentBackend): string | null {
+  return BACKENDS[backend].appendsPrompt ? null : BACKENDS[backend].reasons.noPrompt
+}
+
 export function backendOptions(available: Partial<Record<AgentBackend, boolean>>): BackendOption[] {
   return BACKEND_IDS.map((id) => {
     const ok = available[id] === true
