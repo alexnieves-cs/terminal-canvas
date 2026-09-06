@@ -3754,6 +3754,46 @@ try {
      !('shelf' in empty), Object.keys(empty).join(','))
 } catch (e) { ok('shelf.disk.1 (threw)', false, String(e)) }
 
+// M127 — skill.panel.disk.1. THE THIRTEENTH KIND ON DISK. A skill panel is
+// `kind: 'skill'` plus `skill: { scope, name }` and NOTHING else — no
+// description, no body, no resource count, no token figure: a copy is a
+// second author that goes stale silently (M116's rule for the work card,
+// reached again). Sessionless, so no cwd and no args. Both fields are the
+// panel's whole identity, so a bad scope, a bad name or a missing record
+// drops that PANEL by name with its neighbours kept; an absent title stays
+// absent; and a pre-M127 file — one with no skill panel in it at all — parses
+// with no warning naming a skill.
+{
+  try {
+    const out = L.parseLayout(JSON.stringify({
+      workspaces: [{ id: 'w1', name: 'Main', panels: [
+        { id: 's1', kind: 'skill', x: 1, y: 2, w: 640, h: 520, z: 3, skill: { scope: 'user', name: 'brainstorming' } },
+        { id: 's2', kind: 'skill', x: 0, y: 0, w: 640, h: 520, z: 4, skill: { scope: 'wherever', name: 'brainstorming' } },
+        { id: 's3', kind: 'skill', x: 0, y: 0, w: 640, h: 520, z: 5, title: 'skill · tdd', skill: { scope: 'project', name: 'tdd' } },
+        { id: 's4', kind: 'skill', x: 0, y: 0, w: 640, h: 520, z: 6 },
+        { id: 's5', kind: 'skill', x: 0, y: 0, w: 640, h: 520, z: 7, skill: { scope: 'user', name: '' } },
+        { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 8, cwd: '~', args: [] }
+      ] }],
+      activeWorkspaceId: 'w1'
+    }))
+    const panels = out.snapshot.workspaces[0].panels
+    const named = (id) => out.warnings.some((w) => w.includes(id))
+    const s1 = panels.find((p) => p.id === 's1'), s3 = panels.find((p) => p.id === 's3')
+    // ABSENT, not malformed: a file written before this milestone has no
+    // skill panel and must warn nothing at all.
+    const pre = L.parseLayout(JSON.stringify({ workspaces: [{ id: 'w1', name: 'Main', panels: [{ id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }] }], activeWorkspaceId: 'w1' }))
+    ok('skill.panel.disk.1 a skill panel round-trips as kind + skill.{scope,name} with no cwd/args and an absent title kept absent; a bad scope, an empty name and a missing record each drop their own panel by name; the neighbours survive; a pre-M127 file warns nothing',
+      panels.length === 3 && panels.map((p) => p.id).join(',') === 's1,s3,n1' &&
+        s1 && s1.kind === 'skill' && s1.skill && s1.skill.scope === 'user' && s1.skill.name === 'brainstorming' &&
+        Object.keys(s1.skill).sort().join(',') === 'name,scope' &&
+        !('title' in s1) && !('cwd' in s1) && !('args' in s1) &&
+        s3 && s3.title === 'skill · tdd' && s3.skill.scope === 'project' && s3.skill.name === 'tdd' &&
+        named('s2') && named('s4') && named('s5') && !named('s1') && !named('s3') &&
+        !pre.warnings.some((w) => /skill/i.test(w)),
+      JSON.stringify({ ids: panels.map((p) => p.id), s1, warnings: out.warnings, pre: pre.warnings }))
+  } catch (e) { ok('skill.panel.disk.1 (threw)', false, String(e)) }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

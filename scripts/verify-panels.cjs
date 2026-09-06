@@ -867,6 +867,25 @@ app.whenReady().then(async () => {
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   const toolboxCache = new ToolboxCache()
+  // M127. The plugin fixture the skill panel's own block uses, and the
+  // RECORDED `claude plugin details` text it renders verbatim. Both are
+  // gated on `pluginFixtureOn`, which stays false until skill.panel.1's
+  // block turns it on: `listPlugins` has no cwd argument, so an
+  // unconditionally-answering fake would add a plugin's skills to every
+  // toolbox read this suite has already made (checks 162/163 among them) and
+  // an unrelated check would move for a reason nobody wrote down. The
+  // toolbox cache is keyed by cwd, and that block reads a FRESH temp
+  // directory, so nothing is cached from before the flag flipped.
+  const PLUGIN_ID = 'fixture-plugin@1.0.0'
+  const PLUGIN_DIR = mkdtempSync(join(tmpdir(), 'tc plugin '))
+  mkdirSync(join(PLUGIN_DIR, 'skills', 'plugged-skill'), { recursive: true })
+  writeFileSync(join(PLUGIN_DIR, 'skills', 'plugged-skill', 'SKILL.md'),
+    '---\nname: plugged-skill\ndescription: A skill this plugin ships.\n---\n\nBody of the plugged skill.\n')
+  // As the CLI prints it: a human-formatted table with no --json. Rendered
+  // verbatim and parsed nowhere, so the string a check compares against is
+  // the string the panel must show, byte for byte — newlines included.
+  const PLUGIN_DETAILS_TEXT = 'fixture-plugin@1.0.0\n  Skills (1)  plugged-skill\n  Always-on: ~688 tok\n  plugged-skill   on-invoke   ~120 tok\n'
+  let pluginFixtureOn = false
   const linkOpens = []
   let harnessEnvReport = {
     probedAt: Date.now(),
@@ -1276,7 +1295,17 @@ app.whenReady().then(async () => {
     recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-  }) })
+  }) },
+  // M125/M127. The plugin list and the details text, both fixtures: no suite
+  // spawns the real CLI. `unknown` while the flag is off is exactly what an
+  // uninstalled `claude` produces, so every read before skill.panel.1 sees
+  // the same answer it saw before this fixture existed.
+  async () => (pluginFixtureOn
+    ? { kind: 'ok', plugins: [{ id: PLUGIN_ID, installPath: PLUGIN_DIR, enabled: true }] }
+    : { kind: 'unknown', why: 'plugin list is not wired' }),
+  async (id) => (pluginFixtureOn && id === PLUGIN_ID
+    ? { kind: 'ok', text: PLUGIN_DETAILS_TEXT }
+    : { kind: 'unknown', why: `claude plugin details ${id} did not answer` }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -18636,6 +18665,131 @@ app.whenReady().then(async () => {
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(bdErr && bdErr.message || bdErr))
+      }
+    }
+
+    /* ========== M127: the skill panel, the thirteenth kind ============== */
+    //
+    // Driven through the DROP door the Skills pane already uses (M126's own
+    // MIME on a real DragEvent), never through a mint written here: the
+    // panel must be reachable by the gesture, not only constructible.
+    // Fixtures: a project skill ALSO defined in the fenced user home (so
+    // `alsoDefinedIn` is real rather than asserted about a hand-built entry)
+    // and a plugin skill behind the recorded `claude plugin details` text.
+    {
+      const IDS = [
+        'skill.panel.1a a dropped skill card mints a kind=skill panel whose record holds exactly {scope,name} and no copied description, body, resource count or token figure',
+        'skill.panel.1b a skill panel is sessionless — no PanelSession, no WebGL context, and closing it sends no pty.kill',
+        'skill.panel.1c the body names which OPEN panels can see this skill',
+        'skill.panel.1d a name defined in two scopes states the link and picks NO winner',
+        'skill.panel.1e a plugin skill renders `claude plugin details` VERBATIM, with a readAt and a refresh'
+      ]
+      try {
+        pluginFixtureOn = true
+        // A path with a SPACE in it, this suite's standing fixture rule.
+        const SK_DIR = mkdtempSync(join(tmpdir(), 'tc skill panel '))
+        mkdirSync(join(SK_DIR, '.claude', 'skills', 'shared-name', 'references'), { recursive: true })
+        writeFileSync(join(SK_DIR, '.claude', 'skills', 'shared-name', 'SKILL.md'),
+          '---\nname: shared-name\ndescription: The project copy of a contested name.\n---\n\nProject body text.\n')
+        writeFileSync(join(SK_DIR, '.claude', 'skills', 'shared-name', 'references', 'a.md'), 'ref\n')
+        // The USER copy, in the temp home panels-entry.cjs fences this suite
+        // onto — never the developer's real ~/.claude.
+        const USER_HOME = process.env.TC_TOOLBOX_HOME
+        mkdirSync(join(USER_HOME, '.claude', 'skills', 'shared-name'), { recursive: true })
+        writeFileSync(join(USER_HOME, '.claude', 'skills', 'shared-name', 'SKILL.md'),
+          '---\nname: shared-name\ndescription: The user copy of a contested name.\n---\n')
+
+        // One terminal panel in SK_DIR: it is the cwd whose inventory the
+        // panel reads AND the answer 1c is about.
+        layoutStore.save({
+          panels: [{ id: 'skT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: SK_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'skill host' }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: 'skT', focusedId: 'skT'
+        })
+        flushLayoutStore()
+        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="skT"]') !== null`), 8000)
+
+        const xtermsBefore = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+        const drop = async (key) => wc.executeJavaScript(`(() => {
+          const host = document.querySelector('[role="application"]'); if (!host) return false
+          const r = host.getBoundingClientRect()
+          const dt = new DataTransfer(); dt.setData('application/x-tc-skill', ${JSON.stringify(key)})
+          return host.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 200, clientY: r.top + 400 })) || true
+        })()`)
+        await drop(JSON.stringify(['project', 'shared-name']))
+        const projId = await waitUntil(() => wc.executeJavaScript(
+          `(() => { const n = document.querySelector('.panel[data-panel-kind="skill"]'); return n ? n.getAttribute('data-panel-id') : false })()`), 8000)
+
+        // 1a — the RECORD, read off the store the renderer actually wrote,
+        // not off the DOM: a panel that painted the right thing while
+        // persisting a copied description would pass a DOM-only assertion.
+        await settle()
+        flushLayoutStore()
+        const onDiskSk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const wsSk = onDiskSk.workspaces.find((w) => w.id === onDiskSk.activeWorkspaceId) || onDiskSk.workspaces[0]
+        const rec = wsSk.panels.find((p) => p.kind === 'skill')
+        ok(IDS[0],
+          typeof projId === 'string' && rec !== undefined && rec.skill !== undefined &&
+            Object.keys(rec.skill).sort().join(',') === 'name,scope' &&
+            rec.skill.scope === 'project' && rec.skill.name === 'shared-name' &&
+            !('cwd' in rec) && !('args' in rec) && !('description' in rec) && !('resources' in rec),
+          JSON.stringify({ projId, rec }))
+
+        const body = async (id) => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(id)}] [data-scroll-host]'); return b ? b.textContent : null })()`)
+        const text = await waitUntil(async () => {
+          const t = await body(projId)
+          return t && /skill host/.test(t) ? t : null
+        }, 10000)
+
+        // 1c — the cross-panel answer, backlog #26's whole original argument.
+        ok(IDS[2], text !== null && /can see|available in/i.test(String(text)) && /skill host/.test(String(text)),
+          JSON.stringify(String(text).slice(0, 300)))
+        // 1d — the link, and NO winner. The negative is the milestone: M21
+        // refused to name one and this panel may not re-decide it.
+        ok(IDS[3], text !== null && /defined in/i.test(String(text)) && !/wins|shadows|overrides/i.test(String(text)),
+          JSON.stringify(String(text).slice(0, 300)))
+
+        // 1e — the plugin skill, verbatim. Compared byte for byte against the
+        // recorded string: there is no --json, so a parser here would be a
+        // differential nobody could see going wrong.
+        await drop(JSON.stringify(['user', 'plugged-skill']))
+        const plugId = await waitUntil(() => wc.executeJavaScript(
+          `(() => { const ns = [...document.querySelectorAll('.panel[data-panel-kind="skill"]')].filter((n) => n.getAttribute('data-panel-id') !== ${JSON.stringify(projId)}); return ns[0] ? ns[0].getAttribute('data-panel-id') : false })()`), 8000)
+        const plug = await waitUntil(async () => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(plugId)}]'); if (!n) return false
+          const v = n.querySelector('[data-skill-plugin-verbatim]'); if (!v) return false
+          return { verbatim: v.textContent, readAt: n.querySelector('[data-skill-read-at]') !== null, refresh: n.querySelector('[data-skill-door="plugin-refresh"]') !== null,
+                   notPlugin: (document.querySelector('.panel[data-panel-id=${JSON.stringify(projId)}] [data-skill-section="plugin"]') || {}).textContent || null }
+        })()`), 10000)
+        ok(IDS[4],
+          plug !== false && plug.verbatim === PLUGIN_DETAILS_TEXT && plug.readAt === true && plug.refresh === true &&
+            typeof plug.notPlugin === 'string' && /not a plugin skill/i.test(plug.notPlugin),
+          JSON.stringify(plug))
+
+        // 1b — sessionless, and the close proves it against a live recorder:
+        // a negative on a recorder that stopped recording is vacuous, so a
+        // real terminal is closed in the same breath and MUST be recorded.
+        const hasSession = await wc.executeJavaScript(
+          `Object.prototype.hasOwnProperty.call(window.__m4aSessions(), ${JSON.stringify(projId)})`)
+        const xtermsAfter = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length`)
+        const killsBefore = killedPanelIds.length
+        await clickPanelClose(wc, projId)
+        await clickPanelClose(wc, 'skT')
+        await settle()
+        const killsSince = killedPanelIds.slice(killsBefore)
+        ok(IDS[1],
+          typeof projId === 'string' && hasSession === false && xtermsAfter === xtermsBefore &&
+            !killsSince.includes(projId) && killsSince.includes('skT'),
+          JSON.stringify({ hasSession, xtermsBefore, xtermsAfter, killsSince }))
+
+        try { rmSync(SK_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (skErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(skErr && skErr.message || skErr))
+      } finally {
+        pluginFixtureOn = false
       }
     }
 
