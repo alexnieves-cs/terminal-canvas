@@ -2365,6 +2365,7 @@ body {
 .launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); white-space: normal; }
 .launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
 .launcher__env-hint { color: var(--iris); }
+.launcher__check { margin-left: var(--sp-3); }
 
 /* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
    gesture has been used. Never a click target. */
@@ -3779,7 +3780,11 @@ body {
    line said (prose, cut from the right), an unread dot before the label, and
    the dock's two capsules. */
 .rail-row__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
-.rail-row__last { display: block; padding: 0 var(--sp-2) var(--sp-1) var(--sp-4); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The row is a flex line; the last line said WRAPS beneath it (a full-width
+   child ordered last) rather than sharing the line and squeezing the title
+   to `c..` beside it. */
+.rail-row { flex-wrap: wrap; }
+.rail-row__last { display: block; flex: 1 0 100%; order: 10; padding: 0 var(--sp-2) var(--sp-1) var(--sp-4); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock__capsules { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; }
 .dock__capsule { font-size: var(--t-xs); white-space: nowrap; }
 
@@ -3787,8 +3792,15 @@ body {
    whole words first, then an ellipsis — and the verbs never shrink, so a
    narrow frame keeps its controls and never prints `Revie…` beside them. The
    full title lives in the title attribute and the ⋯ menu. */
-.pf__title { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf__title { min-width: 8ch; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__word, .pf__chrome .pf__kind { flex: 0 0 auto; }
-.pf__menu-host { position: relative; }
-.pf__menu { position: absolute; top: 100%; right: 0; z-index: 30; min-width: 220px; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
+/* The readouts give AFTER the title and BEFORE the verbs: a live 320px frame
+   with a CPU · RAM badge pushed `fill` and `×` past its own edge in the first
+   header shot, with the title already at its floor. */
+.pf__chrome .panel__machine-cost { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The ⋯ menu spans the frame beneath the chrome — the CHROME is its containing
+   block — because `.panel` clips its overflow and a menu hung off the ⋯ button
+   was cut at the frame's left edge on a narrow panel. */
+.pf__chrome { position: relative; }
+.pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }

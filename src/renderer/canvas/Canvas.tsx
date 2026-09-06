@@ -131,8 +131,8 @@ import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
-import { onChatSession, onChatAuto, onChatTurnEnd, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
-import { setLastLine, clearUnread, clearLastLine } from '@renderer/session/last-line-store'
+import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
+import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
@@ -780,7 +780,6 @@ export function Canvas({
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
-      clearLastLine(panel.rect.id)
         clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
@@ -3188,7 +3187,6 @@ export function Canvas({
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
       clearLastLine(id)
-    clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
       clearUsage(id)
@@ -3387,6 +3385,9 @@ export function Canvas({
   // M105. A chat's turn end sets its LAST LINE SAID and, when the user was
   // elsewhere, the unread mark — per id, in its own store, never on version().
   useEffect(() => onChatTurnEnd((id) => { setLastLine(id, lastLineOf(lastAssistantText(id)), focusedIdRef.current !== id) }), [])
+  // M105. After a relaunch the row still says what its chat said last — read,
+  // never unread: a restored answer was read in its earlier life.
+  useEffect(() => onChatSeeded((id) => { if (getLastLine(id).line !== '') return; const line = lastLineOf(lastAssistantText(id)); if (line !== '') setLastLine(id, line, false) }), [])
   // M97. An auto run is a run: the store's auto bus feeds the recorder.
   useEffect(() => onChatAuto((id, status) => runsApi.onAutoEvent(id, status)), [runsApi])
   const anyOpen = runs.some((r) => r.endedAt === undefined)
@@ -3618,8 +3619,12 @@ export function Canvas({
     })),
     maximise: maximisePanel,
     restore: restorePanel,
-    readOnly: merged
-  }), [marksSignature, maximisePanel, restorePanel, merged])
+    readOnly: merged,
+    // M106. The ⋯ menu's door: the ref is set HERE as well as by the render,
+    // because openPalette captures the ref synchronously and the focus it just
+    // asked for lands a render later.
+    more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() }
+  }), [marksSignature, maximisePanel, restorePanel, merged, onFocusPanel, palette])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -4664,8 +4669,10 @@ export function Canvas({
                 rect={panel.rect}
                 z={panel.z}
                 title={panel.title}
-                // M106. Flip hands the far view's summary tier to every terminal deliberately.
-                cardDetail={flipped ? 'summary' : cardDetail}
+                cardDetail={cardDetail}
+                // M106. Flip hands the far view's summary to every terminal deliberately — a
+                // prop, because a LIVE panel never reads the card's detail.
+                flipped={flipped}
                 selected={selectedIds.has(panel.rect.id)}
                 onSelect={onSelectPanel}
                 onSlotMount={onSlotMount}

@@ -16,7 +16,7 @@ import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
-import { resolveShellEnv, shellProbeOutcome, shellProbeFacts, forgetShellEnv, whichFromEnv } from './shell-env'
+import { resolveShellEnv, shellProbeOutcome, shellProbeFacts, reprobeShellEnv, whichFromEnv } from './shell-env'
 import { buildEnvReport, type CliName } from './env-report'
 import { resolveLinkOpen } from './link-open'
 import { createRunLedger } from './run-ledger'
@@ -1501,7 +1501,7 @@ app.whenReady().then(async () => {
       // found. The app's own environment (the presets' which, the PTYs' env)
       // applies on relaunch — said on the row, so a green re-probe does not
       // read as a fixed spawn.
-      const env2 = again ? (forgetShellEnv(), await resolveShellEnv()) : loginEnv
+      const env2 = again ? await reprobeShellEnv() : loginEnv
       const which2 = again ? (name: CliName) => whichFromEnv(name, env2) : which
       return buildEnvReport({
       env: env2,

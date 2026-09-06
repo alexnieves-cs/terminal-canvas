@@ -501,7 +501,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {/* M107. The header reads on from the mark: folder · branch · model — the
             engine is the kind word beside it (the M90 mark the checks pin), so
             it is not said twice. Every absent piece absent. */}
-        <span className="pf__kind chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }) })}>{[panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/', branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
+        <span className="pf__summary chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }) })}>{[panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/', branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.

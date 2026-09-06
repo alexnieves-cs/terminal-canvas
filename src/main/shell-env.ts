@@ -96,13 +96,28 @@ export function shellProbeFacts(): { shells: string[]; timedOut: boolean } {
   return { shells: [...probed.shells], timedOut: probed.timedOut }
 }
 
-/** M107. `Check again`: forget the cached answer so the next resolve asks the shell once more. */
-export function forgetShellEnv(): void {
+/**
+ * M107. `Check again`: ask the shell once more, into a LOCAL, and replace the
+ * cached answer only when the probe succeeds. Clearing the cache first was
+ * wrong twice over: a failed re-probe (the case Check again exists for) wrote
+ * `process.env` — launchd's bare PATH — over the login environment every
+ * later PTY reads, and a create racing the empty cache ran a second login
+ * shell. `probed`/`outcome` always report the latest probe.
+ */
+export async function reprobeShellEnv(): Promise<Record<string, string>> {
+  const before = cached
   cached = null
+  const next = await probe()
+  if (!outcome.ok && before) cached = before
+  return cached ?? next
 }
 
 export async function resolveShellEnv(): Promise<Record<string, string>> {
   if (cached) return cached
+  return probe()
+}
+
+async function probe(): Promise<Record<string, string>> {
 
   const shell = process.env.SHELL || userInfo().shell || '/bin/zsh'
   probed = { shells: [shell], timedOut: false }

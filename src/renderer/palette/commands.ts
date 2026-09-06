@@ -1333,7 +1333,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({
       id: 'panel.tidy',
       title: useSelection ? `Tidy the selection (${ctx.selectedIds.length} panels)` : 'Tidy everything',
-      subtitle: 'compact without reordering — one undo',
+      subtitle: ctx.merged === true ? REASON_MERGED_READ_ONLY : 'compact without reordering — one undo',
       group: 'panel',
       searchText: 'tidy arrange compact grid align clean up layout',
       run: () => actions.tidyPanels(ids)

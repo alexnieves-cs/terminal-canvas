@@ -63,6 +63,8 @@ export interface PanelMarks {
   maximise: (id: string) => void
   restore: (id: string) => void
   readOnly: boolean
+  /** M106. The ⋯ menu's door: focus this panel and open the palette captured on it. Absent in a fixture. */
+  more?: (id: string) => void
 }
 export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
 
@@ -117,6 +119,8 @@ export function PanelFrame({
   // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
   // process kind's is its state's, a document kind's is `kind`.
   const marks = useContext(PanelMarksContext)
+  // M106. The canvas provides the door once; a kind may still hand its own.
+  const more = onMore ?? marks.more
   const mark = marks.marks.get(id)
   const tone = state?.tone ?? rootAttrs?.['data-tone'] ?? 'kind'
   // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
@@ -172,10 +176,10 @@ export function PanelFrame({
           <button type="button" className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
             {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
           {menuOpen && (
-            <div className="pf__menu" role="menu" data-panel-menu onMouseDown={(e) => e.stopPropagation()}>
+            <div className="pf__menu" role="menu" data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
-              {onMore !== undefined && <button type="button" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); onMore(id) })}>Verbs in ⌘K…</button>}
+              {more !== undefined && <button type="button" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
               <button type="button" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
             </div>
           )}

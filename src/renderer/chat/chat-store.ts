@@ -173,6 +173,7 @@ export function seedChat(
     // M98. Carried, never re-seeded: a seed is main's snapshot, and grants are asked for separately.
     ...(prev.grants === undefined ? {} : { grants: prev.grants })
   })
+  if (input.turns !== undefined && input.turns.length > 0) for (const l of seededListeners) l(id)
 }
 
 let insertSeq = 0
@@ -247,6 +248,17 @@ const autoListeners = new Set<AutoListener>()
 export function onChatAuto(listener: AutoListener): () => void {
   autoListeners.add(listener)
   return () => { autoListeners.delete(listener) }
+}
+
+/**
+ * M105. A chat SEEDED with its transcript (a relaunch, `Open as chat`): the
+ * rail's last line is re-derived by the canvas — the guarded reader — and never
+ * marked unread, because a restored answer was read in its earlier life.
+ */
+const seededListeners = new Set<TurnEndListener>()
+export function onChatSeeded(listener: TurnEndListener): () => void {
+  seededListeners.add(listener)
+  return () => { seededListeners.delete(listener) }
 }
 
 export function onChatTurnEnd(listener: TurnEndListener): () => void {

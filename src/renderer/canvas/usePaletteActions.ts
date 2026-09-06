@@ -473,6 +473,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       if (text !== null && text !== undefined) void navigator.clipboard.writeText(text)
     },
     tidyPanels: (ids) => {
+      // The merged view is read-only for geometry (M14) — the menu's Tidy and
+      // the row both reach here.
+      if (mergedRef.current) return
       // ONE history entry for the whole arrangement — twenty panels moving is
       // one gesture to undo, not twenty. Sizes never change (tidyPanels'
       // contract), so no rect can fall under the floor the validator
@@ -1245,7 +1248,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             instantiate: instantiateTemplate,
             teammates: teammatesRef.current,
             // M104. The ceiling as read live: the preview says who queues before Enter.
-            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && getChat(p.rect.id).snapshot?.status === 'streaming').length },
+            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length },
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.
@@ -1266,6 +1269,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                   ? (async (): Promise<SpawnResult> => {
                     const plan = lineupPlan(LINEUPS[(values.what as { id: Lineup['id'] }).id], { cwd: values.cwd, worktrees: values.worktree === true, maxConcurrent: 0, liveAgents: 0 })
                     const agentPreset = presetRows.find((p) => p.agent !== undefined && p.available)
+                    // Refused BEFORE any seat is minted: a refusal mid-loop leaves half a lineup.
+                    if (agentPreset === undefined && plan.seats.some((s) => s.kind === 'agent')) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
                     for (const seat of plan.seats) {
                       if (seat.kind === 'browser') { openBrowserPanel(seat.url ?? 'http://localhost:3000/'); continue }
                       if (seat.kind === 'agent') {

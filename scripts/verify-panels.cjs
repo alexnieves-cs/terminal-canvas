@@ -18322,7 +18322,7 @@ app.whenReady().then(async () => {
     // box and carries the full title in `title`; FLIP turns every terminal to
     // its far-view summary and back through the menu's own event.
     {
-      const IDS = ['header.1 a 320px frame with a long title keeps every chrome control visible inside the frame, the title is ellipsised (narrower than its text) and the full title lives in its title attribute', 'flip.1 canvas:flip turns every terminal to the far-view summary (the title large, the state beneath) while a chat is untouched, and a second flip turns them back']
+      const IDS = ['header.1 a 320px frame with a long title keeps every chrome control visible inside the frame, the title is ellipsised (narrower than its text) and the full title lives in its title attribute', 'flip.1 canvas:flip turns every terminal — a LIVE one included, not only the carded — to the far-view summary (the title large, the state beneath), and a second flip turns them back']
       try {
         layoutStore.save({ panels: [{ id: 'hdA', x: 100, y: 100, w: 320, h: 240, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'review: a very long title that would truncate to Revie in a narrow frame' }, { id: 'hdB', x: 500, y: 100, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'worker b' }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'hdA', focusedId: 'hdA' })
         flushLayoutStore()
@@ -18340,12 +18340,19 @@ app.whenReady().then(async () => {
         })()`)
         ok(IDS[0], header !== null && typeof header.title === 'string' && /Revie in a narrow frame$/.test(header.title) && header.clipped === true && header.controls >= 2 && header.inside === true,
           JSON.stringify(header))
+        // Wake hdB so the flip is measured on a LIVE panel: the first version of
+        // this check passed on two dormant (carded) panels while a running
+        // terminal did not turn over at all.
+        await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="hdB"] .panel__card'); if (!card) return false
+          const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        const liveB = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] .panel__slot') !== null`), 10000)
         win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
         const flipped = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id="hdA"] [data-card-summary], .panel[data-panel-id="hdB"] [data-card-summary]').length === 2`), 3000)
         const summaryTitle = await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="hdB"] .panel__card-summary-title'); return s ? s.textContent : null })()`)
         win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
         const back = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-card-summary]').length === 0`), 3000)
-        ok(IDS[1], flipped === true && summaryTitle === 'worker b' && back === true, JSON.stringify({ flipped, summaryTitle, back }))
+        const slotBack = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] .panel__slot') !== null`)
+        ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true, JSON.stringify({ liveB, flipped, summaryTitle, back, slotBack }))
       } catch (hErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr))
       }

@@ -454,10 +454,11 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 }
 
 // M106 — header.1. THE FRAME RULE, once, for every kind: the title shrinks
-// (min-width 0, ellipsis) and the verbs never do (flex 0 0 auto), so a narrow
-// frame keeps its controls and never prints `Revie…` beside them.
+// (M67's 8ch floor — never 0, which was the critic's blocking finding then —
+// and an ellipsis) and the verbs never do (flex 0 0 auto), so a narrow frame
+// keeps its controls and never prints `Revie…` beside them.
 {
-  const titleRule = all.find((r) => /\.pf__title\b/.test(r.sel) && /min-width\s*:\s*0/.test(r.body) && /text-overflow\s*:\s*ellipsis/.test(r.body))
+  const titleRule = all.find((r) => /\.pf__title\b/.test(r.sel) && /min-width\s*:\s*8ch/.test(r.body) && /text-overflow\s*:\s*ellipsis/.test(r.body))
   const verbRule = all.find((r) => /\.pf__verb\b|\.pf__close\b/.test(r.sel) && /flex\s*:\s*0 0 auto|flex-shrink\s*:\s*0/.test(r.body))
   ok('header.1', 'the frame title shrinks with an ellipsis and the chrome verbs never shrink — one rule for every kind',
     titleRule !== undefined && verbRule !== undefined, `title: ${titleRule ? titleRule.sel : 'none'} · verbs: ${verbRule ? verbRule.sel : 'none'}`)

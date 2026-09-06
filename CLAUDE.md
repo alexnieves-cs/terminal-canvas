@@ -500,11 +500,12 @@ check does not, and should not, cover it.
   `flipped` — M106. ONE rule for every kind: `.pf__title` gives (min-width 0, ellipsis) and
   every chrome control is `flex: 0 0 auto` (`verify:styles header.1`, `verify:panels
   header.1`); the full title rides the `title` attribute and the `⋯` menu. Flip hands
-  `summary` to every terminal frame through the same `CardDetailContext` the camera uses —
-  M57's far-view renderer reused, never a second one; a view state, never persisted
+  `summary` to every terminal through a `flipped` PROP on `TerminalPanel` (never
+  `CardDetailContext`, which only a CARDED panel reads — a live one renders the slot), so
+  a running terminal turns over too; M57's far-view renderer reused, never a second one; a view state, never persisted
   (`verify:panels flip.1`). `canvas:tidy` / `canvas:flip` are main→renderer events.
 - `shared/env-report.ts`'s `probe` and `probeOutcome`, `shell-env.ts`'s `shellProbeFacts` /
-  `forgetShellEnv` — M107. Discovery explains itself: which shells were asked, which folders
+  `reprobeShellEnv` (a re-probe into a local; the cache is replaced only on success) — M107. Discovery explains itself: which shells were asked, which folders
   checked, and THREE states — `found`, `not-found`, and `no-answer` for a shell that timed out
   (a slow or prompting `~/.zshrc`), which says the `~/.zprofile` fix and is never read as not
   installed. `env:report` with `again` asks the login shell once more and reports; the app's

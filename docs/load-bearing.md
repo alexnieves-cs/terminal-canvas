@@ -3763,9 +3763,11 @@ moves the width at which the next title fails. The rule is in the stylesheet onc
 is the one thing that gives (`min-width: 0`, ellipsis, its full text in `title` and at the top
 of the `⋯` menu) and every chrome control is `flex: 0 0 auto`; a per-kind rule would be the
 same truncation reappearing on the kind nobody measured. Flip hands `summary` to every
-terminal frame through `CardDetailContext` — the value the camera's distance already sets —
-so the far view's renderer is invoked deliberately and no second renderer of the same card
-exists to drift from it; it is a view state, never persisted, because a layout file that
+terminal through a `flipped` PROP on `TerminalPanel`, NOT through `CardDetailContext`: the
+context is read by the card, and a LIVE panel renders its slot and never the card — the first
+`flip.1` passed on two dormant panels while a running terminal on screen did not turn over.
+The flipped body is the same `PanelCard` at `summary`, so the far view's renderer is invoked
+deliberately and no second renderer of the same card exists to drift from it; it is a view state, never persisted, because a layout file that
 remembered a flip would open a canvas of cards with no gesture that made them.
 
 **The last line said is the transcript's, per panel, and never a terminal's scrollback

@@ -41,6 +41,15 @@ export interface TerminalPanelProps {
   title?: string
   /** M57. How the card draws at this zoom; `tail` is the only tier with terminal text. */
   cardDetail?: CardDetail
+  /**
+   * M106. Flip Terminals: the far-view SUMMARY over the body whatever the tier.
+   * A prop rather than `CardDetailContext`, which only reaches a CARDED panel
+   * (`live` renders the slot, never the card) — the first flip.1 passed on two
+   * dormant panels and a running terminal on screen did not turn over at all.
+   * The slot detaching is what a tier change already does; the session is
+   * untouched (two lifetimes, not one).
+   */
+  flipped?: boolean
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
@@ -120,7 +129,7 @@ const CARD_LINES = 6
 const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
-  session, rect, z, title, cardDetail, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
+  session, rect, z, title, cardDetail, flipped = false, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
   onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
   onBeginLink, linkTarget, onOpenAsChat
 }: TerminalPanelProps): JSX.Element {
@@ -272,7 +281,7 @@ function TerminalPanelImpl({
     >
 
 
-      {live ? (
+      {live && !flipped ? (
         <div
           className="pf__body panel__slot"
           // The marker shouldYieldWheel's rule 3 looks for. It is on the SLOT
@@ -292,7 +301,7 @@ function TerminalPanelImpl({
           }}
         />
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={flipped ? 'summary' : cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
       )}
 
     </PanelFrame>

@@ -81,6 +81,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const [mode, setMode] = useState<PermissionMode | ''>('')
   const [effort, setEffort] = useState<Effort | ''>('')
   const [modelName, setModelName] = useState('')
+  // M104. Worktrees ASKED for a lineup: only agent seats get a lane (lineupPlan's rule).
+  const [worktree, setWorktree] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
   // M80. The chosen template and its parameters — ONE FIELD PER PARAMETER,
   // the composer's fill step (the sheet is a form; a form asks its fields
@@ -119,7 +121,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
     if (modelName.trim() !== '') agentOptions.model = modelName.trim()
-    return { what, cwd, title, agentOptions }
+    return { what, cwd, title, agentOptions, ...(lineupId !== null && worktree ? { worktree: true } : {}) }
   }
 
   const submit = (): void => {
@@ -192,7 +194,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
     : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
-    : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+    : parseLineupWhatId(whatId) !== null ? `lineup: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
@@ -236,7 +238,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}
           {LINEUP_IDS.map((id) => (
-            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}</option>
+            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!model.claudeAvailable && !model.codexAvailable}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
           ))}
           {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
           {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
@@ -280,6 +282,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       </label>
       )}
 
+      {parseLineupWhatId(whatId) !== null && (
+        <label className="sheet__field sheet__field--how">
+          <span className="sheet__label">lanes</span>
+          <span className="sheet__how"><input type="checkbox" data-sheet-worktree checked={worktree} onChange={(e) => setWorktree(e.target.checked)} /> agents in their own worktrees</span>
+        </label>
+      )}
       {isAgent && (
         <div className="sheet__field sheet__field--how">
           <span className="sheet__label">how</span>
