@@ -3892,6 +3892,10 @@ which the row says, so a green re-probe does not read as a fixed spawn.
 
 **The sandbox bypasses the Places gate BY CONSTRUCTION, never by exception (`main/sandbox.ts`, `agent:create`, M120).** The folder is the app's own under `userData/sandbox/<id>`; there is no path to check and no place to add. A teammate beside `sandbox` is refused FIRST with one sentence, because a teammate has places and the gate would otherwise be asked about a folder it has no rule for. The id is checked as a plain path segment: the renderer mints ids, and a `../` in one would be a folder outside the root with no error anywhere.
 
+**`scrollback:search` was WIDENED into one answer over both logs, never a second channel beside it (`main/panel-search.ts`, `PanelSearchResult`, M122).** A second `search` invoke would have given the palette two lists to merge and two caps to explain; the one invoke's answer STATES its cap and its redaction count, and the renderer's scope reads them first. Every line leaves through `redactSecrets` — `verify:verbs gate.2` names the module as the gate's fourth caller rather than loosening the count, so a fifth reader still has to be chosen. The ACTIVE workspace only: a hit in another workspace would fly nowhere.
+
+**A fixture's bare origin must NAME its branch, or the runner's default decides (`scripts/verify-review.cjs`, M124).** `git init --bare` leaves HEAD at `init.defaultBranch`; on this machine that is `main`, on the macOS runner `master`. The second clone then checks out an unborn branch, its commit starts a second root, and `push HEAD:main` is non-fast-forward — a red CI over a locally green chain for three milestones. `git symbolic-ref HEAD refs/heads/main` on the bare repo is the fix every git has; a fixture that pushes into an origin it made must say which branch it means.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3971,4 +3975,8 @@ check. Treat green as green, not as proof of these.
 - **`copilot --acp` under the app (M119).** The handshake was recorded under the probe client; the same lines under the manager's stdio seam are driven by a fake pair in `acp.3`. A real `session/request_permission` answered from the card is unproven.
 - **`--permission-mode plan` in a real sandbox turn (M120).** The argv is pinned; that claude refuses a write under it, and that codex's `--sandbox read-only` and copilot's denied tools hold, is the CLI's behaviour and was not watched.
 - **`cursor-agent` (M117).** Nothing to confirm: the recording itself is owed (backlog #80).
+
+**The manual-only list, re-read entire at 3.0 (M124).** Nothing above was struck: M113–M123 added surfaces beside the entries, never checks beneath them. Every owed hand check on this list — the webview's `_blank` link, the lineup into worktrees, the routine tick, the folder dialog, `Cmd+Z` over a text draft, Sentry — is STILL owed at 3.0.0, and the run's one outward check (a dispatch with `Open PR` against a throwaway repository) was not made: each needs a person at the app or an account's outward action, and `docs/build-log/m122-m125-product.md` carries the exact steps. Added:
+- **The update check against the real feed (M123).** `verify:file update.1` drives a fake fetcher; that `api.github.com/repos/<owner>/<repo>/releases` answers the real `https.get` under the app's environment, and that the notice's `Open release` opens the right page, is unproven.
+- **The unsigned `.dmg` on another Mac (M125).** Gatekeeper's behaviour on a build with no identity — right-click → Open, or `xattr -d com.apple.quarantine` — was not watched on a second machine.
 

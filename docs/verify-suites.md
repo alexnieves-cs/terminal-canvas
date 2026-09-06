@@ -169,3 +169,7 @@ A lesson this act added: **a keep-both merge of two suite blocks appended at the
 
 The method lesson from this act: **the red check is its own commit** — `git log` on the branch alternates `check(…) — red` and `feat(…)`, which is the proof Act I's verifier could not get.
 
+## The product (M122–M125)
+
+`verify:file psearch.1` drives `searchPanels` over two REAL logs made in the fixture dir (the scrollback log through `createScrollbackLog`, the transcript log through `createAgentTranscriptLog`): a transcript hit with its turn index, a scrollback hit with its line index, case-insensitivity, a planted `ghp_` token that never returns and is COUNTED, `maxHits: 1` capped and said, a panel with no file answering nothing. `verify:palette psearch.1` reads the scope's first rows (the cap, the redaction count) and the off state naming that chats still answer. `verify:verbs gate.2` names `main/panel-search.ts` as the fourth caller — widened by NAME, the check's own rule. `verify:file update.1` and `verify:meta update.1` are the update check over a fake fetcher and the pins that no suite touches the network. `verify:panels reach.2` tabs the Board pane and the card with a real Tab; `verify:review`'s across fixture now names `main` in its bare origin's HEAD (the CI red of Act 0 — the lesson: a fixture that pushes into an origin it made must say which branch it means, because the runner's `init.defaultBranch` is not yours).
+

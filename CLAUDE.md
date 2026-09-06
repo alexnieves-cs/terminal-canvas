@@ -677,6 +677,16 @@ check does not, and should not, cover it.
   `reasons.noSandbox`). Deleted on dispose with `drop`, never on exit. `ChatSource.sandbox`
   is carried by `carryChatMarks` beside `dispatch`; the header reads `sandboxed · no folder`.
 
+- `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
+  answer over both durable logs, built in main over injected readers, every line through
+  `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap
+  and the redaction count STATED on the result and shown first; the existing
+  `scrollback:search` invoke was widened, never doubled. The update check is a pure module
+  over an injected fetcher (the real `https.get` lives in `index.ts` and is called by no
+  suite — `verify:meta update.1`), one GET of the releases LIST so a prerelease is skipped
+  by name, a small semver compare, three states; auto-swap is declined by name because the
+  build is unsigned, and `update.checkOnLaunch` is off by default and never `planWritable`.
+
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different
 statements, and `session-registry.ts` is where that difference lives.
