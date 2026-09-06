@@ -1838,6 +1838,64 @@ const isResult = (l) => l.includes('"type":"result"')
     }
   }
 
+  /* M119 — acp.2. THE ROW IS THE PROMISE, THE HANDSHAKE THE FACT. The row
+     says copilot (acp) resumes and takes images; what initialize ANSWERS is
+     the measured truth for this process, stored on the snapshot as
+     `negotiated`, and it outranks the row: a session/load on an agent that
+     answered loadSession: false errors (or worse, silently starts fresh under
+     the old id), and an image block to an agent that answered image: false
+     is a refused prompt with a stored turn. Guarded like acp.1. */
+  {
+    const ACP = M.acp
+    const SH = M.sharedSession || {}
+    const acpLines = (name) => readFileSync(join(FIX, 'acp', name), 'utf8').split('\n').filter((l) => l.startsWith('<- ')).map((l) => l.slice(3))
+    const answerTo = (name, id) => acpLines(name).find((l) => { try { const j = JSON.parse(l); return j.id === id && j.method === undefined } catch { return false } })
+    const noLoad = (l) => l.replace('"loadSession":true', '"loadSession":false').replace('"image":true', '"image":false')
+    const parsed = (proc) => proc.stdin.map((l) => { try { return JSON.parse(l) } catch { return { raw: l } } })
+    if (!ACP || typeof ACP.parseAcpLine !== 'function') {
+      ok('acp.2 the ACP codec exists for the negotiated rule to ride', false, 'no acp codec in the bundle')
+    } else try {
+      const { manager, spawns } = makeManager({ binaries: { acp: { command: '/fake/bin/copilot' } } })
+      manager.create({ id: 'ng', cwd: '/w', backend: 'acp' })
+      manager.send('ng', 'first')
+      const s1 = spawns[0]
+      s1.proc.emitLines([noLoad(answerTo('pong.log', 1))])
+      await tick(10)
+      s1.proc.emitLines([answerTo('pong.log', 2)])
+      await tick(10)
+      const opened = manager.get('ng')
+      s1.proc.emitLines([answerTo('pong.log', 3)])
+      await tick(10)
+      const withImage = manager.send('ng', 'see', [{ mediaType: 'image/png', base64: 'aGk=' }])
+      const turnsAfterRefusal = manager.transcript('ng').length
+      s1.proc.exit(0, null)
+      await tick(10)
+      manager.send('ng', 'second')
+      const s2 = spawns[1]
+      s2.proc.emitLines([noLoad(answerTo('pong.log', 1))])
+      await tick(10)
+      const secondOpen = parsed(s2.proc)[1]
+      ok('acp.2 initialize answering loadSession: false / image: false lands on the snapshot as negotiated { loadSession: false, image: false } (the row still says true for both); a send with an image is then refused by name and stores nothing; and the second spawn writes session/new — never session/load — because the negotiated fact outranks the row\'s resumes',
+        opened.negotiated !== undefined && opened.negotiated.loadSession === false && opened.negotiated.image === false && M.backends.BACKENDS.acp.resumes === true && M.backends.BACKENDS.acp.images === true &&
+          withImage === 'refused-images' && turnsAfterRefusal === 2 &&
+          spawns.length === 2 && secondOpen !== undefined && secondOpen.method === 'session/new' && secondOpen.params.cwd === '/w' &&
+          !s2.proc.stdin.some((l) => l.includes('session/load')),
+        JSON.stringify({ negotiated: opened.negotiated, withImage, turnsAfterRefusal, secondOpen, stdin2: s2.proc.stdin }))
+      manager.dispose('ng')
+
+      // The pure helper the composer reads: negotiated when present, the row otherwise.
+      const B = M.backends.BACKENDS
+      const ia = SH.imagesAllowed
+      ok('acp.2.b imagesAllowed(snapshot, row) is pure in shared/agent-session.ts: the negotiated image answer when the snapshot carries one (false over a true row; true over a false row), the row\'s images otherwise (a snapshot with no negotiated, or one whose negotiated says nothing about images)',
+        typeof ia === 'function' &&
+          ia({ negotiated: { image: false } }, B.acp) === false && ia({ negotiated: { image: true } }, B.codex) === true &&
+          ia({}, B.acp) === true && ia({}, B.codex) === false && ia({ negotiated: { loadSession: false } }, B.acp) === true && ia(null, B.claude) === true,
+        JSON.stringify({ has: typeof ia }))
+    } catch (e) {
+      ok('acp.2 the negotiated rule runs without throwing', false, String((e && e.stack) || e).slice(0, 300))
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
