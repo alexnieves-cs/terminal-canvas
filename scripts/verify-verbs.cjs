@@ -179,9 +179,15 @@ const FACTS = {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   }
 
-  // gate.2 — the gate is the only door OUT. `redactSecrets` may be called by
-  // the gate and by the memory store's write scrub (a store, not a reader)
-  // and nowhere else; every reader of pane text goes through `outward`.
+  // gate.2 — the gate is the only door OUT for a READER of pane/chat text.
+  // `redactSecrets` may be called by the gate, by the memory store's write
+  // scrub (a store, not a reader) and — as of M112 — by `main/telemetry.ts`'s
+  // `scrubEvent`, a third caller on a genuinely different data path: an
+  // exception VALUE the Sentry SDK is about to hand to a third-party service,
+  // never a panel's tail or a chat's last answer. Widening this allowlist by
+  // NAME (rather than loosening the assertion to "at least these two") is the
+  // point — a future caller still has to be added here on purpose, the same
+  // way EXCLUDED_ACTIONS names a refusal rather than defaulting to open.
   {
     const { readdirSync, statSync } = require('node:fs')
     const root = join(__dirname, '..', 'src')
@@ -191,8 +197,8 @@ const FACTS = {
     const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
     const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
-    ok('gate.2 redactSecrets has exactly two callers (the outward gate and the memory store\'s write scrub), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    ok('gate.2 redactSecrets has exactly three callers (the outward gate, the memory store\'s write scrub, and telemetry\'s event scrubber), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/telemetry.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 
