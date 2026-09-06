@@ -180,6 +180,7 @@ renderer --invoke--> routine:list / routine:save / routine:delete / routine:run 
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer --invoke--> browser:read                                                --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
+renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer

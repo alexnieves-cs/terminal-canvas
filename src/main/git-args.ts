@@ -146,6 +146,15 @@ export function parseAheadOf(stdout: string): { ahead: number; behind: number } 
   return parsed === null ? null : { ahead: parsed.behind, behind: parsed.ahead }
 }
 
+/**
+ * M115. The ONE push this app builds: the lane's branch to origin, with the
+ * user's own git credentials (the app holds none for git and passes nothing).
+ * Not a fetch — git.1's rule is about reads that look passive.
+ */
+export function buildPushArgs(path: string, branch: string): string[] {
+  return ['-C', path, 'push', '-u', 'origin', branch]
+}
+
 export function buildWorktreeListArgs(root: string): string[] {
   return ['-C', root, 'worktree', 'list', '--porcelain']
 }

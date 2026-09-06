@@ -8,7 +8,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import type { RunRow } from '../shared/run-ledger'
 import type {
@@ -214,10 +214,14 @@ const INERT_BROWSER: BrowserHandlers = {
 export interface BoardHandlers {
   lane(req: BoardLaneRequest): Promise<BoardLaneResult>
   laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
+  openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
+  commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
 }
 const INERT_BOARD: BoardHandlers = {
   lane: async () => ({ kind: 'refused', reason: 'dispatch is not available here' }),
-  laneStatus: async () => ({ kind: 'unreadable', detail: 'the lane is not available here' })
+  laneStatus: async () => ({ kind: 'unreadable', detail: 'the lane is not available here' }),
+  openPr: async () => ({ kind: 'refused', reason: 'the PR door is not available here' }),
+  commentPr: async () => ({ kind: 'refused', reason: 'the PR door is not available here' })
 }
 
 const INERT_SCROLLBACK: ScrollbackHandlers = {
@@ -349,6 +353,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.BROWSER_READ, (_event, req: BrowserReadRequest) => browser.read(req))
   ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
+  ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))
+  ipcMain.handle(IPC.BOARD_COMMENT_PR, (_event, req: BoardCommentRequest) => board.commentPr(req))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())

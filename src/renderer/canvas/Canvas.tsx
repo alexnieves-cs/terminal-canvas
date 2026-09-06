@@ -138,7 +138,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
-import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -1856,6 +1856,10 @@ export function Canvas({
         commitHistory(current)
         return current
       })
+      // M114. A card the user MOVED chose its own place: its anchor to the
+      // lane is dropped, or the next render would snap it back beside the chat.
+      const movedCards = states.filter((state) => state.mode.kind === 'move').map((state) => workCardItemId(panelsRef.current.find((p) => p.rect.id === state.panelId) ?? ({ kind: 'terminal' } as unknown as Panel))).filter((id): id is string => id !== undefined)
+      if (movedCards.length > 0) setWorkItems((current) => current.map((i) => (movedCards.includes(i.id) && i.anchor !== undefined ? carryWorkItem({ ...i, anchor: undefined }) : i)))
       // A move changes no terminal dimension, so it has nothing to commit.
       const resized = states.filter((state) => state.mode.kind === 'resize')
       if (resized.length === 0) return
@@ -3879,6 +3883,65 @@ export function Canvas({
     await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
   }, [commitHistory, selectOnly])
   boardVerbsRef.current.dispatch = (itemId, teammateId, root) => { void dispatchWorkItem(itemId, teammateId, root) }
+  /**
+   * M115. THE RETURN PATH. `openPr` refuses by name through `prRefusal` (the
+   * one function the card's disabled title also reads) BEFORE main is asked;
+   * main pushes the lane and POSTs through the broker, whose write gate asks
+   * the teammate's spend card. `opened` and `exists` alike give the card its
+   * `pr` and the state `review` — the runtime's word, from the event. Every
+   * refusal lands in the record's `note`, where the card shows it.
+   */
+  const patchWorkItem = useCallback((itemId: string, fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) => {
+    setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
+  }, [])
+  const openPr = useCallback(async (itemId: string): Promise<void> => {
+    if (mergedRef.current) return
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const mate = item.teammateId === undefined ? undefined : teammatesRef.current?.find((t) => t.id === item.teammateId)
+    const connected = credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined)
+    const lanes = await window.canvas.worktree.list()
+    const lane = lanes.find((w) => w.id === item.worktreeId)
+    const standing = lane === undefined ? undefined : await window.canvas.board.laneStatus({ path: lane.path, root: lane.root })
+    const refusal = prRefusal(item, standing, connected, mate)
+    if (refusal !== null || lane === undefined || item.teammateId === undefined || item.panelId === undefined || item.key === undefined) { patchWorkItem(itemId, { note: refusal ?? 'no lane yet — dispatch the item first' }); return }
+    const repo = repoOfKey(item.key)
+    if (repo === null) return
+    const body = [`Dispatched from the Terminal Canvas board.`, item.url === undefined ? '' : `Closes ${item.url}`, item.description ?? ''].filter((l) => l !== '').join('\n\n')
+    const result = await window.canvas.board.openPr({ itemId, panelId: item.panelId, teammateId: item.teammateId, worktreeId: lane.id, repo, title: item.title, body })
+    if (result.kind === 'opened' || result.kind === 'exists') {
+      patchWorkItem(itemId, { pr: { number: result.number, url: result.url }, state: WORK_ITEM_STATES[2] as PersistedWorkItem['state'], note: undefined })
+      return
+    }
+    if ('reason' in result) patchWorkItem(itemId, { note: `${result.kind === 'push-failed' ? 'push failed — ' : ''}${result.reason}` })
+  }, [credentialRows, patchWorkItem])
+  const commentPr = useCallback(async (itemId: string): Promise<void> => {
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined || item.pr === undefined || item.key === undefined || item.panelId === undefined || item.teammateId === undefined) return
+    const repo = repoOfKey(item.key)
+    const number = /#(\d+)$/.exec(item.key)
+    if (repo === null || number === null) return
+    const result = await window.canvas.board.commentPr({ panelId: item.panelId, teammateId: item.teammateId, repo, number: Number(number[1]), body: `Pull request: ${item.pr.url}` })
+    patchWorkItem(itemId, { note: result.kind === 'commented' ? `commented on ${item.key}` : result.reason })
+  }, [patchWorkItem])
+  /**
+   * M115. `done` is the USER's. On a GitHub item with a PR the comment is
+   * offered as a second card and declining it still marks done. A Jira item
+   * marks done here and moves in Jira from its ticket row (M24's transition
+   * list) — recorded as the owed follow-up rather than a second Jira write.
+   */
+  const markDone = useCallback((itemId: string): void => {
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'] })
+    if (item.source === 'github' && item.pr !== undefined) {
+      setInputMode({ kind: 'confirm', label: `Comment the PR on ${item.key ?? 'the issue'}?`, initial: '', submit: () => { void commentPr(itemId) } })
+      palette.openPalette()
+    }
+  }, [patchWorkItem, commentPr, palette])
+  boardVerbsRef.current.openPr = (itemId) => { void openPr(itemId) }
+  boardVerbsRef.current.commentPr = (itemId) => { void commentPr(itemId) }
+  boardVerbsRef.current.markDone = markDone
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing

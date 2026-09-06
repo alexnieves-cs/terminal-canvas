@@ -3702,6 +3702,8 @@ console.log('\n' + '='.repeat(60))
       typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Teammates pane/.test(noService) &&
       carried && carried.pr && carried.pr.number === 4,
     JSON.stringify({ okArm, noLane, zero, jira, notConnected, noService, pr: carried && carried.pr }))
+}
+
 // M116 — work.5. THE TWELFTH KIND ON DISK. A work card is `kind: 'work'`
 // plus `work: { itemId }` and nothing else — no cwd and no args, like every
 // sessionless kind, so the terminal reader cannot mistake it for a process.

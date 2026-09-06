@@ -587,7 +587,10 @@ export const IPC = {
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
-  BOARD_LANE_STATUS: 'board:lane-status'
+  BOARD_LANE_STATUS: 'board:lane-status',
+  /** M115. The return path: push the lane, POST the PR through the broker behind the teammate's spend card; the comment on the issue. */
+  BOARD_OPEN_PR: 'board:open-pr',
+  BOARD_COMMENT_PR: 'board:comment-pr'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -596,6 +599,16 @@ export interface BoardLaneRequest { itemId: string; chatPanelId: string; teammat
 export type BoardLaneResult =
   | { kind: 'lane'; path: string; worktreeId: string; branch: string; root: string }
   | { kind: 'refused'; reason: string }
+
+/** M115. What `Open PR` hands main: ids, never paths — main resolves the worktree record and runs the push itself. */
+export interface BoardOpenPrRequest { itemId: string; panelId: string; teammateId: string; worktreeId: string; repo: string; title: string; body: string }
+export type BoardOpenPrResult =
+  | { kind: 'opened' | 'exists'; number: number; url: string }
+  | { kind: 'push-failed' | 'no-lane' | 'no-credential' | 'rejected' | 'unavailable' | 'malformed' | 'refused'; reason: string }
+export interface BoardCommentRequest { panelId: string; teammateId: string; repo: string; number: number; body: string }
+export type BoardCommentResult =
+  | { kind: 'commented'; url: string }
+  | { kind: 'no-credential' | 'rejected' | 'unavailable' | 'malformed' | 'refused'; reason: string }
 
 /** M113. What `tc board` asks the renderer, and what it answers. */
 export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
@@ -1475,6 +1488,8 @@ export interface CanvasBridge {
   board: {
     lane(req: BoardLaneRequest): Promise<BoardLaneResult>
     laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
+    openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
+    commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

@@ -7,6 +7,7 @@ import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestF
 import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { buildPushArgs } from './git-args'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
 import { createRoutineRunner } from './routine-runner'
@@ -32,7 +33,7 @@ import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
 import { createBroker } from './broker'
-import { listAssignedWorkItems as listGithubWorkItems } from './github-client'
+import { listAssignedWorkItems as listGithubWorkItems, openPullRequest, commentIssue } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
 import { createBrokerAudit } from './broker-audit'
 import { readVault } from './vault-read'
@@ -1677,7 +1678,25 @@ app.whenReady().then(async () => {
     // M103. The guest is resolved by the id the node learned on did-attach;
     // main checks it is a webview before reading anything.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
-    { ...boardLane, laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root) }
+    {
+      ...boardLane,
+      laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
+      // M115. The return path, in order: the lane's record (ids in, never a
+      // path from the renderer), `git push -u origin <branch>` in the lane
+      // with the USER's own git credentials (the app holds none for git),
+      // then the POST through the broker — whose own write gate asks M102's
+      // spend card on the teammate's chat before the token is read.
+      openPr: async (req) => {
+        const lane = layoutStore.worktrees().find((w) => w.id === req.worktreeId)
+        if (lane === undefined) return { kind: 'no-lane', reason: 'the lane\'s worktree record is gone — check the Worktrees list' }
+        const pushed = await gitRunner(buildPushArgs(lane.path, lane.branch))
+        if (!pushed.ok) return { kind: 'push-failed', reason: pushed.notFound ? 'git could not be run' : (pushed.stderr.split('\n').map((l) => l.trim()).filter((l) => l !== '').find((l) => /^(fatal|error):/i.test(l)) ?? pushed.stderr.trim().split('\n').pop() ?? 'git push failed') }
+        const root = await reviewEngine.status(lane.root)
+        const base = root.kind === 'status' ? root.branch : 'main'
+        return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
+      },
+      commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
+    }
   )
   createWindow()
 

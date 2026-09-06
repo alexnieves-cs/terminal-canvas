@@ -198,6 +198,31 @@ export function repoOfKey(key: string): string | null {
   return m === null ? null : (m[1] as string)
 }
 
+/**
+ * M115. THE PR DOOR'S REFUSALS, as data: the one function every Open PR
+ * button and verb reads, so the arms are named once and a disabled control
+ * always says which. `lane` is the lane's standing against the root's branch
+ * (undefined when the item has no lane or the count could not be read),
+ * `connected` whether GitHub holds a credential, `mate` the teammate record.
+ */
+export function prRefusal(
+  item: { source: WorkItemSource; key?: string; panelId?: string; worktreeId?: string; teammateId?: string },
+  lane: { kind: 'lane'; base: string; ahead: number; behind: number } | { kind: 'git-missing' } | { kind: 'unreadable'; detail: string } | undefined,
+  connected: boolean,
+  mate: { name: string; services: readonly string[] } | undefined
+): string | null {
+  if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository — this item is ${item.source}`
+  if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet — dispatch the item first'
+  if (!connected) return 'not connected — add a github token in ⌘K, then Credentials'
+  if (mate === undefined) return 'the teammate this item was dispatched to is gone — open the Teammates pane'
+  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in the Teammates pane`
+  if (lane === undefined) return 'the lane could not be read — is the worktree still there?'
+  if (lane.kind === 'git-missing') return 'git was not found on the login PATH'
+  if (lane.kind === 'unreadable') return `the lane could not be read — ${lane.detail}`
+  if (lane.ahead === 0) return `nothing to open a PR for — the lane has no commits past ${lane.base}`
+  return null
+}
+
 /** The typed door's one refusal. */
 export function workItemRefusal(title: string): string | null {
   return title.trim() === '' ? 'a work item needs a title' : null

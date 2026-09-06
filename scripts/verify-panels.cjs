@@ -1266,7 +1266,10 @@ app.whenReady().then(async () => {
   createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
   // M114. The REAL lane over the harness's own worktree manager and a real
   // Places gate, so dispatch.1 mints a real worktree in a fixture repository.
-  { laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root), ...createBoardLane({
+  { laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
+    // M115. The harness's PR door never pushes and never reaches GitHub: a fake success with a fixed number, so the record's `pr` and the `review` word can be asserted offline.
+    openPr: async () => ({ kind: 'opened', number: 42, url: 'https://github.com/acme/canvas/pull/42' }), commentPr: async () => ({ kind: 'commented', url: 'https://github.com/acme/canvas/issues/1#issuecomment-1' }),
+    ...createBoardLane({
     gate: createPlacesGate({ realpath: (p) => realpathSync(p), teammate: (id) => layoutStore.teammates().find((t) => t.id === id), worktreeRootOf: (p) => layoutStore.worktrees().find((w) => w.path === p)?.root }),
     worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
     teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
