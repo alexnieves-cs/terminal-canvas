@@ -125,6 +125,17 @@ export interface PanelRow {
    * permanently disabled (undefined !== true), and tsc says nothing.
    */
   agent: boolean
+  /**
+   * M112 (review round 1, CRITICAL 2). Whether the SESSION has ever spawned
+   * — `registry.get(id)?.spawned`, computed in Canvas like `restartable`
+   * and `agent` beside it. The export row's own refusal needs this fact
+   * that `restartable` doesn't carry: a panel can be non-restartable (still
+   * running) and fully exportable, or restartable (exited) and still hold a
+   * live buffer from before it exited. REQUIRED for the same reason as
+   * `restartable`/`agent` one field up: optional would let a half-wired
+   * row compile disabled forever with tsc silent about it.
+   */
+  spawned: boolean
 }
 
 export interface PaletteActions {
@@ -563,7 +574,14 @@ export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 /** M50. One panel has nothing to be tidied against. */
 export const REASON_TIDY_NEEDS_TWO = 'needs two panels on the canvas'
 export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to export'
-export const REASON_SCROLLBACK_OFF = 'durable scrollback is off — turn on scrollback.persist in Settings'
+/**
+ * M112 (review round 1, CRITICAL 2). Renamed from REASON_SCROLLBACK_OFF: the
+ * row is no longer refused just because scrollback is off — a spawned
+ * panel exports from its live buffer instead (M112). What is STILL
+ * genuinely refusable is a panel that has never started AND has
+ * scrollback off: neither source has anything to give.
+ */
+export const REASON_NOTHING_TO_EXPORT = 'this panel has never started, and scrollback is off — turn on scrollback.persist in Settings, or start the panel first'
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
@@ -1358,20 +1376,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => { if (target !== undefined) actions.copyLastOutput(target.id) } }, reason))
   }
 
-  // --- Export (M58) -----------------------------------------------------------
+  // --- Export (M58; M112 opened the buffer door) ------------------------------
   //
-  // The panel row reads the DURABLE log, so scrollback off is its own reason
-  // (a different fix from "focus a panel"); the xterm buffer is never a
-  // fallback, because that is a truncation the user cannot see.
+  // The panel row prefers the DURABLE log but falls back to the live xterm
+  // buffer (M112) once the panel has spawned, so scrollback being off is no
+  // longer this row's own reason by itself — a spawned panel exports from
+  // its buffer regardless. The one case still genuinely refusable is a
+  // panel that has never started AND has scrollback off: neither source
+  // has anything to give.
   {
     const target = ctx.capturedId === null ? undefined : ctx.panels.find((p) => p.id === ctx.capturedId)
     const reason = ctx.capturedId === null || target === undefined
       ? REASON_NO_FOCUS
-      : (target.kind !== 'terminal' ? REASON_NOT_TERMINAL_OUTPUT : (ctx.scrollbackEnabled === false ? REASON_SCROLLBACK_OFF : undefined))
+      : (target.kind !== 'terminal'
+          ? REASON_NOT_TERMINAL_OUTPUT
+          : (ctx.scrollbackEnabled === false && target.spawned !== true ? REASON_NOTHING_TO_EXPORT : undefined))
     out.push(withReason({
       id: 'panel.export-text',
       title: 'Export panel output…',
-      subtitle: 'everything the durable log holds (2 MB), ANSI stripped, secrets scrubbed, to a file',
+      // M112. Honest about both sources now: the durable log (2 MB cap)
+      // when scrollback is on and has bytes, else the live buffer (10 000
+      // rows, xterm's own scrollback cap) — main decides which one wins.
+      subtitle: 'the durable log if scrollback holds it (2 MB), else the live buffer, ANSI stripped, secrets scrubbed, to a file',
       searchText: 'export save output text transcript file panel',
       group: 'panel',
       run: () => { if (target !== undefined) actions.exportPanelText(target.id) }

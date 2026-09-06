@@ -46,6 +46,27 @@ const atomicWrite = (path: string, data: string | Buffer): void => {
 
 const stamp = (d: Date): string => d.toISOString().replace(/[:.]/g, '-').slice(0, 19)
 
+// M112 (review round 1, CRITICAL 1). A secret can come back from the LIVE
+// BUFFER split by a real CR/LF sitting exactly where a terminal-width row
+// wrap happened — on macOS the pty's own line discipline inserts a literal
+// CR while echoing typed input past the terminal's column width, and
+// xterm's buffer can register that boundary as a genuine new row rather
+// than a soft continuation, so the serialized text carries a hard break a
+// human reading the panel would never perceive as one. `redactSecrets`
+// deliberately does not match across a real line break — shared/redact.ts
+// is also memory-store.ts's, the broker audit's, the diagnostics bundle's
+// and browser-read.ts's, and a pattern that spanned newlines there would
+// merge unrelated lines in every one of those callers — so loosening it
+// globally is out. This closes the gap LOCALLY instead, only for the
+// buffer source, only where a `\r\n`/`\r` sits strictly between two
+// characters every pattern in shared/redact.ts's alphabet draws from
+// (alnum, `_ ~ + / = . -`). A genuine separate line in agent output does
+// not open and close on exactly those characters with nothing else
+// between; this reunites a token the terminal split in two without
+// merging content a human would read as two distinct lines.
+const WRAP_GAP = /(?<=[A-Za-z0-9_~+/=.-])\r\n?(?=[A-Za-z0-9_~+/=.-])/g
+const closeWrapGaps = (text: string): string => text.replace(WRAP_GAP, '')
+
 export const INERT_EXPORTERS: Exporters = {
   panelText: async () => ({ kind: 'failed', reason: 'export is not wired' }),
   canvasPng: async () => ({ kind: 'failed', reason: 'export is not wired' })
@@ -78,6 +99,9 @@ export function createExporters(deps: ExporterDeps): Exporters {
         source = 'buffer'
       }
       if (source === null) return on || typeof buffer === 'string' ? { kind: 'empty' } : { kind: 'off' }
+      // CRITICAL 1's fix: only the buffer source carries this risk (the log
+      // is raw PTY bytes with no VT-reconstruction step in between).
+      if (source === 'buffer') raw = closeWrapGaps(raw)
       const stripped = stripAnsi(raw)
       // M96. Through the ONE outward gate (the scrubber plus its note).
       const { text, redacted: count } = outward(stripped, `panel ${panelId}`)
@@ -88,7 +112,13 @@ export function createExporters(deps: ExporterDeps): Exporters {
       } catch (error: unknown) {
         return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) }
       }
-      const lines = text.split('\n').filter((l) => l.length > 0).length
+      // M112 (review round 1, minor 8). The log source is LF-only; the
+      // buffer source is CRLF (xterm's own line ending). Splitting on
+      // bare '\n' left a lone '\r' on every buffer-sourced blank row,
+      // which has length 1 and was being counted as a non-empty line.
+      // Splitting on the ending itself, whichever it is, makes the two
+      // sources agree on what "a line" means.
+      const lines = text.split(/\r\n|\n/).filter((l) => l.length > 0).length
       return { kind: 'written', path, lines, redacted: count, source }
     },
     async canvasPng() {

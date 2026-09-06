@@ -116,9 +116,16 @@ app.whenReady().then(async () => {
   // export a moment after re-attach.
   const s = probe.serialize || {}
   const has = (t) => typeof t === 'string' && t.includes('SER-ONE') && t.includes('SER-TWO')
+  // M112 (review round 1, minor 7). "answers the same rows" was checking
+  // only that both sentinels appear in each of the three strings SEPARATELY
+  // — three independently-truthy checks, never compared to each other. A
+  // detach that scrambled row order, dropped an unrelated row or otherwise
+  // changed the text without losing either literal sentinel would still
+  // have passed. Compare the three strings directly.
   ok('serialize.1 the serialize addon answers the same rows attached, detached and re-attached',
-    !s.error && has(s.attached) && has(s.detached) && has(s.reattached),
-    JSON.stringify({ error: s.error, lens: [s.attached?.length, s.detached?.length, s.reattached?.length] }))
+    !s.error && has(s.attached) && has(s.detached) && has(s.reattached) &&
+      s.attached === s.detached && s.detached === s.reattached,
+    JSON.stringify({ error: s.error, equal: s.attached === s.detached && s.detached === s.reattached, lens: [s.attached?.length, s.detached?.length, s.reattached?.length] }))
 
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)

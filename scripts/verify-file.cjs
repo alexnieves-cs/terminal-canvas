@@ -669,11 +669,40 @@ const p = (name) => join(DIR, name)
       // "no escapes" means no raw ANSI bytes survive (the ESC-`[` pair) — a
       // literal bracket check would fail on every redaction, since the
       // placeholder itself is written as `[redacted api key]`.
-      can && a && a.kind === 'written' && a.source === 'buffer' && a.redacted === 1 && t1.includes('from the buffer') && t1.includes('green') && !t1.includes('[') && !t1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') &&
+      can && a && a.kind === 'written' && a.source === 'buffer' && a.redacted === 1 && t1.includes('from the buffer') && t1.includes('green') && !t1.includes('\x1b[') && !t1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') &&
         b && b.kind === 'written' && b.source === 'log' && t2.includes('hello red world') && !t2.includes('from the buffer') &&
         c && c.kind === 'written' && c.source === 'buffer' &&
         d && d.kind === 'off' && e && e.kind === 'empty',
       JSON.stringify({ a, b, c, d, e, t1: t1.slice(0, 60) }))
+  }
+  // export.6 (M112, review round 1, CRITICAL 1). A secret split by a real
+  // CR/LF sitting exactly where a terminal-width wrap happened — the case
+  // the reviewer reproduced: a token's PREFIX gets redacted (the pattern
+  // still matches up to the break) while its TAIL, now alone on its own
+  // row, does not, so a fragment of the secret survives the outward gate.
+  // closeWrapGaps (main/export.ts) exists to close exactly this: a
+  // `\r\n` sitting strictly between two characters the redaction
+  // patterns' alphabet draws from is not a real line break in this
+  // reconstruction, so it never gets a chance to hide half a secret.
+  {
+    // The wrap sits INSIDE the token (both flanking characters alnum, so
+    // closeWrapGaps reunites them); the token's OUTER edges each border a
+    // non-token character (': ' before, a leading space after the second
+    // `\r\n`) on purpose — a gap-close not anchored to a real word
+    // boundary on the far side would let the pattern's own `{20,}`
+    // quantifier run on and swallow "end of line here" into the secret,
+    // which is exactly the over-redaction this test also stands guard
+    // against by asserting that phrase survives untouched.
+    const wrapped = 'before: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ\r\nabcdefghijklmnopqrstuvwxyz0123456789\r\n end of line here'
+    const o = join(dir, 'wrapped.txt')
+    const w = log ? await mk(o, { persistOn: false }).panelText({ panelId: 'pWrap', buffer: wrapped }) : null
+    const tw = existsSync(o) ? readFileSync(o, 'utf8') : ''
+    ok('export.6 a secret split across a mid-token wrap (a real CR/LF between two token characters) is redacted WHOLE — neither its prefix nor its interior survives, exactly one redaction is counted, and text on either side of the wrap is untouched (no over-redaction into the next line)',
+      can && w && w.kind === 'written' && w.source === 'buffer' && w.redacted === 1 &&
+        tw.includes('before:') && tw.includes('end of line here') &&
+        !tw.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !tw.includes('abcdefghijklmnopqrstuvwxyz0123456789') &&
+        tw.includes('[redacted api key]'),
+      JSON.stringify({ w, tw }))
   }
   rmSync(dir, { recursive: true, force: true })
 }

@@ -1897,6 +1897,26 @@ const WS = [
     JSON.stringify({ r: r && r.disabledReason, none: row(none) && row(none).disabledReason, wrong: row(wrongKind) && row(wrongKind).disabledReason, off: row(off) && row(off).disabledReason, png: png && png.group, calls }))
 }
 
+// export.2 (M112, review round 1, CRITICAL 2). Opening the buffer door: a
+// SPAWNED panel's row must be enabled regardless of scrollback, because
+// M112 gave it a second source (the live buffer) that scrollback.persist
+// has no say over. The only case still refused is a panel that has NEVER
+// spawned with scrollback off — neither a log nor a buffer exists for it.
+{
+  const spawnedPanel = [{ id: 'n1', label: 'claude', kind: 'terminal', spawned: true }]
+  const neverSpawnedPanel = [{ id: 'n1', label: 'claude', kind: 'terminal', spawned: false }]
+  const spawnedOff = ctx({ panels: spawnedPanel, capturedId: 'n1', scrollbackEnabled: false })
+  const spawnedOn = ctx({ panels: spawnedPanel, capturedId: 'n1', scrollbackEnabled: true })
+  const neverSpawnedOff = ctx({ panels: neverSpawnedPanel, capturedId: 'n1', scrollbackEnabled: false })
+  const row2 = (c) => byId(P.buildCommands(c), 'panel.export-text')
+  ok('export.2 a spawned panel\'s export row is enabled with scrollback off (the live buffer answers) and with it on; a never-spawned panel with scrollback off is still refused, by a reason distinct from no-focus/wrong-kind',
+    row2(spawnedOff) !== undefined && row2(spawnedOff).disabledReason === undefined &&
+      row2(spawnedOn) !== undefined && row2(spawnedOn).disabledReason === undefined &&
+      row2(neverSpawnedOff) !== undefined && typeof row2(neverSpawnedOff).disabledReason === 'string' &&
+      /scrollback/i.test(row2(neverSpawnedOff).disabledReason) && /never started|has not started/i.test(row2(neverSpawnedOff).disabledReason),
+    JSON.stringify({ spawnedOff: row2(spawnedOff) && row2(spawnedOff).disabledReason, spawnedOn: row2(spawnedOn) && row2(spawnedOn).disabledReason, neverSpawnedOff: row2(neverSpawnedOff) && row2(neverSpawnedOff).disabledReason }))
+}
+
 // M59 — the audit's two palette checks.
 {
   // rename.1: a bookmark can be renamed, per bookmark, through the input

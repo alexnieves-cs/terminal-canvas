@@ -16114,6 +16114,12 @@ app.whenReady().then(async () => {
     //   Red first: before M112 this answered `off` and wrote nothing.
     {
       const exportDir = mkdtempSync(join(tmpdir(), 'tc panels export2 '))
+      // M112 (review round 1, minor 6). Capture whatever this run's ACTUAL
+      // current value is (the schema default, absent an earlier check that
+      // changed it) rather than assuming and hardcoding `true` — a comment
+      // claiming "the real default" beside a literal was exactly last
+      // round's inconsistency.
+      const persistBefore = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => rows.find((r) => r.id === 'scrollback.persist').value)`)
       await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', false)`)
       const idsBefore = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
       wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), args: ['-l'] })
@@ -16130,33 +16136,60 @@ app.whenReady().then(async () => {
         el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }))
         return true })()`) : false
       if (liveId) ptyManager.write(liveId, 'echo BUFFER_SENTINEL_2291 sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\r')
-      const onScreen = liveId ? await waitUntil(async () => wc.executeJavaScript(`(() => { const s = window.__m4aSessions().find((r) => r.id === ${JSON.stringify(liveId)}); return !!s })()`) && (await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${liveId}"]') !== null`)), 4000) : false
+      // M112 (review round 1, minor 5). The brief's original had the FIRST
+      // executeJavaScript un-awaited, so `&&` was testing a Promise object
+      // (always truthy) rather than its resolved value — the check measured
+      // only the DOM half, not the session half. Await both.
+      const onScreen = liveId ? await waitUntil(async () => {
+        const hasSession = await wc.executeJavaScript(`(() => { const s = window.__m4aSessions().find((r) => r.id === ${JSON.stringify(liveId)}); return !!s })()`)
+        const inDom = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${liveId}"]') !== null`)
+        return hasSession && inDom
+      }, 4000) : false
       await new Promise((r) => setTimeout(r, 600))
       exportTarget = join(exportDir, 'panel.txt')
       const opened = await (async () => {
         await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
         return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
       })()
-      const ran = opened === true ? await wc.executeJavaScript(`(() => {
+      // M112 (review round 1, CRITICAL 2). The palette's settings reload is
+      // async (toggleSetting re-fetches the row list after main answers, it
+      // does not update optimistically — see usePaletteActions.ts's own
+      // comment on that), so the row can still read disabled for a moment
+      // after `spawned` went true. Poll for the row to actually clear
+      // `palette__row--disabled` before clicking it — a click landing on a
+      // stale-disabled reading proves nothing about whether the door is
+      // open, only that the race happened to land on the enabled frame.
+      const enabled = opened === true ? await waitUntil(() => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id="panel.export-text"]')
+          return !!el && !el.className.includes('palette__row--disabled')
+        })()`), 4000) : false
+      const ran = enabled === true ? await wc.executeJavaScript(`(() => {
           const el = document.querySelector('[data-command-id="panel.export-text"]')
           if (!el) return 'no row'
           if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
           el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
-          return true })()`) : 'no palette'
+          return true })()`) : (opened === true ? 'still disabled' : 'no palette')
       const written = await waitUntil(async () => existsSync(exportTarget) && /BUFFER_SENTINEL_2291/.test(readFileSync(exportTarget, 'utf8')), 6000)
       const text = existsSync(exportTarget) ? readFileSync(exportTarget, 'utf8') : ''
       exportTarget = null
-      // scrollback.persist defaults to true (settings-schema.ts); restore
-      // that default rather than a hardcoded value so a later default change
-      // does not leave this suite's side effect one setting stale.
-      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', true)`)
+      // Restore whatever this run's ACTUAL value was before this check
+      // touched it (captured above), not an assumed default.
+      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', ${JSON.stringify(persistBefore)})`)
       // "no escape bytes" checks for raw ANSI (the ESC-`[` pair), not a
       // literal bracket — the redaction placeholder itself reads
       // `[redacted api key]`, so a bare '[' check would fail on every scrub.
-      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the token is not, no escape bytes',
-        liveId !== null && focused === true && onScreen === true && ran === true && written === true &&
-          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('['),
-        JSON.stringify({ liveId, focused, onScreen, ran, written, tail: text.slice(-160) }))
+      //
+      // M112 (review round 1, CRITICAL 1). Checking only the PREFIX is
+      // exactly the half that a terminal-width wrap does NOT split — the
+      // token is long enough to wrap inside a normal-width panel, and the
+      // original defect left an unredacted TAIL fragment sitting on its own
+      // row. `abcdefghijklmnopqrstuvwxyz` sits well inside the token (not
+      // at either edge), so its absence proves the WHOLE run was scrubbed,
+      // not just whichever half happened to carry the `sk-` prefix.
+      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the whole token is not (prefix and an interior run alike), the door was actually enabled, no escape bytes',
+        liveId !== null && focused === true && onScreen === true && enabled === true && ran === true && written === true &&
+          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('abcdefghijklmnopqrstuvwxyz') && !text.includes('\x1b['),
+        JSON.stringify({ liveId, focused, onScreen, enabled, ran, written, tail: text.slice(-160) }))
       rmSync(exportDir, { recursive: true, force: true })
     }
 
