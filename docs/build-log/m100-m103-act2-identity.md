@@ -198,4 +198,16 @@ memory store and routing exist; the surfaces are not built this act.
 
 ## Verification
 
-(The chain's exit line is recorded below at the gate.)
+`npm run verify` alone on `m100-teammates` at the gate: every suite green, `verify:panels
+305/305 passed`, exit 0 (1607 PASS lines). Four chain runs went red on the way, each on ONE
+clause of a new check reading state at the wrong moment or against the wrong door — the
+control suite's call count read after the next call; the browser check counting every panel
+an earlier block left, then asserting the harness's in-memory store had dropped a record only
+the PARSE drops (the door a file on disk takes) — each fixed by pinning the fact the check
+meant. `npm run shot`: 45 scenes including `teammate`, `routine`, `browser` and the updated
+`integrations`.
+
+**Unproven, by design or by this run:** the OS folder dialog, a real tick over minutes, a real
+broker write with a card, a real remote site in the guest (the manual-only list); the file
+verbs are NOT gated (amended in the spec); a routine chat's rule prompt does not survive a
+relaunch; `tc memory add --teammate` and the pane's memory/skills/chats lists are not built.
