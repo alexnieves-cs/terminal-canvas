@@ -568,8 +568,23 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M58. Fire-and-forget into main, which owns the dialog, the write and
     // the reveal; a refusal is logged, since the palette has no toast.
     exportPanelText: (panelId) => {
-      void window.canvas.export.panelText(panelId).then((r) => {
-        if (r.kind !== 'written' && r.kind !== 'cancelled') console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
+      // M112. The live buffer rides along when the panel has one, so an
+      // export works with persistence off; main decides which source wins.
+      const session = registry.get(panelId)
+      // `buffer` is `undefined` when the panel never spawned — spread into
+      // the request object, that would normally be the `key: undefined`
+      // shape the absent-stays-absent rule warns about, but it is benign
+      // HERE because main discriminates on `typeof buffer === 'string'`,
+      // not `'buffer' in req`. A later refactor to an `in` check would
+      // silently flip an unspawned panel's `off` result to `empty`.
+      const buffer = session && session.spawned ? session.handle.serialize() ?? undefined : undefined
+      void window.canvas.export.panelText({ panelId, buffer }).then((r) => {
+        // M112 (review round 1, IMPORTANT 3). The one place `source` is
+        // read: the palette has no toast, so console feedback is the whole
+        // of "the palette's feedback says which" — a written result names
+        // which of the two sources actually answered.
+        if (r.kind === 'written') console.info(`[export] panel text written from the ${r.source} — ${r.path}`)
+        else if (r.kind !== 'cancelled') console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
       })
     },
     exportCanvasPng: () => {

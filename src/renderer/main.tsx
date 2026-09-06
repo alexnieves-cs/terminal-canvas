@@ -51,6 +51,32 @@ window.canvas.preset.onDefault((template) => {
 // state can be mounted by verify:panels against a known layout, instead of
 // against whatever a hardcoded constant happens to say.
 async function boot(): Promise<void> {
+  // M112. The renderer's Sentry, gated on the bridge field main stamped. Off
+  // (the default) installs nothing — no global handlers, no console patching
+  // — so a process that will never send never sees a byte. Inside boot()
+  // rather than a top-level await: main.tsx is a module evaluated before
+  // React exists, and a top-level await here would delay the Cmd+N
+  // subscription above by an unknown amount, reopening the exact race that
+  // subscription's own comment documents.
+  if (window.canvas.telemetry.enabled) {
+    // No `ipcMode` here: it is a main-process-only option (real 7.18.0
+    // types put it on `ElectronMainOptions`, not `ElectronRendererOptions`)
+    // and main already pinned Classic in its own sentryInit call. What DOES
+    // belong on this side of that pairing is `preload/index.ts`'s
+    // `hookupIpc()` (fix round 1, CRITICAL): without it `window.__SENTRY_IPC__`
+    // is never exposed into this world, and this init() would fall back to
+    // fetching `sentry-ipc://…` — refused by the CSP with no error.
+    //
+    // Fix round 1 (review, CRITICAL, second half): `defaultIntegrations:
+    // false` with no `integrations` here installed NOTHING — not even the
+    // global error/rejection handlers an error-reporting SDK exists for.
+    // `globalHandlersIntegration` is the one this process actually needs;
+    // it is a real export of this SDK's renderer entry (confirmed against
+    // the installed package, re-exported from `@sentry/browser`).
+    const { init, globalHandlersIntegration } = await import('@sentry/electron/renderer')
+    init({ defaultIntegrations: false, integrations: [globalHandlersIntegration()], beforeBreadcrumb: () => null })
+  }
+
   // A failed load must still open a WORKING canvas. parseLayout never throws
   // and the store's initial() is built not to throw, precisely so a corrupt
   // file degrades instead of failing — but the IPC hop between them had no

@@ -6,6 +6,10 @@ import { WebglAddon } from '@xterm/addon-webgl'
 // The REAL factory, not a hand-built Terminal: unicode.1 asserts a property
 // of what createTerminal returns, which is the one place a Terminal is built.
 import { createTerminal, attachTerminal } from '../src/renderer/terminal/create-terminal'
+// serialize.1/.2 (M112). The REAL SessionHandle, not a hand-built Terminal
+// plus a raw addon: this is what usePaletteActions.ts actually calls, so a
+// pass here is a pass on the production path, not a spike alongside it.
+import { createSessionFactory } from '../src/renderer/terminal/session-factory'
 
 const readRows = (term) => {
   const buf = term.buffer.active
@@ -155,6 +159,64 @@ window.__probe = (async () => {
     handles.term.dispose()
   } catch (error) {
     out.unicode.error = String(error)
+  }
+
+  // serialize.1 (M112). The REAL SessionHandle.serialize() (built off the
+  // buffer's own `isWrapped`, not `@xterm/addon-serialize` — the addon
+  // was tried and dropped; see session-factory.ts's comment above
+  // `serialize()` for why) must answer the same rows before eviction,
+  // while detached, and after re-attach — otherwise an export from a
+  // carded panel silently differs from the same export a moment later.
+  out.serialize = {}
+  try {
+    const factory = createSessionFactory()
+    const handle = factory.create('probe-serialize-1')
+    handle.host.style.cssText = 'width: 640px; height: 400px;'
+    document.body.appendChild(handle.host)
+    handle.attach()
+    handle.write('SER-ONE\r\nSER-TWO\r\n')
+    await new Promise((r) => setTimeout(r, 200))
+    out.serialize.attached = handle.serialize()
+    handle.detach()
+    await new Promise((r) => setTimeout(r, 100))
+    out.serialize.detached = handle.serialize()
+    document.body.appendChild(handle.host)
+    handle.attach()
+    await new Promise((r) => setTimeout(r, 200))
+    out.serialize.reattached = handle.serialize()
+    handle.dispose()
+  } catch (error) {
+    out.serialize.error = String(error)
+  }
+
+  // serialize.2 (M112, review round 2, CRITICAL 1 — the actual `isWrapped`
+  // proof). A single line written with NO `\r\n` of its own, long enough
+  // that the terminal MUST auto-wrap it across several rows — the exact
+  // shape a wrapped secret has. `isWrapped` is what tells serialize() each
+  // of those continuation rows is not a real line, so the reunited output
+  // must contain the whole run as ONE unbroken string with no interior
+  // `\r\n` — proof against a REAL wrap in a REAL terminal, not a
+  // hand-simulated one.
+  out.serializeWrap = {}
+  try {
+    const factory2 = createSessionFactory()
+    const handle2 = factory2.create('probe-serialize-2')
+    // Narrow on purpose: a small host forces a small column count, so a
+    // few hundred characters reliably spans many rows without needing to
+    // know the exact fitted width.
+    handle2.host.style.cssText = 'width: 320px; height: 200px;'
+    document.body.appendChild(handle2.host)
+    handle2.attach()
+    const longRun = 'Q'.repeat(400)
+    handle2.write(longRun)
+    await new Promise((r) => setTimeout(r, 300))
+    const serialized = handle2.serialize()
+    out.serializeWrap.containsWholeRun = typeof serialized === 'string' && serialized.includes(longRun)
+    out.serializeWrap.cols = handle2.size().cols
+    out.serializeWrap.len = typeof serialized === 'string' ? serialized.length : null
+    handle2.dispose()
+  } catch (error) {
+    out.serializeWrap.error = String(error)
   }
 
   return out

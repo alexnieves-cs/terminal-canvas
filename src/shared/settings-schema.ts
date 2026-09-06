@@ -45,6 +45,9 @@ export const HINTS_CATEGORY = 'Hints'
 /** Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const TERMINAL_CATEGORY = 'Terminal'
 
+/** M112. Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const TELEMETRY_CATEGORY = 'Privacy & telemetry'
+
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
    *  user's choice with no migration. Prefix by area: `restore.`, `agent.`. */
@@ -408,6 +411,31 @@ export const SETTINGS: readonly SettingDef[] = [
     // failure M39 exists to end, and the description says the cost plainly.
     default: true,
     category: SESSION_CATEGORY
+  },
+  {
+    // M112. Nothing leaves the machine until a DSN is here, and NOT
+    // planWritable: a plan that could switch telemetry on has the shape of
+    // one that raises its own ceiling. Read once at launch (main/index.ts),
+    // which the description says.
+    id: 'telemetry.sentryDsn',
+    label: 'Sentry DSN',
+    description: 'send crash reports and errors to a Sentry project you own — nothing is sent until a DSN is here; takes effect on next launch',
+    keywords: ['sentry', 'telemetry', 'crash', 'errors', 'reporting', 'privacy', 'dsn'],
+    type: 'text',
+    default: '',
+    category: TELEMETRY_CATEGORY
+  },
+  {
+    // M112. A separate decision from the DSN because it fails differently: a
+    // JS event is scrubbed field by field (main/telemetry.ts); a native dump
+    // is process memory, which no scrubber reads.
+    id: 'telemetry.nativeCrashes',
+    label: 'Include native crash dumps',
+    description: 'a dump is process memory and can contain what a terminal showed or a token this app held — off unless you accept that',
+    keywords: ['minidump', 'crash', 'native', 'node-pty', 'telemetry', 'privacy'],
+    type: 'boolean',
+    default: false,
+    category: TELEMETRY_CATEGORY
   }
 ]
 

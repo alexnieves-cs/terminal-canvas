@@ -73,6 +73,17 @@ export interface SessionHandle {
   refit(): void
   /** Last N non-empty buffer lines, for the card tier. */
   tail(lines: number): string[]
+  /**
+   * M112. The whole buffer as plain text: every ROW joined with the
+   * previous one by `\r\n`, unless xterm's own `isWrapped` says that row
+   * is a display continuation rather than a real new line, in which case
+   * it is joined with nothing. `@xterm/addon-serialize` was tried and
+   * dropped here — see session-factory.ts's own comment above `serialize()`
+   * for why. `null` before a Terminal exists — a never-spawned card has no
+   * buffer, and main's `off`/`empty` arms need to be able to tell "nothing
+   * was sent" from "an empty string was".
+   */
+  serialize(): string | null
   focus(): void
   onInput(listener: (data: string) => void): void
   /** The current selection, or '' if there is none. Backs menu-driven Cmd+C. */

@@ -26,7 +26,19 @@ buildSync({
   bundle: true,
   platform: 'browser',
   format: 'iife',
-  loader: { '.css': 'text' }
+  loader: { '.css': 'text' },
+  // M112 (review round 2). serialize.1/.2 now import the REAL
+  // session-factory.ts (not a hand-built Terminal), which reaches
+  // `@shared/link-scan` and `@shared/types` — the same alias
+  // electron.vite.config.ts and every other plain-node/esbuild verify
+  // bundle already carries (see verify-panels.cjs's own comment on this:
+  // an unresolved alias fails buildSync itself, at module scope, before
+  // this harness's window even exists — that reads as a HANG, not a red
+  // suite, which is why this is called out here explicitly).
+  alias: {
+    '@shared': join(__dirname, '..', 'src', 'shared'),
+    '@renderer': join(__dirname, '..', 'src', 'renderer')
+  }
 })
 
 // No CSP here on purpose: this is a probe page, not the app.
@@ -109,6 +121,38 @@ app.whenReady().then(async () => {
   ok('unicode.1 createTerminal measures widths against Unicode 11 — a wide glyph is two cells',
     probe.unicode && probe.unicode.activeVersion === '11' && probe.unicode.cursorX === 2,
     JSON.stringify(probe.unicode))
+
+  // serialize.1 (M112). The REAL SessionHandle.serialize() — built off
+  // the buffer's own `isWrapped`, not `@xterm/addon-serialize` (tried and
+  // dropped; see session-factory.ts's comment above `serialize()`) — must
+  // answer the same rows before eviction, while detached, and after
+  // re-attach. Eviction only drops the WebGL context and the host node;
+  // the Terminal and its buffer survive, so the answer must not change.
+  const s = probe.serialize || {}
+  const has = (t) => typeof t === 'string' && t.includes('SER-ONE') && t.includes('SER-TWO')
+  // M112 (review round 1, minor 7). "answers the same rows" was checking
+  // only that both sentinels appear in each of the three strings SEPARATELY
+  // — three independently-truthy checks, never compared to each other. A
+  // detach that scrambled row order, dropped an unrelated row or otherwise
+  // changed the text without losing either literal sentinel would still
+  // have passed. Compare the three strings directly.
+  ok('serialize.1 SessionHandle.serialize() answers the same rows attached, detached and re-attached',
+    !s.error && has(s.attached) && has(s.detached) && has(s.reattached) &&
+      s.attached === s.detached && s.detached === s.reattached,
+    JSON.stringify({ error: s.error, equal: s.attached === s.detached && s.detached === s.reattached, lens: [s.attached?.length, s.detached?.length, s.reattached?.length] }))
+
+  // serialize.2 (M112, review round 2, CRITICAL 1). The actual proof that
+  // `isWrapped` does what CRITICAL 1's fix depends on: a single 400-
+  // character run, written with NO `\r\n` of its own, forced to wrap
+  // across several real rows by a narrow host. If `isWrapped` join were
+  // wrong (the exact failure mode that made a wrap read as a hard
+  // newline), the run would come back split by a `\r\n` and this would
+  // fail — this is the one check in the suite that a regression back to
+  // "wraps sometimes turn into real breaks" cannot pass.
+  const sw = probe.serializeWrap || {}
+  ok('serialize.2 a single run long enough to wrap across several real terminal rows comes back as ONE unbroken line — isWrapped correctly joined every continuation',
+    !sw.error && sw.containsWholeRun === true,
+    JSON.stringify({ error: sw.error, containsWholeRun: sw.containsWholeRun, cols: sw.cols, len: sw.len }))
 
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)

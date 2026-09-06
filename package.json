@@ -59,14 +59,17 @@
     "verify:canvas": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-canvas.cjs",
     "verify:xterm": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-xterm-detach.cjs",
     "verify:panels": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels.cjs",
-    "verify": "npm run verify:meta && npm run verify:styles && npm run verify:viewport && npm run verify:groups && npm run verify:merged && npm run verify:registry && npm run verify:layout && npm run verify:credentials && npm run verify:jira && npm run verify:github && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:subagent && npm run verify:file && npm run verify:toolbox && npm run verify:usage && npm run verify:machine-cost && npm run verify:tmux && npm run verify:agent-state && npm run verify:agent-session && npm run verify:verbs && npm run verify:teammates && npm run verify:control && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels",
+    "verify": "npm run verify:meta && npm run verify:styles && npm run verify:viewport && npm run verify:groups && npm run verify:merged && npm run verify:registry && npm run verify:layout && npm run verify:credentials && npm run verify:jira && npm run verify:github && npm run verify:palette && npm run verify:rail && npm run verify:review && npm run verify:subagent && npm run verify:file && npm run verify:toolbox && npm run verify:usage && npm run verify:machine-cost && npm run verify:tmux && npm run verify:agent-state && npm run verify:agent-session && npm run verify:verbs && npm run verify:teammates && npm run verify:electron && npm run verify:control && npm run verify:package && npm run verify:pty && npm run verify:pty-manager && npm run verify:window && npm run verify:ipc && npm run build && npm run verify:canvas && npm run verify:xterm && npm run verify:panels",
     "verify:verbs": "node scripts/verify-verbs.cjs",
-    "verify:teammates": "node scripts/verify-teammates.cjs"
+    "verify:teammates": "node scripts/verify-teammates.cjs",
+    "verify:electron": "node scripts/verify-electron.cjs"
   },
   "dependencies": {
+    "@sentry/electron": "7.18.0",
     "node-pty": "1.1.0"
   },
   "devDependencies": {
+    "@doyensec/electronegativity": "^1.10.3",
     "@electron/rebuild": "^4.0.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

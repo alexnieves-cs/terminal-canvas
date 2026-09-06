@@ -22,6 +22,7 @@ import type { PersistedRoutine } from '../shared/routines'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
+import type { PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -417,7 +418,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
   ipcMain.handle(IPC.ENV_REPORT, (_event, again?: boolean) => envReport(again === true))
-  ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, panelId: string) => exporters.panelText(panelId))
+  ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, req: PanelTextExportRequest) => exporters.panelText(req))
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))

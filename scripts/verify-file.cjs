@@ -620,17 +620,17 @@ const p = (name) => join(DIR, name)
     await log.idle('pX')
   }
   const out1 = join(dir, 'pX.txt')
-  const r1 = log ? await mk(out1).panelText('pX') : null
+  const r1 = log ? await mk(out1).panelText({ panelId: 'pX' }) : null
   const text1 = existsSync(out1) ? readFileSync(out1, 'utf8') : ''
   ok('export.1 a panel\'s text export is the whole log, ANSI stripped and secrets scrubbed, with lines and the redaction count reported',
     can && r1.kind === 'written' && r1.path === out1 && r1.lines === 3 && r1.redacted === 1 &&
       text1.includes('hello red world') && !text1.includes('\u001b[') && !text1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && text1.includes('last line'),
     can ? JSON.stringify({ r1, text1 }) : 'createExporters is not exported')
   const before = writes.length
-  const r2 = log ? await mk(null).panelText('pX') : null
+  const r2 = log ? await mk(null).panelText({ panelId: 'pX' }) : null
   ok('export.2 a cancelled save dialog writes nothing and says cancelled', can && r2.kind === 'cancelled' && writes.length === before, JSON.stringify(r2))
-  const r3 = log ? await mk(join(dir, 'none.txt')).panelText('pNone') : null
-  const r3b = log ? await mk(join(dir, 'off.txt'), { persistOn: false }).panelText('pX') : null
+  const r3 = log ? await mk(join(dir, 'none.txt')).panelText({ panelId: 'pNone' }) : null
+  const r3b = log ? await mk(join(dir, 'off.txt'), { persistOn: false }).panelText({ panelId: 'pX' }) : null
   ok('export.3 no log is `empty`; scrollback off is `off` and reads nothing, never the xterm buffer',
     can && r3.kind === 'empty' && r3b.kind === 'off' && !existsSync(join(dir, 'none.txt')) && !existsSync(join(dir, 'off.txt')),
     JSON.stringify({ r3, r3b }))
@@ -641,6 +641,82 @@ const p = (name) => join(DIR, name)
   ok('export.4 the PNG export writes exactly the captured bytes, and a cancel writes nothing',
     can && r4.kind === 'written' && r4.path === out4 && png === 'FRAMEBYTES' && r4b.kind === 'cancelled',
     JSON.stringify({ r4, png, r4b }))
+  // export.5 (M112). THE SECOND SOURCE. The live buffer, serialized by the
+  // renderer and handed over on the request, is what lets a panel export
+  // with persistence OFF — before M112 that answered `off` for text the
+  // user was looking at. Arm order: the log when persistence is on (durable,
+  // longer than the buffer); the buffer when the log is empty or persistence
+  // is off; `empty` when both are absent; `off` only when persistence is off
+  // AND no buffer came. Every source is stripped and passes the outward gate:
+  // the token planted in the BUFFER must be gone from the file.
+  //
+  // (Named .5, not the spec's .4 — this file's export.4 is already the PNG
+  // check above; verify:meta 22 fails the build on two computed checks
+  // sharing an id in one suite.)
+  {
+    const buf = 'from the buffer\r\n\x1b[32mgreen\x1b[0m sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\r\n'
+    const o1 = join(dir, 'buf-off.txt')
+    const a = log ? await mk(o1, { persistOn: false }).panelText({ panelId: 'pX', buffer: buf }) : null
+    const t1 = existsSync(o1) ? readFileSync(o1, 'utf8') : ''
+    const o2 = join(dir, 'log-on.txt')
+    const b = log ? await mk(o2).panelText({ panelId: 'pX', buffer: buf }) : null
+    const t2 = existsSync(o2) ? readFileSync(o2, 'utf8') : ''
+    const o3 = join(dir, 'buf-nolog.txt')
+    const c = log ? await mk(o3).panelText({ panelId: 'pNone', buffer: buf }) : null
+    const d = log ? await mk(join(dir, 'x.txt'), { persistOn: false }).panelText({ panelId: 'pX' }) : null
+    const e = log ? await mk(join(dir, 'y.txt')).panelText({ panelId: 'pNone', buffer: '' }) : null
+    ok('export.5 persistence off + a buffer writes the buffer (source buffer, scrubbed, no escapes); persistence on prefers the log (source log); an empty log falls back to the buffer; off with no buffer is `off`; nothing from either is `empty`',
+      // "no escapes" means no raw ANSI bytes survive (the ESC-`[` pair) — a
+      // literal bracket check would fail on every redaction, since the
+      // placeholder itself is written as `[redacted api key]`.
+      can && a && a.kind === 'written' && a.source === 'buffer' && a.redacted === 1 && t1.includes('from the buffer') && t1.includes('green') && !t1.includes('\x1b[') && !t1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') &&
+        b && b.kind === 'written' && b.source === 'log' && t2.includes('hello red world') && !t2.includes('from the buffer') &&
+        c && c.kind === 'written' && c.source === 'buffer' &&
+        d && d.kind === 'off' && e && e.kind === 'empty',
+      JSON.stringify({ a, b, c, d, e, t1: t1.slice(0, 60) }))
+  }
+  // export.6 (M112). Two arms, one check — this is the id that BOTH prior
+  // wrong fixes each passed one arm of and failed the other:
+  //
+  //   Arm A: a secret that arrives at main ALREADY reunited (exactly what
+  //   the renderer's `SessionHandle.serialize()` now guarantees, since it
+  //   joins a wrap using xterm's own `isWrapped` at the SOURCE — see
+  //   session-factory.ts — so main never receives a secret split by a
+  //   wrap in the first place) is still redacted WHOLE by the ordinary
+  //   pipeline. Wrap repair is no longer main's job at all; this is a
+  //   regression guard on the job main keeps — stripAnsi + outward — once
+  //   round 1 and round 2's now-removed wrap-fixing code is gone.
+  //
+  //   Arm B: ordinary multi-line text survives byte-for-byte. This is the
+  //   fixture that defeated round 1's blanket regex (a `\r\n` closed
+  //   whenever it sat between two "token-alphabet" characters — the
+  //   DEFAULT shape of file listings, paths, JSON, prose) — unpadded on
+  //   purpose, since round 1's own fixture padding the boundary with a
+  //   space is what hid the regression. main no longer touches `\r\n` at
+  //   all (see main/export.ts: no wrap-fixing code remains there after
+  //   review round 2 moved the fix upstream), so this is now nearly a
+  //   tautology by construction — it stays as the test that would catch
+  //   anyone reintroducing text-based wrap detection in main later.
+  {
+    const wrapped = 'before: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij end of line here'
+    const o = join(dir, 'wrapped.txt')
+    const w = log ? await mk(o, { persistOn: false }).panelText({ panelId: 'pWrap', buffer: wrapped }) : null
+    const tw = existsSync(o) ? readFileSync(o, 'utf8') : ''
+
+    const plain = 'line one\r\nline two\r\nsome-path/to/file.txt\r\nnext output line\r\n'
+    const o2 = join(dir, 'plain.txt')
+    const p = log ? await mk(o2, { persistOn: false }).panelText({ panelId: 'pPlain', buffer: plain }) : null
+    const tp = existsSync(o2) ? readFileSync(o2, 'utf8') : ''
+
+    ok('export.6 Arm A: a secret that arrives already reunited (the shape the renderer now guarantees) is still redacted WHOLE by main\'s ordinary pipeline, with surrounding text untouched. Arm B: ordinary multi-line text whose boundaries abut on word characters (unpadded) keeps EVERY line break and its line count, byte for byte',
+      can && w && w.kind === 'written' && w.source === 'buffer' && w.redacted === 1 &&
+        tw.includes('before:') && tw.includes('end of line here') &&
+        !tw.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !tw.includes('abcdefghijklmnopqrstuvwxyz') &&
+        tw.includes('[redacted api key]') &&
+        p && p.kind === 'written' && p.redacted === 0 && p.lines === 4 &&
+        tp === plain,
+      JSON.stringify({ w, tw, p, tp, plain }))
+  }
   rmSync(dir, { recursive: true, force: true })
 }
 
@@ -1081,6 +1157,44 @@ const p = (name) => join(DIR, name)
     has && found.probe.shells.join() === '/bin/zsh' && found.probe.folders.join() === '/usr/bin,/opt/homebrew/bin' &&
       arms[0].kind === 'found' && arms[1].kind === 'not-found' && arms[2].kind === 'no-answer' && /didn.t answer|did not answer/.test(arms[2].sentence) && /zprofile/.test(arms[2].sentence) && /install/.test(arms[1].sentence),
     JSON.stringify({ probe: found && found.probe, arms }))
+}
+
+// telemetry.2 (M112). THE PLAN AND THE SCRUB. Three arms for the plan — no
+// DSN, a malformed one (its own arm: a typo must not read as "off"), and
+// on with the dumps flag — and a beforeSend that is an ALLOWLIST built
+// field by field: a fixture event stuffed with breadcrumbs, a request, a
+// user, a token in the message and the home path in a frame must come out
+// with none of those KEYS and neither string. Asserted on keys, because a
+// spread that carried everything satisfies any value-phrased check.
+{
+  const can = typeof F.telemetryPlan === 'function' && typeof F.scrubEvent === 'function'
+  const read = (m) => (id) => m[id]
+  const p1 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': '', 'telemetry.nativeCrashes': false })) : null
+  const p2 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': 'not a dsn', 'telemetry.nativeCrashes': true })) : null
+  const p3 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': 'https://abc123@o1.ingest.sentry.io/42', 'telemetry.nativeCrashes': true })) : null
+  const token = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij'
+  const ev = {
+    event_id: 'e1', timestamp: 1, level: 'error', release: 'tc@2.3.0', environment: 'production',
+    breadcrumbs: [{ message: 'echo ' + token }], request: { url: 'file:///x' }, user: { ip_address: '1.2.3.4' },
+    extra: { cwd: '/Users/alex/secret' }, tags: { t: '1' },
+    contexts: { os: { name: 'macOS', version: '15' }, app: { app_name: 'Terminal Canvas', app_version: '2.3.0' }, device: { name: 'alexs-mac' } },
+    exception: { values: [{ type: 'Error', value: 'failed with ' + token, stacktrace: { frames: [
+      { function: 'f', lineno: 1, colno: 2, filename: '/Users/alex/Library/Application Support/Terminal Canvas/x.js', vars: { t: token } },
+      { function: 'g', lineno: 3, colno: 4, filename: '/Users/alex/proj/y.js' }
+    ] } }] }
+  }
+  const out = can ? F.scrubEvent(ev, { userData: '/Users/alex/Library/Application Support/Terminal Canvas', home: '/Users/alex' }) : null
+  const keys = out ? Object.keys(out).sort() : []
+  const frames = out?.exception?.values?.[0]?.stacktrace?.frames ?? []
+  const s = JSON.stringify(out ?? {})
+  ok('telemetry.2 the plan has three arms (no-dsn, malformed-dsn, on with nativeCrashes); scrubEvent keeps only the allowlisted keys, replaces the userData and home paths, drops frame vars and contexts.device, and the token is gone from the value',
+    can && p1 && p1.on === false && p1.reason === 'no-dsn' && p2 && p2.on === false && p2.reason === 'malformed-dsn' &&
+      p3 && p3.on === true && p3.dsn === 'https://abc123@o1.ingest.sentry.io/42' && p3.nativeCrashes === true &&
+      out && !keys.includes('breadcrumbs') && !keys.includes('request') && !keys.includes('user') && !keys.includes('extra') && !keys.includes('tags') &&
+      out.contexts && !('device' in out.contexts) && out.contexts.os && out.contexts.app &&
+      frames.length === 2 && frames[0].filename === '<userData>/x.js' && frames[1].filename === '<home>/proj/y.js' && !('vars' in frames[0]) &&
+      !s.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !s.includes('/Users/alex'),
+    can ? JSON.stringify({ p1, p2, p3, keys, frames, valueHead: out?.exception?.values?.[0]?.value?.slice(0, 40) }) : 'telemetry not exported')
 }
 
 const failed = results.filter((r) => !r.pass)

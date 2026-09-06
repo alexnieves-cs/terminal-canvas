@@ -2114,6 +2114,73 @@ sheet; nothing spawns. The recent-directories list is recorded in the `pty:creat
 not in the sheet's, so `⌘N` and a menu pick count too — it is "where panels start", and a
 list fed only by the sheet would be a list of where the sheet was used.
 
+**`verify:electron`'s `ACCEPTED` list is TWO-WAY (`scripts/verify-electron.cjs`).** A finding not on
+it fails, and a row on it that stopped firing fails too. The second half is the one that gets
+"fixed": someone tidies `sandbox: false` into a variable, the tool stops matching the sample, the
+row goes stale, and a list that only failed on NEW findings would stay green while the sentence
+beside the row described code that no longer exists. Rows are keyed by check, file and a sample
+SUBSTRING — never a line — because every edit above a finding moves its line. And `-e` is passed
+from `package.json` on purpose: without it the tool assumed v0.1.0 on this tree and every verdict
+was about Electron 2018's defaults, with one warning line as the only symptom.
+
+**Export's arm order is log, buffer, empty, off — and `off` means "persistence off AND no buffer
+came" (`main/export.ts`).** Before M112 `off` fired whenever persistence was off, refusing an export
+of text on screen. The buffer is the renderer's `SessionHandle.serialize()`, sent on the SAME
+channel as an optional field; a never-spawned card sends nothing, which is what lets main tell
+"no buffer exists" from "the buffer was empty". Both sources pass `stripAnsi` and the ONE outward
+gate; the written arm's `source` says which won, because the two differ in length and a user
+comparing the file to the screen deserves to know why.
+
+**`scrubEvent` is an ALLOWLIST COPY, never a spread (`main/telemetry.ts`).** The Sentry SDK adds
+fields with every version; a `beforeSend` that deleted known-bad keys from the SDK's object would
+pass the next new one through. The scrubber builds a new event naming every field it keeps —
+M91's rule for the diagnostics bundle, applied to a third data source. Breadcrumbs are dropped
+whole: the console breadcrumb carries `console.log` arguments, which in this app carry terminal
+bytes. Native minidumps are process memory and no scrubber reads them, which is why they ride a
+SEPARATE setting whose description says so.
+
+**`scrubEvent` only sees EVENT envelopes, and the renderer's integration list is the one thing
+holding that true (`main/index.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
+`beforeSend` is Sentry's own event hook: in the installed `@sentry/electron` 7.18.0,
+`main/ipc.js`'s `handleEnvelope` calls it only on the branch that resolves an incoming envelope
+to an event, and hands every other envelope kind — profile chunks, span containers, replays —
+straight to `getTransport().send(...)` with no scrubber in between. Today's renderer init passes
+`defaultIntegrations: false` plus exactly `globalHandlersIntegration()`, which manufactures error
+events and nothing of any other kind, so the untouched branch is dead code rather than a leak.
+Adding `replayIntegration()`, `browserTracingIntegration()` or the logs integration to that one
+call — the obvious way to get richer telemetry later — starts emitting envelopes `scrubEvent`
+never inspects, with no failed check and no thrown error to mark the moment it happened.
+`verify:meta telemetry.5` pins that `globalHandlersIntegration` is *named* there; it cannot pin
+that nothing else is. Widen `scrubEvent` (or gate the new envelope kind before the transport) in
+the SAME change that adds a second renderer integration.
+
+**`@sentry/electron` ships in every packaged build regardless of whether a DSN is ever set
+(`build/builder-config.cjs`, `package.json`'s `dependencies`).** The packager resolves production
+dependencies from `package.json` rather than from its own `files` globs, so `@sentry/electron`,
+`@sentry/node` and the OpenTelemetry/`import-in-the-middle` tree they pull transitively ride
+inside the asar for every user, opted in or not — the cost is paid before the setting is ever
+read. M112's final review ran `npm run verify:packaged` (outside the `verify` chain by design, and
+not previously run on this dependency) to close the one question that mattered: whether a
+packaged app carrying this tree still launches. It packaged with `@electron/rebuild` against the
+real Electron version and launched under a stripped `PATH` and a scratch `--user-data-dir`, 12/12
+— a PTY spawned, the login shell resolved, and a second launch of the same build declined to
+double-open. The size trade itself stays accepted and unmeasured further here; what changed is
+that the packaging path is no longer an owed pre-release gate.
+
+**Telemetry reaches the renderer as an argv flag and a bridge FIELD, not a channel
+(`main/index.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
+window exists, and stamps `--tc-telemetry=1` on `additionalArguments`; the preload reads
+`process.argv` (sandbox is false) and exposes `canvas.telemetry.enabled`. A channel would have
+added a handler to pin, a diagram row, and a renderer that loads the SDK before it knows the
+answer; the flag means a process that will never send never loads a byte of it. `IPCMode.Classic`
+is named, not defaulted: Protocol mode fetches `sentry-ipc://`, which the renderer CSP refuses
+with no error. This is not hypothetical — it is the exact bug fix round 1 found and fixed: with
+`defaultIntegrations: false` also dropping the SDK's own preload-injection integration, nothing
+exposed `window.__SENTRY_IPC__` and the renderer fell back to the fetch silently. The preload now
+imports `hookupIpc` from the NON-side-effecting `@sentry/electron/preload-namespaced` entry
+(never the plain `/preload`, which runs unconditionally at import and cannot be gated) and calls
+it INSIDE the telemetry-enabled branch.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
@@ -3866,4 +3933,12 @@ one to add: **the ⋯ menu's `Verbs in ⌘K…` on a real click (M106)** — `ve
 header.1` opens the menu and reads its title; that the door focuses the panel and opens the
 palette captured on it was confirmed once by hand in the shot harness's picture, not by a
 check. Treat green as green, not as proof of these.
+- **M112.** A real DSN pasted, a relaunch, a thrown renderer error arriving in a real Sentry
+  project with `<home>` (and `<userData>`) in its frame paths, `window.__SENTRY_IPC__`
+  actually populated on the page (proof the Classic transport carried the event rather than
+  the `sentry-ipc://` fetch fallback the CSP swallows with no error), and no breadcrumbs on
+  the arrived event — **owed**; no Sentry project was at hand during this run. `verify:meta
+  telemetry.5` pins the transport's WIRING as text (the preload's `hookupIpc` call, the
+  renderer's explicit `globalHandlersIntegration`) precisely because this hand check is owed,
+  not because it stands in for it. No suite sends anything; `npm run verify` stays offline.
 

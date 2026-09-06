@@ -3,19 +3,22 @@
  *
  * Both run here against injected functions — the save dialog, the frame
  * capture, the write — so verify:file drives every arm against a scratch
- * log with a fake dialog. Text comes from the DURABLE log, never the xterm
- * buffer: the buffer is a truncation the user cannot see, while the log's
- * cap is stated in the palette row. It is stripped of ANSI and scrubbed by
- * the same redactor the diagnostics bundle uses, and the result carries the
- * redaction COUNT, because a file that quietly differs from the screen is
- * the failure #31 is about. Cancel writes nothing; off reads nothing.
+ * log with a fake dialog. M112: text comes from the DURABLE log when
+ * persistence is on and has bytes; otherwise from the live xterm buffer the
+ * renderer serialized and handed over on the request — the second source
+ * that lets a panel export with `scrollback.persist` off, rather than
+ * answering `off` for text the user is looking at right now. It is stripped
+ * of ANSI and scrubbed by the same redactor the diagnostics bundle uses, and
+ * the result carries the redaction COUNT and which source won, because a
+ * file that quietly differs from the screen is the failure #31 is about.
+ * Cancel writes nothing; off (persistence off AND no buffer) reads nothing.
  */
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { ScrollbackLog } from './scrollback-log'
 import { stripAnsi } from '../shared/ansi'
 import { outward } from '../shared/outward'
-import type { CanvasPngExportResult, PanelTextExportResult } from '../shared/export'
+import type { CanvasPngExportResult, PanelTextExportRequest, PanelTextExportResult } from '../shared/export'
 
 export interface ExporterDeps {
   log: Pick<ScrollbackLog, 'readAll'>
@@ -30,7 +33,7 @@ export interface ExporterDeps {
 }
 
 export interface Exporters {
-  panelText(panelId: string): Promise<PanelTextExportResult>
+  panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
   canvasPng(): Promise<CanvasPngExportResult>
 }
 
@@ -52,15 +55,29 @@ export function createExporters(deps: ExporterDeps): Exporters {
   const write = deps.write ?? atomicWrite
   const now = deps.now ?? (() => new Date())
   return {
-    async panelText(panelId) {
-      if (!deps.persistOn()) return { kind: 'off' }
-      let raw: string
-      try {
-        raw = await deps.log.readAll(panelId)
-      } catch (error: unknown) {
-        return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) }
+    async panelText(req) {
+      const { panelId, buffer } = req
+      const on = deps.persistOn()
+      let raw = ''
+      let source: 'log' | 'buffer' | null = null
+      if (on) {
+        try {
+          raw = await deps.log.readAll(panelId)
+        } catch (error: unknown) {
+          return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) }
+        }
+        if (raw.length > 0) source = 'log'
       }
-      if (raw.length === 0) return { kind: 'empty' }
+      // M112. The buffer is the second source: the log when persistence is on
+      // and has bytes; otherwise what the renderer serialized from the live
+      // terminal. `off` is reserved for persistence off AND no buffer — a
+      // never-spawned card with the log switched off — so its sentence can
+      // name the fix without lying about text that was on screen.
+      if (source === null && typeof buffer === 'string' && buffer.length > 0) {
+        raw = buffer
+        source = 'buffer'
+      }
+      if (source === null) return on || typeof buffer === 'string' ? { kind: 'empty' } : { kind: 'off' }
       const stripped = stripAnsi(raw)
       // M96. Through the ONE outward gate (the scrubber plus its note).
       const { text, redacted: count } = outward(stripped, `panel ${panelId}`)
@@ -71,8 +88,14 @@ export function createExporters(deps: ExporterDeps): Exporters {
       } catch (error: unknown) {
         return { kind: 'failed', reason: error instanceof Error ? error.message : String(error) }
       }
-      const lines = text.split('\n').filter((l) => l.length > 0).length
-      return { kind: 'written', path, lines, redacted: count }
+      // M112 (review round 1, minor 8). The log source is LF-only; the
+      // buffer source is CRLF (xterm's own line ending). Splitting on
+      // bare '\n' left a lone '\r' on every buffer-sourced blank row,
+      // which has length 1 and was being counted as a non-empty line.
+      // Splitting on the ending itself, whichever it is, makes the two
+      // sources agree on what "a line" means.
+      const lines = text.split(/\r\n|\n/).filter((l) => l.length > 0).length
+      return { kind: 'written', path, lines, redacted: count, source }
     },
     async canvasPng() {
       let bytes: Buffer

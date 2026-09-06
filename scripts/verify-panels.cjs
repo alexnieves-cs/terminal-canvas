@@ -16107,6 +16107,122 @@ app.whenReady().then(async () => {
       rmSync(exportDir, { recursive: true, force: true })
     }
 
+    // export.2 (M112). THE SECOND SOURCE, end to end: persistence OFF, a live
+    //   panel prints a sentinel and a token, the palette row exports, and the
+    //   file holds the sentinel with the token scrubbed — written from the
+    //   xterm buffer the renderer serialized, since the log was never fed.
+    //   Red first: before M112 this answered `off` and wrote nothing.
+    {
+      const exportDir = mkdtempSync(join(tmpdir(), 'tc panels export2 '))
+      // M112 (review round 1, minor 6). Capture whatever this run's ACTUAL
+      // current value is (the schema default, absent an earlier check that
+      // changed it) rather than assuming and hardcoding `true` — a comment
+      // claiming "the real default" beside a literal was exactly last
+      // round's inconsistency.
+      const persistBefore = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => rows.find((r) => r.id === 'scrollback.persist').value)`)
+      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', false)`)
+      const idsBefore = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), args: ['-l'] })
+      const liveId = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : [])`)
+        const fresh = rows.find((r) => !idsBefore.includes(r.id) && r.spawned)
+        return fresh ? fresh.id : false
+      }, 8000) || null
+      const focused = liveId ? await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.panel[data-panel-id="${liveId}"] .xterm-screen') || document.querySelector('.panel[data-panel-id="${liveId}"] .panel__slot')
+        if (!el) return false
+        const r = el.getBoundingClientRect()
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }))
+        return true })()`) : false
+      if (liveId) ptyManager.write(liveId, 'echo BUFFER_SENTINEL_2291 sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\r')
+      // M112 (review round 1, minor 5). The brief's original had the FIRST
+      // executeJavaScript un-awaited, so `&&` was testing a Promise object
+      // (always truthy) rather than its resolved value — the check measured
+      // only the DOM half, not the session half. Await both.
+      const onScreen = liveId ? await waitUntil(async () => {
+        const hasSession = await wc.executeJavaScript(`(() => { const s = window.__m4aSessions().find((r) => r.id === ${JSON.stringify(liveId)}); return !!s })()`)
+        const inDom = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${liveId}"]') !== null`)
+        return hasSession && inDom
+      }, 4000) : false
+      await new Promise((r) => setTimeout(r, 600))
+      exportTarget = join(exportDir, 'panel.txt')
+      const opened = await (async () => {
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      })()
+      // M112 (review round 1, CRITICAL 2). The palette's settings reload is
+      // async (toggleSetting re-fetches the row list after main answers, it
+      // does not update optimistically — see usePaletteActions.ts's own
+      // comment on that), so the row can still read disabled for a moment
+      // after `spawned` went true. Poll for the row to actually clear
+      // `palette__row--disabled` before clicking it — a click landing on a
+      // stale-disabled reading proves nothing about whether the door is
+      // open, only that the race happened to land on the enabled frame.
+      const enabled = opened === true ? await waitUntil(() => wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id="panel.export-text"]')
+          return !!el && !el.className.includes('palette__row--disabled')
+        })()`), 4000) : false
+      const ran = enabled === true ? await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id="panel.export-text"]')
+          if (!el) return 'no row'
+          if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          return true })()`) : (opened === true ? 'still disabled' : 'no palette')
+      const written = await waitUntil(async () => existsSync(exportTarget) && /BUFFER_SENTINEL_2291/.test(readFileSync(exportTarget, 'utf8')), 6000)
+      const text = existsSync(exportTarget) ? readFileSync(exportTarget, 'utf8') : ''
+      exportTarget = null
+      // Restore whatever this run's ACTUAL value was before this check
+      // touched it (captured above), not an assumed default.
+      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', ${JSON.stringify(persistBefore)})`)
+      // "no escape bytes" checks for raw ANSI (the ESC-`[` pair), not a
+      // literal bracket — the redaction placeholder itself reads
+      // `[redacted api key]`, so a bare '[' check would fail on every scrub.
+      //
+      // M112 (review round 1, CRITICAL 1). Checking only the PREFIX is
+      // exactly the half that a terminal-width wrap does NOT split — the
+      // token is long enough to wrap inside a normal-width panel, and the
+      // original defect left an unredacted TAIL fragment sitting on its own
+      // row. `abcdefghijklmnopqrstuvwxyz` sits well inside the token (not
+      // at either edge), so its absence proves the WHOLE run was scrubbed,
+      // not just whichever half happened to carry the `sk-` prefix.
+      //
+      // M112 (review round 2, CRITICAL 1 — reopened). TWO earlier attempts
+      // at a fix each over-corrected here: a blanket text-based join
+      // (round 1) and a pattern-straddle probe (round 2's first attempt)
+      // both erased the real breaks between the echoed command, its own
+      // output, and the following shell prompt — three distinct real
+      // lines — because each one ran through the unrelated sentinel word
+      // immediately after a real newline. The actual fix moved upstream
+      // entirely: `SessionHandle.serialize()` (session-factory.ts) builds
+      // the buffer text off xterm's own `isWrapped`, at the SOURCE, so
+      // main never receives a secret split by a wrap and does no
+      // wrap-related processing of its own at all. Assert at least one
+      // real break SURVIVES between two distinct output lines; a fix that
+      // closes every gap (by whatever mechanism, wherever it lives) fails
+      // this exactly as it fails verify:file export.6's Arm B.
+      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the whole token is not (prefix and an interior run alike), a real line break survives between distinct output lines (the fix is not a blanket join), the door was actually enabled, no escape bytes',
+        liveId !== null && focused === true && onScreen === true && enabled === true && ran === true && written === true &&
+          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('abcdefghijklmnopqrstuvwxyz') && !text.includes('\x1b[') &&
+          /\r\n|\n/.test(text),
+        JSON.stringify({ liveId, focused, onScreen, enabled, ran, written, hasBreak: /\r\n|\n/.test(text), tail: text.slice(-200) }))
+      rmSync(exportDir, { recursive: true, force: true })
+    }
+
+    // telemetry.4 (M112). OFF BY DEFAULT, OBSERVABLY. The harness passes no
+    //   --tc-telemetry flag (main's plan is no-dsn), so the bridge field is
+    //   false and the MAIN WORLD never loaded the SDK: no __SENTRY__ global.
+    //   Fix round 1 (review, MINOR 2): this observes the renderer's own
+    //   main-world init() only — it says nothing about the preload's
+    //   isolated world, which since fix round 1 calls hookupIpc() (not
+    //   init()) and so was never claimed to install a __SENTRY__ global
+    //   there either. Red first: the field did not exist.
+    {
+      const t = await wc.executeJavaScript(`({ field: window.canvas && window.canvas.telemetry ? window.canvas.telemetry.enabled : 'absent', sentry: typeof window.__SENTRY__ })`)
+      ok('telemetry.4 with no DSN the bridge says telemetry is off and the renderer has no Sentry global',
+        t.field === false && t.sentry === 'undefined', JSON.stringify(t))
+    }
+
     // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
     //   at the default zoom, `summary` (naming its panel) once the camera is
     //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with

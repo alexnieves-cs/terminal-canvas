@@ -171,6 +171,9 @@ export function useRailModels(deps: RailModelsDeps) {
                 // reports what a panel is actually running.
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
                 claude: registry.get(p.rect.id)?.spec.agent === 'claude-code',
+                // M112 (review round 1, CRITICAL 2). Same pattern as `agent`
+                // one line up: read off the session, passed in as plain data.
+                spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
                 ...findingFields(p, registry, dormantIds)
               }
@@ -186,6 +189,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 ...(p.maximised === undefined ? {} : { maximised: true }),
                 ...reviewFields(p),
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
+                spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
                 ...findingFields(p, registry, dormantIds)
               }
