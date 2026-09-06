@@ -18537,7 +18537,7 @@ app.whenReady().then(async () => {
     // box and carries the full title in `title`; FLIP turns every terminal to
     // its far-view summary and back through the menu's own event.
     {
-      const IDS = ['header.1 a 320px frame with a long title keeps every chrome control visible inside the frame, the title is ellipsised (narrower than its text) and the full title lives in its title attribute', 'flip.1 canvas:flip turns every terminal — a LIVE one included, not only the carded — to the far-view summary (the title large, the state beneath), and a second flip turns them back', 'menu.1 the ⋯ menu opens on its button, stays open on a mousedown inside itself, and closes on a mousedown anywhere outside it (the canvas host) — without a click on its own close verb']
+      const IDS = ['header.1 a 320px frame with a long title keeps every chrome control visible inside the frame, the title is ellipsised (narrower than its text) and the full title lives in its title attribute', 'flip.1 canvas:flip turns every terminal — a LIVE one included, not only the carded — to the far-view summary (the title large, the state beneath), a second flip turns them back, and (M121) a flipped canvas is UNFLIPPED by a workspace switch: the host loses data-flipped on the way out and the panels come back unflipped on the way back', 'menu.1 the ⋯ menu opens on its button, stays open on a mousedown inside itself, and closes on a mousedown anywhere outside it (the canvas host) — without a click on its own close verb']
       try {
         layoutStore.save({ panels: [{ id: 'hdA', x: 100, y: 100, w: 320, h: 240, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'review: a very long title that would truncate to Revie in a narrow frame' }, { id: 'hdB', x: 500, y: 100, w: 520, h: 340, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'worker b' }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'hdA', focusedId: 'hdA' })
         flushLayoutStore()
@@ -18590,7 +18590,21 @@ app.whenReady().then(async () => {
         win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
         const back = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-card-summary]').length === 0`), 3000)
         const slotBack = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] .panel__slot') !== null`)
-        ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true, JSON.stringify({ liveB, flipped, summaryTitle, back, slotBack }))
+        // M121. Flip is a VIEW state and a workspace switch is a new view: a
+        // flipped canvas that stayed flipped across a switch showed the incoming
+        // workspace's panels as summaries with nothing on screen saying why
+        // (verifier 12). The host stamps data-flipped so the state is readable
+        // as a fact, not inferred from what happens to be rendered.
+        win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
+        const flippedAgain = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.canvas') !== null && document.querySelector('.canvas').hasAttribute('data-flipped') && document.querySelectorAll('[data-card-summary]').length === 2`), 3000)
+        const flipWs = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('flip-away')`)
+        await settle()
+        const unflippedAway = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.canvas') !== null && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 3000)
+        await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+        await settle()
+        const backUnflipped = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"]') !== null && document.querySelectorAll('[data-card-summary]').length === 0 && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 6000)
+        ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true && flippedAgain === true && typeof flipWs === 'string' && unflippedAway === true && backUnflipped === true,
+          JSON.stringify({ liveB, flipped, summaryTitle, back, slotBack, flippedAgain, flipWs, unflippedAway, backUnflipped }))
       } catch (hErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr))
       }
