@@ -13,6 +13,7 @@ import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOption
 import type { SettingValue } from '@shared/settings-schema'
 import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@shared/auto'
 import type { EnvReport } from '@shared/env-report'
+import { updateSentence, type UpdateState } from '@renderer/session/update-store'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import { shortPath } from './panel-name'
 import { statePriority, type StateInput } from '@renderer/panels/panel-state'
@@ -465,6 +466,8 @@ export interface PaletteActions {
   openBoard(): void
   /** M120. A chat with no folder, in the app's own sandbox directory, on the row's read-only mode. */
   newSandboxChat(backend: AgentBackend): void
+  /** M123. Ask GitHub once, by hand; the three states land on the palette's feedback line. Excluded from plans by name. */
+  checkForUpdates(): void
 }
 
 export interface PaletteContext {
@@ -485,6 +488,12 @@ export interface PaletteContext {
    * Read by buildEnvironmentRows; the launcher reads the same object.
    */
   envReport?: EnvReport | null
+  /**
+   * M123. The last update check's answer (update-store.ts), or null/absent
+   * when none has been asked. Read by the `update.check` row's subtitle and
+   * the `env.update` row; the launcher reads the same store.
+   */
+  update?: UpdateState | null
   /** M49. The global terminal font size, for the font rows' titles. */
   globalFontSize?: number
   /** M56. This workspace's bookmarks, and whether the camera trail can step each way. */
@@ -1405,6 +1414,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.beginNewWorkItem()
   })
+  // M123. The by-hand door onto the update NOTICE. Always present and never
+  // disabled: the check's own third state (`could not check — <reason>`) is
+  // the honest answer offline, and a row that vanished would read as a
+  // feature that was never built. The subtitle is the LAST answer, so a
+  // user who already asked sees it without asking again.
+  out.push({
+    id: 'update.check',
+    title: 'Check for updates…',
+    subtitle: ctx.update === undefined || ctx.update === null ? 'ask GitHub whether a newer release is published — nothing is installed' : updateSentence(ctx.update),
+    searchText: 'update check release version newer github download notice',
+    group: 'canvas',
+    run: () => actions.checkForUpdates()
+  })
 
   // --- Placement (M50) -------------------------------------------------------
   //
@@ -1658,7 +1680,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
 
-  out.push(...buildEnvironmentRows(ctx.envReport ?? null))
+  out.push(...buildEnvironmentRows(ctx.envReport ?? null, ctx.update ?? null))
 
   // --- Credentials -----------------------------------------------------------
   //
@@ -2183,7 +2205,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
  */
 export const REASON_NO_ENV_REPORT = 'the environment has not been read yet'
 
-export function buildEnvironmentRows(report: EnvReport | null): Command[] {
+export function buildEnvironmentRows(report: EnvReport | null, update: UpdateState | null = null): Command[] {
   const rows: Command[] = []
   const info = (id: string, title: string, subtitle: string, searchText: string): Command => ({
     id, title, subtitle, group: 'manage', scope: 'environment', hiddenAtRest: true, searchText, run: () => {}
@@ -2243,5 +2265,23 @@ export function buildEnvironmentRows(report: EnvReport | null): Command[] {
     'tc cli command line socket url scheme'))
     rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
     'once, at launch — a CLI installed since is not seen until relaunch', 'probed at time relaunch'))
+  // M123. FOUR sentences for the update notice — not checked, up to date,
+  // newer, could not check — and `not checked` is the rest state: the
+  // launch check is off by default, and "never asked" must not read as
+  // "up to date". Never a fifth row for `newer` with a verb: the
+  // information rows do nothing on Enter (their `run` is a no-op by the
+  // scope's rule); the door with the verb is `Check for updates…`.
+  const u = update ?? EMPTY_UPDATE
+  rows.push(info('env.update',
+    `Update: ${updateSentence(u)}`,
+    u.result === null
+      ? 'Check for updates… asks GitHub by hand; the launch check is a setting, off by default'
+      : u.result.kind === 'newer'
+        ? `${u.result.url} — nothing is downloaded or installed; download the release by hand`
+        : u.result.kind === 'current'
+          ? `read at ${new Date(u.at).toLocaleTimeString()} from the releases feed`
+          : 'the releases feed was asked and did not answer usefully — try again later',
+    'update release version newer github check'))
   return rows
 }
+const EMPTY_UPDATE: UpdateState = { result: null, checking: false, at: 0 }

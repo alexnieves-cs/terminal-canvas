@@ -207,6 +207,8 @@ const spyActions = () => {
     openTeammates: record('openTeammates'),
     // M103
     beginBrowser: record('beginBrowser'),
+    // M123
+    checkForUpdates: record('checkForUpdates'),
     // M106
     toggleFlip: record('toggleFlip'),
     addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'), newSandboxChat: record('newSandboxChat'),
@@ -2443,6 +2445,38 @@ const WS = [
       codex && /PATH/.test(codex.disabledReason || '') && acp && /read-only/.test(acp.disabledReason || '') &&
       Array.isArray(choices.copilot) && choices.copilot.includes('gpt-5-mini') && !choices.copilot.includes('auto') && choices.claude === null,
     JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
+}
+
+// M123 — update.1. THE UPDATE NOTICE'S TWO ROWS. `Check for updates…` is a
+//     canvas-group row, present with NO credential and NO network and never
+//     disabled (the check's own third state is the offline answer), and it
+//     runs `checkForUpdates` — which is on EXCLUDED_ACTIONS, so no plan
+//     reaches it. `env.update` says FOUR sentences: `not checked` (the rest
+//     state — the launch check is off by default, and "never asked" must
+//     not read as "up to date"), `up to date — <v>`, `<v> is out` with the
+//     url in the subtitle, and `could not check — <reason>`.
+{
+  let threw = null
+  let door = null, notChecked = null, newer = null, current = null, failed = null, calls = []
+  try {
+    const c = ctx()
+    door = byId(P.buildCommands(c), 'update.check')
+    if (door) door.run()
+    calls = c.actions.calls
+    const report = { probedAt: 0, shell: { path: '/bin/zsh', ok: true }, pathEntries: [], clis: [], tmux: { kind: 'direct', reason: 'x', path: null }, layout: { path: '/x', backupWritten: false }, envKeys: [] }
+    const envRow = (update) => byId(P.buildEnvironmentRows(report, update), 'env.update')
+    notChecked = envRow(null)
+    newer = envRow({ result: { kind: 'newer', version: '3.1.0', url: 'https://github.com/acme/canvas/releases/tag/v3.1.0' }, checking: false, at: 1 })
+    current = envRow({ result: { kind: 'current', version: '3.0.0' }, checking: false, at: 1 })
+    failed = envRow({ result: { kind: 'could-not-check', reason: 'GitHub answered 403' }, checking: false, at: 1 })
+  } catch (e) { threw = String(e) }
+  ok('update.1 Check for updates… is a canvas row, never disabled, running checkForUpdates; env.update says not checked / up to date — v / v is out (url in the subtitle) / could not check — reason',
+    threw === null && door && door.group === 'canvas' && door.disabledReason === undefined && calls.length === 1 && calls[0][0] === 'checkForUpdates' &&
+      notChecked && /not checked/.test(notChecked.title) && notChecked.scope === 'environment' &&
+      newer && /3\.1\.0 is out/.test(newer.title) && /releases\/tag\/v3\.1\.0/.test(newer.subtitle) &&
+      current && /up to date — 3\.0\.0/.test(current.title) &&
+      failed && /could not check — GitHub answered 403/.test(failed.title),
+    JSON.stringify({ threw, door: door && [door.group, door.disabledReason], calls, titles: [notChecked, newer, current, failed].map((r) => r && r.title) }))
 }
 
 const failed = results.filter((r) => !r.pass)

@@ -55,6 +55,8 @@ import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
+import { checkForUpdate, repoOf } from './update-check'
+import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
@@ -1719,6 +1721,35 @@ app.whenReady().then(async () => {
         return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
       },
       commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
+    },
+    // M123. The update NOTICE's one verb, over the one real fetcher in the
+    // app that is not the broker's. Here and not in update-check.ts so the
+    // module runs under plain node and `verify:meta update.1` can pin that
+    // no suite bundles an `https` call. A GET with a deadline for the whole
+    // call (the M87 rule: node's socket timeout is inactivity, and a byte
+    // every 29 s holds a call open forever), GitHub's required User-Agent,
+    // and NO redirect following — the feed url is fixed, and a 3xx to
+    // somewhere else is a could-not-check naming the status, not a fetch of
+    // wherever it pointed. The repository is package.json's own
+    // `repository.url`; a build without one gets the third state by name.
+    {
+      check: () => {
+        let repo: string | null = null
+        try { repo = repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { repo = null }
+        if (repo === null) return Promise.resolve({ kind: 'could-not-check', reason: 'this build names no GitHub repository in its package.json' })
+        return checkForUpdate(app.getVersion(), {
+          repo,
+          fetch: (url) => new Promise((resolve, reject) => {
+            const deadline = setTimeout(() => { r.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
+            const r = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
+              const chunks: Buffer[] = []
+              res.on('data', (c: Buffer) => { chunks.push(c) })
+              res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
+            })
+            r.on('error', (error) => { clearTimeout(deadline); reject(error) })
+          })
+        })
+      }
     }
   )
   createWindow()

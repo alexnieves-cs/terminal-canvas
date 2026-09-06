@@ -759,7 +759,9 @@ console.log('\n' + '='.repeat(60))
 // wrapper module one hop away evades a substring grep.
 {
   const { readdirSync } = require('node:fs')
-  const schema = read('src/shared/settings-schema.ts') ?? ''
+  // Comments stripped FIRST: the entry's own comment says "never planWritable",
+  // and a text check that read it would fail on the sentence explaining it.
+  const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
   const start = schema.indexOf("id: 'update.checkOnLaunch'")
   const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
   const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && !/planWritable/.test(entry)
