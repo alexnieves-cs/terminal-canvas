@@ -161,7 +161,7 @@ intended cwd now, except a sandbox chat's, which main resolved. `menu.1` queried
 the same tick as a React click; `flip.1` expected no cards after returning to a workspace
 whose panels are dormant.
 
-The chain: see the last line of this log.
+The chain: `npm run verify` alone on the branch tip — `EXIT=0`, 0 `FAIL` lines, 1677 `PASS` lines, `verify:panels` 313/313 (copilot.1, menu.1 and the widened flip.1 among them), `verify:ipc` 1/1 at 111 channels. No push, no tag.
 
 ## What green does not prove
 
