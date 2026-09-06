@@ -933,6 +933,43 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ n: read && read.notes.map((x) => [x.path, x.title]), skipped: read && read.skipped, capped: capped && { n: capped.notes.length, skipped: capped.skipped }, missing }))
 }
 
+// M103 — browser.1. READING THE PANE IS LEAVING THE APP. The read is driven
+//      over injected `getUrl`/`evaluate` so no webview is in earshot: a
+//      `file:`, a `data:` and an `about:` page are each refused BY NAME before
+//      anything is evaluated (the scheme check is main's, on the READ path —
+//      a navigation gate alone leaves `about:blank` and a page's own
+//      `data:` redirect readable); an `https:` page is read, capped at the
+//      byte ceiling, and passed through the outward gate — a token planted
+//      in the page's text is gone and the note says the content is a remote
+//      page's at that host. A guest that answers with something other than a
+//      string is refused, never coerced to `[object Object]`.
+{
+  const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let evaluated = 0
+  const drive = async (url, body) => typeof F.readBrowserPage === 'function'
+    ? F.readBrowserPage({ getUrl: () => url, evaluate: async () => { evaluated += 1; return body } })
+    : { kind: 'missing' }
+  const file = await drive('file:///etc/passwd', 'root:x:0:0')
+  const data = await drive('data:text/html,hi', 'hi')
+  const blank = await drive('about:blank', '')
+  const chrome = await drive('chrome://gpu', 'gpu')
+  const refusedBeforeEvaluating = evaluated === 0
+  const cap = typeof F.BROWSER_READ_MAX_BYTES === 'number' ? F.BROWSER_READ_MAX_BYTES : 0
+  const page = await drive('https://example.com/docs?q=1', `Welcome to the docs\nGITHUB_TOKEN=${token}\n` + 'x'.repeat(cap + 100))
+  const notText = await drive('https://example.com/', { not: 'text' })
+  ok('browser.1 file:, data:, about: and chrome: pages are refused by name before anything is evaluated; an https: page is read, capped at BROWSER_READ_MAX_BYTES, scrubbed (a planted token is gone, the note names a remote page at its host), and a non-string answer is refused',
+    file.kind === 'refused' && /file:/.test(file.reason) &&
+      data.kind === 'refused' && /data:/.test(data.reason) &&
+      blank.kind === 'refused' && /about:/.test(blank.reason) &&
+      chrome.kind === 'refused' && /chrome:/.test(chrome.reason) &&
+      refusedBeforeEvaluating && cap > 0 &&
+      page.kind === 'read' && page.url === 'https://example.com/docs?q=1' && page.text.includes('Welcome to the docs') &&
+      !page.text.includes(token) && /redacted/.test(page.note) && /remote page/.test(page.note) && /example\.com/.test(page.note) &&
+      Buffer.byteLength(page.text, 'utf8') <= cap + 64 && page.truncated === true &&
+      notText.kind === 'refused' && /text/.test(notText.reason),
+    JSON.stringify({ file, data, blank, chrome, evaluated, cap, page: page && { kind: page.kind, url: page.url, note: page.note, bytes: page.text && Buffer.byteLength(page.text, 'utf8'), truncated: page.truncated }, notText }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

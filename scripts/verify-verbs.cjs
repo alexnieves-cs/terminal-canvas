@@ -196,6 +196,26 @@ const FACTS = {
       JSON.stringify({ callers, readers, unguarded }))
   }
 
+  // gate.3 (M103) — the browser pane's read is a reader too, and the only
+  // module that evaluates script in a guest. `executeJavaScript(` appears in
+  // exactly one source file, and that file calls `outward(` — so a second
+  // reader of a page, added later without the gate, fails this build rather
+  // than handing a page's text out unscrubbed with no symptom at all.
+  {
+    const { readdirSync, statSync } = require('node:fs')
+    const root = join(__dirname, '..', 'src')
+    const files = []
+    const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p) } }
+    walk(root)
+    const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    const evaluators = files.filter((f) => /executeJavaScript\(/.test(strip(readFileSync(f, 'utf8')))).map((f) => f.slice(root.length + 1)).sort()
+    let reader = ''
+    try { reader = strip(readFileSync(join(root, 'main', 'browser-read.ts'), 'utf8')) } catch {}
+    ok('gate.3 main/browser-read.ts is the only source file that evaluates script in a guest page, and it passes what it reads through outward',
+      JSON.stringify(evaluators) === JSON.stringify(['main/browser-read.ts']) && /outward\(/.test(reader) && /innerText/.test(reader),
+      JSON.stringify({ evaluators, callsOutward: /outward\(/.test(reader) }))
+  }
+
   // auto.1 (M97) — a mode is a plan with a turn limit; a mode holding a
   // destructive verb without its confirmation is refused by name.
   {

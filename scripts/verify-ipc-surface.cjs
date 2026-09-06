@@ -219,7 +219,8 @@ app.whenReady().then(() => {
   // M93 snapshot:list and snapshot:restore (94).
   // M97 agent:auto-start / agent:auto-stop (96).
   // M98 agent:grants and agent:revoke-grants (98) — session grants read and dropped.
-  const EXPECTED_CHANNELS = 98
+  // M103 browser:read (99) — the browser pane's text, read in main and passed outward.
+  const EXPECTED_CHANNELS = 99
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

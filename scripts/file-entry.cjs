@@ -30,5 +30,9 @@ module.exports = {
   ...require('../src/main/vault-read.ts'),
   ...require('../src/shared/watch-trigger.ts'),
   ...require('../src/main/watch-runner.ts'),
-  ...require('../src/shared/redact.ts')
+  ...require('../src/shared/redact.ts'),
+  /* M103. The browser pane's read, over injected getUrl/evaluate: the scheme
+     check and the cap and the outward gate, with no webview in earshot. */
+  ...require('../src/shared/browser-panel.ts'),
+  ...require('../src/main/browser-read.ts')
 }
