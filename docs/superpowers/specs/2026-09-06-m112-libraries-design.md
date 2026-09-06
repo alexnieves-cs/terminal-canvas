@@ -117,7 +117,41 @@ parsed grid, not a second copy of every byte).
 - `verify:panels export.1` (real renderer): persistence off, a live panel prints a token, the
   export verb runs, the result is `written` with `source: 'buffer'` and the token redacted.
 - `verify:xterm serialize.1`: a Terminal with rows written, detached and re-attached, serializes
-  the same rows — the addon survives the M3 eviction cycle.
+  the same rows — proven as an EQUALITY of the three readings, through the real `SessionHandle`.
+- `verify:xterm serialize.2` (round 2): a 400-character run auto-wrapped across ~10 rows in a
+  narrow real terminal is reunited unbroken.
+- `verify:file export.6` (round 2): a secret split mid-token across a real CR/LF is redacted
+  WHOLE, AND ordinary multi-line text whose boundaries abut on word characters keeps every
+  break — the second arm is what a blanket join fails.
+
+### Amended 2026-09-06 (review round 2): the serialize addon is declined too
+
+`@xterm/addon-serialize` was implemented, measured and REMOVED. Two reasons, both found by
+building it:
+
+1. **Its wrap reconstruction leaked a secret.** The addon renders a display wrap as a hard
+   `\r\n`, which split a planted token across a line; `redactSecrets` is line-oriented, so it
+   scrubbed only the row carrying the prefix and 54 characters of the token reached a real
+   exported file. The log path is immune (a wrap leaves no byte in the PTY stream), so the
+   addon made the new source strictly leakier than the one it supplements.
+2. **Its one advantage is discarded a moment later.** `main/export.ts` calls `stripAnsi` on the
+   text before the gate, so the VT sequences and styling the addon exists to reproduce are
+   thrown away in the next statement.
+
+`SessionHandle.serialize()` now reads the buffer directly (`translateToString(true)` per row,
+the shape `tail()` already uses) and joins a row to the previous one with NO separator when
+`line.isWrapped` is true **or** the previous row's trimmed length exactly equals `term.cols`.
+The second clause is not belt-and-braces: `isWrapped` ALONE was proven insufficient against a
+real `/bin/zsh -l` at the harness's own 93x23 — zsh's line editor redraws a too-long TYPED
+command with its own cursor-positioning escapes rather than relying on terminal auto-wrap, so
+xterm never marks the continuation row. Shell OUTPUT wrapping is marked correctly, and a plain
+`/bin/sh` echo did not reproduce it, which is why only the real login shell surfaced it. The
+accepted cost is one false join when ordinary output ends exactly at the current width; the
+decision reads a single buffer row and never accumulated output, so it cannot cascade.
+
+The method keeps its name and its `string | null` tri-state (null before a Terminal exists),
+which main's `off` vs `empty` arms depend on. `verify:xterm serialize.2` proves a 400-character
+run auto-wrapped across ~10 real rows is reunited unbroken.
 
 ### Canvas addon — declined by name
 
