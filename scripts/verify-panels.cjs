@@ -18613,7 +18613,7 @@ app.whenReady().then(async () => {
             aColumn: a.closest('[data-board-column]').getAttribute('data-board-column'),
             bColumn: b.closest('[data-board-column]').getAttribute('data-board-column'),
             aLabel: a.querySelector('.rail-row__label')?.textContent ?? null,
-            aTail: a.querySelector('.rail-row__tail')?.textContent ?? null,
+            aTail: a.querySelector('.board-row__facts')?.textContent ?? null,
             aShow: a.querySelector('[data-board-show]') !== null,
             bShow: b.querySelector('[data-board-show]') !== null
           }

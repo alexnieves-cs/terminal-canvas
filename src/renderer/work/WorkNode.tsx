@@ -135,10 +135,10 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
             {item.description !== undefined && item.description !== '' && <p className="work-node__title" data-work-description>{item.description.split('\n')[0]}</p>}
             {/* Three facts, each ABSENT rather than `—` when unknown: a row that says `lane: —` reads as a lane that failed. */}
             <dl className="work-node__facts" data-work-facts>
-              {teammateName !== undefined && <div><dt>teammate </dt><dd data-work-teammate>{teammateName}</dd></div>}
-              {item.panelId !== undefined && <div><dt>lane </dt><dd data-work-lane>{props.laneLabel ?? item.panelId}</dd></div>}
+              {teammateName !== undefined && <div><dt>teammate</dt><dd data-work-teammate>{teammateName}</dd></div>}
+              {item.panelId !== undefined && <div><dt>lane</dt><dd data-work-lane>{props.laneLabel ?? item.panelId}</dd></div>}
               {item.pr !== undefined && (
-                <div><dt>pr </dt><dd><a href={item.pr.url} data-work-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
+                <div><dt>pr</dt><dd><a href={item.pr.url} data-work-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
                   onClick={(e) => { e.preventDefault(); openLink((item.pr as { url: string }).url) }}>#{item.pr.number}</a></dd></div>
               )}
             </dl>
