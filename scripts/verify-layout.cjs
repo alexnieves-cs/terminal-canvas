@@ -3754,6 +3754,54 @@ try {
      !('shelf' in empty), Object.keys(empty).join(','))
 } catch (e) { ok('shelf.disk.1 (threw)', false, String(e)) }
 
+// M131 — workflow.1. Three new template node kinds: pool, orchestrator,
+//      collect — each an arm on TemplateNode, parsed by parseWorkflowNode and
+//      routed through layout-schema:1359's existing unknown-kind arm, which
+//      stays exactly as it is for whatever comes after these three.
+try {
+  const node = (over = {}) => ({ key: 'a', kind: 'terminal', cwd: '~', dx: 0, dy: 0, ...over })
+  const pool = (over = {}) => ({ key: 'p', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '/tmp/list.txt', prompt: 'do it', ...over })
+  const orch = (over = {}) => ({ key: 'o', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: 'lead', ...over })
+  const coll = (over = {}) => ({ key: 'c', kind: 'collect', cwd: '~', dx: 0, dy: 0, target: '/tmp/out.txt', ...over })
+
+  const parsed = L.parseLayout(file({ templates: [
+    { id: 't1', name: 'workflow', nodes: [pool(), orch(), coll()], edges: [] }
+  ] }))
+  const t1 = (parsed.snapshot.templates ?? [])[0]
+  ok('workflow.1a the three kinds parse', !!t1 && t1.nodes.length === 3 && parsed.warnings.length === 0,
+     JSON.stringify({ t1, warnings: parsed.warnings }))
+
+  // A pre-M131 template file (terminal/chat only) loads byte-identical.
+  const preM131 = [{ id: 't0', name: 'old', nodes: [node(), node({ key: 'b', kind: 'chat' })], edges: [{ from: 'a', to: 'b', trigger: 'exit-ok' }] }]
+  const before = L.parseTemplates(preM131, [])
+  const w = []
+  const after0 = L.parseTemplates(preM131, w)
+  ok('workflow.1b a pre-M131 template file loads UNTOUCHED',
+     JSON.stringify(after0) === JSON.stringify(before) && w.length === 0,
+     'every existing template must survive this change silently')
+
+  // An unknown kind drops the node AND its edges naming it; the template stays.
+  const w2 = []
+  const after = L.parseTemplates([
+    { id: 't2', name: 'ghost', nodes: [node(), node({ key: 'x', kind: 'nonsense' })], edges: [{ from: 'a', to: 'x', trigger: 'exit' }] }
+  ], w2)
+  ok("workflow.1c an unknown kind drops the node AND its edges, the template kept",
+     after.length === 1 && after[0].nodes.length === 1 && after[0].edges.length === 0 && w2.length === 1,
+     JSON.stringify({ after, w2 }))
+
+  // A pool width below 1 is dropped, never coerced to 1.
+  const w3 = []
+  const droppedWidth = L.parseTemplates([{ id: 't3', name: 'bad width', nodes: [node(), pool({ width: 0 })], edges: [] }], w3)
+  ok('workflow.1d a pool width below 1 is dropped, never coerced to 1',
+     droppedWidth.length === 1 && droppedWidth[0].nodes.length === 1 && droppedWidth[0].nodes[0].kind === 'terminal' &&
+       w3.some((x) => /width/.test(x)),
+     JSON.stringify({ droppedWidth, w3 }))
+
+  ok('workflow.1e blockCount counts nodes, matching the header readout', L.blockCount(t1) === 3, JSON.stringify(t1))
+} catch (e) {
+  ok('workflow.1 (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

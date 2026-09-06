@@ -8,6 +8,8 @@ module.exports = {
   /* M113. The board's record: pure data and rules. */
   ...require('../src/shared/work-items'),
   ...require('../src/shared/layout-schema'),
+  /* M131. The three workflow node kinds: pure parse over a raw node object. */
+  ...require('../src/shared/workflow-nodes'),
   /* M6b: the settings schema is pure data with no imports at all, so it costs
      this tier nothing and gets covered by the suite that already owns the
      on-disk format it is stored in. */
