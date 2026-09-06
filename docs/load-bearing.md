@@ -2139,6 +2139,34 @@ whole: the console breadcrumb carries `console.log` arguments, which in this app
 bytes. Native minidumps are process memory and no scrubber reads them, which is why they ride a
 SEPARATE setting whose description says so.
 
+**`scrubEvent` only sees EVENT envelopes, and the renderer's integration list is the one thing
+holding that true (`main/index.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
+`beforeSend` is Sentry's own event hook: in the installed `@sentry/electron` 7.18.0,
+`main/ipc.js`'s `handleEnvelope` calls it only on the branch that resolves an incoming envelope
+to an event, and hands every other envelope kind — profile chunks, span containers, replays —
+straight to `getTransport().send(...)` with no scrubber in between. Today's renderer init passes
+`defaultIntegrations: false` plus exactly `globalHandlersIntegration()`, which manufactures error
+events and nothing of any other kind, so the untouched branch is dead code rather than a leak.
+Adding `replayIntegration()`, `browserTracingIntegration()` or the logs integration to that one
+call — the obvious way to get richer telemetry later — starts emitting envelopes `scrubEvent`
+never inspects, with no failed check and no thrown error to mark the moment it happened.
+`verify:meta telemetry.5` pins that `globalHandlersIntegration` is *named* there; it cannot pin
+that nothing else is. Widen `scrubEvent` (or gate the new envelope kind before the transport) in
+the SAME change that adds a second renderer integration.
+
+**`@sentry/electron` ships in every packaged build regardless of whether a DSN is ever set
+(`build/builder-config.cjs`, `package.json`'s `dependencies`).** The packager resolves production
+dependencies from `package.json` rather than from its own `files` globs, so `@sentry/electron`,
+`@sentry/node` and the OpenTelemetry/`import-in-the-middle` tree they pull transitively ride
+inside the asar for every user, opted in or not — the cost is paid before the setting is ever
+read. M112's final review ran `npm run verify:packaged` (outside the `verify` chain by design, and
+not previously run on this dependency) to close the one question that mattered: whether a
+packaged app carrying this tree still launches. It packaged with `@electron/rebuild` against the
+real Electron version and launched under a stripped `PATH` and a scratch `--user-data-dir`, 12/12
+— a PTY spawned, the login shell resolved, and a second launch of the same build declined to
+double-open. The size trade itself stays accepted and unmeasured further here; what changed is
+that the packaging path is no longer an owed pre-release gate.
+
 **Telemetry reaches the renderer as an argv flag and a bridge FIELD, not a channel
 (`main/index.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
 window exists, and stamps `--tc-telemetry=1` on `additionalArguments`; the preload reads

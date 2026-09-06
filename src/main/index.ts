@@ -1011,6 +1011,25 @@ app.whenReady().then(async () => {
           // Task 3's and stays unmodified.
           beforeSend: (event) => scrubEvent(event, paths) as unknown as typeof event | null,
           beforeBreadcrumb: () => null
+          // M112 review, IMPORTANT 1: `beforeSend` only sees envelopes the SDK
+          // resolves to an EVENT (`node_modules/@sentry/electron/main/ipc.js`'s
+          // `handleEnvelope`, confirmed against the installed 7.18.0 tree).
+          // Profile chunks, span containers and replay envelopes take a
+          // different branch of that function straight to
+          // `getTransport().send(...)` — `scrubEvent` never runs on them. This
+          // is safe TODAY only because `renderer/main.tsx`'s own `init()` call
+          // passes `defaultIntegrations: false` plus exactly
+          // `globalHandlersIntegration()`, which manufactures error events and
+          // nothing else. The natural next edit to that call —
+          // `replayIntegration()`, `browserTracingIntegration()`, or the logs
+          // integration, any of which starts emitting a type `beforeSend`
+          // cannot see — would export renderer data around this allowlist with
+          // NO symptom: no failed check, no thrown error, just unscrubbed
+          // bytes on the wire. `verify:meta telemetry.5` pins that
+          // `globalHandlersIntegration` is *named* in that call; it does not
+          // and cannot pin that nothing else is. Whoever adds a second
+          // renderer integration must widen `scrubEvent` (or gate the new
+          // envelope kind before it reaches the transport) in the same change.
         })
         telemetryOn = true
         console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)

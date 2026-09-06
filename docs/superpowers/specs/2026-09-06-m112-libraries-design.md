@@ -37,7 +37,16 @@ check or records a decision by name; none adds a panel kind, a channel or a `Bac
 Twenty-five suites and none reads the Electron security boundary the whole credential design
 rests on: `contextIsolation`, `nodeIntegration`, `sandbox`, the CSP, the preload's exposure, the
 `<webview>` guest's five properties. Each fails silently if regressed — the app keeps working, the
-boundary is gone. The tool checks precisely that set, offline, in the plain-node tier.
+boundary is gone. The tool checks precisely that set, in the plain-node tier.
+
+**Amended (final review): not fully offline.** `node_modules/@doyensec/electronegativity/dist/locales/i18n.js`
+GETs `https://electronegativity-i18n.s3.us-west-2.amazonaws.com/<LANG>.json` with a 1s timeout on
+every run — the "Could not retrieve updated translations" line noted in M0 is that request
+failing. It fails CLOSED (falls back to the tool's bundled `en-US` strings) and every verdict
+`ACCEPTED` matches on ruleId/file/sample sliced from local source, never on the translated text
+that request would supply, so verdicts never depend on it. The cost is a third-party request and
+up to 1s of stall on every developer machine and CI run; `docs/verify-suites.md`'s row states this
+plainly rather than calling the suite offline.
 
 ### Shape
 
@@ -201,6 +210,23 @@ must not be able to switch telemetry on, the same rule as the ceilings.
   before the store loads is uncovered — the trade for reading the setting from the store.
 - `@sentry/electron` is a runtime `dependencies` entry (externalized in main by
   `externalizeDepsPlugin`, bundled into the renderer by vite). No native module.
+
+**Amended (final review): the packaging cost is real, and the path is now exercised.**
+`build/builder-config.cjs` resolves production dependencies from `package.json` rather than from
+its own `files` globs, so `@sentry/electron`, `@sentry/node` and the OpenTelemetry tree it pulls
+transitively (`import-in-the-middle`, `@opentelemetry/*`) are packed into EVERY build, for every
+user, whether or not they ever set a DSN — a real byte and renderer-chunk cost paid by the
+majority who don't. `npm run verify:packaged` was run in full for this review, for the first time
+since this dependency landed (the suite is deliberately outside the `verify` chain and had not
+been run on this branch before): it packaged a real `.app` with `@electron/rebuild` against
+Electron 43.4.1 and launched it under a stripped `PATH` and a scratch `--user-data-dir`, **12/12
+passed** — the app boots, spawns a PTY, resolves the login shell, and a second launch of the same
+build correctly declines to double-open. The OpenTelemetry/`import-in-the-middle` tree inside the
+asar was therefore never a theoretical risk; it is now proven not to break packaging or boot on
+this machine. The size cost itself (the extra `node_modules` weight and the ~224 KB renderer
+chunk) was not re-litigated here — it is the accepted trade this paragraph already states — but
+the gate that was owed ("has a packaged app carrying this dependency ever actually launched") is
+no longer owed.
 
 ### Renderer and preload — zero new channels
 

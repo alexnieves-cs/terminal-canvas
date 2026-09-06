@@ -189,6 +189,15 @@ function createHandle(id: PanelId): SessionHandle {
     // not `isWrapped` agrees. Ordinary content ending precisely at the
     // terminal's current width is the one case this can misjudge; that
     // rare, cosmetic cost is preferred to a secret escaping the gate.
+    // Final review, MINOR: `term.buffer.active` is xterm's ALTERNATE buffer
+    // whenever the panel is running a full-screen program (vim, less, a TUI
+    // dashboard — anything that enters the alt-screen). The alternate buffer
+    // carries no scrollback at all, only the rows currently on screen, so an
+    // export taken mid-vim returns the visible pane, not the 10 000-row
+    // history the palette's subtitle promises for the ordinary case. This is
+    // a truth-in-labelling gap, not a bug: reading the NORMAL buffer instead
+    // would export text the alt-screen program is not showing, which is a
+    // worse answer. `commands.ts`'s export row subtitle says so.
     serialize() {
       if (!handles) return null
       const { term } = handles

@@ -1913,7 +1913,7 @@ const WS = [
     row2(spawnedOff) !== undefined && row2(spawnedOff).disabledReason === undefined &&
       row2(spawnedOn) !== undefined && row2(spawnedOn).disabledReason === undefined &&
       row2(neverSpawnedOff) !== undefined && typeof row2(neverSpawnedOff).disabledReason === 'string' &&
-      /scrollback/i.test(row2(neverSpawnedOff).disabledReason) && /never started|has not started/i.test(row2(neverSpawnedOff).disabledReason),
+      /scrollback/i.test(row2(neverSpawnedOff).disabledReason) && /never started|has not started|hasn't been opened/i.test(row2(neverSpawnedOff).disabledReason),
     JSON.stringify({ spawnedOff: row2(spawnedOff) && row2(spawnedOff).disabledReason, spawnedOn: row2(spawnedOn) && row2(spawnedOn).disabledReason, neverSpawnedOff: row2(neverSpawnedOff) && row2(neverSpawnedOff).disabledReason }))
 }
 

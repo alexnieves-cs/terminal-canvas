@@ -23,6 +23,14 @@ longer exists. `eneg.4` pins the tool's own blind spot as text: it never inspect
 invisible to its SARIF and has to be read from `main/index.ts` as comment-stripped source,
 the way `verify:meta` 20/21 already read the credential boundary.
 
+**Final review, IMPORTANT 2: the suite is not fully offline.** The package's own
+`dist/locales/i18n.js` GETs an S3 URL for updated translations before every scan, with a 1s
+timeout — the "Could not retrieve updated translations" line was noted in M0 as benign but the
+spec and `docs/verify-suites.md` had called the suite "offline" outright, which is false: it is a
+real network request from every developer machine and CI run, just one that fails closed
+(bundled `en-US` strings) and cannot move a verdict, since `ACCEPTED` matches on local source
+slices, never on the fetched text. Both docs corrected to say so plainly.
+
 Reviewed once (1 Important, 2 Minor: an unguarded SARIF parse that could abort the suite, the
 CSP finding's "why" sentence, lockfile churn) and landed clean after one fix round.
 

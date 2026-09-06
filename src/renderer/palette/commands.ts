@@ -578,10 +578,18 @@ export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to e
  * M112 (review round 1, CRITICAL 2). Renamed from REASON_SCROLLBACK_OFF: the
  * row is no longer refused just because scrollback is off — a spawned
  * panel exports from its live buffer instead (M112). What is STILL
- * genuinely refusable is a panel that has never started AND has
- * scrollback off: neither source has anything to give.
+ * genuinely refusable is a panel with `spawned !== true` AND scrollback
+ * off: neither source has anything to give.
+ *
+ * Final review, MINOR: the sentence used to say "this panel has never
+ * started", which is untrue for a DORMANT panel restored from a saved
+ * layout — `registry.get(id).spawned` reads false until the panel is
+ * woken, even though a real tmux session is running behind it and would
+ * answer with scrollback if this row let it try. "hasn't been opened in
+ * this window" is true in both the genuinely-fresh case and the
+ * dormant-but-alive one, and the fix named is unchanged either way.
  */
-export const REASON_NOTHING_TO_EXPORT = 'this panel has never started, and scrollback is off — turn on scrollback.persist in Settings, or start the panel first'
+export const REASON_NOTHING_TO_EXPORT = "this panel hasn't been opened in this window, and scrollback is off — turn on scrollback.persist in Settings, or open the panel first"
 export const REASON_ALREADY_DEFAULT = 'already the default'
 /** M37. Three distinct reasons, never one shared "unavailable". */
 export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
@@ -1397,7 +1405,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       // M112. Honest about both sources now: the durable log (2 MB cap)
       // when scrollback is on and has bytes, else the live buffer (10 000
       // rows, xterm's own scrollback cap) — main decides which one wins.
-      subtitle: 'the durable log if scrollback holds it (2 MB), else the live buffer, ANSI stripped, secrets scrubbed, to a file',
+      //
+      // Final review, MINOR: "10 000 rows" is the normal-screen case. While
+      // a full-screen program (vim, less, a TUI) has the panel in the
+      // ALTERNATE screen, `SessionHandle.serialize()` reads that buffer,
+      // which xterm gives no scrollback at all — the export is only what is
+      // currently on screen. The subtitle says "the live buffer" without
+      // repeating that row count, on purpose: promising 10 000 rows
+      // unconditionally would be wrong for exactly the case a user reaches
+      // for this row from (an agent stuck inside a pager).
+      subtitle: 'the durable log if scrollback holds it (2 MB), else the live buffer (fewer rows inside a full-screen program), ANSI stripped, secrets scrubbed, to a file',
       searchText: 'export save output text transcript file panel',
       group: 'panel',
       run: () => { if (target !== undefined) actions.exportPanelText(target.id) }
