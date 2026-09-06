@@ -1560,6 +1560,35 @@ const isResult = (l) => l.includes('"type":"result"')
     JSON.stringify({ first, later }))
 }
 
+{
+  /* copilot.2 — the manager over a fake runner with backend copilot: codex's process model with the HOST's id. */
+  const cpFixture = (name) => readFileSync(join(__dirname, 'fixtures', 'agent-session', 'copilot', name), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  const { manager, spawns, events } = makeManager({ binaries: { copilot: { command: '/fake/bin/copilot' } } })
+  let r1, s1, afterResult, afterExit, r2, s2, interrupted, imgRefused, r3, threw = null
+  try {
+    manager.create({ id: 'cp', cwd: '/w', backend: 'copilot', sessionId: 'pin-1' })
+    r1 = manager.send('cp', 'ping')
+    s1 = spawns[0]
+    if (s1) { s1.proc.emitLines(cpFixture('pong.jsonl')); afterResult = manager.get('cp'); s1.proc.exit(0, null); afterExit = manager.get('cp') }
+    r2 = manager.send('cp', 'again')
+    s2 = spawns[1]
+    interrupted = manager.interrupt('cp')
+    imgRefused = manager.send('cp', 'look', [{ mediaType: 'image/png', base64: 'AAAA', name: 'a.png' }])
+    if (s2) { s2.proc.emitLines(cpFixture('resume.jsonl')) }
+    r3 = manager.send('cp', 'between')
+    if (s2) s2.proc.exit(0, null)
+  } catch (e) { threw = String(e) }
+  ok('copilot.2 a copilot session spawns per send with `-p <text>` and the SPEC\'s id pinned on `--session-id`, stdin closed and nothing written; the exit 0 after `result` is the turn\'s END (ready, one turn, never exited)',
+    threw === null && r1 === 'sent' && s1 && s1.command === '/fake/bin/copilot' && s1.args[0] === '-p' && s1.args[1] === 'ping' && s1.args[s1.args.indexOf('--session-id') + 1] === 'pin-1' && s1.closeStdin === true && s1.proc.stdin.length === 0 &&
+      afterResult && afterResult.turns === 1 && afterResult.sessionId === 'pin-1' && afterResult.model === 'claude-haiku-4.5' && afterResult.costUsd === undefined &&
+      afterExit && afterExit.status === 'ready' && afterExit.exitCode === undefined && !events.some((e) => e.id === 'cp' && e.type === 'turn-aborted'),
+    JSON.stringify({ threw, r1, args: s1 && s1.args, closeStdin: s1 && s1.closeStdin, afterResult, afterExit }))
+  ok('copilot.2.b the second send spawns a NEW process naming `--resume=<the same id>` and no `--session-id`; interrupt answers false (no door); an image send is refused BY NAME with the row\'s sentence; a send between result and exit QUEUES and the exit serves it',
+    r2 === 'sent' && s2 && s2.args.includes('--resume=pin-1') && !s2.args.includes('--session-id') && interrupted === false && imgRefused === 'refused-images' &&
+      r3 === 'queued' && spawns.length === 3 && spawns[2].args[1] === 'between' && manager.get('cp').queued === 0,
+    JSON.stringify({ r2, args: s2 && s2.args, interrupted, imgRefused, r3, n: spawns.length }))
+}
+
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */
   {
