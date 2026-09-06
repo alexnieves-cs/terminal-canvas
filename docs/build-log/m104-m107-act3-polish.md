@@ -136,4 +136,12 @@ a WHERE filled.
 
 ## Verification
 
-(At the gate.)
+`npm run verify` alone, after the gate's fixes, exit 0: every suite green, the panels
+suite 307/307 (with `header.1` measuring a live 320px frame and `flip.1` turning a woken
+panel over and back), `verify:ipc` at 107 channels. `npm run shot` re-read for the three
+new scenes and the rail: `header.png` shows the ellipsised title with `⋯ · working ·
+CPU… · fill · ×` inside the frame and the menu spanning it with the full title;
+`flip.png` a live terminal flipped to `claude — api (2) / idle`; `lineup.png` the `lanes`
+box asked and `in a worktree` on the agent seat alone; `navigator-panels.png` the chat
+row with `Want me to wire \`/health\` to it?` beneath it. Unproven, by construction: a real
+slow `~/.zshrc` against `Check again`; the ⋯ menu on a kind that supplies its own `onMore`.
