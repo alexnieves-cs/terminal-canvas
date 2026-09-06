@@ -91,7 +91,20 @@ the manual-only list says.
 
 ## M125 — reconcile and ship 3.0.0
 
-<!-- filled at the ship -->
+On `main` after the act's merge (`a31469f`): the version to `3.0.0` (`package.json`, the
+lockfile, the README status line, `verify:meta version.1`'s pin moved with it), CLAUDE.md's
+preamble rewritten for the sixth run, the README table in sequence to M125, both IPC
+diagrams against the contract (`verify:meta 14` / `claude-md.1`), `verify:ipc` at 112,
+`graphify update .` (the code layer; the semantic layer still needs a key). The two
+packaging gates, run once each: `npm run package` built `Terminal Canvas-3.0.0-arm64.dmg`
+(163972370 bytes, unsigned — no `Developer ID Application` identity exists on this machine, said
+in the release body with the right-click → Open sentence); `verify:packaged` 12/12, exit 0.
+Then `npm run verify` alone on `main` at the version commit — `EXIT=0`, 0 `FAIL`, 1684
+`PASS`. Then the tag, the push and the release — the ONE push after Act 0, as the brief
+allows. CI's result on the pushed `main` is read after the push and recorded in the run
+memory; it is the first run with the across fixture's fix.
+
+**3.0.0**, because the board (Act I) landed and copilot is the third engine (M118).
 
 ## The checks
 
