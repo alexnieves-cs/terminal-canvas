@@ -33,7 +33,7 @@ export type ControlRequest =
    * performed by main with the credential attached and never returned. The
    * verb that can SPEND a credential — refused at the URL door outright.
    */
-  | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string }
+  | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string; cost?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -115,6 +115,11 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       const req: ControlRequest = { verb: 'api', service, method, path }
       if (typeof body === 'string') req.body = body
       if (panelId !== undefined) req.panelId = panelId
+      // M102. What the caller says the call costs — shown on the card as said.
+      // The TEAMMATE is never a field here: main derives it from the panel
+      // that asked, so an agent cannot name an identity it is not.
+      const cost = optionalString(fields['cost'])
+      if (cost !== null && cost !== undefined) req.cost = cost.slice(0, 64)
       return { kind: 'ok', req }
     }
     case 'focus': {

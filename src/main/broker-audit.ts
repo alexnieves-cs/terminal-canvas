@@ -62,6 +62,7 @@ export function createBrokerAudit(o: { file: string; max?: number }): BrokerAudi
             at: r.at, service: r.service, method: r.method, path: r.path, status: r.status,
             bytes: typeof r.bytes === 'number' ? r.bytes : 0,
             ...(typeof r.panelId === 'string' ? { panelId: r.panelId } : {}),
+            ...(typeof r.teammateId === 'string' ? { teammateId: r.teammateId } : {}),
             ...(typeof r.reason === 'string' ? { reason: r.reason } : {})
           })
         } catch { skipped += 1 }

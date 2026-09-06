@@ -573,7 +573,29 @@ let watchRunnerRef: { disposeAll(): void } | null = null
  * neither spend a credential nor see what an agent spent.
  */
 const brokerAudit = createBrokerAudit({ file: join(app.getPath('userData'), 'broker-audit.jsonl') })
-const broker = createBroker({ store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit })
+// M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
+// never the CLI's claim; the grant is the roster's; a write asks on the
+// teammate's chat through the manager's external question — the one door.
+const teammateOfPanel = (panelId: string): string | undefined => {
+  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.id === panelId && p.kind === 'chat') return p.chat.teammateId
+  return undefined
+}
+const chatOfTeammate = (teammateId: string, preferred?: string): string | undefined => {
+  const live = agentSessions?.list().map((s) => s.id) ?? []
+  if (preferred !== undefined && live.includes(preferred)) return preferred
+  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.kind === 'chat' && p.chat.teammateId === teammateId && live.includes(p.id)) return p.id
+  return undefined
+}
+const broker = createBroker({
+  store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit,
+  services: (teammateId) => layoutStore.teammates().find((t) => t.id === teammateId)?.services,
+  account: (service) => credentialStore.list().find((c) => c.service === service)?.label,
+  approve: async (ask) => {
+    const chatId = chatOfTeammate(ask.teammateId)
+    if (chatId === undefined || agentSessions === null) return false
+    return agentSessions.askExternal(chatId, ask.service, { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost}`)
+  }
+})
 
 /** M83. A directory's repository root, or the directory itself when git does not own it. */
 const memoryRoot = async (path: string): Promise<string> => {
@@ -585,6 +607,7 @@ const memoryRoot = async (path: string): Promise<string> => {
 const controlHandler = createControlHandler({
   // M87. The one verb that can spend a credential.
   broker,
+  teammateOf: teammateOfPanel,
   presets: () => allPresets(layoutStore.presets()),
   defaultId: () => layoutStore.defaultPresetId() || null,
   spawn: (preset, cwd) => {

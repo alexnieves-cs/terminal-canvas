@@ -4125,8 +4125,10 @@ export function Canvas({
     // fifteen-second request (M89's verifier). A failure is the palette's
     // line, as the credential rows already do it.
     onVerify: (service: string) => { void window.canvas.credential.verify(service).then((res) => { if (!res.ok) paletteActions.verifyCredential(service); reloadIntegrations() }).catch(() => reloadIntegrations()) },
-    onRefresh: reloadIntegrations
-  }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations])
+    onRefresh: reloadIntegrations,
+    // M102. The roster's grants per service, by teammate name.
+    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => t.name)]))
+  }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations, teammates])
 
   /**
    * M85. ONE object each for the pane and for every in-vault note, memoised

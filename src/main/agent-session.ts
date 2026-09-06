@@ -160,6 +160,8 @@ interface Session {
   /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
   queue: { text: string; images: OutgoingImage[]; auto?: true }[]
   pending: Map<string, PendingPermission>
+  /** M102. Resolvers for the questions that are ours (the broker's), by request id. */
+  external: Map<string, (allow: boolean) => void>
   usage: TokenTotals
   costUsd?: number
   turnCount: number
@@ -234,6 +236,7 @@ export class AgentSessionManager {
       abortReason: null,
       queue: [],
       pending: new Map(),
+      external: new Map(),
       usage: emptyTotals(),
       turnCount: 0,
       userTurns: 0,
@@ -348,12 +351,42 @@ export class AgentSessionManager {
     return true
   }
 
+  /**
+   * M102. A question that is NOT the CLI's — the broker asking before a
+   * write — put on the session's pending set so every surface answers it
+   * through the one door (`answerPermission`), M98's grants included. It
+   * resolves the answer; the process is never written to for it, and the
+   * question dies with the session (dispose, exit) as `false`.
+   */
+  askExternal(id: string, toolName: string, input: Record<string, unknown>, description: string): Promise<boolean> {
+    const session = this.sessions.get(id)
+    if (!session) return Promise.resolve(false)
+    if (this.deps.preAnswer?.(id, toolName) === true) {
+      this.emit({ id, type: 'permission-auto-allowed', requestId: `tc-ext-${++this.requestSeq}`, toolName })
+      return Promise.resolve(true)
+    }
+    const requestId = `tc-ext-${++this.requestSeq}`
+    return new Promise<boolean>((resolve) => {
+      session.external.set(requestId, resolve)
+      session.pending.set(requestId, { requestId, toolName, input, description })
+      this.emit({ id, type: 'permission-request', requestId, toolName, input, description })
+    })
+  }
+
   answerPermission(id: string, requestId: string, answer: PermissionAnswer): boolean {
     const session = this.sessions.get(id)
-    if (!session || !session.proc) return false
+    if (!session) return false
     const pending = session.pending.get(requestId)
     if (!pending) return false
-    session.proc.write(permissionResponseLine(requestId, pending.input, answer))
+    const external = session.external.get(requestId)
+    if (external !== undefined) {
+      // Ours, not the CLI's: nothing is written to the process.
+      session.external.delete(requestId)
+      external(answer.allow)
+    } else {
+      if (!session.proc) return false
+      session.proc.write(permissionResponseLine(requestId, pending.input, answer))
+    }
     session.pending.delete(requestId)
     if (session.auto !== undefined && session.pending.size === 0 && session.auto.permissionTimer !== null) { clearTimeout(session.auto.permissionTimer); session.auto.permissionTimer = null }
     this.emit({ id, type: 'permission-answered', requestId, allow: answer.allow })
@@ -460,6 +493,8 @@ export class AgentSessionManager {
     session.autoLast = undefined
     this.dropBatch(session)
     session.queue.length = 0
+    for (const resolve of session.external.values()) resolve(false)
+    session.external.clear()
     session.pending.clear()
     session.inFlight = false
     if (session.proc) {
@@ -756,6 +791,7 @@ export class AgentSessionManager {
       session.queue.length = 0
       this.emit({ id, type: 'queue-dropped', count })
     }
+    for (const [requestId, resolve] of [...session.external.entries()]) { session.external.delete(requestId); resolve(false) }
     for (const requestId of [...session.pending.keys()]) {
       session.pending.delete(requestId)
       this.emit({ id, type: 'permission-dropped', requestId })
