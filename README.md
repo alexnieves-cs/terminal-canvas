@@ -395,7 +395,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        teammate:choose-place
                        routine:list / routine:save / routine:delete / routine:run
                        browser:read
-                       board:lane
+                       board:lane / board:lane-status
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

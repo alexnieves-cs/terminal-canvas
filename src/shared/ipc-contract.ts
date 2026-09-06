@@ -99,7 +99,7 @@ export interface ControlCanvasModel {
   runs: Array<{ id: string; name: string; outcome: string; panels: number; cost?: number }>
 }
 import type { SettingDef, SettingValue } from './settings-schema'
-import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from './review'
+import type { RepoStatus, ReviewAcross, ReviewResult, ReviewBaseline, ReviewSubject, ReviewDiff, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult , LaneStatus } from './review'
 import type { CredentialMeta } from './credential-schema'
 import type { WorkItem, WorkItemTransition } from './work-item'
 import type { FileCreateResult, FileResult, FileWriteResult } from './file-panel'
@@ -585,7 +585,9 @@ export const IPC = {
    */
   BROWSER_READ: 'browser:read',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
-  BOARD_LANE: 'board:lane'
+  BOARD_LANE: 'board:lane',
+  /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
+  BOARD_LANE_STATUS: 'board:lane-status'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1472,6 +1474,7 @@ export interface CanvasBridge {
   /** M114. The board's main-side verbs. */
   board: {
     lane(req: BoardLaneRequest): Promise<BoardLaneResult>
+    laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

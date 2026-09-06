@@ -68,6 +68,12 @@ export type RepoStatus =
   | { kind: 'git-missing' }
   | { kind: 'unreadable'; detail: string }
 
+/** M115. Where a dispatched lane stands against the root's branch. Three arms, never two. */
+export type LaneStatus =
+  | { kind: 'lane'; base: string; ahead: number; behind: number }
+  | { kind: 'git-missing' }
+  | { kind: 'unreadable'; detail: string }
+
 /** M86. One worktree's place in a cross-worktree review: the main tree first, then each record. */
 export interface ReviewSection {
   path: string

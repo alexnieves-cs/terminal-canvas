@@ -697,7 +697,7 @@ app.whenReady().then(async () => {
     // M103. The real read over the real guest.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
-    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }) }
+    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }) }
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

@@ -1677,7 +1677,7 @@ app.whenReady().then(async () => {
     // M103. The guest is resolved by the id the node learned on did-attach;
     // main checks it is a webview before reading anything.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
-    boardLane
+    { ...boardLane, laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root) }
   )
   createWindow()
 

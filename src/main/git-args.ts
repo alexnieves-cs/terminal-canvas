@@ -131,6 +131,21 @@ export function parseAheadBehind(stdout: string): { ahead: number; behind: numbe
   return { ahead, behind }
 }
 
+/**
+ * M115. A dispatched lane's branch has no upstream until it is pushed, so
+ * `HEAD...@{u}` is null for exactly the branch the card asks about. Ask the
+ * lane how far it is past the ROOT's branch instead. Still NO FETCH.
+ */
+export function buildAheadOfArgs(path: string, base: string): string[] {
+  return ['-C', path, 'rev-list', '--left-right', '--count', `${base}...HEAD`]
+}
+
+/** `<base>...HEAD` prints `BEHIND<TAB>AHEAD` — left is the base's side — so the arms are the mirror of parseAheadBehind's. */
+export function parseAheadOf(stdout: string): { ahead: number; behind: number } | null {
+  const parsed = parseAheadBehind(stdout)
+  return parsed === null ? null : { ahead: parsed.behind, behind: parsed.ahead }
+}
+
 export function buildWorktreeListArgs(root: string): string[] {
   return ['-C', root, 'worktree', 'list', '--porcelain']
 }
