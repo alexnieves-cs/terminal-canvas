@@ -1,3 +1,4 @@
+import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
 import { isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
@@ -48,7 +49,19 @@ export interface RailRow {
  * would make this a fifth place M5a's absent-command rule can be lost, and
  * every command-less preset would start spawning a hardcoded shell.
  */
-export function railLabel(panel: Panel, status: PanelStatus | undefined): string {
+export function railLabel(
+  panel: Panel,
+  status: PanelStatus | undefined,
+  /**
+   * M132. A workflow trigger's template name, by template id — so a watcher
+   * whose command is `/usr/bin/true` (main's arming needs one) reads as the
+   * WORKFLOW it runs and not as a binary nobody typed. OPTIONAL and
+   * defaulted, the trade every parameter added to this family has made:
+   * absent means "nobody asked", which `workflowWatchLabel` says as `a
+   * workflow` rather than guessing the template is gone.
+   */
+  templateNameOf?: (templateId: string) => string | undefined
+): string {
   // M116. A work card reads `work · <title>` with the KIND first, before the
   // title rule below: its title is the item's, and the chat dispatched on
   // that item carries the same words, so a rail of cards and lanes would be
@@ -86,6 +99,11 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // it in their head, and the trigger is the row's trailing phrase — a row
   // that led with the trigger would sort every watcher under `on`.
   if (isWatcherPanel(panel)) {
+    // M132. A workflow trigger names its WORKFLOW; the binary main's arming
+    // needs is not what this watcher is for.
+    if (panel.watch.templateId !== undefined) {
+      return `watcher · ${workflowWatchLabel(templateNameOf === undefined ? null : templateNameOf(panel.watch.templateId))}`
+    }
     const command = panel.watch.command.replace(/\/+$/, '')
     return `watcher · ${command.slice(command.lastIndexOf('/') + 1) || command}`
   }
@@ -158,7 +176,9 @@ export function buildRailRows(
    * older caller and check keeps its meaning — and absent (the record gone)
    * reads as the kind.
    */
-  workStateOf?: (itemId: string) => WorkItemState | undefined
+  workStateOf?: (itemId: string) => WorkItemState | undefined,
+  /** M132. Passed through to `railLabel` — see its own parameter. */
+  templateNameOf?: (templateId: string) => string | undefined
 ): RailRow[] {
   return panels.map((panel) => {
     const id = panel.rect.id
@@ -178,7 +198,7 @@ export function buildRailRows(
     const workState = isWorkPanel(panel) && workStateOf !== undefined ? workStateOf(panel.work.itemId) : undefined
     const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
-    return { id, label: railLabel(panel, status), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
+    return { id, label: railLabel(panel, status, templateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
   })
 }
 

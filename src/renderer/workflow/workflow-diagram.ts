@@ -137,8 +137,56 @@ export function runsForTemplate(runs: readonly PersistedRun[], templateId: strin
  * fire and the WORK is the instantiation, which is the renderer's (only the
  * renderer can mint panels). The fire is what this watcher exists to
  * produce; the exit is deliberately the trivial success.
+ *
+ * KNOWN COST, and it is deliberate rather than overlooked. Main is not
+ * changed by M132, so main goes on treating this watcher as any other:
+ *
+ *  1. every fire SPAWNS `/usr/bin/true` — a real process, doing nothing;
+ *  2. every fire appends a run ledger row naming `/usr/bin/true`, so the
+ *     ledger reads as a command nobody typed rather than as a workflow.
+ *
+ * Both are main's, and closing either means teaching `watch-runner.ts` about
+ * templates — a second place that knows what a workflow is. Every RENDERER
+ * readout reads the mark instead (`workflowWatchWord`), so the only surface
+ * still showing the binary is the ledger.
  */
 export const WORKFLOW_WATCH_COMMAND = '/usr/bin/true'
+
+/**
+ * What a watcher RUNS, in the reader's words rather than the binary's.
+ *
+ * Three arms, not two, because "nobody asked" and "asked, and there is no
+ * such template" are different facts and the sentences differ:
+ *
+ *  - `null`      — no resolver was passed (a caller or a check that has no
+ *                  template list). The honest answer is the general one.
+ *  - `undefined` — asked, and no template answers to the id: it was deleted
+ *                  under the watcher, which is worth saying.
+ *  - a name      — the ordinary case.
+ */
+export function workflowWatchWord(name: string | undefined | null): string {
+  if (name === null) return 'runs a workflow'
+  if (name === undefined) return 'runs a workflow that no longer exists'
+  return `runs the workflow ${name}`
+}
+
+/** The same three arms as a short label — the rail's `watcher · <what>` tail. */
+export function workflowWatchLabel(name: string | undefined | null): string {
+  return name === null || name === undefined ? 'a workflow' : name
+}
+
+/**
+ * M132, fix round 1. Why a TRIGGER cannot run this template — or undefined.
+ *
+ * A parameterised template is refused ON THE FIRE PATH and mints nothing: a
+ * timer at 3am has nobody to answer the sheet, and opening one would leave a
+ * modal over an empty canvas while the watcher recorded a success. The CLICK
+ * path keeps the sheet, because a click has a person behind it.
+ */
+export function workflowFireRefusal(holes: readonly string[]): string | undefined {
+  if (holes.length === 0) return undefined
+  return `not run: this workflow has parameters (${holes.join(', ')}) and a trigger cannot fill them`
+}
 
 export function workflowWatch(
   templateId: string, cwd: string, trigger: WatchTrigger

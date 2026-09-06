@@ -121,7 +121,8 @@ import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { WorkNode } from '@renderer/work/WorkNode'
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
-import { workflowWatch } from '@renderer/workflow/workflow-diagram'
+import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
+import { setDisarmed, clearDisarmed } from '@renderer/watcher/watcher-store'
 import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
 import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
@@ -4215,14 +4216,22 @@ export function Canvas({
     selectOnly(id)
   }, [commitHistory, selectOnly])
 
-  const runWorkflow = useCallback((templateId: string) => {
+  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click'): string | undefined => {
     const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
-    if (template === undefined) return
-    // A template with parameters cannot run unasked — the sheet is where a
-    // person answers them, and guessing an empty string for a repository
-    // would mint panels in the wrong directory, silently.
-    if (templateHoles(template).length > 0) { paletteActionsRef.current?.beginSpawnSheet(templateId); return }
+    if (template === undefined) return 'not run: that template is no longer saved'
+    // A template with parameters cannot run unasked. On the CLICK path the
+    // sheet is where a person answers them. On the FIRE path there is nobody
+    // to answer: a 3am timer would leave a modal over an empty canvas while
+    // the watcher recorded a success, so it is refused BY NAME and mints
+    // nothing (`workflowFireRefusal`).
+    const holes = templateHoles(template)
+    if (holes.length > 0) {
+      if (source === 'fire') return workflowFireRefusal(holes)
+      paletteActionsRef.current?.beginSpawnSheet(templateId)
+      return undefined
+    }
     void instantiateTemplateRef.current(template, {})
+    return undefined
   }, [])
 
   // Read through a ref by the fired handler, which is installed once.
@@ -4290,7 +4299,12 @@ export function Canvas({
       if (panel === undefined || !isWatcherPanel(panel)) return
       const templateId = panel.watch.templateId
       if (templateId === undefined) return
-      runWorkflowRef.current(templateId)
+      // A refusal is SAID, on the watcher's own body, rather than swallowed:
+      // a trigger that fired and did nothing with no sentence anywhere is the
+      // silent failure this whole file is written against.
+      const refused = runWorkflowRef.current(templateId, 'fire')
+      if (refused !== undefined) setDisarmed(watcherId, refused)
+      else clearDisarmed(watcherId)
     })
     return () => setWatcherFiredHandler(null)
   }, [panelsRef])
@@ -4536,7 +4550,10 @@ export function Canvas({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
     workspaceRows, waitingIds, selectedId, globalFontSize,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
-    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) })
+    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
+    // M132. A workflow trigger's template name, so a watcher whose command is
+    // `/usr/bin/true` reads as the workflow it runs — built-ins included.
+    templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -4968,6 +4985,7 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onSetArmed={setWatcherArmed}
                   {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
+                  workflowName={panel.watch.templateId === undefined ? null : allTemplates(templateRows).find((t) => t.id === panel.watch.templateId)?.name}
                 />
               )
             }

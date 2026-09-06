@@ -10,6 +10,7 @@ import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
+import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
 import { isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
@@ -526,7 +527,13 @@ export function buildInspectorModelBare(
    * seconds of every restored chat.
    */
   chat?: ChatInspectorInput | undefined,
-  workItem?: PersistedWorkItem | undefined
+  workItem?: PersistedWorkItem | undefined,
+  /**
+   * M132. A workflow trigger's template name by id. OPTIONAL and defaulted,
+   * the trade every parameter above it made; absent means "nobody asked", and
+   * `workflowWatchWord` says so rather than claiming the template is gone.
+   */
+  templateNameOf?: (templateId: string) => string | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isChatPanel(panel)) {
@@ -667,11 +674,15 @@ export function buildInspectorModelBare(
     return {
       kind: 'watcher', reviewable: false,
       state: { kind: 'watcher', status: undefined, dormant: false, watch: watchStateInput(panel.rect.id) },
-      id: panel.rect.id, heading: railLabel(panel, undefined),
+      id: panel.rect.id, heading: railLabel(panel, undefined, templateNameOf),
       ...(panel.title === undefined ? {} : { title: panel.title }),
       restartable: false, reattached: false, links, usage: NO_USAGE,
       fields: [
-        { key: 'watch-command', label: 'runs', value: [panel.watch.command, ...panel.watch.args].join(' ') },
+        // M132. A workflow trigger reads as the workflow it runs. `/usr/bin/true`
+        // is what main's arming needs, not what this watcher is for.
+        panel.watch.templateId === undefined
+          ? { key: 'watch-command', label: 'runs', value: [panel.watch.command, ...panel.watch.args].join(' ') }
+          : { key: 'watch-command', label: 'runs', value: workflowWatchWord(templateNameOf === undefined ? null : templateNameOf(panel.watch.templateId)) },
         { key: 'watch-cwd', label: 'in', value: panel.watch.cwd },
         { key: 'watch-trigger', label: 'when', value: describeTrigger(panel.watch.trigger) }
       ]
@@ -1228,9 +1239,15 @@ export function buildInspectorModel(
   dormant?: boolean,
   chat?: ChatInspectorInput | undefined,
   /** M116. The work card's record, for its word and its five facts. Optional like every dep before it. */
-  workItem?: PersistedWorkItem | undefined
+  workItem?: PersistedWorkItem | undefined,
+  /**
+   * M132. A workflow trigger's template name by id. OPTIONAL and defaulted,
+   * the trade every parameter above it made; absent means "nobody asked", and
+   * `workflowWatchWord` says so rather than claiming the template is gone.
+   */
+  templateNameOf?: (templateId: string) => string | undefined
 ): InspectorModel {
-  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem)
+  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem, templateNameOf)
   if (panel.locked === true || panel.pinned === true || panel.maximised !== undefined) {
     return { ...model, marks: { locked: panel.locked === true, pinned: panel.pinned === true, maximised: panel.maximised !== undefined } }
   }

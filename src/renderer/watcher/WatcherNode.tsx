@@ -6,6 +6,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { triggerWord } from '@shared/watch-trigger'
 import { panelState } from '@renderer/panels/panel-state'
 import { useWatch, watchStateInput, setDisarmed, clearDisarmed } from './watcher-store'
+import { workflowWatchLabel, workflowWatchWord } from '@renderer/workflow/workflow-diagram'
 
 /**
  * M84. THE WATCHER NODE — the eighth kind, and the second process node that
@@ -32,6 +33,12 @@ export interface WatcherNodeProps {
   linkTarget: boolean
   /** The label of a `panel` trigger's source, when the canvas has one. */
   sourceLabel?: string
+  /**
+   * M132. The name of the template this watcher instantiates, when it is one
+   * of those and the template still exists. Three arms, `workflowWatchWord`'s:
+   * `null` means nobody asked, `undefined` means the template is gone.
+   */
+  workflowName?: string | null
   /** M84. Arm or disarm this watcher — a persisted fact, so it survives a relaunch. */
   onSetArmed: (id: string, armed: boolean) => void
 }
@@ -80,7 +87,12 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
       className="watcher-node"
       state={state}
       rootAttrs={{ 'data-watcher-node': id, 'data-watcher-status': snapshot.status, 'data-tone': state.tone }}
-      title={panel.title ?? `watcher · ${panel.watch.command.split('/').pop() ?? panel.watch.command}`}
+      // M132. A workflow trigger names the WORKFLOW, never `/usr/bin/true` —
+      // the binary is an implementation detail of main's arming and reads as
+      // a command the user never typed.
+      title={panel.title ?? (panel.watch.templateId === undefined
+        ? `watcher · ${panel.watch.command.split('/').pop() ?? panel.watch.command}`
+        : `watcher · ${workflowWatchLabel(props.workflowName ?? null)}`)}
       // The chrome row is the terminal's and the chat's: title, then the
       // PILL carrying the state word in its tone (M84's critic — a process
       // node without one reads as a document), then the trigger phrase, then
@@ -121,8 +133,8 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
       onBeginLink={props.onBeginLink}
     >
       <div className="pf__body watcher-node__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
-        <p className="watcher-node__command" title={`${panel.watch.command} ${panel.watch.args.join(' ')} in ${panel.watch.cwd}`}>
-          {[panel.watch.command, ...panel.watch.args].join(' ')}
+        <p className="watcher-node__command" title={panel.watch.templateId === undefined ? `${panel.watch.command} ${panel.watch.args.join(' ')} in ${panel.watch.cwd}` : `${workflowWatchWord(props.workflowName ?? null)} in ${panel.watch.cwd}`}>
+          {panel.watch.templateId === undefined ? [panel.watch.command, ...panel.watch.args].join(' ') : workflowWatchWord(props.workflowName ?? null)}
         </p>
         {snapshot.disarmed !== undefined && (
           <p className="pf__note watcher-node__refusal" data-watcher-disarmed role="alert">{snapshot.disarmed}</p>

@@ -18718,6 +18718,98 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M132 — workflow.panel.1f. THE FIRE PATH, driven end to end: a
+    //     `watcher:state` event for a workflow watcher (which is what main's
+    //     runner sends on every run) reaches setWatcherFiredHandler, the
+    //     Canvas handler reads the record's templateId, and ONE instantiation
+    //     happens — a second event that is still `running` (a tail update) is
+    //     the same run and must mint nothing. And a workflow with PARAMETERS
+    //     is refused by name on the fire path and mints nothing at all, where
+    //     a click would have opened the sheet.
+    //
+    //     In verify:panels rather than a plain-node suite because the whole
+    //     claim is a chain across three modules that only exist in a live
+    //     renderer: the IPC subscription, the module-level store's
+    //     transition, and Canvas's own panel lookup.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['workflow.panel.1f a workflow watcher\'s fire instantiates ONCE — a second running event with a new tail is the same run and mints nothing — and a parameterised workflow is refused by name on the fire path, minting nothing']
+      const wfLog2 = []
+      const onWf2 = (_e, level, m) => { if (level >= 2) wfLog2.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onWf2)
+      try {
+        const fireDir = mkdtempSync(join(tmpdir(), 'tc panels wffire-'))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reF0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF0
+        await settle()
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf2', name: 'plain sweep', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(fireDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: 0, dy: 0 }
+        ], edges: [] })`)
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf3', name: 'asks first', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: '{{repository}}', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: 0, dy: 0 }
+        ], edges: [] })`)
+        // Two workflow watchers: one on the parameterless template, one on the
+        // template that asks. Both armed=false, so MAIN never runs them — this
+        // check drives the fire path, not the arming.
+        layoutStore.save({
+          panels: [
+            { id: 'wfW', kind: 'watcher', x: 100, y: 100, w: 460, h: 220, z: 1, watch: { cwd: fireDir, command: '/usr/bin/true', args: [], armed: false, templateId: 'wf2', trigger: { kind: 'git-ref', root: fireDir } } },
+            { id: 'wfP', kind: 'watcher', x: 700, y: 100, w: 460, h: 220, z: 2, watch: { cwd: fireDir, command: '/usr/bin/true', args: [], armed: false, templateId: 'wf3', trigger: { kind: 'git-ref', root: fireDir } } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF
+        await settle()
+        // The readouts read the MARK, never `/usr/bin/true` (fix round 1, #2).
+        const readouts = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfW"]'); if (!n) return false
+          const cmd = n.querySelector('.watcher-node__command'); if (!cmd) return false
+          const title = n.querySelector('.pf__title')?.textContent ?? null
+          if (title === null) return false
+          return { title, command: cmd.textContent ?? '' }
+        })()`), 6000)
+        const before = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        const panelsBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        // The event main's runner sends on every run, twice: the transition
+        // into running IS the fire; a second running event with a new tail is
+        // the same run still going.
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfW', status: 'running', tail: '', pending: false, startedAt: Date.now() })
+        const once = await waitUntil(() => wc.executeJavaScript(`window.__m132Instantiations() > ${before} ? window.__m132Instantiations() : false`), 8000)
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfW', status: 'running', tail: 'still going\n', pending: false, startedAt: Date.now() })
+        await settle()
+        await sleep(600)
+        const afterTail = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        // The parameterised one: refused BY NAME on the watcher's own body,
+        // and nothing minted.
+        const panelsMid = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfP', status: 'running', tail: '', pending: false, startedAt: Date.now() })
+        const refused = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfP"]'); if (!n) return false
+          const t = n.textContent ?? ''
+          return /not run: this workflow has parameters/.test(t) ? t.slice(0, 400) : false })()`), 8000)
+        await settle()
+        const finalCalls = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        const panelsAfter = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        const sheet = await wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`)
+        ok(IDS[0],
+          readouts && /plain sweep/.test(String(readouts.title)) && !/true/.test(String(readouts.title)) &&
+            /runs the workflow plain sweep/.test(String(readouts.command)) && !/usr\/bin\/true/.test(String(readouts.command)) &&
+            once !== false && once === before + 1 && afterTail === before + 1 &&
+            refused !== false && finalCalls === before + 1 && panelsAfter === panelsMid && panelsMid > panelsBefore && sheet === false,
+          JSON.stringify({ readouts, before, once, afterTail, panelsBefore, panelsMid, panelsAfter, finalCalls, sheet, refused, log: wfLog2.slice(-3) }))
+        try { rmSync(fireDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (fErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (wfLog2.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onWf2)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

@@ -63,6 +63,18 @@ export const TEMPLATE_GONE = 'that template is no longer saved'
  * claim — so the sentence names the door that does work.
  */
 export const REASON_NO_EDITOR = 'the live canvas is the editor — arrange the panels, then Save selection as template'
+/**
+ * M132, fix round 1. THREE STATES, NOT TWO, and this sentence is the third.
+ *
+ * A run learns its template from an origin map held in the renderer's own
+ * ref (`useRuns.noteTemplate`), so a run of these panels in an EARLIER
+ * session — or one the user wired by hand — records with no mark and cannot
+ * be attributed. `Runs (0)` beside "no runs yet" would be a confident wrong
+ * answer about work that really happened; the empty arm states the bound
+ * instead, and the tab drops its count while nothing is attributable rather
+ * than counting zero.
+ */
+export const RUNS_UNATTRIBUTED = 'no runs recorded since this app started - runs from earlier sessions are not attributed to a workflow'
 
 const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
 
@@ -130,7 +142,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
             <div className="workflow-node__tabs" role="tablist">
               {(['definition', 'runs'] as const).map((t) => (
                 <button key={t} type="button" role="tab" aria-selected={tab === t} className="pf__verb pf__verb--word workflow-node__tab"
-                  data-workflow-tab={t} onMouseDown={press(() => setTab(t))}>{t === 'definition' ? 'Definition' : `Runs (${mine.length})`}</button>
+                  data-workflow-tab={t} onMouseDown={press(() => setTab(t))}>{t === 'definition' ? 'Definition' : (mine.length === 0 ? 'Runs' : `Runs (${mine.length})`)}</button>
               ))}
             </div>
             <section className="workflow-node__pane" data-workflow-panel="definition" role="tabpanel" hidden={tab !== 'definition'}>
@@ -169,7 +181,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               {/* Three states, never two: nothing recorded yet is a SENTENCE,
                   not an empty box — an empty box reads as a tab that broke. */}
               {mine.length === 0 ? (
-                <p className="pf__note workflow-node__empty" data-workflow-runs-empty>no runs of this workflow yet - Run records one</p>
+                <p className="pf__note workflow-node__empty" data-workflow-runs-empty>{RUNS_UNATTRIBUTED}</p>
               ) : (
                 <ul className="workflow-node__runs" data-workflow-runs>
                   {mine.map((r) => (
