@@ -48,7 +48,27 @@ is not a preset kind (it shares copilot's binary), a small deviation from the sp
 
 ## M119 — the canvas as an ACP client (Track B)
 
-<!-- filled from Track B's report at the merge -->
+Track B's report, folded in at the merge (`d23437a`). `shared/acp-transcript.ts` is the
+codec: JSON-RPC over the line seam, both directions, to the one `TranscriptEvent` union —
+`initialize`'s answer as a `session` event carrying `negotiated`, `session/new`'s as the
+adopted id, `agent_message_chunk` as block deltas, `tool_call`/`tool_call_update` as the
+tool pair, the prompt's result with token usage, `session/request_permission` as the one
+`permission-request` event with the option ids riding in `input.__options`, and
+`session/load`'s replay as `replay: true` turns. The adapter grew optional encoders the
+manager PREFERS when a row has them; two deviations from the plan, each argued: the
+handshake is TWO hooks (`handshake` at spawn, `openSession` once `initialize` answers),
+because the resume decision must read `negotiated.loadSession` from that answer and cannot
+be minted up front; and `session/cancel` is a NOTIFICATION (no id) per ACP. The codec's
+pending-request state lives in `session.carry` as JSON — reset on spawn and exit, so a dead
+process's ids can never match a live one. The first send is HELD until the session opens;
+`interrupt` is refused while a prompt is held. The grant lands at answer time: `index.ts`
+grants before it answers, so `Allow for session` is `allow_always` on that very answer.
+`clientCapabilities` declines `fs/*` and `terminal/*` by measurement (`acp.4` pins the
+line; backlog #81). Three things the checks caught in their feat commits: a load's answer
+carries no session id (`noteRequest`'s fourth argument), `acp.4`'s regex first matched the
+header COMMENT (the `tone.1` trap, anchored on `export const`), and the ACP fixtures
+themselves had never been committed — the blanket `*.log` in `.gitignore` hid them since
+Act 0; a scoped negation tracks them now.
 
 ## M120 — chat mode, and the model word
 
@@ -71,7 +91,18 @@ as a select where the CLI has one (`modelChoices`).
 
 ## M121 — the deferred seven (Track B)
 
-<!-- filled from Track B's report at the merge -->
+One check commit and one fix commit each, the smallest change at the named line: (1) a
+routine's chat is MARKED (`ChatSource.routine`, carried by `carryChatMarks` beside
+`dispatch` and `sandbox`) so `useChatSessions` appends `ROUTINE_PROMPT` again after a
+relaunch; (2) `tc memory add/list --teammate <id>` maps to the `teammate:<id>` root; (3) the
+⋯ menu closes on an outside `mousedown` (`verify:panels menu.1`); (4) `flipped` resets on a
+workspace switch and the host carries `data-flipped` (`flip.1` widened — it creates a
+throwaway `flip-away` workspace); (5) `lineupPlan` takes `queued` so the preview counts the
+sends already waiting; (6) `sealAbandoned(runs, at, idle?)` seals an open run whose every
+panel is idle at load — Track B noted it is INERT at the two load sites (every panel is idle
+at load) and that the observed stale row comes through `useRuns.onAutoEvent` from a seeded
+`running` auto status, which it did not redesign; the plan's literal fix, recorded as
+such and the observation carried to M124; (7) `.chat__auto` gives (`verify:styles header.2`).
 
 ## The checks
 
