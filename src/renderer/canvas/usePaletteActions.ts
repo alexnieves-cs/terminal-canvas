@@ -8,6 +8,8 @@ import { insertIntoComposer, lastAssistantText, reportedModels } from '@renderer
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
+import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
+import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
@@ -29,7 +31,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isWatcherPanel, isGithubPanel, isMemoryPanel,
+  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -90,6 +92,8 @@ export interface PaletteActionsDeps {
   /** M84. The palette's Watch… row: ask for the command, then the trigger. */
   beginWatcher: () => void
   beginNewNote: () => void
+  /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
+  openBrowserPanel: (url: string) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>
   /** M92. Lock, pin and maximise, each with its opposite. */
@@ -169,7 +173,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel
   } = deps
 
   return useMemo<PaletteActions>(() => ({
@@ -429,6 +433,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // the same field-by-field rule this rename obeys.
               if (isChatPanel(p)) {
                 return { kind: p.kind, rect: p.rect, chat: p.chat, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M103. The browser pane's one field, by name.
+              if (isBrowserPanel(p)) {
+                return { kind: p.kind, rect: p.rect, url: p.url, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
@@ -1589,6 +1597,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'read': {
             // Guardrail 2: through the ONE outward gate, whichever front-end.
             const p = panelOf(a.panel!)
+            // M103. A browser panel's text is read in MAIN, which owns the
+            // scheme check, the cap and the gate; the note it hands back says
+            // the content is a remote page's, and that is what the plan reads
+            // out. No live guest is a named refusal, never an empty read.
+            if (p && isBrowserPanel(p)) {
+              const guest = browserGuestId(p.rect.id)
+              if (guest === undefined) return { kind: 'refused', reason: `${a.panel}: ${REASON_NO_LIVE_PAGE}` }
+              const page = await window.canvas.browser.read({ panelId: p.rect.id, webContentsId: guest })
+              if (page.kind === 'refused') return { kind: 'refused', reason: `${a.panel}: ${page.reason}` }
+              return { kind: 'ran', note: `${page.note}: ${page.text.slice(0, 160).replace(/\s+/g, ' ')}` }
+            }
             const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
             const gate = outward(raw, `panel ${a.panel}`)
             return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
@@ -1699,8 +1718,27 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       }
       begin(task)
     },
-    stopAuto: (id) => { void window.canvas.agentSession.autoStop(id) }
-    ,
+    stopAuto: (id) => { void window.canvas.agentSession.autoStop(id) },
+    // M103. The page door: a URL or a bare host in the palette's text mode
+    // (a bare host gets http://, a dev server being the ordinary case), a
+    // refusal by name kept on the feedback line for correction, and the
+    // panel minted at the world centre through Canvas.tsx's minter — the
+    // same shape every typed door here takes.
+    beginBrowser: () => {
+      const ask = (initial: string, feedback?: true): void => setInputMode({
+        kind: 'text',
+        label: feedback === undefined ? 'Open a page — a URL, or a host like localhost:3000' : 'Try a URL or a host — http(s) pages only',
+        initial,
+        ...(feedback === undefined ? {} : { feedback }),
+        submit: (value) => {
+          const normalised = normaliseTypedUrl(value)
+          if (normalised.kind === 'refused') { ask(value, true); return }
+          setInputMode(null)
+          openBrowserPanel(normalised.url)
+        }
+      })
+      ask('http://localhost:3000')
+    },
     // M100. The roster's door: the navigator's pane, chosen the way the dock chooses it.
     openTeammates: () => chooseNavigator('teammates')
 
@@ -1713,5 +1751,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel])
 }

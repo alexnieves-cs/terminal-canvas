@@ -1,8 +1,9 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
-import { BrowserWindow, Notification, app, dialog, shell, clipboard } from 'electron'
+import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
+import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { createPlacesGate, fsRealpath } from './places'
@@ -683,7 +684,15 @@ function createWindow(): void {
       nodeIntegration: false,
       // node-pty lives in main, but the preload still needs `require('electron')`
       // to reach contextBridge/ipcRenderer.
-      sandbox: false
+      sandbox: false,
+      // M103. The browser pane is a <webview> — a guest PROCESS, the one shape
+      // that pans, zooms, clips and z-orders with the world (M0 measured it;
+      // an iframe is refused by the renderer's CSP and a WebContentsView does
+      // not follow the transform, M91). Electron's docs discourage the tag,
+      // and every property they warn about is closed by name below:
+      // will-attach-webview, the partition's permission handler, the guest's
+      // window-open handler. verify:meta browser.1 reads all five as text.
+      webviewTag: true
     }
   })
 
@@ -731,6 +740,37 @@ function createWindow(): void {
     void shell.openExternal(url)
     return { action: 'deny' }
   })
+
+  // M103. THE GUEST'S PROPERTIES, CLOSED BEFORE IT EXISTS. A page cannot set
+  // them, and the node does not need to remember to: whatever the tag's
+  // attributes say, the guest gets no preload, no node integration and
+  // context isolation — and only an http(s) src ever attaches, so a record
+  // that slipped past the parser with a file: url still opens nothing.
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    if (!/^https?:/.test(params.src)) {
+      console.warn(`[browser] refused a guest at ${params.src}: http(s) only`)
+      event.preventDefault()
+    }
+  })
+  // Once attached, the guest's own new windows are denied — a page's
+  // `window.open` or a target=_blank link would otherwise mint a BrowserWindow
+  // with no chrome of ours and no handler on it. `link:open` stays the door
+  // for a page that should leave the app, and it is a labelled verb.
+  mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
+    guest.setWindowOpenHandler(() => ({ action: 'deny' }))
+    // A navigation to anything but the web is refused too; the READ path
+    // checks the live url again on its own (browser-read.ts).
+    guest.on('will-navigate', (event, url) => {
+      if (!/^https?:/.test(url)) { console.warn(`[browser] refused navigation to ${url}`); event.preventDefault() }
+    })
+  })
+  // Every permission ask — camera, microphone, geolocation, notifications,
+  // the lot — answered no by default. The partition is the pane's own, so
+  // the main window's session (which never sees a page) is untouched.
+  session.fromPartition('persist:tc-browser').setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
@@ -1472,7 +1512,10 @@ app.whenReady().then(async () => {
       }
     }),
     agentHandlers,
-    watcherHandlers
+    watcherHandlers,
+    // M103. The guest is resolved by the id the node learned on did-attach;
+    // main checks it is a webview before reading anything.
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
   )
   createWindow()
 

@@ -9,7 +9,7 @@ const { join } = require('node:path')
 const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, webContents } = require('electron')
 
 // This script is its own Electron entry point (not out/main/index.js), so
 // nothing has registered ipcMain handlers for the pty:* channels the built
@@ -92,6 +92,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
+  createBrowserHandlers, parseLayout,
   readVault,
   createLayoutSnapshots, restoreFromSnapshot,
   listGithubWorkItems,
@@ -396,7 +397,10 @@ app.whenReady().then(async () => {
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // M103. The browser pane is a <webview>; the harness window needs the
+      // tag on exactly as production's does (main/index.ts).
+      webviewTag: true
     }
   })
 
@@ -1246,7 +1250,9 @@ app.whenReady().then(async () => {
     persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
     askPath: async () => exportTarget,
     capture: async () => (await win.webContents.capturePage()).toPNG()
-  }), agentHandlers, watcherHandlers)
+  }), agentHandlers, watcherHandlers,
+  // M103. The real read over the real guest, the same adapter main/index.ts wires.
+  createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -18231,6 +18237,67 @@ app.whenReady().then(async () => {
           JSON.stringify({ rowV, mode, refused, locked, report, confirm, stillThere }))
       } catch (vErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(vErr && vErr.message || vErr))
+      }
+    }
+
+    // M103 — browser.1. THE BROWSER PANE END TO END, against a page that
+    // LIES: a local http server whose page rewrites `document.title` to a
+    // bank's sign-in and `history.replaceState`s itself to another path. The
+    // frame's readout must be the guest's own `getURL()` — the replaced path
+    // is fine (that IS a navigation, and it is what main reads too), the
+    // title must appear nowhere on the frame. `browser:read` over the bridge
+    // hands back the page's body text with a planted token scrubbed and a
+    // note naming a remote page; the main window's own id is refused by
+    // name; and a second record at file:///etc/hosts never becomes a panel —
+    // dropped at parse, by id, with the rest of the layout intact.
+    {
+      const IDS = ['browser.1 a browser panel opens a local page whose script rewrites its title and history; the readout is the guest\'s real getURL() (http://127.0.0.1:…/elsewhere, the title nowhere on the frame); browser:read over the bridge returns the body text, scrubbed, from that same url, and refuses the window\'s own id; a file:///etc/hosts record is dropped at parse by name']
+      let server = null
+      try {
+        const http = require('node:http')
+        const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        server = http.createServer((_req, res) => {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end(`<!doctype html><html><head><title>honest title</title></head><body><h1>Hello from the fixture server</h1><p>GITHUB_TOKEN=${token}</p><script>document.title = 'bank.example — Sign in'; history.replaceState(null, '', '/elsewhere');</script></body></html>`)
+        })
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+        const port = server.address().port
+        for (const id of ['vbA']) { try { await ptyManager.kill(id) } catch {} }
+        layoutStore.save({ panels: [
+          { id: 'bA', kind: 'browser', x: 80, y: 80, w: 640, h: 480, z: 1, url: `http://127.0.0.1:${port}/start` },
+          { id: 'bB', kind: 'browser', x: 800, y: 80, w: 640, h: 480, z: 2, url: 'file:///etc/hosts' }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        // The parser's own answer over the file just written: the file: record
+        // is dropped BY NAME and its neighbour survives.
+        const parsed = parseLayout(readFileSync(LAYOUT_PATH, 'utf8'))
+        const parsedIds = parsed.snapshot.workspaces.flatMap((w) => w.panels.map((p) => p.id))
+        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reB
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        // Live: the guest attached (its id on the frame) and the readout ends
+        // at the path the page moved itself to.
+        const live = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="bA"]'); if (!n || n.getAttribute('data-browser-live') !== 'yes') return false
+          const wcId = n.getAttribute('data-browser-wc'); const url = n.querySelector('[data-browser-url]')?.textContent ?? ''; if (!wcId || !url.endsWith('/elsewhere')) return false
+          return { url, wc: Number(wcId), address: n.querySelector('[data-browser-address]')?.value ?? null, guest: n.querySelector('webview[data-browser-guest]') !== null, leak: n.textContent.includes('bank.example') || n.textContent.includes('honest title') } })()`), 20000)
+        const read = live ? await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${live.wc} })`) : null
+        const bogus = await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${wc.id} })`)
+        const dropped = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="bB"]') === null && document.querySelectorAll('.panel[data-panel-id]').length === 1`)
+        const rail = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="bA"]'); return r ? { label: r.querySelector('.rail-row__label')?.textContent ?? null } : null })()`)
+        const expectUrl = `http://127.0.0.1:${port}/elsewhere`
+        ok(IDS[0],
+          live && live.guest === true && live.url === expectUrl && live.address === expectUrl && live.leak === false &&
+            read && read.kind === 'read' && read.url === expectUrl && /Hello from the fixture server/.test(read.text) && !read.text.includes(token) &&
+            /remote page at 127\.0\.0\.1/.test(read.note) && /redacted/.test(read.note) &&
+            bogus && bogus.kind === 'refused' && /not a page in a browser panel/.test(bogus.reason) &&
+            dropped === true && parsedIds.join(',') === 'bA' && parsed.warnings.some((w) => w.includes('bB') && /file:/.test(w)) &&
+            rail && /127\.0\.0\.1/.test(rail.label ?? ''),
+          JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, parsedIds, warnings: parsed.warnings, rail }))
+      } catch (bErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr))
+      } finally {
+        if (server) server.close()
       }
     }
 

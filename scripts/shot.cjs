@@ -25,7 +25,7 @@ const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync 
 const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, webContents } = require('electron')
 
 const OUT = process.env.SHOT_DIR || join(__dirname, '..', 'out', 'shots')
 mkdirSync(OUT, { recursive: true })
@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -98,6 +98,18 @@ writeFileSync(join(scrollbackDir, 'dormant.log'), [
 ].join('\r\n'))
 
 const layoutPath = join(mkdtempSync(join(tmpdir(), 'tc shot layout ')), 'layout.json')
+
+// M103. A dev server the browser panel opens to — the harness's own, so the
+// scene needs no network and the address bar reads a real 127.0.0.1 url.
+// The page looks like a preview (a heading, a status line, a list) rather
+// than a placeholder, because the scene's claim is "the guest painted inside
+// the frame", and a blank page proves nothing.
+const SHOT_HTTP = require('node:http').createServer((_req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+  res.end(`<!doctype html><html><head><title>api — preview</title><style>body{margin:0;padding:24px 28px;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#1d2433;background:#fff}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 14px;color:#5b6472}code{background:#f1f3f6;padding:2px 6px;border-radius:4px}ul{margin:0;padding-left:18px}li{margin:4px 0}.ok{color:#1a7f37}</style></head><body><h1>api — preview</h1><p>served by <code>npm run dev</code> · <span class="ok">listening</span></p><ul><li>GET /health → <code>200 ok</code></li><li>GET /users → <code>200</code> (3 rows)</li><li>POST /users → <code>201</code></li></ul></body></html>`)
+})
+const shotHttpReady = new Promise((resolve) => SHOT_HTTP.listen(0, '127.0.0.1', resolve))
+const shotHttpUrl = () => `http://127.0.0.1:${SHOT_HTTP.address().port}/`
 
 const term = (id, x, y, w, h, z, extra = {}) => ({ id, x, y, w, h, z, cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "$ claude"; echo "Reading src/server.ts"; echo "Editing src/server.ts"; sleep 600'], ...extra })
 
@@ -168,6 +180,12 @@ const SCENES = [
       await kit.goTo('watcher · sh')
       await sleep(900)
       await kit.shot('watcher')
+    } },
+  { name: 'browser', intent: 'The browser pane beside the terminal that started its dev server: a live page painted INSIDE the panel frame, panned and clipped with the world like every other node. The chrome reads the page\'s real address (`http://127.0.0.1:…`, from the guest itself — never the page\'s title) beside one labelled verb, `Open in browser`; below it the app\'s own bar — `Back`, `Forward`, `Reload` as words, disabled with their reasons, and the address input — and then the page. A ruled edge from the dev server says `on exit 0`: the page reloads when the server comes back. The kind word `browser` sits in the rail and on the frame; no state is invented for a document.',
+    run: async (kit) => {
+      await kit.goTo('browser · 127.0.0.1')
+      await sleep(1800)
+      await kit.shot('browser')
     } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
@@ -345,6 +363,7 @@ const SCENES = [
 ]
 
 app.whenReady().then(async () => {
+  await shotHttpReady
   const win = new BrowserWindow({
     show: false,
     width: 1440,
@@ -354,7 +373,9 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      // M103. The browser pane is a <webview>; the tag on, as production has it.
+      webviewTag: true
     }
   })
   const wc = win.webContents
@@ -409,6 +430,10 @@ app.whenReady().then(async () => {
         { id: 'jira', kind: 'jira', x: 440, y: 570, w: 300, h: 210, z: 7 },
         // M88. The GitHub work panel over a recorded broker.
         { id: 'github', kind: 'github', x: 1800, y: 900, w: 460, h: 440, z: 15 },
+        // M103. A dev server beside the browser pane that shows it, with a
+        // ruled edge from the one into the other: on exit 0, reload.
+        term('dev', 1550, 120, 360, 250, 16, { title: 'dev server', args: ['-c', 'echo "$ npm run dev"; echo "listening on http://127.0.0.1:3000"; sleep 600'], links: [{ to: 'browser', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
+        { id: 'browser', kind: 'browser', x: 1950, y: 120, w: 560, h: 420, z: 17, url: shotHttpUrl() },
         // M86. One review over every worktree of the fixture repository.
         { id: 'across', kind: 'review', x: 1200, y: 1300, w: 560, h: 420, z: 14,
           subject: { subjectId: 'live', repoRoot: REPO_ROOT, baselineSha: REPO_HEAD, label: 'every worktree of repo', across: true } },
@@ -626,7 +651,9 @@ app.whenReady().then(async () => {
     undefined,
     undefined,
     agentHandlers,
-    watcherHandlers
+    watcherHandlers,
+    // M103. The real read over the real guest.
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

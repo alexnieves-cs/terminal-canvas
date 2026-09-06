@@ -69,7 +69,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -433,6 +433,8 @@ export interface PaletteActions {
   stopAuto(id: string): void
   /** M100. Open the navigator on the Teammates pane. */
   openTeammates(): void
+  /** M103. The palette's Open a page… row: ask for a URL in text mode, then mint a browser panel at the world centre. */
+  beginBrowser(): void
 }
 
 export interface PaletteContext {
@@ -1101,6 +1103,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'panel',
     run: () => actions.beginWatcher()
   }, ctx.noteRoot === null || ctx.noteRoot === undefined ? REASON_NO_WATCH_ROOT : undefined))
+
+  // M103. The browser pane. ALWAYS present and never disabled: a URL is
+  // typed, not derived from a captured panel or a directory, so there is no
+  // reason a row could be refused for — and a row that only appeared once
+  // something was selected would read as a feature that was never built.
+  out.push({
+    id: 'canvas.browser',
+    title: 'Open a page…',
+    subtitle: 'a browser panel — a dev server, docs, a preview',
+    searchText: 'open page browser url web http localhost dev server preview',
+    group: 'spawn',
+    run: () => actions.beginBrowser()
+  })
 
   const templateRows = ctx.templates ?? []
   if (templateRows.length === 0) {

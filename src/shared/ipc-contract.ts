@@ -5,6 +5,7 @@ import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
+import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 /**
  * Single source of truth for the IPC surface.
  *
@@ -575,7 +576,14 @@ export const IPC = {
   ROUTINE_LIST: 'routine:list',
   ROUTINE_SAVE: 'routine:save',
   ROUTINE_DELETE: 'routine:delete',
-  ROUTINE_RUN: 'routine:run'
+  ROUTINE_RUN: 'routine:run',
+  /**
+   * M103. The browser pane's text, read in MAIN: the scheme is checked on
+   * the guest's LIVE url (not the record's, not only at navigation), the
+   * text is capped inside the guest, and it passes the outward gate before
+   * it crosses back. Reading the pane is leaving the app.
+   */
+  BROWSER_READ: 'browser:read'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
@@ -1431,6 +1439,10 @@ export interface CanvasBridge {
     permissions(
       req: ToolboxPermissionsRequest
     ): Promise<{ rules: string[]; total: number; status: string }>
+  }
+  /** M103. See BROWSER_READ. Three arms; never rejects. */
+  browser: {
+    read(req: BrowserReadRequest): Promise<BrowserReadResult>
   }
   platform: NodeJS.Platform
 }

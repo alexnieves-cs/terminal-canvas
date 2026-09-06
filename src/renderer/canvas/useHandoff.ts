@@ -3,7 +3,9 @@ import { useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import type { AgentState } from '@shared/types'
 import type { Panel } from '@renderer/panels/panels'
-import { isTerminalPanel, isChatPanel, linksOf } from '@renderer/panels/panels'
+import { isTerminalPanel, isChatPanel, isBrowserPanel, linksOf } from '@renderer/panels/panels'
+import { reloadBrowser } from '@renderer/browser/browser-store'
+import { REASON_NO_LIVE_PAGE } from '@shared/browser-panel'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { Registry } from '@renderer/session/session-registry'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
@@ -104,6 +106,17 @@ export function useHandoff(deps: HandoffDeps): void {
           setResult(key, sentence)
           record(sentence.startsWith('skipped') ? { kind: 'skipped', panelId: targetId, sentence, at: Date.now() } : { kind: 'delivered', panelId: targetId, sentence, at: Date.now() })
         })
+        return
+      }
+      // M103. A browser target RELOADS — the payload has nowhere to go in a
+      // page, and the edge's meaning beside a dev server is "the build
+      // passed, show me". M78's table decided the firing; nothing new here
+      // decides anything. No live guest is a named skip, never a silent one.
+      if (isBrowserPanel(target)) {
+        const reloaded = reloadBrowser(targetId)
+        const sentence = reloaded ? 'reloaded the page' : `skipped — ${REASON_NO_LIVE_PAGE}`
+        setResult(key, sentence)
+        record(reloaded ? { kind: 'delivered', panelId: targetId, sentence, at: Date.now() } : { kind: 'skipped', panelId: targetId, sentence, at: Date.now() })
         return
       }
       if (!isTerminalPanel(target)) {

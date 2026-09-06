@@ -180,6 +180,10 @@ module.exports = {
      process here — a stub would leave watch.1 proven no further than the
      preload, which is the reason every other real export here is real. */
   createWatchRunner: require('../src/main/watch-runner').createWatchRunner,
+  /* M103. The browser pane's read over a real guest, and the parser so a
+     check can assert a file: record was dropped by name at parse. */
+  createBrowserHandlers: require('../src/main/browser-read').createBrowserHandlers,
+  parseLayout: require('../src/shared/layout-schema').parseLayout,
   /* M85. The vault's reader — node:fs, the tier file-read.ts sits in. */
   readVault: require('../src/main/vault-read').readVault,
   /* M88. The GitHub client, real over a recorded requester in the suite. */

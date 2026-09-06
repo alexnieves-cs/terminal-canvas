@@ -3579,6 +3579,34 @@ console.log('\n' + '='.repeat(60))
       by('r4') !== undefined && !('plan' in by('r4')) && !('lastRun' in by('r4')) && !('missed' in by('r4')) && by('r4').paused === false &&
       Array.isArray(absent.snapshot.routines) && absent.snapshot.routines.length === 0 && absent.warnings.length === 0 && L.ROUTINES_MAX > 0,
     JSON.stringify({ rs, warnings: out.warnings }))
+// M103 — browser.1. THE ELEVENTH KIND ON DISK. A browser panel is `kind:
+// 'browser'` plus a `url` and nothing else — no cwd and no args, like every
+// sessionless kind, so a reader keyed on the top-level cwd cannot mistake it
+// for a terminal. A url that is not http(s) is MALFORMED, not a different
+// kind of page: `file:` would hand the guest the user's disk and `data:` a
+// page nobody can name, so the panel is dropped by id with a warning and the
+// neighbours survive. An absent title stays absent (the record rule).
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'b1', kind: 'browser', x: 1, y: 2, w: 640, h: 480, z: 3, url: 'http://localhost:3000/' },
+      { id: 'b2', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 4, url: 'file:///etc/passwd' },
+      { id: 'b3', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 5, title: 'docs', url: 'https://example.com/docs' },
+      { id: 'b4', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 6 },
+      { id: 'b5', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 7, url: 'javascript:alert(1)' },
+      { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 8, cwd: '~', args: [] }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const named = (id) => out.warnings.some((w) => w.includes(id))
+  const b1 = panels.find((p) => p.id === 'b1'), b3 = panels.find((p) => p.id === 'b3')
+  ok('browser.1 a browser panel round-trips as kind + url with no cwd/args and an absent title kept absent; a file:, a javascript: and a missing url each drop their own panel by name; the neighbours survive',
+    panels.length === 3 && panels.map((p) => p.id).join(',') === 'b1,b3,n1' &&
+      b1 && b1.kind === 'browser' && b1.url === 'http://localhost:3000/' && !('title' in b1) && !('cwd' in b1) && !('args' in b1) &&
+      b3 && b3.title === 'docs' && b3.url === 'https://example.com/docs' &&
+      named('b2') && named('b4') && named('b5') && !named('b1') && !named('b3'),
+    JSON.stringify({ ids: panels.map((p) => p.id), b1, warnings: out.warnings }))
 }
 
 const failed = results.filter((r) => !r.pass)
