@@ -1690,6 +1690,153 @@ const isResult = (l) => l.includes('"type":"result"')
     }
   }
 
+  /* M119 — acp.3–.4. THE MANAGER AS AN ACP CLIENT, over the fake runner. The
+     check plays the agent: it answers each handshake step by writing the
+     fixture's own `<- ` lines back (our request ids are the probe's — 1, 2,
+     3 — so the recordings replay verbatim). What fails silently without
+     these: a prompt written before session/new answers is a prompt with no
+     session (the agent errors, or worse, ignores it — the panel reads
+     `working` forever); an interrupt written as claude's control_request is
+     a line ACP does not know; a permission answered with claude's
+     control_response never reaches the tool, and the agent waits on an id
+     nobody will answer. Guarded like acp.1. */
+  {
+    const ACP = M.acp
+    const acpLines = (name) => readFileSync(join(FIX, 'acp', name), 'utf8').split('\n').filter((l) => l.startsWith('<- ')).map((l) => l.slice(3))
+    const answerTo = (name, id) => acpLines(name).find((l) => { try { const j = JSON.parse(l); return j.id === id && j.method === undefined } catch { return false } })
+    const updates = (name) => acpLines(name).filter((l) => l.includes('"method":"session/update"'))
+    const parsed = (proc) => proc.stdin.map((l) => { try { return JSON.parse(l) } catch { return { raw: l } } })
+    const CAPS = { fs: { readTextFile: false, writeTextFile: false }, terminal: false }
+    if (!ACP || typeof ACP.parseAcpLine !== 'function') {
+      ok('acp.3 the ACP codec exists for the manager to ride', false, 'no acp codec in the bundle')
+    } else try {
+      let granted = new Set()
+      const { manager, spawns, events } = makeManager({ binaries: { acp: { command: '/fake/bin/copilot' } }, preAnswer: (id, tool) => granted.has(`${id}/${tool}`) })
+      manager.create({ id: 'ac', cwd: '/w', backend: 'acp' })
+      const r1 = manager.send('ac', 'Reply with exactly the word pong.')
+      const s1 = spawns[0]
+      const afterSend = { n: s1 ? s1.proc.stdin.length : -1, lines: s1 ? parsed(s1.proc) : [], snap: manager.get('ac') }
+      if (s1) s1.proc.emitLines([answerTo('pong.log', 1)])
+      await tick(10)
+      const afterInit = { n: s1 ? s1.proc.stdin.length : -1, lines: s1 ? parsed(s1.proc) : [], snap: manager.get('ac') }
+      if (s1) s1.proc.emitLines([answerTo('pong.log', 2)])
+      await tick(10)
+      const afterNew = { n: s1 ? s1.proc.stdin.length : -1, lines: s1 ? parsed(s1.proc) : [], snap: manager.get('ac') }
+      ok('acp.3 an acp send spawns the copilot binary with --acp and writes ONLY initialize (clientCapabilities: both declined); session/new (the session\'s cwd) is written only once initialize answers, and the prompt is HELD — status starting, nothing else on stdin — until session/new answers; then session/prompt names the ADOPTED id with the text, the snapshot carries that id, and the session reads streaming',
+        r1 === 'sent' && spawns.length === 1 && s1.command === '/fake/bin/copilot' && JSON.stringify(s1.args) === JSON.stringify(['--acp']) && s1.closeStdin === undefined &&
+          afterSend.n === 1 && afterSend.lines[0].method === 'initialize' && afterSend.lines[0].id === 1 && JSON.stringify(afterSend.lines[0].params.clientCapabilities) === JSON.stringify(CAPS) && afterSend.snap.status === 'starting' &&
+          afterInit.n === 2 && afterInit.lines[1].method === 'session/new' && afterInit.lines[1].id === 2 && afterInit.lines[1].params.cwd === '/w' && afterInit.snap.status === 'starting' &&
+          afterNew.n === 3 && afterNew.lines[2].method === 'session/prompt' && afterNew.lines[2].params.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' && afterNew.lines[2].params.prompt[0].text === 'Reply with exactly the word pong.' &&
+          afterNew.snap.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' && afterNew.snap.status === 'streaming' && afterNew.snap.backend === 'acp',
+        JSON.stringify({ r1, args: s1 && s1.args, afterSend, afterInit, afterNew }))
+
+      // The turn: the recorded updates and the prompt's answer.
+      if (s1) s1.proc.emitLines([...updates('pong.log'), answerTo('pong.log', 3)])
+      await tick(10)
+      const done = manager.get('ac')
+      const turns = manager.transcript('ac')
+      const result = events.find((e) => e.id === 'ac' && e.type === 'result')
+      ok('acp.3.b the turn ends on session/prompt\'s answer: one result with the usage, the session ready (the process stays — not one per turn), the transcript holding the user turn and the assistant\'s pong, the delta batch delivered before the result',
+        done.status === 'ready' && done.turns === 1 && done.usage.input === 13654 && done.costUsd === undefined && done.pid !== undefined &&
+          turns.length === 2 && turns[0].role === 'user' && turns[1].role === 'assistant' && turns[1].blocks[0].text === 'pong' &&
+          result !== undefined && result.interrupted === false && events.some((e) => e.id === 'ac' && e.type === 'block-delta' && e.text === 'pong') &&
+          events.findIndex((e) => e.id === 'ac' && e.type === 'block-delta') < events.findIndex((e) => e.id === 'ac' && e.type === 'result'),
+        JSON.stringify({ done, turns, result }))
+
+      // Interrupt: session/cancel, a notification naming the session.
+      const r2 = manager.send('ac', 'again')
+      const promptLine = s1 && parsed(s1.proc)[3]
+      const interrupted = manager.interrupt('ac')
+      const cancelLine = s1 && parsed(s1.proc)[4]
+      if (s1) s1.proc.emitLines([JSON.stringify({ jsonrpc: '2.0', id: promptLine && promptLine.id, result: { stopReason: 'cancelled' } })])
+      await tick(10)
+      const cancelled = events.filter((e) => e.id === 'ac' && e.type === 'result')[1]
+      ok('acp.3.c a second send is session/prompt with the next id (no handshake again); interrupt writes session/cancel — a notification with no id, naming the session — and answers true; the prompt\'s answer with stopReason cancelled is a result marked interrupted and the session is ready again',
+        r2 === 'sent' && promptLine !== undefined && promptLine.method === 'session/prompt' && promptLine.id === 4 && s1.proc.stdin.length === 5 &&
+          interrupted === true && cancelLine.method === 'session/cancel' && cancelLine.id === undefined && cancelLine.params.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' &&
+          cancelled !== undefined && cancelled.interrupted === true && cancelled.stopReason === 'cancelled' && manager.get('ac').status === 'ready' && s1.proc.killed === 0,
+        JSON.stringify({ r2, promptLine, interrupted, cancelLine, cancelled, status: manager.get('ac').status }))
+
+      // Permissions through the one door. The recorded request (JSON-RPC id 0).
+      manager.send('ac', 'Run the shell command')
+      const askLine = acpLines('terminal.log').find((l) => l.includes('session/request_permission'))
+      if (s1) s1.proc.emitLines([askLine])
+      await tick(10)
+      const pendingBefore = manager.get('ac').pending
+      const allowed = manager.answerPermission('ac', '0', { allow: true })
+      const allowLine = s1 && parsed(s1.proc)[s1.proc.stdin.length - 1]
+      if (s1) s1.proc.emitLines([askLine.replace('"id":0', '"id":5')])
+      await tick(10)
+      const denied = manager.answerPermission('ac', '5', { allow: false, message: 'no' })
+      const denyLine = s1 && parsed(s1.proc)[s1.proc.stdin.length - 1]
+      // The card's third verb: main grants FIRST, then answers through the same
+      // door (index.ts's order) — so at answer time preAnswer already says yes.
+      if (s1) s1.proc.emitLines([askLine.replace('"id":0', '"id":6')])
+      await tick(10)
+      granted.add('ac/execute')
+      const forSession = manager.answerPermission('ac', '6', { allow: true })
+      const alwaysLine = s1 && parsed(s1.proc)[s1.proc.stdin.length - 1]
+      // And a request that arrives with the grant already held: answered
+      // allow_always before it is ever pending, never shown.
+      const stdinBefore = s1 ? s1.proc.stdin.length : 0
+      if (s1) s1.proc.emitLines([askLine.replace('"id":0', '"id":7')])
+      await tick(10)
+      const autoLine = s1 && parsed(s1.proc)[s1.proc.stdin.length - 1]
+      const autoEvent = events.find((e) => e.id === 'ac' && e.type === 'permission-auto-allowed')
+      const askedSeven = events.find((e) => e.id === 'ac' && e.type === 'permission-request' && e.requestId === '7')
+      ok('acp.3.d session/request_permission is pending with requestId \'0\' and toolName execute; answerPermission allow writes the JSON-RPC answer { id: 0, result.outcome.optionId: allow_once }, deny writes reject_once, an answer under a session grant (preAnswer true at answer time) writes allow_always, and a request arriving with the grant held is answered allow_always before it is pending (permission-auto-allowed, no permission-request event); no control_response line is ever written',
+        pendingBefore.length === 1 && pendingBefore[0].requestId === '0' && pendingBefore[0].toolName === 'execute' && pendingBefore[0].input.command === 'echo probe-ok' &&
+          allowed === true && allowLine.id === 0 && allowLine.result.outcome.optionId === 'allow_once' && allowLine.result.outcome.outcome === 'selected' &&
+          denied === true && denyLine.id === 5 && denyLine.result.outcome.optionId === 'reject_once' &&
+          forSession === true && alwaysLine.id === 6 && alwaysLine.result.outcome.optionId === 'allow_always' &&
+          s1.proc.stdin.length === stdinBefore + 1 && autoLine.id === 7 && autoLine.result.outcome.optionId === 'allow_always' && autoEvent !== undefined && autoEvent.toolName === 'execute' && askedSeven === undefined &&
+          manager.get('ac').pending.length === 0 && !s1.proc.stdin.some((l) => l.includes('control_response')),
+        JSON.stringify({ pendingBefore, allowLine, denyLine, alwaysLine, autoLine, autoEvent, askedSeven, stdin: s1 && s1.proc.stdin.length }))
+      granted = new Set()
+
+      // The process dies mid-prompt: the turn is aborted with the reason.
+      if (s1) s1.proc.exit(1, null, 'gone')
+      await tick(10)
+      const aborted = events.find((e) => e.id === 'ac' && e.type === 'turn-aborted')
+      const exited = manager.get('ac')
+      ok('acp.3.e the process exiting mid-prompt aborts the turn (turn-aborted, reason exited) and the session reads exited with the code and stderr',
+        aborted !== undefined && aborted.reason === 'exited' && exited.status === 'exited' && exited.exitCode === 1 && events.some((e) => e.id === 'ac' && e.type === 'status' && e.status === 'exited' && e.stderr === 'gone'),
+        JSON.stringify({ aborted, exited }))
+
+      // The second spawn: session/load names the adopted id; its replay stores nothing.
+      const storedBefore = manager.transcript('ac').length
+      const r3 = manager.send('ac', 'What was the first word?')
+      const s2 = spawns[1]
+      if (s2) s2.proc.emitLines([answerTo('load.log', 1)])
+      await tick(10)
+      const loadLine = s2 && parsed(s2.proc)[1]
+      const heldStill = s2 ? s2.proc.stdin.length : -1
+      const loadReplay = acpLines('load.log').slice(1, 6).map((l) => l.replace(/b5a48d7e-2ebc-460b-adb9-379df4779281/g, '20d8f012-67af-4c3a-a046-350822466b44'))
+      if (s2) s2.proc.emitLines(loadReplay)
+      await tick(10)
+      const promptAfterLoad = s2 && parsed(s2.proc)[2]
+      const storedAfter = manager.transcript('ac').length
+      ok('acp.3.f a session that has spawned before writes session/load (the adopted id, the cwd) after initialize answers instead of session/new, holds the prompt until the load answers, and the load\'s replayed history stores NO turns (the transcript already holds them); the prompt then goes with the held text',
+        r3 === 'sent' && spawns.length === 2 && loadLine !== undefined && loadLine.method === 'session/load' && loadLine.params.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' && loadLine.params.cwd === '/w' && heldStill === 2 &&
+          promptAfterLoad !== undefined && promptAfterLoad.method === 'session/prompt' && promptAfterLoad.params.prompt[0].text === 'What was the first word?' && promptAfterLoad.params.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' &&
+          storedAfter === storedBefore + 1 && manager.get('ac').status === 'streaming',
+        JSON.stringify({ r3, loadLine, heldStill, promptAfterLoad, storedBefore, storedAfter, status: manager.get('ac').status }))
+      manager.dispose('ac')
+
+      const src = readFileSync(join(__dirname, '..', 'src', 'shared', 'acp-transcript.ts'), 'utf8')
+      const capsBlock = (src.match(/ACP_CLIENT_CAPABILITIES[\s\S]*?\n\}\)/) || [''])[0]
+      const initLine = JSON.parse(ACP.acpInitialize(1))
+      ok('acp.4 clientCapabilities in the initialize line are EXACTLY { fs: { readTextFile: false, writeTextFile: false }, terminal: false } — as text in acp-transcript.ts (the declared object) and as the encoded line; no `true` anywhere in the declaration',
+        /readTextFile:\s*false/.test(capsBlock) && /writeTextFile:\s*false/.test(capsBlock) && /terminal:\s*false/.test(capsBlock) && !/true/.test(capsBlock) &&
+          JSON.stringify(initLine.params.clientCapabilities) === JSON.stringify(CAPS) && initLine.params.protocolVersion === 1,
+        JSON.stringify({ capsBlock, caps: initLine.params.clientCapabilities }))
+    } catch (e) {
+      // The stub adapter THROWS by name before M119 wires it; a throw here
+      // would abort every check below (verify-suites.md rule 1).
+      ok('acp.3 the manager drives an acp session without throwing', false, String((e && e.stack) || e).slice(0, 300))
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
