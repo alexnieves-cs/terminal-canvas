@@ -47,7 +47,32 @@ with a REAL Tab.
 
 **The hand checks, on this machine:**
 
-<!-- filled after the checks: each done or restated, with the date and the words seen -->
+Each of these needs a person at the app or an account's outward action, and this run's
+session had neither; they are RESTATED as owed, with the exact steps, never claimed:
+- **A real https site in the webview guest with a `target=_blank` link (M103).** `npm run
+  dev`, `Open a page…` on `https://developer.mozilla.org`, click a `_blank` link: the
+  guest's `setWindowOpenHandler` must deny and the pane must not navigate. Owed.
+- **A lineup into real worktrees (M104).** The sheet's `lineup: pair` on a real repository
+  with `worktree` on: two agent seats in two lanes under `userData/worktrees`, the shell seat
+  in the checkout. Owed.
+- **A real routine tick over ten minutes (M101).** A routine at one minute, the app left
+  open: a `routine:fire` per minute and a chat minted under `ROUTINE_PROMPT`, the pane's
+  `last run` moving. Owed.
+- **The OS folder dialog (M100).** Teammates pane → `Add place…` → a real folder chosen and
+  appended. Owed.
+- **`Cmd+Z` over the fourth text surface (M24/M116).** A Jira comment draft and the card's
+  `Assign to…` menu open: `Cmd+Z` must not reach `applyHistory`. Owed — the M24 entry's
+  documented hazard stands.
+- **Sentry (M112).** No DSN exists. Owed.
+- **THE outward check (M114/M115).** A throwaway GitHub repository, a teammate with the
+  `github` service and a place holding the clone, `Add to board` an issue, dispatch to a
+  real `claude`, `Open PR`: the push with the user's credentials, the POST through the
+  broker behind the spend card, the PR url on the card, `review` on the board. Creating a
+  repository under the user's account is an outward action this session did not take. Owed,
+  and the first thing to do by hand after 3.0.0.
+
+None of the seven was done in this run. `npm run verify` is silent on every one of them, as
+the manual-only list says.
 
 ## M125 — reconcile and ship 3.0.0
 
