@@ -3,7 +3,7 @@ import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId } from './spawn-sheet'
+import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices } from './spawn-sheet'
 import { type AgentBackend, BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -302,7 +302,15 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               <option value="">{own.effort ?? 'default'} effort</option>
               {EFFORTS.map((m) => <option key={m} value={m}>{m} effort</option>)}
             </select>
-            <input className="sheet__input sheet__input--mono" data-sheet-model list="sheet-reported-models" value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
+            {/* M120. A closed list where the row has one (copilot names its models), free text otherwise. */}
+            {(() => { const choices = backendOfWhatId(whatId) === undefined ? null : modelChoices(backendOfWhatId(whatId) as AgentBackend); return choices === null ? (
+              <input className="sheet__input sheet__input--mono" data-sheet-model list="sheet-reported-models" value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
+            ) : (
+              <select className="sheet__input sheet__input--mono" data-sheet-model data-sheet-model-list value={modelName} aria-label="model" onChange={(e) => setModelName(e.target.value)}>
+                <option value="">default model</option>
+                {choices.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            ) })()}
             {/* M99. Suggestions are what live sessions REPORTED, never a vendor list (a fixed list rots the day a model ships). */}
             <datalist id="sheet-reported-models" data-sheet-reported-models>
               {(model.reportedModels ?? []).map((m) => <option key={m} value={m} />)}

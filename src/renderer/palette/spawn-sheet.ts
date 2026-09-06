@@ -91,6 +91,11 @@ export function supervisorRowReason(backend: AgentBackend): string | null {
   return BACKENDS[backend].appendsPrompt ? null : BACKENDS[backend].reasons.noPrompt
 }
 
+/** M120. The row's closed model list where the CLI has one, null for free text — what the sheet's model field renders as a select or an input. */
+export function modelChoices(backend: AgentBackend): readonly string[] | null {
+  return BACKENDS[backend].models ?? null
+}
+
 export function backendOptions(available: Partial<Record<AgentBackend, boolean>>): BackendOption[] {
   return BACKEND_IDS.map((id) => {
     const ok = available[id] === true

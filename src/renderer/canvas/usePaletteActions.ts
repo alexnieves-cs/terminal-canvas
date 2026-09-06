@@ -1,6 +1,6 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
-import { BACKEND_IDS } from '@shared/agent-backends'
+import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
 import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
@@ -100,7 +100,7 @@ export interface PaletteActionsDeps {
   /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
   openBrowserPanel: (url: string) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
-  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true }) => Promise<SpawnResult>
   /** M92. Lock, pin and maximise, each with its opposite. */
   lockPanel: (id: string) => void
   unlockPanel: (id: string) => void
@@ -1842,7 +1842,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     commentPr: (itemId) => boardVerbsRef.current?.commentPr?.(itemId),
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
-    openBoard: () => chooseNavigator('board')
+    openBoard: () => chooseNavigator('board'),
+    // M120. The sandbox flag rides the create; the backend by NAME from the row, absent is claude.
+    newSandboxChat: (backend) => { void beginNewChat({ sandbox: true, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }) }
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,

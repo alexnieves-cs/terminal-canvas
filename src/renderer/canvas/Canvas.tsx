@@ -3176,7 +3176,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3802,7 +3802,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3826,12 +3826,14 @@ export function Canvas({
     const backend = carryBackend(opts ?? {})
     // M100. The identity rides the create (main reads the brief and checks the places) and the record.
     const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M120. The sandbox flag: main resolves the cwd to its own folder and ignores the one here; the record keeps the mark so a relaunch re-creates it the same way.
+    const sandbox = opts?.sandbox === true ? { sandbox: true as const } : {}
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...sandbox, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: result.snapshot.cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next

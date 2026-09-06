@@ -52,6 +52,8 @@ export interface AgentSessionSpec {
   appendSystemPrompt?: string
   /** M100. The teammate this chat speaks as; main's Places gate reads it before the cwd resolves. */
   teammateId?: string
+  /** M120. A chat with NO place: main resolves the cwd to its own sandbox folder (never a place, never home) and spawns on the row's read-only mode. Refused beside a teammate. */
+  sandbox?: true
 }
 
 export interface PendingPermission {

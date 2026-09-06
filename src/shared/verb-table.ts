@@ -100,6 +100,7 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',
+  newSandboxChat: 'a chat with no folder is the user\'s door — a plan works in a place, where its reads and writes can be judged',
   openPr: 'a broker write asks its own spend card — a plan has no teammate to answer it',
   commentPr: 'a broker write asks its own spend card — a plan has no teammate to answer it',
   beginRenamePreset: 'opens the palette\'s text mode — a plan has no typist',

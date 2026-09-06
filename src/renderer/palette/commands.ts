@@ -463,6 +463,8 @@ export interface PaletteActions {
   markDone(itemId: string): void
   /** M116. Open the navigator on the Board pane. */
   openBoard(): void
+  /** M120. A chat with no folder, in the app's own sandbox directory, on the row's read-only mode. */
+  newSandboxChat(backend: AgentBackend): void
 }
 
 export interface PaletteContext {
@@ -663,7 +665,7 @@ export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in 
 /** M73. One sentence for the palette row, the launcher line and the composer. */
 export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
 import type { AgentBackend } from '@shared/agent-session'
-import { BACKENDS } from '@shared/agent-backends'
+import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
@@ -1236,6 +1238,26 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       claudeAvailable(ctx.presets) ? undefined : REASON_NO_CLAUDE
     )
   )
+
+  // M120. A chat with NO place: one canvas-group row per registered backend
+  // (the sheet's own order), disabled by name for a binary not on the PATH
+  // and by the row's own `noSandbox` sentence for a row with no read-only
+  // mode — never dropped, so a backend that cannot is a backend that says so.
+  for (const backend of BACKEND_IDS) {
+    const row = BACKENDS[backend]
+    out.push(
+      withReason(
+        {
+          id: `chat.sandbox.${backend}`,
+          title: `New chat (no folder) — ${row.label}`,
+          searchText: `new chat no folder sandbox ${row.label} conversation without a repository`,
+          group: 'canvas',
+          run: () => actions.newSandboxChat(backend)
+        },
+        row.sandboxArgs === undefined ? row.reasons.noSandbox : backendAvailable(ctx.presets, backend) ? undefined : row.reasons.noCli
+      )
+    )
+  }
 
   for (const preset of ctx.presets) {
     out.push(
