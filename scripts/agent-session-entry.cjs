@@ -33,5 +33,8 @@ module.exports = {
   chatPanel: require('../src/shared/chat-panel'),
   /* M114. DISPATCH_PROMPT lives beside SUPERVISOR_PROMPT in the shared module. */
   sharedSession: require('../src/shared/agent-session'),
-  cost: require('../src/shared/cost')
+  cost: require('../src/shared/cost'),
+  /* M131. The pool: N workers over a shared list, pure over injected deps —
+     no AgentSessionManager import, no fs. */
+  pool: require('../src/main/pool-runner')
 }

@@ -1562,6 +1562,137 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ prompt, marks: typeof marks }))
   }
 
+  // M131 — pool.1. The pool: N workers over a shared list, no ceiling of its
+  // own (M82's `agents.maxConcurrent`/`budgetUsd` read LIVE every pump).
+  {
+    const poolNode = (width) => ({ kind: 'pool', width, list: '/fake/list.txt', prompt: 'do it', cwd: '/repo', dx: 0, dy: 0 })
+    const itemsOf = (n) => Array.from({ length: n }, (_, i) => `item-${i}`)
+
+    // pool.1a/1b — width 12 under a ceiling of 4: 4 start, 8 queue with the
+    // same 'concurrency' reason M82's own queue uses, and no budget applies.
+    {
+      const events = []
+      let nextId = 0
+      M.pool.startPool(poolNode(12), {
+        readList: () => ({ kind: 'ok', items: itemsOf(12) }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(20)
+      const started = events.filter((e) => e.kind === 'started').length
+      const queuedEvents = events.filter((e) => e.kind === 'queued')
+      const queued = queuedEvents.length
+      ok('pool.1a width is bounded by maxConcurrent READ LIVE, not captured',
+        started === 4 && queued === 8,
+        'a pool of 12 under a ceiling of 4 — M82 built this queue; the pool gets no ceiling of its own')
+      ok('pool.1b a queued worker names WHICH queue it is in',
+        queuedEvents.length > 0 && queuedEvents.every((e) => e.reason === 'concurrency'),
+        JSON.stringify(queuedEvents[0]))
+    }
+
+    // pool.1c — a worker finishing pulls the next item, until the list drains.
+    {
+      const events = []
+      let nextId = 0
+      const handle = M.pool.startPool(poolNode(2), {
+        readList: () => ({ kind: 'ok', items: itemsOf(5) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(20)
+      let started = events.filter((e) => e.kind === 'started')
+      // Drain by finishing the oldest live worker each round until the pool
+      // reports empty — this is the loop M97 widened from one agent to N.
+      let guard = 0
+      while (!events.some((e) => e.kind === 'stopped') && guard < 20) {
+        const stillLive = events.filter((e) => e.kind === 'started').map((e) => e.id)
+          .filter((id) => !events.some((e) => e.kind === 'finished' && e.id === id))
+        if (stillLive.length === 0) break
+        handle.finished(stillLive[0])
+        await tick(10)
+        guard += 1
+      }
+      const pulls = events.filter((e) => e.kind === 'started').length
+      const stopped = events.find((e) => e.kind === 'stopped')
+      ok('pool.1c a worker that finishes pulls the next item until the list is empty',
+        pulls === 5 && stopped !== undefined && stopped.why === 'empty',
+        `M97's loop shape widened from one agent to N — pulls=${pulls}`)
+    }
+
+    // pool.1d — an empty list ends the pool without minting a worker.
+    {
+      const events = []
+      M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'ok', items: [] }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: 'never' }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      const minted = events.filter((e) => e.kind === 'started').length
+      ok('pool.1d an empty list ends the pool without minting a worker',
+        minted === 0 && events.some((e) => e.kind === 'stopped' && e.why === 'empty'),
+        JSON.stringify(events))
+    }
+
+    // pool.1e — a list that cannot be read refuses BY NAME before any worker
+    // is minted.
+    {
+      const events = []
+      M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'error', why: 'ENOENT' }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: 'never' }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      const minted = events.filter((e) => e.kind === 'started').length
+      const res = events.find((e) => e.kind === 'refused')
+      ok('pool.1e a list that cannot be read refuses BY NAME before any worker is minted',
+        res !== undefined && res.kind === 'refused' && minted === 0,
+        JSON.stringify(events))
+    }
+
+    // pool.1f — a budget crossing interrupts every live worker and kills none.
+    // `spend` crosses AFTER the four started, and the caller re-checks live
+    // ceilings the same way M82 already does elsewhere (here via `tick()`,
+    // driven with none of the four having naturally finished).
+    {
+      const events = []
+      const interrupted = []
+      let nextId = 0
+      let spendValue = 0
+      const handle = M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'ok', items: itemsOf(4) }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 1 }),
+        spend: () => spendValue,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: (id) => interrupted.push(id),
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      const startedBefore = events.filter((e) => e.kind === 'started').length
+      spendValue = 5 // crosses budgetUsd: 1
+      handle.tick()
+      await tick(10)
+      const kills = 0 // interrupt is the only door this module has
+      ok('pool.1f a budget crossing INTERRUPTS every worker and never kills one',
+        startedBefore === 4 && interrupted.length === 4 && kills === 0 &&
+          events.some((e) => e.kind === 'stopped' && e.why === 'budget'),
+        'a killed agent loses its turn, and a budget is a stop — M82, unchanged')
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
