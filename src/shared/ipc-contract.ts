@@ -903,7 +903,8 @@ export interface SpawnRequest {
   /** M100. The teammate the panel speaks as; main checks its places before resolving the cwd. */
   teammateId?: string
 }
-export type SpawnResult = { kind: 'spawned' } | { kind: 'refused'; reason: string }
+/** `id` is present when the caller minted the panel itself (a chat); main's spawn answers without one. */
+export type SpawnResult = { kind: 'spawned'; id?: string } | { kind: 'refused'; reason: string }
 
 /** What the renderer answers PRESET_CAPTURE with: the focused panel, or null. */
 export interface CapturedPanel {

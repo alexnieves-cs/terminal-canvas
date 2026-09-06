@@ -53,6 +53,6 @@ export function insidePlace(candidate: string, places: readonly string[], realpa
 /** The one refusal, with the fix: the folder to add is the candidate's own directory. */
 export function placeRefusal(name: string, candidate: string): string {
   const norm = normalisePath(candidate) ?? candidate
-  const folder = norm.endsWith('/') ? norm : posix.dirname(norm) === norm ? norm : norm
-  return `${candidate} is outside every place of ${name} — add ${folder} to this teammate's places in the Teammates pane`
+  const shown = norm === '' ? '(no folder)' : norm
+  return `${shown} is outside every place of ${name} — add ${shown === '(no folder)' ? 'a folder' : shown} to this teammate's places in the Teammates pane`
 }

@@ -152,6 +152,50 @@ distinction. (7, 14) A disabled verb's reason is its title, the app's rule for e
 (23) `Deny` vs `Deny Bash` is pre-existing wording. (18) `Reconnect…` opens the palette's secret
 mode; `Verify` acts — the ellipsis is right.
 
+### The verifier — fourteen findings; eleven taken, one declined, two deferred by name
+
+**Taken.**
+1. **(blocker) The spend card was opt-in for the agent and a panel id could be borrowed**: a
+   headless chat's environment carried no `TC_PANEL_ID` and no socket, so `tc api` from a
+   teammate's chat was "a request with no teammate" — the pre-M102 broker — and `--panel
+   <another chat>` borrowed that chat's grants. Now every headless session's environment is its
+   own (`envFor`: the door, `TC_PANEL_ID`, a per-session `TC_PANEL_TOKEN`, `tc` on PATH — the
+   block PtyManager already gives a terminal), `tc` forwards the token, and the control handler
+   maps a token to the panel main minted it for, IGNORING a claimed panelId beside it; a token
+   this window never minted is refused by name. `verify:control token.1`.
+2. **(blocker) The routine tick sent its prompt into "the newest chat"** — read from `panelsRef`
+   before React had rendered the mint, so a user's own chat got the routine's prompt, or nothing
+   was sent and the row said `last run` anyway. `beginNewChat` answers its minted id now
+   (`SpawnResult.id`), and the tick uses it.
+3. **(blocker) Every `routine:save` re-armed every routine**, resetting each interval's phase — a
+   one-minute routine's saves starved a five-minute one forever. `arm` keeps the timer of a
+   routine whose schedule is unchanged; the missed mark is computed only at STARTUP, so a
+   resume after a long pause is never "the app was closed" (findings 3 and 8; `verify:file
+   routine.2`).
+4. A relaunch re-created a teammate's chat without its `teammateId` — no brief, no gate.
+   `useChatSessions` carries it.
+5. The spec said the file verbs were gated; they are the user's own panels and were not. The
+   spec is amended at the gate, the suite header too, and the honest limit stands as written.
+6. The spend card could land on another chat of the same teammate: the asking panel rides
+   `SpendApproval` and is preferred.
+7. `saveTeammate` replaced an unparseable record with an EMPTY one — places and services gone
+   silently. It refuses by name now.
+9. The tick's report merged onto main's stale fire payload: it merges onto the LATEST record.
+10. The control door's memory verbs ignored the `teammate:` prefix (a nonsense repo file);
+    routed like the IPC door.
+11. The card says `cost: … (as stated by the caller)`.
+13. `routineRefusal` refuses a teammate with no places; `placeRefusal` names `(no folder)` for an
+    empty cwd instead of an empty string.
+14. `setPermissionCheckHandler` set beside the request handler on the guest partition.
+
+**Declined.** (12) The card's tool name is the service (`github`), not `broker:github` — the
+spec's prefix was a namespace no other tool shares; the spec is amended.
+
+**Deferred, by name.** (4b) A routine's `ROUTINE_PROMPT` is not on the chat's record, so a
+relaunch resumes that chat without it — the teammate's brief returns, the routine rule does
+not. (10b) `tc memory add --teammate`, and the pane's memory, skills and chats lists: the
+memory store and routing exist; the surfaces are not built this act.
+
 ## Verification
 
-(At the gate.)
+(The chain's exit line is recorded below at the gate.)

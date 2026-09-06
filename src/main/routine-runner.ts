@@ -22,8 +22,15 @@ export interface RoutineRunnerDeps {
 }
 
 export interface RoutineRunner {
-  /** Arms every unpaused routine given (a paused one is known but has no interval), disarming any not in the list; returns the ids marked missed. */
-  arm(routines: readonly PersistedRoutine[]): string[]
+  /**
+   * Arms every unpaused routine given (a paused one is known but has no
+   * interval), disarming any not in the list. A routine whose interval and
+   * pause are UNCHANGED keeps its timer — a save must not reset every phase,
+   * or a frequent routine's saves starve a slower one forever. The missed
+   * mark is computed only at STARTUP (`startup: true`): a resume after a long
+   * pause is not "the app was closed". Returns the ids marked missed.
+   */
+  arm(routines: readonly PersistedRoutine[], opts?: { startup?: boolean }): string[]
   /** Fires one now, whatever the schedule says. False for an unknown id. */
   runNow(id: string): boolean
   /** Every known id, paused included. */
@@ -50,14 +57,20 @@ export function createRoutineRunner(deps: RoutineRunnerDeps): RoutineRunner {
     deps.fire(stamped)
   }
   return {
-    arm(routines) {
+    arm(routines, opts) {
       const wanted = new Set(routines.map((r) => r.id))
       for (const id of [...armed.keys()]) if (!wanted.has(id)) disarm(id)
       const missed: string[] = []
       for (const r of routines) {
+        const existing = armed.get(r.id)
+        if (existing !== undefined && existing.routine.everyMs === r.everyMs && existing.routine.paused === r.paused) {
+          // Same schedule: keep the timer's phase, take the newer record.
+          existing.routine = r
+          continue
+        }
         disarm(r.id)
         if (r.paused) { armed.set(r.id, { routine: r, handle: null }); continue }
-        const due = missedAt(r, deps.now())
+        const due = opts?.startup === true ? missedAt(r, deps.now()) : null
         let routine = r
         if (due !== null && (r.missed === undefined || r.missed.at !== due)) {
           routine = { ...r, missed: { at: due } }

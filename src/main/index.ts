@@ -1,4 +1,5 @@
 import { homedir } from 'node:os'
+import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
@@ -10,7 +11,6 @@ import { createPlacesGate, fsRealpath } from './places'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
 import { parseTeammates, parseRoutines } from '@shared/layout-schema'
-import { emptyTeammate } from '@shared/teammates'
 import { resolveSpawnRequest } from './spawn-request'
 import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
@@ -545,7 +545,18 @@ const routineRunner = createRoutineRunner({
   fire: (routine) => { mainWindow?.webContents.send(IPC_EVENTS.ROUTINE_FIRE, routine) },
   save: (routine) => layoutStore.saveRoutine(routine)
 })
-const armRoutines = (): string[] => routineRunner.arm(layoutStore.routines())
+const armRoutines = (startup = false): string[] => routineRunner.arm(layoutStore.routines(), { startup })
+// M102. A session TOKEN per chat, minted into its environment: `tc api` from
+// inside the chat carries it, and the control handler maps it back to the
+// panel that really asked — a claimed panelId beside it is ignored. Memory
+// only; a relaunch mints fresh ones, which is right (the old shells are gone).
+const panelTokens = new Map<string, string>()
+const tokenOfPanel = (id: string): string => {
+  let t = panelTokens.get(id)
+  if (t === undefined) { t = randomBytes(16).toString('hex'); panelTokens.set(id, t) }
+  return t
+}
+const panelOfToken = (token: string): string | undefined => { for (const [id, t] of panelTokens) if (t === token) return id; return undefined }
 const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
 
 /**
@@ -605,9 +616,9 @@ const broker = createBroker({
   services: (teammateId) => layoutStore.teammates().find((t) => t.id === teammateId)?.services,
   account: (service) => credentialStore.list().find((c) => c.service === service)?.label,
   approve: async (ask) => {
-    const chatId = chatOfTeammate(ask.teammateId)
+    const chatId = chatOfTeammate(ask.teammateId, ask.panelId)
     if (chatId === undefined || agentSessions === null) return false
-    return agentSessions.askExternal(chatId, ask.service, { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost}`)
+    return agentSessions.askExternal(chatId, ask.service, { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost} (as stated by the caller)`)
   }
 })
 
@@ -622,6 +633,7 @@ const controlHandler = createControlHandler({
   // M87. The one verb that can spend a credential.
   broker,
   teammateOf: teammateOfPanel,
+  panelOfToken,
   presets: () => allPresets(layoutStore.presets()),
   defaultId: () => layoutStore.defaultPresetId() || null,
   spawn: (preset, cwd) => {
@@ -642,8 +654,9 @@ const controlHandler = createControlHandler({
   // the node and the chat never read, and every door still shows a plausible
   // non-empty list (M83's verifier).
   memory: {
-    list: async (root, limit) => memoryStore.list(await memoryRoot(root), limit),
-    add: async (req) => memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+    // M100. The teammate prefix routes here as it does at the IPC door.
+    list: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
+    add: async (req) => req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
   },
   canvas: async () => {
     const wc = mainWindow?.webContents
@@ -771,6 +784,7 @@ function createWindow(): void {
   // the lot — answered no by default. The partition is the pane's own, so
   // the main window's session (which never sees a page) is untouched.
   session.fromPartition('persist:tc-browser').setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
+  session.fromPartition('persist:tc-browser').setPermissionCheckHandler(() => false)
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
@@ -853,6 +867,17 @@ app.whenReady().then(async () => {
     // tracker is created after the manager (it subscribes to it), so a
     // captured reference here would be null for the life of the app.
     preAnswer: (id, toolName) => approvals?.granted(id, toolName) ?? false
+    ,
+    // M102. Each headless session gets the door and its OWN panel id and token
+    // — the same block PtyManager gives a terminal — so `tc api` from a chat
+    // is that chat's, never a claim.
+    envFor: (id) => ({
+      ...env,
+      TC_CONTROL_SOCKET: controlSocketPath,
+      TC_PANEL_ID: id,
+      TC_PANEL_TOKEN: tokenOfPanel(id),
+      PATH: env['PATH'] === undefined || env['PATH'] === '' ? launcherDir : `${launcherDir}:${env['PATH']}`
+    })
   })
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
@@ -1037,8 +1062,8 @@ app.whenReady().then(async () => {
   })
   watchRunnerRef = watchRunner
   // M101. Arm every routine the layout holds; a tick that fell while the app
-  // was closed is marked missed here, never fired.
-  armRoutines()
+  // was closed is marked missed here (startup only), never fired.
+  armRoutines(true)
   const disarmWatch = (id: string): void => {
     watchFileWatchers.close(id)
     const dir = watchDirWatchers.get(id)
@@ -1393,10 +1418,13 @@ app.whenReady().then(async () => {
       // the same rules the file is (a relative place never lands).
       listTeammates: () => layoutStore.teammates(),
       saveTeammate: (teammate) => {
-        const parsed = parseTeammates([teammate], [])
-        const saved = parsed[0] ?? emptyTeammate(teammate.id, teammate.name)
-        layoutStore.saveTeammate(saved)
-        return saved
+        // A record the parser drops is REFUSED, never replaced with an empty one
+        // (which would wipe its places and services silently — the verifier).
+        const warnings: string[] = []
+        const parsed = parseTeammates([teammate], warnings)[0]
+        if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
+        layoutStore.saveTeammate(parsed)
+        return parsed
       },
       removeTeammate: (id) => layoutStore.deleteTeammate(id),
       // M101. A save is refused BY NAME against M96's table and the teammate's
@@ -1406,7 +1434,7 @@ app.whenReady().then(async () => {
         const parsed = parseRoutines([routine], [])[0]
         if (parsed === undefined) return { kind: 'refused' as const, reason: `the routine could not be kept — the interval is at least ${ROUTINE_MIN_MS / 60_000} minute and it needs a name, a teammate and a prompt` }
         const mate = layoutStore.teammates().find((t) => t.id === parsed.teammateId)
-        const refusal = routineRefusal(parsed, mate === undefined ? undefined : { name: mate.name, scheduling: mate.scheduling })
+        const refusal = routineRefusal(parsed, mate === undefined ? undefined : { name: mate.name, scheduling: mate.scheduling, places: mate.places })
         if (refusal !== null) return { kind: 'refused' as const, reason: refusal }
         layoutStore.saveRoutine(parsed)
         armRoutines()

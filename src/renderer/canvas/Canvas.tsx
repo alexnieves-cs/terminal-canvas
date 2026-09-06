@@ -2286,16 +2286,22 @@ export function Canvas({
       const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT })
       const at = Date.now()
       if (result.kind === 'refused') {
-        await window.canvas.routine.save({ ...routine, lastRun: { at, outcome: 'refused', error: result.reason } })
+        const latestR = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
+        await window.canvas.routine.save({ ...latestR, lastRun: { at, outcome: 'refused', error: result.reason } })
         reloadRoutines()
         return
       }
-      const panelId = panelsRef.current.filter(isChatPanel).map((p) => p.rect.id).sort((a, b) => Number(b.slice(1)) - Number(a.slice(1)))[0]
+      // The id the mint answered — never "the newest chat", which a user's own
+      // chat could be (the verifier's finding).
+      const panelId = result.id
+      // Merge onto the LATEST record: a pause saved while the mint was in flight
+      // must not be overwritten by the fire's stale payload.
+      const latest = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
       if (panelId !== undefined) {
         const answer = await window.canvas.agentSession.send(panelId, routine.prompt)
         const refused = typeof answer === 'object' ? answer.refused : answer.startsWith('refused') || answer === 'no-session' ? answer : undefined
         if (routine.plan !== undefined && routine.plan.trim() !== '') insertIntoComposer(panelId, routine.plan)
-        await window.canvas.routine.save({ ...routine, lastRun: { at, outcome: refused === undefined ? 'started' : 'refused', panelId, ...(refused === undefined ? {} : { error: refused }) } })
+        await window.canvas.routine.save({ ...latest, lastRun: { at, outcome: refused === undefined ? 'started' : 'refused', panelId, ...(refused === undefined ? {} : { error: refused }) } })
       }
       reloadRoutines()
     })()
@@ -3706,7 +3712,7 @@ export function Canvas({
     selectOnly(id)
     // M81/M80's rule: a first message is INSERTED, never sent.
     if (opts?.message !== undefined && opts.message !== '') void deliverToComposer(id, opts.message)
-    return { kind: 'spawned' }
+    return { kind: 'spawned', id }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the

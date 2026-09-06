@@ -131,6 +131,10 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
       if (body !== undefined) fields.body = body
       const panelId = panelFlag ?? env['TC_PANEL_ID']
       if (panelId !== undefined && panelId !== '') fields.panelId = panelId
+      // M102. The session's token, when this shell is a panel's: main trusts it
+      // over any panelId, so an agent cannot borrow another panel's teammate.
+      const token = env['TC_PANEL_TOKEN']
+      if (token !== undefined && token !== '') fields.token = token
       return { kind: 'ok', line: JSON.stringify(fields) }
     }
     case 'list':

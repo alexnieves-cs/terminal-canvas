@@ -56,6 +56,8 @@ export interface SpendApproval {
   /** The connected account's label (`credential:list`'s), never the token. */
   account: string
   cost: string
+  /** The panel that asked, so the card lands on ITS chat and its session grant answers it. */
+  panelId?: string
 }
 
 export type BrokerAnswer =
@@ -225,7 +227,7 @@ export function createBroker(deps: BrokerDeps): Broker {
       // cost. Read-only methods run uninterrupted (the table above). The
       // answer comes through M98's door, `Allow for session` included.
       if (req.teammateId !== undefined && !READ_ONLY_METHODS.has(method)) {
-        const allowed = deps.approve === undefined ? false : await deps.approve({ teammateId: req.teammateId, service: req.service, method, path: asked.path, account: deps.account?.(req.service) ?? req.service, cost: req.cost ?? 'unknown' })
+        const allowed = deps.approve === undefined ? false : await deps.approve({ teammateId: req.teammateId, service: req.service, method, path: asked.path, account: deps.account?.(req.service) ?? req.service, cost: req.cost ?? 'unknown', ...(req.panelId === undefined ? {} : { panelId: req.panelId }) })
         if (!allowed) return refuse(asked, `${method} ${asked.path} on ${req.service} was not allowed — a write through the broker asks first, on the teammate's chat`, NOT_ANSWERED_CODE)
       }
       if (inFlight >= BROKER_IN_FLIGHT_MAX) return refuse(asked, `${BROKER_IN_FLIGHT_MAX} calls are already in flight — wait for one to finish`)

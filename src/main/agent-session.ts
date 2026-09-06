@@ -113,6 +113,13 @@ export interface AgentSessionDeps {
   hasTurns?: (id: string) => boolean
   /** The login environment every PTY gets — how the CLI finds its config. */
   env: Record<string, string>
+  /**
+   * M102. The environment for ONE session — the login env plus the door and
+   * the session's own panel id and token (`TC_PANEL_ID`, `TC_PANEL_TOKEN`,
+   * `TC_CONTROL_SOCKET`), so `tc api` from inside a chat is that chat's, not a
+   * claim. Absent means `env` for every session (every pre-M102 check).
+   */
+  envFor?: (id: string) => Record<string, string>
   newSessionId: () => string
   /**
    * M73. Whether the CLI already holds a transcript for this session id
@@ -584,7 +591,7 @@ export class AgentSessionManager {
     })
     // `closeStdin` is written only when true: the fake runner records the
     // spawn as handed, and M71's checks compare the claude spawn by shape.
-    const proc = this.deps.runner({ command: binary, args, cwd: session.cwd, env: this.deps.env, ...(row.closeStdin ? { closeStdin: true } : {}) })
+    const proc = this.deps.runner({ command: binary, args, cwd: session.cwd, env: this.deps.envFor?.(session.id) ?? this.deps.env, ...(row.closeStdin ? { closeStdin: true } : {}) })
     session.proc = proc
     session.carry = ''
     session.exitCode = undefined

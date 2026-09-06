@@ -33,7 +33,7 @@ export type ControlRequest =
    * performed by main with the credential attached and never returned. The
    * verb that can SPEND a credential — refused at the URL door outright.
    */
-  | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string; cost?: string }
+  | { verb: 'api'; service: string; method: string; path: string; body?: string; panelId?: string; cost?: string; token?: string }
 
 export type ParsedControl =
   | { kind: 'ok'; req: ControlRequest }
@@ -120,6 +120,10 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       // that asked, so an agent cannot name an identity it is not.
       const cost = optionalString(fields['cost'])
       if (cost !== null && cost !== undefined) req.cost = cost.slice(0, 64)
+      // M102. The session's own token (from its environment): main maps it to
+      // the panel that really asked and IGNORES a claimed panelId beside it.
+      const token = optionalString(fields['token'])
+      if (token !== null && token !== undefined) req.token = token.slice(0, 128)
       return { kind: 'ok', req }
     }
     case 'focus': {

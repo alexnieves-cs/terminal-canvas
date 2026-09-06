@@ -974,7 +974,7 @@ const p = (name) => join(DIR, name)
   const r1 = { id: 'r1', name: 'a', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false }
   const stale = { id: 'r2', name: 'b', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false, lastRun: { at: now - 5 * 60000, outcome: 'started' } }
   const paused = { id: 'r3', name: 'c', teammateId: 't', everyMs: 60000, prompt: 'p', paused: true }
-  const missed = runner ? runner.arm([r1, stale, paused]) : []
+  const missed = runner ? runner.arm([r1, stale, paused], { startup: true }) : []
   const armedCount = timers.size
   const tick = () => { for (const t of [...timers.values()]) t.fn() }
   now += 60000; tick()
@@ -991,6 +991,40 @@ const p = (name) => join(DIR, name)
       // The fire's stamp clears the missed mark: the LAST r2 saved carries none.
       saved.filter((s) => s.id === 'r2').slice(-1)[0].missed === undefined,
     JSON.stringify({ has, armedCount, missed, firedAfterTick, rearmed, armedAfterRearm, ran, ranUnknown, stampedR1, saved: saved.map((s) => [s.id, s.missed, s.lastRun && s.lastRun.outcome]) }))
+  if (runner) runner.disposeAll()
+}
+
+// M101 — routine.2. A SAVE KEEPS THE PHASE. Re-arming with an unchanged schedule
+// keeps the routine's timer (a frequent routine's saves must not restart a
+// slower one forever — the verifier's finding); a changed interval re-arms;
+// the missed mark is computed only at STARTUP, so a resume after a long
+// pause is never "the app was closed".
+{
+  const has = typeof F.createRoutineRunner === 'function'
+  const timers = new Map(); let seq = 0; let now = 5_000_000
+  const fired = [], saved = []
+  const runner = has ? F.createRoutineRunner({
+    now: () => now,
+    setInterval: (fn, ms) => { const h = ++seq; timers.set(h, { fn, ms }); return h },
+    clearInterval: (h) => { timers.delete(h) },
+    fire: (r) => fired.push(r.id),
+    save: (r) => saved.push(r)
+  }) : null
+  const a = { id: 'a', name: 'a', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false }
+  const b = { id: 'b', name: 'b', teammateId: 't', everyMs: 300000, prompt: 'p', paused: false }
+  if (runner) runner.arm([a, b], { startup: true })
+  const handlesBefore = [...timers.keys()].join(',')
+  if (runner) runner.arm([{ ...a, name: 'a renamed' }, b]) // a save with the same schedule
+  const handlesAfter = [...timers.keys()].join(',')
+  if (runner) runner.arm([{ ...a, everyMs: 120000 }, b]) // a changed interval
+  const handlesChanged = [...timers.keys()].join(',')
+  const stale = { id: 's', name: 's', teammateId: 't', everyMs: 60000, prompt: 'p', paused: false, lastRun: { at: now - 3600000, outcome: 'started' } }
+  const notStartup = runner ? runner.arm([a, b, stale]) : ['x']
+  const stale2 = { ...stale, id: 's2' }
+  const atStartup = runner ? runner.arm([a, b, stale, stale2], { startup: true }) : []
+  ok('routine.2 an unchanged schedule keeps its timer across a save; a changed interval re-arms; the missed mark is computed only at startup — a later arm marks nothing',
+    has && handlesBefore === handlesAfter && handlesChanged !== handlesAfter && notStartup.length === 0 && atStartup.join() === 's2' && saved.some((s) => s.id === 's2' && s.missed) && !saved.some((s) => s.id === 's' && s.missed),
+    JSON.stringify({ handlesBefore, handlesAfter, handlesChanged, notStartup, atStartup }))
   if (runner) runner.disposeAll()
 }
 

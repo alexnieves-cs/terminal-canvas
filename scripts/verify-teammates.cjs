@@ -1,6 +1,6 @@
 /* Verifies M100's Places — a teammate's authority over the filesystem as an
    explicit list of approved folders, checked in MAIN before any spawn
-   resolves a cwd and before any file verb answers.
+   resolves a cwd (the file verbs are the user's own and carry no teammate).
    Run with: npm run verify:teammates
 
    Plain node over a FAKE realpath. The three traversal cases are the whole
