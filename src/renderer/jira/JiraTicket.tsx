@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { WorkItem, WorkItemTransition } from '@shared/work-item'
 
 /**
@@ -12,9 +12,13 @@ export function JiraTicket(props: {
   focusedId: string | null
   restoreFocus: (id: string) => void
   onSpawn(item: WorkItem): void
+  /** M113. Add to board — an upsert by the issue key. */
+  onAddToBoard(item: WorkItem): void
   onWritten(): void
 }): JSX.Element {
   const { item } = props
+  const [added, setAdded] = useState(false)
+  useEffect(() => { if (!added) return; const t = setTimeout(() => setAdded(false), 2000); return () => clearTimeout(t) }, [added])
   const [draft, setDraft] = useState<string | null>(null)
   const [transitions, setTransitions] = useState<WorkItemTransition[] | null>(null)
   /**
@@ -114,6 +118,7 @@ export function JiraTicket(props: {
 
     <div className="jira-node__actions">
       <button type="button" onMouseDown={(e) => { stop(e); props.onSpawn(item) }}>Start session</button>
+      <button type="button" data-work-add={item.id} title={`Put ${item.id} on the board — a second press updates it`} onMouseDown={(e) => { stop(e); props.onAddToBoard(item); setAdded(true) }}>{added ? 'Added' : 'Add to board'}</button>
       <button
         type="button"
         data-jira-comment-open

@@ -138,6 +138,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
+import { WORK_ITEM_STATES, type PersistedWorkItem } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -254,6 +255,13 @@ export function Canvas({
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
   const annotationsRef = useRef(annotations)
   annotationsRef.current = annotations
+  // M113. The board's records: saved with the workspace, absent on disk when
+  // empty, and NOT in history — records like runs and bookmarks, not layout.
+  const [workItems, setWorkItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
+  const workItemsRef = useRef(workItems)
+  workItemsRef.current = workItems
+  // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
   // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
   // or the strip's Done. A selected note is the canvas's, like a selected
   // edge; the editing note is the one whose input is open.
@@ -561,6 +569,14 @@ export function Canvas({
     onSpawn(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), undefined, { title: `${item.id}: ${item.title}` })
   }, [onSpawn])
   const spawnJiraTicket = useCallback((item: WorkItem) => spawnWorkItem(item, 'Jira ticket'), [spawnWorkItem])
+  // M113. `Add to board` on a work panel's row. The key is the provider's own
+  // id (`owner/repo#N`, `PROJ-12`) — the identity the dedupe reads, so a
+  // second press updates rather than duplicates. Declared after the palette
+  // memo exists (it calls addWorkItem), which is why these are functions of
+  // a ref rather than closures over paletteActions.
+  const addToBoardRef = useRef<(item: WorkItem, source: 'github' | 'jira') => void>(() => undefined)
+  const addGithubToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'github'), [])
+  const addJiraToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'jira'), [])
   const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
   const openGithubPanel = useCallback(() => {
     const id = `g${nextIdRef.current++}`
@@ -1120,6 +1136,18 @@ export function Canvas({
   useEffect(() => window.canvas.canvas.onFlip(() => setFlipped((v) => !v)), [])
   // `paletteActionsRef` is the existing ref, assigned after the actions are built; read inside the listener only.
   useEffect(() => window.canvas.canvas.onTidy(() => paletteActionsRef.current?.tidyPanels(panelsRef.current.map((p) => p.rect.id))), [])
+  // M113. `tc board add/done`: the renderer answers because it OWNS the
+  // workspace it renders — a main-side write would be overwritten by the next
+  // coalesced save. Answered synchronously from refs, like the model.
+  useEffect(() => window.canvas.canvas.onBoard((req) => {
+    const actions = paletteActionsRef.current
+    if (actions === null || actions === undefined) return { kind: 'refused', reason: 'the canvas is still starting' }
+    if (req.op === 'add') return { kind: 'ok', id: actions.addWorkItem({ source: 'typed', title: req.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] }) }
+    const item = workItemsRef.current.find((i) => i.id === req.id)
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${req.id} — tc status lists the board` }
+    actions.markDone(req.id)
+    return { kind: 'ok', id: req.id }
+  }), [])
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -2249,9 +2277,10 @@ export function Canvas({
       focusedId: merged && before ? before.focusedId : focusedId,
       bookmarks,
       runs,
-      ...(annotations.length === 0 ? {} : { annotations })
+      ...(annotations.length === 0 ? {} : { annotations }),
+      ...(workItems.length === 0 ? {} : { workItems })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -4097,8 +4126,12 @@ export function Canvas({
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput, openBrowserPanel,
-    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v)
+    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v),
+    workItemsRef, setWorkItems, boardVerbsRef
   })
+  addToBoardRef.current = (item, source) => {
+    paletteActions.addWorkItem({ source, key: item.id, title: item.title, url: item.url, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...(item.description === '' ? {} : { description: item.description }), ...(item.state === null ? {} : { remoteState: item.state }) })
+  }
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
   // changes, so handing `paletteActions.removeLink` straight to LinkLayer
@@ -4663,8 +4696,8 @@ export function Canvas({
                 />
               )
             }
-            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} onAddToBoard={addGithubToBoard} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

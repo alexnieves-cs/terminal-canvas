@@ -209,6 +209,7 @@ const spyActions = () => {
     beginBrowser: record('beginBrowser'),
     // M106
     toggleFlip: record('toggleFlip'),
+    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
@@ -2381,6 +2382,23 @@ const WS = [
     swarm !== null && swarm.sessions === 4 && swarm.agents === 3 && swarm.queued === 2 && /2 .*queue/.test(swarm.ceilingLine) && /ceiling of 2/.test(swarm.ceilingLine) &&
       bench !== null && bench.queued === 0 && bench.ceilingLine === '',
     JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine }))
+}
+
+// M113 — board.1. THE TYPED DOOR. `New work item…` is a canvas-group row (a
+// panel-group row competes with Go-to rows by fuzzy score), never disabled,
+// running the palette's text mode — a plan has no typist, so the action is
+// excluded from the verb table by name rather than reached.
+{
+  let row, calls = []
+  try {
+    const c = ctx()
+    row = byId(P.buildCommands(c), 'board.new')
+    if (row) row.run()
+    calls = c.actions.calls.map((x) => x[0])
+  } catch (e) { row = { disabledReason: String(e) } }
+  ok('board.1 New work item… is a canvas-group row with no disabled reason that runs beginNewWorkItem',
+    row !== undefined && row.group === 'canvas' && row.disabledReason === undefined && /New work item/.test(row.title) && calls.includes('beginNewWorkItem'),
+    JSON.stringify({ row: row && { id: row.id, group: row.group, title: row.title, disabledReason: row.disabledReason }, calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

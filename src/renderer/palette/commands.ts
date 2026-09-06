@@ -1,3 +1,4 @@
+import type { PersistedWorkItem } from '@shared/work-items'
 import type { Command } from './palette-model'
 import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
@@ -448,6 +449,18 @@ export interface PaletteActions {
   beginBrowser(): void
   /** M106. Flip every terminal to its far view, and back. */
   toggleFlip(): void
+  /** M113. Upsert a board record (the dedupe by key); returns the surviving id. */
+  addWorkItem(item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }): string
+  /** M113. The typed door: the palette's text mode asks for a title. */
+  beginNewWorkItem(): void
+  /** M114. The one verb: a lane, a chat as the teammate, an edge meaning dispatched. */
+  dispatchWorkItem(itemId: string, teammateId: string, root?: string): void
+  /** M115. A broker WRITE behind the teammate's spend card — excluded from plans by name. */
+  openPr(itemId: string): void
+  /** M115. The optional comment on the issue after done — the second card. */
+  commentPr(itemId: string): void
+  /** M115. done is the user's. */
+  markDone(itemId: string): void
 }
 
 export interface PaletteContext {
@@ -1345,6 +1358,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     title: 'Reset canvas…',
     group: 'canvas',
     run: () => actions.resetCanvas()
+  })
+  // M113. The typed door onto the board. A canvas-group row (a panel-group
+  // row competes with Go-to rows by fuzzy score) and never disabled: a typed
+  // item needs no service, no place and no CLI — it is a title on a board.
+  out.push({
+    id: 'board.new',
+    title: 'New work item…',
+    searchText: 'board work item task card todo kanban new',
+    group: 'canvas',
+    run: () => actions.beginNewWorkItem()
   })
 
   // --- Placement (M50) -------------------------------------------------------

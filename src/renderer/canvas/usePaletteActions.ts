@@ -14,6 +14,7 @@ import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
+import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
@@ -139,6 +140,15 @@ export interface PaletteActionsDeps {
   chooseNavigator: (pane: NavigatorPane) => void
   /** M106. */
   toggleFlip: () => void
+  /** M113. The board's records (a ref: a verb reads the list once) and their setter. Records, not layout: not in history, like runs and bookmarks. */
+  workItemsRef: RefObject<PersistedWorkItem[]>
+  setWorkItems: Dispatch<SetStateAction<PersistedWorkItem[]>>
+  /**
+   * M114/M115. The verbs Canvas installs AFTER the memo is built (they close
+   * over the chat and broker doors that live there); a ref rather than four
+   * deps so the memo does not rebuild when Canvas re-creates them.
+   */
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>
 }
 
 /**
@@ -178,7 +188,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip,
+    workItemsRef, setWorkItems, boardVerbsRef
   } = deps
 
   return useMemo<PaletteActions>(() => ({
@@ -1792,7 +1803,36 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     openTeammates: () => chooseNavigator('teammates')
     ,
     // M106. The flip is Canvas's view state; the row reaches it through the same event the menu sends.
-    toggleFlip: () => toggleFlip()
+    toggleFlip: () => toggleFlip(),
+    // M113. The dedupe lives in upsertWorkItem; the id the caller gets back is
+    // the SURVIVING one, which for a second `Add to board` is the first's.
+    addWorkItem: (item) => {
+      const id = item.id ?? `wi${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
+      const next = upsertWorkItem(workItemsRef.current ?? [], { ...item, id }, Date.now())
+      setWorkItems(next)
+      const identity = item.key === undefined ? undefined : next.find((i) => i.source === item.source && i.key === item.key)
+      return identity === undefined ? id : identity.id
+    },
+    beginNewWorkItem: () => {
+      setInputMode({
+        kind: 'text',
+        label: 'New work item — a title',
+        initial: '',
+        submit: (value) => {
+          const refusal = workItemRefusal(value)
+          if (refusal !== null) { setInputMode({ kind: 'text', label: refusal, initial: value, submit: () => undefined }); return }
+          const id = `wi${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
+          setWorkItems((current) => upsertWorkItem(current, { id, source: 'typed', title: value.trim(), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] }, Date.now()))
+          setInputMode(null)
+        }
+      })
+      palette.openPalette()
+    },
+    // M114/M115. Installed by Canvas; a verb asked before install is a no-op, never a throw.
+    dispatchWorkItem: (itemId, teammateId, root) => boardVerbsRef.current?.dispatch?.(itemId, teammateId, root),
+    openPr: (itemId) => boardVerbsRef.current?.openPr?.(itemId),
+    commentPr: (itemId) => boardVerbsRef.current?.commentPr?.(itemId),
+    markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId)
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
@@ -1803,5 +1843,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef])
 }
