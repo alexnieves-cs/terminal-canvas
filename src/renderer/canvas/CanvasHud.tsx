@@ -13,6 +13,8 @@ export interface CanvasHudProps {
   selectedId: string | null
   /** M63. The selected panel's title and state word, so the strip says who and what, not an id. */
   selected?: { id: string; label: string; state: StateInput } | null
+  /** M123. The last update check's answer, when it said newer — the one line a user with panels sees. */
+  updateNewer?: { version: string; url: string } | null
   /** M78. A selected EDGE, when one is: the strip names it as `source → target`. */
   selectedEdge?: { source: string; target: string } | null
   /** null until the one-shot probe answers. */
@@ -40,7 +42,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit, updateNewer }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
@@ -69,6 +71,12 @@ export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected
       {backend?.kind === 'direct' && (
         <span className="canvas-hud__warn" title={backend.reason}>
           no tmux — sessions end on reload
+        </span>
+      )}
+      {/* M123. The launcher's notice reaches only an empty canvas; a user with panels sees it HERE. */}
+      {updateNewer !== undefined && updateNewer !== null && (
+        <span className="canvas-hud__warn" data-hud-update={updateNewer.version} title="Open release — the app does not install it">
+          <a href={updateNewer.url} onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: '', target: updateNewer.url }) }}>{updateNewer.version} is out</a>
         </span>
       )}
     </div>

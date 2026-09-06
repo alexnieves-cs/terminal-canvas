@@ -70,20 +70,20 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 
 | Script | Runtime | Covers |
 |---|---|---|
-| `verify:meta` | plain node | 33 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
+| `verify:meta` | plain node | 34 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
 | `verify:viewport` | plain node | ~134 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | 212 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | 213 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 17 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:github` | plain node | 7 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
-| `verify:palette` | plain node | 136 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:palette` | plain node | 138 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
 | `verify:rail` | plain node | ~165 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~98 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
-| `verify:file` | plain node | 54 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
+| `verify:file` | plain node | 56 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
 | `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
@@ -101,7 +101,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 111 channels as of M115 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 112 channels as of M123 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 9 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | 309 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
@@ -181,6 +181,7 @@ renderer --invoke--> snapshot:list / snapshot:restore                           
 renderer --invoke--> browser:read                                                --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
+renderer --invoke--> update:check                                                --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer
@@ -676,6 +677,16 @@ check does not, and should not, cover it.
   `sandbox` input; a row without them refuses the SEND by name (`refused-sandbox` →
   `reasons.noSandbox`). Deleted on dispose with `drop`, never on exit. `ChatSource.sandbox`
   is carried by `carryChatMarks` beside `dispatch`; the header reads `sandboxed · no folder`.
+
+- `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
+  answer over both durable logs, built in main over injected readers, every line through
+  `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap
+  and the redaction count STATED on the result and shown first; the existing
+  `scrollback:search` invoke was widened, never doubled. The update check is a pure module
+  over an injected fetcher (the real `https.get` lives in `index.ts` and is called by no
+  suite — `verify:meta update.1`), one GET of the releases LIST so a prerelease is skipped
+  by name, a small semver compare, three states; auto-swap is declined by name because the
+  build is unsigned, and `update.checkOnLaunch` is off by default and never `planWritable`.
 
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different

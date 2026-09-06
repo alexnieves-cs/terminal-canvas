@@ -364,7 +364,7 @@ const SCENES = [
     run: async (k) => { await k.click('.shell__spawn'); await sleep(700); await k.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; s.value = 'claude'; s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`); await sleep(200); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) { w.focus(); w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })) } return !!w })()`); await sleep(600); await k.shot('spawn-sheet'); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`); await sleep(300) } },
   { name: 'palette-dark', intent: 'The palette at rest on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.press('k', { metaKey: true }); await sleep(600); await k.shot('palette-dark'); await k.closePalette(); await k.theme('light') } },
-  { name: 'search', intent: 'Search across every panel (Cmd+F) for "FAIL": hits from the durable log, each naming its panel, with the matching line.',
+  { name: 'search', intent: 'Search across every panel (Cmd+F) for "FAIL": hits from the durable log, each naming its panel, with the matching line. M122: the scope now reads BOTH durable logs — the scrollback logs and the chat transcript logs — and what the answer left out comes first (the cap line, the redaction count), each only when non-zero.',
     run: async (k) => { await k.press('f', { metaKey: true, code: 'KeyF' }); await sleep(500); await k.type('FAIL'); await sleep(900); await k.shot('search') } },
   { name: 'search-empty', intent: 'The same search with a term nothing said: an empty state that names the term and says there were no matches, not a blank list.',
     run: async (k) => { await k.type('zzqx'); await sleep(900); await k.shot('search-empty'); await k.closePalette() } },
@@ -712,7 +712,7 @@ app.whenReady().then(async () => {
     {
       tail: (panelId, lines) => scrollbackLog.tail(panelId, lines),
       clear: () => scrollbackLog.clearAll(),
-      search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
+      search: async (panelIds, query) => ({ hits: (await scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })).map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 })
     },
     () => ({
       probedAt: Date.now(), shell: { path: '/bin/zsh', ok: true }, pathEntries: ['/usr/bin', '/bin'],
@@ -728,7 +728,9 @@ app.whenReady().then(async () => {
     // M103. The real read over the real guest.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
-    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) }
+    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) },
+    // M123. No harness reaches the network: the third state, by name.
+    { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) }
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

@@ -1234,7 +1234,7 @@ app.whenReady().then(async () => {
     clear: () => scrollbackLog.clearAll(),
     // M42. The same shape main/index.ts wires, so the SCROLLBACK_SEARCH handler
     // registerIpcHandlers installs has a real implementation to call.
-    search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
+    search: async (panelIds, query) => ({ hits: (await scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })).map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 })
   },
   // M48. The environment report, as a fixture the checks can swap: env.1
   // needs a FAILED probe, which no harness machine should produce for real.
@@ -1276,7 +1276,9 @@ app.whenReady().then(async () => {
     recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-  }) })
+  }) },
+  // M123. No harness reaches the network: the third state, by name.
+  { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -18091,6 +18093,58 @@ app.whenReady().then(async () => {
         ok(IDS[0], rows && rows.map((r) => r.id).join(',') === 'claude,codex,copilot,acp' && cp && /chat with copilot/.test(cp.text) && cp.disabled === true && /PATH/.test(cp.text) && acp && /copilot \(acp\)/.test(acp.text) && acp.disabled === true,
           JSON.stringify({ rows }))
         await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+        await settle()
+      } catch (e) { for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e)) }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* M124 — reach.2. A real Tab through the Board pane and the card    */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['reach.2 a real Tab from the Board pane\'s first row (the todo column\'s) visits its Show on canvas and then the working row, and from the card\'s first verb visits every ENABLED verb in order (a disabled Open PR is skipped, which is right) — the surfaces M113–M116 added are in the tab order, not click-only']
+      try {
+        const now = Date.now()
+        layoutStore.save({
+          panels: [{ id: 'rk2', kind: 'work', x: 200, y: 200, w: 420, h: 200, z: 1, title: 'Fix the flush gate', work: { itemId: 'wi-r1' } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+          workItems: [
+            { id: 'wi-r1', source: 'github', key: 'acme/canvas#7', title: 'Fix the flush gate', url: 'https://github.com/acme/canvas/issues/7', state: 'working', teammateId: 'tm-r', panelId: 'gone', worktreeId: 'wt-r', createdAt: now, updatedAt: now },
+            { id: 'wi-r2', source: 'typed', title: 'Write the release notes', state: 'todo', createdAt: now - 1, updatedAt: now - 1 }
+          ]
+        })
+        flushLayoutStore()
+        const reR2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reR2
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="board"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-board-row]').length === 2`), 6000)
+        const tabWalk2 = async (startSel, identity, max) => {
+          const started = await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(startSel)}); if (!b) return 'no control'; if (b.disabled) return 'disabled'; b.focus(); return document.activeElement === b })()`)
+          if (started !== true) return { started, visited: [] }
+          const read = () => wc.executeJavaScript(`(() => { const el = document.activeElement; if (!el) return null; const id = (() => { ${identity} })(); return id ?? ('#' + (el.className || el.tagName)) })()`)
+          const visited = [await read()]
+          for (let i = 0; i < max; i++) {
+            wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' })
+            await sleep(60)
+            const at = await read()
+            if (at === visited[0]) break
+            visited.push(at)
+          }
+          return { started, visited }
+        }
+        const identity = `const row = el.closest('[data-board-row]'); if (row && el.classList.contains('rail-row__main')) return 'row:' + row.getAttribute('data-board-row'); if (el.hasAttribute('data-board-show')) return 'show:' + (row ? row.getAttribute('data-board-row') : '?'); if (el.hasAttribute('data-work-verb')) return 'verb:' + el.getAttribute('data-work-verb'); return null`
+        // The FIRST row in DOM order: the todo column comes first, and Tab walks forward — starting at the working row would leave the pane at once.
+        const pane = await tabWalk2('[data-board-row="wi-r2"] .rail-row__main', identity, 10)
+        const card = await tabWalk2('[data-work-verb="assign"]', identity, 10)
+        const enabledVerbs = await wc.executeJavaScript(`[...document.querySelectorAll('[data-work-verb]')].filter((b) => !b.disabled).map((b) => 'verb:' + b.getAttribute('data-work-verb'))`)
+        ok(IDS[0], pane.started === true && pane.visited[0] === 'row:wi-r2' && pane.visited.includes('show:wi-r2') && pane.visited.includes('row:wi-r1') && pane.visited.indexOf('show:wi-r2') < pane.visited.indexOf('row:wi-r1') &&
+          card.started === true && Array.isArray(enabledVerbs) && enabledVerbs.length >= 3 && enabledVerbs.every((v) => card.visited.includes(v)) && enabledVerbs.map((v) => card.visited.indexOf(v)).every((idx, i, arr) => i === 0 || idx > arr[i - 1]),
+          JSON.stringify({ pane, card, enabledVerbs }))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+        const reR3 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reR3
         await settle()
       } catch (e) { for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e)) }
     }

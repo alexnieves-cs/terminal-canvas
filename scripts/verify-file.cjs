@@ -1254,6 +1254,88 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ r1, r2, made, removed }))
   } catch (e) { ok('sandbox.1 (threw)', false, String(e)) }
 
+  // M122 — psearch.1. FIND IN PANELS over TWO durable logs — the scrollback
+  // log (M39) and the chat transcript log (M73) — through one pure function
+  // over injected readers. A dormant panel's log answers like a live one;
+  // every line leaves through redactSecrets and the count rides the result;
+  // the cap is STATED, never silent. Case-insensitive, like M42's search.
+  try {
+    const dirS = join(DIR, 'psearch')
+    mkdirSync(join(dirS, 'scrollback'), { recursive: true }); mkdirSync(join(dirS, 'transcripts'), { recursive: true })
+    const slog = F.createScrollbackLog({ dir: join(dirS, 'scrollback'), maxBytes: 1024 * 1024 })
+    await slog.append('n1', 'building…\nError: cannot read foo\ntoken ghp_abcdefghijklmnopqrstuvwxyz0123456789 leaked\n')
+    await slog.flushAll?.()
+    const tlog = F.createAgentTranscriptLog({ dir: join(dirS, 'transcripts') })
+    tlog.appendTurn('c1', { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'why does the watchdog fire?' }], at: 1 })
+    tlog.appendTurn('c1', { id: 'a-1', role: 'assistant', blocks: [{ type: 'text', text: 'the flush gate is the cause\nsee onExit' }], at: 2 })
+    tlog.appendTurn('c2', { id: 'a-2', role: 'assistant', blocks: [{ type: 'text', text: 'gate one\ngate two\ngate three\ngate four' }], at: 3 })
+    tlog.appendTurn('c3', { id: 'a-3', role: 'assistant', blocks: [{ type: 'text', text: 'the last gate' }], at: 4 })
+    const panels = [{ id: 'n1', kind: 'terminal', title: 'api' }, { id: 'c1', kind: 'chat', title: 'api (chat)' }, { id: 'c2', kind: 'chat', title: 'busy' }, { id: 'c3', kind: 'chat', title: 'last' }, { id: 'n9', kind: 'terminal', title: 'nothing' }]
+    const deps = { scrollback: (ids, q, caps) => slog.search(ids, q, caps), transcript: (id) => tlog.read(id).turns }
+    const caps = { maxHits: 50, maxPerPanel: 10 }
+    const gate = await F.searchPanels('gate', panels, deps, caps)
+    const foo = await F.searchPanels('FOO', panels, deps, caps)
+    const secret = await F.searchPanels('ghp_', panels, deps, caps)
+    const one = await F.searchPanels('e', panels, deps, { maxHits: 1, maxPerPanel: 10 })
+    const none = await F.searchPanels('zzqx', panels, deps, caps)
+    const perPanel = await F.searchPanels('gate', panels, deps, { maxHits: 50, maxPerPanel: 2 })
+    ok('psearch.1 a chat that fills its per-panel cap stops only itself (the next chat still answers, uncapped); a transcript hit names its chat and turn with kind transcript; a scrollback hit names its line with kind scrollback (case-insensitive); a planted token never returns and is counted as redacted; maxHits 1 over both logs is capped and SAYS the cap; a panel with no file answers nothing and throws nothing; no match is an empty, uncapped result',
+      gate.hits.filter((h) => h.panelId === 'c1').length === 1 && gate.hits[0].panelId === 'c1' && gate.hits[0].kind === 'transcript' && gate.hits[0].turnIndex === 1 && /flush gate/.test(gate.hits[0].line) && gate.capped === false && gate.redacted === 0 &&
+        perPanel.hits.filter((h) => h.panelId === 'c2').length === 2 && perPanel.hits.some((h) => h.panelId === 'c3') && perPanel.capped === false &&
+        foo.hits.length === 1 && foo.hits[0].panelId === 'n1' && foo.hits[0].kind === 'scrollback' && typeof foo.hits[0].lineIndex === 'number' &&
+        secret.hits.length === 1 && /\[redacted github token\]/.test(secret.hits[0].line) && !/ghp_abc/.test(JSON.stringify(secret)) && secret.redacted === 1 &&
+        one.hits.length === 1 && one.capped === true && one.cap === 1 &&
+        none.hits.length === 0 && none.capped === false,
+      JSON.stringify({ gate, foo, secret, one, none, perPanel }))
+  } catch (e) { ok('psearch.1 (threw)', false, String(e)) }
+  // M123 — update.1. THE UPDATE CHECK, pure over an injected fetcher. Three
+  // states and never two: `current`, `newer` (with the release's url) and
+  // `could-not-check` (with the reason) — a check that folded the last into
+  // the first would tell an offline user they are up to date. The feed is
+  // the releases LIST, not `/latest`, so a prerelease is skipped BY NAME
+  // rather than trusted; a `v` prefix is optional; the compare is numeric
+  // per segment (3.10.0 is newer than 3.9.1 — a string compare says the
+  // opposite, silently). No suite ever holds a real fetcher: `verify:meta
+  // update.1` greps for one.
+  try {
+    const feed = [
+      { tag_name: 'v3.1.0-beta.1', prerelease: true, html_url: 'https://github.com/acme/canvas/releases/tag/v3.1.0-beta.1' },
+      { tag_name: 'v3.1.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/v3.1.0', published_at: '2026-09-10T00:00:00Z' },
+      { tag_name: 'v3.0.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/v3.0.0' }
+    ]
+    const urls = []
+    const fetchOf = (status, body) => async (url) => { urls.push(url); return { status, body } }
+    const deps = (status, body) => ({ fetch: fetchOf(status, body), repo: 'acme/canvas' })
+    const newer = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify(feed)))
+    const same = await F.checkForUpdate('3.1.0', deps(200, JSON.stringify(feed)))
+    const ahead = await F.checkForUpdate('3.2.0', deps(200, JSON.stringify(feed)))
+    const bare = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify([{ tag_name: '3.2.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/3.2.0' }])))
+    const forbidden = await F.checkForUpdate('3.0.0', deps(403, '{"message":"rate limit"}'))
+    const threw = await F.checkForUpdate('3.0.0', { fetch: async () => { throw new Error('getaddrinfo ENOTFOUND api.github.com') }, repo: 'acme/canvas' })
+    const notJson = await F.checkForUpdate('3.0.0', deps(200, 'not json'))
+    const notList = await F.checkForUpdate('3.0.0', deps(200, '{"tag_name":"v9.0.0"}'))
+    const onlyPre = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify([{ tag_name: 'v4.0.0-rc.1', prerelease: true, html_url: 'x' }])))
+    const cmp = F.compareVersions('3.10.0', '3.9.1')
+    const cmpEq = F.compareVersions('v3.0.0', '3.0.0')
+    const repo = F.repoOf({ repository: { url: 'git+https://github.com/acme/canvas.git' } })
+    const repoStr = F.repoOf({ repository: 'github:acme/canvas' })
+    const noRepo = F.repoOf({})
+    ok('update.1 the newest NON-prerelease wins (3.1.0 over a 3.1.0-beta.1 above it) with its url; equal is current; a bare tag parses; a 403 is could-not-check naming the status; a thrown fetch carries its message; a body that is not JSON or not a list is could-not-check in words; a feed of only prereleases is current; compareVersions is numeric per segment; repoOf reads repository.url',
+      newer.kind === 'newer' && newer.version === '3.1.0' && newer.url === 'https://github.com/acme/canvas/releases/tag/v3.1.0' && newer.publishedAt === '2026-09-10T00:00:00Z' &&
+        same.kind === 'current' && same.version === '3.1.0' &&
+        ahead.kind === 'current' &&
+        bare.kind === 'newer' && bare.version === '3.2.0' &&
+        forbidden.kind === 'could-not-check' && /GitHub answered 403/.test(forbidden.reason) &&
+        threw.kind === 'could-not-check' && /ENOTFOUND/.test(threw.reason) &&
+        notJson.kind === 'could-not-check' && /the releases feed could not be read/.test(notJson.reason) &&
+        notList.kind === 'could-not-check' && /the releases feed could not be read/.test(notList.reason) &&
+        onlyPre.kind === 'could-not-check' && /no releases are published/.test(onlyPre.reason) &&
+        cmp > 0 && cmpEq === 0 &&
+        repo === 'acme/canvas' && repoStr === 'acme/canvas' && noRepo === null &&
+        urls.every((u) => u === 'https://api.github.com/repos/acme/canvas/releases'),
+      JSON.stringify({ newer, same, ahead, bare, forbidden, threw, notJson, notList, onlyPre, cmp, cmpEq, repo, repoStr, noRepo, url: urls[0] }))
+  } catch (e) { ok('update.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

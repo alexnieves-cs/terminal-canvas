@@ -9,6 +9,7 @@ import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { buildPushArgs } from './git-args'
 import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
+import { searchPanels } from './panel-search'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { createRoutineRunner } from './routine-runner'
@@ -55,6 +56,8 @@ import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
+import { checkForUpdate, repoOf } from './update-check'
+import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
@@ -1633,10 +1636,17 @@ app.whenReady().then(async () => {
       // Gated on the SAME setting as tail: search reads the same files, so a
       // user who turned persistence off must get nothing rather than stale
       // hits from a log they asked not to keep.
-      search: (panelIds, query) =>
-        layoutStore.getSetting('scrollback.persist') === true
-          ? scrollbackLog.search(panelIds, query, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
-          : Promise.resolve([])
+      // M122. Both logs. The scrollback half stays gated on the setting; the
+      // transcript half is a chat's own durable file and answers regardless
+      // — the palette's off reason says so.
+      search: (panelIds, query) => {
+        const kinds = new Map((layoutStore.mergedWorkspaces().find((w) => w.active)?.panels ?? []).map((p) => [p.id, p.kind ?? 'terminal'] as const))
+        const panels = panelIds.map((id) => ({ id, kind: kinds.get(id) ?? 'terminal' }))
+        return searchPanels(query, panels, {
+          scrollback: (ids, q, caps) => layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.search(ids, q, caps) : Promise.resolve([]),
+          transcript: (id) => agentTranscripts.read(id).turns
+        }, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
+      }
     },
     // M48. The environment report, built on demand from facts this file
     // already holds: the probe's outcome, the login env, the same which()
@@ -1719,6 +1729,35 @@ app.whenReady().then(async () => {
         return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
       },
       commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
+    },
+    // M123. The update NOTICE's one verb, over the one real fetcher in the
+    // app that is not the broker's. Here and not in update-check.ts so the
+    // module runs under plain node and `verify:meta update.1` can pin that
+    // no suite bundles an `https` call. A GET with a deadline for the whole
+    // call (the M87 rule: node's socket timeout is inactivity, and a byte
+    // every 29 s holds a call open forever), GitHub's required User-Agent,
+    // and NO redirect following — the feed url is fixed, and a 3xx to
+    // somewhere else is a could-not-check naming the status, not a fetch of
+    // wherever it pointed. The repository is package.json's own
+    // `repository.url`; a build without one gets the third state by name.
+    {
+      check: () => {
+        let repo: string | null = null
+        try { repo = repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { repo = null }
+        if (repo === null) return Promise.resolve({ kind: 'could-not-check', reason: 'this build names no GitHub repository in its package.json' })
+        return checkForUpdate(app.getVersion(), {
+          repo,
+          fetch: (url) => new Promise((resolve, reject) => {
+            const deadline = setTimeout(() => { r.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
+            const r = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
+              const chunks: Buffer[] = []
+              res.on('data', (c: Buffer) => { chunks.push(c) })
+              res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
+            })
+            r.on('error', (error) => { clearTimeout(deadline); reject(error) })
+          })
+        })
+      }
     }
   )
   createWindow()

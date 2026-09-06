@@ -8,11 +8,12 @@ import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
 import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
 import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@shared/auto'
 import type { EnvReport } from '@shared/env-report'
+import { updateSentence, type UpdateState } from '@renderer/session/update-store'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import { shortPath } from './panel-name'
 import { statePriority, type StateInput } from '@renderer/panels/panel-state'
@@ -465,6 +466,10 @@ export interface PaletteActions {
   openBoard(): void
   /** M120. A chat with no folder, in the app's own sandbox directory, on the row's read-only mode. */
   newSandboxChat(backend: AgentBackend): void
+  /** M122. Scroll a chat's stored turn into view — a search hit's flight. */
+  scrollChatTurn(panelId: string, turnIndex: number): void
+  /** M123. Ask GitHub once, by hand; the three states land on the palette's feedback line. Excluded from plans by name. */
+  checkForUpdates(): void
 }
 
 export interface PaletteContext {
@@ -485,6 +490,12 @@ export interface PaletteContext {
    * Read by buildEnvironmentRows; the launcher reads the same object.
    */
   envReport?: EnvReport | null
+  /**
+   * M123. The last update check's answer (update-store.ts), or null/absent
+   * when none has been asked. Read by the `update.check` row's subtitle and
+   * the `env.update` row; the launcher reads the same store.
+   */
+  update?: UpdateState | null
   /** M49. The global terminal font size, for the font rows' titles. */
   globalFontSize?: number
   /** M56. This workspace's bookmarks, and whether the camera trail can step each way. */
@@ -509,7 +520,8 @@ export interface PaletteContext {
    * empty state from []), and `scrollbackEnabled` decides the "off" state.
    */
   searchQuery: string
-  searchResults: ScrollbackSearchHit[] | null
+  /** M122. The whole answer: hits over both logs, the cap stated, the redaction count. */
+  searchResults: PanelSearchResult | null
   scrollbackEnabled: boolean
   /**
    * Panel ids currently in wants-you, from the renderer's own attention set.
@@ -615,7 +627,7 @@ export const REASON_NO_GITHUB = notConnectedReason('github')
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
-export const REASON_SEARCH_OFF = 'scrollback is off — turn on Keep output for search to read'
+export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep recent output on disk; chats still answer'
 export const REASON_SEARCH_NO_MATCHES = 'try another word'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
@@ -1405,6 +1417,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.beginNewWorkItem()
   })
+  // M123. The by-hand door onto the update NOTICE. Always present and never
+  // disabled: the check's own third state (`could not check — <reason>`) is
+  // the honest answer offline, and a row that vanished would read as a
+  // feature that was never built. The subtitle is the LAST answer, so a
+  // user who already asked sees it without asking again.
+  out.push(withReason({
+    id: 'update.check',
+    title: 'Check for updates…',
+    subtitle: ctx.update === undefined || ctx.update === null ? 'ask GitHub whether a newer release is published — nothing is installed' : updateSentence(ctx.update),
+    searchText: 'update check release version newer github download notice',
+    group: 'canvas',
+    run: () => actions.checkForUpdates()
+  }, ctx.update?.checking === true ? 'checking…' : undefined))
 
   // --- Placement (M50) -------------------------------------------------------
   //
@@ -1658,7 +1683,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
 
-  out.push(...buildEnvironmentRows(ctx.envReport ?? null))
+  out.push(...buildEnvironmentRows(ctx.envReport ?? null, ctx.update ?? null))
 
   // --- Credentials -----------------------------------------------------------
   //
@@ -2063,13 +2088,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M42 — the search scope. Rows exist only in scope 'search'; the view shows
   // them only when the user has opened that scope. Three empty states, never
   // one — a folded pair tells the user the wrong fix.
+  // M122. Persistence off is no longer the whole answer: the chat transcript
+  // logs answer regardless, so the reason says so and the hits that came
+  // still render beneath it. Only a query with an answer of NOTHING says
+  // "no matches"; before the first keystroke the scope is quiet.
   if (!ctx.scrollbackEnabled) {
     out.push(withReason(
-      { id: 'search.off', title: 'Search is unavailable', subtitle: 'turn on Keep output', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+      { id: 'search.off', title: 'Terminal output is not being kept', subtitle: 'turn on Keep recent output on disk — chats still answer', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
       REASON_SEARCH_OFF
     ))
-  } else if (ctx.searchResults !== null) {
-    if (ctx.searchResults.length === 0) {
+  }
+  if (ctx.searchResults !== null) {
+    const result = ctx.searchResults
+    if (result.hits.length === 0) {
       // Only once a query has been typed: an empty query answers null above,
       // not [], so "no matches" never shows before the first keystroke.
       if (ctx.searchQuery.trim() !== '') {
@@ -2081,12 +2112,18 @@ export function buildCommands(ctx: PaletteContext): Command[] {
         ))
       }
     } else {
+      // M122. What the answer LEFT OUT comes first: the cap, and the secrets the gate replaced.
+      // INFORMATION, not verbs: disabled with their own sentence, so stepping skips them and Enter never lands on a row that does nothing.
+      if (result.capped) { const t = `the first ${result.cap} matches — narrow the search`; out.push(withReason({ id: 'search.cap', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
+      if (result.redacted > 0) { const t = `${result.redacted} secret${result.redacted === 1 ? '' : 's'} redacted from these lines`; out.push(withReason({ id: 'search.redacted', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
       // M64. The hit leads with the panel's NAME, not its path-and-id label.
       const labelOf = new Map(ctx.panels.map((row) => [row.id, row.title ?? row.name ?? row.label]))
-      for (const hit of ctx.searchResults) {
+      for (const hit of result.hits) {
+        const isTurn = hit.kind === 'transcript'
         out.push({
-          id: `search.hit.${hit.panelId}.${hit.lineIndex}`,
-          title: labelOf.get(hit.panelId) ?? hit.panelId,
+          id: isTurn ? `search.hit.${hit.panelId}.t${hit.turnIndex ?? 0}` : `search.hit.${hit.panelId}.${hit.lineIndex ?? 0}`,
+          // The panel's name AND which kind the line came from: two panels can share a name, and the two verbs differ.
+          title: `${labelOf.get(hit.panelId) ?? hit.panelId} · ${isTurn ? `chat turn ${(hit.turnIndex ?? 0) + 1}` : `line ${(hit.lineIndex ?? 0) + 1}`}`,
           mono: true,
           // The matched line, and the haystack: the palette's own filter runs
           // over title+subtitle+searchText, so typing narrows the hits too.
@@ -2095,7 +2132,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           group: 'panel',
           scope: 'search',
           hiddenAtRest: true,
-          run: () => actions.goToPanel(hit.panelId)
+          // A transcript hit flies to the chat AND to the turn; a scrollback hit keeps M42's door.
+          run: () => { actions.goToPanel(hit.panelId); if (isTurn) actions.scrollChatTurn(hit.panelId, hit.turnIndex ?? 0) }
         })
       }
     }
@@ -2183,7 +2221,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
  */
 export const REASON_NO_ENV_REPORT = 'the environment has not been read yet'
 
-export function buildEnvironmentRows(report: EnvReport | null): Command[] {
+export function buildEnvironmentRows(report: EnvReport | null, update: UpdateState | null = null): Command[] {
   const rows: Command[] = []
   const info = (id: string, title: string, subtitle: string, searchText: string): Command => ({
     id, title, subtitle, group: 'manage', scope: 'environment', hiddenAtRest: true, searchText, run: () => {}
@@ -2243,5 +2281,23 @@ export function buildEnvironmentRows(report: EnvReport | null): Command[] {
     'tc cli command line socket url scheme'))
     rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
     'once, at launch — a CLI installed since is not seen until relaunch', 'probed at time relaunch'))
+  // M123. FOUR sentences for the update notice — not checked, up to date,
+  // newer, could not check — and `not checked` is the rest state: the
+  // launch check is off by default, and "never asked" must not read as
+  // "up to date". Never a fifth row for `newer` with a verb: the
+  // information rows do nothing on Enter (their `run` is a no-op by the
+  // scope's rule); the door with the verb is `Check for updates…`.
+  const u = update ?? EMPTY_UPDATE
+  rows.push(info('env.update',
+    `Update: ${updateSentence(u)}`,
+    u.result === null
+      ? 'Check for updates… asks GitHub by hand; the launch check is a setting, off by default'
+      : u.result.kind === 'newer'
+        ? `${u.result.url} — nothing is downloaded or installed; download the release by hand`
+        : u.result.kind === 'current'
+          ? `read at ${new Date(u.at).toLocaleTimeString()} from the releases feed`
+          : 'the releases feed was asked and did not answer usefully — try again later',
+    'update release version newer github check'))
   return rows
 }
+const EMPTY_UPDATE: UpdateState = { result: null, checking: false, at: 0 }

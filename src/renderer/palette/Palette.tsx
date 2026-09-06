@@ -29,12 +29,13 @@ import { type ApprovalRow,
   type PresetRow,
   type PromptRow
 } from './commands'
-import type { SettingRow, WorkspaceRow, WorktreeListRow, ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
 import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 import { ChevronRight } from '@renderer/icons'
 import type { EnvReport } from '@shared/env-report'
+import type { UpdateState } from '@renderer/session/update-store'
 
 /**
  * The overlay. Rendered as a sibling of `.world`, NEVER inside it: a scale()
@@ -119,6 +120,8 @@ export interface PaletteProps {
   worktrees: readonly WorktreeListRow[]
   /** M48. See PaletteContext.envReport. */
   envReport: EnvReport | null
+  /** M123. See PaletteContext.update. Absent in a fixture: the rows read `not checked`. */
+  update?: UpdateState | null
   /** M49. See PaletteContext.globalFontSize. */
   globalFontSize: number
   /** M56. This workspace's bookmarks and the trail's two ends. */
@@ -148,7 +151,7 @@ export interface PaletteProps {
   /** Set by beginRenamePreset / beginSavePrompt / the deletes; null is command mode. */
   inputMode: InputMode | null
   /** M42. Hits from main for the current search query; null before the first answer. */
-  searchResults: ScrollbackSearchHit[] | null
+  searchResults: PanelSearchResult | null
   /** M42. scrollback.persist — decides the "search is off" empty state. */
   scrollbackEnabled: boolean
   /** M42. Called with the live query WHILE the scope is `search`, so Canvas can ask main. */
@@ -210,6 +213,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         credentials: props.credentials,
         worktrees: props.worktrees,
         envReport: props.envReport,
+        update: props.update ?? null,
         globalFontSize: props.globalFontSize,
         bookmarks: props.bookmarks,
         cameraTrail: props.cameraTrail,
@@ -239,7 +243,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         actions: props.actions
       }),
     [props.presets, props.prompts, props.panels, props.settings, props.workspaces, props.bookmarks, props.cameraTrail,
-     props.credentials, props.worktrees, props.envReport, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
+     props.credentials, props.worktrees, props.envReport, props.update, props.globalFontSize, props.attentionIds, props.approvals, props.templates, controller.capturedId, props.hasSelection,
      props.selectedIds, props.merged, props.actions,
      query, scope, props.searchResults, props.scrollbackEnabled]
   )

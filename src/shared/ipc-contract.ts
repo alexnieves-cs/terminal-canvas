@@ -590,8 +590,25 @@ export const IPC = {
   BOARD_LANE_STATUS: 'board:lane-status',
   /** M115. The return path: push the lane, POST the PR through the broker behind the teammate's spend card; the comment on the issue. */
   BOARD_OPEN_PR: 'board:open-pr',
-  BOARD_COMMENT_PR: 'board:comment-pr'
+  BOARD_COMMENT_PR: 'board:comment-pr',
+  /**
+   * M123. The update NOTICE: one GET of the releases feed in main, three
+   * states back. Nothing is downloaded or installed — auto-swap is declined
+   * by name for an unsigned build. Asked by the renderer once at launch only
+   * when `update.checkOnLaunch` is on, and by hand from the palette row.
+   */
+  UPDATE_CHECK: 'update:check'
 } as const
+
+/**
+ * M123. Three states, never two: `could-not-check` is its own arm with the
+ * reason, because "up to date" and "could not ask" are different sentences
+ * and an offline user must not read the first.
+ */
+export type UpdateResult =
+  | { kind: 'current'; version: string }
+  | { kind: 'newer'; version: string; url: string; publishedAt?: string }
+  | { kind: 'could-not-check'; reason: string }
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
 /** M114. What `dispatch` asks main for: a worktree lane for the chat it is about to mint. `repo` is `owner/repo` from a GitHub key; `root` is the place the sheet chose for an item with no repository. */
@@ -961,6 +978,24 @@ export interface ScrollbackSearchHit {
   lineIndex: number
 }
 
+/** M122. One hit of Find in panels: a scrollback line or a transcript line, REDACTED. */
+export interface PanelSearchHit {
+  panelId: PanelId
+  kind: 'scrollback' | 'transcript'
+  line: string
+  /** A scrollback hit: the line's index in the log, for the in-panel search. */
+  lineIndex?: number
+  /** A transcript hit: the turn's index, for the chat's flight to it. */
+  turnIndex?: number
+}
+/** M122. The answer STATES its cap and how many secrets the gate replaced. */
+export interface PanelSearchResult {
+  hits: PanelSearchHit[]
+  capped: boolean
+  cap: number
+  redacted: number
+}
+
 export interface PromptBridgeRow {
   id: string
   name: string
@@ -1217,7 +1252,8 @@ export interface CanvasBridge {
     tail(req: { panelId: PanelId; lines: number }): Promise<string[]>
     clear(): Promise<void>
     /** M42. Hits across every panel's log, newest-first within a panel, capped. [] for an empty query. */
-    search(query: string): Promise<ScrollbackSearchHit[]>
+    /** M122. Find in panels: the scrollback AND transcript logs of the active workspace, capped and redacted, the counts on the result. */
+    search(query: string): Promise<PanelSearchResult>
   }
   /** M83. The project memory: what this repository has decided, tried and failed. */
   memory: {
@@ -1490,6 +1526,10 @@ export interface CanvasBridge {
     laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
     openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
     commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
+  }
+  /** M123. See UPDATE_CHECK. Three arms; never rejects. */
+  update: {
+    check(): Promise<UpdateResult>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

@@ -2181,6 +2181,44 @@ imports `hookupIpc` from the NON-side-effecting `@sentry/electron/preload-namesp
 (never the plain `/preload`, which runs unconditionally at import and cannot be gated) and calls
 it INSIDE the telemetry-enabled branch.
 
+**The update check is a NOTICE with three states, its fetcher is injected, and no plan may
+switch it on (`main/update-check.ts`, `shared/settings-schema.ts`'s `update.checkOnLaunch`,
+`renderer/session/update-store.ts`, M123).** Auto-swap is declined by name: `electron-updater`
+refuses to install an unsigned update on macOS and this machine holds no `Developer ID
+Application` identity, so what ships answers "is a newer release published, and where" and
+opens the release page through `links.open` — nothing is downloaded or installed, and a
+signed 3.1's verb (`Install and relaunch` through M36's tmux durability) is design only in
+the Act III spec's §2.1. Four rules, each with a quiet failure behind it. **Three states,
+never two:** `current`, `newer` (version and url) and `could-not-check` (reason) — a check
+that folded the last into the first would tell an offline user they are up to date, which is
+why the renderer store adds a fourth, `null` (not checked), as the REST state: the launch
+check is off by default, and "never asked" must not read as "up to date" either. **The feed
+is the releases LIST, not `/latest`:** `/latest` is GitHub's own pick and cannot say why it
+skipped a prerelease; the list lets the newest NON-prerelease win by `compareVersions`
+(numeric per segment — `3.10.0` over `3.9.1`, which a string compare and a JSON sort get
+backwards silently), never the feed's first row (a backported 2.x cut after 3.0 sits above
+it). **The fetcher is injected and the module imports no `https`:** the real one (`https.get`,
+a 10 s deadline for the whole call — M87's rule, node's socket timeout is inactivity — GitHub's
+required `User-Agent`, and NO redirect following: the url is fixed and a 3xx is a
+`could-not-check` naming the status) lives in `main/index.ts` alone, which no suite bundles,
+so `verify:file update.1` drives every arm under plain node and `verify:meta update.1` greps
+the scripts for `https.get(`, an `https` import or a templated `api.github.com/repos/${…}`
+url. **The setting is boolean, off, and NOT `planWritable`, and `checkForUpdates` is on
+`EXCLUDED_ACTIONS`:** a launch-time GET a plan could switch on, or a verb a plan could run on
+a schedule, is a beacon with the shape of exfiltration — the same reason telemetry's keys
+carry no flag. The renderer asks ONCE per launch from `Canvas.tsx`'s startup effect, gated
+on the store (not a ref, so a reload finds the answer and asks nothing), and the row, the
+launcher's second footer line (rendered ONLY on `newer` — a launcher that said "up to date"
+on every fresh install is a line nobody reads) and the `env.update` row all read the one
+store. Three doors, one sentence: `updateSentence` is the only place the words live.
+
+**The manual-only list, M123's own item.** *A real GET of the real feed.* `verify:file
+update.1` drives a fake fetcher over a hand-written feed; that the fetcher in
+`main/index.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's
+releases page answers the recorded shape, and that `Open release` lands on the release in
+the default browser were not watched by any suite and — until the first release exists on
+the feed (M125 cuts it) — could not have been. Unproven, by construction, at merge.
+
 **Known manual-only verifications, not covered by any automated check.** Each of these was
 confirmed once, by hand, against a real machine/keyboard/CLI/build rather than by anything
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
@@ -3892,6 +3930,10 @@ which the row says, so a green re-probe does not read as a fixed spawn.
 
 **The sandbox bypasses the Places gate BY CONSTRUCTION, never by exception (`main/sandbox.ts`, `agent:create`, M120).** The folder is the app's own under `userData/sandbox/<id>`; there is no path to check and no place to add. A teammate beside `sandbox` is refused FIRST with one sentence, because a teammate has places and the gate would otherwise be asked about a folder it has no rule for. The id is checked as a plain path segment: the renderer mints ids, and a `../` in one would be a folder outside the root with no error anywhere.
 
+**`scrollback:search` was WIDENED into one answer over both logs, never a second channel beside it (`main/panel-search.ts`, `PanelSearchResult`, M122).** A second `search` invoke would have given the palette two lists to merge and two caps to explain; the one invoke's answer STATES its cap and its redaction count, and the renderer's scope reads them first. Every line leaves through `redactSecrets` — `verify:verbs gate.2` names the module as the gate's fourth caller rather than loosening the count, so a fifth reader still has to be chosen. The ACTIVE workspace only: a hit in another workspace would fly nowhere.
+
+**A fixture's bare origin must NAME its branch, or the runner's default decides (`scripts/verify-review.cjs`, M124).** `git init --bare` leaves HEAD at `init.defaultBranch`; on this machine that is `main`, on the macOS runner `master`. The second clone then checks out an unborn branch, its commit starts a second root, and `push HEAD:main` is non-fast-forward — a red CI over a locally green chain for three milestones. `git symbolic-ref HEAD refs/heads/main` on the bare repo is the fix every git has; a fixture that pushes into an origin it made must say which branch it means.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3971,4 +4013,8 @@ check. Treat green as green, not as proof of these.
 - **`copilot --acp` under the app (M119).** The handshake was recorded under the probe client; the same lines under the manager's stdio seam are driven by a fake pair in `acp.3`. A real `session/request_permission` answered from the card is unproven.
 - **`--permission-mode plan` in a real sandbox turn (M120).** The argv is pinned; that claude refuses a write under it, and that codex's `--sandbox read-only` and copilot's denied tools hold, is the CLI's behaviour and was not watched.
 - **`cursor-agent` (M117).** Nothing to confirm: the recording itself is owed (backlog #80).
+
+**The manual-only list, re-read entire at 3.0 (M124).** Nothing above was struck: M113–M123 added surfaces beside the entries, never checks beneath them. Every owed hand check on this list — the webview's `_blank` link, the lineup into worktrees, the routine tick, the folder dialog, `Cmd+Z` over a text draft, Sentry — is STILL owed at 3.0.0, and the run's one outward check (a dispatch with `Open PR` against a throwaway repository) was not made: each needs a person at the app or an account's outward action, and `docs/build-log/m122-m125-product.md` carries the exact steps. Added:
+- **The update check against the real feed (M123).** `verify:file update.1` drives a fake fetcher; that `api.github.com/repos/<owner>/<repo>/releases` answers the real `https.get` under the app's environment, and that the notice's `Open release` opens the right page, is unproven.
+- **The unsigned `.dmg` on another Mac (M125).** Gatekeeper's behaviour on a build with no identity — right-click → Open, or `xattr -d com.apple.quarantine` — was not watched on a second machine.
 

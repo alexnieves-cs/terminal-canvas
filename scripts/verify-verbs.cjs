@@ -197,8 +197,8 @@ const FACTS = {
     const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
     const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
-    ok('gate.2 redactSecrets has exactly three callers (the outward gate, the memory store\'s write scrub, and telemetry\'s event scrubber), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/telemetry.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    ok('gate.2 redactSecrets has exactly four callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, and M122\'s panel search — pane content leaving through main), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 
