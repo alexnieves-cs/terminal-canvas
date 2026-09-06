@@ -421,13 +421,14 @@ const ok = (n, pass, detail = '') => {
     const honest = handler && parsed.kind === 'ok' ? await handler(parsed.req) : null
     const forged = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'GET', path: '/user', panelId: 'c-ada', token: 'tok-nope' }))
     const refused = handler && forged.kind === 'ok' ? await handler(forged.req) : null
+    const callsAfterRefused = calls.length
     const bare = C.parseControlLine(JSON.stringify({ verb: 'api', service: 'github', method: 'GET', path: '/user', panelId: 'c-other' }))
     const plain = handler && bare.kind === 'ok' ? await handler(bare.req) : null
     ok('token.1 a token maps to the panel main minted it for and overrides the claimed panelId (the teammate follows the real panel, the cost rides); an unknown token is refused by name and reaches no broker; with no token the claimed panelId stands and names no teammate',
       has && parsed.kind === 'ok' && parsed.req.token === 'tok-ada' && honest && honest.ok === true && calls.length === 1 && calls[0].panelId === 'c-ada' && calls[0].teammateId === 'ada' && calls[0].cost === '1 call' &&
         refused && refused.ok === false && /token/.test(refused.error) && callsAfterRefused === 1 &&
         plain && plain.ok === true && calls.length === 2 && calls[1].panelId === 'c-other' && calls[1].teammateId === undefined,
-      JSON.stringify({ parsed: parsed.kind, honest, refused, plain, calls }))
+      JSON.stringify({ parsed: parsed.kind, tok: parsed.req && parsed.req.token, honest, refused, plain, calls, callsAfterRefused, c0: calls[0], c1: calls[1] }))
   }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
