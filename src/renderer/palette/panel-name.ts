@@ -1,4 +1,4 @@
-import { isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 
 /**
@@ -58,6 +58,8 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   // M103. `browser · <host>` — the rail's own label, so the Go-to row and
   // the rail agree on the name.
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
+  // M116. `work · <title>` — the rail's own label, so the Go-to row agrees.
+  if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -72,5 +74,7 @@ export function panelPath(panel: Panel): string | undefined {
   if (isWatcherPanel(panel)) return panel.watch.cwd
   // A page has no directory; the url is the inspector's identity line.
   if (isBrowserPanel(panel)) return undefined
+  // M116. A card has no directory; its lane's chat has one.
+  if (isWorkPanel(panel)) return undefined
   return panel.spec.cwd
 }

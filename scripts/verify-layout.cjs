@@ -3073,8 +3073,9 @@ const filePanelOnDisk = (id, over = {}) => ({
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
-  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
-    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates']) &&
+  // M116 added `board` as the seventh.
+  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
       tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
@@ -3701,6 +3702,37 @@ console.log('\n' + '='.repeat(60))
       typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Teammates pane/.test(noService) &&
       carried && carried.pr && carried.pr.number === 4,
     JSON.stringify({ okArm, noLane, zero, jira, notConnected, noService, pr: carried && carried.pr }))
+// M116 — work.5. THE TWELFTH KIND ON DISK. A work card is `kind: 'work'`
+// plus `work: { itemId }` and nothing else — no cwd and no args, like every
+// sessionless kind, so the terminal reader cannot mistake it for a process.
+// The itemId is the card's ONLY identity (the record it renders lives on the
+// workspace's workItems list, never on the panel), so a missing or non-string
+// one is a malformed panel dropped BY NAME with the neighbours kept — a card
+// that names no item would sit on the canvas saying `no longer on the board`
+// about an item that never existed. An absent title stays absent.
+{
+  try {
+    const out = L.parseLayout(JSON.stringify({
+      workspaces: [{ id: 'w1', name: 'Main', panels: [
+        { id: 'k1', kind: 'work', x: 1, y: 2, w: 640, h: 180, z: 3, work: { itemId: 'wi-7' } },
+        { id: 'k2', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 4, work: { itemId: 7 } },
+        { id: 'k3', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 5, title: 'Fix the thing', work: { itemId: 'wi-8' } },
+        { id: 'k4', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 6 },
+        { id: 'k5', kind: 'work', x: 0, y: 0, w: 640, h: 180, z: 7, work: { itemId: '' } },
+        { id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 8, cwd: '~', args: [] }
+      ] }],
+      activeWorkspaceId: 'w1'
+    }))
+    const panels = out.snapshot.workspaces[0].panels
+    const named = (id) => out.warnings.some((w) => w.includes(id))
+    const k1 = panels.find((p) => p.id === 'k1'), k3 = panels.find((p) => p.id === 'k3')
+    ok('work.5 a work panel round-trips as kind + work.itemId with no cwd/args and an absent title kept absent; a numeric, an empty and a missing itemId each drop their own panel by name; the neighbours survive',
+      panels.length === 3 && panels.map((p) => p.id).join(',') === 'k1,k3,n1' &&
+        k1 && k1.kind === 'work' && k1.work && k1.work.itemId === 'wi-7' && Object.keys(k1.work).length === 1 && !('title' in k1) && !('cwd' in k1) && !('args' in k1) &&
+        k3 && k3.title === 'Fix the thing' && k3.work.itemId === 'wi-8' &&
+        named('k2') && named('k4') && named('k5') && !named('k1') && !named('k3'),
+      JSON.stringify({ ids: panels.map((p) => p.id), k1, warnings: out.warnings }))
+  } catch (e) { ok('work.5 (threw)', false, String(e)) }
 }
 
 const failed = results.filter((r) => !r.pass)

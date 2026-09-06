@@ -309,6 +309,19 @@ export interface PersistedBrowserPanel extends PersistedPanelBase {
   url: string
 }
 
+/**
+ * M116. The work card — the twelfth kind, sessionless like Jira's. The
+ * record it renders lives on the workspace's `workItems` list and the panel
+ * carries the item's id ALONE: a card that copied the state would be a second
+ * author of a fact the board owns, wrong after the next dispatch. (The
+ * title is the base's, stamped at mint for the rail; nothing reads it as the
+ * item's.) No cwd, no args.
+ */
+export interface PersistedWorkPanel extends PersistedPanelBase {
+  kind: 'work'
+  work: { itemId: string }
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -320,6 +333,7 @@ export type PersistedPanel =
   | PersistedChatPanel
   | PersistedWatcherPanel
   | PersistedBrowserPanel
+  | PersistedWorkPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -850,6 +864,17 @@ function parsePanel(
       return null
     }
     return { ...base, kind: 'browser', url }
+  }
+  if (kind === 'work') {
+    // M116. The item id is the card's only identity, so an unusable one
+    // drops the PANEL by name: a card naming no record would sit on the
+    // canvas saying "no longer on the board" about an item that never was.
+    const work = (raw as Record<string, unknown>).work
+    if (!isRecord(work) || !isStr(work.itemId) || work.itemId.trim() === '') {
+      warnings.push(`dropped work panel ${id}: work.itemId was not a string`)
+      return null
+    }
+    return { ...base, kind: 'work', work: { itemId: work.itemId } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

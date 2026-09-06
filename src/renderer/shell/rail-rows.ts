@@ -1,7 +1,8 @@
-import { isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import type { WorkItemState } from '@shared/work-items'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -48,6 +49,11 @@ export interface RailRow {
  * every command-less preset would start spawning a hardcoded shell.
  */
 export function railLabel(panel: Panel, status: PanelStatus | undefined): string {
+  // M116. A work card reads `work · <title>` with the KIND first, before the
+  // title rule below: its title is the item's, and the chat dispatched on
+  // that item carries the same words, so a rail of cards and lanes would be
+  // two rows with one label and nothing saying which is the conversation.
+  if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
   // The user's own title is the first link for BOTH kinds — it is the one
   // link the user chose.
   if (panel.title !== undefined) return panel.title
@@ -143,7 +149,14 @@ export function railTail(status: PanelStatus | undefined, dormant: boolean, kind
 export function buildRailRows(
   panels: readonly Panel[],
   statusOf: (id: string) => PanelStatus | undefined,
-  dormantIds: ReadonlySet<string>
+  dormantIds: ReadonlySet<string>,
+  /**
+   * M116. A work card's item state by item id, so its row and its minimap
+   * block speak the item's word. OPTIONAL and defaulted to nothing — every
+   * older caller and check keeps its meaning — and absent (the record gone)
+   * reads as the kind.
+   */
+  workStateOf?: (itemId: string) => WorkItemState | undefined
 ): RailRow[] {
   return panels.map((panel) => {
     const id = panel.rect.id
@@ -158,8 +171,12 @@ export function buildRailRows(
     // several callers reach with nothing else in hand.
     const tailKind: RailTailKind =
       isFilePanel(panel) && panel.source.prose === true ? 'note' : panel.kind
+    // M116. The item's state rides the row's StateInput — present only when
+    // the record is, so an older row's shape (and signature) is unchanged.
+    const workState = isWorkPanel(panel) && workStateOf !== undefined ? workStateOf(panel.work.itemId) : undefined
+    const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
-    return { id, label: railLabel(panel, status), tail: railTail(status, dormant, tailKind), dormant, state: { kind: tailKind, status, dormant }, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
+    return { id, label: railLabel(panel, status), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
   })
 }
 

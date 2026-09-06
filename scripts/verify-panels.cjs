@@ -18558,6 +18558,72 @@ app.whenReady().then(async () => {
       }
     }
 
+    // M116 — board.1. THE BOARD PANE END TO END: seeded records become the
+    // pane's rows (by title); exactly two columns carry `data-board-drop` and
+    // they are the FIRST and the LAST of the four (todo and done — the
+    // user's, read structurally so this file spells no state word); a card
+    // on the canvas carries its item's state in `data-work-state` and the
+    // frame's state pill; a row click moves the CAMERA and leaves the focus
+    // exactly where it was (the minimap's rule — navigating is not
+    // interacting); the item with no card offers Show on canvas.
+    {
+      const IDS = ['board.1 the Board pane lists every seeded item under its state column, marks exactly the first and last columns droppable, a working card carries data-work-state and the state pill, a row click flies the camera without moving the focus, and an uncarded item offers Show on canvas']
+      try {
+        const WORKING = 'working', TODO = 'todo'
+        layoutStore.save({
+          panels: [
+            { id: 'bdT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'lane' },
+            { id: 'bdA', kind: 'work', x: 2400, y: 2400, w: 640, h: 180, z: 2, title: 'Fix the flush gate', work: { itemId: 'wi-a' } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: 'bdT',
+          workItems: [
+            { id: 'wi-a', source: 'github', key: 'acme/canvas#7', title: 'Fix the flush gate', url: 'https://github.com/acme/canvas/issues/7', state: WORKING, teammateId: 'nobody', panelId: 'bdT', createdAt: 10, updatedAt: 20 },
+            { id: 'wi-b', source: 'typed', title: 'Write the release note', state: TODO, createdAt: 5, updatedAt: 6 }
+          ]
+        })
+        flushLayoutStore()
+        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reB
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="board"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const pane = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const p = document.querySelector('[data-board-pane]'); if (!p) return false
+          const cols = [...p.querySelectorAll('[data-board-column]')]
+          if (cols.length !== 4) return false
+          const rowOf = (id) => p.querySelector('[data-board-row="' + id + '"]')
+          const a = rowOf('wi-a'), b = rowOf('wi-b'); if (!a || !b) return false
+          return {
+            columns: cols.map((c) => c.getAttribute('data-board-column')),
+            drops: cols.map((c) => c.hasAttribute('data-board-drop')),
+            aColumn: a.closest('[data-board-column]').getAttribute('data-board-column'),
+            bColumn: b.closest('[data-board-column]').getAttribute('data-board-column'),
+            aLabel: a.querySelector('.rail-row__label')?.textContent ?? null,
+            aTail: a.querySelector('.rail-row__tail')?.textContent ?? null,
+            aShow: a.querySelector('[data-board-show]') !== null,
+            bShow: b.querySelector('[data-board-show]') !== null
+          }
+        })()`), 6000)
+        const card = await wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="bdA"]'); if (!n) return null
+          return { kind: n.getAttribute('data-panel-kind'), state: n.getAttribute('data-work-state'), word: n.querySelector('[data-work-word]')?.textContent ?? null, verbs: [...n.querySelectorAll('[data-work-verb]')].map((v) => [v.getAttribute('data-work-verb'), v.disabled, v.getAttribute('title')]) }
+        })()`)
+        const before = await wc.executeJavaScript(`({ vp: window.__m4aViewport(), focus: window.__m4aFocusedId() })`)
+        await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-board-row="wi-a"] .rail-row__main'); if (r) r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!r })()`)
+        const moved = await waitUntil(() => wc.executeJavaScript(`(() => { const v = window.__m4aViewport(); return (Math.abs(v.x - ${before ? before.vp.x : 0}) > 1 || Math.abs(v.y - ${before ? before.vp.y : 0}) > 1) ? v : false })()`), 3000)
+        const after = await wc.executeJavaScript(`({ vp: window.__m4aViewport(), focus: window.__m4aFocusedId() })`)
+        ok(IDS[0],
+          pane && pane.columns.length === 4 && new Set(pane.columns).size === 4 &&
+            pane.drops.join(',') === 'true,false,false,true' && pane.columns[0] === TODO && pane.columns[1] === WORKING &&
+            pane.aColumn === WORKING && pane.bColumn === TODO && pane.aLabel === 'Fix the flush gate' && /acme\/canvas#7/.test(pane.aTail ?? '') && /lane/.test(pane.aTail ?? '') &&
+            pane.aShow === false && pane.bShow === true &&
+            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 4 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
+          JSON.stringify({ pane, card, before, after, moved }))
+      } catch (bdErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(bdErr && bdErr.message || bdErr))
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL

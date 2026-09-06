@@ -1,5 +1,5 @@
 import { triggerWord } from '@shared/watch-trigger'
-import { isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
+import { isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
   isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
@@ -106,6 +106,8 @@ export function panelLabel(panel: Panel): string {
   if (isWatcherPanel(panel)) return `watcher: ${panel.watch.command} ${triggerWord(panel.watch.trigger)} (${panel.rect.id})`
   // M103. The eleventh kind, named by the page it opens to.
   if (isBrowserPanel(panel)) return `browser: ${panel.url} (${panel.rect.id})`
+  // M116. The twelfth kind, named by its item (the title stamped at mint).
+  if (isWorkPanel(panel)) return `work: ${panel.title ?? panel.work.itemId} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

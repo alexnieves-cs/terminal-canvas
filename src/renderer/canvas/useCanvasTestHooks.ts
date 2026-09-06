@@ -91,6 +91,8 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
     w.__m4aViewport = (): { x: number; y: number; scale: number } => ({
       ...viewportRef.current
     })
+    /** M116. The focused id, so a check can assert a flight moved the camera and NOT the focus. */
+    w.__m4aFocusedId = (): string | null => focusedIdRef.current
     /** Screen-space centre of the first cell of `word` in the focused panel. */
     w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
       const id = focusedIdRef.current

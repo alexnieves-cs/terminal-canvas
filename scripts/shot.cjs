@@ -200,6 +200,12 @@ const SCENES = [
       await k.shot('routine')
       await k.click('[data-dock="panels"]'); await sleep(300)
     } },
+  { name: 'board', intent: 'M116. The Board pane: four columns (todo · working · review · done) over the workspace\'s work items — `acme/canvas#12 Watchdog fires under load` under working with `ada` and its lane `claude — api (chat)` as the trailing phrase, `acme/canvas#31` under todo with `Show on canvas` because it has no card; todo and done are the only columns with a dashed (droppable) edge. On the canvas, the #12 card sits beside the chat it was dispatched to, its state word `working` in the working tone, with the edge between them.',
+    run: async (k) => {
+      await k.dock('board'); await sleep(500)
+      await k.shot('board')
+      await k.dock('panels'); await sleep(300)
+    } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
       await kit.goTo('memory · repo')
@@ -466,6 +472,8 @@ app.whenReady().then(async () => {
         { id: 'chat', kind: 'chat', x: 770, y: 570, w: 560, h: 360, z: 11, title: 'claude — api (chat)', chat: { cwd: REPO, sessionId: '55555555-5555-4555-8555-555555555555' }, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'idle' } }] },
         // M90. The second backend beside the first: the chrome names it, the rest is the same panel.
         { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
+        // M116. A work card beside the chat it was dispatched to, with the edge.
+        { id: 'card12', kind: 'work', x: 770, y: 1260, w: 420, h: 180, z: 18, title: 'Watchdog fires under load', work: { itemId: 'wi-12' }, links: [{ to: 'chat' }] },
         // M106. A narrow frame with a long title: the frame rule's subject.
         term('narrow', 1400, 1360, 320, 220, 30, { title: 'review: the health check wiring for the api repository' }),
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
@@ -476,6 +484,13 @@ app.whenReady().then(async () => {
       // M79. A run that already happened: the chat and worker a handed off into twin.
       runs: [{ id: 'run-1', name: 'run 1', panelIds: ['chat', 'groupA', 'twin'], edges: [{ from: 'chat', to: 'twin' }, { from: 'groupA', to: 'twin' }], startedAt: Date.now() - 3600000, endedAt: Date.now() - 3480000, entries: [{ panelId: 'chat', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3590000, outcome: 'a turn' }, { panelId: 'groupA', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3560000, outcome: 'exit 0' }, { panelId: 'twin', startedAt: Date.now() - 3560000, endedAt: Date.now() - 3480000, outcome: 'exit 0' }], costUsd: 0.2138 }],
       bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }],
+      // M116. The board: one item dispatched to ada's chat (its card is
+      // `card12` above), one still to do with no card, so the pane shows a
+      // lane row and a `Show on canvas` row.
+      workItems: [
+        { id: 'wi-12', source: 'github', key: 'acme/canvas#12', title: 'Watchdog fires under load', url: 'https://github.com/acme/canvas/issues/12', description: 'The 300s watchdog trips when the suite runs beside a build.', state: 'working', remoteState: 'open', teammateId: 'ada', panelId: 'chat', createdAt: Date.now() - 7200000, updatedAt: Date.now() - 600000 },
+        { id: 'wi-31', source: 'github', key: 'acme/canvas#31', title: 'Group buttons are mouse-only', url: 'https://github.com/acme/canvas/issues/31', state: 'todo', remoteState: 'open', createdAt: Date.now() - 3600000, updatedAt: Date.now() - 3600000 }
+      ],
       // M93. Notes in the margins: one on the canvas, one on a panel.
       annotations: [{ id: 'note-1', text: 'the api pair — worker b takes over on exit 0', anchor: { kind: 'world', x: 30, y: 318 } }, { id: 'note-2', text: 'flaky since the watchdog change', anchor: { kind: 'panel', panelId: 'dormant', dx: 12, dy: 262 } }]
     }, {

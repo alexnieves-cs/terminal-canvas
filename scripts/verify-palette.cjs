@@ -209,7 +209,7 @@ const spyActions = () => {
     beginBrowser: record('beginBrowser'),
     // M106
     toggleFlip: record('toggleFlip'),
-    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'),
+    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),

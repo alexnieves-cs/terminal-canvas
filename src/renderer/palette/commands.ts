@@ -70,7 +70,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -461,6 +461,8 @@ export interface PaletteActions {
   commentPr(itemId: string): void
   /** M115. done is the user's. */
   markDone(itemId: string): void
+  /** M116. Open the navigator on the Board pane. */
+  openBoard(): void
 }
 
 export interface PaletteContext {
@@ -1362,6 +1364,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M113. The typed door onto the board. A canvas-group row (a panel-group
   // row competes with Go-to rows by fuzzy score) and never disabled: a typed
   // item needs no service, no place and no CLI — it is a title on a board.
+  out.push({
+    id: 'board.open',
+    title: 'Open board',
+    searchText: 'board kanban columns todo working review done dispatch',
+    group: 'canvas',
+    run: () => actions.openBoard()
+  })
   out.push({
     id: 'board.new',
     title: 'New work item…',

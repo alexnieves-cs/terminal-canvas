@@ -10,6 +10,7 @@ import { FileTree } from './FileTree'
 import { VaultPane, type VaultPaneProps } from './VaultPane'
 import { IntegrationsPane, type IntegrationsPaneProps } from './IntegrationsPane'
 import { TeammatesPane, type TeammatesPaneProps } from './TeammatesPane'
+import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
 
@@ -58,6 +59,8 @@ export interface NavigatorProps {
   integrations: IntegrationsPaneProps
   /** M100. The roster pane's model. */
   teammates: TeammatesPaneProps
+  /** M116. The board pane's model. */
+  board: BoardPaneProps
 }
 
 /**
@@ -87,10 +90,12 @@ export interface NavigatorProps {
  */
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
-  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'teammates' ? 'Teammates' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
+  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
-      {navigator === 'teammates' ? (
+      {navigator === 'board' ? (
+        <BoardPane {...props.board} onToggle={onToggle} />
+      ) : navigator === 'teammates' ? (
         <TeammatesPane {...props.teammates} onToggle={onToggle} />
       ) : navigator === 'integrations' ? (
         <IntegrationsPane {...props.integrations} onToggle={onToggle} />

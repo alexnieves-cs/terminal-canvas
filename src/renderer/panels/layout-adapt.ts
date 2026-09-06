@@ -3,7 +3,7 @@ import { carryBackend } from '@shared/agent-backends'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
+import { isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, type Panel } from './panels'
 
 /**
@@ -102,6 +102,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     }
     // M103. The browser pane: one field, copied by name.
     if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url }
+    // M116. The work card: one field, copied by name.
+    if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -191,6 +193,8 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     }
     // M103. Same no-cwd/no-args rule as every branch above.
     if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url }
+    // M116. Same rule; the id is the record's whole identity.
+    if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     return {
       ...base,
       kind: 'terminal' as const,

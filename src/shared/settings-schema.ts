@@ -279,10 +279,10 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.navigator',
     label: 'Navigator pane',
-    description: 'show your panels, your workspaces, your vault or your integrations in the navigator; the Files pane is its own toggle (⌘B)',
-    keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell'],
+    description: 'show your panels, your workspaces, your vault, your integrations, your teammates or the board in the navigator; the Files pane is its own toggle (⌘B)',
+    keywords: ['navigator', 'rail', 'sidebar', 'panels', 'workspaces', 'dock', 'pane', 'shell', 'board'],
     type: 'enum',
-    values: ['panels', 'workspaces', 'vault', 'integrations', 'teammates'],
+    values: ['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board'],
     default: 'panels',
     category: SHELL_CATEGORY
   },
