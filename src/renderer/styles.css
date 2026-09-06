@@ -28,7 +28,8 @@
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
      is right. 50% and --r-full are SHAPES (a circle, a pill), not steps. */
-  --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-full: 999px;
+  /* M109. One step rounder each (Obsidian: round corners, 12px on the frame). */
+  --r-sm: 5px; --r-md: 8px; --r-lg: 12px; --r-full: 999px;
 
   /* Type. A six-step scale at a 1.2 ratio, 11 to 24. --t-xs is legal below
      the 12px floor ONLY because every user of it is a one- or two-word
@@ -93,12 +94,12 @@
      darkest step, panels sit a step above it, raised surfaces are white.
      --s-4 is the hover fill and --s-5 the pressed/selected fill — a tint, as
      every native macOS control does it, and never a text ground. */
-  --s-0: #e9ecf0;   /* canvas ground                                  */
-  --s-1: #f7f8fa;   /* panel and pane surfaces                        */
-  --s-2: #f0f2f5;   /* chrome: top bar, rail, inspector               */
+  --s-0: #e3e7ee;   /* canvas ground (under the aura)                 */
+  --s-1: #f6f7fa;   /* panel and pane surfaces (the opaque fallback)  */
+  --s-2: #eef0f5;   /* chrome: top bar, rail, inspector               */
   --s-3: #ffffff;   /* raised: palette, HUD, menus                    */
-  --s-4: #e2e5ea;   /* hover fill                                     */
-  --s-5: #d5d9e0;   /* pressed / selected fill — never a text ground  */
+  --s-4: #e0e4eb;   /* hover fill                                     */
+  --s-5: #d2d7e0;   /* pressed / selected fill — never a text ground  */
 
   /* The terminal ground. Tied to terminal/themes.ts's light `background`:
      the two must agree or the screen shows a seam against the slot's own
@@ -142,37 +143,61 @@
   --e-3: 0 6px 20px rgba(15, 18, 26, .16);
   --e-4: 0 14px 40px rgba(15, 18, 26, .22);
 
+  /* M109. THE MATERIAL (Obsidian). Glass fills are rgba over a blur — a
+     NEW name each, so nothing check 11 measures stops being hex. --lift is
+     the ONE resting shadow (the panel frame; verify:styles shadow.1 names
+     its sites), --edge-light the 1px inner light on a top edge, --bezel the
+     dark line where the chrome meets the well, the two auras the ground's
+     light, --on-iris the ink on a filled accent control, --blur the one
+     backdrop filter. Light: frosted porcelain, tinted shadows. */
+  --glass-1:    rgba(255, 255, 255, .80);
+  --glass-2:    rgba(246, 247, 250, .86);
+  --edge-light: rgba(255, 255, 255, .95);
+  --bezel:      rgba(30, 40, 70, .10);
+  --lift:       0 12px 30px -16px rgba(30, 50, 90, .28);
+  --aura-1:     rgba(14, 116, 144, .14);
+  --aura-2:     rgba(99, 102, 241, .10);
+  --on-iris:    #ffffff;
+  --blur:       blur(12px) saturate(120%);
+
   /* Back-compat aliases. Recorded as debt in M45's build log: they let the
-     migration land task by task, and they go when their last user does. */
+     migration land task by task, and they go when their last user does.
+     M109: --panel-bg and --chrome-bg alias the GLASS — verify:panels reads a
+     card's ground against var(--panel-bg), and the alias is what keeps that
+     check measuring the real fill. */
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
-  --panel-bg:  var(--s-1);
-  --chrome-bg: var(--s-2);
+  --panel-bg:  var(--glass-1);
+  --chrome-bg: var(--glass-2);
   --border:    var(--line);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --s-0: #0e1015;
-  --s-1: #171a21;
-  --s-2: #1b1f27;
-  --s-3: #232833;
-  --s-4: #2b313d;
-  --s-5: #363d4b;
+  /* M109. Obsidian: a deeper ground so five levels are legible (the
+     pre-M109 ramp spanned ten points; this spans twenty), blue-black rather
+     than grey. Every value re-derived against check 11. */
+  --s-0: #070910;
+  --s-1: #12161f;
+  --s-2: #0f131b;
+  --s-3: #1a1f2b;
+  --s-4: #232937;
+  --s-5: #2c3344;
 
-  /* terminal/themes.ts's dark `background`, and the pre-M45 value: the
-     sixteen ANSI colours were tuned against it and did not move. */
-  --well: #14161c;
+  /* terminal/themes.ts's dark `background`: a half-step below the glass so
+     the well reads as a screen set into the frame. The sixteen ANSI colours
+     did not move (they are the agent's, not the app's). */
+  --well: #0c0f16;
 
-  --fg:   #e7e9ee;
-  --fg-2: #b6bcc8;
-  --fg-3: #98a0b0;
-  --fg-4: #78808f;
+  --fg:   #e9ecf4;
+  --fg-2: #b8bfcd;
+  --fg-3: #98a1b3;
+  --fg-4: #7a8396;
 
-  --line:        #2c323e;
-  --line-strong: #414959;
+  --line:        #262c39;
+  --line-strong: #3b4356;
   --frame-line: var(--line-strong);
 
   --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .16);
@@ -188,11 +213,21 @@
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
 
+  --glass-1:    rgba(18, 22, 31, .74);
+  --glass-2:    rgba(13, 16, 24, .82);
+  --edge-light: rgba(255, 255, 255, .06);
+  --bezel:      rgba(0, 0, 0, .45);
+  --lift:       0 20px 40px -22px rgba(0, 0, 0, .75);
+  --aura-1:     rgba(99, 102, 241, .22);
+  --aura-2:     rgba(45, 212, 191, .12);
+  --on-iris:    #06111a;
+  --blur:       blur(14px) saturate(140%);
+
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
-  --panel-bg:  var(--s-1);
-  --chrome-bg: var(--s-2);
+  --panel-bg:  var(--glass-1);
+  --chrome-bg: var(--glass-2);
   --border:    var(--line);
 }
 
@@ -269,6 +304,10 @@ body {
   --shell-ctx-w: 260px;
   --shell-top-h: 56px;
   position: relative;
+  /* M109. A stacking context of its own, so the aura at z-index -1 sits
+     under every region and never under the body. */
+  isolation: isolate;
+  background: var(--s-0);
   display: grid;
   height: 100%;
   grid-template-columns: var(--shell-dock-w) var(--shell-nav-w) 1fr var(--shell-ctx-w);
@@ -310,6 +349,20 @@ body {
 .shell--ctx-drawer .inspector__actions.context__actions { padding-bottom: calc(var(--sp-5) + 44px); }
 .shell--nav-drawer .rail-list { padding-bottom: calc(var(--sp-5) + 44px); }
 
+/* M109. THE AURA. Two radial lights on the ground, painted ONCE under every
+   region (the chrome is glass, so the light shows through the rail and the
+   top bar as well as the canvas — one source lights the whole window).
+   z-index -1 inside the shell's own stacking context: below every in-flow
+   region, above the shell's ground. Never a click target. */
+.shell__aura {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 55% at 12% 0%, var(--aura-1), transparent 62%),
+    radial-gradient(50% 45% at 96% 100%, var(--aura-2), transparent 60%);
+}
 .shell__top { grid-area: top; }
 .shell__dock { grid-area: dock; }
 .shell__rail { grid-area: nav; }
@@ -341,7 +394,9 @@ body {
   align-items: center;
   gap: var(--sp-2);
   padding: var(--sp-3) 0;
-  background: var(--s-2);
+  background: var(--glass-2);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border-right: 1px solid var(--line);
 }
 .dock__button {
@@ -353,12 +408,12 @@ body {
   position: relative;
 }
 .dock__button--on {
-  color: var(--iris);
-  background: var(--iris-dim);
-  /* A 1px iris ring on the tile: the fill alone was invisible at a glance
-     and the edge bar read as the window border (M66's critic). A line,
-     not a shadow. */
-  box-shadow: inset 0 0 0 1px var(--iris);
+  /* M109. FILLED: the accent as the tile, --on-iris as the glyph, a soft
+     glow of its tint. M66's ring was there because the dim fill was
+     invisible; a full fill is not. */
+  color: var(--on-iris);
+  background: var(--iris);
+  box-shadow: 0 0 12px var(--iris-dim);
 }
 /* M66. A 2px iris bar on the dock's left edge for the active pane — the
    same "bar in the left slot means selected" the rail uses. The fill alone
@@ -442,7 +497,12 @@ body {
   /* The left padding is the traffic-light clearance, paid here instead of as
      dead space above the shell. */
   padding: 0 var(--sp-5) 0 var(--titlebar-inset);
-  background: var(--s-2);
+  /* M109. Glass with an inner light along its top edge: the chrome is a
+     material the content sits inside, lit from above. */
+  background: var(--glass-2);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: inset 0 1px 0 var(--edge-light);
   border-bottom: 1px solid var(--line);
   -webkit-app-region: drag;
 }
@@ -533,7 +593,9 @@ body {
    Workspaces and Attention are short by construction and are capped so a long
    workspace list cannot push the panel outline off screen. */
 .shell__rail {
-  background: var(--s-2);
+  background: var(--glass-2);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -542,7 +604,9 @@ body {
 /* The Files pane fills the navigator column. */
 .shell__tree { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .shell__inspector {
-  background: var(--s-2);
+  background: var(--glass-2);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
   border-left: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -1394,11 +1458,22 @@ body {
      row track. Keeping the old declaration would resolve it against .app's
      full height and push the canvas back out of the frame. */
   overflow: hidden;
-  /* M67. FLAT. The dot grid was a whiteboard's promise that you will draw;
-     this canvas is for reading (brief, Colour). Panning is read from the
-     panels moving and the HUD's coordinates; nothing under them. */
-  background: var(--s-0);
+  /* M67. FLAT: no dot grid — this canvas is for reading. M109: TRANSPARENT,
+     so the shell's aura is the ground, and the one thing under the panels is
+     .canvas__aura, a light that follows the camera at a fraction of its
+     speed — panning reads as movement through a lit space. */
+  background: transparent;
   cursor: default;
+}
+/* M109. The camera's light: a sibling of .world, BEFORE it in the DOM so
+   the world paints over it; translated by Canvas.tsx at 0.12 of the
+   viewport's own translation (parallax — the ground is far away). Oversized
+   so the light never shows an edge. Never a click target. */
+.canvas__aura {
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  background: radial-gradient(38% 38% at 50% 48%, var(--aura-1), transparent 70%);
 }
 
 /* Backlog #68: space-drag and middle-drag pan cursor feedback. --panning
@@ -1756,14 +1831,49 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* M67. A hairline, no shadow: --line carried the boundary under an --e-2
-     that made every panel at rest look lifted (brief, principle 4). */
+  /* M67 drew a hairline and no shadow. M109 (Obsidian): the hairline stays
+     the boundary, the fill is GLASS over a blur, and --lift is the one
+     resting shadow — tight and low, so a panel sits a finger's width above
+     the ground rather than floating (verify:styles shadow.1 names its
+     sites). Every selected/state rule below that writes box-shadow restates
+     the lift, or the panel would drop to the ground when clicked. */
   border: 1px solid var(--frame-line);
   border-radius: var(--r-lg);
   background: var(--panel-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--lift);
   user-select: none;
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
+/* M109. WHERE BLUR IS NOT PAID. backdrop-filter composites a layer per
+   element; the near tiers are bounded by the viewport, the far tiers are not
+   (a hundred blocks at 8%), and the glass is invisible there anyway. */
+.world[data-detail="summary"] .pf,
+.world[data-detail="block"] .pf {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* M109. THE STATE EDGE GLOWS. A 1px pseudo-element pinned just OUTSIDE the
+   frame's left edge — clipped by the frame's own overflow: hidden, so only
+   its shadow, spilling inward, is ever seen — carrying a soft glow in the
+   tone's own tint. It reads --tone-dim, so the tone block above stays the
+   only place a hue is bound. pointer-events: none. (And because this is the
+   first REAL .pf::before rule, verify:styles tone.1's "nothing after the
+   tone block binds a hue" arm runs for the first time — see the M109 log.) */
+.pf::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  box-shadow: 0 0 14px 3px var(--tone-dim);
+}
+/* At the far tiers the glow doubles, so a wall of blocks reads as lights. */
+.world[data-detail="summary"] .pf::before,
+.world[data-detail="block"] .pf::before { box-shadow: 0 0 24px 6px var(--tone-dim); }
 
 /* M47. THE FRAME. `.pf` is the box (`.panel` stays as its alias, for the
    ~200 checks that select on it); `.pf__chrome`, `.pf__title`, `.pf__close`,
@@ -1846,8 +1956,8 @@ body {
    own accent answers selection everywhere (brief, principle 5). */
 .panel--selected {
   border-color: var(--iris);
-  /* M67. A ring, never a lift: the elevation left with every other resting shadow. */
-  box-shadow: 0 0 0 1px var(--iris);
+  /* M67. A ring. M109: and the lift restated, or a click drops the panel. */
+  box-shadow: 0 0 0 1px var(--iris), var(--lift);
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
@@ -1855,7 +1965,7 @@ body {
    (M67: the ring is the whole shadow now — resting elevation left every
    panel, so there is no base box-shadow for this rule to preserve.) */
 .panel[data-link-target] {
-  box-shadow: 0 0 0 2px var(--iris);
+  box-shadow: 0 0 0 2px var(--iris), var(--lift);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -1879,8 +1989,8 @@ body {
    read borderTopColor, and border-color stays a plain, untransformed
    var(--amber) below, outside the keyframes. Do not fold it in. */
 @keyframes wants-you-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim); }
-  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 32px var(--amber-dim); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--lift); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 36px var(--amber-dim), var(--lift); }
 }
 .panel--agent-wants-you {
   border-color: var(--frame-line);
@@ -1891,8 +2001,11 @@ body {
      whatever is declared HERE. Without this line an unselected waiting panel
      shows no amber ring at all, for exactly the users who asked for less
      motion — silently removing the app's one attention signal. */
-  box-shadow: 0 0 0 2px var(--amber);
-  animation: wants-you-pulse 2.4s ease-in-out infinite;
+  box-shadow: 0 0 0 2px var(--amber), var(--lift);
+  /* M109. ONE BREATH, not a heartbeat: two cycles over 1.2s, then the static
+     ring above. A pulse that never ends on a panel that waits an hour is a
+     signal the eye learns to skip (brief, Motion: three moments). */
+  animation: wants-you-pulse 1.2s ease-in-out 2;
 }
 .panel--agent-exited { border-color: var(--frame-line); }
 
@@ -1909,8 +2022,8 @@ body {
      critic sampled it. Blue is now only ever "working". */
   border-color: var(--iris);
   /* The ring, restated: this rule is the LATER one at equal specificity and
-     would otherwise drop it (M67: the ring is the only shadow a panel has). */
-  box-shadow: 0 0 0 1px var(--iris);
+     would otherwise drop it — and the lift with it (M109). */
+  box-shadow: 0 0 0 1px var(--iris), var(--lift);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -1923,7 +2036,7 @@ body {
    selection never paints over. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--iris);
-  box-shadow: 0 0 0 1px var(--iris);
+  box-shadow: 0 0 0 1px var(--iris), var(--lift);
 }
 
 /* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
@@ -1953,6 +2066,13 @@ body {
   min-height: 36px;
   padding: var(--sp-2) var(--sp-3) var(--sp-2) var(--sp-5);
   background: var(--chrome-bg);
+  /* M109. THE BEZEL. An inner light along the chrome's top edge and a dark
+     line just below its hairline, over the well: the terminal reads as a
+     screen set into a housing. Drawn on the CHROME, never on the slot (its
+     own comment forbids the slot any inset), and position: relative so the
+     outer shadow paints over the later sibling. */
+  position: relative;
+  box-shadow: inset 0 1px 0 var(--edge-light), 0 1px 0 var(--bezel);
   border-bottom: 1px solid var(--line);
   /* A calc off the same token rather than a literal so the relationship
      survives a change to the token. Without matching top corners here, a
@@ -2126,7 +2246,7 @@ body {
    the point — at 8% a block is a map marker, not a paragraph. */
 .panel__card--summary { justify-content: center; gap: var(--sp-3); font-family: var(--font-ui); }
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); }
+.panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
 .panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
 .panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .panel__card-summary-cost { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; }
@@ -2141,7 +2261,10 @@ body {
 }
 .panel__card-block-title { font-size: calc(var(--t-2xl) * 3); font-weight: 700; padding: var(--sp-6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 /* M63. The block is its tone: the same colour the edge and the minimap use. */
-.panel__card-block[data-tone] { background: var(--tone-dim); color: var(--tone); }
+/* M110. A STATUS WALL: a solid tint of the tone over the surface — the
+   16%-alpha --tone-dim vanished on a dark ground at 8% — and the minimap
+   below draws the SAME expression (verify:styles far.1 compares them). */
+.panel__card-block[data-tone] { background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); color: var(--tone); }
 .panel__card-block[data-tone="asleep"], .panel__card-block[data-tone="none"], .panel__card-block[data-tone="starting"] { background: var(--s-4); color: var(--fg); }
 
 .panel__card-line {
@@ -2248,7 +2371,7 @@ body {
   position: absolute;
   box-sizing: border-box;
   border: 1px solid var(--tone);
-  background: var(--tone-dim);
+  background: color-mix(in srgb, var(--tone) 26%, var(--s-1));
 }
 .minimap__block[data-tone="none"], .minimap__block[data-tone="starting"] { border-color: var(--line-strong); background: var(--s-4); }
 /* Asleep is DASHED and empty; a sessionless kind is a hairline and empty;
@@ -2324,10 +2447,12 @@ body {
   width: min(560px, 86%);
   z-index: 20;
   padding: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--frame-line);
   border-radius: var(--r-lg);
-  background: var(--s-1);
-  box-shadow: none;
+  background: var(--glass-1);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--lift);
   color: var(--fg-2);
   overflow: hidden;
 }
@@ -2363,6 +2488,22 @@ body {
 /* M91. A disabled verb's hint IS the fix: it wraps rather than ending in an
    ellipsis mid-sentence (the critic saw `check the en…`). */
 .launcher__verb:disabled .launcher__verb-hint { color: var(--fg-4); white-space: normal; }
+/* M111. The launcher's moment. The wordmark is the brief's "launcher's one
+   heading" (--t-2xl, nowhere else in the chrome); the light behind it is the
+   aura's own tokens; the doors are cards in a row that step down from the
+   frame's radius; the list beneath stays the quiet prompt lines. */
+.launcher { width: min(720px, 90%); }
+.launcher__hero { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-7) var(--sp-6) var(--sp-6); text-align: center; }
+.launcher__hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 80% at 50% 30%, var(--aura-1), transparent 70%); }
+.launcher__wordmark { font-family: var(--font-mono); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
+.launcher__tagline { font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__doors { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); margin: 0 0 var(--sp-6); }
+.launcher__verb--door { flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light); }
+.launcher__verb--door .launcher__verb-name::before { content: none; }
+.launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
+.launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
+.launcher__verb--door:hover:not(:disabled) { border-color: var(--iris); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
+.launcher__verb--door:disabled { background: var(--s-2); border-style: dashed; }
 .launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
 .launcher__env-hint { color: var(--iris); }
 .launcher__check { margin-left: var(--sp-3); }
@@ -3006,9 +3147,10 @@ body {
    overlay's OWN element — .world is never touched (four checks read its
    computed matrix) and this is not in .world. Standing down under
    prefers-reduced-motion is handled by the global block below. */
+/* M110. Scale as well as rise: the overlay arrives rather than appears. */
 @keyframes palette-enter {
-  from { opacity: 0; transform: translateX(-50%) translateY(-6px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(.98); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 .palette { animation: palette-enter var(--dur-2) var(--ease) both; }
 
@@ -3621,6 +3763,10 @@ body {
 .chat__row:last-child { border-bottom: 0; }
 .chat__role { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); padding-top: var(--sp-1); }
 .chat__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+/* M111. A user turn is a BAND — a tinted, rounded row rather than a labelled
+   column — so the eye finds the turns at a glance; the agent's answer stays
+   on the ground, the loudest thing in the panel. */
+.chat__row--user { background: var(--s-2); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: var(--sp-2) 0; border-bottom: 0; }
 .chat__row--user .chat__text { color: var(--fg-2); }
 .chat__row--live .chat__text::after { content: '▍'; color: var(--fg-3); }
 .chat__row--thinking, .chat__row--tool { grid-template-columns: 52px 1fr; }
@@ -3630,7 +3776,9 @@ body {
 .chat__thinking-text { grid-column: 2; margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
 .chat__row--tool { grid-template-columns: 52px auto minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2); }
 .chat__row--tool::before { content: 'tool'; font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+/* M111. The tool's name is a CHIP: an object you could pick up, which M77 says it is. */
 .chat__tool-name { font-weight: 600; }
+.chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
 /* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 .chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
@@ -3646,12 +3794,53 @@ body {
 .chat__verb { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__verb:hover:not(:disabled) { background: var(--s-4); }
 .chat__verb:disabled { color: var(--fg-3); border-color: var(--line); background: transparent; cursor: default; }
-.chat__composer { flex: none; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); background: var(--s-1); }
-/* Plain: the composer's hairline above is its boundary (principles 4, 12); no box, no grip. */
-.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-2) 0; border: 0; background: transparent; color: var(--fg); font-family: var(--font-mono); font-size: var(--t-md); }
-.chat__input:focus { outline: none; }
+.chat__composer { flex: none; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); background: transparent; }
+/* M111. A RAISED FIELD: the one place in the panel that asks to be typed
+   into looks like it — a hairline box on the raised surface, an iris ring
+   on focus (the focus outline is relocated, not removed). */
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
+.chat__input:focus { outline: none; border-color: var(--iris); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
+/* M110. ONE FILLED CONTROL PER SURFACE. The interface accent as a fill and
+   --on-iris as its ink, on exactly five sites: the top bar's New panel, the
+   composer's Send, the pane's Restart, Run again, Jira's Connect. NOT
+   Commit — .review-node__commit's own comment refuses a destructive verb
+   that looks primary. verify:styles primary.1 reads this selector list. */
+.is-primary,
+.shell__top .shell__spawn,
+.chat__verb--send,
+.inspector__action--primary,
+.rail-run .rail-row__verb,
+.jira-node__connect {
+  background: var(--iris);
+  color: var(--on-iris);
+  border-color: transparent;
+  font-weight: 600;
+}
+.is-primary:hover:not(:disabled),
+.shell__top .shell__spawn:hover:not(:disabled),
+.chat__verb--send:hover:not(:disabled),
+.inspector__action--primary:hover:not(:disabled),
+.rail-run .rail-row__verb:hover:not(:disabled),
+.jira-node__connect:hover:not(:disabled) {
+  background: var(--iris);
+  color: var(--on-iris);
+  border-color: transparent;
+  box-shadow: 0 0 0 3px var(--iris-dim);
+}
+.is-primary:disabled,
+.shell__top .shell__spawn:disabled,
+.chat__verb--send:disabled,
+.inspector__action--primary:disabled,
+.rail-run .rail-row__verb:disabled,
+.jira-node__connect:disabled {
+  background: transparent;
+  color: var(--fg-4);
+  border-color: var(--line);
+  box-shadow: none;
+}
+
 /* M74. A kind's chrome verb (open as chat / open in terminal): the icon-button
    family, disabled by name rather than hidden where it cannot apply. */
 .pf__verb--word { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: transparent; color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; white-space: nowrap; }

@@ -724,7 +724,7 @@ function InspectorPanel({
           <div className="inspector__run" data-work-run>
             <span className="inspector__run-name">{panelRun.name}</span>
             <span className="inspector__run-facts">{panelRun.facts} · <span data-tone={panelRun.tone}>{panelRun.outcome}</span></span>
-            <button type="button" className="inspector__action inspector__action--secondary" data-work-run-again disabled={!panelRun.runAgain.enabled}
+            <button type="button" className="inspector__action inspector__action--primary" data-work-run-again disabled={!panelRun.runAgain.enabled}
               title={panelRun.runAgain.enabled ? 'Restart this run\'s roots in order' : panelRun.runAgain.reason}
               {...shellControl(() => { if (panelRun.runAgain.enabled) onRunAgain(panelRun.id) })}>Run again</button>
           </div>
@@ -872,7 +872,7 @@ function InspectorPanel({
         */}
         <button
           type="button"
-          className="inspector__action"
+          className="inspector__action inspector__action--primary"
           data-inspector-action="restart"
           disabled={model.kind !== 'terminal' || !model.restartable}
           title={

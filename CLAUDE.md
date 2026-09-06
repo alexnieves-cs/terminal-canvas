@@ -512,6 +512,21 @@ check does not, and should not, cover it.
   environment applies on relaunch. `verify:file env.1`. Changes refresh on the selected chat's
   turn end; `chatHeaderLine` reads folder · branch · engine · model with every absent piece
   absent (`verify:rail header.1`).
+- `src/renderer/styles.css`'s glass set / `docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`
+  — M109–M111 (2.3.0), the Obsidian redesign. The two theme blocks gained NINE names together
+  (`--glass-1/2`, `--edge-light`, `--bezel`, `--lift`, `--aura-1/2`, `--on-iris`, `--blur`;
+  `obsidian.1` pins the set, `theme.1` the parity) and every measured token stayed six-digit
+  hex — `verify:panels` parses `--line-strong` with `toRgb` and check 11 skips an rgba, so a
+  glass fill is a NEW name, never a re-spelling. `--panel-bg` aliases `--glass-1`, which is
+  what keeps the card-ground check measuring the real fill. The ground is the SHELL's
+  (`.shell__aura` at z-index -1 inside `isolation: isolate`; `.canvas` is transparent;
+  `.canvas__aura` follows the camera at 0.12) — `ground.1` reads all three. ONE resting shadow,
+  `--lift`, on the frame, its state rules, the wants-you keyframes and the launcher (`shadow.1`
+  names the sites). Blur is paid at the near tiers only (`blur.1`). The state edge's glow is
+  `.pf::before` reading `--tone-dim` — and that rule's existence is what turned on `tone.1`'s
+  "after the tone block" arm, which had sliced at a string that occurred only in a comment. The
+  pulse is finite (`pulse.1`); the primary control has five named sites and never Commit
+  (`primary.1`); the block tier and the minimap share one `color-mix` (`far.1`).
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`

@@ -14342,8 +14342,9 @@ app.whenReady().then(async () => {
         }
         ok(IDS[0],
           vAWoke === true && stamped && after.attr === 'dark' && before.attr === 'light' &&
-            before.a === '#ffffff' && after.a === '#14161c' &&
-            before.b === '#ffffff' && after.b === '#14161c' &&
+            // M109: the Obsidian well; themes.ts and --well move together.
+            before.a === '#ffffff' && after.a === '#0c0f16' &&
+            before.b === '#ffffff' && after.b === '#0c0f16' &&
             before.card.got === before.card.want && after.card.got === after.card.want &&
             before.card.got !== after.card.got,
           JSON.stringify({ before, after }))

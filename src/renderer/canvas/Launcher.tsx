@@ -54,17 +54,35 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
     <div className="launcher pf" data-launcher data-tone="none" role="region" aria-label="Get started">
-      <div className="launcher__chrome pf__chrome">
-        <span className="launcher__title">terminal canvas</span>
-      </div>
+      {/* M111. No chrome row: the wordmark in the hero below is the name, and a
+          second "terminal canvas" above it read as a caption to itself. */}
       <div className="launcher__well">
-      <div className="launcher__verbs">
-        {/* The considered door first: `claude` at `~` is almost never the
-            right place, and the line that asks where should lead. */}
-        <button type="button" className="launcher__verb launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
+      {/* M111. The one place the app is allowed a moment: the wordmark over a
+          light drawn from the aura tokens, and THREE DOORS as cards — the
+          considered door first (`claude` at `~` is almost never the right
+          place), the conversation, a file. Every door keeps .launcher__verb
+          and its data-launcher-* attribute: the checks count verbs and read
+          preset names, door or not. */}
+      <div className="launcher__hero" aria-hidden="true">
+        <span className="launcher__wordmark">terminal canvas</span>
+        <span className="launcher__tagline">every agent on one canvas, one person at the desk</span>
+      </div>
+      <div className="launcher__doors">
+        <button type="button" className="launcher__verb launcher__verb--door launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
           <span className="launcher__verb-name">New panel…</span>
           <span className="launcher__verb-hint">a directory, a preset or a command, the agent's mode</span>
         </button>
+        <button type="button" className="launcher__verb launcher__verb--door" data-launcher-new-chat disabled={chatReason !== null}
+          title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>
+          <span className="launcher__verb-name">Chat with Claude…</span>
+          <span className="launcher__verb-hint">{chatReason === null ? 'a conversation panel — the same agent, no terminal' : chatReason}</span>
+        </button>
+        <button type="button" className="launcher__verb launcher__verb--door" data-launcher-open-file title="Open a file as a panel" {...shellControl(onOpenFile)}>
+          <span className="launcher__verb-name">Open a file…</span>
+          <span className="launcher__verb-hint">a file panel, editable</span>
+        </button>
+      </div>
+      <div className="launcher__verbs">
         {presets.map((p) => {
           const cli = p.subtitle.split(' ')[0]
           const install = p.available ? undefined : (INSTALL[cli] ?? INSTALL[p.name.toLowerCase().split(' ')[0]])
@@ -85,22 +103,11 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
             </button>
           )
         })}
-        {/* M73. The conversation door: the same agent the claude preset
-            starts in a terminal, rendered as a transcript. */}
-        <button type="button" className="launcher__verb" data-launcher-new-chat disabled={chatReason !== null}
-          title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>
-          <span className="launcher__verb-name">Chat with Claude…</span>
-          <span className="launcher__verb-hint">{chatReason === null ? 'a conversation panel — the same agent, no terminal' : chatReason}</span>
-        </button>
         {/* M90/M91. The second backend's door, beside the first, disabled by name. */}
         <button type="button" className="launcher__verb" data-launcher-new-codex disabled={codexReason !== null}
           title={codexReason === null ? 'A chat with codex, in your home directory' : codexReason} {...shellControl(() => { if (codexReason === null) onNewCodexChat() })}>
           <span className="launcher__verb-name">Chat with Codex…</span>
           <span className="launcher__verb-hint">{codexReason === null ? 'a conversation panel — codex, one process per turn' : codexReason}</span>
-        </button>
-        <button type="button" className="launcher__verb" data-launcher-open-file title="Open a file as a panel" {...shellControl(onOpenFile)}>
-          <span className="launcher__verb-name">Open a file…</span>
-          <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
         {/* On an empty canvas "select a panel first" names an impossible fix;
             the launcher's own reason says what to do here. */}

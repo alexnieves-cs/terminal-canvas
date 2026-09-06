@@ -411,16 +411,35 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const canvasBg = canvasRules.map((r) => (r.body.match(/background[^;]*;/g) || []).join(' ')).join(' ')
   const dotUses = (bare.match(/var\(--dot\)/g) || []).length
   const dotDeclared = (src.match(/--dot:/g) || []).length
-  ok('ground.1', 'the canvas ground is flat: no gradient, no --dot token',
-    canvas !== null && !/gradient/.test(canvasBg) && dotUses === 0 && dotDeclared === 0,
-    JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared }))
+  // M109. AMENDED: the ground is a LIT SPACE, not a flat fill — but the light
+  // lives on two aura layers (`.shell__aura` behind every region, `.canvas__aura`
+  // beside .world, following the camera), never on .canvas itself, which is
+  // transparent so the shell's light shows through. Both take no pointer:
+  // a layer over the world that hit-tests would swallow the background
+  // mousedown that clears selection. Still no dot grid.
+  const auraShell = bodyRules.find((r) => r.sel === '.shell__aura')
+  const auraCanvas = bodyRules.find((r) => r.sel === '.canvas__aura')
+  const auraOk = (r) => r !== undefined && /gradient/.test(r.body) && /pointer-events:\s*none/.test(r.body) && /var\(--aura-1\)/.test(r.body)
+  ok('ground.1', 'the canvas is transparent and flat; the light is on the two aura layers, each a gradient from the aura tokens that takes no pointer; no --dot token',
+    canvas !== null && !/gradient/.test(canvasBg) && /background:\s*transparent/.test(canvasBg) && dotUses === 0 && dotDeclared === 0 && auraOk(auraShell) && auraOk(auraCanvas),
+    JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined }))
 
   const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
   const OVERLAY = /\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
-  ok('shadow.1', 'no resting shadow: --e-1/--e-2 unused in the body, --e-3/--e-4 only on overlays',
-    restingUses.length === 0 && overlayMisuse.length === 0,
-    JSON.stringify({ restingUses: restingUses.slice(0, 6), overlayMisuse: overlayMisuse.slice(0, 6) }))
+  // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
+  // the panel frame (and the launcher, which wears the frame) and nowhere
+  // else. --e-1/--e-2 stay unused; --e-3/--e-4 stay overlay-only. A lift
+  // creeping onto a rail row or a card would put the old "everything
+  // floats" grammar back one selector at a time.
+  const liftUses = bodyRules.filter((r) => /var\(--lift\)/.test(r.body)).map((r) => r.sel)
+  // The frame, its selected/state rules, the wants-you keyframes (parsed as
+  // `0%, 100%` selectors) and the launcher, which wears the frame.
+  const LIFT_OK = /^\.panel(\b|--)|^\.launcher$|^\d+%/
+  const liftMisuse = liftUses.filter((sel) => !LIFT_OK.test(sel))
+  ok('shadow.1', 'one resting shadow, --lift, on the panel frame and the launcher only; --e-1/--e-2 unused in the body, --e-3/--e-4 only on overlays',
+    restingUses.length === 0 && overlayMisuse.length === 0 && liftUses.length >= 1 && liftMisuse.length === 0,
+    JSON.stringify({ restingUses: restingUses.slice(0, 6), overlayMisuse: overlayMisuse.slice(0, 6), liftUses, liftMisuse }))
 
   const dark = /\[data-theme="dark"\]\s*\{([^}]*)\}/.exec(bare)
   const darkBinds = dark ? /--frame-line:\s*var\(--line-strong\)/.test(dark[1]) : false
@@ -462,6 +481,90 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const verbRule = all.find((r) => /\.pf__verb\b|\.pf__close\b/.test(r.sel) && /flex\s*:\s*0 0 auto|flex-shrink\s*:\s*0/.test(r.body))
   ok('header.1', 'the frame title shrinks with an ellipsis and the chrome verbs never shrink — one rule for every kind',
     titleRule !== undefined && verbRule !== undefined, `title: ${titleRule ? titleRule.sel : 'none'} · verbs: ${verbRule ? verbRule.sel : 'none'}`)
+}
+
+// M109 — obsidian.1. THE GLASS SET, in both blocks. theme.1 already proves
+// the two blocks agree; this pins that the set EXISTS (a missing --glass-1
+// leaves every panel with no fill and no error — check 2 would catch the
+// var, but not a panel rule that was simply never written to use it) and
+// that --panel-bg aliases --glass-1: verify:panels reads a card's computed
+// background against var(--panel-bg), so the alias is what keeps that check
+// measuring the real fill.
+{
+  const GLASS = ['--glass-1', '--glass-2', '--edge-light', '--bezel', '--lift', '--aura-1', '--aura-2', '--on-iris', '--blur']
+  const missing = GLASS.filter((t) => !(perBlock.light || {})[t] || !(perBlock.dark || {})[t])
+  const alias = ['light', 'dark'].every((n) => /var\(--glass-1\)/.test((perBlock[n] || {})['--panel-bg'] || ''))
+  const panelUses = /\n\.panel\s*\{[^}]*background:\s*var\(--panel-bg\)/.test(bare) || /\n\.panel\s*\{[^}]*background:\s*var\(--glass-1\)/.test(bare)
+  const onIrisHex = ['light', 'dark'].every((n) => /^#[0-9a-fA-F]{6}$/.test((perBlock[n] || {})['--on-iris'] || ''))
+  ok('obsidian.1', 'the glass set is declared in both theme blocks, --panel-bg aliases --glass-1, the panel fills with it, and --on-iris is measurable hex',
+    missing.length === 0 && alias && panelUses && onIrisHex, JSON.stringify({ missing, alias, panelUses, onIrisHex }))
+}
+
+// M109 — blur.1. WHERE BLUR IS NOT PAID. backdrop-filter composites a layer
+// per element; the live and card tiers are bounded by the viewport, the far
+// tiers are not (a hundred blocks at 8%), and the glass is invisible there
+// anyway. The far-tier rules must set it to none, and the HUD must stay off
+// it (compact.1 reads its opaque ground; it sits over a world that repaints
+// on every pan frame).
+{
+  const panelBlur = /\n\.panel\s*\{[^}]*backdrop-filter:\s*var\(--blur\)/.test(bare)
+  const farOff = /\.world\[data-detail="summary"\] \.pf,\s*\.world\[data-detail="block"\] \.pf\s*\{[^}]*backdrop-filter:\s*none/.test(bare)
+  const hudRule = bodyRules.find((r) => r.sel === '.canvas-hud')
+  const hudOff = hudRule !== undefined && !/backdrop-filter/.test(hudRule.body)
+  ok('blur.1', 'the panel blurs through --blur at the near tiers, the far tiers set backdrop-filter: none, and the HUD never blurs',
+    panelBlur && farOff && hudOff, JSON.stringify({ panelBlur, farOff, hudOff }))
+}
+
+// M109 — pulse.1. ONE BREATH. The brief's motion rule is three moments; the
+// needs-you pulse is one of them and it ENDS — an infinite pulse on a panel
+// that waits an hour is a heartbeat the user learns to ignore. The static
+// ring stays declared outside the keyframes (its own comment says why).
+{
+  const wy = /\n\.panel--agent-wants-you\s*\{([^}]*)\}/.exec(bare)
+  const anim = wy ? /animation:\s*wants-you-pulse[^;]*;/.exec(wy[1]) : null
+  const finite = anim !== null && !/infinite/.test(anim[0]) && /\b[1-4]\s*;/.test(anim[0])
+  const staticRing = wy ? /box-shadow:[^;]*var\(--amber\)/.test(wy[1]) : false
+  ok('pulse.1', 'the wants-you pulse runs a finite number of breaths (1–4) and rests on its static amber ring',
+    finite && staticRing, JSON.stringify({ anim: anim && anim[0], staticRing }))
+}
+
+// M110 — primary.1. ONE FILLED CONTROL PER SURFACE. The rule fills with the
+// interface accent and inks with --on-iris, and it is on exactly the five
+// sites the spec names — never Commit, whose own comment refuses it. Read
+// as selectors in the stylesheet: a site that lost the class reads as an
+// ordinary outlined button, which is the pre-M110 look and not an error.
+{
+  const rule = all.find((r) => /\.is-primary\b/.test(r.sel) && /background:\s*var\(--iris\)/.test(r.body) && /color:\s*var\(--on-iris\)/.test(r.body))
+  const SITES = ['.shell__spawn', '.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect']
+  const sel = rule ? rule.sel.replace(/\s+/g, ' ') : ''
+  const missing = SITES.filter((s) => !sel.includes(s))
+  const commit = sel.includes('.review-node__commit')
+  ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its five sites and never Commit',
+    rule !== undefined && missing.length === 0 && !commit, JSON.stringify({ sel: sel.slice(0, 200), missing, commit }))
+}
+
+// M110 — far.1. ONE STATUS WALL. The block tier and the minimap draw the
+// same fact and must draw it with the same fill — one color-mix of the tone
+// over the surface — or the map and the canvas disagree about what a
+// colour means at a glance, which is the whole reason the minimap exists.
+{
+  const mix = /color-mix\(in srgb, var\(--tone\) (\d+)%, var\(--s-1\)\)/
+  const block = /\.panel__card-block\[data-tone\]\s*\{([^}]*)\}/.exec(bare)
+  const mini = /\n\.minimap__block\s*\{([^}]*)\}/.exec(bare)
+  const b = block ? mix.exec(block[1]) : null
+  const m = mini ? mix.exec(mini[1]) : null
+  ok('far.1', 'the block tier and the minimap share one color-mix fill of the tone over --s-1',
+    b !== null && m !== null && b[1] === m[1], JSON.stringify({ block: b && b[0], mini: m && m[0] }))
+}
+
+// M110 — motion.1. The palette's moment: it enters with a scale as well as
+// the rise, on its own element (never .world). The reduced-motion block
+// still stands it down.
+{
+  const kf = /@keyframes palette-enter\s*\{([\s\S]*?)\}\s*\}/.exec(bare)
+  const scales = kf ? /from\s*\{[^}]*scale\(\.9[0-9]\)/.test(kf[1]) : false
+  ok('motion.1', 'the palette-enter keyframe scales from below 1 on the palette\'s own element',
+    scales, JSON.stringify({ kf: kf && kf[1].replace(/\s+/g, ' ').slice(0, 160) }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

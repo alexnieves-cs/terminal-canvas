@@ -6,7 +6,8 @@ import type { ITheme } from '@xterm/xterm'
  * stamps — never by the setting's raw value, because `system` resolves to one
  * of these two and is not a theme of its own.
  *
- * DARK is the pre-M45 theme byte for byte: its sixteen ANSI entries are the
+ * DARK's sixteen ANSI entries are the pre-M45 set byte for byte (M109 moved
+ * only the ground, with the stylesheet's --well): they are the
  * agent's palette, not the app's (tmux-args.ts sets terminal-features RGB so
  * 24-bit agent colour passes through undownsampled), and re-tuning them to
  * suit the chrome would be the app overruling the thing it exists to display.
@@ -23,10 +24,11 @@ import type { ITheme } from '@xterm/xterm'
  * verify:panels theme.1 reads the card slot's computed background against it.
  */
 export const DARK_TERMINAL_THEME: ITheme = {
-  background: '#14161c',
+  // M109. The Obsidian well: a half-step below the glass, --well in styles.css.
+  background: '#0c0f16',
   foreground: '#d8dae5',
   cursor: '#7aa2f7',
-  cursorAccent: '#14161c',
+  cursorAccent: '#0c0f16',
   selectionBackground: '#2d3350',
   black: '#15161e',
   red: '#f7768e',
