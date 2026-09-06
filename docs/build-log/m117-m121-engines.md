@@ -113,7 +113,55 @@ such and the observation carried to M124; (7) `.chat__auto` gives (`verify:style
 
 ## The gate
 
-<!-- filled at the gate -->
+The shot pass first showed the `chat-copilot` scene's preview reading `chat with claude`
+under a copilot row — fixed before the reviewers saw it (the preview names the chosen
+row's engine, and now its capability sentence). The scene shows the row DISABLED (`— not on
+PATH`): the shot harness strips the PATH, and the codex scene's rule holds — the row is the
+assertion on every machine, the mint only where the binary is.
+
+**The critic** (fresh context) found fourteen; taken, every one but one: two refusals
+answered in codex's words for every backend (`REASON_NO_CODEX`, `REASON_CODEX_NO_IMAGES`) —
+the row's own sentences now; `claude is waiting for your answer` on an acp permission —
+the row's label; the pending ACP handshake was a two-state result that could hang silently
+with Interrupt enabled to a no-op — `awaitingHandshake` rides the snapshot, the composer
+says `waiting for <label> to open its session` with Interrupt disabled by name, and a
+handshake nobody answers is killed after the interrupt grace with `handshake-timeout` as
+the reason; claude's permission modes and efforts offered to copilot and acp as controls
+that did nothing — disabled with `<label> has no permission mode flag`; `default model` and
+`auto` as two rows for one meaning — `auto (the CLI's default)` is the empty choice and the
+list carries the rest; the sheet's preview names how two copilot rows differ (derived from
+the row: asks before a command runs · interrupts · images · a read-only mode); the sandbox
+rows sit beside `New chat…` in the spawn group; the acp `noSandbox` sentence names its fix;
+the auto chip's ellipsis lived on an inline-flex row and never applied — the words are a
+block that gives; the lineups are disabled only when NO row is available; M121 (6) is said
+plainly at its call site and in the README row. **Declined:** renaming copilot's deny
+arguments to the stream's tool names — `--deny-tool` takes a permission KIND
+(`shell(command)`, `write(path)`), which the recorded `copilot help permissions` says and
+`copilot.sandbox.1` now pins as text; the model word before the first turn is seeded from
+the spec.
+
+**The verifier** proved written-first FROM GIT this time (every spec check's red commit
+precedes its feat commit) and every constraint, and named five blockers, each fixed: the
+`Allow for session` grant landed AFTER the answer, so an ACP answer carried `allow_once`
+where the code's own comment promised `allow_always` — the grant goes first now, guarded by
+the pending lookup rather than a revoke; `registry.1`'s regex named only `claude|codex`, so
+a `backend === 'copilot'` would have passed — four names now; M121 (6) was a pure function
+nobody calls — restated, not claimed; a raw NUL byte in `copilot-transcript.ts` made the file
+binary to git and blind to grep — spelled `\u0000`; eight stale CLAUDE.md suite rows and
+the spec's missing `verify:panels` copilot-row check — both landed. Recorded and accepted:
+three feat commits edited their check's assertion (one loosened `acp.2`'s turn count to a
+before/after comparison), `sandbox.1` does not pin codex's tail position on RESUME (whether
+`exec resume` accepts `--sandbox` after the prompt is unmeasured — a manual-only line), and
+four stray `docs/research/*` files rode in through Track B's merge and were dropped.
+
+The renderer pass after the fixes: `verify:panels` found two of my own — the record's cwd
+came from the live snapshot, and a RECYCLED panel id answered with a stale session's folder
+(codex.1 and memory.2 read `no such directory: <a removed fixture>`); the record keeps the
+intended cwd now, except a sandbox chat's, which main resolved. `menu.1` queried the DOM in
+the same tick as a React click; `flip.1` expected no cards after returning to a workspace
+whose panels are dormant.
+
+The chain: see the last line of this log.
 
 ## What green does not prove
 
