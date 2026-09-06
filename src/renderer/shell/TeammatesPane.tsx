@@ -74,7 +74,8 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
             <li key={t.id} className={`rail-row${t.id === props.selectedId ? ' rail-row--selected' : ''}`} data-teammate-row={t.id} aria-selected={t.id === props.selectedId}>
               <button type="button" className="rail-row__main" {...shellControl(() => props.onSelect(t.id === props.selectedId ? null : t.id))}>
                 <span className="rail-row__label">{teammateWord(t)}</span>
-                <span className="rail-row__tail">{t.places.length} place{t.places.length === 1 ? '' : 's'} · {t.services.length} service{t.services.length === 1 ? '' : 's'}{t.scheduling ? ' · scheduled' : ''}{t.messaging ? ' · messaging' : ''}</span>
+                {/* Short nouns so the PERMISSION word survives the row's width — the critic saw `1 service · s…`. */}
+                <span className="rail-row__tail">{t.places.length} place{t.places.length === 1 ? '' : 's'} · {t.services.length} svc{t.scheduling ? ' · scheduled' : ''}{t.messaging ? ' · messaging' : ''}</span>
               </button>
             </li>
           ))}
@@ -82,7 +83,12 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
       )}
       {selected !== null && (
         <div className="teammates-pane__detail" data-teammate-detail={selected.id}>
-          <div className="shell__region-title">{teammateWord(selected)}</div>
+          <div className="shell__region-title shell__region-title--action">
+            <span>{teammateWord(selected)}</span>
+            <button type="button" className="pf__verb pf__verb--word" data-teammate-chat disabled={selected.places.length === 0}
+              title={selected.places.length === 0 ? 'add a place first — a teammate with no places can work nowhere' : `Start a chat as ${teammateWord(selected)}`}
+              {...shellControl(() => { if (selected.places.length > 0) props.onChat(selected.id) })}>Chat as {teammateWord(selected)}</button>
+          </div>
           <label className="teammates-pane__field">
             <span className="teammates-pane__label">brief</span>
             <textarea className="teammates-pane__brief" data-teammate-brief defaultValue={selected.brief} key={selected.id}
@@ -110,7 +116,8 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
                 const granted = selected.services.includes(svc.id)
                 return (
                   <li key={svc.id} className="teammates-pane__item" data-teammate-service={svc.id}>
-                    <span>{svc.label}{svc.connected ? '' : ' — not connected'}</span>
+                    {/* The grant is SAID, not implied by the verb's word. */}
+                    <span>{svc.label}{granted ? ' — granted' : ''}{svc.connected ? '' : ' — not connected'}</span>
                     <button type="button" className="pf__verb pf__verb--word" data-teammate-service-toggle={svc.id}
                       title={granted ? `Revoke ${svc.label} from this teammate` : `Grant ${svc.label} to this teammate — it spends the app's credential through the broker`}
                       {...shellControl(() => props.onSave({ ...selected, services: granted ? selected.services.filter((x) => x !== svc.id) : [...selected.services, svc.id] }))}>{granted ? 'revoke' : 'grant'}</button>
@@ -125,9 +132,6 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
           </div>
           <RoutinesSection teammate={selected} routines={props.routines.filter((r) => r.teammateId === selected.id)} onSave={props.onSaveRoutine} onDelete={props.onDeleteRoutine} onRun={props.onRunRoutine} onOpenLast={props.onOpenLast} />
           <div className="teammates-pane__field teammates-pane__actions">
-            <button type="button" className="inspector__action" data-teammate-chat disabled={selected.places.length === 0}
-              title={selected.places.length === 0 ? 'add a place first — a teammate with no places can work nowhere' : `Start a chat as ${teammateWord(selected)}`}
-              {...shellControl(() => { if (selected.places.length > 0) props.onChat(selected.id) })}>Chat as {teammateWord(selected)}</button>
             <button type="button" className={`inspector__action inspector__action--danger${armed === selected.id ? ' inspector__action--armed' : ''}`} data-teammate-delete
               title={armed === selected.id ? 'Press again to delete' : 'Delete this teammate (its chats stay; they lose their identity)'}
               {...shellControl(() => { if (armed === selected.id) { props.onDelete(selected.id); setArmed(null) } else setArmed(selected.id) })}>{armed === selected.id ? 'Delete?' : 'Delete'}</button>
@@ -171,7 +175,7 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
               <span className="rail-row__tail" data-routine-when>{everyWord(r.everyMs)}{r.paused ? ' · paused' : ''}</span>
             </div>
             <p className="pf__note" data-routine-last>
-              {r.missed !== undefined ? `missed at ${when(r.missed.at)} — the app was closed · ` : ''}
+              {r.missed !== undefined && <span className="badge" data-tone="needs-you" data-routine-missed>missed at {when(r.missed.at)} — the app was closed</span>}{r.missed !== undefined ? ' · ' : ''}
               {r.lastRun === undefined ? 'never run' : r.lastRun.outcome === 'started' ? `last run ${when(r.lastRun.at)}` : `last run ${when(r.lastRun.at)} was refused — ${r.lastRun.error ?? 'no reason given'}`}
             </p>
             <div className="teammates-pane__actions">
@@ -186,8 +190,8 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
       <div className="teammates-pane__routine-form" data-routine-form>
         <input className="teammates-pane__name" data-routine-name placeholder="routine name…" value={name} onChange={(e) => setName(e.target.value)} />
         <label className="teammates-pane__item"><span>every</span><input className="teammates-pane__minutes" data-routine-minutes type="number" min={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} /><span>minutes</span></label>
-        <textarea className="teammates-pane__brief" data-routine-prompt placeholder="what the fresh chat is asked each time…" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
-        <input className="teammates-pane__name" data-routine-plan placeholder="optional verb line after the prompt (never destructive)…" value={plan} onChange={(e) => setPlan(e.target.value)} />
+        <label className="teammates-pane__field"><span className="teammates-pane__label">prompt</span><textarea className="teammates-pane__brief" data-routine-prompt placeholder="asked of the fresh chat each time" value={prompt} onChange={(e) => setPrompt(e.target.value)} /></label>
+        <label className="teammates-pane__field"><span className="teammates-pane__label">verb line · optional, never destructive</span><input className="teammates-pane__name" data-routine-plan placeholder="focus n3" value={plan} onChange={(e) => setPlan(e.target.value)} /></label>
         {refusal !== null && <p className="pf__note chat__refusal" data-routine-refusal role="alert">{refusal}</p>}
         <button type="button" className="inspector__action" data-routine-add disabled={!props.teammate.scheduling} title={props.teammate.scheduling ? 'Save this routine' : `${teammateWord(props.teammate)} may not be scheduled — allow scheduling above first`} {...shellControl(() => { if (props.teammate.scheduling) submit() })}>Add routine</button>
       </div>

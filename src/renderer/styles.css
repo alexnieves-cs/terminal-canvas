@@ -3770,4 +3770,7 @@ body {
    scrolls, so a long brief or many routines never squeeze the rows to nothing
    (the list's flex basis would otherwise yield to the detail in the column). */
 .rail-list--teammates { flex: 0 0 auto; }
-.teammates-pane__detail { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.teammates-pane__detail { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+
+/* M102. The grant line is a sentence beside `connected as`, never a heading over the service. */
+.integration__grants { margin: 0; font-size: var(--t-xs); }

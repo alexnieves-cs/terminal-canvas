@@ -125,9 +125,32 @@ that rewrites its title and history — the readout stays the guest's own `getUR
 - **The iOS Simulator pane is declined by name** in the act's spec: no seam, a screen-scrape,
   unbounded scope.
 
-## Findings (critic and verifier)
+## Findings (critic and verifier, two parallel fresh-context subagents)
 
-(At the gate.)
+### The critic — twenty-six findings; eight taken, the rest declined or deferred by name
+
+**Taken.** (1) The roster row's tail truncated exactly at the permission word (`1 place · 1
+service · s…`): the nouns are short now (`svc`) and the permission word survives. (2) A granted
+service read only `not connected`, the grant implied by the verb alone: the row says
+`GitHub — granted · not connected`. (6) The pane's scrollbar overlaid and clipped the right edge
+(`grant`, `every 10m`, `Add routine`): `scrollbar-gutter: stable` on the detail. (8) The missed
+tick was body text in the same grey as `last run`: it is in the attention tone now. (16) The
+`granted to…` line rendered at heading size above the service name: sized as the sentence beside
+`connected as`. (17) The shot fixture's refused audit row carried two reasons, the first false for
+its own path: one reason. (9) The routine form's fields have labels (`prompt`, `verb line`).
+(3) `Chat as <name>` sits beside the record's heading, not below the fold.
+
+**Deferred, by name.** (13) The address painted twice and the kind word three times on the
+browser pane, and (21/24) the minimap and status pill covering a chat's verbs — M106's header
+discipline (Act III). (20) The approval card absent from `auto.png` — the Act I record stands
+(the harness's fake agent reuses one request id).
+
+**Declined.** (11) The `on exit 0` label sits on the part of the edge the navigator hides — the
+fixture's framing; M78's checks pin the label. (12) `asleep` beside `listening` is the fixture's
+composition. (22) `not started` (never ran) vs `asleep` (ran, restored) is M63's deliberate
+distinction. (7, 14) A disabled verb's reason is its title, the app's rule for every control.
+(23) `Deny` vs `Deny Bash` is pre-existing wording. (18) `Reconnect…` opens the palette's secret
+mode; `Verify` acts — the ellipsis is right.
 
 ## Verification
 
