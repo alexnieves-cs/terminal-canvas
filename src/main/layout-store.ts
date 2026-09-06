@@ -1,3 +1,4 @@
+import { carryWorkItem } from '../shared/work-items'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
   DEFAULT_PRESET_ID,
@@ -389,7 +390,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       bookmarks: (w.bookmarks ?? []).map((b) => ({ id: b.id, name: b.name, camera: { ...b.camera } })),
       // M79. Runs are a history, kept whatever the restore settings say.
       runs: (w.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) })),
-      ...(layout && w.annotations !== undefined ? { annotations: w.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } })) } : {})
+      ...(layout && w.annotations !== undefined ? { annotations: w.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } })) } : {}),
+      // M113. Records, not layout — kept whatever the restore settings say, like bookmarks and runs.
+      ...(w.workItems !== undefined ? { workItems: w.workItems.map(carryWorkItem) } : {})
     }
   }
 
@@ -427,6 +430,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // reader (and the layout check that counts keys) sees the file it knew.
     if (incoming.annotations !== undefined && incoming.annotations.length > 0) w.annotations = incoming.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } }))
     else delete w.annotations
+    // M113. The same absent-when-empty rule, for the same reader.
+    if (incoming.workItems !== undefined && incoming.workItems.length > 0) w.workItems = incoming.workItems.map(carryWorkItem)
+    else delete w.workItems
     scheduleWrite()
   }
 
@@ -838,6 +844,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       w.selectedId = null
       w.focusedId = null
       delete w.annotations
+      delete w.workItems
       scheduleWrite()
     },
 

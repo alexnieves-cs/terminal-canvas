@@ -5,6 +5,8 @@ module.exports = {
   /* M93. The snapshot ring: injected dir/now, plain node. */
   ...require('../src/main/layout-snapshots'),
   ...require('../src/shared/annotations'),
+  /* M113. The board's record: pure data and rules. */
+  ...require('../src/shared/work-items'),
   ...require('../src/shared/layout-schema'),
   /* M6b: the settings schema is pure data with no imports at all, so it costs
      this tier nothing and gets covered by the suite that already owns the

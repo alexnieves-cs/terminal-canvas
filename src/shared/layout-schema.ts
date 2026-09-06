@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
 import { parseAnnotations, type Annotation } from './annotations'
+import { parseWorkItems, type PersistedWorkItem } from './work-items'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
@@ -423,6 +424,8 @@ export interface CanvasState {
   runs: PersistedRun[]
   /** M93. Notes in the margins. ABSENT on every pre-M93 file and stays absent — never normalised to []. */
   annotations?: Annotation[]
+  /** M113. The board's records. ABSENT on every pre-M113 file and stays absent, for M93's reason. */
+  workItems?: PersistedWorkItem[]
 }
 
 /** M56. A place to come back to: three numbers and a name. */
@@ -1668,7 +1671,11 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     focusedId: pick(raw.focusedId),
     bookmarks: parseBookmarks(raw.bookmarks, warnings),
     runs: parseRuns(raw.runs, surviving, warnings),
-    ...(() => { const a = parseAnnotations(raw.annotations, surviving, warnings, `workspace ${id}`); return a === undefined ? {} : { annotations: a } })()
+    ...(() => { const a = parseAnnotations(raw.annotations, surviving, warnings, `workspace ${id}`); return a === undefined ? {} : { annotations: a } })(),
+    // M113. Work items are records, not layout: an item naming a panel that
+    // did not survive keeps its id (the note says `lane closed`), so the
+    // parser takes no panel set — unlike annotations, whose anchor is geometry.
+    ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })()
   }
 }
 

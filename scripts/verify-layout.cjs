@@ -3624,6 +3624,57 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), b1, warnings: out.warnings }))
 }
 
+// M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
+// malformed entry is dropped by name; the cap keeps the newest; the dedupe is
+// by key and never resets a working item; every absent optional stays absent
+// through the carry. The four state words are DATA here, never a provider's
+// string — a board whose column a drag can set is a board that lies.
+{
+  const W = L
+  const good = { id: 'wi1', source: 'github', key: 'acme/canvas#7', title: 'Fix the thing', url: 'https://github.com/acme/canvas/issues/7', state: 'todo', createdAt: 5, updatedAt: 10 }
+  let absent, replaced, dropped, capped
+  const warnings = [], w2 = [], w3 = []
+  try {
+    absent = W.parseWorkItems(undefined, warnings)
+    replaced = W.parseWorkItems('nope', w2)
+    dropped = W.parseWorkItems([good, { ...good, id: 'x', state: 'doing' }, { ...good, id: 'y', source: 'trello' }, { ...good, id: 'z', pr: { number: 'four', url: 'u' } }, { ...good, id: 'ok', pr: { number: 4, url: 'u' } }, 'junk'], w3)
+    const many = Array.from({ length: W.WORK_ITEMS_MAX + 5 }, (_, i) => ({ ...good, id: `m${i}`, key: `k#${i}`, updatedAt: i }))
+    capped = W.parseWorkItems(many, [])
+    ok('work.1 an absent workItems field is undefined with no warning; a non-array is replaced with one warning; an unknown state, an unknown source, a pr with a non-numeric number and a non-object entry each drop their own entry by name and the rest survive; the cap keeps the newest by updatedAt',
+      absent === undefined && warnings.length === 0 && Array.isArray(replaced) && replaced.length === 0 && w2.length === 1
+        && dropped.map((i) => i.id).join(',') === 'wi1,ok' && w3.length === 4 && w3.every((t) => /dropped work item/.test(t))
+        && capped.length === W.WORK_ITEMS_MAX && capped[0].id === `m${W.WORK_ITEMS_MAX + 4}`,
+      JSON.stringify({ absent, replaced, w2, ids: dropped && dropped.map((i) => i.id), w3, cappedFirst: capped && capped[0] && capped[0].id }))
+  } catch (e) { ok('work.1 (threw)', false, String(e)) }
+  try {
+    const one = W.upsertWorkItem([], { ...good }, 100)
+    const again = W.upsertWorkItem(one.map((i) => ({ ...i, state: 'working', panelId: 'n9' })), { ...good, title: 'Fix the thing (edited)', remoteState: 'open' }, 200)
+    const typedA = W.upsertWorkItem([], { id: 't1', source: 'typed', title: 'same', state: 'todo' }, 1)
+    const typedB = W.upsertWorkItem(typedA, { id: 't2', source: 'typed', title: 'same', state: 'todo' }, 2)
+    ok('work.2 upsert by key updates title/remoteState/updatedAt and keeps state, panelId and createdAt — adding twice never duplicates and never resets a working item; two typed items with one title are two items',
+      one.length === 1 && one[0].createdAt === 100 && again.length === 1 && again[0].title === 'Fix the thing (edited)' && again[0].state === 'working' && again[0].panelId === 'n9' && again[0].createdAt === 100 && again[0].updatedAt === 200 && again[0].remoteState === 'open' && typedB.length === 2,
+      JSON.stringify({ one, again, typedB }))
+  } catch (e) { ok('work.2 (threw)', false, String(e)) }
+  try {
+    const bare = { id: 'b', source: 'typed', title: 'bare', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const carried = W.carryWorkItem(bare)
+    const full = { ...bare, key: 'K', url: 'u', description: 'd', remoteState: 'r', teammateId: 't', panelId: 'p', worktreeId: 'w', pr: { number: 1, url: 'pu' }, note: 'n', anchor: { panelId: 'p', dx: 1, dy: 2 } }
+    const carriedFull = W.carryWorkItem(full)
+    ok('work.3 carryWorkItem writes exactly the six required keys for a bare item and every present optional for a full one, never an undefined key, with pr and anchor as fresh objects',
+      Object.keys(carried).sort().join(',') === 'createdAt,id,source,state,title,updatedAt' && JSON.stringify(carriedFull) === JSON.stringify(full) && carriedFull.pr !== full.pr && carriedFull.anchor !== full.anchor,
+      JSON.stringify({ keys: Object.keys(carried), carriedFull }))
+  } catch (e) { ok('work.3 (threw)', false, String(e)) }
+  // The workspace: absent stays absent ON DISK, and a list round-trips.
+  try {
+    const parsedAbsent = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }], activeWorkspaceId: 'w1' }))
+    const parsedWith = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, workItems: [good, 'junk'] }], activeWorkspaceId: 'w1' }))
+    const wsA = parsedAbsent.snapshot.workspaces[0], wsB = parsedWith.snapshot.workspaces[0]
+    ok('work.1.b the workspace parse keeps workItems ABSENT for a pre-M113 file and carries a list through the ONE parser with the junk entry dropped by name',
+      !('workItems' in wsA) && Array.isArray(wsB.workItems) && wsB.workItems.length === 1 && wsB.workItems[0].key === 'acme/canvas#7' && parsedWith.warnings.some((t) => /dropped work item/.test(t)),
+      JSON.stringify({ wsAKeys: Object.keys(wsA), wsB: wsB.workItems, warnings: parsedWith.warnings }))
+  } catch (e) { ok('work.1.b (threw)', false, String(e)) }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
