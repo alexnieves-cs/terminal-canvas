@@ -152,7 +152,7 @@ as its implementation. The red runs happened (each is named above); a check comm
 its feat commit is the rule from Act II on. One accepted weakness: `verify:rail board.1`
 does not cover the pane's rows (there is no pure row model); `verify:panels board.1` does.
 
-The chain: see the last line of this log.
+The chain: `npm run verify` alone on the branch tip, after the fix pass — `EXIT=0`, 0 `FAIL` lines, 1645 `PASS` lines, `verify:panels` 311/311, `verify:ipc` 1/1 at 111 channels. No push, no tag.
 
 ## What green does not prove
 
