@@ -3,6 +3,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
+import { SerializeAddon } from '@xterm/addon-serialize'
 // The REAL factory, not a hand-built Terminal: unicode.1 asserts a property
 // of what createTerminal returns, which is the one place a Terminal is built.
 import { createTerminal, attachTerminal } from '../src/renderer/terminal/create-terminal'
@@ -155,6 +156,34 @@ window.__probe = (async () => {
     handles.term.dispose()
   } catch (error) {
     out.unicode.error = String(error)
+  }
+
+  // serialize.1 (M112). The serialize addon reads the buffer, not the DOM,
+  // so it must answer the same rows before eviction, while detached and
+  // after re-attach — otherwise an export from a carded panel silently
+  // differs from the same export a moment later.
+  out.serialize = {}
+  try {
+    const host4 = document.createElement('div')
+    host4.style.cssText = 'width: 640px; height: 400px;'
+    document.body.appendChild(host4)
+    const h = createTerminal()
+    const ser = new SerializeAddon()
+    h.term.loadAddon(ser)
+    attachTerminal(h, host4)
+    h.term.write('SER-ONE\r\nSER-TWO\r\n')
+    await new Promise((r) => setTimeout(r, 200))
+    out.serialize.attached = ser.serialize()
+    host4.remove(); h.webgl?.dispose(); h.webgl = null
+    await new Promise((r) => setTimeout(r, 100))
+    out.serialize.detached = ser.serialize()
+    document.body.appendChild(host4)
+    attachTerminal(h, host4)
+    await new Promise((r) => setTimeout(r, 200))
+    out.serialize.reattached = ser.serialize()
+    h.term.dispose()
+  } catch (error) {
+    out.serialize.error = String(error)
   }
 
   return out

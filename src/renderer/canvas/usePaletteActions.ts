@@ -568,7 +568,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M58. Fire-and-forget into main, which owns the dialog, the write and
     // the reveal; a refusal is logged, since the palette has no toast.
     exportPanelText: (panelId) => {
-      void window.canvas.export.panelText(panelId).then((r) => {
+      // M112. The live buffer rides along when the panel has one, so an
+      // export works with persistence off; main decides which source wins.
+      const session = registry.get(panelId)
+      const buffer = session && session.spawned ? session.handle.serialize() ?? undefined : undefined
+      void window.canvas.export.panelText({ panelId, buffer }).then((r) => {
         if (r.kind !== 'written' && r.kind !== 'cancelled') console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
       })
     },

@@ -16107,6 +16107,59 @@ app.whenReady().then(async () => {
       rmSync(exportDir, { recursive: true, force: true })
     }
 
+    // export.2 (M112). THE SECOND SOURCE, end to end: persistence OFF, a live
+    //   panel prints a sentinel and a token, the palette row exports, and the
+    //   file holds the sentinel with the token scrubbed — written from the
+    //   xterm buffer the renderer serialized, since the log was never fed.
+    //   Red first: before M112 this answered `off` and wrote nothing.
+    {
+      const exportDir = mkdtempSync(join(tmpdir(), 'tc panels export2 '))
+      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', false)`)
+      const idsBefore = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').homedir(), args: ['-l'] })
+      const liveId = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : [])`)
+        const fresh = rows.find((r) => !idsBefore.includes(r.id) && r.spawned)
+        return fresh ? fresh.id : false
+      }, 8000) || null
+      const focused = liveId ? await wc.executeJavaScript(`(() => {
+        const el = document.querySelector('.panel[data-panel-id="${liveId}"] .xterm-screen') || document.querySelector('.panel[data-panel-id="${liveId}"] .panel__slot')
+        if (!el) return false
+        const r = el.getBoundingClientRect()
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, buttons: 1 }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 }))
+        return true })()`) : false
+      if (liveId) ptyManager.write(liveId, 'echo BUFFER_SENTINEL_2291 sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\r')
+      const onScreen = liveId ? await waitUntil(async () => wc.executeJavaScript(`(() => { const s = window.__m4aSessions().find((r) => r.id === ${JSON.stringify(liveId)}); return !!s })()`) && (await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="${liveId}"]') !== null`)), 4000) : false
+      await new Promise((r) => setTimeout(r, 600))
+      exportTarget = join(exportDir, 'panel.txt')
+      const opened = await (async () => {
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      })()
+      const ran = opened === true ? await wc.executeJavaScript(`(() => {
+          const el = document.querySelector('[data-command-id="panel.export-text"]')
+          if (!el) return 'no row'
+          if (el.className.includes('palette__row--disabled')) return 'disabled: ' + (el.getAttribute('title') || el.textContent)
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          return true })()`) : 'no palette'
+      const written = await waitUntil(async () => existsSync(exportTarget) && /BUFFER_SENTINEL_2291/.test(readFileSync(exportTarget, 'utf8')), 6000)
+      const text = existsSync(exportTarget) ? readFileSync(exportTarget, 'utf8') : ''
+      exportTarget = null
+      // scrollback.persist defaults to true (settings-schema.ts); restore
+      // that default rather than a hardcoded value so a later default change
+      // does not leave this suite's side effect one setting stale.
+      await wc.executeJavaScript(`window.canvas.settings.set('scrollback.persist', true)`)
+      // "no escape bytes" checks for raw ANSI (the ESC-`[` pair), not a
+      // literal bracket — the redaction placeholder itself reads
+      // `[redacted api key]`, so a bare '[' check would fail on every scrub.
+      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the token is not, no escape bytes',
+        liveId !== null && focused === true && onScreen === true && ran === true && written === true &&
+          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('['),
+        JSON.stringify({ liveId, focused, onScreen, ran, written, tail: text.slice(-160) }))
+      rmSync(exportDir, { recursive: true, force: true })
+    }
+
     // detail.1 (M57). Semantic zoom read off the DOM: every card is `tail`
     //   at the default zoom, `summary` (naming its panel) once the camera is
     //   pulled to ~0.2, `block` at ~0.08, and `tail` again after Cmd+0 — with

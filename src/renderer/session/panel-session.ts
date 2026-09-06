@@ -73,6 +73,13 @@ export interface SessionHandle {
   refit(): void
   /** Last N non-empty buffer lines, for the card tier. */
   tail(lines: number): string[]
+  /**
+   * M112. The whole buffer as VT sequences (`@xterm/addon-serialize`), for
+   * the export door's second source. `null` before a Terminal exists — a
+   * never-spawned card has no buffer, and main's `off`/`empty` arms need to
+   * be able to tell "nothing was sent" from "an empty string was".
+   */
+  serialize(): string | null
   focus(): void
   onInput(listener: (data: string) => void): void
   /** The current selection, or '' if there is none. Backs menu-driven Cmd+C. */

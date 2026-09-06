@@ -1,6 +1,7 @@
 import { findLinks } from '@shared/link-scan'
 import type { PanelId } from '@shared/types'
 import type { SessionFactory, SessionHandle, TerminalOptions } from '@renderer/session/panel-session'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import {
   attachTerminal,
   createTerminal,
@@ -22,6 +23,9 @@ function createHandle(id: PanelId): SessionHandle {
   host.dataset.panelId = id
 
   let handles: TerminalHandles | null = null
+  // M112. The serialize addon, held beside the terminal it reads: loaded once
+  // inside ensure(), never twice (loadAddon on a disposed addon throws).
+  let serializer: SerializeAddon | null = null
   // M52. The shell's prompt marks, for navigation and "copy last output".
   const prompts: import('@xterm/xterm').IMarker[] = []
   let commandMarker: import('@xterm/xterm').IMarker | null = null
@@ -38,6 +42,11 @@ function createHandle(id: PanelId): SessionHandle {
     if (!handles) {
       handles = createTerminal()
       if (Object.keys(pendingOptions).length > 0) Object.assign(handles.term.options, pendingOptions)
+      // M112. Loaded here, once, beside the terminal it serializes: the addon
+      // reads the live buffer at call time, so it costs nothing until export
+      // asks. Never loaded twice — loadAddon on a disposed addon throws.
+      serializer = new SerializeAddon()
+      handles.term.loadAddon(serializer)
       // M51. Paths and URLs in the buffer become links: underlined on hover,
       // opened on Cmd-click ONLY (a plain click stays a click — agent TUIs
       // use clicks), and never by this process: the renderer sends the text
@@ -154,6 +163,10 @@ function createHandle(id: PanelId): SessionHandle {
       for (let i = bottom; i >= 0 && rows.length < lines; i--) rows.unshift(rowAt(i))
       return rows
     },
+    serialize() {
+      if (!handles || !serializer) return null
+      return serializer.serialize()
+    },
     focus() {
       handles?.term.focus()
     },
@@ -249,6 +262,8 @@ function createHandle(id: PanelId): SessionHandle {
     dispose() {
       if (handles) disposeTerminal(handles)
       handles = null
+      serializer?.dispose()
+      serializer = null
       host.remove()
     }
   }

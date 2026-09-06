@@ -620,17 +620,17 @@ const p = (name) => join(DIR, name)
     await log.idle('pX')
   }
   const out1 = join(dir, 'pX.txt')
-  const r1 = log ? await mk(out1).panelText('pX') : null
+  const r1 = log ? await mk(out1).panelText({ panelId: 'pX' }) : null
   const text1 = existsSync(out1) ? readFileSync(out1, 'utf8') : ''
   ok('export.1 a panel\'s text export is the whole log, ANSI stripped and secrets scrubbed, with lines and the redaction count reported',
     can && r1.kind === 'written' && r1.path === out1 && r1.lines === 3 && r1.redacted === 1 &&
       text1.includes('hello red world') && !text1.includes('\u001b[') && !text1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && text1.includes('last line'),
     can ? JSON.stringify({ r1, text1 }) : 'createExporters is not exported')
   const before = writes.length
-  const r2 = log ? await mk(null).panelText('pX') : null
+  const r2 = log ? await mk(null).panelText({ panelId: 'pX' }) : null
   ok('export.2 a cancelled save dialog writes nothing and says cancelled', can && r2.kind === 'cancelled' && writes.length === before, JSON.stringify(r2))
-  const r3 = log ? await mk(join(dir, 'none.txt')).panelText('pNone') : null
-  const r3b = log ? await mk(join(dir, 'off.txt'), { persistOn: false }).panelText('pX') : null
+  const r3 = log ? await mk(join(dir, 'none.txt')).panelText({ panelId: 'pNone' }) : null
+  const r3b = log ? await mk(join(dir, 'off.txt'), { persistOn: false }).panelText({ panelId: 'pX' }) : null
   ok('export.3 no log is `empty`; scrollback off is `off` and reads nothing, never the xterm buffer',
     can && r3.kind === 'empty' && r3b.kind === 'off' && !existsSync(join(dir, 'none.txt')) && !existsSync(join(dir, 'off.txt')),
     JSON.stringify({ r3, r3b }))
@@ -641,6 +641,40 @@ const p = (name) => join(DIR, name)
   ok('export.4 the PNG export writes exactly the captured bytes, and a cancel writes nothing',
     can && r4.kind === 'written' && r4.path === out4 && png === 'FRAMEBYTES' && r4b.kind === 'cancelled',
     JSON.stringify({ r4, png, r4b }))
+  // export.5 (M112). THE SECOND SOURCE. The live buffer, serialized by the
+  // renderer and handed over on the request, is what lets a panel export
+  // with persistence OFF — before M112 that answered `off` for text the
+  // user was looking at. Arm order: the log when persistence is on (durable,
+  // longer than the buffer); the buffer when the log is empty or persistence
+  // is off; `empty` when both are absent; `off` only when persistence is off
+  // AND no buffer came. Every source is stripped and passes the outward gate:
+  // the token planted in the BUFFER must be gone from the file.
+  //
+  // (Named .5, not the spec's .4 — this file's export.4 is already the PNG
+  // check above; verify:meta 22 fails the build on two computed checks
+  // sharing an id in one suite.)
+  {
+    const buf = 'from the buffer\r\n\x1b[32mgreen\x1b[0m sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij\r\n'
+    const o1 = join(dir, 'buf-off.txt')
+    const a = log ? await mk(o1, { persistOn: false }).panelText({ panelId: 'pX', buffer: buf }) : null
+    const t1 = existsSync(o1) ? readFileSync(o1, 'utf8') : ''
+    const o2 = join(dir, 'log-on.txt')
+    const b = log ? await mk(o2).panelText({ panelId: 'pX', buffer: buf }) : null
+    const t2 = existsSync(o2) ? readFileSync(o2, 'utf8') : ''
+    const o3 = join(dir, 'buf-nolog.txt')
+    const c = log ? await mk(o3).panelText({ panelId: 'pNone', buffer: buf }) : null
+    const d = log ? await mk(join(dir, 'x.txt'), { persistOn: false }).panelText({ panelId: 'pX' }) : null
+    const e = log ? await mk(join(dir, 'y.txt')).panelText({ panelId: 'pNone', buffer: '' }) : null
+    ok('export.5 persistence off + a buffer writes the buffer (source buffer, scrubbed, no escapes); persistence on prefers the log (source log); an empty log falls back to the buffer; off with no buffer is `off`; nothing from either is `empty`',
+      // "no escapes" means no raw ANSI bytes survive (the ESC-`[` pair) — a
+      // literal bracket check would fail on every redaction, since the
+      // placeholder itself is written as `[redacted api key]`.
+      can && a && a.kind === 'written' && a.source === 'buffer' && a.redacted === 1 && t1.includes('from the buffer') && t1.includes('green') && !t1.includes('[') && !t1.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') &&
+        b && b.kind === 'written' && b.source === 'log' && t2.includes('hello red world') && !t2.includes('from the buffer') &&
+        c && c.kind === 'written' && c.source === 'buffer' &&
+        d && d.kind === 'off' && e && e.kind === 'empty',
+      JSON.stringify({ a, b, c, d, e, t1: t1.slice(0, 60) }))
+  }
   rmSync(dir, { recursive: true, force: true })
 }
 

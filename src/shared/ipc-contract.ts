@@ -3,7 +3,7 @@ import type { RunRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
-import type { PanelTextExportResult, CanvasPngExportResult } from './export'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 /**
@@ -1304,7 +1304,8 @@ export interface CanvasBridge {
     report(again?: boolean): Promise<EnvReport>
   }
   export: {
-    panelText(panelId: PanelId): Promise<PanelTextExportResult>
+    /** M58; M112 carries the live buffer when the panel has one. */
+    panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
     canvasPng(): Promise<CanvasPngExportResult>
   }
   diagnostics: {

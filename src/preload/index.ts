@@ -28,6 +28,7 @@ import type {
   SubagentUpdate
 } from '../shared/types'
 import type { CanvasState } from '../shared/layout-schema'
+import type { PanelTextExportRequest } from '../shared/export'
 import type { OrphanRow } from '../shared/orphans'
 import type { SettingValue } from '../shared/settings-schema'
 import type { PanelUsage } from '../shared/cost'
@@ -192,7 +193,7 @@ const bridge: CanvasBridge = {
     open: (req: { panelId: string; target: string }) => ipcRenderer.invoke(IPC.LINK_OPEN, req)
   },
   export: {
-    panelText: (panelId: PanelId) => ipcRenderer.invoke(IPC.EXPORT_PANEL_TEXT, panelId),
+    panelText: (req: PanelTextExportRequest) => ipcRenderer.invoke(IPC.EXPORT_PANEL_TEXT, req),
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG)
   },
   diagnostics: {

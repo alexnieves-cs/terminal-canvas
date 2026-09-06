@@ -110,6 +110,16 @@ app.whenReady().then(async () => {
     probe.unicode && probe.unicode.activeVersion === '11' && probe.unicode.cursorX === 2,
     JSON.stringify(probe.unicode))
 
+  // serialize.1 (M112). The addon reads the buffer, not the DOM, so eviction
+  // (which only drops the WebGL context and the host node) must not change
+  // what it answers — an export from a carded panel must match the same
+  // export a moment after re-attach.
+  const s = probe.serialize || {}
+  const has = (t) => typeof t === 'string' && t.includes('SER-ONE') && t.includes('SER-TWO')
+  ok('serialize.1 the serialize addon answers the same rows attached, detached and re-attached',
+    !s.error && has(s.attached) && has(s.detached) && has(s.reattached),
+    JSON.stringify({ error: s.error, lens: [s.attached?.length, s.detached?.length, s.reattached?.length] }))
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
