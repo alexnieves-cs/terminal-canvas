@@ -718,8 +718,9 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {
-    if (raw.backend === 'codex') chat.backend = 'codex'
-    else if (raw.backend !== 'claude') warnings.push(`panel ${id}: chat backend ${JSON.stringify(raw.backend)} is not claude or codex; using claude`)
+    // The ONE place a literal member is allowed (registry.1): absent-vs-malformed needs it.
+    if (raw.backend === 'codex' || raw.backend === 'copilot' || raw.backend === 'acp') chat.backend = raw.backend
+    else if (raw.backend !== 'claude') warnings.push(`panel ${id}: chat backend ${JSON.stringify(raw.backend)} is not claude, codex, copilot or acp; using claude`)
   }
   const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
   if (agentOptions !== undefined) chat.agentOptions = agentOptions

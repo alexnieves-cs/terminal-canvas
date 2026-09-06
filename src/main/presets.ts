@@ -53,6 +53,8 @@ export const BUILT_IN_PRESETS: Preset[] = [
     agentOptions: { permissionMode: 'plan' }
   },
   { id: 'codex', name: 'Codex', cwd: '~', command: 'codex', args: [], agent: 'codex' },
+  // M118. The probe the chat doors read for copilot's availability (codex's rule), and a terminal running the interactive CLI.
+  { id: 'copilot', name: 'Copilot', cwd: '~', command: 'copilot', args: [], agent: 'copilot' },
   // M37. The feature's door without a preset editor: presets are captured
   // from panels and there is no form, so a built-in is how a new user finds
   // "spawn in a fresh worktree" at all. `~` is the same cwd every built-in

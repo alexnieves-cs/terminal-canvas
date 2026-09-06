@@ -3,7 +3,7 @@ import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId } from './spawn-sheet'
 import { BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -116,7 +116,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const values = (): SheetValues => {
     const teammateId = parseTeammateWhatId(whatId)
     const lineupId = parseLineupWhatId(whatId)
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : lineupId !== null ? { kind: 'lineup', id: lineupId } : teammateId !== null ? { kind: 'teammate', id: teammateId } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : lineupId !== null ? { kind: 'lineup', id: lineupId } : teammateId !== null ? { kind: 'teammate', id: teammateId } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : backendOfWhatId(whatId) !== undefined ? { kind: 'chat', ...(backendOfWhatId(whatId) === 'claude' ? {} : { backend: backendOfWhatId(whatId) }) } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
@@ -178,7 +178,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // M73. A chat is an agent panel: the how fields apply, with the CLI's own
   // defaults as the placeholders.
   const isSupervisor = whatId === SUPERVISOR_WHAT_ID
-  const isChat = whatId === CHAT_WHAT_ID || whatId === CODEX_WHAT_ID || isSupervisor
+  const isChat = backendOfWhatId(whatId) !== undefined || isSupervisor
   const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
   const request = buildSpawnRequest(values(), model.presets)

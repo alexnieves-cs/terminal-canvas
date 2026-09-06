@@ -703,9 +703,14 @@ export function codexAvailable(presets: readonly PresetRow[]): boolean {
   return presets.some((p) => p.agent === 'codex' && p.available)
 }
 
+/** M118. The same fact for copilot — the built-in copilot preset's probe; the acp row shares the binary. */
+export function copilotAvailable(presets: readonly PresetRow[]): boolean {
+  return presets.some((p) => p.agent === 'copilot' && p.available)
+}
+
 /** M99. The fact by ROW: a panel asks for its own backend's availability without naming one. */
 export function backendAvailable(presets: readonly PresetRow[], backend: AgentBackend): boolean {
-  const probes: Record<AgentBackend, (rows: readonly PresetRow[]) => boolean> = { claude: claudeAvailable, codex: codexAvailable }
+  const probes: Record<AgentBackend, (rows: readonly PresetRow[]) => boolean> = { claude: claudeAvailable, codex: codexAvailable, copilot: copilotAvailable, acp: copilotAvailable }
   return probes[backend](presets)
 }
 

@@ -2321,7 +2321,7 @@ const WS = [
   // Guarded: a throw here would abort every check below it (verify-suites.md rule 1).
   const has = typeof P.backendOptions === 'function' && Array.isArray(P.BACKEND_IDS)
   const rows = has ? P.backendOptions({ claude: true, codex: false }) : []
-  const all = has ? P.backendOptions({ claude: true, codex: true }) : []
+  const all = has ? P.backendOptions({ claude: true, codex: true, copilot: true, acp: true }) : []
   ok('backends.1 backendOptions lists every registered backend in registry order with its id and label; an absent CLI disables its row naming PATH; a present one is enabled with no suffix',
     has && rows.length === P.BACKEND_IDS.length && rows[0].id === 'claude' && rows[0].disabled === false && rows[0].label === 'chat with claude' &&
       rows[1].id === 'codex' && rows[1].disabled === true && /PATH/.test(rows[1].label) &&

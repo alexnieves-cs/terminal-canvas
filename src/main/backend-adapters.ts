@@ -50,5 +50,17 @@ export const BACKEND_ADAPTERS: Readonly<Record<AgentBackend, BackendAdapter>> = 
   codex: {
     args: (input) => codexArgs({ cwd: input.cwd, text: input.text, resume: input.resume, sessionId: input.sessionId, agentOptions: input.agentOptions }),
     parseChunk: parseCodexChunk
+  },
+  // M118/M119. A row whose adapter has not landed THROWS by name rather than
+  // borrowing claude's — a misrouted argv would spawn a real CLI with the
+  // wrong flags and read as a hang. The manager never reaches here for a
+  // backend whose binary is absent, and `binaries` carries no entry yet.
+  copilot: {
+    args: () => { throw new Error('the copilot adapter is not wired') },
+    parseChunk: () => { throw new Error('the copilot adapter is not wired') }
+  },
+  acp: {
+    args: () => { throw new Error('the acp adapter is not wired') },
+    parseChunk: () => { throw new Error('the acp adapter is not wired') }
   }
 }

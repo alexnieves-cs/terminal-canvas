@@ -179,6 +179,7 @@ let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
 /** M90. The second headless CLI, from the same probe. Null means the codex chat row is disabled by name. */
 let codexPath: string | null = null
+let copilotPath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
 // constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
@@ -862,7 +863,7 @@ app.whenReady().then(async () => {
   const env = await resolveShellEnv()
   loginEnv = env
   probedAt = Date.now()
-  for (const binary of ['claude', 'codex', 'git']) {
+  for (const binary of ['claude', 'codex', 'copilot', 'git']) {
     const found = whichFromEnv(binary, env)
     // The diagnostic and the review engine's git are ONE resolution, not two.
     // This loop already computed the right answer before M9a's fix round and
@@ -871,6 +872,7 @@ app.whenReady().then(async () => {
     if (binary === 'git') gitPath = found
     if (binary === 'claude') claudePath = found
     if (binary === 'codex') codexPath = found
+    if (binary === 'copilot') copilotPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
   // The bare name is kept when the probe found nothing: the spawn then fails
@@ -1311,7 +1313,7 @@ app.whenReady().then(async () => {
       // M99. Refused by the backend's ROW: the probe's path for that binary,
       // and the row's own `noCli` sentence. A lookup, never a switch.
       const backend = backendOf(spec)
-      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
+      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath, copilot: copilotPath, acp: copilotPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
       // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
       // to home could turn a refused folder into an allowed one silently.

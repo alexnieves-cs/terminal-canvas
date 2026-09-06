@@ -1288,9 +1288,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             submit: (values) => values.what.kind === 'supervisor'
               ? beginNewChat({ cwd: values.cwd, title: values.title === '' ? 'supervisor' : values.title, agentOptions: values.agentOptions, appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
               : values.what.kind === 'chat'
-                ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
-                : values.what.kind === 'codex'
-                  ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, backend: 'codex' })
+                // M118. The backend by NAME from the arm, never a switch: absent is claude.
+                ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, ...(values.what.backend === undefined ? {} : { backend: values.what.backend }) })
                 : values.what.kind === 'lineup'
                   // M104. Seat by seat through the ordinary doors: an agent seat is
                   // the first available agent preset (a worktree lane only when
