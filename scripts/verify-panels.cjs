@@ -18615,10 +18615,12 @@ app.whenReady().then(async () => {
         // as a fact, not inferred from what happens to be rendered.
         win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
         const flippedAgain = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.canvas') !== null && document.querySelector('.canvas').hasAttribute('data-flipped') && document.querySelectorAll('[data-card-summary]').length === 2`), 3000)
+        // The seeded panels live in whatever workspace is ACTIVE here (earlier blocks create and delete workspaces), never in a literal `w1`.
+        const homeWs = await activeWorkspaceId(wc)
         const flipWs = await wc.executeJavaScript(`window.__m7aWorkspace().createAndSwitch('flip-away')`)
         await settle()
         const unflippedAway = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.canvas') !== null && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 3000)
-        await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
+        await wc.executeJavaScript(`window.__m7aWorkspace().switchTo(${JSON.stringify(homeWs)})`)
         await settle()
         const backUnflipped = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"]') !== null && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 6000)
         ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true && flippedAgain === true && typeof flipWs === 'string' && unflippedAway === true && backUnflipped === true,
