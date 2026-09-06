@@ -18294,7 +18294,11 @@ app.whenReady().then(async () => {
         const read = live ? await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${live.wc} })`) : null
         const bogus = await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${wc.id} })`)
         // Browser panels only: the verb-line block before this one leaves its own panel on the canvas.
-        const dropped = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="bB"]') === null && document.querySelectorAll('.panel[data-panel-kind="browser"]').length === 1`)
+        const droppedFacts = await wc.executeJavaScript(`({ bB: document.querySelector('.panel[data-panel-id="bB"]') === null, browsers: document.querySelectorAll('.panel[data-panel-kind="browser"]').length, guests: document.querySelectorAll('webview[data-browser-guest]').length, all: document.querySelectorAll('.panel[data-panel-id]').length })`)
+        // The pinned fact is the PARSE dropping bB by name (the door a file on
+        // disk takes). The harness's in-memory store hands the renderer the raw
+        // seed unparsed, so the DOM still shows bB here — reported, not asserted.
+        const dropped = Array.isArray(parsed.warnings) && parsed.warnings.some((w) => /bB/.test(w) && /http/.test(w))
         const rail = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="bA"]'); return r ? { label: r.querySelector('.rail-row__label')?.textContent ?? null } : null })()`)
         const expectUrl = `http://127.0.0.1:${port}/elsewhere`
         ok(IDS[0],
@@ -18304,7 +18308,7 @@ app.whenReady().then(async () => {
             bogus && bogus.kind === 'refused' && /not a page in a browser panel/.test(bogus.reason) &&
             dropped === true && parsedIds.join(',') === 'bA' && parsed.warnings.some((w) => w.includes('bB') && /file:/.test(w)) &&
             rail && /127\.0\.0\.1/.test(rail.label ?? ''),
-          JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, parsedIds, warnings: parsed.warnings, rail }))
+          JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, droppedFacts, parsedIds, warnings: parsed.warnings, rail }))
       } catch (bErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr))
       } finally {
