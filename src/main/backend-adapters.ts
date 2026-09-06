@@ -2,6 +2,7 @@ import type { AgentOptions } from '@shared/cost'
 import { type AgentBackend } from '@shared/agent-backends'
 import { parseStreamChunk, type TranscriptEvent } from '@shared/transcript'
 import { codexArgs, parseCodexChunk } from '@shared/codex-transcript'
+import { copilotArgs, parseCopilotChunk } from '@shared/copilot-transcript'
 import { headlessArgs } from './agent-session-args'
 
 /**
@@ -29,9 +30,14 @@ export interface BackendArgsInput {
   appendSystemPrompt?: string
 }
 
+/** M118. What a parser may be TOLD: the id the host pinned, for a stream that never states its own (copilot). claude's and codex's parsers ignore it. */
+export interface ParseContext {
+  sessionId: string
+}
+
 export interface BackendAdapter {
   args(input: BackendArgsInput): string[]
-  parseChunk(chunk: string, carry: string): { events: TranscriptEvent[]; carry: string }
+  parseChunk(chunk: string, carry: string, ctx: ParseContext): { events: TranscriptEvent[]; carry: string }
 }
 
 export const BACKEND_ADAPTERS: Readonly<Record<AgentBackend, BackendAdapter>> = {
@@ -55,9 +61,10 @@ export const BACKEND_ADAPTERS: Readonly<Record<AgentBackend, BackendAdapter>> = 
   // borrowing claude's — a misrouted argv would spawn a real CLI with the
   // wrong flags and read as a hang. The manager never reaches here for a
   // backend whose binary is absent, and `binaries` carries no entry yet.
+  // M118. codex's process model with the HOST's id: the parser is told the pinned id because the stream never states one.
   copilot: {
-    args: () => { throw new Error('the copilot adapter is not wired') },
-    parseChunk: () => { throw new Error('the copilot adapter is not wired') }
+    args: (input) => copilotArgs({ cwd: input.cwd, text: input.text, resume: input.resume, sessionId: input.sessionId, agentOptions: input.agentOptions }),
+    parseChunk: (chunk, carry, ctx) => parseCopilotChunk(chunk, carry, ctx)
   },
   acp: {
     args: () => { throw new Error('the acp adapter is not wired') },

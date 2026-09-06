@@ -885,6 +885,8 @@ app.whenReady().then(async () => {
     // M90. Present only when found: an absent codex makes a codex send
     // `refused-backend`, never a spawn of a bare name that ENOENTs.
     ...(codexPath === null ? {} : { codex: { command: codexPath } }),
+    // M118/M119. Present only when found, like codex: the copilot binary serves both its JSONL row and its ACP row.
+    ...(copilotPath === null ? {} : { binaries: { copilot: { command: copilotPath }, acp: { command: copilotPath } } }),
     hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
     env,
     newSessionId: () => randomUUID(),

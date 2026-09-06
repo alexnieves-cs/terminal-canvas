@@ -599,7 +599,7 @@ export class AgentSessionManager {
     session.abortReason = null
     proc.onData((chunk) => {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
-      const { events, carry } = adapter.parseChunk(chunk, session.carry)
+      const { events, carry } = adapter.parseChunk(chunk, session.carry, { sessionId: session.sessionId })
       session.carry = carry
       for (const event of events) this.handle(session, event)
     })
@@ -639,6 +639,11 @@ export class AgentSessionManager {
         // session learns what `exec resume` must name. claude's id is ours
         // (pinned with --session-id), and the event only ever repeats it.
         if (BACKENDS[session.backend].adoptsThreadId) { session.sessionId = event.sessionId; session.everSpawned = true }
+        // M118. A per-turn row whose id is the HOST's (copilot): the first
+        // stream is still where the session learns the CLI now holds it, so
+        // the next process must name `--resume=` rather than pin again — a
+        // second pin of the same id is a fresh conversation with no memory.
+        else if (BACKENDS[session.backend].oneProcessPerTurn) session.everSpawned = true
         if (session.status === 'starting') this.setStatus(session, session.inFlight ? 'streaming' : 'ready')
         this.emit({ id, ...event })
         return
