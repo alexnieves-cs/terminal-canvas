@@ -1593,7 +1593,7 @@ const isResult = (l) => l.includes('"type":"result"')
         else if (r.method === 'session/new') line = ACP.acpSessionNew(r.id, r.params.cwd)
         else if (r.method === 'session/load') line = ACP.acpSessionLoad(r.id, r.params.sessionId, r.params.cwd)
         else if (r.method === 'session/prompt') line = ACP.acpPrompt(r.id, r.params.sessionId, r.params.prompt[0].text, [])
-        if (line !== undefined) { ours.push({ recorded: r, ours: JSON.parse(line) }); state = ACP.noteRequest(state, r.id, r.method) }
+        if (line !== undefined) { ours.push({ recorded: r, ours: JSON.parse(line) }); state = ACP.noteRequest(state, r.id, r.method, r.params && r.params.sessionId) }
       }
       const events = []
       for (const l of heard(lines)) { const out = ACP.parseAcpLine(edit(l), state); state = out.state; events.push(...out.events) }

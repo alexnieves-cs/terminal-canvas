@@ -11,6 +11,8 @@ module.exports = {
   transcript: require('../src/shared/transcript'),
   /* M90. The codex adapter: codex's JSONL to the same TranscriptEvent union. */
   codex: require('../src/shared/codex-transcript'),
+  /* M119. The ACP codec: JSON-RPC over the line seam to the same union, both directions. */
+  acp: require('../src/shared/acp-transcript'),
   session: require('../src/main/agent-session'),
   args: require('../src/main/agent-session-args'),
   quit: require('../src/main/quit'),
