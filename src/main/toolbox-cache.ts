@@ -22,6 +22,7 @@ import {
   type ReadToolboxInput
 } from './toolbox-read'
 import type { ToolInventoryResult } from '../shared/toolbox'
+import type { PluginRecord } from './plugin-list'
 
 /**
  * How many directories' inventories are held at once.
@@ -49,8 +50,21 @@ export class ToolboxCache {
    * freshness recomputed rather than the whole read being repeated for two
    * panels that differ only in when they started.
    */
-  read(input: ReadToolboxInput): ToolInventoryResult {
-    if (input.cwd === '') return readToolbox(input)
+  /**
+   * `resolvePlugins` is asked ONLY on an actual miss — the two `readToolbox`
+   * call sites below, never the hit path above them. `claude plugin list
+   * --json` is a real process spawn; a cache HIT answering it already has
+   * whatever plugin skills its last real read saw, and asking again on every
+   * one of N panels sharing this cwd would spawn the CLI N times for a
+   * question this cache exists to answer once. (A toggled plugin is not
+   * picked up until the cwd's own config stamps change and force a re-read —
+   * a known limit, not this fix's job.)
+   */
+  async read(
+    input: ReadToolboxInput,
+    resolvePlugins?: () => Promise<PluginRecord[] | undefined>
+  ): Promise<ToolInventoryResult> {
+    if (input.cwd === '') return readToolbox({ ...input, plugins: await resolvePlugins?.() })
     const now = configStamps(input.cwd, input.home)
     const hit = this.entries.get(input.cwd)
     if (hit !== undefined && stampsEqual(hit.stamps, now)) {
@@ -76,7 +90,7 @@ export class ToolboxCache {
         }
       }
     }
-    const result = readToolbox(input)
+    const result = readToolbox({ ...input, plugins: await resolvePlugins?.() })
     this.entries.set(input.cwd, { result, stamps: now })
     while (this.entries.size > INVENTORY_CACHE_MAX) {
       const oldest = this.entries.keys().next().value

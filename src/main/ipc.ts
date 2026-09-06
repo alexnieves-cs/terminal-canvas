@@ -669,21 +669,28 @@ export function registerIpcHandlers(
     fileWatchers.close(panelId)
   })
 
-  ipcMain.handle(IPC.TOOLBOX_READ, async (_event, req: ToolboxReadRequest) => {
+  ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => {
     // resolveCwd is pty-manager's — the SAME expansion a spawn gets, so the
     // toolbox and the agent can never disagree about which directory they are
     // describing. index.ts already reaches for it this way for prompts.
-    const pluginsResult = await listPlugins()
-    return toolboxCache.read({
-      cwd: req.cwd === '' ? '' : resolveCwd(req.cwd),
-      home: resolveToolboxHome(),
-      spawnStamps: ptyManager.configStampsFor(req.panelId),
-      // `unknown` reads as no plugins, never as an error surfaced here — the
-      // pane already has a place for "the CLI didn't answer" one level up
-      // (the ordinary env-report three-state rule), and TOOLBOX_READ has no
-      // slot to carry a second one through.
-      plugins: pluginsResult.kind === 'ok' ? pluginsResult.plugins : undefined
-    })
+    return toolboxCache.read(
+      {
+        cwd: req.cwd === '' ? '' : resolveCwd(req.cwd),
+        home: resolveToolboxHome(),
+        spawnStamps: ptyManager.configStampsFor(req.panelId)
+      },
+      // Passed as a RESOLVER, never pre-awaited here: the cache asks this
+      // only on an actual miss, so N toolbox panels sharing one cwd spawn
+      // `claude plugin list --json` once, not once per panel. `unknown`
+      // reads as no plugins, never as an error surfaced here — the pane
+      // already has a place for "the CLI didn't answer" one level up (the
+      // ordinary env-report three-state rule), and TOOLBOX_READ has no slot
+      // to carry a second one through.
+      async () => {
+        const pluginsResult = await listPlugins()
+        return pluginsResult.kind === 'ok' ? pluginsResult.plugins : undefined
+      }
+    )
   })
 
   ipcMain.handle(IPC.TOOLBOX_PERMISSIONS, (_event, req: ToolboxPermissionsRequest) => {

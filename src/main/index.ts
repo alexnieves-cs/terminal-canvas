@@ -50,7 +50,7 @@ import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
-import { listPlugins, type PluginRunner } from './plugin-list'
+import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
@@ -446,7 +446,7 @@ const which = (command: string): string | null => whichFromEnv(command, loginEnv
  */
 const runClaudePluginList: PluginRunner = () =>
   new Promise((resolve) => {
-    execFile(claudePath ?? 'claude', ['plugin', 'list', '--json'], { env: loginEnv }, (error, stdout) => {
+    execFile(claudePath ?? 'claude', ['plugin', 'list', '--json'], { env: loginEnv, timeout: PLUGIN_LIST_TIMEOUT_MS }, (error, stdout) => {
       // Absent binary (ENOENT), a non-zero exit, or any other spawn failure
       // all read the same way here: `listPlugins` only asks whether the code
       // was zero, so any error becomes a non-zero code rather than a thrown

@@ -35,14 +35,21 @@ export async function listPlugins(
   timeoutMs: number = PLUGIN_LIST_TIMEOUT_MS
 ): Promise<PluginListResult> {
   let res: { stdout: string; code: number }
+  // NOT unref'd. An unref'd timer is defeated the instant it is the last
+  // handle left on the loop — exactly the shape of `verify-file.cjs`'s own
+  // IIFE, which exits the moment its event loop empties. A suite hitting
+  // this arm read as green with `plugins.1e`, the final tally and the
+  // cleanup all silently never having run — a fix round's whole finding.
+  // Cleared on whichever side settles first, so the ordinary fast path
+  // still leaves no pending handle behind it.
+  let timer: ReturnType<typeof setTimeout> | undefined
   try {
     res = await Promise.race([
-      run(),
+      run().finally(() => {
+        if (timer !== undefined) clearTimeout(timer)
+      }),
       new Promise<never>((_, reject) => {
-        const timer = setTimeout(() => reject(new Error('timed out')), timeoutMs)
-        // Never keeps the process alive on its own — a suite that drives a
-        // hung fake runner must exit on its own, not wait out this timer.
-        timer.unref?.()
+        timer = setTimeout(() => reject(new Error('timed out')), timeoutMs)
       })
     ])
   } catch (e) {
