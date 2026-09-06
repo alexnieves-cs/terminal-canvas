@@ -210,6 +210,18 @@ const SCENES = [
       await k.shot('board')
       await k.dock('panels'); await sleep(300)
     } },
+  { name: 'chat-copilot', intent: 'M118/M120. The spawn sheet on the copilot row: `what` reads `chat with copilot` (enabled on this machine, `— not on PATH` elsewhere), the model field is a SELECT from the row\'s closed list (auto, claude-haiku-4.5, gpt-5-mini, mai-code-1.1-flash) where claude\'s is free text, and the preview names one conversation panel. The same family as the codex row — a third engine is a row, not a new surface.',
+    run: async (kit) => {
+      await kit.press('k', { metaKey: true }); await sleep(400)
+      await kit.type('new panel'); await sleep(300)
+      await kit.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!i })()`)
+      await sleep(800)
+      await kit.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, '__copilot__'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(500)
+      await kit.shot('chat-copilot')
+      await kit.js(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await sleep(300)
+    } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
       await kit.goTo('memory · repo')
