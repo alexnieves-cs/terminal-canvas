@@ -31,6 +31,7 @@ import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
 import type { PluginListResult } from './plugin-list'
+import type { PluginDetailsResult } from '@shared/skills'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
@@ -336,6 +337,16 @@ export function registerIpcHandlers(
   listPlugins: () => Promise<PluginListResult> = async () => ({
     kind: 'unknown',
     why: 'plugin list is not wired'
+  }),
+  /**
+   * M127. One plugin's `claude plugin details` text. Inert by default for
+   * every collaborator's reason: a harness that does not wire it keeps
+   * compiling, and the panel's plugin section shows its `unknown` arm rather
+   * than nothing at all.
+   */
+  pluginDetails: (id: string) => Promise<PluginDetailsResult> = async (id) => ({
+    kind: 'unknown',
+    why: `plugin details for ${id} is not wired`
   })
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
@@ -498,6 +509,9 @@ export function registerIpcHandlers(
   // per-column channel would let a half-applied drag persist.
   ipcMain.handle(IPC.SHELF_LIST, () => palette.shelf())
   ipcMain.handle(IPC.SHELF_SAVE, (_event, shelf: Shelf) => palette.saveShelf(shelf))
+  // M127. One plugin's details, verbatim and parsed nowhere. Asked only by a
+  // skill panel that names a plugin — never on a toolbox read.
+  ipcMain.handle(IPC.PLUGIN_DETAILS, (_event, id: string) => pluginDetails(id))
 
   // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
   // the renderer has no process.env to do it with — the same boundary

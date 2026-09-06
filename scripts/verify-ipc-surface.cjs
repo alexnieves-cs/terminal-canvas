@@ -222,7 +222,7 @@ app.whenReady().then(() => {
   // M100 teammate:list / teammate:save / teammate:delete / teammate:choose-place (102).
   // M101 routine:list / routine:save / routine:delete / routine:run (106).
   // M103 browser:read (107) — the browser pane's text, read in main and passed outward.
-  const EXPECTED_CHANNELS = 113
+  const EXPECTED_CHANNELS = 114
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

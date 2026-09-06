@@ -167,7 +167,12 @@ export const KindWork = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M2 6h12M5 9h6" /></Svg>
 )
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork } as const
+/* M127. A skill: a bookmarked page — the shelf's own card, on a leaf. */
+export const KindSkill = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3.5 2h9v12l-4.5-3-4.5 3z" /><path d="M6 5.5h4" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

@@ -141,3 +141,16 @@ export function renameInShelf(shelf: Shelf, from: SkillKey, to: SkillKey): Shelf
     }))
   }
 }
+
+/**
+ * M127. `claude plugin details <id>` output, VERBATIM.
+ *
+ * Lives here rather than beside its reader in `main/plugin-details.ts`
+ * because the ipc contract carries it across the bridge, and `shared/` may
+ * never import from `main/`. Three-state, never two: `unknown` with a why
+ * covers an absent CLI, a non-zero exit and a timeout alike — an empty
+ * string would read as a plugin that ships nothing.
+ */
+export type PluginDetailsResult =
+  | { kind: 'ok'; text: string }
+  | { kind: 'unknown'; why: string }

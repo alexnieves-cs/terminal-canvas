@@ -4003,6 +4003,24 @@ body {
 .work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 
+/* M127. The skill panel: a document body — the three doors, then six
+   sections in the order the model builds them. The verbatim blocks
+   (`SKILL.md` and `claude plugin details`) are the only pre-wrapped text on
+   the panel and scroll INSIDE their own box rather than widening the body,
+   the rule every wide block in this file follows. */
+.skill-node__body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); }
+.skill-node__doors { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.skill-node__scope { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); flex: 0 0 auto; }
+.skill-node__section { display: flex; flex-direction: column; gap: var(--sp-1); }
+.skill-node__heading { margin: 0; font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-3); font-weight: 500; }
+.skill-node__line { margin: 0; font-size: var(--t-sm); color: var(--fg-2); }
+/* An unknown section is dimmer than a real answer and never hidden: a row
+   that disappears is indistinguishable from a feature that was never built. */
+.skill-node__section[data-skill-state="unknown"] .skill-node__line,
+.skill-node__section[data-skill-state="none"] .skill-node__line { color: var(--fg-3); }
+.skill-node__verbatim { margin: 0; padding: var(--sp-2); max-height: 240px; overflow: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); white-space: pre; }
+.skill-node__read-at { margin: 0; display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
+
 /* M103. The browser pane: the app's chrome above a guest that fills the
    rest. The guest is `display: block` and sized to its host — a <webview>
    is inline by default and an inline guest paints at 300x150 whatever its

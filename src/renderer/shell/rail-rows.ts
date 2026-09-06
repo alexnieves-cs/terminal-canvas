@@ -1,4 +1,4 @@
-import { isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isSkillPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -54,6 +54,8 @@ export function railLabel(panel: Panel, status: PanelStatus | undefined): string
   // that item carries the same words, so a rail of cards and lanes would be
   // two rows with one label and nothing saying which is the conversation.
   if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
+  // M127. Same rule as panel-name.ts's — one label for one panel.
+  if (isSkillPanel(panel)) return panel.title ?? `skill · ${panel.skill.name}`
   // The user's own title is the first link for BOTH kinds — it is the one
   // link the user chose.
   if (panel.title !== undefined) return panel.title

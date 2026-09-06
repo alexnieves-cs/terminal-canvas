@@ -6,7 +6,7 @@ import type { ChatSource } from '@shared/chat-panel'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
-import type { ToolboxSource } from '@shared/toolbox'
+import type { ToolboxSource, ToolScope } from '@shared/toolbox'
 import type { LinkAutomation } from '@shared/handoff'
 
 export type { ReviewSubject }
@@ -211,7 +211,22 @@ export interface WorkPanel extends PanelBase {
   work: { itemId: string }
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel
+/**
+ * M127. The skill panel — the THIRTEENTH kind, sessionless like the work
+ * card. `scope` and `name` and nothing else: everything on screen (the
+ * frontmatter, the capped SKILL.md text, the resource count, the
+ * `alsoDefinedIn` link, which panels can see it, a plugin's details) is read
+ * LIVE from the toolbox inventory, because a copy is a second author that
+ * goes stale silently. Sessionless: no spec, so it never reaches
+ * assignTiers, and isTerminalPanel's clause below is what keeps that
+ * structural.
+ */
+export interface SkillPanel extends PanelBase {
+  kind: 'skill'
+  skill: { scope: ToolScope; name: string }
+}
+
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -264,6 +279,10 @@ export function isWorkPanel(panel: Panel): panel is WorkPanel {
   return panel.kind === 'work'
 }
 
+export function isSkillPanel(panel: Panel): panel is SkillPanel {
+  return panel.kind === 'skill'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -285,7 +304,11 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
-    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel)
+    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel) &&
+    // M127. The thirteenth kind joins the partition HERE, and forgetting it
+    // is the dangerous direction: a skill panel satisfying isTerminalPanel
+    // reaches assignTiers and registry.ensure with no spec at all.
+    !isSkillPanel(panel)
   )
 }
 
@@ -898,6 +921,17 @@ export const WORK_H = 180
  */
 export function makeWorkPanel(id: string, centre: Point, z: number, itemId: string, title: string): WorkPanel {
   return { kind: 'work', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - WORK_H / 2, w: JIRA_W, h: WORK_H }, z, title, work: { itemId } }
+}
+
+/** M127. A skill panel reads like a document: the work panels' width, a file panel's height. */
+export const SKILL_H = 520
+/**
+ * M127. A skill panel at a point. The title is stamped at mint for the rail
+ * — `skill · <name>` — and nothing reads it as the skill's own name; the
+ * record's `skill.name` is the identity, and the title is a label.
+ */
+export function makeSkillPanel(id: string, centre: Point, z: number, scope: ToolScope, name: string): SkillPanel {
+  return { kind: 'skill', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - SKILL_H / 2, w: JIRA_W, h: SKILL_H }, z, title: `skill · ${name}`, skill: { scope, name } }
 }
 
 /**

@@ -3,7 +3,7 @@ import { carryBackend } from '@shared/agent-backends'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
+import { isSkillPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, type Panel } from './panels'
 
 /**
@@ -104,6 +104,9 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url }
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
+    // M127. The skill panel: two fields, copied BY NAME. A spread of
+    // `p.skill` would share the persisted object with the live panel.
+    if (p.kind === 'skill') return { ...base, kind: 'skill' as const, skill: { scope: p.skill.scope, name: p.skill.name } }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -195,6 +198,8 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url }
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
+    // M127. Same rule; the pair is the record's whole identity.
+    if (isSkillPanel(panel)) return { ...base, kind: 'skill' as const, skill: { scope: panel.skill.scope, name: panel.skill.name } }
     return {
       ...base,
       kind: 'terminal' as const,

@@ -87,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -139,6 +139,7 @@ import { parseSkillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type 
 import type { ToolInventoryResult, ToolScope } from '@shared/toolbox'
 import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@renderer/shell/skills-pane-model'
 import type { SkillsInventoryState } from '@renderer/shell/SkillsPane'
+import { SkillNode } from '@renderer/skills/SkillNode'
 
 /* M126. Module scope, never a fresh literal per render: canvas-constants.ts's
    own rule — a new object each render is re-render churn through every memo
@@ -3160,6 +3161,12 @@ export function Canvas({
     // `openSkillPanel`; the `skill` panel kind is M127's, so today that door
     // records the request and opens nothing. Checked BEFORE the file arm,
     // because a drag with no files would otherwise fall out of it silently.
+    // M59's guard, hoisted ABOVE the skill arm: a drop while the palette or
+    // the nav grid owns the keyboard opens NOTHING. The skill arm returned
+    // before ever reaching it, so a card dropped under an open overlay minted
+    // a panel the user could not see — the same defect the file arm's own
+    // comment already records.
+    if (palette.isOpen() || navGridIsOpenRef.current()) return
     const skill = event.dataTransfer.getData(SKILL_CARD_MIME)
     if (skill !== '') {
       const parsed = parseSkillKey(skill)
@@ -4299,6 +4306,23 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M127. The skill panel's mint — the ONE door, called by the Skills pane's
+   * drop, a click on a card, and (through the palette's action object) by
+   * anything later. The world point is the drop's own, so the panel lands
+   * under the cursor at every zoom; one history entry, like every other mint.
+   * The record is the pair and NOTHING else: everything the panel shows is
+   * read live from the inventory.
+   */
+  const openSkillPanel = useCallback((scope: ToolScope, name: string, world: Point): void => {
+    const skillId = `s${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeSkillPanel(skillId, cascadeCentre(world, current), nextZ(current), scope, name)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(skillId)
+  }, [commitHistory, selectOnly])
+  /**
    * M103. The guest navigated: the record follows, with NO history entry
    * (M90's thread-id rule — a Cmd+Z that un-navigated a page would remove a
    * panel two presses later with nothing on screen explaining why). The
@@ -4326,7 +4350,7 @@ export function Canvas({
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, openBrowserPanel,
+    setInputMode, setBroadcastInput, openBrowserPanel, openSkillPanel,
     teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v),
     workItemsRef, setWorkItems, boardVerbsRef
   })
@@ -4562,6 +4586,19 @@ export function Canvas({
       .catch(() => { if (live) setSkillsInventory({ kind: 'no-cwd' }) })
     return () => { live = false }
   }, [selectedId, skillsCwd])
+  /**
+   * M127. Every OPEN panel that HAS a directory, with the rail's own label.
+   * The skill panel asks each one's inventory — the cache is keyed by
+   * resolved cwd, so twelve panels in one repository cost one parse — and
+   * that list is also the answer to "which panels can see this skill".
+   * A panel with no directory is absent rather than listed as "no": it was
+   * never a candidate, and listing it would read as a refusal.
+   */
+  const skillSources = useMemo(() => panels.flatMap((p) => {
+    const cwd = isTerminalPanel(p) ? p.spec.cwd : isChatPanel(p) ? p.chat.cwd : isToolboxPanel(p) ? p.source.cwd : undefined
+    if (cwd === undefined || cwd === '') return []
+    return [{ panelId: p.rect.id, cwd, label: railRows.find((r) => r.id === p.rect.id)?.label ?? p.rect.id }]
+  }), [panels, railRows])
   const skillsPaneProps = useMemo(() => {
     const entries = skillsInventory?.kind === 'inventory' ? skillsInventory.inventory.entries : []
     const state: SkillsInventoryState =
@@ -5051,6 +5088,16 @@ export function Canvas({
                   openReviewAcross(it.panelId)
                 }}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
+            }
+            // M127. The skill panel: every OPEN panel that has a directory,
+            // with the rail's own label, so the body can answer which of them
+            // can see this skill. The record carries nothing else.
+            if (isSkillPanel(panel)) {
+              return <SkillNode key={panel.rect.id} panel={panel} sources={skillSources}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
+                // INSERTED into the composer, never sent — M80's rule for a
+                // template's first message. `beginNewChat` is the one mint.
+                onChat={(cwd, message) => { void beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), message }) }} />
             }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)

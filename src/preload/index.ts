@@ -170,6 +170,10 @@ const bridge: CanvasBridge = {
     list: () => ipcRenderer.invoke(IPC.SHELF_LIST),
     save: (shelf) => ipcRenderer.invoke(IPC.SHELF_SAVE, shelf)
   },
+  // M127. One plugin's details text, verbatim.
+  plugin: {
+    details: (id) => ipcRenderer.invoke(IPC.PLUGIN_DETAILS, id)
+  },
   routine: {
     list: () => ipcRenderer.invoke(IPC.ROUTINE_LIST),
     save: (routine) => ipcRenderer.invoke(IPC.ROUTINE_SAVE, routine),

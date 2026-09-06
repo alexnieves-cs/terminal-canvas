@@ -51,6 +51,7 @@ import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
 import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
+import { describePlugin } from './plugin-details'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
@@ -452,6 +453,23 @@ const runClaudePluginList: PluginRunner = () =>
       // all read the same way here: `listPlugins` only asks whether the code
       // was zero, so any error becomes a non-zero code rather than a thrown
       // rejection this Promise never produces.
+      if (error !== null) {
+        resolve({ stdout: '', code: 1 })
+        return
+      }
+      resolve({ stdout, code: 0 })
+    })
+  })
+
+/**
+ * M127. The real details runner, per id. Built the same way as
+ * `runClaudePluginList` and deliberately not folded into it: `describePlugin`
+ * takes a zero-argument runner (the id rides in this closure) so the timeout
+ * race in `plugin-list.ts` can be shared byte for byte.
+ */
+const runClaudePluginDetails = (id: string): PluginRunner => () =>
+  new Promise((resolve) => {
+    execFile(claudePath ?? 'claude', ['plugin', 'details', id], { env: loginEnv, timeout: PLUGIN_LIST_TIMEOUT_MS }, (error, stdout) => {
       if (error !== null) {
         resolve({ stdout: '', code: 1 })
         return
@@ -1732,7 +1750,10 @@ app.whenReady().then(async () => {
       },
       commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
     },
-    () => listPlugins(runClaudePluginList)
+    () => listPlugins(runClaudePluginList),
+    // M127. The same CLI, the same login env and the same timeout as the
+    // list above — two calls onto one binary, kept in step deliberately.
+    (id) => describePlugin(runClaudePluginDetails(id), id)
   )
   createWindow()
 

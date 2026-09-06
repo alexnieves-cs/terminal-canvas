@@ -5,7 +5,7 @@ import { parseWorkItems, type PersistedWorkItem } from './work-items'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
-import type { ToolboxSource } from './toolbox'
+import type { ToolboxSource, ToolScope } from './toolbox'
 import type { ChatSource } from './chat-panel'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
@@ -323,6 +323,21 @@ export interface PersistedWorkPanel extends PersistedPanelBase {
   work: { itemId: string }
 }
 
+/**
+ * M127. The skill panel — the thirteenth kind, sessionless like the work
+ * card. `scope` AND `name`, and NOTHING else: no description, no body, no
+ * resource count, no token figure. A copy is a second author that goes stale
+ * silently (M116's ruling for the work card, reached again), so everything
+ * the panel shows is read live from the toolbox inventory. Identity is the
+ * PAIR because M21 measured that two scopes can define one name and refused
+ * to name a winner — a record keyed by name alone would silently pick one.
+ * No cwd, no args.
+ */
+export interface PersistedSkillPanel extends PersistedPanelBase {
+  kind: 'skill'
+  skill: { scope: ToolScope; name: string }
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -335,6 +350,7 @@ export type PersistedPanel =
   | PersistedWatcherPanel
   | PersistedBrowserPanel
   | PersistedWorkPanel
+  | PersistedSkillPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -879,6 +895,24 @@ function parsePanel(
       return null
     }
     return { ...base, kind: 'work', work: { itemId: work.itemId } }
+  }
+  if (kind === 'skill') {
+    // M127. Both fields are the panel's whole identity, so an unusable one
+    // drops the PANEL by name — a skill panel naming no scope could not ask
+    // any inventory for an entry and would render six unknown sections
+    // about nothing. The scope is checked against the closed set for the
+    // reason parseSkillKey checks it: `local` is a scope and `wherever` is
+    // not, and coercing would put a panel on the canvas that can never match.
+    const skill = (raw as Record<string, unknown>).skill
+    if (!isRecord(skill) || !isStr(skill.name) || skill.name.trim() === '') {
+      warnings.push(`dropped skill panel ${id}: skill.name was not a string`)
+      return null
+    }
+    if (skill.scope !== 'user' && skill.scope !== 'project' && skill.scope !== 'local') {
+      warnings.push(`dropped skill panel ${id}: skill.scope ${JSON.stringify(skill.scope)} is not a scope`)
+      return null
+    }
+    return { ...base, kind: 'skill', skill: { scope: skill.scope, name: skill.name } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

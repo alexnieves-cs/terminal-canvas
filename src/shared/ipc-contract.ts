@@ -28,7 +28,7 @@ import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 import type { PersistedTeammate } from './teammates'
 import type { PersistedRoutine } from './routines'
-import type { Shelf } from './skills'
+import type { Shelf, PluginDetailsResult } from './skills'
 
 /** M83. One memory as the renderer reads it. */
 /**
@@ -588,6 +588,17 @@ export const IPC = {
    */
   SHELF_LIST: 'shelf:list',
   SHELF_SAVE: 'shelf:save',
+  /**
+   * M127. `claude plugin details <id>` for ONE plugin, as TEXT.
+   *
+   * Its own channel rather than a field on TOOLBOX_READ for two reasons: the
+   * inventory is asked per cwd and this is asked per plugin, and the details
+   * call is only made when a skill panel that names a plugin is on screen —
+   * folding it into the toolbox read would spend a CLI call on every panel
+   * that never opens one. Three-state, parsed NOWHERE (there is no --json;
+   * see main/plugin-details.ts).
+   */
+  PLUGIN_DETAILS: 'plugin:details',
   /**
    * M103. The browser pane's text, read in MAIN: the scheme is checked on
    * the guest's LIVE url (not the record's, not only at navigation), the
@@ -1248,6 +1259,10 @@ export interface CanvasBridge {
   shelf: {
     list(): Promise<Shelf>
     save(shelf: Shelf): Promise<Shelf>
+  }
+  /** M127. One plugin's `claude plugin details` output, verbatim. Never rejects. */
+  plugin: {
+    details(id: string): Promise<PluginDetailsResult>
   }
   /** M101. Routines. `save` answers the record as saved or a named refusal; `run` fires now. */
   routine: {

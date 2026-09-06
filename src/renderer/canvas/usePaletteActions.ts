@@ -1,5 +1,6 @@
-import { useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
+import type { ToolScope } from '@shared/toolbox'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
@@ -35,7 +36,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel,
+  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -98,6 +99,8 @@ export interface PaletteActionsDeps {
   beginNewNote: () => void
   /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
   openBrowserPanel: (url: string) => void
+  /** M127. Mint a skill panel at a world point. */
+  openSkillPanel: (scope: ToolScope, name: string, world: { x: number; y: number }) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>
   /** M92. Lock, pin and maximise, each with its opposite. */
@@ -188,14 +191,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip,
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip,
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
-
-  /* M126. The skill drop's parking spot until M127 mints the `skill` panel
-     kind. A ref rather than state on purpose: nothing renders it yet, and a
-     setState here would re-render the canvas for a request nothing reads. */
-  const pendingSkillOpenRef = useRef<{ scope: string; name: string; world: { x: number; y: number } } | null>(null)
 
   return useMemo<PaletteActions>(() => ({
     spawnPreset: (id) => {
@@ -462,6 +460,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M116. The work card's one field, by name — the twelfth arm.
               if (isWorkPanel(p)) {
                 return { kind: p.kind, rect: p.rect, work: { itemId: p.work.itemId }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M127. The skill panel's two fields, by name — the thirteenth arm.
+              if (isSkillPanel(p)) {
+                return { kind: p.kind, rect: p.rect, skill: { scope: p.skill.scope, name: p.skill.name }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
@@ -1846,13 +1848,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
     openBoard: () => chooseNavigator('board'),
-    // M126. The skill card's drop door, a named STUB until M127 mints the
-    // `skill` panel kind. It opens nothing and records the request, so the
-    // drop has one caller to change rather than a mint path invented at the
-    // drop site. Do NOT invent a panel record here.
-    openSkillPanel: (scope, name, world) => {
-      pendingSkillOpenRef.current = { scope, name, world }
-    }
+    // M126/M127. The skill card's door — the drop, and a click on a card.
+    // Canvas owns the mint (it owns the panel array and the id counter); this
+    // is the pass-through that gives every caller one name to reach it by.
+    openSkillPanel: (scope, name, world) => openSkillPanel(scope, name, world)
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
@@ -1863,5 +1862,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef])
 }
