@@ -1,4 +1,5 @@
 import type { HandoffTrigger } from './handoff'
+import type { WorkflowNode } from './workflow-nodes'
 
 /**
  * M80. A TEMPLATE: a shape of work — panels, their directories, their first
@@ -14,7 +15,7 @@ import type { HandoffTrigger } from './handoff'
  * `parseTemplates`).
  */
 
-export interface TemplateNode {
+export interface TerminalOrChatNode {
   key: string
   kind: 'terminal' | 'chat'
   /** A terminal node's preset, when it has one; else `command`, else the login shell. */
@@ -32,6 +33,13 @@ export interface TemplateNode {
   w?: number
   h?: number
 }
+
+/**
+ * M131. `TemplateNode` widened to a union: a terminal/chat node (M80) or one
+ * of the three workflow blocks (`WorkflowNode`), each carrying the same
+ * `key` a template's edges name.
+ */
+export type TemplateNode = TerminalOrChatNode | (WorkflowNode & { key: string })
 
 export interface TemplateEdge {
   from: string

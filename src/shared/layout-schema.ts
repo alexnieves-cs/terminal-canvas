@@ -12,6 +12,7 @@ import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
+import { parseWorkflowNode } from './workflow-nodes'
 import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
 import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from './routines'
 import { parseShelf, type Shelf } from './skills'
@@ -1360,6 +1361,16 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
     const nodes: TemplateNode[] = []
     if (Array.isArray(entry.nodes)) for (const n of entry.nodes) {
       if (!isRecord(n) || !isStr(n.key) || n.key.trim() === '' || nodes.some((x) => x.key === n.key)) { warnings.push(`dropped a node with an unusable key from template ${entry.id}`); continue }
+      // M131: the three workflow kinds route through their own parser, which
+      // reports its own reason; the arm below stays exactly as it is for
+      // whatever comes after these three.
+      if (n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect') {
+        const wfWarnings: string[] = []
+        const wf = parseWorkflowNode(n, wfWarnings)
+        if (!wf) { warnings.push(`dropped node ${n.key} from template ${entry.id}: ${wfWarnings[0] ?? 'unusable'}`); continue }
+        nodes.push({ key: n.key, ...wf })
+        continue
+      }
       if (n.kind !== 'terminal' && n.kind !== 'chat') { warnings.push(`dropped node ${n.key} from template ${entry.id}: kind was unusable`); continue }
       if (!isStr(n.cwd)) { warnings.push(`dropped node ${n.key} from template ${entry.id}: cwd was unusable`); continue }
       nodes.push({

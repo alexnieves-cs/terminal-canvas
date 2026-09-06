@@ -3616,6 +3616,10 @@ export function Canvas({
         if (node.message !== undefined && node.message !== '') messages.push({ id, text: node.message })
         continue
       }
+      // M131: the three workflow kinds land in TemplateNode's union but have
+      // no runtime here yet — this task lands the schema, not the runtime,
+      // so they are skipped BY NAME rather than instantiated as panels.
+      if (node.kind === 'pool' || node.kind === 'orchestrator' || node.kind === 'collect') continue
       // A preset node is RESOLVED by main (only main turns an absent command
       // into the login shell, M5b) and minted here — never spawned through the
       // event path, which would place it itself and commit its own history

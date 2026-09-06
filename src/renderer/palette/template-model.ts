@@ -16,6 +16,10 @@ function fieldsOf(template: PersistedTemplate): string[] {
   const out: string[] = [template.name, ...(template.description === undefined ? [] : [template.description])]
   for (const n of template.nodes) {
     out.push(n.cwd)
+    // M131: the three workflow kinds land here too but carry none of these
+    // fields — this task lands the schema, not the runtime, so they are
+    // skipped BY NAME rather than given a parameter surface of their own.
+    if (n.kind !== 'terminal' && n.kind !== 'chat') continue
     if (n.command !== undefined) out.push(n.command)
     if (n.title !== undefined) out.push(n.title)
     if (n.message !== undefined) out.push(n.message)
@@ -36,7 +40,7 @@ export function fillTemplate(template: PersistedTemplate, values: Record<string,
     ...template,
     name: fill(template.name),
     ...(template.description === undefined ? {} : { description: fill(template.description) }),
-    nodes: template.nodes.map((n) => ({
+    nodes: template.nodes.map((n) => (n.kind !== 'terminal' && n.kind !== 'chat') ? { ...n, cwd: fill(n.cwd) } : ({
       ...n,
       cwd: fill(n.cwd),
       ...(n.command === undefined ? {} : { command: fill(n.command) }),
@@ -67,7 +71,7 @@ export function templateRefusal(
   presets: readonly { id: string }[],
   claudeAvailable: boolean
 ): string | undefined {
-  const missing = template.nodes.find((n) => n.presetId !== undefined && !presets.some((p) => p.id === n.presetId))
+  const missing = template.nodes.find((n) => n.kind === 'terminal' && n.presetId !== undefined && !presets.some((p) => p.id === n.presetId))
   if (missing !== undefined) return `${missing.key} names a preset that no longer exists — save the template again`
   const bare = template.nodes.find((n) => n.kind === 'terminal' && n.presetId === undefined && (n.command ?? '') === '')
   if (bare !== undefined) return `${bare.key} names neither a preset nor a command`

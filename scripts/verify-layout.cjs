@@ -3786,7 +3786,8 @@ try {
     { id: 't2', name: 'ghost', nodes: [node(), node({ key: 'x', kind: 'nonsense' })], edges: [{ from: 'a', to: 'x', trigger: 'exit' }] }
   ], w2)
   ok("workflow.1c an unknown kind drops the node AND its edges, the template kept",
-     after.length === 1 && after[0].nodes.length === 1 && after[0].edges.length === 0 && w2.length === 1,
+     after.length === 1 && after[0].nodes.length === 1 && after[0].edges.length === 0 &&
+       w2.some((x) => /x/.test(x) && /kind/.test(x)) && w2.some((x) => /edge/.test(x)),
      JSON.stringify({ after, w2 }))
 
   // A pool width below 1 is dropped, never coerced to 1.
