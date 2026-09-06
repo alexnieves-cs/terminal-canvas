@@ -101,8 +101,16 @@ packaging gates, run once each: `npm run package` built `Terminal Canvas-3.0.0-a
 in the release body with the right-click → Open sentence); `verify:packaged` 12/12, exit 0.
 Then `npm run verify` alone on `main` at the version commit — `EXIT=0`, 0 `FAIL`, 1684
 `PASS`. Then the tag, the push and the release — the ONE push after Act 0, as the brief
-allows. CI's result on the pushed `main` is read after the push and recorded in the run
-memory; it is the first run with the across fixture's fix.
+allows. CI's result on the pushed `main` (run 34060199326): **red, for a NEW reason.** Every
+plain-node suite passed on the runner — the across fixture's fix held, `verify:review` is
+green there for the first time since M86 — and the chain then died at `verify:pty` with
+`node_modules/electron/dist/Electron.app/Contents/MacOS/Electron: No such file or
+directory`, exit 127: `npm ci` on the runner did not leave Electron's binary in
+`node_modules` (the README's own `Error: Electron uninstall` gotcha, on a machine that is
+not this one). The workflow gains a `node node_modules/electron/install.js` step after
+`npm ci`, committed on `main` AFTER the tag and NOT pushed — the brief allows one push, and
+it was the ship's. Pushing that commit is the user's call; until then CI is red on a green
+chain for the second time, this time one step later.
 
 **3.0.0**, because the board (Act I) landed and copilot is the third engine (M118).
 
