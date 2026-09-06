@@ -1254,6 +1254,37 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ r1, r2, made, removed }))
   } catch (e) { ok('sandbox.1 (threw)', false, String(e)) }
 
+  // M122 — psearch.1. FIND IN PANELS over TWO durable logs — the scrollback
+  // log (M39) and the chat transcript log (M73) — through one pure function
+  // over injected readers. A dormant panel's log answers like a live one;
+  // every line leaves through redactSecrets and the count rides the result;
+  // the cap is STATED, never silent. Case-insensitive, like M42's search.
+  try {
+    const dirS = join(DIR, 'psearch')
+    mkdirSync(join(dirS, 'scrollback'), { recursive: true }); mkdirSync(join(dirS, 'transcripts'), { recursive: true })
+    const slog = F.createScrollbackLog({ dir: join(dirS, 'scrollback'), maxBytes: 1024 * 1024 })
+    await slog.append('n1', 'building…\nError: cannot read foo\ntoken ghp_abcdefghijklmnopqrstuvwxyz0123456789 leaked\n')
+    await slog.flushAll?.()
+    const tlog = F.createAgentTranscriptLog({ dir: join(dirS, 'transcripts') })
+    tlog.appendTurn('c1', { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'why does the watchdog fire?' }], at: 1 })
+    tlog.appendTurn('c1', { id: 'a-1', role: 'assistant', blocks: [{ type: 'text', text: 'the flush gate is the cause\nsee onExit' }], at: 2 })
+    const panels = [{ id: 'n1', kind: 'terminal', title: 'api' }, { id: 'c1', kind: 'chat', title: 'api (chat)' }, { id: 'n9', kind: 'terminal', title: 'nothing' }]
+    const deps = { scrollback: (ids, q, caps) => slog.search(ids, q, caps), transcript: (id) => tlog.read(id).turns }
+    const caps = { maxHits: 50, maxPerPanel: 10 }
+    const gate = await F.searchPanels('gate', panels, deps, caps)
+    const foo = await F.searchPanels('FOO', panels, deps, caps)
+    const secret = await F.searchPanels('ghp_', panels, deps, caps)
+    const one = await F.searchPanels('e', panels, deps, { maxHits: 1, maxPerPanel: 10 })
+    const none = await F.searchPanels('zzqx', panels, deps, caps)
+    ok('psearch.1 a transcript hit names its chat and turn with kind transcript; a scrollback hit names its line with kind scrollback (case-insensitive); a planted token never returns and is counted as redacted; maxHits 1 over both logs is capped and SAYS the cap; a panel with no file answers nothing and throws nothing; no match is an empty, uncapped result',
+      gate.hits.length === 1 && gate.hits[0].panelId === 'c1' && gate.hits[0].kind === 'transcript' && gate.hits[0].turnIndex === 1 && /flush gate/.test(gate.hits[0].line) && gate.capped === false && gate.redacted === 0 &&
+        foo.hits.length === 1 && foo.hits[0].panelId === 'n1' && foo.hits[0].kind === 'scrollback' && typeof foo.hits[0].lineIndex === 'number' &&
+        secret.hits.length === 1 && /\[redacted github token\]/.test(secret.hits[0].line) && !/ghp_abc/.test(JSON.stringify(secret)) && secret.redacted === 1 &&
+        one.hits.length === 1 && one.capped === true && one.cap === 1 &&
+        none.hits.length === 0 && none.capped === false,
+      JSON.stringify({ gate, foo, secret, one, none }))
+  } catch (e) { ok('psearch.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
