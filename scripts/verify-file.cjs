@@ -1159,6 +1159,44 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ probe: found && found.probe, arms }))
 }
 
+// telemetry.2 (M112). THE PLAN AND THE SCRUB. Three arms for the plan — no
+// DSN, a malformed one (its own arm: a typo must not read as "off"), and
+// on with the dumps flag — and a beforeSend that is an ALLOWLIST built
+// field by field: a fixture event stuffed with breadcrumbs, a request, a
+// user, a token in the message and the home path in a frame must come out
+// with none of those KEYS and neither string. Asserted on keys, because a
+// spread that carried everything satisfies any value-phrased check.
+{
+  const can = typeof F.telemetryPlan === 'function' && typeof F.scrubEvent === 'function'
+  const read = (m) => (id) => m[id]
+  const p1 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': '', 'telemetry.nativeCrashes': false })) : null
+  const p2 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': 'not a dsn', 'telemetry.nativeCrashes': true })) : null
+  const p3 = can ? F.telemetryPlan(read({ 'telemetry.sentryDsn': 'https://abc123@o1.ingest.sentry.io/42', 'telemetry.nativeCrashes': true })) : null
+  const token = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij'
+  const ev = {
+    event_id: 'e1', timestamp: 1, level: 'error', release: 'tc@2.3.0', environment: 'production',
+    breadcrumbs: [{ message: 'echo ' + token }], request: { url: 'file:///x' }, user: { ip_address: '1.2.3.4' },
+    extra: { cwd: '/Users/alex/secret' }, tags: { t: '1' },
+    contexts: { os: { name: 'macOS', version: '15' }, app: { app_name: 'Terminal Canvas', app_version: '2.3.0' }, device: { name: 'alexs-mac' } },
+    exception: { values: [{ type: 'Error', value: 'failed with ' + token, stacktrace: { frames: [
+      { function: 'f', lineno: 1, colno: 2, filename: '/Users/alex/Library/Application Support/Terminal Canvas/x.js', vars: { t: token } },
+      { function: 'g', lineno: 3, colno: 4, filename: '/Users/alex/proj/y.js' }
+    ] } }] }
+  }
+  const out = can ? F.scrubEvent(ev, { userData: '/Users/alex/Library/Application Support/Terminal Canvas', home: '/Users/alex' }) : null
+  const keys = out ? Object.keys(out).sort() : []
+  const frames = out?.exception?.values?.[0]?.stacktrace?.frames ?? []
+  const s = JSON.stringify(out ?? {})
+  ok('telemetry.2 the plan has three arms (no-dsn, malformed-dsn, on with nativeCrashes); scrubEvent keeps only the allowlisted keys, replaces the userData and home paths, drops frame vars and contexts.device, and the token is gone from the value',
+    can && p1 && p1.on === false && p1.reason === 'no-dsn' && p2 && p2.on === false && p2.reason === 'malformed-dsn' &&
+      p3 && p3.on === true && p3.dsn === 'https://abc123@o1.ingest.sentry.io/42' && p3.nativeCrashes === true &&
+      out && !keys.includes('breadcrumbs') && !keys.includes('request') && !keys.includes('user') && !keys.includes('extra') && !keys.includes('tags') &&
+      out.contexts && !('device' in out.contexts) && out.contexts.os && out.contexts.app &&
+      frames.length === 2 && frames[0].filename === '<userData>/x.js' && frames[1].filename === '<home>/proj/y.js' && !('vars' in frames[0]) &&
+      !s.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !s.includes('/Users/alex'),
+    can ? JSON.stringify({ p1, p2, p3, keys, frames, valueHead: out?.exception?.values?.[0]?.value?.slice(0, 40) }) : 'telemetry not exported')
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

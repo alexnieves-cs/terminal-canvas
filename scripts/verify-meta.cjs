@@ -672,6 +672,21 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ webviewTag, stripsPreload, noNode, srcGate, permission, guestDeny }))
 }
 
+// M112 — telemetry.3. THE MODULES THAT HOLD BYTES NEVER MEET THE SDK. A
+// Sentry import in the env builder, the PTY manager, the credential store or
+// the scrollback log is a second exit for exactly the data the scrubber
+// exists to withhold; the boundary is the import graph, pinned as text, the
+// shape check 21 uses. And the credential store's reader list (readers.1)
+// stays exactly three — telemetry.ts is not one of them.
+{
+  const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/credential-store.ts', 'src/main/scrollback-log.ts', 'src/main/telemetry.ts']
+    .filter((f) => /@sentry\//.test(stripComments(read(f) ?? '')))
+  const telemetryReadsStore = /credential-(store|verify|crypto)/.test(stripComments(read('src/main/telemetry.ts') ?? ''))
+  ok('telemetry.3 no byte-holding module and not telemetry.ts itself imports @sentry; telemetry.ts never imports the credential store',
+    offenders.length === 0 && !telemetryReadsStore,
+    offenders.join(', ') || 'clean')
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

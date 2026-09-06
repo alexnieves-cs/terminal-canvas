@@ -898,6 +898,19 @@ const preset = (over = {}) => ({ id: 'u1', name: 'Claude here', cwd: '/tmp', arg
     bad.length === 0, bad.map((d) => d.id).join(','))
 }
 
+{
+  // telemetry.1 (M112). Two settings, neither a plan may write: a plan that
+  // can switch telemetry on has the same shape as one that raises its own
+  // ceiling. The DSN is text and empty; the dumps toggle is boolean and off.
+  const dsn = L.SETTINGS.find((d) => d.id === 'telemetry.sentryDsn')
+  const dumps = L.SETTINGS.find((d) => d.id === 'telemetry.nativeCrashes')
+  ok('telemetry.1 telemetry.sentryDsn is text defaulting to empty and telemetry.nativeCrashes is boolean defaulting to false; neither is planWritable; both share TELEMETRY_CATEGORY',
+    !!dsn && dsn.type === 'text' && dsn.default === '' && dsn.planWritable === undefined &&
+      !!dumps && dumps.type === 'boolean' && dumps.default === false && dumps.planWritable === undefined &&
+      typeof L.TELEMETRY_CATEGORY === 'string' && dsn.category === L.TELEMETRY_CATEGORY && dumps.category === L.TELEMETRY_CATEGORY,
+    JSON.stringify({ dsn, dumps }))
+}
+
 // 65-69 — M6b. The same ABSENT-vs-MALFORMED line parsePresets draws, and for
 //     the same reason: a file with no preferences key is every file written
 //     before M6b and is perfectly fine, while a present-but-wrong one is

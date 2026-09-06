@@ -39,5 +39,7 @@ module.exports = {
   /* M103. The browser pane's read, over injected getUrl/evaluate: the scheme
      check and the cap and the outward gate, with no webview in earshot. */
   ...require('../src/shared/browser-panel.ts'),
-  ...require('../src/main/browser-read.ts')
+  ...require('../src/main/browser-read.ts'),
+  /* M112. Telemetry's decision and its scrubber: pure over injected paths. */
+  ...require('../src/main/telemetry.ts')
 }
