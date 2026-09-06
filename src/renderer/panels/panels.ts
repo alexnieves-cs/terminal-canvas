@@ -197,7 +197,20 @@ export interface BrowserPanel extends PanelBase {
   url: string
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel
+/**
+ * M116. The work card — the TWELFTH kind, sessionless like Jira's: the
+ * board's row in the world. It carries the item's id alone; the record
+ * (title, state, teammate, lane, PR) lives on the workspace's workItems list
+ * and the card looks it up at render, so a card can never disagree with the
+ * board. Sessionless: no spec, so it never reaches assignTiers, and
+ * isTerminalPanel's clause below is what keeps that structural.
+ */
+export interface WorkPanel extends PanelBase {
+  kind: 'work'
+  work: { itemId: string }
+}
+
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -246,6 +259,10 @@ export function isBrowserPanel(panel: Panel): panel is BrowserPanel {
   return panel.kind === 'browser'
 }
 
+export function isWorkPanel(panel: Panel): panel is WorkPanel {
+  return panel.kind === 'work'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -267,7 +284,7 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
-    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel)
+    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel)
   )
 }
 
@@ -867,6 +884,18 @@ export function makeGithubPanel(id: string, centre: Point, z: number): GithubPan
 
 export function makeJiraPanel(id: string, centre: Point, z: number): JiraPanel {
   return { kind: 'jira', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - JIRA_H / 2, w: JIRA_W, h: JIRA_H }, z, title: 'Jira tickets' }
+}
+
+/** M116. A card is a ROW, not a list: the work panels' width and a short height (above MIN_PANEL_H). */
+export const WORK_H = 180
+/**
+ * M116. A work card at the centre. The title is the ITEM's at mint — the
+ * rail reads `work · <title>` from it — and it is a copy on purpose: the
+ * card's body reads the live record by id, so a renamed item re-titles the
+ * body while the rail keeps the name the user saw when they made the card.
+ */
+export function makeWorkPanel(id: string, centre: Point, z: number, itemId: string, title: string): WorkPanel {
+  return { kind: 'work', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - WORK_H / 2, w: JIRA_W, h: WORK_H }, z, title, work: { itemId } }
 }
 
 /**

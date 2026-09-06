@@ -9,7 +9,7 @@ import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
-import { isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -415,6 +415,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  * string would have hidden the next one exactly as well; tsc will not.
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  work: 'A work card',
   browser: 'A browser panel',
   memory: 'A memory node',
   github: 'A GitHub work panel',
@@ -672,6 +673,12 @@ export function buildInspectorModelBare(
         { key: 'watch-trigger', label: 'when', value: describeTrigger(panel.watch.trigger) }
       ]
     }
+  }
+  // M116. The work card: a document kind whose identity is its item's id.
+  // The item's own facts (source, key, teammate, lane, PR) are the card's
+  // body, which holds the record; the pane names which record.
+  if (isWorkPanel(panel)) {
+    return { kind: 'work', reviewable: false, state: { kind: 'work', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'work-item', label: 'item', value: panel.work.itemId }] }
   }
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows

@@ -34,7 +34,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel,
+  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -442,6 +442,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M103. The browser pane's one field, by name.
               if (isBrowserPanel(p)) {
                 return { kind: p.kind, rect: p.rect, url: p.url, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M116. The work card's one field, by name — the twelfth arm.
+              if (isWorkPanel(p)) {
+                return { kind: p.kind, rect: p.rect, work: { itemId: p.work.itemId }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them

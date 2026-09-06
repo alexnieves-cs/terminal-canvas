@@ -162,7 +162,12 @@ export const KindBrowser = (p: IconProps): JSX.Element => (
   <Svg {...p}><circle cx="8" cy="8" r="5.5" /><path d="M2.5 8h11M8 2.5c2 2 2 9 0 11M8 2.5c-2 2-2 9 0 11" /></Svg>
 )
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser } as const
+/* M116. The work card: a board's column with one card in it. */
+export const KindWork = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M2 6h12M5 9h6" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

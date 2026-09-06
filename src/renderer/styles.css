@@ -3939,6 +3939,27 @@ body {
 .teammates-pane__routine { display: flex; flex-direction: column; gap: var(--sp-1); }
 .teammates-pane__routine-form { display: flex; flex-direction: column; gap: var(--sp-1); }
 .teammates-pane__minutes { width: 64px; font: inherit; }
+/* M116. The work card: the board's row in the world. A short frame whose
+   body is a head line (key · the item's state word), the title, the facts
+   as an inline list and a verb row. The Assign menu is spanned UNDER the
+   verbs inside the body, never off a chrome button: `.panel` clips
+   overflow, so a menu hung off the chrome is cut at the frame's edge. */
+.work-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); position: relative; }
+.work-node__head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.work-node__key { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; cursor: pointer; }
+.work-node__key--plain { color: var(--fg-3); text-decoration: none; cursor: default; }
+.work-node__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--tone); }
+.work-node__state[data-tone="kind"] { color: var(--fg-3); }
+.work-node__title { margin: 0; font-size: var(--t-sm); color: var(--fg); }
+.work-node__facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.work-node__facts dt { display: inline; }
+.work-node__facts dd { display: inline; margin: 0; color: var(--fg-2); }
+.work-node__facts a { color: var(--iris); text-decoration: underline; }
+.work-node__note { margin: 0; }
+.work-node__verbs { display: flex; align-items: center; gap: var(--sp-2); position: relative; }
+.work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+
 /* M103. The browser pane: the app's chrome above a guest that fills the
    rest. The guest is `display: block` and sized to its host — a <webview>
    is inline by default and an inline guest paints at 300x150 whatever its

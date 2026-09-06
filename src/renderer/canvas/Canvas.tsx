@@ -87,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -120,6 +120,7 @@ import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
+import { WorkNode } from '@renderer/work/WorkNode'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -138,6 +139,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
+import type { PersistedWorkItem } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -252,6 +254,8 @@ export function Canvas({
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
+  // M113. The board's records: layout on the workspace, absent on disk when empty (M93's rule).
+  const [workItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
   const annotationsRef = useRef(annotations)
   annotationsRef.current = annotations
   // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
@@ -2249,9 +2253,10 @@ export function Canvas({
       focusedId: merged && before ? before.focusedId : focusedId,
       bookmarks,
       runs,
-      ...(annotations.length === 0 ? {} : { annotations })
+      ...(annotations.length === 0 ? {} : { annotations }),
+      ...(workItems.length === 0 ? {} : { workItems })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -4186,7 +4191,9 @@ export function Canvas({
     selectedPanel, selectedLive, inspectorModel, selectedIsSessionless
   } = useRailModels({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
-    workspaceRows, waitingIds, selectedId, globalFontSize
+    workspaceRows, waitingIds, selectedId, globalFontSize,
+    // M116. A work card's row speaks its item's state; absent when the board is empty.
+    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state })
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -4664,6 +4671,16 @@ export function Canvas({
               )
             }
             if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            // M116. The work card: the record by id from the board's list, the
+            // lane's rail label (the chat the item was dispatched to, when it
+            // is still here), the roster for Assign. The verbs are Track A's
+            // (M114/M115) and arrive as props after the merge; absent they
+            // render disabled by name.
+            if (isWorkPanel(panel)) {
+              const item = workItems.find((i) => i.id === panel.work.itemId)
+              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} />
+            }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
