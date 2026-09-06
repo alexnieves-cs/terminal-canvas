@@ -7,7 +7,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
 
-export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; onAddToBoard(item: WorkItem): void; focusedId: string | null; restoreFocus(id: string): void; readOnly?: boolean; onBeginLink(panelId: string, event: ReactMouseEvent): void; linkTarget: boolean; onConnect(): void }): JSX.Element {
+export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(id: string, additive?: boolean): void; onFocus(id: string): void; onBeginDrag(state: DragState): void; onClose(id: string): void; onSpawn(item: WorkItem): void; onAddToBoard(item: WorkItem): void; boardKeys?: ReadonlySet<string>; focusedId: string | null; restoreFocus(id: string): void; readOnly?: boolean; onBeginLink(panelId: string, event: ReactMouseEvent): void; linkTarget: boolean; onConnect(): void }): JSX.Element {
   const { panel } = props
   const [result, setResult] = useState<Awaited<ReturnType<typeof window.canvas.jira.list>> | null>(null)
   const load = (): void => { void window.canvas.jira.list().then(setResult).catch(() => setResult({ kind: 'unavailable', reason: 'Jira could not be reached.' })) }
@@ -33,7 +33,7 @@ export function JiraNode(props: { panel: JiraPanel; selected: boolean; onSelect(
       {result === null ? <p>Loading Jira tickets…</p> : result.kind === 'items' ? result.items.length === 0 ? <p>No assigned tickets.</p> : result.items.map((item) => <JiraTicket
         key={item.id} item={item}
         focusedId={props.focusedId} restoreFocus={props.restoreFocus}
-        onSpawn={props.onSpawn} onAddToBoard={props.onAddToBoard} onWritten={load}
+        onSpawn={props.onSpawn} onAddToBoard={props.onAddToBoard} boardKeys={props.boardKeys} onWritten={load}
       />) : (
         <>
           <p className="pf__note jira-node__note">{result.reason}</p>

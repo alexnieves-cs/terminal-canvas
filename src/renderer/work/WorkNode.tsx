@@ -5,7 +5,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
-import type { PersistedWorkItem } from '@shared/work-items'
+import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 
 /**
  * M116. THE WORK CARD — the board's row in the world, the twelfth kind,
@@ -23,12 +23,14 @@ import type { PersistedWorkItem } from '@shared/work-items'
  * only Close — never a blank body, which reads as a card that broke.
  *
  * The verbs are M114/M115's (dispatch, the PR door, the review flight,
- * done). Each is DISABLED BY NAME when its handler is absent — the reason is
- * in the title, the button stays — so a card rendered before the verbs are
- * wired (or under the merged view) is a card with four disabled verbs, not a
- * card with fewer. `Assign to…` opens a menu spanned UNDER the verb row,
- * inside the body: `.panel` clips overflow, so a menu hung off the chrome
- * would be cut at the frame's edge (the harness lesson).
+ * done). Each is DISABLED BY NAME — the merged view, the PR door's own
+ * `prRefusalSync` sentence, a teammate with no places — with the reason in
+ * the title and the button kept, never removed. `Assign to…` opens a menu
+ * spanned UNDER the verb row, inside the body: `.panel` clips overflow, so a
+ * menu hung off the chrome would be cut at the frame's edge (the harness
+ * lesson). The chrome is DRAGGABLE with the board's own MIME: the Teammates
+ * pane's rows accept it, and a card in the world is the only thing that can
+ * share the screen with that pane (the navigator shows one pane at a time).
  */
 export interface WorkNodeProps {
   panel: WorkPanel
@@ -46,18 +48,20 @@ export interface WorkNodeProps {
   readOnly?: boolean
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   linkTarget: boolean
-  /** M114. Dispatch the item to a teammate. Absent: the verb is disabled by name. */
-  onDispatch?: (itemId: string, teammateId: string) => void
-  /** M115. Open the pull request from the lane. Absent: disabled by name. */
-  onOpenPr?: (itemId: string) => void
-  /** M115. Fly to the review of the lane's diff. Absent: disabled by name. */
-  onReview?: (itemId: string) => void
-  /** M115. Mark the item done. Absent: disabled by name. */
-  onDone?: (itemId: string) => void
+  /** M114. Dispatch the item to a teammate. */
+  onDispatch: (itemId: string, teammateId: string) => void
+  /** M114. Why a teammate cannot be picked, before main is asked; null when it can. */
+  teammateReason: (teammate: PersistedTeammate) => string | null
+  /** M115. Open the pull request from the lane. */
+  onOpenPr: (itemId: string) => void
+  /** M115. The PR door's synchronous refusal (`prRefusalSync`), or null when the door is open — the lane's standing is asked at the click. */
+  prReason: string | null
+  /** M115. Fly to the review of the lane's diff. */
+  onReview: (itemId: string) => void
+  /** M115. Mark the item done. */
+  onDone: (itemId: string) => void
 }
 
-/** The placeholder reason every unwired verb carries — one string, so a grep finds every site when the wiring lands. */
-export const REASON_VERB_UNWIRED = 'not wired yet — Track A'
 export const REASON_MERGED_VIEW = 'leave merged view to act on the card'
 export const WORK_ITEM_GONE = 'this item is no longer on the board'
 export const REASON_NO_TEAMMATES = 'no teammates yet — ⌘K, then Manage teammates…'
@@ -74,10 +78,9 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
   const teammate = item?.teammateId === undefined ? undefined : props.teammates.find((t) => t.id === item.teammateId)
   const teammateName = item?.teammateId === undefined ? undefined : (teammate === undefined ? item.teammateId : teammateWord(teammate))
   // A verb's reason, in precedence: the merged view first (nothing acts
-  // there), then the missing wiring. `null` means enabled.
-  const reasonFor = (wired: boolean): string | null => (readOnly ? REASON_MERGED_VIEW : wired ? null : REASON_VERB_UNWIRED)
-  const verb = (key: string, label: string, wired: boolean, run: () => void, extra?: Record<string, string | boolean | undefined>): JSX.Element => {
-    const reason = reasonFor(wired)
+  // there), then the verb's own. `null` means enabled.
+  const verb = (key: string, label: string, own: string | null, run: () => void, extra?: Record<string, string | boolean | undefined>): JSX.Element => {
+    const reason = readOnly ? REASON_MERGED_VIEW : own
     return (
       <button type="button" className="pf__verb pf__verb--word" data-work-verb={key} disabled={reason !== null}
         title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })} {...extra}>{label}</button>
@@ -102,7 +105,14 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
       onBeginLink={props.onBeginLink}
       close={readOnly ? null : { armed: false, title: 'Close', armedText: '', onMouseDown: (e) => { e.stopPropagation(); e.preventDefault(); props.onClose(panel.rect.id) } }}
       chrome={item === undefined ? undefined : (
-        <span className="pf__summary work-node__summary" data-work-summary>{item.key ?? item.source}</span>
+        <>
+          {/* The state as a PILL in the chrome, where every sibling's lives (the chat's `asleep`, the terminal's dot) — one placement for one family. */}
+          <span className="pf__summary work-node__pill" data-tone={state.tone} data-work-word>{state.word}</span>
+          {/* The card is the drag source for a drop onto a Teammates-pane row: the board's own MIME, nothing else. */}
+          <span className="pf__summary work-node__summary" data-work-summary draggable
+            onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData(WORK_ITEM_MIME, item.id); e.dataTransfer.effectAllowed = 'move' }}
+            title={`Drag onto a teammate in the Teammates pane to dispatch ${item.key ?? item.title}`}>{item.key ?? item.source}</span>
+        </>
       )}
     >
       <div className="pf__body pf__body--text work-node__body" data-scroll-host onMouseDown={(e) => { e.stopPropagation(); props.onFocus(panel.rect.id) }}>
@@ -118,9 +128,11 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
               ) : (
                 <span className="work-node__key work-node__key--plain" data-work-key>{item.key ?? item.source}</span>
               )}
-              <span className="work-node__state" data-tone={state.tone} data-work-word>{state.word}{item.remoteState === undefined ? '' : ` · ${item.remoteState}`}</span>
+              {/* The provider's own word rides beside, MUTED: it is GitHub's or Jira's, display only, and painting it in the tone would lend it a meaning it does not have. */}
+              {item.remoteState !== undefined && <span className="work-node__remote" data-work-remote>{item.remoteState} on {item.source}</span>}
             </div>
-            <p className="work-node__title" data-work-title>{item.title}</p>
+            {/* The title is the chrome's; the body shows the description's first line, the GitHub row's own pattern. */}
+            {item.description !== undefined && item.description !== '' && <p className="work-node__title" data-work-description>{item.description.split('\n')[0]}</p>}
             {/* Three facts, each ABSENT rather than `—` when unknown: a row that says `lane: —` reads as a lane that failed. */}
             <dl className="work-node__facts" data-work-facts>
               {teammateName !== undefined && <div><dt>teammate </dt><dd data-work-teammate>{teammateName}</dd></div>}
@@ -132,21 +144,24 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
             </dl>
             {item.note !== undefined && <p className="pf__note work-node__note" data-work-note>{item.note}</p>}
             <div className="work-node__verbs" data-work-verbs>
-              {verb('assign', 'Assign to…', props.onDispatch !== undefined, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen })}
-              {verb('open-pr', 'Open PR', props.onOpenPr !== undefined, () => props.onOpenPr?.(item.id))}
-              {verb('review', 'Review', props.onReview !== undefined, () => props.onReview?.(item.id))}
-              {verb('done', 'Done', props.onDone !== undefined, () => props.onDone?.(item.id))}
+              {verb('assign', 'Assign to…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen })}
+              {verb('open-pr', 'Open PR', props.prReason, () => props.onOpenPr(item.id))}
+              {verb('review', 'Review', item.panelId === undefined ? 'no lane yet — dispatch the item first' : null, () => props.onReview(item.id))}
+              {verb('done', 'Done', null, () => props.onDone(item.id))}
               {assignOpen && (
                 <ul className="work-node__menu" role="menu" data-work-assign-menu onMouseDown={(e) => e.stopPropagation()}>
                   {props.teammates.length === 0 ? (
                     <li><p className="work-node__menu-empty" data-work-assign-empty>{REASON_NO_TEAMMATES}</p></li>
-                  ) : props.teammates.map((t) => (
-                    <li key={t.id} role="none">
-                      <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-work-assign={t.id}
-                        title={`Dispatch ${item.key ?? item.title} to ${teammateWord(t)}`}
-                        {...shellControl(() => { setAssignOpen(false); props.onDispatch?.(item.id, t.id) })}>{teammateWord(t)}</button>
-                    </li>
-                  ))}
+                  ) : props.teammates.map((t) => {
+                    const why = props.teammateReason(t)
+                    return (
+                      <li key={t.id} role="none">
+                        <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-work-assign={t.id} disabled={why !== null}
+                          title={why ?? `Dispatch ${item.key ?? item.title} to ${teammateWord(t)}`}
+                          {...shellControl(() => { if (why !== null) return; setAssignOpen(false); props.onDispatch(item.id, t.id) })}>{teammateWord(t)}</button>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>

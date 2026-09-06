@@ -14,6 +14,7 @@ export function JiraTicket(props: {
   onSpawn(item: WorkItem): void
   /** M113. Add to board — an upsert by the issue key. */
   onAddToBoard(item: WorkItem): void
+  boardKeys?: ReadonlySet<string>
   onWritten(): void
 }): JSX.Element {
   const { item } = props
@@ -118,7 +119,7 @@ export function JiraTicket(props: {
 
     <div className="jira-node__actions">
       <button type="button" onMouseDown={(e) => { stop(e); props.onSpawn(item) }}>Start session</button>
-      <button type="button" data-work-add={item.id} title={`Put ${item.id} on the board — a second press updates it`} onMouseDown={(e) => { stop(e); props.onAddToBoard(item); setAdded(true) }}>{added ? 'Added' : 'Add to board'}</button>
+      <button type="button" data-work-add={item.id} title={`Put ${item.id} on the board — a second press updates it`} onMouseDown={(e) => { stop(e); props.onAddToBoard(item); setAdded(true) }}>{added ? 'Added' : props.boardKeys?.has(item.id) ? 'On board' : 'Add to board'}</button>
       <button
         type="button"
         data-jira-comment-open

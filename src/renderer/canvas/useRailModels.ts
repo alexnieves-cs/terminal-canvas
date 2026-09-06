@@ -1,3 +1,4 @@
+import type { PersistedWorkItem } from '@shared/work-items'
 import { carryBackend } from '@shared/agent-backends'
 import { useMemo, type RefObject } from 'react'
 import { useChat, getChat } from '@renderer/chat/chat-store'
@@ -8,7 +9,7 @@ import { orderPanels } from './spatial-order'
 import type { Registry } from '@renderer/session/session-registry'
 import { useLiveSession } from '@renderer/session/live-session-store'
 import { useUsage } from '@renderer/session/usage-store'
-import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel } from '@renderer/panels/panels'
+import { isFilePanel, isTerminalPanel, type Panel, isChatPanel, isWatcherPanel, isWorkPanel } from '@renderer/panels/panels'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { getAgentState } from '@renderer/session/agent-state-store'
 import { watchStateInput } from '@renderer/watcher/watcher-store'
@@ -43,6 +44,8 @@ export interface RailModelsDeps {
   globalFontSize: number
   /** M116. A work card's item state by item id; absent when the board is empty. See buildRailRows. */
   workStateOf?: (itemId: string) => WorkItemState | undefined
+  /** M116. The record itself, for the inspector's five facts. */
+  workItemOf?: (itemId: string) => PersistedWorkItem | undefined
 }
 
 /**
@@ -360,7 +363,9 @@ export function useRailModels(deps: RailModelsDeps) {
             // M98. Main's grants, mirrored; absent until it has answered (the field reads `unknown`).
             ...(selectedChat.grants === undefined ? {} : { grants: selectedChat.grants })
           }
-        })()
+        })(),
+        // M116. The work card's record, for its word and its five facts.
+        isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId) : undefined
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

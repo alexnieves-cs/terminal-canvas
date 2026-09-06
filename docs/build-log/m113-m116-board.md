@@ -114,7 +114,45 @@ without the verb.
 
 ## The gate
 
-<!-- filled at the gate: shot scenes read, critic and verifier findings and triage, the chain's exit line -->
+The shot pass: the `board` scene first showed the pane over whatever the previous scene
+left in view — a harness lesson twice over: a pane row's synthetic `mousedown` does not
+fly (the real click does, `board.1` proves it), and the harness's own `goTo` is the way to
+frame a subject. The scene frames the card, then opens the pane.
+
+**The critic** (fresh context, the PNGs against the spec and the Obsidian brief) found two
+blockers and eighteen more. Taken, every one but two: the drag door to the Teammates pane
+was UNREACHABLE — its only drag source was a Board row, and the navigator shows one pane at
+a time — so the card's chrome is now the drag source (the board's own MIME); a placeholder
+tooltip (`not wired yet — Track A`) shipped on every undispatched card's `Review`, gone
+with the constant; `Open PR` and `Assign to…` now refuse BY NAME before the click
+(`prRefusalSync`, `teammateRefusal` — the same sentences the click's note uses); the HUD
+strip and the inspector said `work` while the rail said `working` — the inspector builder
+takes the record now, and gives the five facts the spec listed instead of an opaque id; the
+`review` tone was the attention amber (`needs-you`), which the attention union owns — it is
+`starting` now; a `working` item dropped on `todo` or `done` with its lane still open says
+`lane still open — close the chat to stop it` instead of flipping back silently; a `done`
+drop goes through `markDone` so the PR-comment offer is not skipped; `On board` reads on a
+row whose key is already there; the row's three facts are a second line; the provider's
+word is muted beside the state, not painted in its tone; the state is a pill in the chrome
+where every sibling's is; the body shows the description's first line instead of the title
+twice; a `commented` success is no longer stored as a note; a re-dispatched item starts at
+`todo` again; the rail label follows the record's title through the dedupe; `Review` on a
+closed lane says where the worktree still is; the shot seeds carry the label and the anchor
+the scene's sentence described. Declined: a drag-over highlight on the columns (the comment
+that claimed one was corrected instead) and a drop-target `min-height` beyond one step.
+
+**The verifier** proved every constraint and every suite line (thirteen plain-node exit
+lines quoted, `readers.1` at exactly three, `Object.values(IPC).length === 111`, the handoff
+table's diff empty) and named three things the branch's own words got wrong, each fixed:
+`verify:rail state.2` bans only the `'working'` literal, not the four state words — two
+comments overclaimed it; the spec's §8 did not name the act's deferrals — it does now; and
+`WORK_ITEM_MIME` was defined twice. One finding it could not prove and this log records
+plainly: **written-first is not provable from git** — every check landed in the same commit
+as its implementation. The red runs happened (each is named above); a check commit before
+its feat commit is the rule from Act II on. One accepted weakness: `verify:rail board.1`
+does not cover the pane's rows (there is no pure row model); `verify:panels board.1` does.
+
+The chain: see the last line of this log.
 
 ## What green does not prove
 

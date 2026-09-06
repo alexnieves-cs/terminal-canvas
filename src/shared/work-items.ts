@@ -211,16 +211,36 @@ export function prRefusal(
   connected: boolean,
   mate: { name: string; services: readonly string[] } | undefined
 ): string | null {
-  if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository — this item is ${item.source}`
-  if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet — dispatch the item first'
-  if (!connected) return 'not connected — add a github token in ⌘K, then Credentials'
-  if (mate === undefined) return 'the teammate this item was dispatched to is gone — open the Teammates pane'
-  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in the Teammates pane`
+  const sync = prRefusalSync(item, connected, mate)
+  if (sync !== null) return sync
   if (lane === undefined) return 'the lane could not be read — is the worktree still there?'
   if (lane.kind === 'git-missing') return 'git was not found on the login PATH'
   if (lane.kind === 'unreadable') return `the lane could not be read — ${lane.detail}`
   if (lane.ahead === 0) return `nothing to open a PR for — the lane has no commits past ${lane.base}`
   return null
+}
+
+/**
+ * The arms that need NO invoke — what the card's disabled title reads on
+ * every render (the lane's standing is asked only at the click, and lands as
+ * the note). The same sentences, one list, two readers.
+ */
+export function prRefusalSync(
+  item: { source: WorkItemSource; key?: string; panelId?: string; worktreeId?: string; teammateId?: string },
+  connected: boolean,
+  mate: { name: string; services: readonly string[] } | undefined
+): string | null {
+  if (item.source !== 'github' || item.key === undefined || repoOfKey(item.key) === null) return `a PR needs a GitHub repository — this item is ${item.source}`
+  if (item.worktreeId === undefined || item.panelId === undefined) return 'no lane yet — dispatch the item first'
+  if (!connected) return 'not connected — add a github token in ⌘K, then Credentials'
+  if (mate === undefined) return 'the teammate this item was dispatched to is gone — open the Teammates pane'
+  if (!mate.services.includes('github')) return `${mate.name} may not spend github — grant it in the Teammates pane`
+  return null
+}
+
+/** M114. Why a teammate cannot be dispatched to, before main is asked; null when it can. The repository arm is main's (it reads the origin). */
+export function teammateRefusal(mate: { name: string; places: readonly string[] }): string | null {
+  return mate.places.length === 0 ? `${mate.name} has no places — add a folder in the Teammates pane` : null
 }
 
 /** The typed door's one refusal. */

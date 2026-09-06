@@ -138,7 +138,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
-import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -607,6 +607,8 @@ export function Canvas({
   // a ref rather than closures over paletteActions.
   const addToBoardRef = useRef<(item: WorkItem, source: 'github' | 'jira') => void>(() => undefined)
   const addGithubToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'github'), [])
+  // M113. The keys already on the board, so a row reads `On board` (still pressable — a second press updates).
+  const boardKeys = useMemo(() => new Set(workItems.flatMap((i) => (i.key === undefined ? [] : [i.key]))), [workItems])
   const addJiraToBoard = useCallback((item: WorkItem) => addToBoardRef.current(item, 'jira'), [])
   const spawnGithubItem = useCallback((item: WorkItem) => spawnWorkItem(item, item.state === 'review requested' || item.state === 'pull request' ? 'GitHub pull request' : 'GitHub issue'), [spawnWorkItem])
   const openGithubPanel = useCallback(() => {
@@ -3879,7 +3881,8 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: undefined, anchor })
+    // A re-dispatch of a done or review item starts over: todo now, working when the lane's first turn says so.
+    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: undefined, anchor, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
     selectOnly(chatId)
     const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
     const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
@@ -3925,7 +3928,8 @@ export function Canvas({
     const number = /#(\d+)$/.exec(item.key)
     if (repo === null || number === null) return
     const result = await window.canvas.board.commentPr({ panelId: item.panelId, teammateId: item.teammateId, repo, number: Number(number[1]), body: `Pull request: ${item.pr.url}` })
-    patchWorkItem(itemId, { note: result.kind === 'commented' ? `commented on ${item.key}` : result.reason })
+    // A success is not a note (a note is what went wrong, or what to do next); the refusal is.
+    patchWorkItem(itemId, { note: result.kind === 'commented' ? undefined : result.reason })
   }, [patchWorkItem])
   /**
    * M115. `done` is the USER's. On a GitHub item with a PR the comment is
@@ -3936,7 +3940,8 @@ export function Canvas({
   const markDone = useCallback((itemId: string): void => {
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return
-    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'] })
+    const laneOpen = item.panelId !== undefined && item.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === item.panelId)
+    patchWorkItem(itemId, { state: WORK_ITEM_STATES[3] as PersistedWorkItem['state'], note: laneOpen ? 'lane still open — close the chat to stop it' : undefined })
     if (item.source === 'github' && item.pr !== undefined) {
       setInputMode({ kind: 'confirm', label: `Comment the PR on ${item.key ?? 'the issue'}?`, initial: '', submit: () => { void commentPr(itemId) } })
       palette.openPalette()
@@ -4390,7 +4395,7 @@ export function Canvas({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
     workspaceRows, waitingIds, selectedId, globalFontSize,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
-    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state })
+    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) })
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -4462,10 +4467,19 @@ export function Canvas({
   // agree by construction. The card set is a signature so a drag's 60Hz
   // rect churn does not rebuild the pane's props.
   const cardItemIds = panels.filter(isWorkPanel).map((p) => p.work.itemId).sort().join('\u0000')
+  // M116. A drop on a user-set column. `done` goes through the SAME verb the
+  // card's button and `tc board done` reach (the PR-comment offer included);
+  // a drop that leaves a lane mid-turn says so in the note rather than
+  // pretending the runtime stopped — the next turn will say `working` again.
   const setWorkItemState = useCallback((itemId: string, state: WorkItemState): void => {
     if (!USER_SET_STATES.includes(state)) return
-    setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, state, updatedAt: Date.now() }) : i)))
-  }, [])
+    if (state === WORK_ITEM_STATES[3]) { markDone(itemId); return }
+    setWorkItems((current) => current.map((i) => {
+      if (i.id !== itemId) return i
+      const laneOpen = i.panelId !== undefined && i.state === WORK_ITEM_STATES[1] && panelsRef.current.some((p) => p.rect.id === i.panelId)
+      return carryWorkItem({ ...i, state, ...(laneOpen ? { note: 'lane still open — close the chat to stop it' } : {}), updatedAt: Date.now() })
+    }))
+  }, [markDone])
   const goToWorkItem = useCallback((itemId: string): void => {
     const card = panelsRef.current.find((p): p is WorkPanelModel => isWorkPanel(p) && p.work.itemId === itemId)
     if (card !== undefined) centreOn(card.rect)
@@ -4897,7 +4911,7 @@ export function Canvas({
                 />
               )
             }
-            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} onAddToBoard={addGithubToBoard} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            if (isGithubPanel(panel)) return <GithubNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnGithubItem} onAddToBoard={addGithubToBoard} boardKeys={boardKeys} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             // M116. The work card: the record by id from the board's list, the
             // lane's rail label (the chat the item was dispatched to, when it
             // is still here), the roster for Assign. The verbs are Track A's
@@ -4909,11 +4923,19 @@ export function Canvas({
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId)}
+                teammateReason={teammateRefusal}
                 onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
-                onReview={item?.panelId === undefined ? undefined : (itemId) => { const it = workItemsRef.current.find((i) => i.id === itemId); if (it?.panelId !== undefined) openReviewAcross(it.panelId) }}
+                prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}
+                onReview={(itemId) => {
+                  const it = workItemsRef.current.find((i) => i.id === itemId)
+                  if (it?.panelId === undefined) return
+                  // A closed lane keeps its panel id (the note says so); the review of its worktree is one door over.
+                  if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still listed under Review every worktree' }); return }
+                  openReviewAcross(it.panelId)
+                }}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
             }
-            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
+            if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (

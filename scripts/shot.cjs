@@ -477,7 +477,7 @@ app.whenReady().then(async () => {
         // M90. The second backend beside the first: the chrome names it, the rest is the same panel.
         { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         // M116. A work card beside the chat it was dispatched to, with the edge.
-        { id: 'card12', kind: 'work', x: 770, y: 1260, w: 420, h: 180, z: 18, title: 'Watchdog fires under load', work: { itemId: 'wi-12' }, links: [{ to: 'chat' }] },
+        { id: 'card12', kind: 'work', x: 300, y: 570, w: 420, h: 200, z: 18, title: 'Watchdog fires under load', work: { itemId: 'wi-12' }, links: [{ to: 'chat', label: 'dispatched' }] },
         // M106. A narrow frame with a long title: the frame rule's subject.
         term('narrow', 1400, 1360, 320, 220, 30, { title: 'review: the health check wiring for the api repository' }),
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
@@ -492,7 +492,7 @@ app.whenReady().then(async () => {
       // `card12` above), one still to do with no card, so the pane shows a
       // lane row and a `Show on canvas` row.
       workItems: [
-        { id: 'wi-12', source: 'github', key: 'acme/canvas#12', title: 'Watchdog fires under load', url: 'https://github.com/acme/canvas/issues/12', description: 'The 300s watchdog trips when the suite runs beside a build.', state: 'working', remoteState: 'open', teammateId: 'ada', panelId: 'chat', createdAt: Date.now() - 7200000, updatedAt: Date.now() - 600000 },
+        { id: 'wi-12', source: 'github', key: 'acme/canvas#12', title: 'Watchdog fires under load', url: 'https://github.com/acme/canvas/issues/12', description: 'The 300s watchdog trips when the suite runs beside a build.', state: 'working', remoteState: 'open', teammateId: 'ada', panelId: 'chat', createdAt: Date.now() - 7200000, updatedAt: Date.now() - 600000, anchor: { panelId: 'chat', dx: -470, dy: 0 } },
         { id: 'wi-31', source: 'github', key: 'acme/canvas#31', title: 'Group buttons are mouse-only', url: 'https://github.com/acme/canvas/issues/31', state: 'todo', remoteState: 'open', createdAt: Date.now() - 3600000, updatedAt: Date.now() - 3600000 }
       ],
       // M93. Notes in the margins: one on the canvas, one on a panel.

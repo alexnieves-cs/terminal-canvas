@@ -1814,6 +1814,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const id = item.id ?? `wi${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
       const next = upsertWorkItem(workItemsRef.current ?? [], { ...item, id }, Date.now())
       setWorkItems(next)
+      // The card's rail label is the panel's title, stamped at mint; an update through the dedupe moves it too, or the rail reads yesterday's title beside today's card.
+      setPanels((current) => current.map((p) => { const wid = isWorkPanel(p) ? p.work.itemId : undefined; const rec = wid === undefined ? undefined : next.find((i) => i.id === wid); return rec === undefined || p.title === rec.title ? p : { ...p, title: rec.title } }))
       const identity = item.key === undefined ? undefined : next.find((i) => i.source === item.source && i.key === item.key)
       return identity === undefined ? id : identity.id
     },

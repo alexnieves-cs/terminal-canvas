@@ -2,7 +2,7 @@ import { memo, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft } from '@renderer/icons'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
-import { USER_SET_STATES, WORK_ITEM_STATES, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { USER_SET_STATES, WORK_ITEM_MIME, WORK_ITEM_STATES, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 
 /**
  * M116. THE BOARD PANE — the navigator's seventh pane: four columns over
@@ -24,7 +24,6 @@ import { USER_SET_STATES, WORK_ITEM_STATES, type PersistedWorkItem, type WorkIte
  * instead, disabled by nothing, because a board row that did nothing on
  * click would read as a broken row.
  */
-export const WORK_ITEM_MIME = 'application/x-tc-work-item'
 export const BOARD_EMPTY = 'Nothing on the board — add a GitHub or Jira item, or ⌘K, then New work item…'
 
 export interface BoardPaneProps {
@@ -88,9 +87,9 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
                         <button type="button" className="rail-row__main" title={carded ? `Go to ${item.title}` : `${item.title} has no card on this canvas`}
                           {...shellControl(() => { if (carded) props.onGoTo(item.id) })}>
                           <span className="rail-row__label">{item.title}</span>
-                          {/* The key, the teammate and the lane as the trailing phrase; each ABSENT when unknown, never a dash. */}
-                          <span className="rail-row__tail">{[item.key, teammate, lane].filter((x) => x !== undefined).join(' · ')}</span>
                         </button>
+                        {/* The key, the teammate and the lane as a SECOND line — three facts do not fit a one-line tail; each ABSENT when unknown, never a dash. */}
+                        <span className="board-row__facts" data-board-facts>{[item.key, teammate, lane].filter((x) => x !== undefined).join(' · ')}</span>
                         {item.pr !== undefined && (
                           <a className="board-row__pr" href={item.pr.url} data-board-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
                             onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: item.panelId ?? '', target: (item.pr as { url: string }).url }) }}>#{item.pr.number}</a>
@@ -98,7 +97,7 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
                         {/* A working card's note is the one sentence the runtime left (`lane closed`, a refusal). */}
                         {item.note !== undefined && <span className="board-row__note" data-board-note>{item.note}</span>}
                         {!carded && (
-                          <button type="button" className="rail-row__verb" data-board-show title="Mint a card for this item at the centre of the canvas" {...shellControl(() => props.onShowOnCanvas(item.id))}>Show on canvas</button>
+                          <button type="button" className="rail-row__verb board-row__show" data-board-show title="Show a card for this item at the centre of the canvas" {...shellControl(() => props.onShowOnCanvas(item.id))}>Show on canvas</button>
                         )}
                       </li>
                     )

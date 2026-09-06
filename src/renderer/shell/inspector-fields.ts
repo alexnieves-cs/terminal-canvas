@@ -1,3 +1,4 @@
+import type { PersistedWorkItem } from '@shared/work-items'
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
 import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_CHAT_NO_BASELINE, REASON_NOT_CLAUDE_SESSION, REASON_NOT_STARTED, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
 import { describeTrigger } from '@shared/watch-trigger'
@@ -523,7 +524,8 @@ export function buildInspectorModelBare(
    * on a chat panel renders `not started` and no cost — the honest first
    * seconds of every restored chat.
    */
-  chat?: ChatInspectorInput | undefined
+  chat?: ChatInspectorInput | undefined,
+  workItem?: PersistedWorkItem | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isChatPanel(panel)) {
@@ -678,7 +680,21 @@ export function buildInspectorModelBare(
   // The item's own facts (source, key, teammate, lane, PR) are the card's
   // body, which holds the record; the pane names which record.
   if (isWorkPanel(panel)) {
-    return { kind: 'work', reviewable: false, state: { kind: 'work', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'work-item', label: 'item', value: panel.work.itemId }] }
+    // M116. The record by the card's id, when the caller handed it: the same
+    // word the rail and the card show, and the five facts — each ABSENT when
+    // unknown. Without the record (a pre-M116 caller, a check) the card is a
+    // document kind and the one field names the item.
+    const item = workItem
+    const fields: InspectorField[] = item === undefined
+      ? [{ key: 'work-item', label: 'item', value: panel.work.itemId }]
+      : [
+          { key: 'work-source', label: 'source', value: item.source },
+          ...(item.key === undefined ? [] : [{ key: 'work-key', label: 'key', value: item.key }]),
+          ...(item.teammateId === undefined ? [] : [{ key: 'work-teammate', label: 'teammate', value: item.teammateId }]),
+          ...(item.panelId === undefined ? [] : [{ key: 'work-lane', label: 'lane', value: item.panelId }]),
+          ...(item.pr === undefined ? [] : [{ key: 'work-pr', label: 'pr', value: `#${item.pr.number}` }])
+        ]
+    return { kind: 'work', reviewable: false, state: { kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields }
   }
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows
@@ -1203,9 +1219,11 @@ export function buildInspectorModel(
   sessionOptions?: AgentOptions | undefined,
   typography?: { fontSize: number; isDefault: boolean } | undefined,
   dormant?: boolean,
-  chat?: ChatInspectorInput | undefined
+  chat?: ChatInspectorInput | undefined,
+  /** M116. The work card's record, for its word and its five facts. Optional like every dep before it. */
+  workItem?: PersistedWorkItem | undefined
 ): InspectorModel {
-  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat)
+  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem)
   if (panel.locked === true || panel.pinned === true || panel.maximised !== undefined) {
     return { ...model, marks: { locked: panel.locked === true, pinned: panel.pinned === true, maximised: panel.maximised !== undefined } }
   }

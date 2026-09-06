@@ -188,13 +188,16 @@ function watchState(watch: WatchStateInput | undefined): PanelStateWord {
 /**
  * M116. The item's state in the one vocabulary. The four words are the
  * record's own (`WORK_ITEM_STATES`), read by INDEX so a renamed state moves
- * here with it and `verify:rail state.2`'s literal ban holds outside this
- * file; the tones are the existing four the states mean — a todo is a
- * document at rest (kind), a working lane works, a review waits on a person,
- * a done item is idle — so no rule and no token is new for the card. With no
+ * here with it (`verify:rail state.2` bans the `'working'` literal outside
+ * this file; the other three words are read by index here so a rename moves
+ * them too); the tones are the existing four the states mean — a todo is a
+ * document at rest (kind), a working lane works, a review is in flight
+ * elsewhere (`starting`: amber is the attention union's, and a PR waiting on
+ * someone else asks this user for nothing), a done item is idle — so no rule
+ * and no token is new for the card. With no
  * record the card names its kind, like every document kind.
  */
-const WORK_TONES: readonly Tone[] = ['kind', 'working', 'needs-you', 'idle']
+const WORK_TONES: readonly Tone[] = ['kind', 'working', 'starting', 'idle']
 function workState(work: { state: WorkItemState } | undefined): PanelStateWord {
   if (work === undefined) return { word: 'work', tone: 'kind' }
   const i = WORK_ITEM_STATES.indexOf(work.state)
