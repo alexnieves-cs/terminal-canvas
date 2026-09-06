@@ -3842,3 +3842,12 @@ beneath them. Added, each confirmed once by hand or not at all, as stated:
 - **A real slow `~/.zshrc` (M107).** `env.1` drives the outcome over a report with
   `timedOut: true`; a login shell that really prompts or hangs for five seconds was not
   staged. `Check again` against a real shell was clicked once by hand or not at all.
+
+**The manual-only list, re-read entire at 2.2 (M108).** Nothing above was struck: M96–M107
+added surfaces beside the list's entries and checks beneath none of them. Every act appended
+its own entries as it landed (M96–M99, M100–M103, M104–M107 above), and the re-read found
+one to add: **the ⋯ menu's `Verbs in ⌘K…` on a real click (M106)** — `verify:panels
+header.1` opens the menu and reads its title; that the door focuses the panel and opens the
+palette captured on it was confirmed once by hand in the shot harness's picture, not by a
+check. Treat green as green, not as proof of these.
+

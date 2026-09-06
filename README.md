@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v2.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v2.2.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and
@@ -894,6 +894,7 @@ price of not killing something.
 | M105 | The rail says what is happening: a chat row's second line carries the agent's last line said, from the transcript's last complete text block (the same content in both front-ends; a terminal's scrollback is not a conversation), an unread dot on a thread that finished while you were elsewhere, cleared on focus, per-panel state in its own store subscribed by id and cleared at every removing site; the dock's `N live` / `N quiet` capsules | ✅ done |
 | M106 | Header discipline and the workspace's two verbs: one frame rule for every kind — the title gives (whole words, then an ellipsis) and the verbs never shrink, the full title in the title attribute and at the top of the frame's `⋯` menu; a `Workspace` menu holding Tidy Panes and Flip Terminals — flip is M57's far view invoked deliberately through the same context and renderer, a view state never persisted, respecting lock and maximise | ✅ done |
 | M107 | The app explains itself: Changes refresh when the selected chat's turn ends; the thread header reads folder · branch · engine · model with every absent piece absent; discovery that explains itself — which shells were asked and which folders checked, `Check again` asking the login shell once more, and the distinction that matters: a shell that did not answer reads `the shell didn't answer` with the `~/.zprofile` fix, never `not installed` — three states, the repository's own rule broken by a surface it shipped, fixed as a defect | ✅ done |
+| M108 | Ship 2.2.0: the version; the README's milestone table in sequence; both IPC diagrams reconciled against the contract (107 invokes); CLAUDE.md and `docs/load-bearing.md` in agreement; this run's surfaces walked in `docs/dead-end-audit.md`; the manual-only list re-read and extended; both packaging gates run with the numbers; the graph refreshed; the final report — 2.2.0 rather than 2.1.0 because Act II shipped BOTH teammates (M100) and the browser pane (M103), the prompt's own threshold | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
