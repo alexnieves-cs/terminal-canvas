@@ -1824,7 +1824,8 @@ const isResult = (l) => l.includes('"type":"result"')
       manager.dispose('ac')
 
       const src = readFileSync(join(__dirname, '..', 'src', 'shared', 'acp-transcript.ts'), 'utf8')
-      const capsBlock = (src.match(/ACP_CLIENT_CAPABILITIES[\s\S]*?\n\}\)/) || [''])[0]
+      // Anchored on the DECLARATION: the header comment names the constant first, and a match there would read prose (the tone.1 lesson).
+      const capsBlock = (src.match(/export const ACP_CLIENT_CAPABILITIES[\s\S]*?\n\}\)/) || [''])[0]
       const initLine = JSON.parse(ACP.acpInitialize(1))
       ok('acp.4 clientCapabilities in the initialize line are EXACTLY { fs: { readTextFile: false, writeTextFile: false }, terminal: false } — as text in acp-transcript.ts (the declared object) and as the encoded line; no `true` anywhere in the declaration',
         /readTextFile:\s*false/.test(capsBlock) && /writeTextFile:\s*false/.test(capsBlock) && /terminal:\s*false/.test(capsBlock) && !/true/.test(capsBlock) &&
