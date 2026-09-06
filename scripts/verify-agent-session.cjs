@@ -1522,10 +1522,15 @@ const isResult = (l) => l.includes('"type":"result"')
     const ids = B.BACKEND_IDS
     const rows = ids.map((id) => B.BACKENDS[id])
     ok('registry.2 BACKENDS has a row per member of the union with a label, a binary, every capability the manager reads and every named reason; AGENT_CAPABILITIES.headless is DERIVED from it; codex is one process per turn with stdin closed and adopts its thread id, claude is neither',
-      ids.join(',') === 'claude,codex' && rows.every((r) => typeof r.label === 'string' && typeof r.binary === 'string' &&
-        ['resumes', 'interrupts', 'images', 'reportsCost', 'asksPermission', 'terminalDoor', 'oneProcessPerTurn', 'closeStdin', 'adoptsThreadId'].every((k) => typeof r[k] === 'boolean') &&
-        ['noCli', 'noInterrupt', 'noImages', 'noTerminal', 'noPermissions'].every((k) => typeof r.reasons[k] === 'string')) &&
+      ids.join(',') === 'claude,codex,copilot,acp' && rows.every((r) => typeof r.label === 'string' && typeof r.binary === 'string' &&
+        ['resumes', 'interrupts', 'images', 'reportsCost', 'asksPermission', 'terminalDoor', 'oneProcessPerTurn', 'closeStdin', 'adoptsThreadId', 'appendsPrompt', 'handshake'].every((k) => typeof r[k] === 'boolean') &&
+        (r.sandboxArgs === undefined || (Array.isArray(r.sandboxArgs) && r.sandboxArgs.length > 0)) && (r.models === undefined || Array.isArray(r.models)) &&
+        ['noCli', 'noInterrupt', 'noImages', 'noTerminal', 'noPermissions', 'noPrompt', 'noSandbox'].every((k) => typeof r.reasons[k] === 'string')) &&
         B.BACKENDS.codex.oneProcessPerTurn && B.BACKENDS.codex.closeStdin && B.BACKENDS.codex.adoptsThreadId && !B.BACKENDS.codex.interrupts && !B.BACKENDS.codex.asksPermission &&
+        // M118/M119. The two measured rows: copilot is codex's shape with the HOST's id; acp is resident with a handshake and a permission door.
+        B.BACKENDS.copilot.oneProcessPerTurn && B.BACKENDS.copilot.closeStdin && !B.BACKENDS.copilot.adoptsThreadId && !B.BACKENDS.copilot.asksPermission && !B.BACKENDS.copilot.appendsPrompt && !B.BACKENDS.copilot.reportsCost && Array.isArray(B.BACKENDS.copilot.models) &&
+        B.BACKENDS.acp.handshake && B.BACKENDS.acp.asksPermission && B.BACKENDS.acp.interrupts && B.BACKENDS.acp.adoptsThreadId && !B.BACKENDS.acp.oneProcessPerTurn && !B.BACKENDS.acp.closeStdin && B.BACKENDS.acp.sandboxArgs === undefined &&
+        B.BACKENDS.claude.appendsPrompt && !B.BACKENDS.acp.appendsPrompt && !B.BACKENDS.claude.handshake &&
         !B.BACKENDS.claude.oneProcessPerTurn && B.BACKENDS.claude.interrupts && B.BACKENDS.claude.asksPermission &&
         M.cost.AGENT_CAPABILITIES.codex.headless.interrupts === B.BACKENDS.codex.interrupts && M.cost.AGENT_CAPABILITIES['claude-code'].headless.permissions === B.BACKENDS.claude.asksPermission,
       JSON.stringify(rows.map((r) => r.id)))
