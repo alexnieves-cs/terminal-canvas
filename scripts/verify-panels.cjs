@@ -18019,6 +18019,9 @@ app.whenReady().then(async () => {
         const before = await chatCount()
         const itemId = await wc.executeJavaScript(`window.__m113 ? window.__m113.add({ source: 'github', key: 'acme/canvas#1', title: 'Fix the thing', url: 'https://github.com/acme/canvas/issues/1', description: 'do it' }) : null`)
         const stateAtClick = await wc.executeJavaScript(`window.__m113 ? (window.__m113.items().find((i) => i.id === ${JSON.stringify(itemId)}) || {}).state : null`)
+        // The card on the canvas FIRST, so the dispatch has a source for its edge.
+        await wc.executeJavaScript(`window.__m113 ? window.__m113.show(${JSON.stringify(itemId)}) : null`)
+        const cardId = await waitUntil(() => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-kind="work"]'); return c ? c.getAttribute('data-panel-id') : false })()`), 4000)
         await wc.executeJavaScript(`window.__m113 ? window.__m113.dispatch(${JSON.stringify(itemId)}, 'tm-ada') : null`)
         const chat = await waitUntil(async () => {
           if ((await chatCount()) !== before + 1) return false
@@ -18032,6 +18035,10 @@ app.whenReady().then(async () => {
           return it && it.panelId && it.worktreeId ? it : false
         }, 6000)
         const lane = chat ? layoutStore.worktrees().find((w) => w.panelId === chat.id) : undefined
+        // The edge: card → chat, labelled `dispatched`, with NO automation — a statement, not a trigger.
+        const cardStored = cardId ? (layoutStore.initial().panels || []).find((p) => p.id === cardId) : undefined
+        const edge = cardStored && Array.isArray(cardStored.links) ? cardStored.links.find((l) => chat && l.to === chat.id) : undefined
+        const anchored = recorded && recorded.anchor && chat && recorded.anchor.panelId === chat.id
         const storedChat = chat ? (layoutStore.initial().panels || []).find((p) => p.id === chat.id) : undefined
         // `working` comes from the runtime: the fake runner answers the first send, and the first message-start flips the word.
         const working = await waitUntil(() => {
@@ -18046,13 +18053,18 @@ app.whenReady().then(async () => {
           const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
           return it && it.note ? it : false
         }, 6000)
+        // done is the user's: the verb, then the word.
+        await wc.executeJavaScript(`window.__m113.done(${JSON.stringify(itemId)})`)
+        const done = await waitUntil(() => { layoutStore.flushSync(); const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId); return it && it.state === 'done' ? it : false }, 4000)
         ok(IDS[0],
-          typeof itemId === 'string' && stateAtClick === 'todo' && chat && chat.backend === 'claude' &&
+          typeof itemId === 'string' && stateAtClick === 'todo' && typeof cardId === 'string' && chat && chat.backend === 'claude' &&
+            edge && edge.label === 'dispatched' && edge.automation === undefined && anchored &&
             recorded && recorded.panelId === chat.id && recorded.teammateId === 'tm-ada' && lane !== undefined && recorded.worktreeId === lane.id && realpathSync(lane.root) === realpathSync(repoD) &&
             storedChat && storedChat.kind === 'chat' && storedChat.chat.dispatch === true && storedChat.chat.teammateId === 'tm-ada' && storedChat.chat.cwd === lane.path &&
             working && working.state === 'working' &&
-            closed && closed.note === 'lane closed' && closed.state === 'working' && closed.panelId === chat.id,
-          JSON.stringify({ itemId, stateAtClick, chat, recorded, lane: lane && { id: lane.id, root: lane.root, path: lane.path }, storedChat: storedChat && storedChat.chat, working: working && working.state, closed, log: cLog.slice(-4) }))
+            closed && closed.note === 'lane closed' && closed.state === 'working' && closed.panelId === chat.id && closed.anchor === undefined &&
+            done && done.state === 'done',
+          JSON.stringify({ itemId, stateAtClick, cardId, edge, anchored, done: done && done.state, chat, recorded, lane: lane && { id: lane.id, root: lane.root, path: lane.path }, storedChat: storedChat && storedChat.chat, working: working && working.state, closed, log: cLog.slice(-4) }))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
         try { layoutStore.deleteTeammate('tm-ada') } catch {}

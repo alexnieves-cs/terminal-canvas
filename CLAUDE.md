@@ -618,6 +618,33 @@ check does not, and should not, cover it.
   `SessionHandle` over `attachTerminal`/`detachTerminal` from the same module, and is what the
   registry's session-factory dependency actually is at runtime.
 
+- `src/shared/work-items.ts` / `src/main/board-lane.ts` / `src/main/board-repo.ts` — M113–M115.
+  The board's record: four states as DATA, two of them the RUNTIME's (`working` from the lane
+  chat's first message start, `review` from a PR opened) and two the user's (`USER_SET_STATES`
+  drives every drop target and verb); the dedupe by key (`upsertWorkItem` keeps what the
+  runtime set); `carryWorkItem` at every by-name copy; `prRefusal` as the ONE list of the PR
+  door's refusals. The record lives on the workspace beside annotations and is absent on disk
+  when empty; it is NOT in history (records like runs and bookmarks, not layout). `tc board`
+  writes nothing in main: the renderer owns the workspace it renders, so main asks it over the
+  ephemeral reply channel `canvas:model` uses (`board:add`, `requestFromRendererWith`).
+  `board-lane.ts` is the dispatch's main half in order — teammate, repository under the
+  places (`board-repo.ts`: a place or its immediate children, by origin), the Places gate on
+  the ROOT (a lane under `userData/worktrees` is outside every place by construction, so the
+  gate's `worktreeRootOf` dep judges it by its record's root and names the root in a refusal),
+  then M37's `ensureForPanel` for the chat's id. `DISPATCH_PROMPT` rides every spawn from
+  `ChatSource.dispatch` (`carryChatMarks` at both copy sites). The edge card → chat is a plain
+  M78 edge labelled `dispatched` with NO automation. `Open PR` is two outward things behind
+  one spend card: `git push -u origin <branch>` in the lane with the user's own credentials
+  (the app holds none for git; `buildPushArgs` is the one push built), then the POST through
+  the broker, never the credential store (`openPullRequest` in `github-client.ts`; 422
+  already-exists → one GET → `exists`). Every outward half is on the manual-only list.
+- `src/renderer/work/WorkNode.tsx` / `src/renderer/shell/BoardPane.tsx` — M116. The twelfth
+  kind (`work`, sessionless, `work: { itemId }` its only identity — the record lives on the
+  workspace, never on the panel) and the Board pane. A dispatched card FOLLOWS its lane: the
+  world layer re-derives its rect from the chat's every render (`anchoredPanels`) and never
+  writes it back; a move of the card drops the anchor. Drop targets exist on the two
+  `USER_SET_STATES` columns only.
+
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different
 statements, and `session-registry.ts` is where that difference lives.

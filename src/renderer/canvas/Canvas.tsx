@@ -3189,7 +3189,9 @@ export function Canvas({
         paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
       dispatch: (itemId: string, teammateId: string, root?: string): void => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root),
       items: (): PersistedWorkItem[] => workItemsRef.current,
-      close: (id: string): void => onClosePanel(id)
+      close: (id: string): void => onClosePanel(id),
+      show: (itemId: string): void => spawnWorkCard(itemId),
+      done: (itemId: string): void => paletteActionsRef.current?.markDone(itemId)
     }
     // M59. The drop door, by screen point — see dropPath.
     // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
