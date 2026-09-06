@@ -627,7 +627,7 @@ export const REASON_NO_GITHUB = notConnectedReason('github')
 export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
 export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
 /** M42. Search's two failure states, distinct so the user gets the right fix. */
-export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep output; chats still answer'
+export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep recent output on disk; chats still answer'
 export const REASON_SEARCH_NO_MATCHES = 'try another word'
 export const REASON_NO_PROMPTS = 'no prompts saved yet'
 export const REASON_ALREADY_ACTIVE = 'already the active workspace'
@@ -1422,14 +1422,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the honest answer offline, and a row that vanished would read as a
   // feature that was never built. The subtitle is the LAST answer, so a
   // user who already asked sees it without asking again.
-  out.push({
+  out.push(withReason({
     id: 'update.check',
     title: 'Check for updates…',
     subtitle: ctx.update === undefined || ctx.update === null ? 'ask GitHub whether a newer release is published — nothing is installed' : updateSentence(ctx.update),
     searchText: 'update check release version newer github download notice',
     group: 'canvas',
     run: () => actions.checkForUpdates()
-  })
+  }, ctx.update?.checking === true ? 'checking…' : undefined))
 
   // --- Placement (M50) -------------------------------------------------------
   //
@@ -2094,7 +2094,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // "no matches"; before the first keystroke the scope is quiet.
   if (!ctx.scrollbackEnabled) {
     out.push(withReason(
-      { id: 'search.off', title: 'Terminal output is not being kept', subtitle: 'turn on Keep output — chats still answer', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
+      { id: 'search.off', title: 'Terminal output is not being kept', subtitle: 'turn on Keep recent output on disk — chats still answer', group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} },
       REASON_SEARCH_OFF
     ))
   }
@@ -2103,7 +2103,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     if (result.hits.length === 0) {
       // Only once a query has been typed: an empty query answers null above,
       // not [], so "no matches" never shows before the first keystroke.
-      if (ctx.searchQuery.trim() !== '' && ctx.scrollbackEnabled) {
+      if (ctx.searchQuery.trim() !== '') {
         out.push(withReason(
           // M64. Names the term, once — the old row said "No matches" in the
           // title and "no matches" in the hint and never the word typed.
@@ -2113,15 +2113,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       }
     } else {
       // M122. What the answer LEFT OUT comes first: the cap, and the secrets the gate replaced.
-      if (result.capped) out.push({ id: 'search.cap', title: `the first ${result.cap} matches — narrow the search`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} })
-      if (result.redacted > 0) out.push({ id: 'search.redacted', title: `${result.redacted} secret${result.redacted === 1 ? '' : 's'} redacted from these lines`, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} })
+      // INFORMATION, not verbs: disabled with their own sentence, so stepping skips them and Enter never lands on a row that does nothing.
+      if (result.capped) { const t = `the first ${result.cap} matches — narrow the search`; out.push(withReason({ id: 'search.cap', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
+      if (result.redacted > 0) { const t = `${result.redacted} secret${result.redacted === 1 ? '' : 's'} redacted from these lines`; out.push(withReason({ id: 'search.redacted', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t)) }
       // M64. The hit leads with the panel's NAME, not its path-and-id label.
       const labelOf = new Map(ctx.panels.map((row) => [row.id, row.title ?? row.name ?? row.label]))
       for (const hit of result.hits) {
         const isTurn = hit.kind === 'transcript'
         out.push({
           id: isTurn ? `search.hit.${hit.panelId}.t${hit.turnIndex ?? 0}` : `search.hit.${hit.panelId}.${hit.lineIndex ?? 0}`,
-          title: labelOf.get(hit.panelId) ?? hit.panelId,
+          // The panel's name AND which kind the line came from: two panels can share a name, and the two verbs differ.
+          title: `${labelOf.get(hit.panelId) ?? hit.panelId} · ${isTurn ? `chat turn ${(hit.turnIndex ?? 0) + 1}` : `line ${(hit.lineIndex ?? 0) + 1}`}`,
           mono: true,
           // The matched line, and the haystack: the palette's own filter runs
           // over title+subtitle+searchText, so typing narrows the hits too.

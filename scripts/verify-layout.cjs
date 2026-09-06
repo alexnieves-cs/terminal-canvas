@@ -3753,6 +3753,28 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ threw, stored, carried, bare }))
 }
 
+// M122 — search.active.1. THE HANDLER'S SOURCE OF PANELS. `initial()` applies
+// `restore.layout` and answers no panels with it off; a search built over it
+// went quiet with nothing to say why. The active row of `mergedWorkspaces()`
+// carries every panel whatever the setting says — pinned here as the store's
+// fact, and both handler sites are read as text for the same call.
+{
+  let listed = null, viaInitial = null, sites = null, threw = null
+  try {
+    const dir = mkdtempSync(join(tmpdir(), 'tc layout search-active '))
+    const store = L.createLayoutStore({ path: join(dir, 'layout.json') })
+    store.save({ panels: [{ id: 'sa1', kind: 'terminal', x: 0, y: 0, w: 10, h: 10, z: 1, cwd: '~', command: '/bin/sh', args: [] }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+    store.setSetting('restore.layout', false)
+    listed = (store.mergedWorkspaces().find((w) => w.active) || { panels: [] }).panels.map((p) => p.id)
+    viaInitial = store.initial().panels.map((p) => p.id)
+    const src = (f) => readFileSync(join(__dirname, '..', 'src', 'main', f), 'utf8')
+    sites = ['ipc.ts', 'index.ts'].map((f) => /mergedWorkspaces\(\)\.find\(\(w\) => w\.active\)/.test(src(f)))
+  } catch (e) { threw = String(e) }
+  ok('search.active.1 the active merged row lists the panel with restore.layout off (initial() is the restore-gated read, never the search\'s), and both search handler sites read the active row',
+    threw === null && Array.isArray(listed) && listed.includes('sa1') && Array.isArray(viaInitial) && sites && sites.every(Boolean),
+    JSON.stringify({ threw, listed, viaInitial, sites }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

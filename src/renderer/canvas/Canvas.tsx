@@ -5132,6 +5132,7 @@ export function Canvas({
         )}
         {!merged && <HintStrip seen={hintsSeen} />}
         <CanvasHud
+          updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}
           cursor={cursor}
           selectedId={selectedId}

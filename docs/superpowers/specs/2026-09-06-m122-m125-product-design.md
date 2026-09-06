@@ -29,7 +29,7 @@ dormant panel's log answers like a live one: that is the point of the durable lo
   (id) => TranscriptTurn[] }, caps: { maxHits, maxPerPanel }) → PanelSearchResult`, where
   `PanelSearchResult = { hits: PanelSearchHit[]; capped: boolean; cap: number; redacted:
   number }` and `PanelSearchHit = { panelId, kind: 'scrollback' | 'transcript', line, lineIndex?,
-  turnIndex?, context: string }`. A transcript hit is a text block's line containing the
+  turnIndex? }` (a `context` field was designed and dropped: the line is the context). A transcript hit is a text block's line containing the
   query (case-insensitive), `turnIndex` naming the turn. Every `line` and `context` is the
   REDACTED text (`redactSecrets` per line; the counts summed onto `redacted`). The cap is
   stated on the result (`MEMORY_MAX`'s shape), never silent.

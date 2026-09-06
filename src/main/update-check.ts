@@ -109,6 +109,9 @@ export async function checkForUpdate(current: string, deps: UpdateCheckDeps): Pr
     if (newest === null || compareVersions(r.tag_name, newest.tag_name) > 0) newest = r
   }
   const shown = current.replace(/^v/i, '')
-  if (newest === null || compareVersions(newest.tag_name, current) <= 0) return { kind: 'current', version: shown }
+  // Nothing published is NOT "up to date": a fork, a prerelease-only feed or an
+  // empty one would read current forever. The third state, with the fact.
+  if (newest === null) return { kind: 'could-not-check', reason: `no releases are published for ${deps.repo}` }
+  if (compareVersions(newest.tag_name, current) <= 0) return { kind: 'current', version: shown }
   return { kind: 'newer', version: newest.tag_name.replace(/^v/i, ''), url: newest.html_url, ...(newest.publishedAt === undefined ? {} : { publishedAt: newest.publishedAt }) }
 }

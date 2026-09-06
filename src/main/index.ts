@@ -1640,7 +1640,7 @@ app.whenReady().then(async () => {
       // transcript half is a chat's own durable file and answers regardless
       // — the palette's off reason says so.
       search: (panelIds, query) => {
-        const kinds = new Map(layoutStore.initial().panels.map((p) => [p.id, p.kind ?? 'terminal'] as const))
+        const kinds = new Map((layoutStore.mergedWorkspaces().find((w) => w.active)?.panels ?? []).map((p) => [p.id, p.kind ?? 'terminal'] as const))
         const panels = panelIds.map((id) => ({ id, kind: kinds.get(id) ?? 'terminal' }))
         return searchPanels(query, panels, {
           scrollback: (ids, q, caps) => layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.search(ids, q, caps) : Promise.resolve([]),

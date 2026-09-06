@@ -379,7 +379,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SCROLLBACK_SEARCH, (_event, query: string): Promise<PanelSearchResult> => {
     // M122. The ACTIVE workspace's panels: a hit in another workspace would fly
     // nowhere (goToPanel names a panel on this canvas). A second scope later.
-    return scrollback.search(layoutStore.initial().panels.map((p) => p.id), query)
+    // `initial()` applies restore.layout and answers NO panels with it off — search
+    // would go quiet with nothing to say why (the verifier found it). The active
+    // ROW of the merged list carries every panel whatever the setting says.
+    return scrollback.search((layoutStore.mergedWorkspaces().find((w) => w.active)?.panels ?? []).map((p) => p.id), query)
   })
   ipcMain.handle(IPC.PTY_CREATE, (_event, spec: PanelSpec) => {
     // M65. Every spawn's directory joins the recent list, here rather than

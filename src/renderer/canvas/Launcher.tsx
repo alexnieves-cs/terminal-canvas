@@ -157,7 +157,7 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
         return (
           <p className="launcher__env" data-launcher-update data-launcher-update-version={update.result.version}>
             <span data-tone="needs-you">{update.result.version} is out</span>
-            {' — '}<span className="launcher__env-hint">nothing is installed by the app; download it from the release page</span>
+            {' — '}<span className="launcher__env-hint">the app does not install it — download from the release page</span>
             {onOpenRelease !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-open-release title={url} {...shellControl(() => onOpenRelease(url))}>Open release</button>
             )}

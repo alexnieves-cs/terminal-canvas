@@ -76,17 +76,22 @@ export async function searchPanels(
     if (panel.kind !== 'chat') continue
     let turns: TranscriptTurn[] = []
     try { turns = deps.transcript(panel.id) } catch { turns = [] }
+    // A chat that fills ITS cap stops only itself (the next chat is still
+    // read); only the total cap ends the search and says so — the first cut
+    // broke out of every chat at one chat's fifth line, and the row said
+    // `the first 50 matches` over an answer of five.
     let perPanel = 0
-    for (let i = turns.length - 1; i >= 0; i -= 1) {
+    let panelFull = false
+    for (let i = turns.length - 1; i >= 0 && !panelFull && !capped; i -= 1) {
       const turn = turns[i]
       if (turn === undefined) continue
       for (const line of textOf(turn).split('\n')) {
         if (line.trim() === '' || !line.toLowerCase().includes(q)) continue
-        if (hits.length >= caps.maxHits || perPanel >= caps.maxPerPanel) { capped = true; break }
+        if (hits.length >= caps.maxHits) { capped = true; break }
+        if (perPanel >= caps.maxPerPanel) { panelFull = true; break }
         push({ panelId: panel.id, kind: 'transcript', line: line.trim(), turnIndex: i })
         perPanel += 1
       }
-      if (capped) break
     }
     if (capped) break
   }

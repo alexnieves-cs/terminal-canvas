@@ -2039,7 +2039,7 @@ const WS = [
   const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: { hits: [{ panelId: 'p2', kind: 'scrollback', lineIndex: 3, line: 'FAIL 3 the writer' }], capped: false, cap: 50, redacted: 0 } })), 'search.hit.p2.3')
   ok('find.4 the empty search names the term once and a hit row leads with the panel\'s name',
     empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
-      hit && hit.title === 'web front' && hit.subtitle === 'FAIL 3 the writer',
+      hit && hit.title.startsWith('web front') && hit.subtitle === 'FAIL 3 the writer',
     JSON.stringify({ empty: empty && [empty.title, empty.subtitle], hit: hit && [hit.title, hit.subtitle] }))
 }
 

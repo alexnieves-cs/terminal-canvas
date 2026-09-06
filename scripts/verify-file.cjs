@@ -1268,7 +1268,9 @@ const p = (name) => join(DIR, name)
     const tlog = F.createAgentTranscriptLog({ dir: join(dirS, 'transcripts') })
     tlog.appendTurn('c1', { id: 'u-1', role: 'user', blocks: [{ type: 'text', text: 'why does the watchdog fire?' }], at: 1 })
     tlog.appendTurn('c1', { id: 'a-1', role: 'assistant', blocks: [{ type: 'text', text: 'the flush gate is the cause\nsee onExit' }], at: 2 })
-    const panels = [{ id: 'n1', kind: 'terminal', title: 'api' }, { id: 'c1', kind: 'chat', title: 'api (chat)' }, { id: 'n9', kind: 'terminal', title: 'nothing' }]
+    tlog.appendTurn('c2', { id: 'a-2', role: 'assistant', blocks: [{ type: 'text', text: 'gate one\ngate two\ngate three\ngate four' }], at: 3 })
+    tlog.appendTurn('c3', { id: 'a-3', role: 'assistant', blocks: [{ type: 'text', text: 'the last gate' }], at: 4 })
+    const panels = [{ id: 'n1', kind: 'terminal', title: 'api' }, { id: 'c1', kind: 'chat', title: 'api (chat)' }, { id: 'c2', kind: 'chat', title: 'busy' }, { id: 'c3', kind: 'chat', title: 'last' }, { id: 'n9', kind: 'terminal', title: 'nothing' }]
     const deps = { scrollback: (ids, q, caps) => slog.search(ids, q, caps), transcript: (id) => tlog.read(id).turns }
     const caps = { maxHits: 50, maxPerPanel: 10 }
     const gate = await F.searchPanels('gate', panels, deps, caps)
@@ -1276,13 +1278,15 @@ const p = (name) => join(DIR, name)
     const secret = await F.searchPanels('ghp_', panels, deps, caps)
     const one = await F.searchPanels('e', panels, deps, { maxHits: 1, maxPerPanel: 10 })
     const none = await F.searchPanels('zzqx', panels, deps, caps)
-    ok('psearch.1 a transcript hit names its chat and turn with kind transcript; a scrollback hit names its line with kind scrollback (case-insensitive); a planted token never returns and is counted as redacted; maxHits 1 over both logs is capped and SAYS the cap; a panel with no file answers nothing and throws nothing; no match is an empty, uncapped result',
-      gate.hits.length === 1 && gate.hits[0].panelId === 'c1' && gate.hits[0].kind === 'transcript' && gate.hits[0].turnIndex === 1 && /flush gate/.test(gate.hits[0].line) && gate.capped === false && gate.redacted === 0 &&
+    const perPanel = await F.searchPanels('gate', panels, deps, { maxHits: 50, maxPerPanel: 2 })
+    ok('psearch.1 a chat that fills its per-panel cap stops only itself (the next chat still answers, uncapped); a transcript hit names its chat and turn with kind transcript; a scrollback hit names its line with kind scrollback (case-insensitive); a planted token never returns and is counted as redacted; maxHits 1 over both logs is capped and SAYS the cap; a panel with no file answers nothing and throws nothing; no match is an empty, uncapped result',
+      gate.hits.filter((h) => h.panelId === 'c1').length === 1 && gate.hits[0].panelId === 'c1' && gate.hits[0].kind === 'transcript' && gate.hits[0].turnIndex === 1 && /flush gate/.test(gate.hits[0].line) && gate.capped === false && gate.redacted === 0 &&
+        perPanel.hits.filter((h) => h.panelId === 'c2').length === 2 && perPanel.hits.some((h) => h.panelId === 'c3') && perPanel.capped === false &&
         foo.hits.length === 1 && foo.hits[0].panelId === 'n1' && foo.hits[0].kind === 'scrollback' && typeof foo.hits[0].lineIndex === 'number' &&
         secret.hits.length === 1 && /\[redacted github token\]/.test(secret.hits[0].line) && !/ghp_abc/.test(JSON.stringify(secret)) && secret.redacted === 1 &&
         one.hits.length === 1 && one.capped === true && one.cap === 1 &&
         none.hits.length === 0 && none.capped === false,
-      JSON.stringify({ gate, foo, secret, one, none }))
+      JSON.stringify({ gate, foo, secret, one, none, perPanel }))
   } catch (e) { ok('psearch.1 (threw)', false, String(e)) }
   // M123 — update.1. THE UPDATE CHECK, pure over an injected fetcher. Three
   // states and never two: `current`, `newer` (with the release's url) and
@@ -1325,7 +1329,7 @@ const p = (name) => join(DIR, name)
         threw.kind === 'could-not-check' && /ENOTFOUND/.test(threw.reason) &&
         notJson.kind === 'could-not-check' && /the releases feed could not be read/.test(notJson.reason) &&
         notList.kind === 'could-not-check' && /the releases feed could not be read/.test(notList.reason) &&
-        onlyPre.kind === 'current' && onlyPre.version === '3.0.0' &&
+        onlyPre.kind === 'could-not-check' && /no releases are published/.test(onlyPre.reason) &&
         cmp > 0 && cmpEq === 0 &&
         repo === 'acme/canvas' && repoStr === 'acme/canvas' && noRepo === null &&
         urls.every((u) => u === 'https://api.github.com/repos/acme/canvas/releases'),
