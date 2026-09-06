@@ -1239,6 +1239,35 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ found, direct, none, key, badKey, good, noPlace, noRepo, gitRefused, gateRefused, unknownMate, typedNoRoot, calls }))
   } catch (e) { ok('lane.1 (threw)', false, String(e)) }
 
+  /* ---- M125: plugin-list, over a fake runner ---- */
+  try {
+    const RECORDED = JSON.stringify([
+      { id: 'superpowers@claude-plugins-official', version: '6.3.0', scope: 'user',
+        enabled: true, installPath: '/tmp/p/superpowers/6.3.0' },
+      { id: 'atomic-agents@claude-plugins-official', version: 'b15c', scope: 'user',
+        enabled: false, installPath: '/tmp/p/atomic/b15c' }
+    ])
+    const fake = (out, code) => () => Promise.resolve({ stdout: out, code })
+
+    const okRes = await F.listPlugins(fake(RECORDED, 0))
+    ok('plugins.1a the recorded JSON parses',
+       okRes.kind === 'ok' && okRes.plugins.length === 1, JSON.stringify(okRes))
+    ok('plugins.1b only ENABLED plugins are returned',
+       okRes.kind === 'ok' && okRes.plugins[0].id.startsWith('superpowers'),
+       'a disabled plugin is unavailable to every agent; listing it answers the pane with a lie')
+
+    const bad = await F.listPlugins(fake('not json', 0))
+    ok('plugins.1c unparseable output is UNKNOWN, never an empty list',
+       bad.kind === 'unknown' && typeof bad.why === 'string', JSON.stringify(bad))
+
+    const nonzero = await F.listPlugins(fake('', 127))
+    ok('plugins.1d an absent CLI is UNKNOWN', nonzero.kind === 'unknown', JSON.stringify(nonzero))
+
+    const slow = await F.listPlugins(() => new Promise(() => {}), 50)
+    ok('plugins.1e a hung CLI times out to UNKNOWN rather than hanging the read',
+       slow.kind === 'unknown' && /timed out/i.test(slow.why), JSON.stringify(slow))
+  } catch (e) { ok('plugins.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

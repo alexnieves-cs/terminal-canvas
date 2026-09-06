@@ -762,6 +762,36 @@ const write = (rel, text) => {
     chmodSync(join(CWD, '.claude', 'skills', 'locked'), 0o755)
   }
 
+  /* ---- M125: a plugin's skills, walked from installPath, total capped ---- */
+  try {
+    const pluginRoot = p('plugin-demo')
+    write(join('plugin-demo', 'skills', 'from-plugin', 'SKILL.md'),
+      '---\nname: from-plugin\ndescription: Ships with the plugin.\n---\n')
+    // Enough sibling skill directories to push the TOTAL (user + project +
+    // plugin) past SKILLS_MAX, so a cap that were per-source rather than
+    // shared would pass this by accident.
+    for (let i = 0; i < T.SKILLS_MAX + 10; i++) {
+      write(join('plugin-demo', 'skills', `filler-${i}`, 'SKILL.md'),
+        `---\nname: filler-${i}\ndescription: Filler.\n---\n`)
+    }
+    const plugins = [{ id: 'demo-plugin@marketplace', installPath: pluginRoot, enabled: true }]
+    const withPlugins = T.readToolbox({ cwd: CWD, home: HOME, plugins })
+    const pinv = withPlugins.kind === 'inventory' ? withPlugins.inventory : null
+    const skills2 = pinv ? pinv.entries.filter((e) => e.kind === 'skill') : []
+    const fromPlugin = skills2.find((e) => e.name === 'from-plugin')
+    ok('skill.2a a plugin skill is stamped with its pluginId and scope user',
+       !!fromPlugin && fromPlugin.pluginId === 'demo-plugin@marketplace' && fromPlugin.scope === 'user',
+       JSON.stringify(fromPlugin))
+    ok('skill.2b a non-plugin skill carries no pluginId key at all',
+       skills2.filter((e) => e.name !== 'from-plugin' && !e.name.startsWith('filler-'))
+         .every((e) => !('pluginId' in e)),
+       'absent, never pluginId: undefined')
+    ok('skill.2c SKILLS_MAX is the TOTAL across scopes and plugins, not per source',
+       skills2.length <= T.SKILLS_MAX, `${skills2.length} skills, cap ${T.SKILLS_MAX}`)
+  } catch (e) {
+    ok('skill.2 (threw)', false, String(e))
+  }
+
   /* ------------------------------------------------------- report ----- */
   console.log('')
   const failed = results.filter((r) => !r.pass)
