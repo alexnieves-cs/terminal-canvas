@@ -701,6 +701,49 @@ console.log('\n' + '='.repeat(60))
     offenders.join(', ') || 'clean')
 }
 
+// M112 — telemetry.5 (fix round 1, CRITICAL). THE TRANSPORT'S WIRING, PINNED
+// AS TEXT. The end-to-end hand check is owed (no DSN at hand — see the
+// owed item in docs/load-bearing.md), so nothing in this repo's suites
+// drives a real Sentry envelope across the IPC boundary. What IS cheaply
+// and honestly reachable from plain node is the SHAPE that boundary
+// depends on, so a later edit cannot silently reintroduce the exact
+// failure fix round 1 found: Classic IPC mode with nothing exposing
+// `window.__SENTRY_IPC__` in the main world, which sends the renderer's
+// SDK fetching `sentry-ipc://…` instead — refused by the CSP with no
+// error at all.
+//
+// Three textual facts, each one a thing that was WRONG before fix round 1
+// and is checked here so it cannot quietly become wrong again:
+//   1. `src/preload/index.ts` imports `hookupIpc` from the NON-side-effecting
+//      `@sentry/electron/preload-namespaced` entry (never the plain
+//      `/preload`, which runs it unconditionally at module load and cannot
+//      be gated) and calls it INSIDE the `if (telemetryEnabled)` gate.
+//   2. That file never re-imports `@sentry/electron/renderer` — the dead
+//      `sentryRendererInit()` path fix round 1 removed, which ran in an
+//      isolated world, captured nothing, and used the same doomed fetch.
+//   3. `src/renderer/main.tsx` passes an explicit `integrations` array
+//      naming `globalHandlersIntegration` to its own `init()` — with
+//      `defaultIntegrations: false` and no explicit list, that init call
+//      would install nothing at all, and the owed hand check would have
+//      failed even if the transport worked.
+//
+// This is a guard on a SHAPE, not a proof the transport works: it cannot
+// see whether `hookupIpc()` actually resolves before the renderer's own
+// `init()` runs, or whether main's real `ipcMain` listeners receive a
+// real envelope. That residual is recorded explicitly in the owed hand
+// check (docs/load-bearing.md).
+{
+  const preloadSrc = stripComments(read('src/preload/index.ts') ?? '')
+  const rendererSrc = stripComments(read('src/renderer/main.tsx') ?? '')
+  const importsNamespacedHookup = /from ['"]@sentry\/electron\/preload-namespaced['"]/.test(preloadSrc) && /\bhookupIpc\b/.test(preloadSrc)
+  const hookupInsideGate = /if\s*\(telemetryEnabled\)\s*\{\s*hookupIpc\(\)\s*\}/.test(preloadSrc)
+  const noDeadRendererImport = !/@sentry\/electron\/renderer/.test(preloadSrc)
+  const rendererHasGlobalHandlers = /@sentry\/electron\/renderer/.test(rendererSrc) && /globalHandlersIntegration/.test(rendererSrc)
+  ok('telemetry.5 the preload exposes window.__SENTRY_IPC__ via the non-side-effecting hookupIpc(), gated and never paired with the dead renderer-SDK import; the renderer\'s own init() names globalHandlersIntegration rather than relying on defaultIntegrations',
+    importsNamespacedHookup && hookupInsideGate && noDeadRendererImport && rendererHasGlobalHandlers,
+    JSON.stringify({ importsNamespacedHookup, hookupInsideGate, noDeadRendererImport, rendererHasGlobalHandlers }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

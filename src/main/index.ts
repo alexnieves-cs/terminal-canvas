@@ -51,7 +51,6 @@ import { claudeCliRunner } from './claude-cli-runner'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
-import { init as sentryInit, IPCMode, onUncaughtExceptionIntegration, onUnhandledRejectionIntegration, electronMinidumpIntegration, linkedErrorsIntegration, functionToStringIntegration } from '@sentry/electron/main'
 import { telemetryPlan, scrubEvent } from './telemetry'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
@@ -956,32 +955,68 @@ app.whenReady().then(async () => {
   // renderer learns the decision as an argv flag, not a channel). The ~100 ms
   // of boot above this line is uncovered, and that is the trade. The
   // minidump integration — process memory — rides only on its own setting.
+  //
+  // Fix round 1 (review, IMPORTANT 1): `@sentry/electron/main` pulls in all
+  // of `@sentry/node`, and `externalizeDepsPlugin` leaves that as a real
+  // `require()` in `out/main/index.js` — a static top-level import would run
+  // it on EVERY launch, DSN or not, which is exactly the load the posture
+  // ("no process may load or initialise the SDK at all" with no DSN)
+  // forbids. The dynamic `import()` below only executes once `plan.on` is
+  // true, matching the shape `renderer/main.tsx` already used.
   {
     const plan = telemetryPlan((id) => layoutStore.getSetting(id))
     if (plan.on) {
-      const paths = { userData: app.getPath('userData'), home: app.getPath('home') }
-      const integrations = [onUncaughtExceptionIntegration(), onUnhandledRejectionIntegration(), linkedErrorsIntegration(), functionToStringIntegration()]
-      if (plan.nativeCrashes) integrations.push(electronMinidumpIntegration())
-      sentryInit({
-        dsn: plan.dsn,
-        release: `terminal-canvas@${app.getVersion()}`,
-        sendDefaultPii: false,
-        defaultIntegrations: false,
-        integrations,
-        // Classic rides Electron IPC to main, which holds the DSN and the
-        // scrubber. Protocol mode registers a `sentry-ipc://` handler the
-        // renderer CSP (`default-src 'self'`) would refuse with no error —
-        // so the mode is named here, never left at the SDK's own default
-        // (`Both`). This is a MAIN-only option in the real 7.18.0 types
-        // (`ElectronMainOptions`, not `ElectronRendererOptions`): it decides
-        // how main LISTENS, so the renderer- and preload-side `init()` calls
-        // below take no `ipcMode` at all — passing one there does not typecheck.
-        ipcMode: IPCMode.Classic,
-        beforeSend: (event) => scrubEvent(event, paths) as typeof event | null,
-        beforeBreadcrumb: () => null
-      })
-      telemetryOn = true
-      console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)
+      // Fix round 1 (review, IMPORTANT 2): this whole block sits inside
+      // `app.whenReady().then(async () => {…})` with no `.catch` on that
+      // chain, and `createWindow()` is hundreds of lines below. A DSN that
+      // passes telemetryPlan's regex but upsets the SDK (or a minidump
+      // handler that fails to install) would otherwise throw here, becoming
+      // an unhandled rejection that leaves the app permanently window-less
+      // — the exact failure mode `renderer/main.tsx`'s own neighbouring
+      // comment already names as "not hypothetical", now reachable from an
+      // opt-in diagnostics feature nobody asked to depend on for the app to
+      // open at all. Caught, logged, and `telemetryOn` stays false: a failed
+      // telemetry init must degrade to off, never to a blank window.
+      try {
+        const { init: sentryInit, IPCMode, onUncaughtExceptionIntegration, onUnhandledRejectionIntegration, electronMinidumpIntegration, linkedErrorsIntegration, functionToStringIntegration } = await import('@sentry/electron/main')
+        const paths = { userData: app.getPath('userData'), home: app.getPath('home') }
+        const integrations = [onUncaughtExceptionIntegration(), onUnhandledRejectionIntegration(), linkedErrorsIntegration(), functionToStringIntegration()]
+        if (plan.nativeCrashes) integrations.push(electronMinidumpIntegration())
+        sentryInit({
+          dsn: plan.dsn,
+          release: `terminal-canvas@${app.getVersion()}`,
+          sendDefaultPii: false,
+          defaultIntegrations: false,
+          integrations,
+          // Classic rides Electron IPC to main, which holds the DSN and the
+          // scrubber. Protocol mode registers a `sentry-ipc://` handler the
+          // renderer CSP (`default-src 'self'`) would refuse with no error —
+          // so the mode is named here, never left at the SDK's own default
+          // (`Both`). This is a MAIN-only option in the real 7.18.0 types
+          // (`ElectronMainOptions`, not `ElectronRendererOptions`): it
+          // decides how main LISTENS, so `main.tsx`'s renderer-side
+          // `init()` call takes no `ipcMode` at all — passing one there
+          // does not typecheck. What DOES need pairing on that side is
+          // `preload/index.ts`'s `hookupIpc()` call (fix round 1, CRITICAL):
+          // Classic mode with nothing exposing `window.__SENTRY_IPC__`
+          // means the renderer falls back to fetching `sentry-ipc://…`,
+          // which the CSP refuses with no error — the silent failure this
+          // feature exists to avoid.
+          ipcMode: IPCMode.Classic,
+          // Fix round 1 (review, MINOR 1): `scrubEvent` returns `Dict | null`
+          // (`Record<string, unknown> | null`), which is not provably
+          // related to Sentry's `Event` type — going through `unknown`
+          // makes that widening explicit rather than asserting a direct
+          // relationship that does not exist. `scrubEvent` itself is
+          // Task 3's and stays unmodified.
+          beforeSend: (event) => scrubEvent(event, paths) as unknown as typeof event | null,
+          beforeBreadcrumb: () => null
+        })
+        telemetryOn = true
+        console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)
+      } catch (error: unknown) {
+        console.error('[startup] telemetry failed to initialise; continuing without it', error)
+      }
     } else {
       console.log(`[startup] telemetry=off (${plan.reason})`)
     }

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
-import { init as sentryRendererInit } from '@sentry/electron/renderer'
+import { hookupIpc } from '@sentry/electron/preload-namespaced'
 import type { WatcherStateEvent } from '@shared/ipc-contract'
 import type { AgentSessionEvent } from '../shared/agent-session'
 import type { PersistedRoutine } from '../shared/routines'
@@ -48,16 +48,31 @@ function subscribe<T>(channel: string, listener: (payload: T) => void): () => vo
 
 // M112. The flag main stamped on this window's argv. sandbox is false, so
 // process.argv is readable here; the renderer itself never sees argv, which
-// is why the fact crosses as a bridge FIELD. When on, the preload inits too:
-// with contextIsolation the SDK cannot see this world otherwise.
+// is why the fact crosses as a bridge FIELD.
+//
+// Fix round 1 (review): this preload does NOT call the renderer SDK's own
+// init() — it never did anything useful here. Classic IPC mode (main pinned
+// it) needs `window.__SENTRY_IPC__` exposed into the MAIN world before the
+// renderer's init() runs; without it, `renderer/ipc.js`'s own
+// `getImplementation` falls back to fetching `sentry-ipc://…`, which the CSP
+// (`default-src 'self'`) refuses with NO error — the exact silent failure
+// this whole feature exists to avoid, and main pinning Classic makes worse
+// (Both mode's IPC-first, fetch-fallback behaviour becomes fetch-ONLY, since
+// nothing ever registers the protocol handler either). `hookupIpc()` is the
+// `@sentry/electron/preload-namespaced` entry point that does exactly one
+// thing — install a `sendEnvelope`/`sendScope`/… object on `window` and
+// bridge it into the main world via `contextBridge.exposeInMainWorld` — with
+// none of `@sentry/core`'s weight behind it (confirmed against the installed
+// package: it imports only `electron` and its own tiny `common/ipc.js`), so
+// it is called PLAINLY here rather than behind a dynamic import the way
+// `/main` and `/renderer` are: there is no SDK instrumentation to defer,
+// only a namespacing utility, and gating the CALL (not the import) is enough
+// to keep a `--tc-telemetry` off run from ever touching `window`.
+// verify:meta telemetry.5 pins this shape as text so a future edit cannot
+// silently swap this back for the dead `sentryRendererInit` path.
 const telemetryEnabled = process.argv.includes('--tc-telemetry=1')
 if (telemetryEnabled) {
-  // `ipcMode` is decided once, in main/index.ts's own sentryInit call — it is
-  // a MAIN-only option in this SDK's real types (ElectronMainOptions), not
-  // part of ElectronRendererOptions, so it is never passed here. Main having
-  // pinned Classic is what keeps this process off the sentry-ipc:// protocol
-  // the renderer CSP would silently refuse.
-  sentryRendererInit({ defaultIntegrations: false, beforeBreadcrumb: () => null })
+  hookupIpc()
 }
 
 const bridge: CanvasBridge = {

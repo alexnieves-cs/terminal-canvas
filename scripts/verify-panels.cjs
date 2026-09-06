@@ -16211,8 +16211,12 @@ app.whenReady().then(async () => {
 
     // telemetry.4 (M112). OFF BY DEFAULT, OBSERVABLY. The harness passes no
     //   --tc-telemetry flag (main's plan is no-dsn), so the bridge field is
-    //   false and the renderer never loaded the SDK: no __SENTRY__ global.
-    //   Red first: the field did not exist.
+    //   false and the MAIN WORLD never loaded the SDK: no __SENTRY__ global.
+    //   Fix round 1 (review, MINOR 2): this observes the renderer's own
+    //   main-world init() only — it says nothing about the preload's
+    //   isolated world, which since fix round 1 calls hookupIpc() (not
+    //   init()) and so was never claimed to install a __SENTRY__ global
+    //   there either. Red first: the field did not exist.
     {
       const t = await wc.executeJavaScript(`({ field: window.canvas && window.canvas.telemetry ? window.canvas.telemetry.enabled : 'absent', sentry: typeof window.__SENTRY__ })`)
       ok('telemetry.4 with no DSN the bridge says telemetry is off and the renderer has no Sentry global',

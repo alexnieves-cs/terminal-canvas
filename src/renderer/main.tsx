@@ -61,9 +61,20 @@ async function boot(): Promise<void> {
   if (window.canvas.telemetry.enabled) {
     // No `ipcMode` here: it is a main-process-only option (real 7.18.0
     // types put it on `ElectronMainOptions`, not `ElectronRendererOptions`)
-    // and main already pinned Classic in its own sentryInit call.
-    const { init } = await import('@sentry/electron/renderer')
-    init({ defaultIntegrations: false, beforeBreadcrumb: () => null })
+    // and main already pinned Classic in its own sentryInit call. What DOES
+    // belong on this side of that pairing is `preload/index.ts`'s
+    // `hookupIpc()` (fix round 1, CRITICAL): without it `window.__SENTRY_IPC__`
+    // is never exposed into this world, and this init() would fall back to
+    // fetching `sentry-ipc://…` — refused by the CSP with no error.
+    //
+    // Fix round 1 (review, CRITICAL, second half): `defaultIntegrations:
+    // false` with no `integrations` here installed NOTHING — not even the
+    // global error/rejection handlers an error-reporting SDK exists for.
+    // `globalHandlersIntegration` is the one this process actually needs;
+    // it is a real export of this SDK's renderer entry (confirmed against
+    // the installed package, re-exported from `@sentry/browser`).
+    const { init, globalHandlersIntegration } = await import('@sentry/electron/renderer')
+    init({ defaultIntegrations: false, integrations: [globalHandlersIntegration()], beforeBreadcrumb: () => null })
   }
 
   // A failed load must still open a WORKING canvas. parseLayout never throws
