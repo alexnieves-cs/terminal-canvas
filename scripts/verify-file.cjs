@@ -1239,6 +1239,21 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ found, direct, none, key, badKey, good, noPlace, noRepo, gitRefused, gateRefused, unknownMate, typedNoRoot, calls }))
   } catch (e) { ok('lane.1 (threw)', false, String(e)) }
 
+  // M120 — sandbox.1. THE SANDBOX CWD is the app's own folder under
+  // userData/sandbox/<id>: never a place, never the home fallback, made on
+  // create and removed on DISPOSE (not on exit — a chat that exits and
+  // resumes keeps its files). Pure over injected mkdir/rm.
+  try {
+    const made = [], removed = []
+    const r1 = F.resolveSandboxCwd('/ud', 'c9', { mkdir: (p) => { made.push(p) }, rm: (p) => { removed.push(p) } })
+    const r2 = F.resolveSandboxCwd('/ud', '../evil', { mkdir: (p) => { made.push(p) }, rm: () => {} })
+    F.disposeSandbox('/ud', 'c9', { mkdir: () => {}, rm: (p) => { removed.push(p) } })
+    F.disposeSandbox('/ud', 'c-never', { mkdir: () => {}, rm: (p) => { removed.push(p) } })
+    ok('sandbox.1 resolveSandboxCwd makes userData/sandbox/<id> and answers it; an id that is not a plain segment is refused by name and makes nothing; disposeSandbox removes the folder by the same rule',
+      r1.kind === 'cwd' && r1.path === '/ud/sandbox/c9' && made.length === 1 && made[0] === '/ud/sandbox/c9' && r2.kind === 'refused' && /id/.test(r2.reason) && removed.length === 2 && removed[0] === '/ud/sandbox/c9',
+      JSON.stringify({ r1, r2, made, removed }))
+  } catch (e) { ok('sandbox.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -1589,6 +1589,25 @@ const isResult = (l) => l.includes('"type":"result"')
     JSON.stringify({ r2, args: s2 && s2.args, interrupted, imgRefused, r3, n: spawns.length }))
 }
 
+{
+  /* M120 — sandbox.1. A chat with NO place spawns on the row's read-only mode: the adapter appends `sandboxArgs`, and a row without them refuses the send by name. */
+  let claudeArgs = [], codexArgs = [], copilotArgs = [], acpSend = null, threw = null
+  try {
+    const AD = M.adapters.BACKEND_ADAPTERS
+    claudeArgs = AD.claude.args({ cwd: '/s/c1', text: 'hi', resume: false, sessionId: 'u1', sandbox: true })
+    codexArgs = AD.codex.args({ cwd: '/s/c2', text: 'hi', resume: false, sessionId: '', sandbox: true })
+    copilotArgs = AD.copilot.args({ cwd: '/s/c3', text: 'hi', resume: false, sessionId: 'u3', sandbox: true })
+    const { manager, spawns } = makeManager({ binaries: { acp: { command: '/fake/bin/copilot' } } })
+    manager.create({ id: 'sb', cwd: '/s/sb', backend: 'acp', sandbox: true })
+    acpSend = { answer: manager.send('sb', 'hi'), spawned: spawns.length }
+  } catch (e) { threw = String(e) }
+  ok('sandbox.1 with `sandbox` on the input claude gets `--permission-mode plan`, codex `--sandbox read-only`, copilot `--deny-tool shell --deny-tool write`; a row with no sandboxArgs (acp) refuses the send by name and spawns nothing',
+    threw === null && claudeArgs.includes('--permission-mode') && claudeArgs[claudeArgs.indexOf('--permission-mode') + 1] === 'plan' &&
+      codexArgs[codexArgs.indexOf('--sandbox') + 1] === 'read-only' && copilotArgs.filter((a) => a === '--deny-tool').length === 2 && copilotArgs.includes('shell') && copilotArgs.includes('write') &&
+      acpSend && acpSend.answer === 'refused-sandbox' && acpSend.spawned === 0,
+    JSON.stringify({ threw, claudeArgs, codexArgs, copilotArgs, acpSend }))
+}
+
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */
   {
