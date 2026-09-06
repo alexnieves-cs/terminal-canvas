@@ -1438,6 +1438,24 @@ ok('74 a panel with no kind is not a review panel',
   ok('run.2 runCost sums priced usage and is absent when any panel is unpriced; no usage at all is zero',
     typeof priced === 'number' && priced > 0 && unpriced === undefined && none === 0,
     JSON.stringify({ priced, unpriced, none }))
+  // M121 — runs.seal.1. A run whose every panel is IDLE (or gone) is also
+  // abandoned: nothing will ever fire its remaining edges, so an open run
+  // beside idle panels reads `working` for ever (critic 11's stale seeded
+  // run). With an `idle` predicate the seal asks it per panel and seals only
+  // when every panel answers idle or is absent; a run with one panel still
+  // busy stays open; the outcome names the reason; a sealed run is untouched.
+  // Without the predicate the M79 rule holds unchanged (run.3 above).
+  const openAB = { id: 'ab', name: 'ab', panelIds: ['a', 'b'], edges: [], startedAt: 1, entries: [{ panelId: 'a', startedAt: 1 }, { panelId: 'b', startedAt: 1, endedAt: 2, outcome: 'exit 0' }] }
+  const openGone = { id: 'gone', name: 'gone', panelIds: ['zz'], edges: [], startedAt: 1, entries: [{ panelId: 'zz', startedAt: 1 }] }
+  const done = { id: 'd', name: 'done', panelIds: ['a'], edges: [], startedAt: 1, endedAt: 3, entries: [{ panelId: 'a', startedAt: 1 }] }
+  const present = new Set(['a', 'b'])
+  const busyA = V.sealAbandoned([openAB, openGone, done], 9, (id) => present.has(id) ? id !== 'a' : true)
+  const allIdle = V.sealAbandoned([openAB, openGone, done], 9, () => true)
+  ok('runs.seal.1 sealAbandoned(runs, at, idle) seals an open run only when every panel of it is idle or absent — a run with one busy panel stays open; one whose panels are all idle is sealed at `at` with an outcome naming the idle panels on its open entries; a run over a panel that no longer exists is sealed; a sealed run is untouched',
+    busyA[0].endedAt === undefined && busyA[0].entries[0].outcome === undefined && busyA[1].endedAt === 9 && busyA[2].endedAt === 3 &&
+      allIdle[0].endedAt === 9 && /idle/.test(allIdle[0].entries[0].outcome) && allIdle[0].entries[1].outcome === 'exit 0' && allIdle[1].endedAt === 9 && /idle/.test(allIdle[1].entries[0].outcome) &&
+      allIdle[2].endedAt === 3 && allIdle[2].entries[0].outcome === undefined,
+    JSON.stringify({ busyA, allIdle }))
 }
 
 // M16 (originally numbered 79-80b under this branch's own M13, which

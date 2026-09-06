@@ -44,5 +44,7 @@ module.exports = {
   ...require('../src/main/telemetry.ts'),
   /* M114. The lane: pure over injected origin/subdir readers, a fake gate and a fake worktree manager. */
   ...require('../src/main/board-repo.ts'),
-  ...require('../src/main/board-lane.ts')
+  ...require('../src/main/board-lane.ts'),
+  /* M120. The sandbox cwd, pure over injected mkdir/rm. */
+  ...require('../src/main/sandbox.ts')
 }

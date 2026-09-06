@@ -209,7 +209,7 @@ const spyActions = () => {
     beginBrowser: record('beginBrowser'),
     // M106
     toggleFlip: record('toggleFlip'),
-    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'),
+    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'), newSandboxChat: record('newSandboxChat'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
@@ -2321,7 +2321,7 @@ const WS = [
   // Guarded: a throw here would abort every check below it (verify-suites.md rule 1).
   const has = typeof P.backendOptions === 'function' && Array.isArray(P.BACKEND_IDS)
   const rows = has ? P.backendOptions({ claude: true, codex: false }) : []
-  const all = has ? P.backendOptions({ claude: true, codex: true }) : []
+  const all = has ? P.backendOptions({ claude: true, codex: true, copilot: true, acp: true }) : []
   ok('backends.1 backendOptions lists every registered backend in registry order with its id and label; an absent CLI disables its row naming PATH; a present one is enabled with no suffix',
     has && rows.length === P.BACKEND_IDS.length && rows[0].id === 'claude' && rows[0].disabled === false && rows[0].label === 'chat with claude' &&
       rows[1].id === 'codex' && rows[1].disabled === true && /PATH/.test(rows[1].label) &&
@@ -2372,16 +2372,23 @@ const WS = [
   const bench = has ? P.lineupPlan(P.LINEUPS.workbench, { cwd: '/w', worktrees: true, maxConcurrent: 0, liveAgents: 0 }) : null
   const swarm = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: true, maxConcurrent: 2, liveAgents: 1 }) : null
   const solo = has ? P.lineupPlan(P.LINEUPS.solo, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 0 }) : null
+  // M121. Sends ALREADY WAITING behind the ceiling take room too: a ceiling
+  // of 3 with one live and one queued has room for ONE more, so a Swarm of
+  // three queues two — the preview said one (verifier 9, second half).
+  const queuedAhead = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 3, liveAgents: 1, queued: 1 }) : null
+  const queuedNoCeiling = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 1, queued: 5 }) : null
   ok('lineup.1 the four lineups exist (solo, pair, workbench, swarm); in a Workbench launched into worktrees only the AGENT seat gets a lane and the shell and browser seats stay in the checkout; without worktrees no seat gets one',
     has && ids.join(',') === 'solo,pair,workbench,swarm' && bench !== null && bench.seats.length === 3 &&
       bench.seats.filter((s) => s.kind === 'agent').every((s) => s.lane === true) && bench.seats.filter((s) => s.kind !== 'agent').every((s) => s.lane === false) &&
       bench.seats.some((s) => s.kind === 'browser' && /localhost:3000/.test(s.url || '')) &&
       solo !== null && solo.seats.every((s) => s.lane === false),
     JSON.stringify({ ids, bench, solo }))
-  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing',
+  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing; (M121) sends already waiting take room too — one live and one queued under a ceiling of three queues two of three, the sentence names the waiting send, and with no ceiling a queue changes nothing',
     swarm !== null && swarm.sessions === 4 && swarm.agents === 3 && swarm.queued === 2 && /2 .*queue/.test(swarm.ceilingLine) && /ceiling of 2/.test(swarm.ceilingLine) &&
-      bench !== null && bench.queued === 0 && bench.ceilingLine === '',
-    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine }))
+      bench !== null && bench.queued === 0 && bench.ceilingLine === '' &&
+      queuedAhead !== null && queuedAhead.queued === 2 && /1 (already )?waiting/.test(queuedAhead.ceilingLine) &&
+      queuedNoCeiling !== null && queuedNoCeiling.queued === 0 && queuedNoCeiling.ceilingLine === '',
+    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine, queuedAhead: queuedAhead && { queued: queuedAhead.queued, line: queuedAhead.ceilingLine }, queuedNoCeiling: queuedNoCeiling && queuedNoCeiling.queued }))
 }
 
 // M113 — board.1. THE TYPED DOOR. `New work item…` is a canvas-group row (a
@@ -2399,6 +2406,43 @@ const WS = [
   ok('board.1 New work item… is a canvas-group row with no disabled reason that runs beginNewWorkItem',
     row !== undefined && row.group === 'canvas' && row.disabledReason === undefined && /New work item/.test(row.title) && calls.includes('beginNewWorkItem'),
     JSON.stringify({ row: row && { id: row.id, group: row.group, title: row.title, disabledReason: row.disabledReason }, calls }))
+}
+
+// M118 — sheet.copilot.1. THE THIRD ROW IN THE SHEET, and the prompt rule.
+// `backendOptions` lists copilot from the registry like any row (disabled
+// by name when absent); `supervisorRowReason(backend)` is the ONE sentence
+// the supervisor row, the routine mint and the dispatch verb read when a
+// row cannot carry an appended prompt — null for a row that can.
+{
+  let rows = [], reason = {}, threw = null
+  try {
+    rows = P.backendOptions({ claude: true, codex: false, copilot: true, acp: false })
+    reason = { claude: P.supervisorRowReason('claude'), copilot: P.supervisorRowReason('copilot'), acp: P.supervisorRowReason('acp') }
+  } catch (e) { threw = String(e) }
+  const cp = rows.find((r) => r.id === 'copilot'), acp = rows.find((r) => r.id === 'acp')
+  ok('sheet.copilot.1 the sheet lists `chat with copilot` enabled when the binary is present and `chat with copilot (acp) — not on PATH` when its is not; supervisorRowReason is null for claude and the row\'s own noPrompt sentence for copilot and acp',
+    threw === null && cp && cp.label === 'chat with copilot' && cp.disabled === false && acp && /PATH/.test(acp.label) && acp.disabled === true &&
+      reason.claude === null && typeof reason.copilot === 'string' && /appended prompt/.test(reason.copilot) && typeof reason.acp === 'string' && /appended prompt/.test(reason.acp),
+    JSON.stringify({ threw, cp, acp, reason }))
+}
+
+// M120 — sandbox.1. A CHAT WITH NO PLACE. The door is a canvas-group row per
+// row (`New chat (no folder)`), disabled by the row's own `noSandbox` sentence
+// for a row without `sandboxArgs`; `modelChoices(backend)` is the row's
+// closed list or null (free text).
+{
+  let rows = [], choices = {}, threw = null
+  try {
+    const c = ctx({ presets: [{ id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', agent: 'claude-code' }] })
+    rows = P.buildCommands(c).filter((r) => r.id.startsWith('chat.sandbox.'))
+    choices = { copilot: P.modelChoices('copilot'), claude: P.modelChoices('claude') }
+  } catch (e) { threw = String(e) }
+  const claude = rows.find((r) => r.id === 'chat.sandbox.claude'), acp = rows.find((r) => r.id === 'chat.sandbox.acp'), codex = rows.find((r) => r.id === 'chat.sandbox.codex')
+  ok('sandbox.1 New chat (no folder) is one spawn-group row per registered backend: enabled for claude when it is on the PATH, disabled by name for codex when it is not, and disabled with the row\'s noSandbox sentence for acp whatever the PATH says; modelChoices is copilot\'s closed list and null for claude',
+    threw === null && claude && claude.group === 'spawn' && claude.disabledReason === undefined && /no folder/.test(claude.title) &&
+      codex && /PATH/.test(codex.disabledReason || '') && acp && /read-only/.test(acp.disabledReason || '') &&
+      Array.isArray(choices.copilot) && choices.copilot.includes('gpt-5-mini') && !choices.copilot.includes('auto') && choices.claude === null,
+    JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
 }
 
 const failed = results.filter((r) => !r.pass)

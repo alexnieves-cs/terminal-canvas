@@ -715,11 +715,16 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (raw.supervisor === true) chat.supervisor = true
   // M114. A dispatched lane keeps its prompt across a relaunch, the same way.
   if (raw.dispatch === true) chat.dispatch = true
+  // M120. A chat with no place keeps its sandbox across a relaunch, the same way.
+  if (raw.sandbox === true) chat.sandbox = true
+  // M121. A routine's chat keeps its rule prompt across a relaunch, the same way.
+  if (raw.routine === true) chat.routine = true
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {
-    if (raw.backend === 'codex') chat.backend = 'codex'
-    else if (raw.backend !== 'claude') warnings.push(`panel ${id}: chat backend ${JSON.stringify(raw.backend)} is not claude or codex; using claude`)
+    // The ONE place a literal member is allowed (registry.1): absent-vs-malformed needs it.
+    if (raw.backend === 'codex' || raw.backend === 'copilot' || raw.backend === 'acp') chat.backend = raw.backend
+    else if (raw.backend !== 'claude') warnings.push(`panel ${id}: chat backend ${JSON.stringify(raw.backend)} is not claude, codex, copilot or acp; using claude`)
   }
   const agentOptions = parseAgentOptions(raw.agentOptions, `panel ${id}`, warnings)
   if (agentOptions !== undefined) chat.agentOptions = agentOptions

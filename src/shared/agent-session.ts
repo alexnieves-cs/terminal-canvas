@@ -1,6 +1,6 @@
 import type { AgentOptions, TokenTotals } from './cost'
 import type { TranscriptEvent, TranscriptTurn } from './transcript'
-import { BACKENDS, type AgentBackend } from './agent-backends'
+import { BACKENDS, type AgentBackend, type BackendDef } from './agent-backends'
 
 /**
  * M73. The agent-session runtime's PUBLIC shapes — what crosses the bridge.
@@ -52,6 +52,8 @@ export interface AgentSessionSpec {
   appendSystemPrompt?: string
   /** M100. The teammate this chat speaks as; main's Places gate reads it before the cwd resolves. */
   teammateId?: string
+  /** M120. A chat with NO place: main resolves the cwd to its own sandbox folder (never a place, never home) and spawns on the row's read-only mode. Refused beside a teammate. */
+  sandbox?: true
 }
 
 export interface PendingPermission {
@@ -92,6 +94,31 @@ export interface AgentSessionSnapshot {
   counters: AgentSessionCounters
   /** M97. Present while an auto run is live or just resolved (until dismissed by a new start or a dispose). */
   auto?: AutoStatus
+  /**
+   * M119. What the process's handshake ANSWERED (ACP's initialize): the
+   * measured fact for this process, which outranks the row's promise. Absent
+   * for every backend without a handshake, and until the handshake answers.
+   */
+  negotiated?: NegotiatedCapabilities
+  /** M119. The handshake has been written and not yet answered: the first send is held. Absent for every other row and once the session opens. */
+  awaitingHandshake?: true
+}
+
+/** M119. The capabilities a handshake states live; each absent when the agent said nothing about it. */
+export interface NegotiatedCapabilities {
+  loadSession?: boolean
+  image?: boolean
+}
+
+/**
+ * M119. Whether a message may carry an image: the handshake's answer when
+ * this process gave one, the row's promise otherwise. Pure, so the composer
+ * and the manager's `send` decide the same way — a composer that read the
+ * row alone would attach an image the runtime then refuses, and the user
+ * would see a refusal for a control that looked enabled.
+ */
+export function imagesAllowed(snapshot: { negotiated?: NegotiatedCapabilities } | null | undefined, row: BackendDef): boolean {
+  return snapshot?.negotiated?.image ?? row.images
 }
 
 export type ResultEvent = Extract<TranscriptEvent, { type: 'result' }> & {
@@ -104,7 +131,7 @@ export type AgentSessionEvent = { id: string } & (
   | ResultEvent
   | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
   | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'budget' }
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' }
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */
@@ -125,7 +152,7 @@ export type AgentSessionEvent = { id: string } & (
  * reached the ceiling its owner set, and the message was NOT stored — a
  * refused message is not a turn.
  */
-export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images'
+export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images' | 'refused-sandbox'
 
 /** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
 export type ChatAttachment =

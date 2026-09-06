@@ -8,8 +8,9 @@ import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { buildPushArgs } from './git-args'
+import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
 import { createBoardLane } from './board-lane'
-import { createPlacesGate, fsRealpath } from './places'
+import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
 import { parseTeammates, parseRoutines } from '@shared/layout-schema'
@@ -59,7 +60,7 @@ import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shar
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
-import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
+import { type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
@@ -179,6 +180,7 @@ let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
 /** M90. The second headless CLI, from the same probe. Null means the codex chat row is disabled by name. */
 let codexPath: string | null = null
+let copilotPath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
 // constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
@@ -862,7 +864,7 @@ app.whenReady().then(async () => {
   const env = await resolveShellEnv()
   loginEnv = env
   probedAt = Date.now()
-  for (const binary of ['claude', 'codex', 'git']) {
+  for (const binary of ['claude', 'codex', 'copilot', 'git']) {
     const found = whichFromEnv(binary, env)
     // The diagnostic and the review engine's git are ONE resolution, not two.
     // This loop already computed the right answer before M9a's fix round and
@@ -871,6 +873,7 @@ app.whenReady().then(async () => {
     if (binary === 'git') gitPath = found
     if (binary === 'claude') claudePath = found
     if (binary === 'codex') codexPath = found
+    if (binary === 'copilot') copilotPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
   // The bare name is kept when the probe found nothing: the spawn then fails
@@ -883,6 +886,8 @@ app.whenReady().then(async () => {
     // M90. Present only when found: an absent codex makes a codex send
     // `refused-backend`, never a spawn of a bare name that ENOENTs.
     ...(codexPath === null ? {} : { codex: { command: codexPath } }),
+    // M118/M119. Present only when found, like codex: the copilot binary serves both its JSONL row and its ACP row.
+    ...(copilotPath === null ? {} : { binaries: { copilot: { command: copilotPath }, acp: { command: copilotPath } } }),
     hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
     env,
     newSessionId: () => randomUUID(),
@@ -1311,13 +1316,25 @@ app.whenReady().then(async () => {
       // M99. Refused by the backend's ROW: the probe's path for that binary,
       // and the row's own `noCli` sentence. A lookup, never a switch.
       const backend = backendOf(spec)
-      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
+      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath, copilot: copilotPath, acp: copilotPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
-      // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
-      // to home could turn a refused folder into an allowed one silently.
-      const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
-      if (!place.ok) return { kind: 'refused', reason: place.reason }
-      const cwd = resolveCwd(spec.cwd)
+      // M120. A chat with NO place: the app's own folder, made here; the Places
+      // gate is bypassed BY CONSTRUCTION (the folder is the app's), and a
+      // teammate beside it is refused first — a teammate has places.
+      const sandboxRefusal = sandboxTeammateRefusal(spec)
+      if (sandboxRefusal !== null) return { kind: 'refused', reason: sandboxRefusal }
+      let cwd: string
+      if (spec.sandbox === true) {
+        const made = resolveSandboxCwd(app.getPath('userData'), spec.id, realSandboxFs)
+        if (made.kind === 'refused') return { kind: 'refused', reason: made.reason }
+        cwd = made.path
+      } else {
+        // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
+        // to home could turn a refused folder into an allowed one silently.
+        const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
+        if (!place.ok) return { kind: 'refused', reason: place.reason }
+        cwd = resolveCwd(spec.cwd)
+      }
       // M100. The brief rides EVERY spawn from the roster main holds — the
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
@@ -1347,8 +1364,11 @@ app.whenReady().then(async () => {
         images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
       }
       const answer = agentSessions?.send(id, text, images) ?? 'no-session'
-      if (answer === 'refused-backend') return { refused: REASON_NO_CODEX }
-      if (answer === 'refused-images') return { refused: REASON_CODEX_NO_IMAGES }
+      // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
+      const row = BACKENDS[agentSessions?.get(id)?.backend ?? 'claude']
+      if (answer === 'refused-backend') return { refused: row.reasons.noCli }
+      if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
+      if (answer === 'refused-images') return { refused: row.reasons.noImages }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
@@ -1367,7 +1387,8 @@ app.whenReady().then(async () => {
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)
-      if (drop) { agentTranscripts.drop(id); dropBaseline(id) }
+      // M120. The sandbox folder goes with the chat — on dispose, never on exit.
+      if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
     },
     // M98. `scope: 'session'` GRANTS the pending request's tool first, then
     // answers through the one `answerPermission` — the grant is keyed by the
@@ -1375,11 +1396,13 @@ app.whenReady().then(async () => {
     // renderer sent. A deny never grants, whatever the scope says.
     answer: ({ id, requestId, answer, scope }) => {
       const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
-      const answered = agentSessions?.answerPermission(id, requestId, answer) ?? false
-      // Granted only for a request that was really answered: a grant for a
-      // question the process never heard would outlive it invisibly.
-      if (answered && toolName !== undefined) approvals?.grant(id, toolName)
-      return answered
+      // M119. The grant goes FIRST so the answer itself can carry the vendor's
+      // word for it (ACP's allow_always — the manager reads preAnswer when it
+      // writes). `toolName` is defined only when the request is really PENDING
+      // in main's own record, so a grant for a question the process never heard
+      // cannot be minted here (the pending lookup above is the guard).
+      if (toolName !== undefined) approvals?.grant(id, toolName)
+      return agentSessions?.answerPermission(id, requestId, answer) ?? false
     },
     grants: (id) => approvals?.grantsOf(id) ?? [],
     revokeGrants: (id) => { approvals?.revoke(id) },

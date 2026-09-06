@@ -1,6 +1,7 @@
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
-import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
+import { BACKEND_IDS, DEFAULT_BACKEND } from '@shared/agent-backends'
+import { backendAvailable, claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
 import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
@@ -99,7 +100,7 @@ export interface PaletteActionsDeps {
   /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
   openBrowserPanel: (url: string) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
-  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>
+  beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true }) => Promise<SpawnResult>
   /** M92. Lock, pin and maximise, each with its opposite. */
   lockPanel: (id: string) => void
   unlockPanel: (id: string) => void
@@ -1270,6 +1271,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
             claudeAvailable: claudeOk,
             codexAvailable: codexAvailable(presetRows),
+            // M118. Every row's availability from the registry's order — a third row needs no new boolean.
+            available: Object.fromEntries(BACKEND_IDS.map((id) => [id, backendAvailable(presetRows, id)])),
             // M99. What live sessions have reported, for the model field's suggestions.
             reportedModels: reportedModels(),
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
@@ -1278,7 +1281,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             instantiate: instantiateTemplate,
             teammates: teammatesRef.current,
             // M104. The ceiling as read live: the preview says who queues before Enter.
-            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length },
+            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
+              // M121. Sends already waiting behind the ceiling take room too.
+              queued: panelsRef.current.reduce((n, p) => n + (isChatPanel(p) ? (getChat(p.rect.id).snapshot?.queued ?? 0) : 0), 0) },
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.
@@ -1288,9 +1293,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             submit: (values) => values.what.kind === 'supervisor'
               ? beginNewChat({ cwd: values.cwd, title: values.title === '' ? 'supervisor' : values.title, agentOptions: values.agentOptions, appendSystemPrompt: SUPERVISOR_PROMPT, message: 'What is this canvas doing?' })
               : values.what.kind === 'chat'
-                ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
-                : values.what.kind === 'codex'
-                  ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, backend: 'codex' })
+                // M118. The backend by NAME from the arm, never a switch: absent is claude.
+                ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, ...(values.what.backend === undefined ? {} : { backend: values.what.backend }) })
                 : values.what.kind === 'lineup'
                   // M104. Seat by seat through the ordinary doors: an agent seat is
                   // the first available agent preset (a worktree lane only when
@@ -1840,7 +1844,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     commentPr: (itemId) => boardVerbsRef.current?.commentPr?.(itemId),
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
-    openBoard: () => chooseNavigator('board')
+    openBoard: () => chooseNavigator('board'),
+    // M120. The sandbox flag rides the create; the backend by NAME from the row, absent is claude.
+    newSandboxChat: (backend) => { void beginNewChat({ sandbox: true, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }) }
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,

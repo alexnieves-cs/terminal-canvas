@@ -11,6 +11,10 @@ module.exports = {
   transcript: require('../src/shared/transcript'),
   /* M90. The codex adapter: codex's JSONL to the same TranscriptEvent union. */
   codex: require('../src/shared/codex-transcript'),
+  /* M118. copilot's JSONL door. Absent until Task 2 lands — the check guards on it. */
+  copilot: (() => { try { return require('../src/shared/copilot-transcript') } catch { return undefined } })(),
+  /* M119. The ACP codec: JSON-RPC over the line seam to the same union, both directions. */
+  acp: require('../src/shared/acp-transcript'),
   session: require('../src/main/agent-session'),
   args: require('../src/main/agent-session-args'),
   quit: require('../src/main/quit'),
@@ -31,6 +35,8 @@ module.exports = {
   backends: require('../src/shared/agent-backends'),
   /* M114. ChatSource's carry for the dispatch mark. */
   chatPanel: require('../src/shared/chat-panel'),
+  /* M120. The adapters' argv builders, for the sandbox arm. */
+  adapters: require('../src/main/backend-adapters'),
   /* M114. DISPATCH_PROMPT lives beside SUPERVISOR_PROMPT in the shared module. */
   sharedSession: require('../src/shared/agent-session'),
   cost: require('../src/shared/cost')

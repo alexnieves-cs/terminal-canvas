@@ -60,6 +60,8 @@ export interface WorkspaceVerbsDeps {
   setHistory: Dispatch<SetStateAction<History<Panel[]>>>
   setMerged: Dispatch<SetStateAction<boolean>>
   setMergedData: Dispatch<SetStateAction<MergedWorkspace[] | null>>
+  /** M121. Flip is a VIEW state; a switch is a new view, so it lands unflipped. */
+  setFlipped: Dispatch<SetStateAction<boolean>>
 }
 
 export interface WorkspaceVerbs {
@@ -109,7 +111,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
-    setMergedData
+    setMergedData, setFlipped
   } = deps
 
   /**
@@ -295,6 +297,11 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         setGroups(result.state.groups ?? [])
         setRuns(sealAbandoned(result.state.runs ?? [], Date.now()))
         forgetOpenRuns()
+        // M121. A flipped canvas stayed flipped across a switch (verifier 12):
+        // the incoming workspace's panels arrived as summaries with nothing on
+        // screen saying why. Flip is never persisted, so this is the one place
+        // it has to be reset.
+        setFlipped(false)
         setBookmarks(result.state.bookmarks ?? [])
         // M93. The incoming workspace's notes, or none: the outgoing ones must
         // not be carried into a workspace that never had them (the verifier).

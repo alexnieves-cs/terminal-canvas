@@ -138,7 +138,11 @@ export function chatHasRun(state: { snapshot: AgentSessionSnapshot | null; turns
 /** M76. The one deny message, whichever surface says it. */
 export const DENY_MESSAGE = 'denied from the canvas'
 /** M76. A question is open: the composer names the fix, which is above it. */
+/** M119. The row's label, not `claude`: acp is the first other row that asks. */
 export const REASON_CHAT_PENDING = 'claude is waiting for your answer — allow or deny above'
+export const reasonChatPending = (label: string): string => `${label} is waiting for your answer — allow or deny above`
+export const reasonChatHandshake = (label: string): string => `waiting for ${label} to open its session — the first message goes when it answers`
+export const REASON_CHAT_HANDSHAKE_INTERRUPT = 'the agent has not opened its session yet — close the panel to stop it'
 /** M99: claude's own `noCli` row, under the name every M73 door imports. */
 export const REASON_CHAT_NO_CLAUDE = BACKENDS.claude.reasons.noCli
 export const REASON_CHAT_IDLE = 'nothing is in flight'
@@ -173,7 +177,9 @@ export function composerState(
   // with the fix (closing the panel kills the process), never enabled to a no-op.
   const noInterrupt: ComposerArm = row.interrupts ? { enabled: true } : { enabled: false, reason: row.reasons.noInterrupt }
   const streaming = snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
-  if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: REASON_CHAT_PENDING }, interrupt: noInterrupt }
+  if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: reasonChatPending(row.label) }, interrupt: noInterrupt }
+  // M119. A handshake in flight is its own state: Send waits, Interrupt cannot reach a session that has not opened (the manager refuses it), so both say so.
+  if (snapshot !== null && snapshot.awaitingHandshake === true) return { send: { enabled: false, reason: reasonChatHandshake(row.label) }, interrupt: { enabled: false, reason: REASON_CHAT_HANDSHAKE_INTERRUPT } }
   if (streaming) return { send: { enabled: false, reason: REASON_CHAT_STREAMING }, interrupt: noInterrupt }
   return { send: { enabled: true }, interrupt: { enabled: false, reason: REASON_CHAT_IDLE } }
 }

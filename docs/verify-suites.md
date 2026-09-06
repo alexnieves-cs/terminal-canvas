@@ -163,3 +163,9 @@ leaves and returns.
 
 A lesson this act added: **a keep-both merge of two suite blocks appended at the same marker drops the closing brace of the first** — the layout suite read `Unexpected end of input` after the Track B merge, and the fix was one `}` between the two blocks. Run every plain-node suite a merge touched before believing the merge.
 
+## The engines (M117–M121)
+
+`verify:agent-session registry.2` grew to four rows and the four new row fields (`appendsPrompt`, `handshake`, `sandboxArgs`, `models`) with each row's shape asserted by fact; `copilot.1–.1.e` is the parser over the three recorded streams — the lesson: the parser is HANDED the pinned id, and `assistant.turn_end` is per model call, so the check counts two `message-end`s and ONE `result` over `command.jsonl`; `copilot.2–.2.b` is the manager over the fake runner, and `.2.b` is the one that found the double pin (a second `--session-id` where `--resume=` belonged). `sandbox.1` in three suites: the adapters' argv per row (codex's tail goes BEFORE the positional prompt), the pure sandbox cwd over injected mkdir/rm (an id that is not a plain segment refused), the teammate refusal's one sentence. `verify:palette sheet.copilot.1` and `sandbox.1` read the rows' labels and reasons from the registry; `header.2` pins `sandboxed · no folder`; `chat.sandbox.1` the mark's round trip and carry. Track B's `acp.1–.4` drive the codec over the four recorded ACP streams and the manager over a fake stdio pair.
+
+The method lesson from this act: **the red check is its own commit** — `git log` on the branch alternates `check(…) — red` and `feat(…)`, which is the proof Act I's verifier could not get.
+

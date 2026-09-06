@@ -483,6 +483,17 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     titleRule !== undefined && verbRule !== undefined, `title: ${titleRule ? titleRule.sel : 'none'} · verbs: ${verbRule ? verbRule.sel : 'none'}`)
 }
 
+// M121 — header.2. THE AUTO CHIP GIVES before the verbs clip: with the
+// header line already giving first (M107), the chip was the next thing to
+// hold its width, and at a narrow frame the chrome verbs clipped instead of
+// it (M107's critic 9, second half). The chip takes .pf__title's own rule —
+// min-width 0, hidden overflow, an ellipsis — and may shrink (flex 1 1 auto).
+{
+  const chipRule = all.find((r) => /\.chat__auto\b(?![-_])/.test(r.sel) && /min-width\s*:\s*0/.test(r.body) && /overflow\s*:\s*hidden/.test(r.body) && /text-overflow\s*:\s*ellipsis/.test(r.body) && /flex\s*:\s*1 1 auto/.test(r.body))
+  ok('header.2', 'the auto chip shrinks with an ellipsis before the chrome verbs clip — min-width 0, overflow hidden, text-overflow ellipsis, flex 1 1 auto on .chat__auto',
+    chipRule !== undefined, chipRule ? chipRule.sel : 'no .chat__auto rule with the four declarations')
+}
+
 // M109 — obsidian.1. THE GLASS SET, in both blocks. theme.1 already proves
 // the two blocks agree; this pins that the set EXISTS (a missing --glass-1
 // leaves every panel with no fill and no error — check 2 would catch the

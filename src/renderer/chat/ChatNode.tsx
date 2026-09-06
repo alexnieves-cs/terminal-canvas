@@ -8,7 +8,7 @@ import { matchReviewPath } from '@shared/tool-index'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
 import { autoChipWords } from '@shared/auto'
-import { chatHeaderLine } from '@renderer/shell/rail-rows'
+import { chatHeaderLine, SANDBOX_HEADER } from '@renderer/shell/rail-rows'
 import { panelState, autoTone } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
@@ -501,7 +501,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         {/* M107. The header reads on from the mark: folder · branch · model — the
             engine is the kind word beside it (the M90 mark the checks pin), so
             it is not said twice. Every absent piece absent. */}
-        <span className="pf__summary chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }) })}>{[panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/', branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
+        <span className="pf__summary chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}) })}>{[panel.chat.sandbox === true ? SANDBOX_HEADER : (panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'), branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
         {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.
@@ -511,7 +511,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           const a = snapshot.auto
           return <span className={`badge pf__word chat__auto${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
             {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
-            {autoChipWords(a)}
+            {/* M121. The WORDS are the flex item that gives: text-overflow lives on a block, not on an inline-flex row's anonymous text. */}
+            <span className="chat__auto-label">{autoChipWords(a)}</span>
             {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
           </span>
         })()}

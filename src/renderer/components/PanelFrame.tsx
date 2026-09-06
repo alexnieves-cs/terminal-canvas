@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
@@ -116,6 +116,24 @@ export function PanelFrame({
   close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore
 }: PanelFrameProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
+  // M121. The outside click. Installed only while the menu is open, on the
+  // DOCUMENT in the capture phase — the canvas host's own mousedown starts a
+  // pan (and stops nothing), so a bubble-phase listener would still see it,
+  // but a mousedown a panel body swallows would not; capture sees every one.
+  // Inside the host (the button, the title, the verbs) is not outside: the
+  // menu's own verbs are mousedown-then-click, and closing on their mousedown
+  // would unmount the button before its click could run.
+  const menuHostRef = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (event: MouseEvent): void => {
+      const host = menuHostRef.current
+      if (host !== null && event.target instanceof Node && host.contains(event.target)) return
+      setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [menuOpen])
   // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
   // process kind's is its state's, a document kind's is `kind`.
   const marks = useContext(PanelMarksContext)
@@ -172,7 +190,7 @@ export function PanelFrame({
         <span className="pf__title panel__title" title={typeof title === 'string' ? title : undefined}>{title}</span>
         {/* M106. The one menu the frame grows: the full title, the kind, and the
             door to every verb the palette holds for this panel. */}
-        <span className="pf__menu-host">
+        <span className="pf__menu-host" ref={menuHostRef}>
           <button type="button" className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
             {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
           {menuOpen && (

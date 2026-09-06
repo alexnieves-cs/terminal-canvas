@@ -255,6 +255,10 @@ export function Canvas({
   // M56. Bookmarks: places, persisted beside the camera, per workspace.
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
   // M79. Runs: a history kept with the layout, owned by useRuns below.
+  // M121 (6). `sealAbandoned` seals every open run at load — the idle predicate
+  // it now takes is inert here (every panel is idle at load), and the stale
+  // row a seeded `running` auto status shows comes through useRuns.onAutoEvent;
+  // carried to M124 rather than redesigned here.
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
@@ -1772,7 +1776,7 @@ export function Canvas({
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
-    setMergedData
+    setMergedData, setFlipped
   })
 
   // The `window.__m4a*` surface verify:panels drives the renderer through,
@@ -2379,7 +2383,7 @@ export function Canvas({
     const mint = beginNewChatRef.current
     void (async () => {
       const mate = teammatesRef.current.find((t) => t.id === routine.teammateId)
-      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT })
+      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT, routine: true })
       const at = Date.now()
       if (result.kind === 'refused') {
         const latestR = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
@@ -3176,7 +3180,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3802,7 +3806,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3818,16 +3822,25 @@ export function Canvas({
     if (opts?.appendSystemPrompt !== undefined && opts.teammateId === undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
+    // M118. A row that cannot carry an appended prompt refuses the three doors
+    // that append one (supervisor, routine, dispatch) BY NAME: a copilot
+    // supervisor would silently not be one.
+    if (opts?.appendSystemPrompt !== undefined && !BACKENDS[backendOf(opts ?? {})].appendsPrompt) return { kind: 'refused', reason: BACKENDS[backendOf(opts ?? {})].reasons.noPrompt }
     // M90. The backend rides the create and the record; absent stays absent.
     const backend = carryBackend(opts ?? {})
     // M100. The identity rides the create (main reads the brief and checks the places) and the record.
     const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M120. The sandbox flag: main resolves the cwd to its own folder and ignores the one here; the record keeps the mark so a relaunch re-creates it the same way.
+    // The record's cwd is the INTENDED one except for a sandbox chat: the snapshot's cwd is a live session's, and a recycled panel id answers with a STALE session's folder (verify:panels codex.1 found it).
+    const sandbox = opts?.sandbox === true ? { sandbox: true as const } : {}
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...sandbox, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      // M121. A routine's chat is MARKED, the way a lane is: the record is what
+      // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -4665,6 +4678,9 @@ export function Canvas({
         // mousemove (setCursor), so the class catches up within a frame or
         // two of the keypress rather than exactly on it. Cursor feedback
         // only; the gesture itself never consults this className.
+        // M121. The flip as a readable FACT on the host (verify:panels flip.1),
+        // never inferred from which panels happen to render summaries.
+        data-flipped={flipped ? '' : undefined}
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
@@ -5076,6 +5092,8 @@ export function Canvas({
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => { void beginNewChat({ backend: 'codex' }) }}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
+            onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
+            sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (

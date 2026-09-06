@@ -7,6 +7,8 @@ module.exports = {
   ...require('../src/shared/annotations'),
   /* M113. The board's record: pure data and rules. */
   ...require('../src/shared/work-items'),
+  /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
+  ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),
   /* M6b: the settings schema is pure data with no imports at all, so it costs
      this tier nothing and gets covered by the suite that already owns the

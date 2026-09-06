@@ -2274,3 +2274,38 @@ scale from when the gesture started until it ends. See `docs/canvas-camera-compa
 
 One signal to gate `machine:sample` polling and the rail's rebuilds while the user is
 mid-gesture. See `docs/canvas-camera-comparison.md`.
+
+## 80. `cursor-agent` as a fifth row — declined in the v6 run (M117), unmeasured
+
+The registry (M99) makes an engine one row, one adapter and one parser over recorded
+fixtures — and the premise of every engine milestone is the recording. `cursor-agent`
+(2026.05.16) is installed on this machine and was NOT logged in on 2026-09-06: the headless
+door refuses with "Authentication required. Please run 'agent login' first, or set
+CURSOR_API_KEY". Login opens a browser, which only a person can do, so no stream exists and a
+row written from the help text alone would be a guess dressed as a fact. What it takes, in
+order: (1) `cursor-agent login` (or `CURSOR_API_KEY` in the login environment); (2) Act 0's
+step 3 verbatim — `agent -p --output-format stream-json --trust --workspace <scratch>` with a
+two-turn prompt, once with `--stream-partial-output`, into
+`scripts/fixtures/agent-session/cursor/`, noting whether the stream carries a turn-end
+record, a session id (`--resume [chatId]` implies one), tool-call pairs, usage and permission
+asks, and whether the process exits at turn end; (3) M118's shape row for row — a `cursor`
+row, `shared/cursor-transcript.ts`, `verify:agent-session cursor.1–.3`. Half a day once the
+recording exists.
+
+## 81. The canvas as an ACP HOST for files and terminals — declined by measurement (M119)
+
+M119 made this app an ACP client (`copilot --acp`): the handshake, `session/prompt`,
+`session/cancel`, `session/load`, `session/request_permission` through the one
+`answerPermission`. The protocol's inversion — the AGENT asking the HOST for
+`fs/read_text_file`, `fs/write_text_file` and `terminal/create` — was advertised to copilot's
+agent in Act 0's probe and it NEVER asked: it ran its own tools and reported them as
+`tool_call` updates with a `kind`. A host answer would be code with no consumer (the
+customer-free-abstraction rule), so `initialize` declares
+`clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }`
+(`verify:agent-session acp.4` pins the line). What it takes, when an ACP agent that asks
+arrives: flip the two `fs` lines and answer from main under the Places gate (a path outside
+every place refused with M100's sentence; the write through M22's mtime rule); the
+`terminal` line is the harder one — a terminal the agent owns is a panel whose lifetime the
+registry does not own (the two-lifetimes rule from the other side) and needs its own design
+before the flag flips. Record a stream from that agent first.
+
