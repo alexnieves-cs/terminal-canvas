@@ -1561,9 +1561,13 @@ const isResult = (l) => l.includes('"type":"result"')
       prompt = M.sharedSession.DISPATCH_PROMPT
       marks = M.chatPanel
     } catch (e) { marks = String(e) }
-    ok('dispatch.1 DISPATCH_PROMPT says the branch is the lane\'s and never to push, merge or open a PR; carryChatMarks writes no key for an absent dispatch and `dispatch: true` for a set one',
+    // M121. A routine chat carries its mark the same way (its rule prompt
+    // must survive a relaunch, the M81 shape): the carry writes `routine: true`
+    // for a set one and nothing for an absent one; both marks ride together.
+    ok('dispatch.1 DISPATCH_PROMPT says the branch is the lane\'s and never to push, merge or open a PR; carryChatMarks writes no key for an absent dispatch and `dispatch: true` for a set one, and (M121) `routine: true` for a routine chat — both marks at once when both are set',
       typeof prompt === 'string' && /branch/.test(prompt) && /[Nn]ever push/.test(prompt) && /pull request/.test(prompt) &&
-        M.chatPanel && Object.keys(M.chatPanel.carryChatMarks({})).length === 0 && M.chatPanel.carryChatMarks({ dispatch: true }).dispatch === true && Object.keys(M.chatPanel.carryChatMarks({ dispatch: true })).length === 1,
+        M.chatPanel && Object.keys(M.chatPanel.carryChatMarks({})).length === 0 && M.chatPanel.carryChatMarks({ dispatch: true }).dispatch === true && Object.keys(M.chatPanel.carryChatMarks({ dispatch: true })).length === 1 &&
+        M.chatPanel.carryChatMarks({ routine: true }).routine === true && Object.keys(M.chatPanel.carryChatMarks({ routine: true })).length === 1 && Object.keys(M.chatPanel.carryChatMarks({ dispatch: true, routine: true })).length === 2,
       JSON.stringify({ prompt, marks: typeof marks }))
   }
 
