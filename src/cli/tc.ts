@@ -5,8 +5,8 @@
  *
  *   tc open [--preset <name|id>] [--cwd <dir>]
  *   tc list | tc focus <id> | tc ping | tc status
- *   tc memory list [--root <dir>] [--limit <n>]
- *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir>]
+ *   tc memory list [--root <dir> | --teammate <id>] [--limit <n>]
+ *   tc memory add --kind <decided|tried|failed|note> --text "…" [--root <dir> | --teammate <id>]
  *   tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]
  *
  * Exit 0 on ok, 1 on a refusal (the app answered no), 2 when nothing is
@@ -28,8 +28,8 @@ export const USAGE = [
   '       tc focus <panel-id>',
   '       tc ping',
   '       tc status',
-  '       tc memory list [--root <dir>] [--limit <n>]',
-  '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir>]',
+  '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
+  '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
   '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
   '',
   'api exits 1 when the service answered 4xx or 5xx, so a script can test $? — the reply',
@@ -99,12 +99,20 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
         const value = flags[i + 1]
         if (value === undefined) return { kind: 'usage', error: `${flag} needs a value` }
         if (flag === '--root' || flag === '--kind' || flag === '--text') { fields[flag.slice(2)] = value; i += 1; continue }
+        // M121. A teammate's OWN memory: the `teammate:<id>` root main already
+        // sorts by (the pane reads the same list), so the flag is a root, not a
+        // second field the handler would have to learn.
+        if (flag === '--teammate') { fields.root = `teammate:${value}`; fields.teammate = value; i += 1; continue }
         if (flag === '--limit') {
           const n = Number(value)
           if (!Number.isInteger(n) || n < 1) return { kind: 'usage', error: `--limit takes a whole number of at least 1, not ${value}` }
           fields.limit = n; i += 1; continue
         }
         return { kind: 'usage', error: `unexpected argument ${flag}` }
+      }
+      if (fields.teammate !== undefined) {
+        delete fields.teammate
+        if (flags.includes('--root')) return { kind: 'usage', error: '--teammate and --root name two subjects — give one' }
       }
       // The panel's own directory is the default subject, which is what makes
       // `tc memory add --kind decided --text "…"` work with no --root at all.
