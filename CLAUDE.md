@@ -645,6 +645,38 @@ check does not, and should not, cover it.
   writes it back; a move of the card drops the anchor. Drop targets exist on the two
   `USER_SET_STATES` columns only.
 
+- `src/shared/copilot-transcript.ts` / `src/main/backend-adapters.ts`'s `ParseContext` — M118.
+  The third row. Copilot's JSONL stream states NO session id (`parentId` chains the previous
+  event), so the HOST pins one with `--session-id` and names `--resume=` from the second turn
+  on — the manager marks `everSpawned` on the first `session` event for a per-turn row that
+  does not adopt, and the parser is TOLD the id (`parseChunk`'s third argument; claude's and
+  codex's ignore it). `assistant.turn_end` is per MODEL CALL (`message-end`); `result` is the
+  turn's end. `--allow-all-tools` is required headless (`asksPermission: false` with the
+  sentence); `--no-auto-update` because the CLI replaced itself mid-recording. Four row
+  fields landed for EVERY row in one commit — `appendsPrompt` (the three prompt doors refuse
+  by name through `beginNewChat`'s guard), `handshake`, `sandboxArgs`, `models` — and the
+  sheet's `SheetWhat` chat arm is ONE arm keyed by `backend` (M90's `codex` kind folded in),
+  so a fourth row needs no new member anywhere (`registry.1`'s rule reached for the sheet).
+- `src/shared/acp-transcript.ts` / the adapter's optional encoders — M119. The fourth row and
+  the first ACP client this app has been: a codec over the resident-process line seam, three
+  optional encoders (`encodeUser`, `encodeInterrupt`, `encodePermission`) plus a `handshake`
+  the manager PREFERS when a row has them; the first send is HELD until `session/new` (or
+  `session/load`) answers; `session/request_permission` becomes the one `permission-request`
+  event with the option ids riding in `input.__options`, answered through the ONE
+  `answerPermission` (allow → `allow_once`, deny → `reject_once`, M98's grant →
+  `allow_always`). `clientCapabilities` declines `fs/*` and `terminal/*` BY MEASUREMENT
+  (copilot's agent never asked; backlog #81; `acp.4` pins the line). The row's capabilities
+  are the promise; `initialize`'s answer is the fact (`negotiated` on the snapshot outranks
+  the row, `acp.2`).
+- `src/main/sandbox.ts` / `sandboxTeammateRefusal` — M120. A chat with NO place lives in
+  `userData/sandbox/<id>` — never a place, never home; the Places gate is bypassed BY
+  CONSTRUCTION (the folder is the app's) and a teammate beside `sandbox` is refused first.
+  The row's `sandboxArgs` (claude `--permission-mode plan`, codex `--sandbox read-only`,
+  copilot `--deny-tool shell --deny-tool write`) ride every spawn through the adapter's
+  `sandbox` input; a row without them refuses the SEND by name (`refused-sandbox` →
+  `reasons.noSandbox`). Deleted on dispose with `drop`, never on exit. `ChatSource.sandbox`
+  is carried by `carryChatMarks` beside `dispatch`; the header reads `sandboxed · no folder`.
+
 The session/view split is the milestone's whole point: in M1, "this component is unmounting"
 and "this panel is going away" were the same statement. Culling makes them different
 statements, and `session-registry.ts` is where that difference lives.

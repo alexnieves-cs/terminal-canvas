@@ -2275,7 +2275,7 @@ scale from when the gesture started until it ends. See `docs/canvas-camera-compa
 One signal to gate `machine:sample` polling and the rail's rebuilds while the user is
 mid-gesture. See `docs/canvas-camera-comparison.md`.
 
-## 27. `cursor-agent` as a fifth row — declined in the v6 run (M117), unmeasured
+## 80. `cursor-agent` as a fifth row — declined in the v6 run (M117), unmeasured
 
 The registry (M99) makes an engine one row, one adapter and one parser over recorded
 fixtures — and the premise of every engine milestone is the recording. `cursor-agent`
@@ -2292,7 +2292,7 @@ asks, and whether the process exits at turn end; (3) M118's shape row for row �
 row, `shared/cursor-transcript.ts`, `verify:agent-session cursor.1–.3`. Half a day once the
 recording exists.
 
-## 28. The canvas as an ACP HOST for files and terminals — declined by measurement (M119)
+## 81. The canvas as an ACP HOST for files and terminals — declined by measurement (M119)
 
 M119 made this app an ACP client (`copilot --acp`): the handshake, `session/prompt`,
 `session/cancel`, `session/load`, `session/request_permission` through the one
