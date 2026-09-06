@@ -1,7 +1,6 @@
 import { findLinks } from '@shared/link-scan'
 import type { PanelId } from '@shared/types'
 import type { SessionFactory, SessionHandle, TerminalOptions } from '@renderer/session/panel-session'
-import { SerializeAddon } from '@xterm/addon-serialize'
 import {
   attachTerminal,
   createTerminal,
@@ -23,9 +22,6 @@ function createHandle(id: PanelId): SessionHandle {
   host.dataset.panelId = id
 
   let handles: TerminalHandles | null = null
-  // M112. The serialize addon, held beside the terminal it reads: loaded once
-  // inside ensure(), never twice (loadAddon on a disposed addon throws).
-  let serializer: SerializeAddon | null = null
   // M52. The shell's prompt marks, for navigation and "copy last output".
   const prompts: import('@xterm/xterm').IMarker[] = []
   let commandMarker: import('@xterm/xterm').IMarker | null = null
@@ -42,11 +38,6 @@ function createHandle(id: PanelId): SessionHandle {
     if (!handles) {
       handles = createTerminal()
       if (Object.keys(pendingOptions).length > 0) Object.assign(handles.term.options, pendingOptions)
-      // M112. Loaded here, once, beside the terminal it serializes: the addon
-      // reads the live buffer at call time, so it costs nothing until export
-      // asks. Never loaded twice — loadAddon on a disposed addon throws.
-      serializer = new SerializeAddon()
-      handles.term.loadAddon(serializer)
       // M51. Paths and URLs in the buffer become links: underlined on hover,
       // opened on Cmd-click ONLY (a plain click stays a click — agent TUIs
       // use clicks), and never by this process: the renderer sends the text
@@ -163,9 +154,58 @@ function createHandle(id: PanelId): SessionHandle {
       for (let i = bottom; i >= 0 && rows.length < lines; i--) rows.unshift(rowAt(i))
       return rows
     },
+    // M112. `@xterm/addon-serialize` was tried here first and dropped: its
+    // own decision between a `\r\n` and a soft continuation is driven by
+    // exactly the same `isWrapped` flag this method reads directly, but it
+    // reconstructs the WHOLE buffer as one VT-styled string, including
+    // colours and cursor-movement escapes — none of which survive main's
+    // `stripAnsi` a moment after this crosses the wire, so the fidelity the
+    // addon exists to provide is discarded before it is ever read. Worse,
+    // in the actual failure this milestone chased, a display wrap came
+    // back as a genuine `\r\n` (the addon's own reconstruction, not
+    // `isWrapped` itself, was the ambiguous part), which split a secret
+    // across two lines and defeated `redactSecrets` (it does not, by
+    // design, match across a real line break — shared/redact.ts is also
+    // memory-store.ts's, the broker audit's, the diagnostics bundle's and
+    // browser-read.ts's).
+    //
+    // `isWrapped` is the authoritative signal FOR PROGRAM OUTPUT (xterm's
+    // own auto-wrap correctly marks the continuation row), but it is not
+    // the whole story: reproduced directly against a real `/bin/zsh -l`
+    // (node-pty, cols=93) — zsh's own line editor (ZLE) redraws a typed
+    // command line that exceeds the terminal width using its OWN cursor
+    // positioning, not the terminal's auto-wrap, so the continuation row
+    // it draws reports `isWrapped: false` even though it is, visibly, the
+    // rest of the same line the user typed. A secret echoed back while
+    // being typed — exactly what an interactive shell does — can wrap
+    // this way and `isWrapped` alone will not catch it; this was caught
+    // only because `verify:panels export.2` drives a REAL zsh, not a
+    // synthetic terminal. The second signal below closes that gap: a row
+    // that fills the terminal EXACTLY edge-to-edge (its trimmed length
+    // equals the current column count) is, on its own, an unusual thing
+    // for a line to do by coincidence — every well-behaved wrap (zsh's
+    // included) produces exactly this shape, since that is what "ran out
+    // of room" looks like — so it is treated as a continuation whether or
+    // not `isWrapped` agrees. Ordinary content ending precisely at the
+    // terminal's current width is the one case this can misjudge; that
+    // rare, cosmetic cost is preferred to a secret escaping the gate.
     serialize() {
-      if (!handles || !serializer) return null
-      return serializer.serialize()
+      if (!handles) return null
+      const { term } = handles
+      const buffer = term.buffer.active
+      const cols = term.cols
+      // Same read as tail() above (translateToString(true), the trimmed
+      // form) — the whole buffer instead of the last few rows.
+      let out = ''
+      let previousRow = ''
+      for (let i = 0; i < buffer.length; i++) {
+        const line = buffer.getLine(i)
+        const row = line ? line.translateToString(true) : ''
+        if (i > 0) out += (line?.isWrapped || previousRow.length === cols) ? '' : '\r\n'
+        out += row
+        previousRow = row
+      }
+      return out
     },
     focus() {
       handles?.term.focus()
@@ -262,8 +302,6 @@ function createHandle(id: PanelId): SessionHandle {
     dispose() {
       if (handles) disposeTerminal(handles)
       handles = null
-      serializer?.dispose()
-      serializer = null
       host.remove()
     }
   }

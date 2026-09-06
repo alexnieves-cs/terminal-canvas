@@ -675,34 +675,47 @@ const p = (name) => join(DIR, name)
         d && d.kind === 'off' && e && e.kind === 'empty',
       JSON.stringify({ a, b, c, d, e, t1: t1.slice(0, 60) }))
   }
-  // export.6 (M112, review round 1, CRITICAL 1). A secret split by a real
-  // CR/LF sitting exactly where a terminal-width wrap happened — the case
-  // the reviewer reproduced: a token's PREFIX gets redacted (the pattern
-  // still matches up to the break) while its TAIL, now alone on its own
-  // row, does not, so a fragment of the secret survives the outward gate.
-  // closeWrapGaps (main/export.ts) exists to close exactly this: a
-  // `\r\n` sitting strictly between two characters the redaction
-  // patterns' alphabet draws from is not a real line break in this
-  // reconstruction, so it never gets a chance to hide half a secret.
+  // export.6 (M112). Two arms, one check — this is the id that BOTH prior
+  // wrong fixes each passed one arm of and failed the other:
+  //
+  //   Arm A: a secret that arrives at main ALREADY reunited (exactly what
+  //   the renderer's `SessionHandle.serialize()` now guarantees, since it
+  //   joins a wrap using xterm's own `isWrapped` at the SOURCE — see
+  //   session-factory.ts — so main never receives a secret split by a
+  //   wrap in the first place) is still redacted WHOLE by the ordinary
+  //   pipeline. Wrap repair is no longer main's job at all; this is a
+  //   regression guard on the job main keeps — stripAnsi + outward — once
+  //   round 1 and round 2's now-removed wrap-fixing code is gone.
+  //
+  //   Arm B: ordinary multi-line text survives byte-for-byte. This is the
+  //   fixture that defeated round 1's blanket regex (a `\r\n` closed
+  //   whenever it sat between two "token-alphabet" characters — the
+  //   DEFAULT shape of file listings, paths, JSON, prose) — unpadded on
+  //   purpose, since round 1's own fixture padding the boundary with a
+  //   space is what hid the regression. main no longer touches `\r\n` at
+  //   all (see main/export.ts: no wrap-fixing code remains there after
+  //   review round 2 moved the fix upstream), so this is now nearly a
+  //   tautology by construction — it stays as the test that would catch
+  //   anyone reintroducing text-based wrap detection in main later.
   {
-    // The wrap sits INSIDE the token (both flanking characters alnum, so
-    // closeWrapGaps reunites them); the token's OUTER edges each border a
-    // non-token character (': ' before, a leading space after the second
-    // `\r\n`) on purpose — a gap-close not anchored to a real word
-    // boundary on the far side would let the pattern's own `{20,}`
-    // quantifier run on and swallow "end of line here" into the secret,
-    // which is exactly the over-redaction this test also stands guard
-    // against by asserting that phrase survives untouched.
-    const wrapped = 'before: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ\r\nabcdefghijklmnopqrstuvwxyz0123456789\r\n end of line here'
+    const wrapped = 'before: sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij end of line here'
     const o = join(dir, 'wrapped.txt')
     const w = log ? await mk(o, { persistOn: false }).panelText({ panelId: 'pWrap', buffer: wrapped }) : null
     const tw = existsSync(o) ? readFileSync(o, 'utf8') : ''
-    ok('export.6 a secret split across a mid-token wrap (a real CR/LF between two token characters) is redacted WHOLE — neither its prefix nor its interior survives, exactly one redaction is counted, and text on either side of the wrap is untouched (no over-redaction into the next line)',
+
+    const plain = 'line one\r\nline two\r\nsome-path/to/file.txt\r\nnext output line\r\n'
+    const o2 = join(dir, 'plain.txt')
+    const p = log ? await mk(o2, { persistOn: false }).panelText({ panelId: 'pPlain', buffer: plain }) : null
+    const tp = existsSync(o2) ? readFileSync(o2, 'utf8') : ''
+
+    ok('export.6 Arm A: a secret that arrives already reunited (the shape the renderer now guarantees) is still redacted WHOLE by main\'s ordinary pipeline, with surrounding text untouched. Arm B: ordinary multi-line text whose boundaries abut on word characters (unpadded) keeps EVERY line break and its line count, byte for byte',
       can && w && w.kind === 'written' && w.source === 'buffer' && w.redacted === 1 &&
         tw.includes('before:') && tw.includes('end of line here') &&
-        !tw.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !tw.includes('abcdefghijklmnopqrstuvwxyz0123456789') &&
-        tw.includes('[redacted api key]'),
-      JSON.stringify({ w, tw }))
+        !tw.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !tw.includes('abcdefghijklmnopqrstuvwxyz') &&
+        tw.includes('[redacted api key]') &&
+        p && p.kind === 'written' && p.redacted === 0 && p.lines === 4 &&
+        tp === plain,
+      JSON.stringify({ w, tw, p, tp, plain }))
   }
   rmSync(dir, { recursive: true, force: true })
 }

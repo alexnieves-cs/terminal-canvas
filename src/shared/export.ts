@@ -1,7 +1,12 @@
 /** M112. What the renderer hands main: the id, and the live buffer when the panel has one. */
 export interface PanelTextExportRequest {
   panelId: string
-  /** The xterm buffer serialized (VT sequences) by `SessionHandle.serialize()`; absent for a never-spawned panel. */
+  /**
+   * The xterm buffer serialized by `SessionHandle.serialize()`: every real
+   * line ending is a `\r\n`, and a display wrap is never one (xterm's own
+   * `isWrapped` decides this in the renderer, where the buffer still is —
+   * see session-factory.ts). Absent for a never-spawned panel.
+   */
   buffer?: string
 }
 

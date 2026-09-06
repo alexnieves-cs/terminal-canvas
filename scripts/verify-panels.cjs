@@ -16186,10 +16186,26 @@ app.whenReady().then(async () => {
       // row. `abcdefghijklmnopqrstuvwxyz` sits well inside the token (not
       // at either edge), so its absence proves the WHOLE run was scrubbed,
       // not just whichever half happened to carry the `sk-` prefix.
-      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the whole token is not (prefix and an interior run alike), the door was actually enabled, no escape bytes',
+      //
+      // M112 (review round 2, CRITICAL 1 — reopened). TWO earlier attempts
+      // at a fix each over-corrected here: a blanket text-based join
+      // (round 1) and a pattern-straddle probe (round 2's first attempt)
+      // both erased the real breaks between the echoed command, its own
+      // output, and the following shell prompt — three distinct real
+      // lines — because each one ran through the unrelated sentinel word
+      // immediately after a real newline. The actual fix moved upstream
+      // entirely: `SessionHandle.serialize()` (session-factory.ts) builds
+      // the buffer text off xterm's own `isWrapped`, at the SOURCE, so
+      // main never receives a secret split by a wrap and does no
+      // wrap-related processing of its own at all. Assert at least one
+      // real break SURVIVES between two distinct output lines; a fix that
+      // closes every gap (by whatever mechanism, wherever it lives) fails
+      // this exactly as it fails verify:file export.6's Arm B.
+      ok('export.2 with persistence off the palette exports a live panel from its serialized buffer — the sentinel is in the file, the whole token is not (prefix and an interior run alike), a real line break survives between distinct output lines (the fix is not a blanket join), the door was actually enabled, no escape bytes',
         liveId !== null && focused === true && onScreen === true && enabled === true && ran === true && written === true &&
-          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('abcdefghijklmnopqrstuvwxyz') && !text.includes('\x1b['),
-        JSON.stringify({ liveId, focused, onScreen, enabled, ran, written, tail: text.slice(-160) }))
+          !text.includes('sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZ') && !text.includes('abcdefghijklmnopqrstuvwxyz') && !text.includes('\x1b[') &&
+          /\r\n|\n/.test(text),
+        JSON.stringify({ liveId, focused, onScreen, enabled, ran, written, hasBreak: /\r\n|\n/.test(text), tail: text.slice(-200) }))
       rmSync(exportDir, { recursive: true, force: true })
     }
 
