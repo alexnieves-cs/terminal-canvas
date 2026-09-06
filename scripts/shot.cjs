@@ -210,7 +210,7 @@ const SCENES = [
       await k.shot('board')
       await k.dock('panels'); await sleep(300)
     } },
-  { name: 'chat-copilot', intent: 'M118/M120. The spawn sheet on the copilot row: `what` reads `chat with copilot` (enabled on this machine, `— not on PATH` elsewhere), the model field is a SELECT from the row\'s closed list (auto, claude-haiku-4.5, gpt-5-mini, mai-code-1.1-flash) where claude\'s is free text, and the preview names one conversation panel. The same family as the codex row — a third engine is a row, not a new surface.',
+  { name: 'chat-copilot', intent: 'M118/M120. The spawn sheet on the copilot row under the harness\'s stripped PATH: `what` reads `chat with copilot — not on PATH` (the disabled arm, by name, like the codex scene), the how row says `no mode flag` and `no effort flag` because copilot has neither, the model field is a SELECT whose empty choice is `auto (the CLI\'s default)` over the row\'s closed list, and the preview names the engine with its capability sentence (runs every tool on its own policy · no interrupt · no images · a read-only mode). A third engine is a row, not a new surface.',
     run: async (kit) => {
       await kit.press('k', { metaKey: true }); await sleep(400)
       await kit.type('new panel'); await sleep(300)
