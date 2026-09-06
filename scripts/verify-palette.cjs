@@ -2401,6 +2401,24 @@ const WS = [
     JSON.stringify({ row: row && { id: row.id, group: row.group, title: row.title, disabledReason: row.disabledReason }, calls }))
 }
 
+// M118 — sheet.copilot.1. THE THIRD ROW IN THE SHEET, and the prompt rule.
+// `backendOptions` lists copilot from the registry like any row (disabled
+// by name when absent); `supervisorRowReason(backend)` is the ONE sentence
+// the supervisor row, the routine mint and the dispatch verb read when a
+// row cannot carry an appended prompt — null for a row that can.
+{
+  let rows = [], reason = {}, threw = null
+  try {
+    rows = P.backendOptions({ claude: true, codex: false, copilot: true, acp: false })
+    reason = { claude: P.supervisorRowReason('claude'), copilot: P.supervisorRowReason('copilot'), acp: P.supervisorRowReason('acp') }
+  } catch (e) { threw = String(e) }
+  const cp = rows.find((r) => r.id === 'copilot'), acp = rows.find((r) => r.id === 'acp')
+  ok('sheet.copilot.1 the sheet lists `chat with copilot` enabled when the binary is present and `chat with copilot (acp) — not on PATH` when its is not; supervisorRowReason is null for claude and the row\'s own noPrompt sentence for copilot and acp',
+    threw === null && cp && cp.label === 'chat with copilot' && cp.disabled === false && acp && /PATH/.test(acp.label) && acp.disabled === true &&
+      reason.claude === null && typeof reason.copilot === 'string' && /appended prompt/.test(reason.copilot) && typeof reason.acp === 'string' && /appended prompt/.test(reason.acp),
+    JSON.stringify({ threw, cp, acp, reason }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)
