@@ -14,6 +14,7 @@ import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
 import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
 import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from './routines'
+import { parseShelf, type Shelf } from './skills'
 export { ROUTINES_MAX } from './routines'
 export type { PersistedRoutine } from './routines'
 export { TEAMMATES_MAX } from './teammates'
@@ -485,6 +486,8 @@ export interface LayoutSnapshot {
   prompts: Prompt[]
   /** M80. Saved shapes of work. Optional on disk for every layout written before templates existed. */
   templates: PersistedTemplate[]
+  /** M125. The skill shelf's columns. Absent on disk for every layout written before it existed. */
+  shelf: Shelf
   /** M100. The roster. Optional on disk for every layout written before teammates existed. */
   teammates: PersistedTeammate[]
   /** M101. Scheduled runs. Optional on disk for every layout written before routines existed. */
@@ -550,6 +553,7 @@ export function defaultSnapshot(): LayoutSnapshot {
     defaultPresetId: DEFAULT_PRESET_ID,
     prompts: [],
     templates: [],
+    shelf: { columns: [] },
     teammates: [],
     routines: [],
     // Empty means "everything at its schema default" — exactly what a default
@@ -1837,6 +1841,7 @@ export function parseLayout(raw: string): {
           : DEFAULT_PRESET_ID,
       prompts: parsePrompts(parsed.prompts, warnings),
       templates: parseTemplates(parsed.templates, warnings),
+      shelf: parseShelf(parsed.shelf, warnings),
       teammates: parseTeammates(parsed.teammates, warnings),
       routines: parseRoutines(parsed.routines, warnings),
       preferences,
@@ -1848,6 +1853,22 @@ export function parseLayout(raw: string): {
     warnings,
     futureVersion: false
   }
+}
+
+/**
+ * M125. The write-side companion to `parseShelf`: an empty shelf is deleted
+ * from the record before it is stringified, the same rule M93's annotations
+ * and workItems already obey per-workspace — a written `"shelf":{"columns":[]}`
+ * is a record claiming to exist, so a fresh file and a file whose shelf was
+ * emptied must be byte-identical. Takes the already-settings-stripped record
+ * `layout-store.ts`'s `writeNow` is about to write, so this stays the ONE
+ * place that decides the on-disk shape of a shelf.
+ */
+export function serialiseLayout(onDisk: Record<string, unknown>): string {
+  const out: Record<string, unknown> = { ...onDisk }
+  const shelf = out.shelf as Shelf | undefined
+  if (shelf !== undefined && shelf.columns.length === 0) delete out.shelf
+  return JSON.stringify(out, null, 2)
 }
 
 /** M92. A boolean flag on a panel record: true, absent/false as absent, else warned and dropped. */

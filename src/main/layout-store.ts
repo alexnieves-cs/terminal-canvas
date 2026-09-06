@@ -5,6 +5,7 @@ import {
   defaultSnapshot,
   defaultWorkspace,
   parseLayout,
+  serialiseLayout,
   type CanvasState,
   type LayoutSnapshot,
   type PersistedPanel,
@@ -271,7 +272,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       // so a pre-M6b file migrates on first load — but once this app has
       // written the file, `preferences` is the only record.
       const { settings: _settings, ...onDisk } = snapshot
-      const bytes = JSON.stringify(onDisk, null, 2)
+      const bytes = serialiseLayout(onDisk)
       writeFileSync(tmp, bytes, 'utf8')
       // rename is atomic on macOS. Writing in place would let a crash
       // mid-write leave a truncated file — parseLayout survives that, but it

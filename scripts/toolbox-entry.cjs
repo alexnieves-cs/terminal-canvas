@@ -10,6 +10,7 @@
  */
 module.exports = {
   ...require('../src/shared/toolbox'),
+  ...require('../src/shared/skills.ts'),
   ...require('../src/main/toolbox-scan.ts'),
   ...require('../src/main/toolbox-read.ts')
 }
