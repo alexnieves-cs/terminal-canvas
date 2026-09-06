@@ -2263,3 +2263,14 @@ The general rule, worth applying to every entry above: **ask which of the three 
 feature needs, and what it does when the answer is "none of them yet".** A feature that
 assumes a buffer exists will work perfectly for the whole session in which it was written
 and be blank the first time the app is relaunched.
+
+## 78. A debounced scale for the tier pass
+
+`assignTiers` reads the live scale; during a pinch a panel can cross a tier boundary several
+times in one gesture. tldraw's `getDebouncedZoomLevel` is the shape: feed the tier pass the
+scale from when the gesture started until it ends. See `docs/canvas-camera-comparison.md`.
+
+## 79. A camera `idle | moving` state
+
+One signal to gate `machine:sample` polling and the rail's rebuilds while the user is
+mid-gesture. See `docs/canvas-camera-comparison.md`.
