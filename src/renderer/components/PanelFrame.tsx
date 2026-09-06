@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
@@ -62,10 +63,14 @@ export interface PanelMarks {
   maximise: (id: string) => void
   restore: (id: string) => void
   readOnly: boolean
+  /** M106. The ⋯ menu's door: focus this panel and open the palette captured on it. Absent in a fixture. */
+  more?: (id: string) => void
 }
 export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
 
 export interface PanelFrameProps {
+  /** M106. Open the palette captured on this panel — the ⋯ menu's door to every verb. Absent hides the door (a fixture). */
+  onMore?: (id: string) => void
   id: string
   kind: Panel['kind']
   rect: WorldRect
@@ -108,11 +113,14 @@ const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 
 
 export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,
-  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far
+  close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore
 }: PanelFrameProps): JSX.Element {
+  const [menuOpen, setMenuOpen] = useState(false)
   // M73. The tone every mark below reads: a terminal's rides rootAttrs, a
   // process kind's is its state's, a document kind's is `kind`.
   const marks = useContext(PanelMarksContext)
+  // M106. The canvas provides the door once; a kind may still hand its own.
+  const more = onMore ?? marks.more
   const mark = marks.marks.get(id)
   const tone = state?.tone ?? rootAttrs?.['data-tone'] ?? 'kind'
   // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
@@ -158,7 +166,24 @@ export function PanelFrame({
              the rail row shows, says what the panel is instead. */
           <span className="pf__state pf__state--kind" data-tone="kind" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind]; return <G /> })()}</span>
         )}
-        <span className="pf__title panel__title">{title}</span>
+        {/* M106. The title is what gives (see styles.css's header rule); the FULL
+            title lives here and at the top of the ⋯ menu, never truncated to
+            `Revie…` with nowhere to read the rest. */}
+        <span className="pf__title panel__title" title={typeof title === 'string' ? title : undefined}>{title}</span>
+        {/* M106. The one menu the frame grows: the full title, the kind, and the
+            door to every verb the palette holds for this panel. */}
+        <span className="pf__menu-host">
+          <button type="button" className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
+            {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
+          {menuOpen && (
+            <div className="pf__menu" role="menu" data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}>
+              <div className="pf__menu-title" data-panel-menu-title>{title}</div>
+              <div className="pf__note">{kind}</div>
+              {more !== undefined && <button type="button" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
+              <button type="button" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
+            </div>
+          )}
+        </span>
         {/* M92. Lock and pin are STATE MARKS with the fix in their title; maximise is a control. */}
         {mark?.locked && <span className="pf__mark pf__mark--lock" data-panel-locked title="locked — drag and resize refuse; Unlock panel in the palette or the pane">{Lock}</span>}
         {mark?.pinned && <span className="pf__mark pf__mark--pin" data-panel-pinned title="pinned — kept live wherever the camera is; Unpin panel in the palette or the pane">{Pin}</span>}

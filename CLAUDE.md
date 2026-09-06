@@ -193,6 +193,7 @@ main     --send-->   spawn:open-sheet                                          -
 main     --send-->   agent:event (batched ~16ms)                                 --> renderer
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
+main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -483,6 +484,34 @@ check does not, and should not, cover it.
   is the per-panel guest record (id and reload), cleared at the four panel-removing sites
   beside `disposeWatcher`; an `exit-ok` edge into the pane reloads it through it, with a
   named skip when no guest is live.
+- `src/shared/lineups.ts` — M104. Four lineups as SEATS (`agent` / `shell` / `browser`);
+  `lineupPlan` is pure: sessions, agents, which seats get a worktree lane (agent seats only,
+  only when asked — a browser or shell in a worktree points at a directory its dev server was
+  never started in), and against `agents.maxConcurrent` read live how many will queue, as a
+  sentence shown in the sheet BEFORE Enter mints anything. The launch is seat by seat through
+  the ordinary doors. `verify:palette lineup.1–.2`.
+- `src/renderer/session/last-line-store.ts` / `rail-rows.ts`'s `lastLineOf`, `railCapsules` —
+  M105. The agent's last line said (the transcript's last complete text block, cut from the
+  right) and the unread mark, per panel by id, never on `registry.version()`; set on a chat's
+  turn end, unread when the panel was not focused, cleared on focus and at every removing site
+  beside `clearAgentState`. A terminal row carries no last line (its scrollback is not a
+  conversation). The dock's `N live` / `N quiet` capsules read the rail's own rows.
+- `PanelFrame.tsx`'s frame rule and `⋯` menu, `menu.ts`'s Workspace menu, `Canvas.tsx`'s
+  `flipped` — M106. ONE rule for every kind: `.pf__title` gives (min-width 0, ellipsis) and
+  every chrome control is `flex: 0 0 auto` (`verify:styles header.1`, `verify:panels
+  header.1`); the full title rides the `title` attribute and the `⋯` menu. Flip hands
+  `summary` to every terminal through a `flipped` PROP on `TerminalPanel` (never
+  `CardDetailContext`, which only a CARDED panel reads — a live one renders the slot), so
+  a running terminal turns over too; M57's far-view renderer reused, never a second one; a view state, never persisted
+  (`verify:panels flip.1`). `canvas:tidy` / `canvas:flip` are main→renderer events.
+- `shared/env-report.ts`'s `probe` and `probeOutcome`, `shell-env.ts`'s `shellProbeFacts` /
+  `reprobeShellEnv` (a re-probe into a local; the cache is replaced only on success) — M107. Discovery explains itself: which shells were asked, which folders
+  checked, and THREE states — `found`, `not-found`, and `no-answer` for a shell that timed out
+  (a slow or prompting `~/.zshrc`), which says the `~/.zprofile` fix and is never read as not
+  installed. `env:report` with `again` asks the login shell once more and reports; the app's
+  environment applies on relaunch. `verify:file env.1`. Changes refresh on the selected chat's
+  turn end; `chatHeaderLine` reads folder · branch · engine · model with every absent piece
+  absent (`verify:rail header.1`).
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`

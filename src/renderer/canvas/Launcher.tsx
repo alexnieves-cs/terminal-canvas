@@ -3,10 +3,13 @@ import type { PresetRow } from '@renderer/palette/commands'
 import { REASON_NOT_ON_PATH } from '@renderer/palette/commands'
 import type { EnvReport } from '@shared/env-report'
 import { shellControl } from '@renderer/shell/shell-control'
+import { probeOutcome } from '@shared/env-report'
 
 export interface LauncherProps {
   presets: PresetRow[]
   report: EnvReport | null
+  /** M107. Ask the login shell again; absent hides the control (a fixture). */
+  onCheckAgain?: () => void
   onSpawnPreset: (id: string) => void
   /** M65. The fifth line: choose where and what. */
   onOpenSheet: () => void
@@ -46,9 +49,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason }: LauncherProps): JSX.Element {
-  const found = report ? report.clis.filter((c) => c.path !== null).map((c) => c.name) : []
-  const missing = report ? report.clis.filter((c) => c.path === null).map((c) => c.name) : []
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -109,13 +110,20 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
           <span className="launcher__verb-hint">{noteReason === null ? 'a note panel' : 'start a panel first — a note is saved in its directory'}</span>
         </button>
       </div>
-      {report !== null && (
-        <p className="launcher__env" data-launcher-env>
-          {found.length > 0 ? `found: ${found.join(', ')}` : 'found: nothing'}
-          {missing.length > 0 ? ` · not found: ${missing.join(', ')}` : ''}
-          {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
-        </p>
-      )}
+      {report !== null && (() => {
+        // M107. THREE STATES: found, not found, and "the shell didn't answer" —
+        // the last with its fix and a way to ask again, never read as not installed.
+        const outcome = probeOutcome(report)
+        return (
+          <p className="launcher__env" data-launcher-env data-launcher-env-kind={outcome.kind}>
+            <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'}>{outcome.sentence}</span>
+            {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
+            {onCheckAgain !== undefined && (
+              <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>
+            )}
+          </p>
+        )
+      })()}
       </div>
     </div>
   )

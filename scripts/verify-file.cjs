@@ -1065,6 +1065,24 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ file, data, blank, chrome, evaluated, cap, page: page && { kind: page.kind, url: page.url, note: page.note, bytes: page.text && Buffer.byteLength(page.text, 'utf8'), truncated: page.truncated }, notText }))
 }
 
+// M107 — env.1. DISCOVERY THAT EXPLAINS ITSELF. The report says which shells
+// were asked and which folders were checked, and tells "the shell didn't
+// answer" (a timeout, a prompting rc file) apart from "not installed" —
+// three states, never two. This is the repository's own three-state rule,
+// which the surface it already shipped was breaking.
+{
+  const has = typeof F.buildEnvReport === 'function' && typeof F.probeOutcome === 'function'
+  const base = { env: { PATH: '/usr/bin:/opt/homebrew/bin' }, which: () => null, backend: { kind: 'direct', reason: 'no tmux', tmuxPath: null }, layoutPath: '/l', backupWritten: false, now: 1, control: null }
+  const found = has ? F.buildEnvReport({ ...base, shell: { path: '/bin/zsh', ok: true }, which: (n) => `/opt/homebrew/bin/${n}`, probe: { shells: ['/bin/zsh'], timedOut: false } }) : null
+  const notFound = has ? F.buildEnvReport({ ...base, shell: { path: '/bin/zsh', ok: true }, probe: { shells: ['/bin/zsh'], timedOut: false } }) : null
+  const noAnswer = has ? F.buildEnvReport({ ...base, shell: { path: '/bin/zsh', ok: false, reason: 'the login shell timed out after 8s' }, probe: { shells: ['/bin/zsh'], timedOut: true } }) : null
+  const arms = has ? [F.probeOutcome(found), F.probeOutcome(notFound), F.probeOutcome(noAnswer)] : []
+  ok('env.1 the report carries the shells asked and the folders checked; a CLI on the PATH is found; one absent from a shell that answered is not-found; a shell that timed out is no-answer with the ~/.zprofile fix in its sentence — never not-found',
+    has && found.probe.shells.join() === '/bin/zsh' && found.probe.folders.join() === '/usr/bin,/opt/homebrew/bin' &&
+      arms[0].kind === 'found' && arms[1].kind === 'not-found' && arms[2].kind === 'no-answer' && /didn.t answer|did not answer/.test(arms[2].sentence) && /zprofile/.test(arms[2].sentence) && /install/.test(arms[1].sentence),
+    JSON.stringify({ probe: found && found.probe, arms }))
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -137,3 +137,21 @@ asserts the second identical write is skipped. `status.1` (M81) is the read-only
 `add` refused by name for a bad kind and for empty text, `list` for a root with no file
 answering EMPTY rather than erroring, and a `command` key still refused on the memory verb —
 the write door is one store, and it can spawn nothing.
+
+### Act III (M104–M107)
+
+`verify:palette lineup.1`/`lineup.2` drive `lineupPlan` pure: the four lineups, a Workbench
+in worktrees giving ONLY the agent seat a lane, and the ceiling line counting who queues.
+`verify:rail lastline.1` pins `lastLineOf` (the last non-empty line of the last answer,
+ellipsised from the END so the tail of a sentence survives). `verify:rail header.1` is the
+chat's header line with every piece present and every absent piece absent. `verify:file
+env.1` is the report's `probe` fact — the shells asked, the folders checked, and `found` /
+`not-found` / `no-answer` told apart (a killed probe is never "not installed").
+`verify:styles header.1` reads the frame rule as text: `.pf__title` gives (its floor stays
+M67's 8ch, not 0) and every chrome control is `flex: 0 0 auto`. In the real renderer,
+`verify:panels header.1` measures a 320px frame with a long title — every control inside
+the box, the title clipped and carried whole in its attribute — and `flip.1` WAKES one
+panel before flipping: the first version passed on two dormant (carded) panels while a
+live terminal did not turn over, because the flip rode `CardDetailContext`, which only the
+card reads. It is a prop on `TerminalPanel` now, and the check asserts the live slot
+leaves and returns.

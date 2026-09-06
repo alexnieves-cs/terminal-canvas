@@ -131,7 +131,9 @@ import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
-import { onChatSession, onChatAuto } from '@renderer/chat/chat-store'
+import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
+import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
@@ -778,6 +780,7 @@ export function Canvas({
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
+        clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
         clearUsage(panel.rect.id)
@@ -1108,6 +1111,15 @@ export function Canvas({
   // tiering, never inside it: assignTiers rations contexts, this rations
   // typography.
   const [cardDetail, setCardDetail] = useState<CardDetail>('tail')
+  // M106. FLIP: every terminal turned over to its far view — M57's summary tier
+  // invoked deliberately rather than by camera distance, through the same
+  // context and the same renderer (no second one is grown). A view state,
+  // never persisted; a locked panel does not move (nothing moves), a
+  // maximised one flips in place.
+  const [flipped, setFlipped] = useState(false)
+  useEffect(() => window.canvas.canvas.onFlip(() => setFlipped((v) => !v)), [])
+  // `paletteActionsRef` is the existing ref, assigned after the actions are built; read inside the listener only.
+  useEffect(() => window.canvas.canvas.onTidy(() => paletteActionsRef.current?.tidyPanels(panelsRef.current.map((p) => p.rect.id))), [])
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -1496,6 +1508,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
+      clearLastLine(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
       clearUsage(panel.rect.id)
@@ -1945,6 +1958,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
+    clearLastLine(id)
     clearLiveSession(id)
     clearSubagents(id)
     clearUsage(id)
@@ -2072,6 +2086,8 @@ export function Canvas({
   const onFocusPanel = useCallback((id: string) => {
     onSelectPanel(id)
     setFocusedId(id)
+    // M105. Looking at it is reading it: the unread mark clears on focus.
+    clearUnread(id)
     registry.focus(id)
     // Looking at a panel is reading it. Sent unconditionally rather than only
     // when this panel is in wants-you: main is the only author of that state,
@@ -3170,6 +3186,7 @@ export function Canvas({
     (id: string, nextSpec: PanelSpecTemplate) => {
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
+      clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
       clearUsage(id)
@@ -3360,6 +3377,17 @@ export function Canvas({
   useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
   const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
   useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
+  // M105. The capsules count ACROSS chats from the chat store (the rail's
+  // rows re-derive a chat's state per row and carry none); the store's one
+  // version is what re-renders this when any chat moves.
+  const chatsVersion = useChatsVersion()
+  const capsules = useMemo(() => railCapsules(panels.filter(isChatPanel).map((p) => { const c = getChat(p.rect.id); return { id: p.rect.id, kind: 'chat', state: { kind: 'chat' as const, status: undefined, dormant: false, chat: chatStateInput(c.snapshot, c.turns.length > 0 || (c.meta?.turns ?? 0) > 0) ?? { status: 'not-started' as const, pending: 0 } } } })), [panels, chatsVersion])
+  // M105. A chat's turn end sets its LAST LINE SAID and, when the user was
+  // elsewhere, the unread mark — per id, in its own store, never on version().
+  useEffect(() => onChatTurnEnd((id) => { setLastLine(id, lastLineOf(lastAssistantText(id)), focusedIdRef.current !== id) }), [])
+  // M105. After a relaunch the row still says what its chat said last — read,
+  // never unread: a restored answer was read in its earlier life.
+  useEffect(() => onChatSeeded((id) => { if (getLastLine(id).line !== '') return; const line = lastLineOf(lastAssistantText(id)); if (line !== '') setLastLine(id, line, false) }), [])
   // M97. An auto run is a run: the store's auto bus feeds the recorder.
   useEffect(() => onChatAuto((id, status) => runsApi.onAutoEvent(id, status)), [runsApi])
   const anyOpen = runs.some((r) => r.endedAt === undefined)
@@ -3591,8 +3619,12 @@ export function Canvas({
     })),
     maximise: maximisePanel,
     restore: restorePanel,
-    readOnly: merged
-  }), [marksSignature, maximisePanel, restorePanel, merged])
+    readOnly: merged,
+    // M106. The ⋯ menu's door: the ref is set HERE as well as by the render,
+    // because openPalette captures the ref synchronously and the focus it just
+    // asked for lands a render later.
+    more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() }
+  }), [marksSignature, maximisePanel, restorePanel, merged, onFocusPanel, palette])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -4065,7 +4097,7 @@ export function Canvas({
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput, openBrowserPanel,
-    teammatesRef, chooseNavigator: chrome.chooseNavigator
+    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v)
   })
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
@@ -4315,6 +4347,7 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
+        capsules={capsules}
       />
       <TopBar
         presets={presetRows}
@@ -4637,6 +4670,9 @@ export function Canvas({
                 z={panel.z}
                 title={panel.title}
                 cardDetail={cardDetail}
+                // M106. Flip hands the far view's summary to every terminal deliberately — a
+                // prop, because a LIVE panel never reads the card's detail.
+                flipped={flipped}
                 selected={selectedIds.has(panel.rect.id)}
                 onSelect={onSelectPanel}
                 onSlotMount={onSlotMount}
@@ -4753,6 +4789,7 @@ export function Canvas({
           <Launcher
             presets={presetRows}
             report={envReport}
+            onCheckAgain={() => { void window.canvas.env.report(true).then(setEnvReport) }}
             onSpawnPreset={paletteActions.spawnPreset}
             onOpenSheet={paletteActions.beginSpawnSheet}
             onOpenFile={paletteActions.openFile}

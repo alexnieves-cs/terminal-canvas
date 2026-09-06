@@ -59,9 +59,26 @@ function notify(id: string): void {
   for (const cb of set) cb()
 }
 
+/**
+ * M105. One version for every chat at once, for the few readers that count
+ * ACROSS chats (the dock's capsules) — a primitive, so useSyncExternalStore
+ * re-renders only when some chat's state object was replaced.
+ */
+let chatsVersion = 0
+const versionListeners = new Set<() => void>()
+export function useChatsVersion(): number {
+  return useSyncExternalStore(
+    (cb) => { versionListeners.add(cb); return () => { versionListeners.delete(cb) } },
+    () => chatsVersion,
+    () => chatsVersion
+  )
+}
+
 function update(id: string, next: ChatState): void {
   states.set(id, next)
+  chatsVersion += 1
   notify(id)
+  for (const cb of versionListeners) cb()
   syncApprovals()
 }
 
@@ -156,6 +173,7 @@ export function seedChat(
     // M98. Carried, never re-seeded: a seed is main's snapshot, and grants are asked for separately.
     ...(prev.grants === undefined ? {} : { grants: prev.grants })
   })
+  if (input.turns !== undefined && input.turns.length > 0) for (const l of seededListeners) l(id)
 }
 
 let insertSeq = 0
@@ -230,6 +248,17 @@ const autoListeners = new Set<AutoListener>()
 export function onChatAuto(listener: AutoListener): () => void {
   autoListeners.add(listener)
   return () => { autoListeners.delete(listener) }
+}
+
+/**
+ * M105. A chat SEEDED with its transcript (a relaunch, `Open as chat`): the
+ * rail's last line is re-derived by the canvas — the guarded reader — and never
+ * marked unread, because a restored answer was read in its earlier life.
+ */
+const seededListeners = new Set<TurnEndListener>()
+export function onChatSeeded(listener: TurnEndListener): () => void {
+  seededListeners.add(listener)
+  return () => { seededListeners.delete(listener) }
 }
 
 export function onChatTurnEnd(listener: TurnEndListener): () => void {

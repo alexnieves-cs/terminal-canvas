@@ -435,6 +435,8 @@ export interface PaletteActions {
   openTeammates(): void
   /** M103. The palette's Open a page… row: ask for a URL in text mode, then mint a browser panel at the world centre. */
   beginBrowser(): void
+  /** M106. Flip every terminal to its far view, and back. */
+  toggleFlip(): void
 }
 
 export interface PaletteContext {
@@ -1331,7 +1333,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({
       id: 'panel.tidy',
       title: useSelection ? `Tidy the selection (${ctx.selectedIds.length} panels)` : 'Tidy everything',
-      subtitle: 'compact without reordering — one undo',
+      subtitle: ctx.merged === true ? REASON_MERGED_READ_ONLY : 'compact without reordering — one undo',
       group: 'panel',
       searchText: 'tidy arrange compact grid align clean up layout',
       run: () => actions.tidyPanels(ids)
@@ -2053,6 +2055,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'manage',
     searchText: 'teammates agents roster identity places brief memory manage',
     run: () => actions.openTeammates()
+  })
+
+  // --- M106: the workspace's second verb ---------------------------------------
+  out.push({
+    id: 'canvas.flip',
+    title: 'Flip terminals',
+    subtitle: 'every terminal shows its work title large, agent and role beneath — the far view, on purpose; again to flip back',
+    group: 'canvas',
+    searchText: 'flip terminals titles far view overview roles',
+    run: () => actions.toggleFlip()
   })
 
   return out

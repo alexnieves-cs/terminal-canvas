@@ -4,6 +4,9 @@ import { APPEARANCE_CATEGORY, RESTORE_CATEGORY, settingsInCategory, type Setting
 import { menuLabel, type PresetAvailability } from './presets'
 
 export interface AppMenuOptions {
+  /** M106. The Workspace menu's two verbs. */
+  onTidy: () => void
+  onFlip: () => void
   /** M65. The File menu's New panel… (⌘⇧N): open the spawn sheet. */
   onOpenSheet(): void
   /** Resolved current values, keyed by SettingDef.id. */
@@ -139,6 +142,16 @@ export function buildAppMenu(options: AppMenuOptions): void {
         },
         { type: 'separator' },
         { role: 'selectAll' }
+      ]
+    },
+    {
+      // M106. The workspace's two verbs, in one menu: Tidy Panes (M40's
+      // arrangement, one undo) and Flip Terminals (M57's far view invoked
+      // deliberately — a view state, never persisted).
+      label: 'Workspace',
+      submenu: [
+        { label: 'Tidy Panes', accelerator: 'CmdOrCtrl+Alt+T', click: () => options.onTidy() },
+        { label: 'Flip Terminals', accelerator: 'CmdOrCtrl+Alt+F', click: () => options.onFlip() }
       ]
     },
     {

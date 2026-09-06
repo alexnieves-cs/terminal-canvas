@@ -3756,6 +3756,41 @@ now` works) rather than dropped from the runner, or `Run now` on a paused routin
 mint is the renderer's (only it mints panels), and the run is reported back through the one
 save door so the row is never a guess.
 
+**The frame rule is ONE rule for every kind, and Flip reuses the far view's own context
+(`PanelFrame.tsx`, `styles.css`, `Canvas.tsx`'s `flipped`, M106).** Three build logs (M66, M67,
+M68) recorded titles truncated to `Revie…`, and M91 answered with a wider rail — a fix that
+moves the width at which the next title fails. The rule is in the stylesheet once: the title
+is the one thing that gives (`min-width: 0`, ellipsis, its full text in `title` and at the top
+of the `⋯` menu) and every chrome control is `flex: 0 0 auto`; a per-kind rule would be the
+same truncation reappearing on the kind nobody measured. Flip hands `summary` to every
+terminal through a `flipped` PROP on `TerminalPanel`, NOT through `CardDetailContext`: the
+context is read by the card, and a LIVE panel renders its slot and never the card — the first
+`flip.1` passed on two dormant panels while a running terminal on screen did not turn over.
+The flipped body is the same `PanelCard` at `summary`, so the far view's renderer is invoked
+deliberately and no second renderer of the same card exists to drift from it; it is a view state, never persisted, because a layout file that
+remembered a flip would open a canvas of cards with no gesture that made them.
+
+**The last line said is the transcript's, per panel, and never a terminal's scrollback
+(`last-line-store.ts`, M105).** The content is the same in both front-ends of a CONVERSATION
+because it comes from the transcript's last complete text block; a terminal's scrollback is
+not a conversation, and a "last line" scraped from it would be a different content in the
+two front-ends and a lie beside a prompt. The store is by id, never on `registry.version()`
+(which carries tier/status/focus/exit and nothing higher-frequency), and it is cleared at
+every panel-removing site beside `clearAgentState` — a recycled id would otherwise inherit
+a dead panel's last words. Unread is set only when the turn ended while the panel was not
+focused, and cleared on focus: looking at it is reading it.
+
+**Discovery has three states, and a shell that did not answer is never "not installed"
+(`shared/env-report.ts`'s `probeOutcome`, `shell-env.ts`, M107).** The probe runs the login
+shell with `-ilc`; a slow or prompting `~/.zshrc` times it out, and the first cut of this
+surface read the resulting empty PATH as every CLI absent — sending a user to reinstall a
+CLI that was installed. `shellProbeFacts` records the shells asked and whether the probe was
+killed; `probeOutcome` reads a shell that did not answer as `no-answer` with the
+`~/.zprofile` fix, and only a shell that ANSWERED and still lacked the CLI as `not-found`.
+`Check again` (`env:report` with `again`) forgets the cached answer and asks once more, and
+REPORTS — the app's own environment (the presets' `which`, the PTYs' env) applies on relaunch,
+which the row says, so a green re-probe does not read as a fixed spawn.
+
 **The manual-only list, re-read entire at 2.0 (M94).** Nothing above was struck: no entry on
 the list was automated by M71–M93 — the run added surfaces beside them rather than checks
 beneath them. Added, each confirmed once by hand or not at all, as stated:
@@ -3801,3 +3836,9 @@ beneath them. Added, each confirmed once by hand or not at all, as stated:
   minutes, and that the renderer's mint answers it, was not watched.
 - **A real write through the broker with a card (M102).** The card and its refusal are driven
   over fake fetchers and a fake session; no real GitHub write was made, by constraint 1.
+- **A lineup launched into worktrees (M104).** `lineupPlan`'s lane rule is pinned; that the
+  agent seats' `spawn:sheet` with `worktree` lands each in its own lane on a real repository
+  while the shell and browser seats stay in the checkout was not driven end to end.
+- **A real slow `~/.zshrc` (M107).** `env.1` drives the outcome over a report with
+  `timedOut: true`; a login shell that really prompts or hangs for five seconds was not
+  staged. `Check again` against a real shell was clicked once by hand or not at all.

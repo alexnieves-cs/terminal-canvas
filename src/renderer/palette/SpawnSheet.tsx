@@ -1,8 +1,9 @@
 import type { PersistedTeammate } from '@shared/teammates'
+import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
+import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, CHAT_WHAT_ID, CODEX_WHAT_ID, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat } from './spawn-sheet'
 import { BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -49,6 +50,8 @@ export interface SpawnSheetModel {
   claudeAvailable: boolean
   /** M100. The roster, for the `chat as <name>` rows. */
   teammates?: readonly PersistedTeammate[]
+  /** M104. The ceiling as read live, for the lineup preview's queue line. */
+  ceiling?: { maxConcurrent: number; liveAgents: number }
   /** M90. Whether codex was found — its chat arm is offered disabled by name otherwise. */
   codexAvailable: boolean
   /** M99. The models live sessions have REPORTED — the model field's suggestions. Absent suggests nothing. */
@@ -78,6 +81,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const [mode, setMode] = useState<PermissionMode | ''>('')
   const [effort, setEffort] = useState<Effort | ''>('')
   const [modelName, setModelName] = useState('')
+  // M104. Worktrees ASKED for a lineup: only agent seats get a lane (lineupPlan's rule).
+  const [worktree, setWorktree] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
   // M80. The chosen template and its parameters — ONE FIELD PER PARAMETER,
   // the composer's fill step (the sheet is a form; a form asks its fields
@@ -110,12 +115,13 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
   const values = (): SheetValues => {
     const teammateId = parseTeammateWhatId(whatId)
-    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : teammateId !== null ? { kind: 'teammate', id: teammateId } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
+    const lineupId = parseLineupWhatId(whatId)
+    const what: SheetWhat = whatId === COMMAND ? { kind: 'command', command } : lineupId !== null ? { kind: 'lineup', id: lineupId } : teammateId !== null ? { kind: 'teammate', id: teammateId } : whatId === SUPERVISOR_WHAT_ID ? { kind: 'supervisor' } : whatId === CHAT_WHAT_ID ? { kind: 'chat' } : whatId === CODEX_WHAT_ID ? { kind: 'codex' } : { kind: 'preset', id: whatId }
     const agentOptions: AgentOptions = {}
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
     if (modelName.trim() !== '') agentOptions.model = modelName.trim()
-    return { what, cwd, title, agentOptions }
+    return { what, cwd, title, agentOptions, ...(lineupId !== null && worktree ? { worktree: true } : {}) }
   }
 
   const submit = (): void => {
@@ -188,7 +194,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
     : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
-    : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+    : parseLineupWhatId(whatId) !== null ? `lineup: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? 'chat with claude' : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
@@ -229,6 +235,10 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               codex row keeps its `data-sheet-codex` mark (`verify:panels codex.1`). */}
           {backendOptions({ claude: model.claudeAvailable, codex: model.codexAvailable }).map((row) => (
             <option key={row.id} value={WHAT_ID_BY_BACKEND[row.id]} disabled={row.disabled} data-sheet-backend={row.id} data-sheet-codex={row.id === BACKENDS.codex.id ? '' : undefined}>{row.label}</option>
+          ))}
+          {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}
+          {LINEUP_IDS.map((id) => (
+            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!model.claudeAvailable && !model.codexAvailable}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
           ))}
           {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
           {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
@@ -272,6 +282,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       </label>
       )}
 
+      {parseLineupWhatId(whatId) !== null && (
+        <label className="sheet__field sheet__field--how">
+          <span className="sheet__label">lanes</span>
+          <span className="sheet__how"><input type="checkbox" data-sheet-worktree checked={worktree} onChange={(e) => setWorktree(e.target.checked)} /> agents in their own worktrees</span>
+        </label>
+      )}
       {isAgent && (
         <div className="sheet__field sheet__field--how">
           <span className="sheet__label">how</span>
@@ -295,6 +311,25 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
       <div className="sheet__foot">
         <span className="sheet__preview" data-sheet-preview>{what}{chosenTemplate !== undefined ? '' : ` · ${request.cwd ? shortPath(request.cwd, 3) : '—'}`}</span>
+        {/* M104. THE LINEUP PREVIEW: every seat, its kind and lane, the session
+            count, and — against the live ceiling — how many will queue, said
+            BEFORE Enter mints anything. */}
+        {(() => {
+          const lid = parseLineupWhatId(whatId)
+          if (lid === null) return null
+          const plan = lineupPlan(LINEUPS[lid], { cwd: cwd.trim() === '' ? '~' : cwd.trim(), worktrees: request.worktree === true, maxConcurrent: model.ceiling?.maxConcurrent ?? 0, liveAgents: model.ceiling?.liveAgents ?? 0 })
+          return (
+            <div className="sheet__lineup" data-sheet-lineup-preview>
+              <div className="sheet__lineup-line">{plan.sessions} session{plan.sessions === 1 ? '' : 's'} will open · {plan.agents} agent{plan.agents === 1 ? '' : 's'}</div>
+              <ul className="sheet__lineup-seats">
+                {plan.seats.map((seat, i) => (
+                  <li key={i} data-sheet-seat={seat.kind}>{seat.role} · {seat.kind}{seat.url !== undefined ? ` · ${seat.url}` : ''}{seat.lane ? ' · in a worktree' : seat.kind !== 'agent' && request.worktree === true ? ' · in the checkout' : ''}</li>
+                ))}
+              </ul>
+              {plan.ceilingLine !== '' && <div className="sheet__lineup-ceiling" data-sheet-lineup-ceiling data-tone="needs-you">{plan.ceilingLine}</div>}
+            </div>
+          )
+        })()}
         {refusal !== null && <span className="sheet__refusal" data-sheet-refusal role="alert">{refusal}</span>}
         {/* M80. The commit verb says what it will MAKE for a template: `start`
             is the state machine's word for one panel (the critic), and a
