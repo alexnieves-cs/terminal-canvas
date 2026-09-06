@@ -3862,19 +3862,20 @@ export function Canvas({
     const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
     if (created.kind === 'refused') { patch({ note: created.reason }); return }
     const GAP = 48
-    let anchor: PersistedWorkItem['anchor']
+    // The card and the offset are computed HERE, from the ref, not inside the
+    // updater: React runs the updater after this function's next line, and
+    // the first cut assigned the anchor inside it — the record was patched
+    // with no anchor every time, and the check said so.
+    const before = panelsRef.current
+    const card = before.find((p) => workCardItemId(p) === itemId)
+    const centre = card === undefined
+      ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
+      : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
+    const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true }), title: item.key ?? item.title }
+    const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
     setPanels((current) => {
-      const card = current.find((p) => workCardItemId(p) === itemId)
-      const centre = card === undefined
-        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
-        : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
-      const panel = makeChatPanel(chatId, centre, nextZ(current), { cwd: lane.path, sessionId, teammateId, dispatch: true })
-      let next: Panel[] = [...current, { ...panel, title: item.key ?? item.title }]
-      if (card !== undefined) {
-        next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
-        const placed = next.find((p) => p.rect.id === chatId)
-        if (placed !== undefined) anchor = { panelId: chatId, dx: card.rect.x - placed.rect.x, dy: card.rect.y - placed.rect.y }
-      }
+      let next: Panel[] = [...current, { ...chatPanel, z: nextZ(current) }]
+      if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
       commitHistory(next)
       return next
     })
