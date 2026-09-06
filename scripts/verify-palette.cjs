@@ -2438,10 +2438,10 @@ const WS = [
     choices = { copilot: P.modelChoices('copilot'), claude: P.modelChoices('claude') }
   } catch (e) { threw = String(e) }
   const claude = rows.find((r) => r.id === 'chat.sandbox.claude'), acp = rows.find((r) => r.id === 'chat.sandbox.acp'), codex = rows.find((r) => r.id === 'chat.sandbox.codex')
-  ok('sandbox.1 New chat (no folder) is one canvas-group row per registered backend: enabled for claude when it is on the PATH, disabled by name for codex when it is not, and disabled with the row\'s noSandbox sentence for acp whatever the PATH says; modelChoices is copilot\'s closed list and null for claude',
-    threw === null && claude && claude.group === 'canvas' && claude.disabledReason === undefined && /no folder/.test(claude.title) &&
+  ok('sandbox.1 New chat (no folder) is one spawn-group row per registered backend: enabled for claude when it is on the PATH, disabled by name for codex when it is not, and disabled with the row\'s noSandbox sentence for acp whatever the PATH says; modelChoices is copilot\'s closed list and null for claude',
+    threw === null && claude && claude.group === 'spawn' && claude.disabledReason === undefined && /no folder/.test(claude.title) &&
       codex && /PATH/.test(codex.disabledReason || '') && acp && /read-only/.test(acp.disabledReason || '') &&
-      Array.isArray(choices.copilot) && choices.copilot.includes('auto') && choices.claude === null,
+      Array.isArray(choices.copilot) && choices.copilot.includes('gpt-5-mini') && !choices.copilot.includes('auto') && choices.claude === null,
     JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
 }
 

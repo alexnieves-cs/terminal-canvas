@@ -1239,7 +1239,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     )
   )
 
-  // M120. A chat with NO place: one canvas-group row per registered backend
+  // M120. A chat with NO place: one spawn-group row per registered backend, beside New chat…
   // (the sheet's own order), disabled by name for a binary not on the PATH
   // and by the row's own `noSandbox` sentence for a row with no read-only
   // mode — never dropped, so a backend that cannot is a backend that says so.
@@ -1251,7 +1251,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           id: `chat.sandbox.${backend}`,
           title: `New chat (no folder) — ${row.label}`,
           searchText: `new chat no folder sandbox ${row.label} conversation without a repository`,
-          group: 'canvas',
+          group: 'spawn',
           run: () => actions.newSandboxChat(backend)
         },
         row.sandboxArgs === undefined ? row.reasons.noSandbox : backendAvailable(ctx.presets, backend) ? undefined : row.reasons.noCli

@@ -511,7 +511,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           const a = snapshot.auto
           return <span className={`badge pf__word chat__auto${a.state === 'running' ? ' chat__auto--running' : ''}`} data-chat-auto={a.state} data-tone={autoTone(a.state)} title={autoChipWords(a)}>
             {a.state === 'running' && <span className="chat__auto-ring" aria-hidden="true" />}
-            {autoChipWords(a)}
+            {/* M121. The WORDS are the flex item that gives: text-overflow lives on a block, not on an inline-flex row's anonymous text. */}
+            <span className="chat__auto-label">{autoChipWords(a)}</span>
             {a.state !== 'running' && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__auto-dismiss" data-chat-auto-dismiss aria-label="Dismiss the auto result" title="Dismiss" {...shellControl(() => dismissAuto(id))}>dismiss</button>}
           </span>
         })()}

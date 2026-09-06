@@ -60,7 +60,7 @@ import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shar
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript } from './transcript-reader'
 import type { AgentHandlers } from './ipc'
-import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
+import { type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
@@ -1364,9 +1364,11 @@ app.whenReady().then(async () => {
         images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
       }
       const answer = agentSessions?.send(id, text, images) ?? 'no-session'
-      if (answer === 'refused-backend') return { refused: REASON_NO_CODEX }
-      if (answer === 'refused-sandbox') return { refused: BACKENDS[agentSessions?.get(id)?.backend ?? 'claude'].reasons.noSandbox }
-      if (answer === 'refused-images') return { refused: REASON_CODEX_NO_IMAGES }
+      // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
+      const row = BACKENDS[agentSessions?.get(id)?.backend ?? 'claude']
+      if (answer === 'refused-backend') return { refused: row.reasons.noCli }
+      if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
+      if (answer === 'refused-images') return { refused: row.reasons.noImages }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
@@ -1394,11 +1396,13 @@ app.whenReady().then(async () => {
     // renderer sent. A deny never grants, whatever the scope says.
     answer: ({ id, requestId, answer, scope }) => {
       const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
-      const answered = agentSessions?.answerPermission(id, requestId, answer) ?? false
-      // Granted only for a request that was really answered: a grant for a
-      // question the process never heard would outlive it invisibly.
-      if (answered && toolName !== undefined) approvals?.grant(id, toolName)
-      return answered
+      // M119. The grant goes FIRST so the answer itself can carry the vendor's
+      // word for it (ACP's allow_always — the manager reads preAnswer when it
+      // writes). `toolName` is defined only when the request is really PENDING
+      // in main's own record, so a grant for a question the process never heard
+      // cannot be minted here (the pending lookup above is the guard).
+      if (toolName !== undefined) approvals?.grant(id, toolName)
+      return agentSessions?.answerPermission(id, requestId, answer) ?? false
     },
     grants: (id) => approvals?.grantsOf(id) ?? [],
     revokeGrants: (id) => { approvals?.revoke(id) },

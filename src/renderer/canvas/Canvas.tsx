@@ -255,6 +255,10 @@ export function Canvas({
   // M56. Bookmarks: places, persisted beside the camera, per workspace.
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
   // M79. Runs: a history kept with the layout, owned by useRuns below.
+  // M121 (6). `sealAbandoned` seals every open run at load — the idle predicate
+  // it now takes is inert here (every panel is idle at load), and the stale
+  // row a seeded `running` auto status shows comes through useRuns.onAutoEvent;
+  // carried to M124 rather than redesigned here.
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
@@ -3827,6 +3831,7 @@ export function Canvas({
     // M100. The identity rides the create (main reads the brief and checks the places) and the record.
     const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
     // M120. The sandbox flag: main resolves the cwd to its own folder and ignores the one here; the record keeps the mark so a relaunch re-creates it the same way.
+    // The record's cwd is the INTENDED one except for a sandbox chat: the snapshot's cwd is a live session's, and a recycled panel id answers with a STALE session's folder (verify:panels codex.1 found it).
     const sandbox = opts?.sandbox === true ? { sandbox: true as const } : {}
     const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...sandbox, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
@@ -3835,7 +3840,7 @@ export function Canvas({
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
       // M121. A routine's chat is MARKED, the way a lane is: the record is what
       // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: result.snapshot.cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next

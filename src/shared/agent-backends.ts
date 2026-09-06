@@ -171,8 +171,8 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     handshake: false,
     // Denial rules outrank --allow-all-tools (`copilot help permissions`).
     sandboxArgs: ['--deny-tool', 'shell', '--deny-tool', 'write'],
-    // The fixtures' own `availableModels`, plus `auto` (the CLI's router).
-    models: ['auto', 'claude-haiku-4.5', 'gpt-5-mini', 'mai-code-1.1-flash'],
+    // The fixtures' own `availableModels`; `auto` (the CLI's router) is what NO `--model` means, so it is the empty choice, not a second row.
+    models: ['claude-haiku-4.5', 'gpt-5-mini', 'mai-code-1.1-flash'],
     reasons: {
       noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
       noInterrupt: 'copilot has no interrupt — close the panel to stop it',
@@ -213,7 +213,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
       noTerminal: 'a copilot (acp) chat continues only here — the terminal door is claude --resume',
       noPermissions: 'copilot (acp) asks before a command runs — a grant answers allow_always for the session',
       noPrompt: 'copilot (acp) takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
-      noSandbox: 'copilot (acp) has no read-only mode to run a chat with no folder in'
+      noSandbox: 'copilot (acp) has no read-only mode to run a chat with no folder in — use the copilot row instead'
     }
   }
 }

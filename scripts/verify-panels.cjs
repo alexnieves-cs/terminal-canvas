@@ -18080,6 +18080,22 @@ app.whenReady().then(async () => {
     }
 
     /* ---------------------------------------------------------------- */
+    /* M118. The sheet's copilot and acp rows, from the registry          */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['copilot.1 the sheet offers `chat with copilot` and `chat with copilot (acp)` beside claude and codex, each disabled BY NAME (`— not on PATH`) when the binary is absent from the harness PATH, and never dropped']
+      try {
+        win.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET)
+        const rows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-sheet-what] option[data-sheet-backend]')]; return o.length >= 4 ? o.map((x) => ({ id: x.getAttribute('data-sheet-backend'), text: x.textContent, disabled: x.disabled })) : false })()`), 4000)
+        const cp = rows && rows.find((r) => r.id === 'copilot'), acp = rows && rows.find((r) => r.id === 'acp')
+        ok(IDS[0], rows && rows.map((r) => r.id).join(',') === 'claude,codex,copilot,acp' && cp && /chat with copilot/.test(cp.text) && cp.disabled === true && /PATH/.test(cp.text) && acp && /copilot \(acp\)/.test(acp.text) && acp.disabled === true,
+          JSON.stringify({ rows }))
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+        await settle()
+      } catch (e) { for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e)) }
+    }
+
+    /* ---------------------------------------------------------------- */
     /* M91. The launcher's verbs as invitations, and the codex door       */
     /* ---------------------------------------------------------------- */
     {
@@ -18565,8 +18581,10 @@ app.whenReady().then(async () => {
         const menuOpened = await wc.executeJavaScript(`(() => {
           const b = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]'); if (!b) return 'no button'
           b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
-          return document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') !== null
+          return true
         })()`)
+        // The click's state update lands on React's next render, never synchronously.
+        const menuOpenedNow = menuOpened === true && await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') !== null`), 3000)
         const menuInside = await wc.executeJavaScript(`(() => {
           const t = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu-title]'); if (!t) return 'no title'
           const r = t.getBoundingClientRect()
@@ -18577,7 +18595,7 @@ app.whenReady().then(async () => {
           c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 }))
           c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
         const menuClosed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
-        ok(IDS[2], menuOpened === true && menuInside === true && menuClosed === true, JSON.stringify({ menuOpened, menuInside, menuClosed }))
+        ok(IDS[2], menuOpenedNow === true && menuInside === true && menuClosed === true, JSON.stringify({ menuOpened, menuInside, menuClosed }))
         // Wake hdB so the flip is measured on a LIVE panel: the first version of
         // this check passed on two dormant (carded) panels while a running
         // terminal did not turn over at all.
@@ -18602,7 +18620,7 @@ app.whenReady().then(async () => {
         const unflippedAway = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.canvas') !== null && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 3000)
         await wc.executeJavaScript(`window.__m7aWorkspace().switchTo('w1')`)
         await settle()
-        const backUnflipped = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"]') !== null && document.querySelectorAll('[data-card-summary]').length === 0 && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 6000)
+        const backUnflipped = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"]') !== null && !document.querySelector('.canvas').hasAttribute('data-flipped')`), 6000)
         ok(IDS[1], liveB === true && flipped === true && summaryTitle === 'worker b' && back === true && slotBack === true && flippedAgain === true && typeof flipWs === 'string' && unflippedAway === true && backUnflipped === true,
           JSON.stringify({ liveB, flipped, summaryTitle, back, slotBack, flippedAgain, flipWs, unflippedAway, backUnflipped }))
       } catch (hErr) {

@@ -172,6 +172,7 @@ interface Session {
    * forever. Cleared with the process (exit, dispose, an error result).
    */
   awaitingHandshake: boolean
+  handshakeTimer: ReturnType<typeof setTimeout> | null
   /** Whether the pending handshake should load the session it names rather than mint one. */
   handshakeResume: boolean
   heldPrompt?: { text: string; images: OutgoingImage[] }
@@ -185,7 +186,7 @@ interface Session {
   inFlight: boolean
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
-  abortReason: 'interrupt-timeout' | 'budget' | null
+  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | null
   /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
   queue: { text: string; images: OutgoingImage[]; auto?: true }[]
   pending: Map<string, PendingPermission>
@@ -260,6 +261,9 @@ export class AgentSessionManager {
       sandbox: spec.sandbox === true,
       carry: '',
       awaitingHandshake: false,
+      handshakeTimer: null,
+      // M120. The chosen model shows in the header before the first turn; the stream's own word replaces it.
+      model: spec.agentOptions?.model,
       handshakeResume: false,
       turns: [],
       inFlight: false,
@@ -597,6 +601,16 @@ export class AgentSessionManager {
       session.awaitingHandshake = true
       session.handshakeResume = resume
       proc.write(opening)
+      // A handshake nobody answers — a logged-out CLI, an older binary printing
+      // help and idling — must not leave the panel at `starting` forever with
+      // both verbs dead: the interrupt grace applies, and the kill names it.
+      this.clearHandshakeTimer(session)
+      session.handshakeTimer = setTimeout(() => {
+        session.handshakeTimer = null
+        if (this.sessions.get(session.id) !== session || session.proc !== proc || !session.awaitingHandshake) return
+        session.abortReason = 'handshake-timeout'
+        proc.kill()
+      }, this.interruptGraceMs)
     }
     this.setStatus(session, 'starting')
   }
@@ -719,6 +733,7 @@ export class AgentSessionManager {
         // the next process must name `--resume=` rather than pin again — a
         // second pin of the same id is a fresh conversation with no memory.
         else if (BACKENDS[session.backend].oneProcessPerTurn) session.everSpawned = true
+        this.clearHandshakeTimer(session)
         if (session.awaitingHandshake) {
           // M119. The session is open: the held prompt goes now, through the
           // ordinary writer (the hold is off, so it writes).
@@ -785,6 +800,7 @@ export class AgentSessionManager {
         // refused): the held prompt never went, and this result is its end.
         session.awaitingHandshake = false
         session.heldPrompt = undefined
+        this.clearHandshakeTimer(session)
         this.clearInterruptTimer(session)
         session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
@@ -880,6 +896,7 @@ export class AgentSessionManager {
     session.carry = ''
     session.awaitingHandshake = false
     session.heldPrompt = undefined
+    this.clearHandshakeTimer(session)
     this.clearInterruptTimer(session)
     // M97. A run whose process exited is stuck: exit — a real verdict with a
     // reason, never a chip that keeps spinning over a dead process.
@@ -960,6 +977,10 @@ export class AgentSessionManager {
     session.batch = []
   }
 
+  private clearHandshakeTimer(session: Session): void {
+    if (session.handshakeTimer !== null) { clearTimeout(session.handshakeTimer); session.handshakeTimer = null }
+  }
+
   private clearInterruptTimer(session: Session): void {
     if (session.interruptTimer !== null) {
       clearTimeout(session.interruptTimer)
@@ -1028,6 +1049,7 @@ export class AgentSessionManager {
       queued: session.queue.length,
       counters: { ...session.counters },
       ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
+      ...(session.awaitingHandshake ? { awaitingHandshake: true as const } : {}),
       ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }

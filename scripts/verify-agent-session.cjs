@@ -1608,6 +1608,16 @@ const isResult = (l) => l.includes('"type":"result"')
     JSON.stringify({ threw, claudeArgs, codexArgs, copilotArgs, acpSend }))
 }
 
+{
+  /* M120 — copilot.sandbox.1. The deny KINDS, not tool names: `copilot help permissions` (recorded) says --deny-tool takes a pattern `kind(argument)` with kinds `shell(command)` and `write(path)`, and that denial outranks --allow-all-tools. The row's sandboxArgs name those kinds. */
+  let help = '', row = []
+  try { help = readFileSync(join(__dirname, 'fixtures', 'agent-session', 'copilot', 'permissions.txt'), 'utf8'); row = M.backends.BACKENDS.copilot.sandboxArgs ?? [] } catch (e) { help = String(e) }
+  const kinds = row.filter((_, i) => i % 2 === 1)
+  ok('copilot.sandbox.1 the copilot row denies by the KINDS the recorded `copilot help permissions` names (shell, write), and the help says denial outranks --allow-all-tools',
+    /shell\(command/.test(help) && /write\(path/.test(help) && /Denial rules always take[\s\S]*precedence/.test(help) && kinds.length === 2 && kinds.every((k) => new RegExp('\\n\\s+' + k + '\\(').test(help)),
+    JSON.stringify({ kinds, hasShell: /shell\(command/.test(help), hasWrite: /write\(path/.test(help) }))
+}
+
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */
   {
@@ -1616,7 +1626,7 @@ const isResult = (l) => l.includes('"type":"result"')
     const files = []
     const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p) } }
     walk(root)
-    const pattern = /backend\s*[!=]==\s*'(?:claude|codex)'|case '(?:claude|codex)':/
+    const pattern = /backend\s*[!=]==\s*'(?:claude|codex|copilot|acp)'|case '(?:claude|codex|copilot|acp)':/
     const hits = files.filter((f) => pattern.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const expected = ['shared/layout-schema.ts']
     ok('registry.1 no file compares a `backend` field to a literal member of the union, and no `case` names one, except the layout parser (absent-vs-malformed needs the literal) — the sheet\'s own `what.kind` vocabulary is outside this grep and is named in the act log',

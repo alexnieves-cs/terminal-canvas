@@ -100,6 +100,8 @@ export interface AgentSessionSnapshot {
    * for every backend without a handshake, and until the handshake answers.
    */
   negotiated?: NegotiatedCapabilities
+  /** M119. The handshake has been written and not yet answered: the first send is held. Absent for every other row and once the session opens. */
+  awaitingHandshake?: true
 }
 
 /** M119. The capabilities a handshake states live; each absent when the agent said nothing about it. */
@@ -129,7 +131,7 @@ export type AgentSessionEvent = { id: string } & (
   | ResultEvent
   | { type: 'status'; status: AgentSessionStatus; exitCode?: number | null; exitSignal?: string; stderr?: string }
   | { type: 'turn'; turn: TranscriptTurn }
-  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'budget' }
+  | { type: 'turn-aborted'; reason: 'exited' | 'interrupt-timeout' | 'handshake-timeout' | 'budget' }
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */

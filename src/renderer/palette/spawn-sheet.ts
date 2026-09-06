@@ -1,3 +1,4 @@
+import type { AgentKind } from '@shared/cost'
 import type { AgentOptions } from '@shared/cost'
 import type { SpawnRequest } from '@shared/ipc-contract'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
@@ -92,6 +93,20 @@ export function supervisorRowReason(backend: AgentBackend): string | null {
 }
 
 /** M120. The row's closed model list where the CLI has one, null for free text — what the sheet's model field renders as a select or an input. */
+/** M118. The preset KIND a backend's headless row shares its flags with — the sheet's how row reads the kind's flag table; acp shares copilot's binary and flags. */
+export const PRESET_KIND_BY_BACKEND: Readonly<Record<AgentBackend, AgentKind>> = { claude: 'claude-code', codex: 'codex', copilot: 'copilot', acp: 'copilot' }
+
+/** M119. What a user chooses between two rows on: the row's facts as one sentence, derived — never a second table. */
+export function rowCapabilitySentence(backend: AgentBackend): string {
+  const row = BACKENDS[backend]
+  return [
+    row.asksPermission ? 'asks before a command runs' : 'runs every tool on its own policy',
+    row.interrupts ? 'interrupts' : 'no interrupt',
+    row.images ? 'images' : 'no images',
+    row.sandboxArgs === undefined ? 'no read-only mode' : 'a read-only mode'
+  ].join(' · ')
+}
+
 export function modelChoices(backend: AgentBackend): readonly string[] | null {
   return BACKENDS[backend].models ?? null
 }

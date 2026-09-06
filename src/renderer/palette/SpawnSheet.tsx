@@ -1,9 +1,9 @@
 import type { PersistedTeammate } from '@shared/teammates'
 import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode } from '@shared/cost'
+import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode, AGENT_CAPABILITIES, AGENT_KINDS, type AgentKind } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices } from './spawn-sheet'
+import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices, rowCapabilitySentence, PRESET_KIND_BY_BACKEND } from './spawn-sheet'
 import { type AgentBackend, BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -196,7 +196,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // what it makes, which is the thing the row cannot.
   const what = chosenTemplate !== undefined ? templateShape
     : isSupervisor ? `a supervisor: a chat that reads this canvas with \`tc status\` and answers in the canvas's own words · one per canvas — ${model.hasSupervisor === true ? 'this canvas already has one' : 'this canvas has none yet'} · it starts asleep and reads the canvas on your first send`
-    : parseLineupWhatId(whatId) !== null ? `lineup: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? `chat with ${BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label}` : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
+    : parseLineupWhatId(whatId) !== null ? `lineup: ${LINEUPS[parseLineupWhatId(whatId) as keyof typeof LINEUPS].label}` : isChat ? `chat with ${BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label} — ${rowCapabilitySentence(backendOfWhatId(whatId) ?? 'claude')}` : request.command !== undefined ? `sh -lc ${request.command}` : (preset?.name ?? '')
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
@@ -240,7 +240,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
           {/* M104. The lineups: a shape of seats, previewed below before anything is minted. */}
           {LINEUP_IDS.map((id) => (
-            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!model.claudeAvailable && !model.codexAvailable}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
+            <option key={id} value={lineupWhatId(id)} data-sheet-lineup={id} disabled={!Object.values(model.available ?? { claude: model.claudeAvailable, codex: model.codexAvailable }).some(Boolean)}>lineup: {LINEUPS[id].label} — {LINEUPS[id].hint}{!model.claudeAvailable && !model.codexAvailable ? ' — no agent CLI on the PATH' : ''}</option>
           ))}
           {/* M100. One `chat as <name>` per teammate, disabled by name with no places. */}
           {teammateOptions(model.teammates ?? [], model.claudeAvailable).map((row) => (
@@ -294,20 +294,23 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         <div className="sheet__field sheet__field--how">
           <span className="sheet__label">how</span>
           <div className="sheet__how">
-            <select className="sheet__select" data-sheet-mode value={mode} aria-label="permission mode" onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
-              <option value="">{own.permissionMode ?? 'default'} mode</option>
-              {PERMISSION_MODES.map((m) => <option key={m} value={m}>{m} mode</option>)}
+            {/* M118. A knob the row's CLI has no flag for is DISABLED with the reason, never a control that silently does nothing. */}
+            {(() => { const presetKind = preset?.agent; const kind: AgentKind = backendOfWhatId(whatId) !== undefined ? PRESET_KIND_BY_BACKEND[backendOfWhatId(whatId) as AgentBackend] : (presetKind !== undefined && (AGENT_KINDS as readonly string[]).includes(presetKind) ? presetKind as AgentKind : 'claude-code'); const flags = AGENT_CAPABILITIES[kind].flags; const label = BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label; return (<>
+            <select className="sheet__select" data-sheet-mode value={mode} aria-label="permission mode" disabled={flags.permissionMode === undefined} title={flags.permissionMode === undefined ? `${label} has no permission mode flag` : undefined} onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
+              <option value="">{flags.permissionMode === undefined ? 'no mode flag' : `${own.permissionMode ?? 'default'} mode`}</option>
+              {flags.permissionMode !== undefined && PERMISSION_MODES.map((m) => <option key={m} value={m}>{m} mode</option>)}
             </select>
-            <select className="sheet__select" data-sheet-effort value={effort} aria-label="effort" onChange={(e) => setEffort(e.target.value as Effort | '')}>
-              <option value="">{own.effort ?? 'default'} effort</option>
-              {EFFORTS.map((m) => <option key={m} value={m}>{m} effort</option>)}
+            <select className="sheet__select" data-sheet-effort value={effort} aria-label="effort" disabled={flags.effort === undefined} title={flags.effort === undefined ? `${label} has no effort flag` : undefined} onChange={(e) => setEffort(e.target.value as Effort | '')}>
+              <option value="">{flags.effort === undefined ? 'no effort flag' : `${own.effort ?? 'default'} effort`}</option>
+              {flags.effort !== undefined && EFFORTS.map((m) => <option key={m} value={m}>{m} effort</option>)}
             </select>
+            </>) })()}
             {/* M120. A closed list where the row has one (copilot names its models), free text otherwise. */}
             {(() => { const choices = backendOfWhatId(whatId) === undefined ? null : modelChoices(backendOfWhatId(whatId) as AgentBackend); return choices === null ? (
               <input className="sheet__input sheet__input--mono" data-sheet-model list="sheet-reported-models" value={modelName} placeholder={own.model ?? 'default model'} aria-label="model" spellCheck={false} onChange={(e) => setModelName(e.target.value)} />
             ) : (
               <select className="sheet__input sheet__input--mono" data-sheet-model data-sheet-model-list value={modelName} aria-label="model" onChange={(e) => setModelName(e.target.value)}>
-                <option value="">default model</option>
+                <option value="">auto (the CLI's default)</option>
                 {choices.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             ) })()}
