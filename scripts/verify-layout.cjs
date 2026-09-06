@@ -3803,6 +3803,63 @@ try {
   ok('workflow.1 (threw)', false, String(e && e.stack || e))
 }
 
+// M132 — workflow.panel.1a–d, the PURE half of the workflow panel: the
+//      diagram as a projection of the record, the header's block count, the
+//      Runs filter, and a trigger round-tripping through watch-trigger.ts.
+//      1e (Run reaching M80's instantiation exactly once) needs the real
+//      renderer and lives in verify-panels.cjs.
+//
+//      Every check here is wrapped: a THROWN check aborts the file and every
+//      check below it never runs, so its silence would read as green.
+try {
+  const pool = (over = {}) => ({ key: 'p', kind: 'pool', cwd: '~', dx: -260, dy: 0, width: 4, list: '/tmp/list.txt', prompt: 'do it', ...over })
+  const orch = (over = {}) => ({ key: 'o', kind: 'orchestrator', cwd: '~', dx: 0, dy: -140, prompt: 'lead', ...over })
+  const coll = (over = {}) => ({ key: 'c', kind: 'collect', cwd: '~', dx: 260, dy: 0, target: '/tmp/out.txt', ...over })
+  const chat = { key: 'r', kind: 'chat', cwd: '~', dx: 0, dy: 180, message: 'review' }
+  const t = {
+    id: 'tw', name: 'a workflow', nodes: [pool(), orch(), coll(), chat],
+    edges: [{ from: 'p', to: 'c', trigger: 'exit-ok' }, { from: 'o', to: 'r', trigger: 'idle' }]
+  }
+
+  const d = L.buildDiagram(t)
+  ok('workflow.panel.1a the diagram matches the RECORD, not a second layout',
+     d.blocks.map((b) => b.key).join(',') === t.nodes.map((n) => n.key).join(',') &&
+       d.edges.map((e) => `${e.from}>${e.to}`).join(',') === 'p>c,o>r' &&
+       d.edges.every((e, i) => e.trigger === ['exit-ok', 'idle'][i]) &&
+       d.blocks.every((b) => !/›/.test(b.sublabel)),
+     'a projection — the live canvas is the editor and the template is the truth')
+
+  ok('workflow.panel.1b the header block count equals blockCount()',
+     d.blocks.length === L.blockCount(t) && d.width > 0 && d.height > 0,
+     JSON.stringify({ blocks: d.blocks.length, count: L.blockCount(t) }))
+
+  const runs = [
+    { id: 'r1', name: 'run 1', panelIds: ['n1'], edges: [], startedAt: 1, entries: [], templateId: 'tw' },
+    { id: 'r2', name: 'run 2', panelIds: ['n2'], edges: [], startedAt: 2, entries: [] },
+    { id: 'r3', name: 'run 3', panelIds: ['n3'], edges: [], startedAt: 3, entries: [], templateId: 'other' }
+  ]
+  const mine = L.runsForTemplate(runs, 'tw')
+  ok('workflow.panel.1c Runs shows only THIS template runs',
+     mine.length === 1 && mine.every((r) => r.templateId === 'tw'),
+     JSON.stringify(mine.map((r) => r.id)))
+
+  // A trigger is a WATCHER's, unchanged: the same union, the same words, and
+  // it survives the layout's own round trip. Not a second scheduler.
+  const watch = L.workflowWatch('tw', '~', { kind: 'git-ref', root: '/tmp/repo' })
+  const roundW = []
+  const round = L.parseLayout(L.serialiseLayout(L.parseLayout(file({
+    workspaces: [{ id: 'w1', name: 'Canvas', panels: [{ id: 'p1', x: 0, y: 0, w: 460, h: 220, z: 1, kind: 'watcher', watch }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }]
+  })).snapshot), roundW)
+  const saved = round.snapshot.workspaces[0].panels[0]
+  const savedTrigger = saved && saved.watch && saved.watch.trigger
+  ok('workflow.panel.1d a trigger round-trips through watch-trigger.ts unchanged',
+     !!savedTrigger && savedTrigger.kind === 'git-ref' && savedTrigger.root === '/tmp/repo' &&
+       saved.watch.templateId === 'tw' && L.triggerWord(savedTrigger) === 'when the branch moves',
+     `a workflow trigger is a watcher; not a second scheduler — ${JSON.stringify({ saved, roundW })}`)
+} catch (e) {
+  ok('workflow.panel.1 (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

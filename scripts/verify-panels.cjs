@@ -18639,6 +18639,85 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M132 — workflow.panel.1e. The workflow panel's Run reaches M80's OWN
+    //     instantiation exactly once — never a second copy of it. The pure
+    //     half of this milestone (the diagram as a projection, the header
+    //     count, the Runs filter, the trigger round trip) is
+    //     `verify:layout workflow.panel.1a-d`; only this needs the renderer.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['workflow.panel.1e Run reaches M80 instantiation, not a second copy — the panel opens on its template with the diagram and the Runs tab, and one click mints the shape through instantiateTemplate exactly once']
+      const wfLog = []
+      const onWf = (_e, level, m) => { if (level >= 2) wfLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onWf)
+      try {
+        const wfDir = mkdtempSync(join(tmpdir(), 'tc panels workflow-'))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reW0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW0
+        await settle()
+        // A template with NO parameters, so Run mints without a sheet.
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf1', name: 'nightly sweep', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(wfDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: -200, dy: 0 },
+          { key: 'pool', kind: 'pool', cwd: ${JSON.stringify(wfDir)}, width: 6, list: ${JSON.stringify(join(wfDir, 'list.txt'))}, prompt: 'work an item', dx: 200, dy: 0 }
+        ], edges: [{ from: 'sweep', to: 'pool', trigger: 'exit-ok' }] })`)
+        layoutStore.save({
+          panels: [{ id: 'wfA', kind: 'workflow', x: 200, y: 200, w: 640, h: 460, z: 1, title: 'nightly sweep', workflow: { templateId: 'wf1' } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW
+        await settle()
+        const opened = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfA"]'); if (!n) return false
+          const blocks = [...n.querySelectorAll('[data-workflow-block]')]
+          if (blocks.length !== 2) return false
+          return {
+            kind: n.getAttribute('data-panel-kind'),
+            template: n.getAttribute('data-workflow-template'),
+            count: n.querySelector('[data-workflow-count]')?.textContent ?? null,
+            blocks: blocks.map((b) => b.getAttribute('data-workflow-block')),
+            sublabels: blocks.map((b) => b.textContent ?? ''),
+            edges: [...n.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')),
+            tabs: [...n.querySelectorAll('[data-workflow-tab]')].map((t) => t.getAttribute('data-workflow-tab')),
+            verbs: [...n.querySelectorAll('[data-workflow-verb]')].map((v) => [v.getAttribute('data-workflow-verb'), v.disabled, v.getAttribute('title')])
+          }
+        })()`), 8000)
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="run"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const minted = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelectorAll('.panel').length
+          return n > ${before} ? { panels: n, calls: window.__m132Instantiations ? window.__m132Instantiations() : null } : false
+        })()`), 10000)
+        await settle()
+        const instantiateCalls = await wc.executeJavaScript(`window.__m132Instantiations ? window.__m132Instantiations() : null`)
+        // The Runs tab exists and, with nothing recorded for this template
+        // yet, says so rather than rendering an empty box.
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-tab="runs"]'); if (t) t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!t })()`)
+        const runsTab = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-panel="runs"]')
+          return p && !p.hasAttribute('hidden') ? (p.textContent ?? '') : false })()`), 4000)
+        ok(IDS[0],
+          opened && opened.kind === 'workflow' && opened.template === 'wf1' &&
+            /2 blocks/.test(String(opened.count)) &&
+            opened.blocks.join(',') === 'sweep,pool' &&
+            opened.sublabels.every((s) => !/›/.test(s)) && opened.sublabels.some((s) => /6 AT A TIME/i.test(s)) &&
+            opened.edges.join(',') === 'sweep>pool' &&
+            opened.tabs.join(',') === 'definition,runs' &&
+            opened.verbs.length >= 5 && opened.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            minted !== false && instantiateCalls === 1 && runsTab !== false && String(runsTab).trim() !== '',
+          JSON.stringify({ opened, before, minted, instantiateCalls, runsTab, log: wfLog.slice(-3) }))
+        try { rmSync(wfDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (wfErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(wfErr && wfErr.message || wfErr) + ' | renderer: ' + (wfLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onWf)
+      }
+    }
+
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected
     // executeJavaScript) still has to report through the same PASS/FAIL
