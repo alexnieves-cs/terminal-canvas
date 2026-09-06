@@ -8,8 +8,9 @@ import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { buildPushArgs } from './git-args'
+import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
 import { createBoardLane } from './board-lane'
-import { createPlacesGate, fsRealpath } from './places'
+import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
 import { parseTeammates, parseRoutines } from '@shared/layout-schema'
@@ -1317,11 +1318,23 @@ app.whenReady().then(async () => {
       const backend = backendOf(spec)
       const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath, copilot: copilotPath, acp: copilotPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
-      // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
-      // to home could turn a refused folder into an allowed one silently.
-      const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
-      if (!place.ok) return { kind: 'refused', reason: place.reason }
-      const cwd = resolveCwd(spec.cwd)
+      // M120. A chat with NO place: the app's own folder, made here; the Places
+      // gate is bypassed BY CONSTRUCTION (the folder is the app's), and a
+      // teammate beside it is refused first — a teammate has places.
+      const sandboxRefusal = sandboxTeammateRefusal(spec)
+      if (sandboxRefusal !== null) return { kind: 'refused', reason: sandboxRefusal }
+      let cwd: string
+      if (spec.sandbox === true) {
+        const made = resolveSandboxCwd(app.getPath('userData'), spec.id, realSandboxFs)
+        if (made.kind === 'refused') return { kind: 'refused', reason: made.reason }
+        cwd = made.path
+      } else {
+        // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
+        // to home could turn a refused folder into an allowed one silently.
+        const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
+        if (!place.ok) return { kind: 'refused', reason: place.reason }
+        cwd = resolveCwd(spec.cwd)
+      }
       // M100. The brief rides EVERY spawn from the roster main holds — the
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
@@ -1352,6 +1365,7 @@ app.whenReady().then(async () => {
       }
       const answer = agentSessions?.send(id, text, images) ?? 'no-session'
       if (answer === 'refused-backend') return { refused: REASON_NO_CODEX }
+      if (answer === 'refused-sandbox') return { refused: BACKENDS[agentSessions?.get(id)?.backend ?? 'claude'].reasons.noSandbox }
       if (answer === 'refused-images') return { refused: REASON_CODEX_NO_IMAGES }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
@@ -1371,7 +1385,8 @@ app.whenReady().then(async () => {
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)
-      if (drop) { agentTranscripts.drop(id); dropBaseline(id) }
+      // M120. The sandbox folder goes with the chat — on dispose, never on exit.
+      if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
     },
     // M98. `scope: 'session'` GRANTS the pending request's tool first, then
     // answers through the one `answerPermission` — the grant is keyed by the

@@ -127,7 +127,7 @@ export type AgentSessionEvent = { id: string } & (
  * reached the ceiling its owner set, and the message was NOT stored — a
  * refused message is not a turn.
  */
-export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images'
+export type SendResult = 'sent' | 'queued' | 'no-session' | 'refused-budget' | 'refused-backend' | 'refused-images' | 'refused-sandbox'
 
 /** M75. What the composer attaches: a dropped image's path (main reads it) or pasted bytes. */
 export type ChatAttachment =

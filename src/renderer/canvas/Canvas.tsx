@@ -5082,6 +5082,8 @@ export function Canvas({
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => { void beginNewChat({ backend: 'codex' }) }}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
+            onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
+            sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (

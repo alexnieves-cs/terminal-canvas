@@ -24,6 +24,9 @@ export interface LauncherProps {
   /** M91. The codex door: its reason when the CLI is absent. */
   onNewCodexChat: () => void
   codexReason: string | null
+  /** M120. The third door: a chat with no folder, in the app's own sandbox on the row's read-only mode. */
+  onNewSandboxChat: () => void
+  sandboxReason: string | null
 }
 
 /**
@@ -49,7 +52,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -108,6 +111,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
           title={codexReason === null ? 'A chat with codex, in your home directory' : codexReason} {...shellControl(() => { if (codexReason === null) onNewCodexChat() })}>
           <span className="launcher__verb-name">Chat with Codex…</span>
           <span className="launcher__verb-hint">{codexReason === null ? 'a conversation panel — codex, one process per turn' : codexReason}</span>
+        </button>
+        {/* M120. The third conversation door: no folder at all — the app's own sandbox, read-only tools. */}
+        <button type="button" className="launcher__verb" data-launcher-new-sandbox disabled={sandboxReason !== null}
+          title={sandboxReason === null ? 'A chat with claude in a folder of the app\'s own, on plan mode — no repository, no edits' : sandboxReason} {...shellControl(() => { if (sandboxReason === null) onNewSandboxChat() })}>
+          <span className="launcher__verb-name">New chat (no folder)…</span>
+          <span className="launcher__verb-hint">{sandboxReason === null ? 'a conversation not about a repository — read-only, nowhere to write' : sandboxReason}</span>
         </button>
         {/* On an empty canvas "select a panel first" names an impossible fix;
             the launcher's own reason says what to do here. */}

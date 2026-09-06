@@ -158,6 +158,8 @@ interface Session {
   exitCode?: number | null
   exitSignal?: string
   everSpawned: boolean
+  /** M120. A chat with no place: the row's sandboxArgs ride every spawn; a row without them refuses the send. */
+  sandbox: boolean
   carry: string
   turns: TranscriptTurn[]
   inFlight: boolean
@@ -235,6 +237,7 @@ export class AgentSessionManager {
       // M90/M99. A backend whose thread id is the CLI's own has no pin to
       // create at: a record with turns names a real thread, so it resumes.
       everSpawned: spec.resume !== undefined || (BACKENDS[backend].adoptsThreadId && (this.deps.hasTurns?.(spec.id) ?? false)),
+      sandbox: spec.sandbox === true,
       carry: '',
       turns: [],
       inFlight: false,
@@ -270,6 +273,8 @@ export class AgentSessionManager {
     // M82. The canvas's own ceilings, read LIVE (a setting changed while a
     // panel is open must take effect on the next send, not the next launch).
     if (this.binaryFor(session.backend) === undefined) return 'refused-backend'
+    // M120. A row with no read-only mode cannot run a chat with no folder: refused by name, nothing spawned.
+    if (session.sandbox && BACKENDS[session.backend].sandboxArgs === undefined) return 'refused-sandbox'
     // M90. A prompt that is an argument has no block to carry an image.
     // Refused whole and stored nowhere, like the budget's refusal.
     if (!BACKENDS[session.backend].images && images.length > 0) return 'refused-images'
@@ -418,7 +423,7 @@ export class AgentSessionManager {
     session.auto.sending = true
     const sent = this.send(id, prompts.opening)
     if (session.auto) session.auto.sending = false
-    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'no-session') {
+    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'refused-sandbox' || sent === 'no-session') {
       this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'error')
       return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : 'the send was refused' }
     }
@@ -587,7 +592,8 @@ export class AgentSessionManager {
       resume: turn.resume,
       sessionId: session.sessionId,
       agentOptions: session.agentOptions,
-      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt })
+      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt }),
+      ...(session.sandbox ? { sandbox: true as const } : {})
     })
     // `closeStdin` is written only when true: the fake runner records the
     // spawn as handed, and M71's checks compare the claude spawn by shape.
