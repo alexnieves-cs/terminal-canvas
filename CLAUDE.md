@@ -19,7 +19,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 2.0 (M95).** The third run, M71 to M95, made it an
+running a coding-agent CLI. **This is 3.0 (M125).** The sixth run, M113 to M125, made the
+canvas the surface that DISPATCHES: a work item is a record with four states as data, two of
+them the runtime's (M113); `dispatch` mints a worktree lane and a teammate's chat with an edge
+meaning *dispatched* (M114); the return path pushes the lane and opens the PR through the
+broker's spend card (M115); the Board pane and the card kind (M116); copilot's two doors as
+the third and fourth engine rows — the JSONL door and the canvas as an ACP client (M118,
+M119; cursor-agent declined by name, unmeasured, M117); chat mode in the app's own sandbox
+with the row's model list (M120); the deferred seven (M121); search over both durable logs
+(M122); the update notice for an unsigned build (M123); the third audit with the hand checks
+restated as owed (M124); and this reconcile (M125). The third run, M71 to M95, made it an
 agentic super app: a main-process conversation runtime behind one seam (`AgentSessionManager`,
 M71) with claude and codex behind it (M90); the chat panel and its composer, approvals,
 tool objects (M73–M77); the task graph with joins, runs and templates (M78–M80); the

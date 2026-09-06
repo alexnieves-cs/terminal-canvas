@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v2.3.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v3.0.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and
@@ -915,7 +915,7 @@ price of not killing something.
 | M122 | Search across every panel: `Find in panels…` reads BOTH durable logs — the scrollback logs and the chat transcript logs — of the active workspace in MAIN (`main/panel-search.ts`, pure over injected readers), every line through `redactSecrets` (the outward gate's fourth named caller) with the count on the result, the cap STATED on the result and shown first; a transcript hit flies to its chat and its turn; a dormant panel's log answers like a live one; persistence off says `chats still answer` | ✅ done |
 | M123 | The update notice, reshaped for an unsigned build: auto-swap declined by name (no `Developer ID Application` identity; `electron-updater` refuses an unsigned update); one GET of the releases feed through an injected fetcher (`main/update-check.ts`, called by no suite), the newest non-prerelease compared by a small semver, three states (`current`, `newer <version>` with `Open release`, `could not check` with the reason) on the palette's `Check for updates…`, the launcher footer and the environment rows; `update.checkOnLaunch` off by default and never `planWritable` | ✅ done |
 | M124 | The third dead-end audit (every surface M113–M123 added, walked), `reach.2` (a real Tab through the Board pane and the card), the CI red of Act 0 fixed at its cause (the across fixture's bare origin names `main` in HEAD), the manual-only list re-read entire — and the owed hand checks RESTATED as owed with their steps, none done in this run (each needs a person at the app or an account's outward action); CI unread until the push | ✅ done |
-| M125 | Reconcile and ship 3.0.0: the version, this table, both IPC diagrams against the contract, `CLAUDE.md` and `docs/load-bearing.md` in agreement, `verify:ipc` re-derived, both packaging gates run with their numbers, `graphify update .`, the tag and the push, a GitHub release carrying the unsigned `.dmg` with the Gatekeeper sentence | 🚧 shipping |
+| M125 | Reconcile and ship 3.0.0: the version, this table, both IPC diagrams against the contract, `CLAUDE.md` and `docs/load-bearing.md` in agreement, `verify:ipc` re-derived, both packaging gates run with their numbers, `graphify update .`, the tag and the push, a GitHub release carrying the unsigned `.dmg` with the Gatekeeper sentence | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
