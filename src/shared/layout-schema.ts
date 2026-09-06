@@ -699,6 +699,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   // M81. A supervisor keeps its job across a relaunch: the flag is what makes
   // its next spawn carry the system prompt again (the CLI keeps no record).
   if (raw.supervisor === true) chat.supervisor = true
+  // M114. A dispatched lane keeps its prompt across a relaunch, the same way.
+  if (raw.dispatch === true) chat.dispatch = true
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {

@@ -78,6 +78,7 @@ const {
   createReviewEngine,
   createGitRunner,
   createWorktreeManager,
+  createBoardLane, createPlacesGate,
   createScrollbackLog,
   createRunLedger,
   createBaselineCapture,
@@ -1262,7 +1263,17 @@ app.whenReady().then(async () => {
     capture: async () => (await win.webContents.capturePage()).toPNG()
   }), agentHandlers, watcherHandlers,
   // M103. The real read over the real guest, the same adapter main/index.ts wires.
-  createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }))
+  createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
+  // M114. The REAL lane over the harness's own worktree manager and a real
+  // Places gate, so dispatch.1 mints a real worktree in a fixture repository.
+  createBoardLane({
+    gate: createPlacesGate({ realpath: (p) => realpathSync(p), teammate: (id) => layoutStore.teammates().find((t) => t.id === id), worktreeRootOf: (p) => layoutStore.worktrees().find((w) => w.path === p)?.root }),
+    worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
+    teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+    recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+    originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
+    subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+  }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

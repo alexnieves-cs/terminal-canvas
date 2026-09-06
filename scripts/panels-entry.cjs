@@ -267,5 +267,8 @@ module.exports = {
   /* M74. The CLI-transcript importer, pure. */
   importClaudeTranscript: require('../src/main/claude-transcript-import').importClaudeTranscript,
   /* M75. The attachment resolver, node:fs over a path. */
-  resolveAttachment: require('../src/main/attachments').resolveAttachment
+  resolveAttachment: require('../src/main/attachments').resolveAttachment,
+  /* M114. The lane and the gate, for dispatch.1. */
+  ...require('../src/main/board-lane'),
+  ...require('../src/main/places')
 }

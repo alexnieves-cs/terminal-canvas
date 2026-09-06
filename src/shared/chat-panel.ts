@@ -31,4 +31,15 @@ export interface ChatSource {
   backend?: AgentBackend
   /** M100. The teammate this chat speaks as; absent for every pre-existing chat and every plain one. */
   teammateId?: string
+  /** M114. This chat is a dispatched LANE: its next spawn carries DISPATCH_PROMPT again. Absent for every other chat. */
+  dispatch?: true
+}
+
+/**
+ * M114. The by-name copy sites' rule for the marks `carryBackend` does not
+ * carry: absent stays absent, and only `true` is ever written. Spread beside
+ * `carryBackend` at every site that rebuilds a ChatSource field by field.
+ */
+export function carryChatMarks(chat: { dispatch?: true }): { dispatch?: true } {
+  return chat.dispatch === true ? { dispatch: true } : {}
 }

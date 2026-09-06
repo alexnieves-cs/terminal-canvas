@@ -583,10 +583,18 @@ export const IPC = {
    * text is capped inside the guest, and it passes the outward gate before
    * it crosses back. Reading the pane is leaving the app.
    */
-  BROWSER_READ: 'browser:read'
+  BROWSER_READ: 'browser:read',
+  /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
+  BOARD_LANE: 'board:lane'
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
+/** M114. What `dispatch` asks main for: a worktree lane for the chat it is about to mint. `repo` is `owner/repo` from a GitHub key; `root` is the place the sheet chose for an item with no repository. */
+export interface BoardLaneRequest { itemId: string; chatPanelId: string; teammateId: string; repo?: string; root?: string }
+export type BoardLaneResult =
+  | { kind: 'lane'; path: string; worktreeId: string; branch: string; root: string }
+  | { kind: 'refused'; reason: string }
+
 /** M113. What `tc board` asks the renderer, and what it answers. */
 export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
 export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
@@ -1460,6 +1468,10 @@ export interface CanvasBridge {
   /** M103. See BROWSER_READ. Three arms; never rejects. */
   browser: {
     read(req: BrowserReadRequest): Promise<BrowserReadResult>
+  }
+  /** M114. The board's main-side verbs. */
+  board: {
+    lane(req: BoardLaneRequest): Promise<BoardLaneResult>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

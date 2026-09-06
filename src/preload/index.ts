@@ -325,6 +325,9 @@ const bridge: CanvasBridge = {
   browser: {
     read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
   },
+  board: {
+    lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req)
+  },
   platform: process.platform,
   telemetry: { enabled: telemetryEnabled }
 }

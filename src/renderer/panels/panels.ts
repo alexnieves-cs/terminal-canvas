@@ -1,3 +1,4 @@
+import { carryChatMarks } from '@shared/chat-panel'
 import { carryBackend } from '@shared/agent-backends'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { WatchTrigger } from '@shared/watch-trigger'
@@ -817,6 +818,7 @@ export function makeChatPanel(
       // absent and the default stay absent, so a claude record never grows a
       // key (`verify:panels codex.1` reads the file).
       ...carryBackend(chat),
+      ...carryChatMarks(chat),
       // M100. The identity, absent unless set — the same rule as the backend.
       ...(chat.teammateId === undefined ? {} : { teammateId: chat.teammateId }),
       cwd: chat.cwd,

@@ -1197,6 +1197,48 @@ const p = (name) => join(DIR, name)
     can ? JSON.stringify({ p1, p2, p3, keys, frames, valueHead: out?.exception?.values?.[0]?.value?.slice(0, 40) }) : 'telemetry not exported')
 }
 
+  // M114 — lane.1. THE LANE. A dispatch finds the item's repository under
+  // the teammate's places (a place itself, then its immediate children, by
+  // the origin url normalised to owner/repo), asks the Places gate on that
+  // ROOT before any worktree is minted, and passes the worktree manager's
+  // own refusal through verbatim. Every arm is a NAMED refusal; nothing here
+  // reaches git — the runner is a fake.
+  try {
+    const origins = { '/home/u/work/api': 'git@github.com:Acme/Canvas.git', '/home/u/work/site': 'https://github.com/acme/site' }
+    const originOf = (d) => origins[d] ?? null
+    const subdirs = (d) => (d === '/home/u/work' ? ['/home/u/work/api', '/home/u/work/site', '/home/u/work/notes'] : [])
+    const found = F.findRepoUnderPlaces('acme/canvas', ['/home/u/work'], { originOf, subdirs })
+    const direct = F.findRepoUnderPlaces('acme/site', ['/home/u/work/site'], { originOf, subdirs })
+    const none = F.findRepoUnderPlaces('acme/other', ['/home/u/work'], { originOf, subdirs })
+    const key = F.repoOfKey('acme/canvas#12'), badKey = F.repoOfKey('PROJ-12')
+    const ada = { id: 't1', name: 'ada', brief: '', places: ['/home/u/work'], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+    const bo = { id: 't2', name: 'bo', brief: '', places: ['/elsewhere'], services: [], skills: [], memory: 'bo', chats: [], messaging: false, scheduling: false }
+    const mates = { t1: ada, t2: bo }
+    const gate = { check: (id, path) => (mates[id] && mates[id].places.some((pl) => path.startsWith(pl)) ? { ok: true } : { ok: false, reason: `${id} may not touch ${path}` }) }
+    const calls = []
+    const worktrees = { ensureForPanel: async (panelId, cwd) => { calls.push([panelId, cwd]); return cwd === '/home/u/work/site' ? { kind: 'refused', reason: 'fatal: a branch named tc/x already exists' } : { kind: 'active', branch: 'tc/n9-1', path: '/app/worktrees/api/tc-n9-1', root: cwd } } }
+    const records = [{ id: 'wt1', root: '/home/u/work/api', path: '/app/worktrees/api/tc-n9-1', branch: 'tc/n9-1', createdAt: 1, panelId: 'n9' }]
+    const lane = F.createBoardLane({ gate, worktrees, teammate: (id) => mates[id], originOf, subdirs, recordFor: (panelId, root) => records.find((r) => r.panelId === panelId && r.root === root) })
+    const good = await lane.lane({ itemId: 'wi1', chatPanelId: 'n9', teammateId: 't1', repo: 'acme/canvas' })
+    const noPlace = await lane.lane({ itemId: 'wi1', chatPanelId: 'n9', teammateId: 't2', repo: 'acme/canvas' })
+    const noRepo = await lane.lane({ itemId: 'wi1', chatPanelId: 'n9', teammateId: 't1', repo: 'acme/other' })
+    const gitRefused = await lane.lane({ itemId: 'wi2', chatPanelId: 'n10', teammateId: 't1', root: '/home/u/work/site' })
+    const gateRefused = await lane.lane({ itemId: 'wi2', chatPanelId: 'n10', teammateId: 't2', root: '/home/u/work/api' })
+    const unknownMate = await lane.lane({ itemId: 'wi2', chatPanelId: 'n10', teammateId: 't9', root: '/home/u/work/api' })
+    const typedNoRoot = await lane.lane({ itemId: 'wi3', chatPanelId: 'n11', teammateId: 't1' })
+    ok('lane.1 the repository is found under a place or its immediate children by origin (case-insensitive, ssh or https, .git or not); the key yields owner/repo and a Jira key none; the lane arm carries the worktree id, path, branch and root after the gate passed on the ROOT; no place, no repository, a refused gate, git\'s own refusal, an unknown teammate and a typed item with no chosen place are each refused by name and mint nothing',
+      found === '/home/u/work/api' && direct === '/home/u/work/site' && none === null && key === 'acme/canvas' && badKey === null &&
+        good.kind === 'lane' && good.worktreeId === 'wt1' && good.path === '/app/worktrees/api/tc-n9-1' && good.branch === 'tc/n9-1' && good.root === '/home/u/work/api' &&
+        noPlace.kind === 'refused' && /bo/.test(noPlace.reason) && /acme\/canvas/.test(noPlace.reason) && /Teammates pane/.test(noPlace.reason) &&
+        noRepo.kind === 'refused' && /acme\/other/.test(noRepo.reason) &&
+        gitRefused.kind === 'refused' && /already exists/.test(gitRefused.reason) &&
+        gateRefused.kind === 'refused' && /may not touch/.test(gateRefused.reason) &&
+        unknownMate.kind === 'refused' && /t9/.test(unknownMate.reason) &&
+        typedNoRoot.kind === 'refused' && /which place/i.test(typedNoRoot.reason) &&
+        calls.length === 2,
+      JSON.stringify({ found, direct, none, key, badKey, good, noPlace, noRepo, gitRefused, gateRefused, unknownMate, typedNoRoot, calls }))
+  } catch (e) { ok('lane.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

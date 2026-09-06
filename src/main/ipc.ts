@@ -8,6 +8,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
+import type { BoardLaneRequest, BoardLaneResult } from '../shared/ipc-contract'
 import type { RunRow } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -208,6 +209,14 @@ const INERT_BROWSER: BrowserHandlers = {
   read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
 }
 
+/** M114. The board's main-side verbs; see board-lane.ts. Inert by default like every collaborator before it. */
+export interface BoardHandlers {
+  lane(req: BoardLaneRequest): Promise<BoardLaneResult>
+}
+const INERT_BOARD: BoardHandlers = {
+  lane: async () => ({ kind: 'refused', reason: 'dispatch is not available here' })
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -303,7 +312,9 @@ export function registerIpcHandlers(
   /** M84. The watcher runtime; see WatcherHandlers. */
   watchers: WatcherHandlers = INERT_WATCHERS,
   /** M103. Appended last, like every collaborator before it. */
-  browser: BrowserHandlers = INERT_BROWSER
+  browser: BrowserHandlers = INERT_BROWSER,
+  /** M114. Appended last, like every collaborator before it. */
+  board: BoardHandlers = INERT_BOARD
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -333,6 +344,7 @@ export function registerIpcHandlers(
   // the scheme on its live url, the cap, the outward gate — the renderer
   // only names which panel.
   ipcMain.handle(IPC.BROWSER_READ, (_event, req: BrowserReadRequest) => browser.read(req))
+  ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())

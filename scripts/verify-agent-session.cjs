@@ -1546,6 +1546,22 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ carried }))
   }
 
+  // M114 — dispatch.1. THE DISPATCH PROMPT AND ITS MARK. The prompt rides
+  // every spawn from `ChatSource.dispatch` (the M81 supervisor rule: the CLI
+  // keeps no record of an appended system prompt, so a resumed lane without
+  // it would stop being a lane); the carry writes no key when absent.
+  {
+    let prompt, marks
+    try {
+      prompt = M.sharedSession.DISPATCH_PROMPT
+      marks = M.chatPanel
+    } catch (e) { marks = String(e) }
+    ok('dispatch.1 DISPATCH_PROMPT says the branch is the lane\'s and never to push, merge or open a PR; carryChatMarks writes no key for an absent dispatch and `dispatch: true` for a set one',
+      typeof prompt === 'string' && /branch/.test(prompt) && /[Nn]ever push/.test(prompt) && /pull request/.test(prompt) &&
+        M.chatPanel && Object.keys(M.chatPanel.carryChatMarks({})).length === 0 && M.chatPanel.carryChatMarks({ dispatch: true }).dispatch === true && Object.keys(M.chatPanel.carryChatMarks({ dispatch: true })).length === 1,
+      JSON.stringify({ prompt, marks: typeof marks }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

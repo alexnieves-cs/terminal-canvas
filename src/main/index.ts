@@ -1,12 +1,13 @@
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync, readdirSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
 import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
+import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
@@ -61,7 +62,7 @@ import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type A
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
-import { spawn as spawnChild } from 'node:child_process'
+import { spawn as spawnChild, execFileSync } from 'node:child_process'
 import { watch as fsWatch, realpathSync, type FSWatcher } from 'node:fs'
 import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './watch-runner'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
@@ -563,7 +564,22 @@ const tokenOfPanel = (id: string): string => {
   return t
 }
 const panelOfToken = (token: string): string | undefined => { for (const [id, t] of panelTokens) if (t === token) return id; return undefined }
-const placesGate = createPlacesGate({ realpath: fsRealpath, teammate: (id) => layoutStore.teammates().find((t) => t.id === id) })
+const placesGate = createPlacesGate({
+  realpath: fsRealpath,
+  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+  // M114. A lane under userData/worktrees is judged by the repository it forks.
+  worktreeRootOf: (path) => layoutStore.worktrees().find((w) => w.path === path)?.root
+})
+// M114. The lane a dispatch mints: the repository under the teammate's places
+// (origin read by git, one level deep), the gate on its root, the worktree.
+const boardLane = createBoardLane({
+  gate: placesGate,
+  worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
+  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
+  recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
+  originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim() || null } catch { return null } },
+  subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+})
 
 /**
  * M85. Main's OWN watch on the vault root, so a note an agent writes into the
@@ -1660,7 +1676,8 @@ app.whenReady().then(async () => {
     watcherHandlers,
     // M103. The guest is resolved by the id the node learned on did-attach;
     // main checks it is a webview before reading anything.
-    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null })
+    createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
+    boardLane
   )
   createWindow()
 

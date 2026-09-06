@@ -150,6 +150,20 @@ export const SUPERVISOR_PROMPT = [
   'Never spawn, close, restart or write to a panel: you observe and report. `tc status` is the only command you need.'
 ].join(' ')
 
+/**
+ * M114. THE DISPATCHED LANE'S JOB, appended on every spawn of a chat whose
+ * `ChatSource.dispatch` is set (the M81 rule: the CLI keeps no record of an
+ * appended system prompt, so a resumed lane without it would stop being a
+ * lane). It names the one thing the agent must never do — the return path
+ * is the person's `Open PR`, behind a spend card, never the agent's.
+ */
+export const DISPATCH_PROMPT = [
+  'You are working one dispatched item from a Terminal Canvas board.',
+  'This directory is a fresh git worktree on its own branch; commit your work on that branch as you go, with clear messages.',
+  'Never push, never merge, and never open a pull request — the person who dispatched you does that from the card when you are done.',
+  'When the item is done, say so plainly and stop.'
+].join(' ')
+
 export type ClipboardImage = { mediaType: string; base64: string; size: number } | { refused: string } | null
 
 /**
