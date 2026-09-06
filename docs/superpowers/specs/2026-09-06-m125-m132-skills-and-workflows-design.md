@@ -1,4 +1,4 @@
-# Act III — the shelf and the shape that runs (M125–M131)
+# Act III — the shelf and the shape that runs (M125–M132)
 
 Branch `m125-skills`, base `main@2d088e2` (Act I merged). Two tracks on one branch; checks
 written first and COMMITTED BEFORE their implementation, Act II's rule. Track B is a
@@ -17,7 +17,7 @@ Five measurements, taken on this machine before a line of this spec was written.
 1. **A skill invocation is a structured record, not screen text.** Across 4,644 transcripts
    under `~/.claude/projects`, **221 files** carry
    `{"type":"tool_use","name":"Skill","input":{"skill":"<name>","args"?:"<text>"}}`, in
-   order, one line per record. The trail (§5) is therefore a READ. The alternative —
+   order, one line per record. The trail (§6) is therefore a READ. The alternative —
    scanning the PTY byte stream for `Skill(name)` as the CLI paints it — is a parser for a
    format this repo does not own and cannot version, which `parseFrontmatter`'s own comment
    refuses in the same words.
@@ -26,10 +26,10 @@ Five measurements, taken on this machine before a line of this spec was written.
    `realResolveTranscript` default (`src/main/pty-manager.ts`), built for M74's
    `Open as chat` and injected precisely so a suite can substitute a fake without a real
    `~/.claude/projects`. The panel's session id is pinned at spawn and re-adopted on
-   `--resume`. §5 adds no new path to the CLI's transcript; it reuses this one.
+   `--resume`. §6 adds no new path to the CLI's transcript; it reuses this one.
 3. **The name in a trail record carries NO scope.** The CLI writes
    `"skill":"superpowers:using-git-worktrees"` — a plugin prefix when there is one, and a
-   bare name otherwise. Nothing in the record says `user` or `project`. §2.1 and §5.3 are
+   bare name otherwise. Nothing in the record says `user` or `project`. §2.1 and §6.3 are
    both consequences of this measurement, and neither may guess.
 4. **`claude plugin list --json` answers the plugin question the backlog declined.**
    26 entries in **0.38s**, each `{id, version, scope, enabled, installPath, installedAt,
@@ -58,7 +58,13 @@ already nodes plus edges plus `{{parameters}}`; `handoffFires` is already the on
 that decides whether an edge fires; `joinAdvance` already delivers payloads in panel order;
 M82 already enforces a live concurrency ceiling with a queue that names its reason; M97 is
 already an agent loop whose stop main enforces. The genuinely new engine in this act is the
-POOL (§7.1), and it is the one thing to defer if the act runs long.
+POOL (§8.1), and it is the one thing to defer if the act runs long.
+
+**Two milestones carry real risk and neither is the pool.** M128 is the first code in this
+repository that writes into `~/.claude`, and its two failure modes (§5.2, §5.4) both end
+with a user's own file quietly meaning something else while the panel says the save
+succeeded. M129's trail reads a record shape nothing versions. Both are specced from the
+failure rather than from the feature.
 
 ## 2. M125 — the skill identity, its resources, and the shelf
 
@@ -225,26 +231,130 @@ The body carries, each a three-state result:
   M80's rule for a template's chat message rather than M114's for a dispatch.
 - **`Open folder`** — `shell.showItemInFolder` on the `sourcePath` every entry already
   carries, the door already wired for worktrees.
-- **`Help me write`** / **`New skill`** — mint a chat in the skills directory whose first
-  message names the file to write. **The app writes nothing.** The file is written by an
-  agent under its own permission system, which is the only door this act opens into
-  `~/.claude`, and it is the same door the user could have opened themselves.
-
-This is the read-plus-reveal-plus-author-via-chat position, and it keeps
-`docs/ideas-backlog.md` #26's refusal of the editing half intact: hooks are arbitrary code,
-permissions decide what an agent may do without asking, an MCP server is a process with its
-own reach — and none of them is written here either.
+- **`Help me write`** — mint a chat in the skill's own directory whose first message names
+  the file. This survives M128's editor rather than being replaced by it: an agent drafting
+  prose in place is a different act from a person typing it, and the screenshot has both.
 
 Checks: `verify:panels skill.1` — the panel opens from three doors, the record holds two
 fields and no copy, the five body sections' three states, the `alsoDefinedIn` refusal, the
 verbatim block parsed nowhere.
 
-## 5. M128 — the live skill trail
+## 5. M128 — the editor
+
+M127 reads. This writes, and it is the only milestone in this act that puts bytes into
+`~/.claude`. `docs/ideas-backlog.md` #26 deferred the editing half; §5.1 is where that
+refusal is narrowed rather than dropped, and §5.2 and §5.4 are the two ways a naive editor
+destroys a user's file while reporting success.
+
+### 5.1 The line: skills yes, everything else no
+
+**Writable:** a skill's `SKILL.md` — its body always, its metadata under §5.2's condition.
+
+**Not writable, each deferred by name with its reason on the disabled control:**
+
+| refused | why |
+|---|---|
+| hooks, permissions, MCP servers, `settings.json`, `.mcp.json`, `.claude.json` | #26's stated reason, unchanged: a hook is arbitrary code that fires automatically, a permission grants without asking, an MCP server is a process with its own reach. **A skill is invoked deliberately.** That is the line, and it is the whole of it. |
+| agents (`agents/*.md`) | an agent's `tools:` line is a permission surface wearing markdown's clothes |
+| commands (`commands/*.md`) | a slash command can carry shell |
+| anything under a plugin's `installPath` | `claude plugin install` owns those directories; a write there is discarded by the next update with no symptom. Refused **naming the plugin**, because "your edit will vanish on upgrade" is the useful sentence |
+
+**Containment is M100's `insidePlace`, reused rather than rewritten.** It already decides on
+the REAL, normalised path with an injected `realpath` — `..` walking out, a symlink pointing
+out, and a relative path refused rather than resolved against a root are each already a
+check (`verify:teammates places.1–.3`). The skills roots are the prefixes. A second
+path-containment implementation is exactly the duplicate this repository has refused every
+time it has come up, and this one would be a security boundary.
+
+### 5.2 The frontmatter round-trip, and why Save never re-serialises
+
+`parseFrontmatter` is **deliberately a small grammar**: a `key: value` line, optionally
+quoted, and `null` for anything else — block scalars, anchors, multi-line folds — because a
+real YAML parser would be a second runtime dependency and a parser differential against the
+CLI. Its own comment says so.
+
+That refusal has a consequence the read half never had to face. **If Save re-serialised the
+frontmatter from what the grammar parsed, every field the grammar could not read would be
+deleted** — silently, in the user's own file, with the panel showing a successful save. The
+file would still load; it would just quietly mean something else.
+
+So the editor **never re-serialises the block**:
+
+- The body below the closing fence is replaced wholesale.
+- Inside the fence, only the specific `key: value` LINES the grammar understood are
+  rewritten, in place. **Every other line is preserved byte for byte**, including comments,
+  blank lines and ordering.
+- If the block contains a line the grammar did not understand, the metadata fields render
+  **read-only with a named reason** and the body stays editable — the three-state rule
+  applied to editability, rather than a disabled Save that explains nothing.
+
+`verify:toolbox edit.1` plants a `SKILL.md` whose frontmatter carries a block scalar, an
+anchor and a comment, saves a changed description and a changed body, and asserts all three
+survive byte for byte.
+
+### 5.3 The writes
+
+- **Atomic, always:** temp file in the SAME directory, then `renameSync` — `layout-store.ts`,
+  `credential-store.ts` and `diagnostics-export.ts`'s shared rule. A partial `SKILL.md` is a
+  skill the CLI will half-load.
+- **Delete is `shell.trashItem`, never an unlink**, and it trashes the skill's DIRECTORY, so
+  its resources go with it — which is why the confirm names the resource count (§2.2) rather
+  than asking about "a skill". Recoverable by construction; the Finder is the undo.
+- **Rename moves the directory and refuses a collision** rather than overwriting. The shelf
+  key is `scope:name` (§2.1), so a rename changes it: `renameInShelf` carries the slot, and
+  a rename that could not be carried leaves the old key in place rendering `not installed
+  here` rather than dropping the column entry.
+- **New scaffolds `<root>/<name>/SKILL.md`** with a frontmatter stub, refusing an existing
+  name by that name.
+- `skill:write` / `skill:create` / `skill:rename` / `skill:delete` are four new invokes;
+  `verify:ipc`'s `EXPECTED_CHANNELS` is re-derived, the pin being deliberate.
+
+### 5.4 The stale write
+
+**An agent editing `SKILL.md` while the panel has it open is the ordinary case in this
+application, not an edge case** — it is what `Help me write` does. A blind Save destroys the
+agent's edit with no symptom on either side.
+
+So every write carries the `mtime` and `size` the panel READ, main compares before the
+temp file is written, and a mismatch is a **named refusal that keeps the user's text**:
+*this file changed on disk since you opened it — reload to see it; your edit is still here.*
+M21's stat-sweep already computes exactly this stamp for its `stale` freshness arm, so the
+value exists and only the comparison is new.
+
+Never last-write-wins. Never a merge — this app has no merge and inventing one here would be
+a second author of a file two things are already editing.
+
+### 5.5 A file write is not history
+
+`Cmd+Z` never reverts one. The shelf's rule (§2.4) for a stronger reason: undo can remove a
+panel and dispose a session, and a keystroke aimed at a text field must not additionally
+revert a file on disk. The trash (§5.3) is the recovery path, and the editor says so.
+
+This inherits the open `Cmd+C`/`Cmd+V`/`Cmd+Z` hazard `CLAUDE.md` already records for
+`ReviewNode`'s commit draft, `FileNode`'s editor and `JiraTicket`'s comment box: a draft open
+in a panel does not own the clipboard verbs. **The editor is the FIFTH such surface**, it is
+the one where a stray `Cmd+Z` is most expensive, and it takes `Palette.tsx`'s shape — its own
+`edit:copy` / `edit:paste` subscriptions serving its own input — which covers two of the
+three. The `edit:undo` half stays open and is stated here rather than discovered later.
+
+### 5.6 Checks
+
+`verify:toolbox edit.1` (§5.2's byte-for-byte round trip), `edit.2` (atomic write; no
+partial file after a failed rename), `edit.3` (the containment refusals over a fake
+`realpath`: `..`, a symlink out, a relative path, a plugin `installPath` naming its plugin),
+`edit.4` (the stale-write refusal keeps the text and names the fix), `edit.5` (rename
+collision refused; `renameInShelf` carries the slot; delete trashes the directory) — all in
+`verify:toolbox`'s existing fixture tree, which is already spaced and syntactically hostile.
+`verify:panels editor.1` — the metadata fields read-only with their reason for an
+ungrammatical block, the body still editable, Save disabled with a named reason and never
+silently.
+
+## 6. M129 — the live skill trail
 
 The act's centre. **What skills a session used, in the order it used them, beside the panel
 that used them.**
 
-### 5.1 Two sources, one shape
+### 6.1 Two sources, one shape
 
 ```ts
 export interface TrailEntry { at: number; name: string; args?: string }
@@ -267,7 +377,7 @@ export type Trail =
 `TRAIL_MAX` newest, with `more` counting what was dropped — a 200-skill session must not
 paint 200 cards, and a silent truncation is a lie about the order.
 
-### 5.2 Derived, anchored, and stored nowhere
+### 6.2 Derived, anchored, and stored nowhere
 
 **The transcript is the author.** The trail is re-derived and never persisted, the way M79
 derives run frames (`run:<id>`, derived read-only group frames, never groups) and M114
@@ -289,7 +399,7 @@ absent by default, carried by M92's existing `carryMarks`. A layout mark like `p
 Collapsed, the panel's chrome shows one capsule — `7 skills` — because a control that
 disappears when it is off is indistinguishable from a feature that was never built.
 
-### 5.3 Resolving a trail entry to the shelf
+### 6.3 Resolving a trail entry to the shelf
 
 Measurement 3: the record carries no scope. So an entry resolves BY NAME against the
 inventory, and there are exactly three outcomes:
@@ -300,7 +410,7 @@ inventory, and there are exactly three outcomes:
 | several scopes define the name | the name, and *defined in N scopes* — **no winner picked**, M21's refusal |
 | no match | the name, and *not installed here* — which is itself the useful answer after a session used a plugin skill this project cannot see |
 
-### 5.4 Geometry
+### 6.4 Geometry
 
 A **lane** beside the panel — a single column at a fixed offset, ordered top to bottom —
 rather than a free cluster. M114's anchored card had exactly one card to place; a cluster of
@@ -309,7 +419,7 @@ forty has no natural resting shape, and the `shot` scene is how this gets judged
 The expand is a **finite** transition (M111's pulse rule), and blur is not paid here: the
 trail exists at the near tiers only, which `blur.1` already constrains.
 
-### 5.5 Checks
+### 6.5 Checks
 
 - `verify:file trail.1` — over a **recorded fixture JSONL**, the way the four recorded
   `claude` streams and Act II's copilot/ACP fixtures already work: the parse, the byte-offset
@@ -319,7 +429,7 @@ trail exists at the near tiers only, which `blur.1` already constrains.
   order matching the transcript, the collapse mark surviving a reload, the capsule's words,
   no trail at the card tier, and **no trail entry in the panel array**.
 
-## 6. M129 — assignments
+## 7. M130 — assignments
 
 A shelf column, or a single skill, attaches to a teammate.
 
@@ -340,14 +450,14 @@ Checks: `verify:teammates assign.1` — the brief append happens once and in mai
 project-scope refusal names the repository and not the worktree; an assignment to an unknown
 teammate refused; a column assignment carrying every present key and no `undefined`.
 
-## 7. M130 — the workflow blocks (Track B)
+## 8. M131 — the workflow blocks (Track B)
 
-`TemplateNode.kind` gains three arms. **Every pre-M130 template file must load unchanged**,
+`TemplateNode.kind` gains three arms. **Every pre-M131 template file must load unchanged**,
 and `layout-schema.ts`'s existing arm — an unusable node kind drops the node and takes its
 edges with it, the template kept — stays exactly as it is for whatever comes after these
 three.
 
-### 7.1 `pool` — the one new engine
+### 8.1 `pool` — the one new engine
 
 ```ts
 { kind: 'pool', width: number, list: string, prompt: string }
@@ -373,26 +483,26 @@ and says so once, latched until the ceiling is raised. Nothing in §7 relaxes it
 A worker that finishes pulls again: M97's loop shape — **main enforces the stop, the
 renderer's chip is a projection that can never move it** — widened from one agent to N.
 
-### 7.2 `orchestrator`
+### 8.2 `orchestrator`
 
 A chat spawned with an appended system prompt. M81's supervisor mechanism reused verbatim,
 **including the reason it rides every spawn**: the CLI keeps no record of
 `--append-system-prompt`, so a resumed orchestrator without it would quietly stop being one.
 
-### 7.3 `collect`
+### 8.3 `collect`
 
 The join. `joinAdvance` already starts a target once, when the last expected source arrives,
 **with payloads in panel order** — which is the screenshot's `OUTPUTS IN ORDER → FINDINGS`.
 A collect node is a join whose target is a file or a chat. `handoffFires` is unchanged; a
 collect adds no trigger.
 
-Checks: `verify:layout workflow.1–.3` (the three kinds parse; a pre-M130 template loads
+Checks: `verify:layout workflow.1–.3` (the three kinds parse; a pre-M131 template loads
 untouched; an unknown kind drops the node and its edges, the template kept),
 `verify:agent-session pool.1` (width against the ceiling read live, the queue's reason, the
 budget stop interrupting rather than killing, an empty list ending the pool, a list that
 cannot be read refusing by name before a worker is minted).
 
-## 8. M131 — the `workflow` panel (the fourteenth) and triggers
+## 9. M132 — the `workflow` panel (the fourteenth) and triggers
 
 ```ts
 { kind: 'workflow', workflow: { templateId: string } }
@@ -419,12 +529,12 @@ Checks: `verify:panels workflow.1` — the diagram matching the record's nodes a
 block count, Runs filtered to this template, a trigger round-tripping, Run reaching M80's
 instantiation and not a second copy of it. `shot` scenes `skills`, `trail`, `workflow`.
 
-## 9. Tracks
+## 10. Tracks
 
 | Track | Milestones | Where |
 |---|---|---|
-| A | M125 → M126 → M127 → M128 → M129 | this session; sequential, each on the record before it |
-| B | M130 → M131 | fresh-context subagent, worktree off M125's schema commit |
+| A | M125 → M126 → M127 → M128 → M129 → M130 | this session; sequential, each on the record before it |
+| B | M131 → M132 | fresh-context subagent, worktree off M125's schema commit |
 
 Track B touches `templates.ts`, `layout-schema.ts`'s template parser, `handoff`/`runs` and
 one new panel kind; Track A touches `toolbox-*`, the shelf, two panel kinds and the trail.
@@ -433,27 +543,32 @@ lesson applies: **run every plain-node suite a merge touched**, because a keep-b
 resolution of two blocks appended at one marker dropped a closing brace and read as
 `Unexpected end of input`.
 
-**If the act runs long, M131 is the one to defer.** The blocks are useful without the panel;
+**If the act runs long, M132 is the one to defer.** The blocks are useful without the panel;
 the panel is useless without the blocks.
 
-## 10. Declared non-goals
+## 11. Declared non-goals
 
-- **Writing into `~/.claude` from the app.** No Save, Rename, Delete, Import or Sync.
-  `docs/ideas-backlog.md` #26's refusal stands; §4.1's chat door is how a file gets written.
+- **Writing anything but a skill.** M128 narrows #26's refusal to exactly one file type and
+  leaves the rest of it standing: no hook, permission, MCP server, settings file, agent or
+  command is written by this app. §5.1 is the table and the reason for each.
+- **Import and Sync.** A marketplace fetch is `claude plugin install`'s, and the app does not
+  reimplement it; the chat door runs it in the directory the user is looking at.
+- **Merging a concurrent edit.** §5.4 refuses and keeps your text. This app has no merge, and
+  inventing one at a two-writer boundary is how the file gets silently wrong.
 - **Parsing `claude plugin details`.** Verbatim or nothing, until it grows `--json`
   (measurement 5).
 - **`@xyflow/react` / React Flow.** A second canvas with its own pan, zoom, selection and
-  undo — the thing §8 exists to avoid.
+  undo — the thing §9 exists to avoid.
 - **`js-yaml`.** The documented parser-differential refusal in `toolbox-scan.ts`.
 - **`fuse.js`, `chokidar`, `react-window`.** `fuzzy.ts`, `FileWatchers`/`fs.watch`, and the
   pane's own culling already do these, each already under a plain-node suite.
 - **`dagre` — recorded as a candidate, not adopted.** ~30 KB, pure, no DOM, so it would fit
   the plain-node verify tier if the diagram ever needs auto-layout. It does not now, because
   template nodes carry authored `dx`/`dy`.
-- **A skill that this app "activates."** §6's claim is that skills are named to an agent.
+- **A skill that this app "activates."** §7's claim is that skills are named to an agent.
 - **The disabled plugins' skills.** §2.3.
 
-## 11. What green will not prove
+## 12. What green will not prove
 
 - **That the trail matches what the agent actually did.** Every check drives a recorded
   fixture JSONL. The record shape is measured (measurement 1) but not versioned by anything;
@@ -466,5 +581,11 @@ the panel is useless without the blocks.
 - **That a pool of N is safe against a real budget.** `pool.1` drives the fake runner and a
   fake limits dep. A pool that spends real money against a real ceiling is a second owed hand
   check, and it should be run with `agents.budgetUsd` set deliberately low.
+- **That a saved `SKILL.md` still loads in the CLI.** `edit.1` proves the bytes round-trip;
+  it does not prove the CLI accepts the result, because no suite in this repository runs a
+  skill. **One hand check is owed:** edit a real skill's description and body, save, and
+  invoke it from a real session.
+- **That `shell.trashItem` behaves on this machine.** It is Electron's, unreachable from
+  plain node, and `verify:toolbox` drives an injected `trash` dep. Manual-only, once.
 - **That the token figures in §4's verbatim block are right.** They are the CLI's estimates,
   rendered as the CLI printed them, and the panel says so.
