@@ -26,3 +26,7 @@ graphify-out/
 # put the whole tree in the repo a second time.
 .claude/
 .superpowers/
+
+# M119. The ACP recordings under scripts/fixtures are FIXTURES a suite reads, not logs:
+# the blanket *.log above hid them from git for one whole milestone.
+!scripts/fixtures/agent-session/acp/*.log

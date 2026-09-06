@@ -1567,6 +1567,129 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ prompt, marks: typeof marks }))
   }
 
+  /* M119 — acp.1. THE ACP CODEC over four streams recorded from `copilot --acp`
+     1.0.83 (2026-09-06, scripts/fixtures/agent-session/acp). Each fixture line
+     is prefixed `-> ` (what the probe wrote) or `<- ` (what the agent said);
+     the check re-makes the probe's requests through OUR encoders, registering
+     each in the codec's state the way the adapter will, then feeds every
+     `<- ` line through parseAcpLine and reads the events. A response is
+     matched to what was ASKED — a prompt's answer and a load's answer are the
+     same JSON shape apart from the id, so a codec that guessed by shape would
+     read a resumed session's history as a turn. Guarded: before the codec
+     lands `M.acp` is undefined, and a throw here would abort every check
+     below (verify-suites.md rule 1). */
+  {
+    const ACP = M.acp
+    const acpFixture = (name) => readFileSync(join(FIX, 'acp', name), 'utf8').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('## '))
+    const sent = (lines) => lines.filter((l) => l.startsWith('-> ')).map((l) => JSON.parse(l.slice(3)))
+    const heard = (lines) => lines.filter((l) => l.startsWith('<- ')).map((l) => l.slice(3))
+    const replay = (name, edit = (l) => l) => {
+      const lines = acpFixture(name)
+      let state = ACP.freshAcpState()
+      const ours = []
+      for (const r of sent(lines).filter((x) => x.method !== undefined)) {
+        let line
+        if (r.method === 'initialize') line = ACP.acpInitialize(r.id)
+        else if (r.method === 'session/new') line = ACP.acpSessionNew(r.id, r.params.cwd)
+        else if (r.method === 'session/load') line = ACP.acpSessionLoad(r.id, r.params.sessionId, r.params.cwd)
+        else if (r.method === 'session/prompt') line = ACP.acpPrompt(r.id, r.params.sessionId, r.params.prompt[0].text, [])
+        if (line !== undefined) { ours.push({ recorded: r, ours: JSON.parse(line) }); state = ACP.noteRequest(state, r.id, r.method) }
+      }
+      const events = []
+      for (const l of heard(lines)) { const out = ACP.parseAcpLine(edit(l), state); state = out.state; events.push(...out.events) }
+      return { events, ours, state, kinds: events.map((e) => e.type) }
+    }
+    const sameRequests = (ours) => ours.every(({ recorded, ours: o }) => o.jsonrpc === '2.0' && o.id === recorded.id && o.method === recorded.method &&
+      (recorded.method !== 'session/new' || o.params.cwd === recorded.params.cwd) &&
+      (recorded.method !== 'session/load' || (o.params.cwd === recorded.params.cwd && o.params.sessionId === recorded.params.sessionId)) &&
+      (recorded.method !== 'session/prompt' || (o.params.sessionId === recorded.params.sessionId && JSON.stringify(o.params.prompt) === JSON.stringify(recorded.params.prompt))))
+    if (!ACP || typeof ACP.parseAcpLine !== 'function') {
+      ok('acp.1 the ACP codec exists (shared/acp-transcript.ts, bundled as M.acp)', false, 'no acp codec in the bundle')
+    } else {
+      const pong = replay('pong.log')
+      const init = pong.events.find((e) => e.type === 'session' && e.negotiated !== undefined)
+      const opened = pong.events.find((e) => e.type === 'session' && e.sessionId !== '')
+      const start = pong.events.find((e) => e.type === 'block-start')
+      const delta = pong.events.find((e) => e.type === 'block-delta')
+      const assistant = pong.events.find((e) => e.type === 'assistant')
+      const result = pong.events.find((e) => e.type === 'result')
+      const k = pong.kinds
+      ok('acp.1 pong.log: our three requests match the probe\'s (id, method, cwd, prompt); initialize\'s answer is a session event with sessionId \'\' carrying negotiated { loadSession: true, image: true }; session/new\'s answer is the session with the minted id; the chunk is message-start, block-start text, block-delta; the prompt\'s answer is one assistant turn THEN a result with usage input 13654 / output 5 / cacheRead 1280 and no cost; the four housekeeping updates are ignored, nothing malformed or unknown',
+        sameRequests(pong.ours) && init !== undefined && init.sessionId === '' && init.negotiated.loadSession === true && init.negotiated.image === true &&
+          opened !== undefined && opened.sessionId === '20d8f012-67af-4c3a-a046-350822466b44' && k.indexOf('session') < k.indexOf('message-start') &&
+          k.indexOf('message-start') < k.indexOf('block-start') && k.indexOf('block-start') < k.indexOf('block-delta') &&
+          start !== undefined && start.block.type === 'text' && delta !== undefined && delta.delta === 'text' && delta.text === 'pong' &&
+          assistant !== undefined && assistant.blocks.length === 1 && assistant.blocks[0].type === 'text' && assistant.blocks[0].text === 'pong' && assistant.replay !== true &&
+          k.indexOf('assistant') < k.indexOf('result') &&
+          result !== undefined && result.ok === true && result.stopReason === 'end_turn' && result.usage.input === 13654 && result.usage.output === 5 && result.usage.cacheRead === 1280 && result.costUsd === undefined &&
+          k.filter((x) => x === 'ignored').length === 4 && k.every((x) => x !== 'malformed' && x !== 'unknown'),
+        JSON.stringify({ same: sameRequests(pong.ours), init, opened, kinds: k, start, delta, assistant, result }))
+
+      const read = replay('read.log')
+      const use = read.events.find((e) => e.type === 'assistant' && e.blocks.some((b) => b.type === 'tool_use'))
+      const useBlock = use && use.blocks.find((b) => b.type === 'tool_use')
+      const res = read.events.find((e) => e.type === 'user' && e.blocks.some((b) => b.type === 'tool_result'))
+      const resBlock = res && res.blocks.find((b) => b.type === 'tool_result')
+      const text = read.events.filter((e) => e.type === 'assistant' && e.blocks.every((b) => b.type === 'text'))
+      const rk = read.kinds
+      ok('acp.1.b read.log: a tool_call is an assistant turn with a tool_use block { id: the toolCallId, name: the kind (read), input: rawInput with its path }; tool_call_update completed is a user turn with a tool_result under the SAME id whose content is rawOutput.content (`hello from probe`), not an error; the reply text follows as its own assistant turn before the result',
+        use !== undefined && useBlock.id === 'call_0TcbrrSahpgOL3pojouLyAp6' && useBlock.name === 'read' && typeof useBlock.input.path === 'string' && useBlock.input.path.endsWith('/note.txt') && use.replay !== true &&
+          res !== undefined && res.replay === false && resBlock.toolUseId === useBlock.id && /hello from probe/.test(resBlock.content) && resBlock.isError === false &&
+          rk.indexOf('assistant') < rk.indexOf('user') && text.length === 1 && text[0].blocks[0].text === 'hello' && rk.lastIndexOf('assistant') < rk.indexOf('result') &&
+          rk.every((x) => x !== 'malformed' && x !== 'unknown'),
+        JSON.stringify({ use, res, text, kinds: rk }))
+
+      const term = replay('terminal.log')
+      const ask = term.events.find((e) => e.type === 'permission-request')
+      const recordedAnswer = acpFixture('terminal.log').find((l) => l.startsWith('-> ') && l.includes('"id":0'))
+      const answer = ACP.acpPermissionAnswer('0', 'allow_once')
+      const termRes = term.events.find((e) => e.type === 'user' && e.blocks.some((b) => b.type === 'tool_result'))
+      const termText = term.events.find((e) => e.type === 'assistant' && e.blocks.every((b) => b.type === 'text'))
+      const deltas = term.events.filter((e) => e.type === 'block-delta').map((e) => e.text)
+      ok('acp.1.c terminal.log: session/request_permission (JSON-RPC id 0) is a permission-request { requestId: \'0\', toolName: \'execute\', input.command === \'echo probe-ok\', input.__options: [allow_once, allow_always, reject_once], description: the title, toolUseId: the toolCallId }; acpPermissionAnswer(\'0\', \'allow_once\') is byte for byte the line the probe wrote; the two partial tool_call_updates (no status) are ignored and the completed one is the tool_result; two chunks are two deltas and one assistant turn reading probe-ok',
+        ask !== undefined && ask.requestId === '0' && ask.toolName === 'execute' && ask.input.command === 'echo probe-ok' && JSON.stringify(ask.input.__options) === JSON.stringify(['allow_once', 'allow_always', 'reject_once']) &&
+          typeof ask.description === 'string' && /shell probe/.test(ask.description) && ask.toolUseId === 'call_NaWlKVD9FdBcOk0lNeHJ5t56' &&
+          recordedAnswer !== undefined && answer === recordedAnswer.slice(3) &&
+          termRes !== undefined && /probe-ok/.test(termRes.blocks[0].content) && term.events.filter((e) => e.type === 'user').length === 1 &&
+          deltas.join('|') === 'probe|-ok' && termText !== undefined && termText.blocks[0].text === 'probe-ok' &&
+          term.kinds.every((x) => x !== 'malformed' && x !== 'unknown'),
+        JSON.stringify({ ask, answer, recordedAnswer, termRes, deltas, termText, kinds: term.kinds }))
+
+      const load = replay('load.log')
+      const lk = load.kinds
+      const loadDone = load.events.findIndex((e) => e.type === 'session' && e.sessionId !== '')
+      const before = load.events.slice(0, loadDone)
+      const after = load.events.slice(loadDone + 1)
+      const replayed = before.filter((e) => e.type === 'user' || e.type === 'assistant')
+      const loadedId = load.events[loadDone] && load.events[loadDone].sessionId
+      const fresh = after.find((e) => e.type === 'assistant')
+      const loadResult = after.find((e) => e.type === 'result')
+      ok('acp.1.d load.log: everything session/load replays before its own answer — the user message, the tool call, its result, the agent\'s text — arrives as user/assistant events marked replay: true and never as deltas; the load\'s answer is the session event naming the LOADED id; the prompt after it streams as a fresh turn (replay absent) with its own result (usage input 13795)',
+        loadDone > 0 && loadedId === 'b5a48d7e-2ebc-460b-adb9-379df4779281' && replayed.length === 4 && replayed.every((e) => e.replay === true) &&
+          replayed[0].type === 'user' && replayed[0].blocks[0].type === 'text' && /note\.txt/.test(replayed[0].blocks[0].text) &&
+          replayed[1].type === 'assistant' && replayed[1].blocks[0].type === 'tool_use' && replayed[2].type === 'user' && replayed[2].blocks[0].type === 'tool_result' &&
+          replayed[3].type === 'assistant' && replayed[3].blocks[0].type === 'text' && replayed[3].blocks[0].text === 'hello' &&
+          !before.some((e) => e.type === 'block-delta' || e.type === 'message-start' || e.type === 'result') &&
+          fresh !== undefined && fresh.replay !== true && fresh.blocks[0].text === 'hello' && after.some((e) => e.type === 'message-start') &&
+          loadResult !== undefined && loadResult.ok === true && loadResult.usage.input === 13795 && loadResult.usage.output === 5 &&
+          lk.every((x) => x !== 'malformed' && x !== 'unknown'),
+        JSON.stringify({ loadDone, loadedId, replayed, fresh, loadResult, kinds: lk }))
+
+      let s = ACP.noteRequest(ACP.freshAcpState(), 3, 'session/prompt')
+      const bad = ACP.parseAcpLine('{not json', s)
+      const err = ACP.parseAcpLine('{"jsonrpc":"2.0","id":3,"error":{"code":-32000,"message":"boom"}}', s)
+      const plan = ACP.parseAcpLine('{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"x","update":{"sessionUpdate":"plan","entries":[]}}}', s)
+      const novel = ACP.parseAcpLine('{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"x","update":{"sessionUpdate":"telepathy_update"}}}', s)
+      const stray = ACP.parseAcpLine('{"jsonrpc":"2.0","id":99,"result":{}}', s)
+      const askedOfUs = ACP.parseAcpLine('{"jsonrpc":"2.0","id":7,"method":"fs/read_text_file","params":{"path":"/x"}}', s)
+      ok('acp.1.e a non-JSON line is malformed; an error response to the pending prompt is result { ok: false, error: the message } and clears the pending id; a `plan` update is ignored by kind (declined: no recording); an update kind this version has not seen is unknown BY KIND; a response to an id nobody asked is unknown; a request the client declined the capability for (fs/read_text_file) is unknown by method, never answered',
+        bad.events[0].type === 'malformed' && err.events[0].type === 'result' && err.events[0].ok === false && err.events[0].error === 'boom' && err.state.pending[3] === undefined &&
+          plan.events[0].type === 'ignored' && /plan/.test(plan.events[0].kind) && novel.events[0].type === 'unknown' && /telepathy_update/.test(novel.events[0].kind) &&
+          stray.events[0].type === 'unknown' && askedOfUs.events[0].type === 'unknown' && /fs\/read_text_file/.test(askedOfUs.events[0].kind),
+        JSON.stringify({ bad: bad.events, err: err.events, plan: plan.events, novel: novel.events, stray: stray.events, askedOfUs: askedOfUs.events }))
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
