@@ -202,6 +202,10 @@ const SCENES = [
     } },
   { name: 'board', intent: 'M116. The Board pane: four columns (todo · working · review · done) over the workspace\'s work items — `acme/canvas#12 Watchdog fires under load` under working with `ada` and its lane `claude — api (chat)` as the trailing phrase, `acme/canvas#31` under todo with `Show on canvas` because it has no card; todo and done are the only columns with a dashed (droppable) edge. On the canvas, the #12 card sits beside the chat it was dispatched to, its state word `working` in the working tone, with the edge between them.',
     run: async (k) => {
+      // Frame the card first (the harness's own goTo, like every scene), THEN
+      // open the pane: the pane's rows are the pane's; the canvas half must
+      // show the card beside its lane, not what the last scene left in view.
+      await k.goTo('Watchdog fires under load'); await sleep(400)
       await k.dock('board'); await sleep(500)
       await k.shot('board')
       await k.dock('panels'); await sleep(300)
