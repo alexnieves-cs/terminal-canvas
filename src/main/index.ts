@@ -50,6 +50,7 @@ import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { claudeCliRunner } from './claude-cli-runner'
+import { listPlugins, type PluginRunner } from './plugin-list'
 import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
@@ -63,7 +64,7 @@ import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type A
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
-import { spawn as spawnChild, execFileSync } from 'node:child_process'
+import { spawn as spawnChild, execFileSync, execFile } from 'node:child_process'
 import { watch as fsWatch, realpathSync, type FSWatcher } from 'node:fs'
 import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './watch-runner'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
@@ -433,6 +434,30 @@ async function confirmReset(): Promise<void> {
  * which is a known limit rather than a bug.
  */
 const which = (command: string): string | null => whichFromEnv(command, loginEnv)
+
+/**
+ * M125. The real `PluginRunner`: `claude plugin list --json` over
+ * `child_process`, resolved through the SAME `claudePath` the startup probe
+ * already found (or the bare name, which `listPlugins` turns into `unknown`
+ * on the resulting ENOENT — never a throw). Kept to the shape `listPlugins`
+ * needs (stdout + exit code) rather than the full `AgentProcess` streaming
+ * shape agent-runner.ts defines: this is one call-and-done, not a
+ * conversation.
+ */
+const runClaudePluginList: PluginRunner = () =>
+  new Promise((resolve) => {
+    execFile(claudePath ?? 'claude', ['plugin', 'list', '--json'], { env: loginEnv }, (error, stdout) => {
+      // Absent binary (ENOENT), a non-zero exit, or any other spawn failure
+      // all read the same way here: `listPlugins` only asks whether the code
+      // was zero, so any error becomes a non-zero code rather than a thrown
+      // rejection this Promise never produces.
+      if (error !== null) {
+        resolve({ stdout: '', code: 1 })
+        return
+      }
+      resolve({ stdout, code: 0 })
+    })
+  })
 
 /**
  * Spawn from a preset, by id. NAMED rather than inlined into the menu's
@@ -1696,7 +1721,8 @@ app.whenReady().then(async () => {
         return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
       },
       commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
-    }
+    },
+    () => listPlugins(runClaudePluginList)
   )
   createWindow()
 

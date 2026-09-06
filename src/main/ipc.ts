@@ -29,6 +29,7 @@ import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
 import type { PromptListRow } from './prompts'
+import type { PluginListResult } from './plugin-list'
 import { SETTINGS, type SettingValue } from '../shared/settings-schema'
 import type { ReviewEngine } from './review-engine'
 import type { CredentialStore } from './credential-store'
@@ -321,7 +322,17 @@ export function registerIpcHandlers(
   /** M103. Appended last, like every collaborator before it. */
   browser: BrowserHandlers = INERT_BROWSER,
   /** M114. Appended last, like every collaborator before it. */
-  board: BoardHandlers = INERT_BOARD
+  board: BoardHandlers = INERT_BOARD,
+  /**
+   * M125. The enabled plugins, asked fresh on every toolbox read. Inert by
+   * default (`unknown`, never spawning anything) for the same reason as every
+   * collaborator before it: a harness that does not wire it keeps compiling
+   * and TOOLBOX_READ still answers, just with no plugin skills.
+   */
+  listPlugins: () => Promise<PluginListResult> = async () => ({
+    kind: 'unknown',
+    why: 'plugin list is not wired'
+  })
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -658,14 +669,20 @@ export function registerIpcHandlers(
     fileWatchers.close(panelId)
   })
 
-  ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => {
+  ipcMain.handle(IPC.TOOLBOX_READ, async (_event, req: ToolboxReadRequest) => {
     // resolveCwd is pty-manager's — the SAME expansion a spawn gets, so the
     // toolbox and the agent can never disagree about which directory they are
     // describing. index.ts already reaches for it this way for prompts.
+    const pluginsResult = await listPlugins()
     return toolboxCache.read({
       cwd: req.cwd === '' ? '' : resolveCwd(req.cwd),
       home: resolveToolboxHome(),
-      spawnStamps: ptyManager.configStampsFor(req.panelId)
+      spawnStamps: ptyManager.configStampsFor(req.panelId),
+      // `unknown` reads as no plugins, never as an error surfaced here — the
+      // pane already has a place for "the CLI didn't answer" one level up
+      // (the ordinary env-report three-state rule), and TOOLBOX_READ has no
+      // slot to carry a second one through.
+      plugins: pluginsResult.kind === 'ok' ? pluginsResult.plugins : undefined
     })
   })
 

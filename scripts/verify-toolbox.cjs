@@ -765,8 +765,8 @@ const write = (rel, text) => {
   /* ---- M125: a plugin's skills, walked from installPath, total capped ---- */
   try {
     const pluginRoot = p('plugin-demo')
-    write(join('plugin-demo', 'skills', 'from-plugin', 'SKILL.md'),
-      '---\nname: from-plugin\ndescription: Ships with the plugin.\n---\n')
+    write(join('plugin-demo', 'skills', '0-from-plugin', 'SKILL.md'),
+      '---\nname: 0-from-plugin\ndescription: Ships with the plugin.\n---\n')
     // Enough sibling skill directories to push the TOTAL (user + project +
     // plugin) past SKILLS_MAX, so a cap that were per-source rather than
     // shared would pass this by accident.
@@ -778,12 +778,12 @@ const write = (rel, text) => {
     const withPlugins = T.readToolbox({ cwd: CWD, home: HOME, plugins })
     const pinv = withPlugins.kind === 'inventory' ? withPlugins.inventory : null
     const skills2 = pinv ? pinv.entries.filter((e) => e.kind === 'skill') : []
-    const fromPlugin = skills2.find((e) => e.name === 'from-plugin')
+    const fromPlugin = skills2.find((e) => e.name === '0-from-plugin')
     ok('skill.2a a plugin skill is stamped with its pluginId and scope user',
        !!fromPlugin && fromPlugin.pluginId === 'demo-plugin@marketplace' && fromPlugin.scope === 'user',
        JSON.stringify(fromPlugin))
     ok('skill.2b a non-plugin skill carries no pluginId key at all',
-       skills2.filter((e) => e.name !== 'from-plugin' && !e.name.startsWith('filler-'))
+       skills2.filter((e) => e.name !== '0-from-plugin' && !e.name.startsWith('filler-'))
          .every((e) => !('pluginId' in e)),
        'absent, never pluginId: undefined')
     ok('skill.2c SKILLS_MAX is the TOTAL across scopes and plugins, not per source',

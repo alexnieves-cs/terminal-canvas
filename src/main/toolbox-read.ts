@@ -22,6 +22,7 @@
 import { readdirSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import type { PluginRecord } from './plugin-list'
 import {
   AGENTS_MAX,
   CLAUDE_JSON_MAX_BYTES,
@@ -175,7 +176,8 @@ function readNamed(
   kind: 'skill' | 'command' | 'agent',
   name: string,
   scope: ToolScope,
-  active: ToolActive
+  active: ToolActive,
+  pluginId?: string
 ): NamedToolEntry | null {
   const head = readHead(path, MARKDOWN_HEAD_BYTES)
   if (head === null) return null
@@ -194,8 +196,22 @@ function readNamed(
     alsoDefinedIn: [],
     name: name.slice(0, TOOL_NAME_MAX),
     description,
-    descriptionTruncated
+    descriptionTruncated,
+    // Absent unless set — never `pluginId: undefined` on a spread, the rule
+    // this module's own header states for every optional field.
+    ...(pluginId !== undefined ? { pluginId } : {})
   }
+}
+
+/**
+ * The running count of skills already accepted across every source read so
+ * far this call — user, project, and every enabled plugin. `SKILLS_MAX` is
+ * the TOTAL, not a per-source allowance, so this is threaded through rather
+ * than each call starting its own `out.length` back at zero: three scopes
+ * plus thirteen plugins must not multiply the cap.
+ */
+interface SkillBudget {
+  used: number
 }
 
 function readSkills(
@@ -204,14 +220,16 @@ function readSkills(
   overrides: unknown,
   overrideSource: string,
   sources: SourceRead[],
-  overflow: ToolOverflow
+  overflow: ToolOverflow,
+  budget: SkillBudget,
+  pluginId?: string
 ): NamedToolEntry[] {
   const dir = join(root, 'skills')
   const listed = listDir(dir)
   sources.push({ path: dir, scope, what: 'skills', status: listed.status, detail: listed.detail })
   const out: NamedToolEntry[] = []
   for (const name of listed.names) {
-    if (out.length >= SKILLS_MAX) {
+    if (budget.used >= SKILLS_MAX) {
       overflow.skills += 1
       continue
     }
@@ -222,13 +240,15 @@ function readSkills(
       'skill',
       name,
       scope,
-      off ? { kind: 'disabled', by: overrideSource } : { kind: 'active' }
+      off ? { kind: 'disabled', by: overrideSource } : { kind: 'active' },
+      pluginId
     )
     // One unreadable skill costs that skill — parseLayout's individual-drop
     // rule, which this whole module inherits.
     if (entry !== null) {
       entry.resources = countResources(join(dir, name))
       out.push(entry)
+      budget.used += 1
     }
   }
   return out
@@ -429,6 +449,12 @@ export interface ReadToolboxInput {
    * ConfigFreshness for the two ordinary ways that happens.
    */
   spawnStamps?: Map<string, string> | undefined
+  /**
+   * M125. The enabled plugins, as `listPlugins` (main's own caller) answered
+   * — this module never spawns the CLI itself. Absent reads exactly as
+   * before this milestone: no plugin skills, same as `[]`.
+   */
+  plugins?: PluginRecord[] | undefined
 }
 
 export function readToolbox(input: ReadToolboxInput): ToolInventoryResult {
@@ -501,6 +527,10 @@ export function readToolbox(input: ReadToolboxInput): ToolInventoryResult {
   const projectOverrideSource =
     localOverrides !== undefined ? paths.projectSettingsLocal : paths.projectSettings
 
+  // Shared across user, project AND every enabled plugin — SKILLS_MAX is the
+  // total, never a per-source allowance (see SkillBudget's own comment).
+  const skillBudget: SkillBudget = { used: 0 }
+
   const entries: ToolEntry[] = []
   entries.push(
     ...readSkills(
@@ -509,7 +539,8 @@ export function readToolbox(input: ReadToolboxInput): ToolInventoryResult {
       overridesOf(userSettings),
       paths.userSettings,
       sources,
-      overflow
+      overflow,
+      skillBudget
     )
   )
   entries.push(...readCommands(paths.userRoot, 'user', sources, overflow))
@@ -521,11 +552,28 @@ export function readToolbox(input: ReadToolboxInput): ToolInventoryResult {
       projectOverrides,
       projectOverrideSource,
       sources,
-      overflow
+      overflow,
+      skillBudget
     )
   )
   entries.push(...readCommands(paths.projectRoot, 'project', sources, overflow))
   entries.push(...readAgents(paths.projectRoot, 'project', sources, overflow))
+
+  /* ---- M125: each enabled plugin's own skills, bounded to its installPath -- */
+  for (const plugin of input.plugins ?? []) {
+    entries.push(
+      ...readSkills(
+        plugin.installPath,
+        'user',
+        undefined,
+        paths.userSettings,
+        sources,
+        overflow,
+        skillBudget,
+        plugin.id
+      )
+    )
+  }
 
   /* ---- mcp: three sources, two independent gate pairs ---- */
 

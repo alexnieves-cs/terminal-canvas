@@ -44,5 +44,7 @@ module.exports = {
   ...require('../src/main/telemetry.ts'),
   /* M114. The lane: pure over injected origin/subdir readers, a fake gate and a fake worktree manager. */
   ...require('../src/main/board-repo.ts'),
-  ...require('../src/main/board-lane.ts')
+  ...require('../src/main/board-lane.ts'),
+  /* M125. The enabled plugins, over an injected one-shot runner. */
+  ...require('../src/main/plugin-list.ts')
 }

@@ -161,6 +161,12 @@ export interface NamedToolEntry extends ToolEntryBase {
   descriptionTruncated: boolean
   /** Skills only — a command and an agent are one file each. */
   resources?: SkillResources
+  /**
+   * M125. The plugin this skill shipped with, when it did. Absent for every
+   * user/project skill — never written as `undefined` on a spread, the same
+   * "absent unless set" rule every optional field in this module follows.
+   */
+  pluginId?: string
 }
 
 /**
