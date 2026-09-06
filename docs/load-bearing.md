@@ -1833,7 +1833,23 @@ hairline, and no shadow carries a boundary, which is what lets a dark theme be a
 rather than a re-derivation of every shadow. The one deliberate survivor from the old grammar is
 `.panel--agent-wants-you`'s untransformed `border-color: var(--amber)` (`verify:panels` 62/97
 compare it by resolved value); `--amber` may be re-tuned per block and may never become a
-gradient or a shadow.
+gradient or a shadow. **M109 amends the shadow half, not the line half:** every boundary is
+still a `--line`, and exactly ONE resting shadow exists, `--lift`, on the panel frame — and
+every later rule on the frame that writes `box-shadow` (selected, link-target, wants-you and
+its keyframes) must RESTATE it, or a click drops the panel to the ground with no error;
+`verify:styles shadow.1` names the sites a lift may appear on.
+
+**Glass is a NEW name, never a re-spelling, and blur is paid at the near tiers only
+(`styles.css`, `verify:styles obsidian.1`/`blur.1`, `verify:panels`).** Two checks parse the
+theme tokens as six-digit hex: check 11 skips anything else (and REPORTS it undeclared), and
+the panels suite converts `--line-strong` with a `toRgb` that reads `#rrggbb`. So the glass
+fills (`--glass-1/2`, rgba over `backdrop-filter`) are additional tokens and `--panel-bg`
+aliases `--glass-1` — the card-ground check reads a panel's computed background against
+`var(--panel-bg)`, and the alias is what keeps it measuring the real fill. `backdrop-filter`
+composites a layer per element: the panel pays it at the live and card tiers (the viewport
+bounds their count) and `.world[data-detail="summary"|"block"] .pf` sets it to `none` (a
+hundred blocks at 8%, where glass is invisible anyway); the HUD stays opaque (`compact.1`
+reads its ground). Undo either and the app is fine on five panels and a fan on twenty.
 
 **`appearance.theme` is the schema's first ENUM, and both doors check membership
 (`shared/settings-schema.ts`, `parsePreferences`, `layout-store.ts`'s `writePreference`).** The

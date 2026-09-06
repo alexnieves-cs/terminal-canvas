@@ -4336,6 +4336,8 @@ export function Canvas({
         chromeRef.current.dismissTransient()
       }}
     >
+      {/* M109. The ground's light, under every region (the chrome is glass). */}
+      <div className="shell__aura" aria-hidden="true" />
       {/* DOM order is screen order for a screen reader: dock, then the top
           bar, then the navigator. */}
       <Dock
@@ -4435,6 +4437,10 @@ export function Canvas({
         <CardDetailContext.Provider value={cardDetail}>
         {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}
         <PanelMarksContext.Provider value={panelMarks}>
+        {/* M109. The camera's light, under the world: a sibling BEFORE .world so
+            the world paints over it, moved at 0.12 of the viewport's translation
+            (parallax — the ground is far away). Never a click target. */}
+        <div className="canvas__aura" aria-hidden="true" style={{ transform: `translate(${viewport.x * 0.12}px, ${viewport.y * 0.12}px)` }} />
         <div
           className="world"
           data-detail={cardDetail}
