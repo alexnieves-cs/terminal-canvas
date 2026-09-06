@@ -86,9 +86,44 @@ the record, and reports the run through the one save door so the row says what h
   routine.1`. The record rules: `verify:layout routine.1`.
 - **In-app only, said on the row** (`runs while the app is open — not while it is closed`).
 
-## M103 — the browser pane (track B)
+## M103 — the browser pane (track B, a worktree subagent)
 
-(Filled in at the gate from the subagent's report.)
+*Reverses `2026-09-03-v2-scope-decision.md` §5, narrowly.* M0 measured the one shape M91 had not:
+a `<webview>` guest loads under the shipped CSP with no violation and follows the world's
+transform, clip and z-order. The renderer's CSP is NOT relaxed.
+
+### Red first
+
+`verify:meta browser.1` (the guest's five properties as text), `verify:layout browser.1` (the
+eleventh kind on disk; a non-http(s) url is malformed, dropped by id), `verify:file browser.1`
+(the read refuses `file:`, `data:`, `about:`, `chrome:` by name before evaluating; an https page
+is read, capped and passed outward — a planted token gone), `verify:verbs gate.3`
+(`browser-read.ts` is the only file that evaluates script in a guest, and it calls `outward`),
+`verify:palette browser.1`, `verify:ipc` 98 → 99; then `verify:panels browser.1` against a page
+that rewrites its title and history — the readout stays the guest's own `getURL()`.
+
+### Shape decisions worth recording
+
+- **`webviewTag: true` is the setting Electron's docs discourage**, and every property they warn
+  about is closed by name in `main/index.ts`: `will-attach-webview` strips `preload`, forces
+  nodeIntegration off and contextIsolation on, and refuses a non-http(s) `src`; the
+  `persist:tc-browser` partition's permission handler answers `false` to every ask; the attached
+  guest's `setWindowOpenHandler` denies every window. `verify:meta browser.1` reads all five.
+- **The address readout is set from the guest's `getURL()` on `did-navigate` and
+  `did-navigate-in-page`, and from nothing a page can write** — a hostile page cannot paint a
+  false address over the pane.
+- **Reading the pane is leaving the app**: `browser:read` is MAIN's — the guest resolved by the
+  id the node registered and checked to be a webview, the scheme checked on the LIVE url (a
+  navigation gate alone leaves `about:blank` and a `data:` redirect readable), the text capped
+  inside the guest, then `outward(text, 'a remote page at <host>')`.
+- The node creates the guest IMPERATIVELY, keyed on the panel id alone — an effect keyed on the
+  record's url would rebuild the guest on every navigation. `browser-store.ts` is the per-panel
+  guest record (id and reload), cleared at the panel-removing sites; an `exit-ok` edge into the
+  pane RELOADS it (M78's table, no new trigger), with a named skip when no guest is live.
+- The palette's `Open a page…` door takes a URL or a bare host (`localhost:3000` gets `http://`)
+  in text mode and refuses a non-http(s) scheme on the feedback line.
+- **The iOS Simulator pane is declined by name** in the act's spec: no seam, a screen-scrape,
+  unbounded scope.
 
 ## Findings (critic and verifier)
 
