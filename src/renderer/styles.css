@@ -3774,3 +3774,21 @@ body {
 
 /* M102. The grant line is a sentence beside `connected as`, never a heading over the service. */
 .integration__grants { margin: 0; font-size: var(--t-xs); }
+
+/* M105. The rail says what is happening: a second line with the agent's last
+   line said (prose, cut from the right), an unread dot before the label, and
+   the dock's two capsules. */
+.rail-row__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.rail-row__last { display: block; padding: 0 var(--sp-2) var(--sp-1) var(--sp-4); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock__capsules { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; }
+.dock__capsule { font-size: var(--t-xs); white-space: nowrap; }
+
+/* M106. HEADER DISCIPLINE, once, for every kind: the title is what gives —
+   whole words first, then an ellipsis — and the verbs never shrink, so a
+   narrow frame keeps its controls and never prints `Revie…` beside them. The
+   full title lives in the title attribute and the ⋯ menu. */
+.pf__title { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__word, .pf__chrome .pf__kind { flex: 0 0 auto; }
+.pf__menu-host { position: relative; }
+.pf__menu { position: absolute; top: 100%; right: 0; z-index: 30; min-width: 220px; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
+.pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }

@@ -18,8 +18,11 @@ import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState } from '@renderer/session/agent-state-store'
+import { clearLastLine } from '@renderer/session/last-line-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
+import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
+import { getChat } from '@renderer/chat/chat-store'
 import { templateRefusal } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
@@ -134,6 +137,8 @@ export interface PaletteActionsDeps {
   /** M100. The roster as loaded (a ref: the sheet's submit reads it once), and the navigator's chooser. */
   teammatesRef: RefObject<PersistedTeammate[]>
   chooseNavigator: (pane: NavigatorPane) => void
+  /** M106. */
+  toggleFlip: () => void
 }
 
 /**
@@ -173,7 +178,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip
   } = deps
 
   return useMemo<PaletteActions>(() => ({
@@ -942,6 +947,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     }
                     registry.dispose(panelId)
                     clearAgentState(panelId)
+                    clearLastLine(panelId)
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
                     clearUsage(panelId)
@@ -1238,6 +1244,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             ...(templateId === undefined ? {} : { templateId }),
             instantiate: instantiateTemplate,
             teammates: teammatesRef.current,
+            // M104. The ceiling as read live: the preview says who queues before Enter.
+            ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && getChat(p.rect.id).snapshot?.status === 'streaming').length },
             // M73. A chat is minted HERE, never sent to spawn:sheet: main
             // validates the directory and the CLI through agent:create and
             // the refusal is shown in the sheet like any other.
@@ -1250,6 +1258,27 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                 ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions })
                 : values.what.kind === 'codex'
                   ? beginNewChat({ cwd: values.cwd, title: values.title, agentOptions: values.agentOptions, backend: 'codex' })
+                : values.what.kind === 'lineup'
+                  // M104. Seat by seat through the ordinary doors: an agent seat is
+                  // the first available agent preset (a worktree lane only when
+                  // asked), a shell seat is the login shell or its command, a browser
+                  // seat is an M103 pane — never in a worktree.
+                  ? (async (): Promise<SpawnResult> => {
+                    const plan = lineupPlan(LINEUPS[(values.what as { id: Lineup['id'] }).id], { cwd: values.cwd, worktrees: values.worktree === true, maxConcurrent: 0, liveAgents: 0 })
+                    const agentPreset = presetRows.find((p) => p.agent !== undefined && p.available)
+                    for (const seat of plan.seats) {
+                      if (seat.kind === 'browser') { openBrowserPanel(seat.url ?? 'http://localhost:3000/'); continue }
+                      if (seat.kind === 'agent') {
+                        if (agentPreset === undefined) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
+                        const r = await window.canvas.spawn.sheet({ presetId: agentPreset.id, cwd: values.cwd, title: seat.role, ...(seat.lane ? { worktree: true } : {}) })
+                        if (r.kind === 'refused') return r
+                        continue
+                      }
+                      const r = seat.command === undefined ? await window.canvas.spawn.sheet({ presetId: 'shell', cwd: values.cwd, title: seat.role }) : await window.canvas.spawn.sheet({ command: seat.command, cwd: values.cwd, title: seat.role })
+                      if (r.kind === 'refused') return r
+                    }
+                    return { kind: 'spawned' }
+                  })()
                 : values.what.kind === 'teammate'
                   // M100. A chat AS a teammate: the id rides the create; main reads
                   // the brief from its roster and checks the places before the cwd.
@@ -1741,6 +1770,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     // M100. The roster's door: the navigator's pane, chosen the way the dock chooses it.
     openTeammates: () => chooseNavigator('teammates')
+    ,
+    // M106. The flip is Canvas's view state; the row reaches it through the same event the menu sends.
+    toggleFlip: () => toggleFlip()
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
@@ -1751,5 +1783,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip])
 }

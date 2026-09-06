@@ -196,3 +196,44 @@ export function buildRailRows(
 export function railSignature(rows: readonly RailRow[]): string {
   return JSON.stringify(rows)
 }
+
+/**
+ * M105. THE LAST LINE SAID — the transcript's last complete text block's last
+ * non-empty line, one line, ellipsised from the RIGHT (prose, not a path).
+ * The same content in both front-ends of a CONVERSATION; a terminal's
+ * scrollback is not one, so a terminal row carries none.
+ */
+export const LAST_LINE_MAX = 96
+
+export function lastLineOf(text: string): string {
+  const lines = text.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  const last = lines[lines.length - 1] ?? ''
+  return last.length > LAST_LINE_MAX ? `${last.slice(0, LAST_LINE_MAX - 1)}…` : last
+}
+
+/**
+ * M105. The dock's two capsules: how many chats are LIVE (a turn streaming)
+ * and how many are QUIET (ready, or asleep with a history). Terminals are
+ * counted by neither — their liveness is the pill's, and the attention badge
+ * already counts what needs a person.
+ */
+export function railCapsules(rows: readonly { id: string; kind: string; state: StateInput }[]): { live: number; quiet: number; liveWord: string; quietWord: string } {
+  let live = 0, quiet = 0
+  for (const r of rows) {
+    const chat = r.state.kind === 'chat' ? r.state.chat : undefined
+    if (r.kind !== 'chat' || chat === undefined) continue
+    if (chat.status === 'streaming' || chat.status === 'starting') live += 1
+    else if (chat.status === 'ready' || (chat.status === 'not-started' && chat.hasHistory === true)) quiet += 1
+  }
+  return { live, quiet, liveWord: `${live} live`, quietWord: `${quiet} quiet` }
+}
+
+/**
+ * M107. THE THREAD HEADER reads on from the mark: folder · branch · engine ·
+ * model. Every absent piece is absent — never `undefined`, never a
+ * placeholder that reads as a value.
+ */
+export function chatHeaderLine(input: { cwd: string; branch?: string; backend: string; model?: string }): string {
+  const folder = input.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'
+  return [folder, input.branch, input.backend, input.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')
+}

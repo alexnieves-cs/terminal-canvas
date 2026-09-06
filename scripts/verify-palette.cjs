@@ -207,6 +207,8 @@ const spyActions = () => {
     openTeammates: record('openTeammates'),
     // M103
     beginBrowser: record('beginBrowser'),
+    // M106
+    toggleFlip: record('toggleFlip'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
@@ -2336,6 +2338,29 @@ const WS = [
     row !== undefined && row.disabledReason === undefined && /Open a page/.test(row.title) && row.group === 'spawn' &&
       c.actions.calls.length === 1 && c.actions.calls[0][0] === 'beginBrowser',
     JSON.stringify({ row: row && { id: row.id, title: row.title, group: row.group, disabledReason: row.disabledReason }, calls: c.actions.calls }))
+}
+
+// M104 — lineup.1/.2. THE LINEUP PREVIEW before anything is minted. A lineup
+// is seats; `lineupPlan` says how many sessions open, each seat's role and
+// kind, WHICH seats get a worktree lane (agent seats only — a browser seat
+// in a worktree points at a directory the dev server was never started in)
+// and how many will queue behind `agents.maxConcurrent`, read live.
+{
+  const has = typeof P.lineupPlan === 'function' && typeof P.LINEUPS === 'object'
+  const ids = has ? Object.keys(P.LINEUPS) : []
+  const bench = has ? P.lineupPlan(P.LINEUPS.workbench, { cwd: '/w', worktrees: true, maxConcurrent: 0, liveAgents: 0 }) : null
+  const swarm = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: true, maxConcurrent: 2, liveAgents: 1 }) : null
+  const solo = has ? P.lineupPlan(P.LINEUPS.solo, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 0 }) : null
+  ok('lineup.1 the four lineups exist (solo, pair, workbench, swarm); in a Workbench launched into worktrees only the AGENT seat gets a lane and the shell and browser seats stay in the checkout; without worktrees no seat gets one',
+    has && ids.join(',') === 'solo,pair,workbench,swarm' && bench !== null && bench.seats.length === 3 &&
+      bench.seats.filter((s) => s.kind === 'agent').every((s) => s.lane === true) && bench.seats.filter((s) => s.kind !== 'agent').every((s) => s.lane === false) &&
+      bench.seats.some((s) => s.kind === 'browser' && /localhost:3000/.test(s.url || '')) &&
+      solo !== null && solo.seats.every((s) => s.lane === false),
+    JSON.stringify({ ids, bench, solo }))
+  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing',
+    swarm !== null && swarm.sessions === 4 && swarm.agents === 3 && swarm.queued === 2 && /2 .*queue/.test(swarm.ceilingLine) && /ceiling of 2/.test(swarm.ceilingLine) &&
+      bench !== null && bench.queued === 0 && bench.ceilingLine === '',
+    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine }))
 }
 
 const failed = results.filter((r) => !r.pass)

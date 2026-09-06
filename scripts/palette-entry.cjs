@@ -13,6 +13,8 @@ module.exports = {
   ...require('../src/renderer/palette/spawn-sheet'),
   /* M80. The template model: holes, fill, placement, the named refusal. */
   ...require('../src/renderer/palette/template-model'),
+  /* M104. The lineups and their preview plan — pure. */
+  ...require('../src/shared/lineups'),
   /* M66. The settings definitions, for the voice check. */
   ...require('../src/shared/settings-schema')
 }

@@ -13,7 +13,7 @@
  * report that did not say when it looked would turn that limit into a lie.
  */
 import { REPORTED_CLIS, type CliName, type EnvReport } from '../shared/env-report'
-export { INERT_ENV_REPORT, REPORTED_CLIS, type CliName, type EnvReport } from '../shared/env-report'
+export { INERT_ENV_REPORT, REPORTED_CLIS, probeOutcome, type CliName, type EnvReport, type ProbeOutcome } from '../shared/env-report'
 
 export interface EnvReportFacts {
   env: Record<string, string>
@@ -25,6 +25,8 @@ export interface EnvReportFacts {
   backupWritten: boolean
   now: number
   control: { socket: string; cliPath: string } | null
+  /** M107. Absent for a caller that does not know (a fixture). */
+  probe?: { shells: string[]; timedOut: boolean }
 }
 
 export function buildEnvReport(f: EnvReportFacts): EnvReport {
@@ -39,6 +41,7 @@ export function buildEnvReport(f: EnvReportFacts): EnvReport {
     tmux: { kind: f.backend.kind, reason: f.backend.reason, path: f.backend.tmuxPath },
     layout: { path: f.layoutPath, backupWritten: f.backupWritten },
     envKeys: Object.keys(f.env).sort(),
-    control: f.control
+    control: f.control,
+    ...(f.probe === undefined ? {} : { probe: { shells: [...f.probe.shells], folders: path === '' ? [] : path.split(':').filter((p) => p !== ''), timedOut: f.probe.timedOut } })
   }
 }

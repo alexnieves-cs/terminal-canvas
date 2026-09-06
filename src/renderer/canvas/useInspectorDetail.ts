@@ -1,3 +1,4 @@
+import { onChatTurnEnd } from '@renderer/chat/chat-store'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { useAgentState } from '@renderer/session/agent-state-store'
@@ -48,6 +49,11 @@ export interface InspectorDetailDeps {
  * round trip (`verify:panels` 100b).
  */
 export function useInspectorDetail(deps: InspectorDetailDeps) {
+  // M107. A chat's turn end is a change of what it changed: the Changes
+  // section re-asks when the SELECTED chat's turn ends (M77 captured the
+  // baseline at create; the trigger was the missing piece).
+  const [chatTurnEnds, setChatTurnEnds] = useState(0)
+  useEffect(() => onChatTurnEnd((id) => { if (id === deps.selectedId) setChatTurnEnds((n) => n + 1) }), [deps.selectedId])
   const {
     registry, palette, panels, selectedId, selectedPanel,
     selectedIsSessionless, selectedSpawned, waitingIds
@@ -151,7 +157,7 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
       if (live) setReview(buildReviewFields(result))
     })
     return () => { live = false; if (timer !== null) clearTimeout(timer) }
-  }, [selectedId, selectedIsSessionless, selectedSpawned, idleArrivals, reask])
+  }, [selectedId, selectedIsSessionless, selectedSpawned, idleArrivals, reask, chatTurnEnds])
   /**
    * The Toolbox section's own query, and it copies the review effect above
    * line for line — including the two comments that ARE the design.

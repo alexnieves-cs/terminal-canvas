@@ -283,7 +283,7 @@ export function registerIpcHandlers(
    */
   scrollback: ScrollbackHandlers = INERT_SCROLLBACK,
   /** M48. Appended last with an inert default, like every collaborator before it. */
-  envReport: () => EnvReport = () => INERT_ENV_REPORT,
+  envReport: (again: boolean) => EnvReport | Promise<EnvReport> = () => INERT_ENV_REPORT,
   /** M51. Appended last with an inert default; the harness passes a recorder. */
   links: LinkHandlers = INERT_LINKS,
   /** M52. The run ledger's read half, inert by default. */
@@ -416,7 +416,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC.SESSION_BACKEND, () => getBackendInfo())
 
-  ipcMain.handle(IPC.ENV_REPORT, () => envReport())
+  ipcMain.handle(IPC.ENV_REPORT, (_event, again?: boolean) => envReport(again === true))
   ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, panelId: string) => exporters.panelText(panelId))
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))

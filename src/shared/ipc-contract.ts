@@ -752,7 +752,10 @@ export const IPC_EVENTS = {
    */
   USAGE_PANEL: 'usage:panel',
   /** M101. A routine's tick: the renderer mints the fresh chat and sends the prompt. */
-  ROUTINE_FIRE: 'routine:fire'
+  ROUTINE_FIRE: 'routine:fire',
+  /** M106. The Workspace menu's two verbs: Tidy Panes and Flip Terminals (a view state, never persisted). */
+  CANVAS_TIDY: 'canvas:tidy',
+  CANVAS_FLIP: 'canvas:flip'
 } as const
 
 export interface FileReadRequest {
@@ -1136,6 +1139,9 @@ export interface CanvasBridge {
     /** M81. The canvas model for `tc status`. Same ephemeral-reply shape as onCounts. */
     onModel(provide: () => ControlCanvasModel): () => void
     onReset(listener: () => void): () => void
+    /** M106. The menu's Tidy Panes and Flip Terminals. */
+    onTidy(listener: () => void): () => void
+    onFlip(listener: () => void): () => void
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
   }
@@ -1294,7 +1300,8 @@ export interface CanvasBridge {
   }
   env: {
     /** M48. The startup probe's facts — PATH entries, each CLI found or absent, tmux, the layout file. Names, never values. */
-    report(): Promise<EnvReport>
+    /** M107. `again: true` asks the login shell once more (Check again) and reports what it found; the app's own environment applies on relaunch. */
+    report(again?: boolean): Promise<EnvReport>
   }
   export: {
     panelText(panelId: PanelId): Promise<PanelTextExportResult>

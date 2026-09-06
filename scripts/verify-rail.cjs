@@ -2752,6 +2752,41 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ none: none.grants, some: some.grants, codex: codex.grants, unknown: unknown.grants }))
 }
 
+// M105 — lastline.1. THE RAIL SAYS WHAT IS HAPPENING: a chat row carries the
+// agent's LAST LINE SAID (the transcript's last complete text block, one line,
+// cut from the right — prose, not a path) and an UNREAD mark when its turn
+// ended while the user was elsewhere; a terminal row carries neither (its
+// scrollback is not a conversation); the capsules count quiet and live.
+{
+  const has = typeof R.lastLineOf === 'function' && typeof R.railCapsules === 'function'
+  const one = has ? R.lastLineOf('It exports `start` and `health`.\nWant me to wire `/health` to it?') : null
+  const long = has ? R.lastLineOf('x'.repeat(200)) : null
+  const empty = has ? R.lastLineOf('   \n') : null
+  const caps = has ? R.railCapsules([
+    { id: 'c1', kind: 'chat', state: { kind: 'chat', status: undefined, dormant: false, chat: { status: 'streaming', pending: 0 } } },
+    { id: 'c2', kind: 'chat', state: { kind: 'chat', status: undefined, dormant: false, chat: { status: 'ready', pending: 0 } } },
+    { id: 'c3', kind: 'chat', state: { kind: 'chat', status: undefined, dormant: false, chat: { status: 'not-started', pending: 0, hasHistory: true } } },
+    { id: 'n1', kind: 'terminal', state: { kind: 'terminal', status: { kind: 'running', pid: 1, command: 'sh', cwd: '/', reattached: false }, dormant: false } }
+  ]) : null
+  ok('lastline.1 lastLineOf takes the LAST non-empty line of the last answer, ellipsised from the right past the cap, and is empty for nothing; railCapsules counts a streaming chat as live and a ready or asleep one as quiet, and a terminal in neither',
+    has && one === 'Want me to wire `/health` to it?' && typeof long === 'string' && long.length < 120 && /…$/.test(long) && empty === '' &&
+      caps !== null && caps.live === 1 && caps.quiet === 2 && /1 live/.test(caps.liveWord) && /2 quiet/.test(caps.quietWord),
+    JSON.stringify({ one, longLen: long && long.length, empty, caps }))
+}
+
+// M107 — header.1. THE THREAD HEADER reads on from the mark: folder · branch ·
+// engine · model, each absent piece simply absent — never `undefined`, never
+// a placeholder that reads as a value.
+{
+  const has = typeof R.chatHeaderLine === 'function'
+  const full = has ? R.chatHeaderLine({ cwd: '/home/u/work/api', branch: 'main', backend: 'claude', model: 'claude-opus-5' }) : null
+  const bare = has ? R.chatHeaderLine({ cwd: '/home/u/work/api', backend: 'claude' }) : null
+  const root = has ? R.chatHeaderLine({ cwd: '/', backend: 'codex' }) : null
+  ok('header.1 the chat header line is `api · main · claude · claude-opus-5` with every piece present, `api · claude` with only the folder and engine, and never spells undefined',
+    has && full === 'api · main · claude · claude-opus-5' && bare === 'api · claude' && typeof root === 'string' && !/undefined/.test(root) && /codex/.test(root),
+    JSON.stringify({ full, bare, root }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

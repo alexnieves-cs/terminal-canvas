@@ -1,3 +1,4 @@
+import { useLastLine } from '@renderer/session/last-line-store'
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailRow } from './rail-rows'
@@ -39,6 +40,7 @@ export interface RailPanelRowProps {
 function RailPanelRowImpl({
   row, selected, onGoTo, onStart, onClose, merged = false
 }: RailPanelRowProps): JSX.Element {
+  const last = useLastLine(row.id)
   const state = useAgentState(row.id)
   // M73. A chat row subscribes to its own session mirror for the same reason
   // it subscribes to its agent state: a delta for c3 re-renders c3's row and
@@ -101,6 +103,8 @@ function RailPanelRowImpl({
         ) : (
           <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
         )}
+        {/* M105. Unread: the turn ended while the user was elsewhere; cleared on focus. */}
+        {last.unread && <span className="rail-row__unread" data-rail-unread title="finished while you were elsewhere" aria-label="unread" />}
         <span className="rail-row__label">{row.label}</span>
         {/* M92. Lock and pin marks after the label, the same glyphs the frame paints. */}
         {row.locked === true && <span className="rail-row__mark" data-rail-locked title="locked">{Lock}</span>}
@@ -110,6 +114,9 @@ function RailPanelRowImpl({
             saying its kind a second time. */}
         <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
+      {/* M105. The agent's last line said — a second line on a chat's row, from
+          the transcript's last complete text block, cut from the right. */}
+      {last.line !== '' && <span className="rail-row__last" data-rail-last title={last.line}>{last.line}</span>}
       {/* M66. The wake control is a WORD, and every terminal row keeps its
           slot so the state column lines up whether or not the row can be
           started: ▶ was the rail's only unlabelled control (M61's critic,

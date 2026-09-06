@@ -193,6 +193,7 @@ main     --send-->   spawn:open-sheet                                          -
 main     --send-->   agent:event (batched ~16ms)                                 --> renderer
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
+main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this

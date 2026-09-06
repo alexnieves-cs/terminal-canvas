@@ -86,6 +86,8 @@ const bridge: CanvasBridge = {
       return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_COUNTS, wrapped)
     },
     onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener),
+    onTidy: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_TIDY, () => listener()),
+    onFlip: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_FLIP, () => listener()),
     requestReset: () => ipcRenderer.invoke(IPC.CANVAS_REQUEST_RESET)
   },
   preset: {
@@ -144,7 +146,7 @@ const bridge: CanvasBridge = {
     list: (path: string) => ipcRenderer.invoke(IPC.FS_LIST, path)
   },
   env: {
-    report: () => ipcRenderer.invoke(IPC.ENV_REPORT)
+    report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
   },
   ledger: {
     list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)

@@ -11,6 +11,8 @@ module.exports = {
   ...require('../src/main/memory-store'),
   /* M101. The routine runner over injected timers, and the record's own rules. */
   ...require('../src/main/routine-runner'),
+  /* M107. The environment report: pure over injected facts. */
+  ...require('../src/main/env-report'),
   ...require('../src/shared/routines'),
   ...require('../src/shared/file-panel'),
   ...require('../src/main/file-read.ts'),

@@ -1,6 +1,8 @@
 import type { AgentOptions } from '@shared/cost'
 import type { SpawnRequest } from '@shared/ipc-contract'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
+import { LINEUP_IDS, type Lineup } from '@shared/lineups'
+type LineupId = Lineup['id']
 import { BACKENDS, BACKEND_IDS, type AgentBackend } from '@shared/agent-backends'
 
 /** M99. The registry's order is the sheet's row order. */
@@ -16,7 +18,7 @@ export { BACKEND_IDS }
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' } | { kind: 'teammate'; id: string }
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' } | { kind: 'teammate'; id: string } | { kind: 'lineup'; id: LineupId }
 
 /**
  * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
@@ -30,6 +32,14 @@ export const CHAT_WHAT_ID = '__chat__'
 export const CODEX_WHAT_ID = '__codex__'
 /** M81. A chat whose subject is the canvas: created with the supervisor's system prompt. */
 export const SUPERVISOR_WHAT_ID = '__supervisor__'
+/** M104. A LINEUP: the sheet's value is this prefix plus the lineup's id; the seats are minted by the renderer after the preview. */
+export const LINEUP_WHAT_PREFIX = '__lineup__:'
+export function lineupWhatId(id: LineupId): string { return LINEUP_WHAT_PREFIX + id }
+export function parseLineupWhatId(value: string): LineupId | null {
+  const id = value.startsWith(LINEUP_WHAT_PREFIX) ? value.slice(LINEUP_WHAT_PREFIX.length) : null
+  return id !== null && (LINEUP_IDS as readonly string[]).includes(id) ? (id as LineupId) : null
+}
+
 /** M100. A chat AS a teammate: the sheet's value is this prefix plus the teammate's id. */
 export const TEAMMATE_WHAT_PREFIX = '__teammate__:'
 export function teammateWhatId(id: string): string { return TEAMMATE_WHAT_PREFIX + id }
@@ -112,6 +122,14 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   if (what.kind === 'supervisor') {
     const req: SpawnRequest = { presetId: SUPERVISOR_WHAT_ID, cwd }
     if (title !== '') req.title = title
+    return req
+  }
+  if (what.kind === 'lineup') {
+    // Minted in the renderer seat by seat after the preview; the id reaches
+    // main only if that branch is lost, where it is refused as an unknown preset.
+    const req: SpawnRequest = { presetId: lineupWhatId(what.id), cwd }
+    if (title !== '') req.title = title
+    if (values.worktree !== undefined) req.worktree = values.worktree
     return req
   }
   if (what.kind === 'teammate') {

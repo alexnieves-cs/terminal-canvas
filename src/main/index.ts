@@ -16,8 +16,8 @@ import { createDirectBackend, type SessionBackend } from './session-backend'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
 import { attachPtyLifecycle } from './window-lifecycle'
-import { resolveShellEnv, shellProbeOutcome, whichFromEnv } from './shell-env'
-import { buildEnvReport } from './env-report'
+import { resolveShellEnv, shellProbeOutcome, shellProbeFacts, forgetShellEnv, whichFromEnv } from './shell-env'
+import { buildEnvReport, type CliName } from './env-report'
 import { resolveLinkOpen } from './link-open'
 import { createRunLedger } from './run-ledger'
 import { createLayoutSnapshots, restoreFromSnapshot } from './layout-snapshots'
@@ -463,6 +463,8 @@ function rebuildMenu(): void {
     onSpawnPreset,
     // M65. The sheet is the renderer's; the menu only asks for it.
     onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
+    onTidy: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_TIDY) },
+    onFlip: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FLIP) },
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
     }
@@ -1494,16 +1496,26 @@ app.whenReady().then(async () => {
     // M48. The environment report, built on demand from facts this file
     // already holds: the probe's outcome, the login env, the same which()
     // the presets use, the backend the probe chose, the layout file.
-    () => buildEnvReport({
-      env: loginEnv,
+    async (again) => {
+      // M107. Check again: ask the login shell once more and REPORT what it
+      // found. The app's own environment (the presets' which, the PTYs' env)
+      // applies on relaunch — said on the row, so a green re-probe does not
+      // read as a fixed spawn.
+      const env2 = again ? (forgetShellEnv(), await resolveShellEnv()) : loginEnv
+      const which2 = again ? (name: CliName) => whichFromEnv(name, env2) : which
+      return buildEnvReport({
+      env: env2,
       shell: shellProbeOutcome(),
-      which,
+      which: which2,
       backend: { kind: backend.kind, reason: backend.reason, tmuxPath: backend.kind === 'tmux' ? (which('tmux') ?? null) : null },
       layoutPath: join(app.getPath('userData'), 'layout.json'),
       backupWritten: layoutStore.backupWritten(),
-      now: probedAt,
-      control: { socket: controlSocketPath, cliPath: join(launcherDir, 'tc') }
-    }),
+      now: again ? Date.now() : probedAt,
+      control: { socket: controlSocketPath, cliPath: join(launcherDir, 'tc') },
+      // M107. Which shells were asked and whether one answered — the third state.
+      probe: shellProbeFacts()
+      })
+    },
     // M51. The only place a Cmd-clicked link opens. The resolution is pure
     // (link-open.ts); this does the two shell calls and turns their outcomes
     // into a result — never a navigation of this window.

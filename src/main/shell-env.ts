@@ -90,10 +90,22 @@ export function shellProbeOutcome(): { path: string; ok: boolean; reason?: strin
   return { ...outcome }
 }
 
+/** M107. What the probe DID: the shells asked, and whether the shell answered at all. */
+let probed: { shells: string[]; timedOut: boolean } = { shells: [], timedOut: false }
+export function shellProbeFacts(): { shells: string[]; timedOut: boolean } {
+  return { shells: [...probed.shells], timedOut: probed.timedOut }
+}
+
+/** M107. `Check again`: forget the cached answer so the next resolve asks the shell once more. */
+export function forgetShellEnv(): void {
+  cached = null
+}
+
 export async function resolveShellEnv(): Promise<Record<string, string>> {
   if (cached) return cached
 
   const shell = process.env.SHELL || userInfo().shell || '/bin/zsh'
+  probed = { shells: [shell], timedOut: false }
 
   try {
     const resolved = await runLoginShell(shell)
@@ -113,7 +125,11 @@ export async function resolveShellEnv(): Promise<Record<string, string>> {
       error
     )
     cached = { ...process.env } as Record<string, string>
-    outcome = { path: shell, ok: false, reason: error instanceof Error ? error.message : String(error) }
+    // A killed probe (the timeout) is "the shell didn't answer" — a slow or
+    // prompting rc file — and must never read as "not installed" downstream.
+    const killed = typeof error === 'object' && error !== null && ((error as { killed?: boolean }).killed === true || (error as { signal?: string }).signal === 'SIGTERM')
+    probed = { shells: [shell], timedOut: killed }
+    outcome = { path: shell, ok: false, reason: killed ? `the login shell ${shell} did not answer within ${TIMEOUT_MS / 1000}s` : error instanceof Error ? error.message : String(error) }
   }
 
   return cached
