@@ -18293,7 +18293,8 @@ app.whenReady().then(async () => {
           return { url, wc: Number(wcId), address: n.querySelector('[data-browser-address]')?.value ?? null, guest: n.querySelector('webview[data-browser-guest]') !== null, leak: n.textContent.includes('bank.example') || n.textContent.includes('honest title') } })()`), 20000)
         const read = live ? await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${live.wc} })`) : null
         const bogus = await wc.executeJavaScript(`window.canvas.browser.read({ panelId: 'bA', webContentsId: ${wc.id} })`)
-        const dropped = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="bB"]') === null && document.querySelectorAll('.panel[data-panel-id]').length === 1`)
+        // Browser panels only: the verb-line block before this one leaves its own panel on the canvas.
+        const dropped = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="bB"]') === null && document.querySelectorAll('.panel[data-panel-kind="browser"]').length === 1`)
         const rail = await wc.executeJavaScript(`(() => { const r = document.querySelector('.rail-list--panels .rail-row[data-rail-row="bA"]'); return r ? { label: r.querySelector('.rail-row__label')?.textContent ?? null } : null })()`)
         const expectUrl = `http://127.0.0.1:${port}/elsewhere`
         ok(IDS[0],
