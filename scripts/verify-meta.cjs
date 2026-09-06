@@ -744,6 +744,34 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ importsNamespacedHookup, hookupInsideGate, noDeadRendererImport, rendererHasGlobalHandlers }))
 }
 
+// M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
+// AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
+// silent failure behind it. (a) The setting `update.checkOnLaunch` exists,
+// is a boolean, defaults to false and is NOT `planWritable`: a plan that
+// could turn on a launch-time network call has the shape of exfiltration,
+// the same reason telemetry's keys carry no flag. (b) `main/update-check.ts`
+// imports no `https` — the fetcher is injected and the real one lives in
+// `main/index.ts`, which no suite bundles — so the module runs under plain
+// node in verify:file. (c) No suite script holds a real fetcher: `https.get(`,
+// an `https` module import, or a TEMPLATED `api.github.com/repos/${…}` url
+// (a recorded fixture body carries the literal host — verify-panels and
+// shot do — and is not a call). Same honest limit as telemetry.3: a
+// wrapper module one hop away evades a substring grep.
+{
+  const { readdirSync } = require('node:fs')
+  const schema = read('src/shared/settings-schema.ts') ?? ''
+  const start = schema.indexOf("id: 'update.checkOnLaunch'")
+  const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && !/planWritable/.test(entry)
+  const moduleSrc = stripComments(read('src/main/update-check.ts') ?? '')
+  const moduleOk = moduleSrc !== '' && !/['"](node:)?https['"]/.test(moduleSrc) && /export (async )?function checkForUpdate/.test(moduleSrc)
+  const offenders = readdirSync(join(ROOT, 'scripts')).filter((n) => /\.cjs$/.test(n))
+    .filter((f) => /https\.get\(|['"](node:)?https['"]|api\.github\.com\/repos\/\$\{/.test(stripComments(read(join('scripts', f)) ?? '')))
+  ok('update.1 update.checkOnLaunch is a boolean, default false, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
+    settingOk && moduleOk && offenders.length === 0,
+    JSON.stringify({ settingOk, moduleOk, offenders }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

@@ -1254,6 +1254,54 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ r1, r2, made, removed }))
   } catch (e) { ok('sandbox.1 (threw)', false, String(e)) }
 
+  // M123 — update.1. THE UPDATE CHECK, pure over an injected fetcher. Three
+  // states and never two: `current`, `newer` (with the release's url) and
+  // `could-not-check` (with the reason) — a check that folded the last into
+  // the first would tell an offline user they are up to date. The feed is
+  // the releases LIST, not `/latest`, so a prerelease is skipped BY NAME
+  // rather than trusted; a `v` prefix is optional; the compare is numeric
+  // per segment (3.10.0 is newer than 3.9.1 — a string compare says the
+  // opposite, silently). No suite ever holds a real fetcher: `verify:meta
+  // update.1` greps for one.
+  try {
+    const feed = [
+      { tag_name: 'v3.1.0-beta.1', prerelease: true, html_url: 'https://github.com/acme/canvas/releases/tag/v3.1.0-beta.1' },
+      { tag_name: 'v3.1.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/v3.1.0', published_at: '2026-09-10T00:00:00Z' },
+      { tag_name: 'v3.0.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/v3.0.0' }
+    ]
+    const urls = []
+    const fetchOf = (status, body) => async (url) => { urls.push(url); return { status, body } }
+    const deps = (status, body) => ({ fetch: fetchOf(status, body), repo: 'acme/canvas' })
+    const newer = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify(feed)))
+    const same = await F.checkForUpdate('3.1.0', deps(200, JSON.stringify(feed)))
+    const ahead = await F.checkForUpdate('3.2.0', deps(200, JSON.stringify(feed)))
+    const bare = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify([{ tag_name: '3.2.0', prerelease: false, html_url: 'https://github.com/acme/canvas/releases/tag/3.2.0' }])))
+    const forbidden = await F.checkForUpdate('3.0.0', deps(403, '{"message":"rate limit"}'))
+    const threw = await F.checkForUpdate('3.0.0', { fetch: async () => { throw new Error('getaddrinfo ENOTFOUND api.github.com') }, repo: 'acme/canvas' })
+    const notJson = await F.checkForUpdate('3.0.0', deps(200, 'not json'))
+    const notList = await F.checkForUpdate('3.0.0', deps(200, '{"tag_name":"v9.0.0"}'))
+    const onlyPre = await F.checkForUpdate('3.0.0', deps(200, JSON.stringify([{ tag_name: 'v4.0.0-rc.1', prerelease: true, html_url: 'x' }])))
+    const cmp = F.compareVersions('3.10.0', '3.9.1')
+    const cmpEq = F.compareVersions('v3.0.0', '3.0.0')
+    const repo = F.repoOf({ repository: { url: 'git+https://github.com/acme/canvas.git' } })
+    const repoStr = F.repoOf({ repository: 'github:acme/canvas' })
+    const noRepo = F.repoOf({})
+    ok('update.1 the newest NON-prerelease wins (3.1.0 over a 3.1.0-beta.1 above it) with its url; equal is current; a bare tag parses; a 403 is could-not-check naming the status; a thrown fetch carries its message; a body that is not JSON or not a list is could-not-check in words; a feed of only prereleases is current; compareVersions is numeric per segment; repoOf reads repository.url',
+      newer.kind === 'newer' && newer.version === '3.1.0' && newer.url === 'https://github.com/acme/canvas/releases/tag/v3.1.0' && newer.publishedAt === '2026-09-10T00:00:00Z' &&
+        same.kind === 'current' && same.version === '3.1.0' &&
+        ahead.kind === 'current' &&
+        bare.kind === 'newer' && bare.version === '3.2.0' &&
+        forbidden.kind === 'could-not-check' && /GitHub answered 403/.test(forbidden.reason) &&
+        threw.kind === 'could-not-check' && /ENOTFOUND/.test(threw.reason) &&
+        notJson.kind === 'could-not-check' && /the releases feed could not be read/.test(notJson.reason) &&
+        notList.kind === 'could-not-check' && /the releases feed could not be read/.test(notList.reason) &&
+        onlyPre.kind === 'current' && onlyPre.version === '3.0.0' &&
+        cmp > 0 && cmpEq === 0 &&
+        repo === 'acme/canvas' && repoStr === 'acme/canvas' && noRepo === null &&
+        urls.every((u) => u === 'https://api.github.com/repos/acme/canvas/releases'),
+      JSON.stringify({ newer, same, ahead, bare, forbidden, threw, notJson, notList, onlyPre, cmp, cmpEq, repo, repoStr, noRepo, url: urls[0] }))
+  } catch (e) { ok('update.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
