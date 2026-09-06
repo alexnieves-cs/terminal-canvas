@@ -195,6 +195,7 @@ main     --send-->   agent:event (batched ~16ms)                                
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
 main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
+main     --send-->   board:add                                                    --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this

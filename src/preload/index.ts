@@ -109,6 +109,15 @@ const bridge: CanvasBridge = {
       ipcRenderer.on(IPC_EVENTS.CANVAS_MODEL, wrapped)
       return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_MODEL, wrapped)
     },
+    // M113. The request rides WITH the reply channel: a board op has a payload
+    // where counts and model have none.
+    onBoard: (handle) => {
+      const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
+        ipcRenderer.send(envelope.replyChannel, handle(envelope.req))
+      }
+      ipcRenderer.on(IPC_EVENTS.BOARD_ADD, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.BOARD_ADD, wrapped)
+    },
     onCounts: (provide) => {
       const wrapped = (_event: IpcRendererEvent, replyChannel: string): void => {
         ipcRenderer.send(replyChannel, provide())

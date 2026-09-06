@@ -587,6 +587,10 @@ export const IPC = {
 } as const
 
 /** Main -> renderer, fire-and-forget via webContents.send. */
+/** M113. What `tc board` asks the renderer, and what it answers. */
+export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
+export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
+
 export const IPC_EVENTS = {
   PTY_DATA: 'pty:data',
   PTY_EXIT: 'pty:exit',
@@ -755,7 +759,9 @@ export const IPC_EVENTS = {
   ROUTINE_FIRE: 'routine:fire',
   /** M106. The Workspace menu's two verbs: Tidy Panes and Flip Terminals (a view state, never persisted). */
   CANVAS_TIDY: 'canvas:tidy',
-  CANVAS_FLIP: 'canvas:flip'
+  CANVAS_FLIP: 'canvas:flip',
+  /** M113. `tc board` asks the RENDERER over an ephemeral reply channel (canvas:model's shape) — main writes no record itself. */
+  BOARD_ADD: 'board:add'
 } as const
 
 export interface FileReadRequest {
@@ -1138,6 +1144,8 @@ export interface CanvasBridge {
     onCounts(provide: () => { panels: number; running: number }): () => void
     /** M81. The canvas model for `tc status`. Same ephemeral-reply shape as onCounts. */
     onModel(provide: () => ControlCanvasModel): () => void
+    /** M113. `tc board add/done`: main sends the request and a reply channel; the renderer answers with the surviving id or a refusal. */
+    onBoard(handle: (req: BoardControlRequest) => BoardControlReply): () => void
     onReset(listener: () => void): () => void
     /** M106. The menu's Tidy Panes and Flip Terminals. */
     onTidy(listener: () => void): () => void

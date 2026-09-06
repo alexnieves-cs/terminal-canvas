@@ -403,6 +403,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        agent:event (batched ~16ms) / watcher:state / vault:changed
                        routine:fire
                        canvas:tidy / canvas:flip
+                       board:add
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
                        canvas:counts / canvas:model / canvas:reset
                        preset:spawn / preset:default / preset:capture

@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync } from 'node:fs'
 import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
-import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer } from './ipc'
+import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
 import { createBrowserHandlers } from './browser-read'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
@@ -35,7 +35,7 @@ import { listAssignedWorkItems as listGithubWorkItems } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
 import { createBrokerAudit } from './broker-audit'
 import { readVault } from './vault-read'
-import type { ControlCanvasModel } from '../shared/ipc-contract'
+import type { ControlCanvasModel , BoardControlReply, BoardControlRequest } from '../shared/ipc-contract'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
@@ -668,6 +668,12 @@ const controlHandler = createControlHandler({
     const wc = mainWindow?.webContents
     if (!wc) return null
     return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
+  },
+  // M113. The board verb asks the renderer, which owns the workspace it renders.
+  board: async (req) => {
+    const wc = mainWindow?.webContents
+    if (!wc) return null
+    return requestFromRendererWith<BoardControlReply | null, BoardControlRequest>(wc, IPC_EVENTS.BOARD_ADD, req, null, 2000)
   },
   // Running sessions only: a dormant card has no session here, and `list`
   // says so in its note.

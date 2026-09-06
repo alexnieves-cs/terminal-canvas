@@ -701,6 +701,33 @@ export function requestFromRenderer<T>(
   })
 }
 
+/**
+ * M113. The same one-shot reply as above, with a PAYLOAD beside the reply
+ * channel: `tc board add` carries a title where counts and model carry
+ * nothing. A sibling rather than a widened parameter so the two existing
+ * callers' wire shape (a bare channel string) stays byte-identical.
+ */
+export function requestFromRendererWith<T, P>(
+  webContents: WebContents,
+  channel: string,
+  payload: P,
+  fallback: T,
+  timeoutMs = 1000
+): Promise<T> {
+  return new Promise((resolve) => {
+    const replyChannel = `${channel}:reply:${Date.now()}:${(replySeq += 1)}`
+    const timer = setTimeout(() => {
+      ipcMain.removeAllListeners(replyChannel)
+      resolve(fallback)
+    }, timeoutMs)
+    ipcMain.once(replyChannel, (_event, reply: T) => {
+      clearTimeout(timer)
+      resolve(reply)
+    })
+    webContents.send(channel, { replyChannel, req: payload })
+  })
+}
+
 export function requestCanvasCounts(
   webContents: WebContents
 ): Promise<{ panels: number; running: number }> {
