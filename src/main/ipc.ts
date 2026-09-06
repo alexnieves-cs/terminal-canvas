@@ -8,7 +8,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import type { RunRow } from '../shared/run-ledger'
 import type {
@@ -224,6 +224,18 @@ const INERT_BOARD: BoardHandlers = {
   commentPr: async () => ({ kind: 'refused', reason: 'the PR door is not available here' })
 }
 
+/**
+ * M123. The update notice's one verb. Inert by default like every collaborator
+ * before it: a harness that did not wire a fetcher gets a NAMED third state,
+ * never a network call and never a hang.
+ */
+export interface UpdateHandlers {
+  check(): Promise<UpdateResult>
+}
+const INERT_UPDATE: UpdateHandlers = {
+  check: async () => ({ kind: 'could-not-check', reason: 'the update check is not available here' })
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -321,8 +333,11 @@ export function registerIpcHandlers(
   /** M103. Appended last, like every collaborator before it. */
   browser: BrowserHandlers = INERT_BROWSER,
   /** M114. Appended last, like every collaborator before it. */
-  board: BoardHandlers = INERT_BOARD
+  board: BoardHandlers = INERT_BOARD,
+  /** M123. Appended last, like every collaborator before it. */
+  update: UpdateHandlers = INERT_UPDATE
 ): void {
+  ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
   ipcMain.handle(IPC.AGENT_CLIPBOARD_IMAGE, () => agents.clipboardImage())

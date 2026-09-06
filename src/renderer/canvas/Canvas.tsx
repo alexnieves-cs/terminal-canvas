@@ -133,6 +133,7 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
@@ -2791,6 +2792,31 @@ export function Canvas({
     return () => { live = false }
   }, [])
 
+  // M123. The launch-time update check — ONCE per launch, and only when the
+  // setting says so. Read the way `agent.glow` and `vault.root` are (a
+  // settings:list of its own, never settingRows, which is empty until the
+  // palette has opened), and gated on the STORE rather than a ref: a second
+  // mount of this component (a workspace switch does not remount, but a
+  // reload does) finds the answer already there and asks nothing. Off by
+  // default, so a fresh install never makes a network call it was not told
+  // to; the by-hand row is the door for everyone else. The answer goes into
+  // the store and nowhere else — the launcher and the environment rows read
+  // it; no dialog, no badge: a notice, not an interruption.
+  const updateState = useUpdateState()
+  useEffect(() => {
+    let live = true
+    void window.canvas.settings.list().then((rows) => {
+      if (!live) return
+      const row = rows.find((r) => r.id === 'update.checkOnLaunch')
+      if (row === undefined || row.value !== true) return
+      if (getUpdateState().checking || getUpdateState().result !== null) return
+      beginUpdateCheck()
+      void window.canvas.update.check().then((result) => { setUpdateResult(result) })
+        .catch((e: unknown) => { setUpdateResult({ kind: 'could-not-check', reason: e instanceof Error ? e.message : 'the update check did not answer' }) })
+    }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
   // M48: the gesture hints. `hints.seen` is read the way every other setting
   // is; a gesture is "seen" when the thing it moves has moved — the camera's
   // translation, its scale, the palette opening, the panel count growing —
@@ -5094,6 +5120,8 @@ export function Canvas({
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
             onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
             sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
+            update={updateState}
+            onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (
@@ -5126,6 +5154,7 @@ export function Canvas({
             credentials={credentialRows}
             worktrees={worktreeRows}
             envReport={envReport}
+            update={updateState}
             bookmarks={bookmarkRows}
             cameraTrail={trail}
             globalFontSize={globalFontSize}

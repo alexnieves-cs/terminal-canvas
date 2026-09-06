@@ -1276,7 +1276,9 @@ app.whenReady().then(async () => {
     recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-  }) })
+  }) },
+  // M123. No harness reaches the network: the third state, by name.
+  { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

@@ -49,5 +49,8 @@ module.exports = {
   ...require('../src/main/sandbox.ts'),
   /* M122. Find in panels: pure over the two logs' readers; the transcript log is bundled for the fixture. */
   ...require('../src/main/panel-search.ts'),
-  ...require('../src/main/agent-transcript-log.ts')
+  ...require('../src/main/agent-transcript-log.ts'),
+  /* M123. The update check, pure over an injected fetcher — no https here;
+     the real fetcher lives in main/index.ts, which no suite bundles. */
+  ...require('../src/main/update-check.ts')
 }

@@ -21,6 +21,7 @@ import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState } from '@renderer/session/agent-state-store'
 import { clearLastLine } from '@renderer/session/last-line-store'
+import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } from '@renderer/session/update-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
@@ -1845,6 +1846,34 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
     openBoard: () => chooseNavigator('board'),
+    // M123. The by-hand update check. The answer lands on the palette's
+    // feedback line (the shape beginSetCredential's refusal already uses:
+    // reopen the palette in an input mode carrying the sentence, with
+    // feedback so it renders as an answer rather than a hint), and the store
+    // remembers it for the environment row and the launcher. On `newer` the
+    // line's verb is Enter — `Open release` through links.open, main's own
+    // door for a url, never a download: auto-swap is declined by name for
+    // an unsigned build. A second ask while one is in flight is a no-op
+    // (the store refuses it), so a double-tap on the row is one GET.
+    checkForUpdates: () => {
+      if (getUpdateState().checking) return
+      beginUpdateCheck()
+      void window.canvas.update.check().then((result) => {
+        setUpdateResult(result)
+        const sentence = updateSentence(getUpdateState())
+        if (result.kind === 'newer') {
+          const url = result.url
+          setInputMode({ kind: 'confirm', label: `${sentence} — Open release`, initial: '', feedback: true, submit: () => { void window.canvas.links.open({ panelId: '', target: url }); setInputMode(null) } })
+        } else {
+          setInputMode({ kind: 'confirm', label: sentence, initial: '', feedback: true, submit: () => setInputMode(null) })
+        }
+        palette.openPalette()
+      }).catch((e: unknown) => {
+        // The invoke itself failed (no handler in an old main): the third
+        // state, never a hang with the row saying `checking…` forever.
+        setUpdateResult({ kind: 'could-not-check', reason: e instanceof Error ? e.message : 'the update check did not answer' })
+      })
+    },
     // M120. The sandbox flag rides the create; the backend by NAME from the row, absent is claude.
     newSandboxChat: (backend) => { void beginNewChat({ sandbox: true, ...(backend === DEFAULT_BACKEND ? {} : { backend }) }) },
     // M122. The chat store's bus; the panel scrolls the turn's row into view.

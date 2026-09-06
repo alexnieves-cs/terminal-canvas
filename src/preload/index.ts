@@ -331,6 +331,9 @@ const bridge: CanvasBridge = {
     openPr: (req) => ipcRenderer.invoke(IPC.BOARD_OPEN_PR, req),
     commentPr: (req) => ipcRenderer.invoke(IPC.BOARD_COMMENT_PR, req)
   },
+  update: {
+    check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK)
+  },
   platform: process.platform,
   telemetry: { enabled: telemetryEnabled }
 }

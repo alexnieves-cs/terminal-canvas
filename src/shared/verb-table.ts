@@ -97,6 +97,10 @@ export const VERBS: readonly VerbDef[] = [
  * list, so adding an action means choosing.
  */
 export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+  // M123. The update notice: one GET of a public feed, but a GET a plan could
+  // fire is a beacon on a schedule; the setting that automates it is not
+  // planWritable for the same reason.
+  checkForUpdates: 'a network call the user makes by hand — never a plan',
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',

@@ -1935,6 +1935,8 @@ step, and force the direct backend to test the no-tmux degradation path determin
 
 ## 74. Updates that survive the tmux server
 
+> **M123 (3.0.0) shipped the NOTICE half only.** The check, the three states, the row, the launcher line and the setting; auto-swap is declined by name for an unsigned build, and the relaunch-with-tmux half is design only in the Act III spec's §2.1.
+
 M5c is packaging only; nothing addresses shipping the *second* build. The sharp part is
 architectural rather than logistical: **an in-app update restarts the app, and `before-quit`
 calls `shutdown()`, which is `kill-server` on the private socket** — so a "restart to update"
