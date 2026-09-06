@@ -1268,6 +1268,39 @@ const p = (name) => join(DIR, name)
        slow.kind === 'unknown' && /timed out/i.test(slow.why), JSON.stringify(slow))
   } catch (e) { ok('plugins.1 (threw)', false, String(e)) }
 
+  /* ---- M129: the trail ---- */
+  try {
+    const FIXTURE = join(__dirname, 'fixtures', 'skill-trail', 'session.jsonl')
+    const all = readFileSync(FIXTURE, 'utf8')
+    const one = F.scanTrailChunk(all, '')
+    ok('trail.1a only Skill tool_use records become entries',
+       one.entries.length === 2, JSON.stringify(one.entries))
+    ok('trail.1b order is the transcript order',
+       one.entries[0].name === 'superpowers:brainstorming' && one.entries[1].name === 'claude-api',
+       'what order they were used in is the whole point')
+    ok('trail.1c args ride when present and are ABSENT when not',
+       one.entries[1].args === 'model ids' && !('args' in one.entries[0]),
+       'an absent optional field stays absent — a spread would write undefined')
+
+    // The byte-offset resume: two appends must equal one read.
+    const cut = Math.floor(all.length / 2)
+    const first = F.scanTrailChunk(all.slice(0, cut), '')
+    const second = F.scanTrailChunk(all.slice(cut), first.carry)
+    ok('trail.1d a truncated final line is CARRIED, never parsed',
+       first.entries.length + second.entries.length === one.entries.length,
+       'the tail resumes at a byte offset; a half-written line is not a dropped record')
+
+    const capped = F.scanTrailChunk(all.repeat(200), '')
+    ok('trail.1e TRAIL_MAX newest, with `more` counting what was dropped',
+       capped.entries.length <= F.TRAIL_MAX, String(capped.entries.length))
+
+    ok('trail.1f a codex panel refuses BY NAME, never an empty list',
+       (await F.trailFor({ backend: 'codex' })).kind === 'unreadable',
+       '"no skills used" and "we cannot see this session" are different sentences')
+    ok('trail.1g an unresolvable transcript refuses by name',
+       (await F.trailFor({ backend: 'claude', resolveTranscript: () => undefined })).kind === 'unreadable', '')
+  } catch (e) { ok('trail.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
