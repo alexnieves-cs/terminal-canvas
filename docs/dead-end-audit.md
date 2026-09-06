@@ -140,6 +140,46 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   refused by name; `Annotate…` present and disabled by name while merged; the strip carries
   its exit; a note's title says what it is; Delete removes a selected note.
 
+### The surfaces this run added (M96–M107)
+
+- **The verb line (M96).** `Run a verb…` is present at rest with no focus; a typed step is
+  refused by name with its fix on the palette's own feedback line and the line kept; a
+  destructive step enters confirm mode naming the verb and its target; a plan that reaches
+  a plain shell with `type`, `submit` or `interrupt` is refused naming the agent fix; a
+  setting outside the closed list is refused naming the palette's Settings door.
+- **Auto (M97).** Five rows present on a chat, each disabled by name on a terminal, with no
+  focus, and while a run is live (`already running here`); the chip resolves to `done`,
+  `stuck — <why>` or `stopped` with a labelled `dismiss`; the chat's `auto` verb opens the
+  palette rather than growing a menu.
+- **Allow for session (M98).** The card's third verb; the pane's `Session grants` field with
+  `Revoke` disabled by name (`nothing granted this session`), codex's reason on a disabled
+  control (its sandbox policy decides), and `asking…` before main answers.
+- **The registry (M99).** One `chat with <backend>` row per registered backend, disabled with
+  `— not on PATH`, never hidden.
+- **Teammates and Places (M100).** `chat as <name>` disabled by name with no places; a place
+  added only through the folder dialog; `Chat as <name>` disabled naming the fix; a refused
+  cwd names the teammate, the path and the folder to add; the roster's door present at rest.
+- **Routines (M101).** `Add routine` disabled naming the schedule permission; `Open last`
+  disabled with `never run`; a destructive plan line, an interval under a minute, an empty
+  prompt, a teammate with no places — each refused by name on the form; `missed at <time>`
+  in the attention tone; the section header says the app must be open.
+- **Service scope and the spend card (M102).** `grant`/`revoke` per service with `not
+  connected` said on the row; the Integrations page's `granted to no teammate — grant it in
+  the Teammates pane`; a broker refusal by CODE (`not-granted`, `not-answered`) with the
+  pane named as the fix.
+- **The browser pane (M103).** `Open a page…` present at rest; a non-http(s) URL refused on
+  the feedback line; `Back`/`Forward` disabled with their reasons; `Open in browser` a
+  labelled verb; a read of a non-http(s) page refused by scheme, by name.
+- **Lineups (M104).** The preview says how many will queue behind the ceiling BEFORE Enter; a
+  lineup with no agent CLI on the PATH is refused by name at launch.
+- **The rail (M105).** A chat row's last line and unread dot; the dock's `N live` / `N quiet`
+  capsules; a terminal row carries no last line, by design.
+- **Header discipline (M106).** The title gives, the verbs never; the full title in the
+  title attribute and the ⋯ menu; Flip Terminals and Tidy Panes in the Workspace menu and
+  as palette rows.
+- **Discovery (M107).** `found` / `not found — install …` / `the shell didn't answer … put
+  PATH edits in ~/.zprofile, then Check again`, with `Check again` on the launcher.
+
 ## Keyboard reach
 
 `verify:panels reach.1` presses a REAL Tab (`sendInputEvent`, not a dispatched event) from
