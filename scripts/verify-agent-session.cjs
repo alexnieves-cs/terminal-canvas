@@ -1505,6 +1505,61 @@ const isResult = (l) => l.includes('"type":"result"')
     }
   }
 
+/* ------------------------------------------------------------------------ */
+/* M118. The third headless backend: copilot -p --output-format json         */
+/* ------------------------------------------------------------------------ */
+
+{
+  /* copilot.1 — the adapter over three streams recorded from GitHub Copilot CLI 1.0.83 (2026-09-06). */
+  const CP = M.copilot
+  const has = CP !== undefined && typeof CP.parseCopilotLines === 'function' && typeof CP.copilotArgs === 'function'
+  const cpFixture = (name) => readFileSync(join(__dirname, 'fixtures', 'agent-session', 'copilot', name), 'utf8').split('\n').filter((l) => l.trim() !== '')
+  let pong = [], command = [], resumed = [], bad = [], first = [], later = []
+  try {
+    pong = has ? CP.parseCopilotLines(cpFixture('pong.jsonl'), { sessionId: 'pinned-1' }) : []
+    command = has ? CP.parseCopilotLines(cpFixture('command.jsonl'), { sessionId: 'pinned-2' }) : []
+    resumed = has ? CP.parseCopilotLines(cpFixture('resume.jsonl'), { sessionId: 'pinned-2' }) : []
+    bad = has ? ['{not json', '{"type":"zz.new","data":{}}', '{"type":"session.usage_checkpoint","data":{"totalNanoAiu":1}}'].flatMap((l) => CP.parseCopilotLine(l, { sessionId: 'x' })) : []
+    first = has ? CP.copilotArgs({ cwd: '/w', text: 'hello there', resume: false, sessionId: 'uuid-1', agentOptions: { model: 'gpt-5-mini' } }) : []
+    later = has ? CP.copilotArgs({ cwd: '/w', text: 'again', resume: true, sessionId: 'uuid-1' }) : []
+  } catch (e) { pong = [{ type: 'threw', error: String(e) }] }
+  const session = pong.find((e) => e.type === 'session')
+  const deltas = pong.filter((e) => e.type === 'block-delta').map((e) => e.text).join('')
+  const assistants = pong.filter((e) => e.type === 'assistant')
+  const results = pong.filter((e) => e.type === 'result')
+  ok('copilot.1 the stream states no session id, so the parser is HANDED the pinned one and puts it on the session event with the model from auto_mode_resolved; message deltas reach the screen as block deltas; the complete assistant.message is ONE assistant text block; result — not assistant.turn_end — is the ONE result, ok, with no usage and no cost (credits are not tokens); usage_checkpoint and the session.* chatter are ignored, never unknown',
+    session !== undefined && session.sessionId === 'pinned-1' && session.model === 'claude-haiku-4.5' &&
+      pong.filter((e) => e.type === 'message-start').length === 1 && deltas === 'pong' &&
+      assistants.length === 1 && assistants[0].blocks.length === 1 && assistants[0].blocks[0].type === 'text' && assistants[0].blocks[0].text === 'pong' &&
+      results.length === 1 && results[0].ok === true && results[0].usage === undefined && results[0].costUsd === undefined &&
+      pong.every((e) => e.type !== 'malformed' && e.type !== 'unknown'),
+    JSON.stringify({ session, deltas, assistants, results, kinds: pong.map((e) => e.type) }))
+
+  const uses = command.flatMap((e) => (e.type === 'assistant' ? e.blocks.filter((b) => b.type === 'tool_use') : []))
+  const toolResults = command.flatMap((e) => (e.type === 'user' ? e.blocks.filter((b) => b.type === 'tool_result') : []))
+  ok('copilot.1.b a toolRequests entry on assistant.message is a tool_use block (the tool name, the arguments as input) and tool.execution_complete is the tool_result under the SAME call id with the content; two model calls are two message-ends and still ONE result',
+    uses.length === 1 && uses[0].name === 'view' && typeof uses[0].input.path === 'string' && uses[0].id.startsWith('call_') &&
+      toolResults.length === 1 && toolResults[0].toolUseId === uses[0].id && /hello from probe/.test(toolResults[0].content) && toolResults[0].isError === false &&
+      command.filter((e) => e.type === 'message-end').length === 2 && command.filter((e) => e.type === 'result').length === 1 &&
+      command.filter((e) => e.type === 'assistant').some((e) => e.blocks.some((b) => b.type === 'text' && b.text === 'hello')),
+    JSON.stringify({ uses, toolResults, kinds: command.map((e) => e.type) }))
+
+  ok('copilot.1.c a resumed stream carries the pinned id again and ends in one ok result whose answer is the recalled word',
+    resumed.find((e) => e.type === 'session')?.sessionId === 'pinned-2' && resumed.filter((e) => e.type === 'result').length === 1 &&
+      resumed.some((e) => e.type === 'assistant' && e.blocks.some((b) => b.type === 'text' && b.text === 'hello')),
+    JSON.stringify({ kinds: resumed.map((e) => e.type) }))
+
+  ok('copilot.1.d a broken line is malformed, a type this version has not seen is unknown BY KIND, and a usage checkpoint is ignored by kind — never a throw',
+    bad.length === 3 && bad[0].type === 'malformed' && bad[1].type === 'unknown' && bad[1].kind === 'zz.new' && bad[2].type === 'ignored' && bad[2].kind === 'session.usage_checkpoint',
+    JSON.stringify(bad))
+
+  ok('copilot.1.e the first turn is `-p <text> --output-format json --allow-all-tools --no-auto-update --session-id <the host\'s id> -C <cwd> [--model m]`; a later turn names `--resume=<id>` instead of pinning; the prompt is never on stdin',
+    first[0] === '-p' && first[1] === 'hello there' && first[first.indexOf('--output-format') + 1] === 'json' && first.includes('--allow-all-tools') && first.includes('--no-auto-update') &&
+      first[first.indexOf('--session-id') + 1] === 'uuid-1' && first[first.indexOf('-C') + 1] === '/w' && first[first.indexOf('--model') + 1] === 'gpt-5-mini' && !first.some((a) => a.startsWith('--resume')) &&
+      later[0] === '-p' && later[1] === 'again' && later.includes('--resume=uuid-1') && !later.includes('--session-id') && later.includes('--no-auto-update'),
+    JSON.stringify({ first, later }))
+}
+
   /* M99 — registry.1–.2. A backend is a ROW; no consumer switches on the
      name. The grep is the check that makes a fourth backend cheap. */
   {
