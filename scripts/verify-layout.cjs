@@ -3737,6 +3737,23 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('work.5 (threw)', false, String(e)) }
 }
 
+/* ---- M125: the shelf on disk ---- */
+try {
+  const w = []
+  const bare = L.parseLayout(JSON.stringify({ version: 1, workspaces: [] }))
+  ok('shelf.disk.1 a pre-M125 file parses with an empty shelf and no warning',
+     bare.snapshot.shelf.columns.length === 0 && !bare.warnings.some((x) => /shelf/i.test(x)),
+     bare.warnings.join('|'))
+  const round = JSON.parse(L.serialiseLayout({
+    ...bare.snapshot, shelf: { columns: [{ id: 'c', title: 'mobile', keys: ['["user","swiftui"]'] }] }
+  }))
+  ok('shelf.disk.2 a shelf round-trips', round.shelf.columns[0].title === 'mobile',
+     JSON.stringify(round.shelf))
+  const empty = JSON.parse(L.serialiseLayout(bare.snapshot))
+  ok('shelf.disk.3 an EMPTY shelf is absent on disk, never written as []',
+     !('shelf' in empty), Object.keys(empty).join(','))
+} catch (e) { ok('shelf.disk.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

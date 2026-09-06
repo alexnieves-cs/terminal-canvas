@@ -645,6 +645,81 @@ const write = (rel, text) => {
       `43 — counts ride the inventory, rule STRINGS do not, and a second read returns them`)
   }
 
+  /* ---- M125: the shelf ---- */
+  try {
+    const { skillKey, parseSkillKey, placement, pluginPrefixOf, parseShelf, carryShelf,
+            renameInShelf, UNGROUPED_COLUMN_ID } = T
+
+    // shelf.1 — the key is a stringified coordinate, never a bare name, and round-trips.
+    {
+      const a = skillKey('user', 'brainstorming')
+      const b = skillKey('project', 'brainstorming')
+      const rt = parseSkillKey(a)
+      ok('shelf.1a two scopes, one name, two keys', a !== b, `${a} vs ${b}`)
+      ok('shelf.1b the key round-trips', rt && rt.scope === 'user' && rt.name === 'brainstorming',
+         JSON.stringify(rt))
+      ok('shelf.1c a name containing the delimiter does not collide',
+         skillKey('user', 'a:b') !== skillKey('user', 'a') + ':b', 'stringified, not joined')
+      ok('shelf.1d a malformed key yields null, never a guess', parseSkillKey('nonsense') === null, '')
+    }
+
+    // shelf.2 — placement: placed outranks derived, and every answer carries its why.
+    {
+      const shelf = { columns: [{ id: 'c1', title: 'mobile', keys: [skillKey('user', 'swiftui')] }] }
+      const placed = placement(skillKey('user', 'swiftui'), shelf, 'user', 'swiftui')
+      const byPlugin = placement(skillKey('user', 'superpowers:brainstorming'), shelf, 'user',
+                                 'superpowers:brainstorming')
+      const byScope = placement(skillKey('project', 'audit'), shelf, 'project', 'audit')
+      ok('shelf.2a placed wins and says so',
+         placed.columnId === 'c1' && placed.why === 'placed', JSON.stringify(placed))
+      ok('shelf.2b a plugin prefix is the derived column',
+         byPlugin.columnId === 'plugin:superpowers' && byPlugin.why === 'by-plugin',
+         JSON.stringify(byPlugin))
+      ok('shelf.2c no prefix falls back to scope',
+         byScope.columnId === 'scope:project' && byScope.why === 'by-scope', JSON.stringify(byScope))
+      ok('shelf.2d pluginPrefixOf reads only the FIRST colon',
+         pluginPrefixOf('a:b:c') === 'a' && pluginPrefixOf('plain') === null, '')
+    }
+
+    // shelf.3 — the record rules: absent, malformed, per-entry drop, and carry.
+    {
+      const w1 = []
+      ok('shelf.3a absent is every pre-M125 file, silently',
+         parseShelf(undefined, w1).columns.length === 0 && w1.length === 0, w1.join('|'))
+      const w2 = []
+      ok('shelf.3b a malformed shelf warns and yields empty',
+         parseShelf(42, w2).columns.length === 0 && w2.length === 1, w2.join('|'))
+      const w3 = []
+      const mixed = parseShelf({ columns: [
+        { id: 'good', title: 'ok', keys: [skillKey('user', 'x')] },
+        { id: 'bad', title: 7, keys: [] }
+      ] }, w3)
+      ok('shelf.3c one bad column costs that column, never the shelf',
+         mixed.columns.length === 1 && mixed.columns[0].id === 'good' && w3.length === 1, w3.join('|'))
+      const carried = carryShelf({ columns: [{ id: 'c', title: 't', keys: [] }] })
+      ok('shelf.3d carryShelf writes no undefined key',
+         !Object.values(carried.columns[0]).includes(undefined) &&
+         Object.keys(carried.columns[0]).sort().join(',') === 'id,keys,title',
+         Object.keys(carried.columns[0]).join(','))
+    }
+
+    // shelf.4 — a rename carries the slot; a key whose skill is gone KEEPS its slot.
+    {
+      const from = skillKey('user', 'old'), to = skillKey('user', 'new')
+      const before = { columns: [{ id: 'c', title: 't', keys: [from, skillKey('user', 'other')] }] }
+      const after = renameInShelf(before, from, to)
+      ok('shelf.4a rename replaces in place, preserving order',
+         after.columns[0].keys[0] === to && after.columns[0].keys.length === 2,
+         JSON.stringify(after.columns[0].keys))
+      ok('shelf.4b a rename of an absent key changes nothing',
+         JSON.stringify(renameInShelf(before, skillKey('user', 'ghost'), to)) === JSON.stringify(before), '')
+      ok('shelf.4c UNGROUPED is a real, reserved id',
+         typeof UNGROUPED_COLUMN_ID === 'string' && UNGROUPED_COLUMN_ID.length > 0, UNGROUPED_COLUMN_ID)
+    }
+  } catch (e) {
+    ok('shelf.1 (threw)', false, String(e))
+  }
+
   /* ------------------------------------------------------- report ----- */
   console.log('')
   const failed = results.filter((r) => !r.pass)
