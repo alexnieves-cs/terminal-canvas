@@ -261,6 +261,19 @@ export function onChatSeeded(listener: TurnEndListener): () => void {
   return () => { seededListeners.delete(listener) }
 }
 
+/**
+ * M114. The FIRST sign of a turn on a panel: the assistant's message start.
+ * The board flips a dispatched item to `working` from this, never from the
+ * click that dispatched it — a card that says working before the agent has
+ * said a word is the board lying by a few seconds, and by minutes when the
+ * spawn was refused.
+ */
+const turnStartListeners = new Set<(id: string) => void>()
+export function onChatTurnStart(listener: (id: string) => void): () => void {
+  turnStartListeners.add(listener)
+  return () => { turnStartListeners.delete(listener) }
+}
+
 export function onChatTurnEnd(listener: TurnEndListener): () => void {
   turnEndListeners.add(listener)
   return () => { turnEndListeners.delete(listener) }
@@ -311,6 +324,7 @@ export function applyChatEvent(event: AgentSessionEvent): void {
       return
     case 'message-start':
       update(event.id, { ...prev, live: { messageId: event.messageId, blocks: [] } })
+      for (const l of turnStartListeners) l(event.id)
       return
     case 'block-start': {
       // No message in flight (an abort or an exit raced a still-batched

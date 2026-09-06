@@ -31,6 +31,9 @@ export const USER_SET_STATES: readonly WorkItemState[] = ['todo', 'done']
 /** The newest kept; a board that has seen a thousand items is a history, not a layout. */
 export const WORK_ITEMS_MAX = 200
 
+/** M114. The drag payload's MIME: a card dragged onto a teammate row, and nothing else, dispatches. */
+export const WORK_ITEM_MIME = 'application/x-tc-work-item'
+
 export type WorkItemSource = 'github' | 'jira' | 'typed'
 const SOURCES: readonly WorkItemSource[] = ['github', 'jira', 'typed']
 
@@ -187,6 +190,12 @@ export function upsertWorkItem(
     updatedAt: now
   })
   return list.map((i, n) => (n === index ? updated : i))
+}
+
+/** `owner/repo#12` → `owner/repo`; a Jira key (`PROJ-12`) or anything else → null. Shared: the renderer decides whether a lane has a repository to find. */
+export function repoOfKey(key: string): string | null {
+  const m = /^([^/\s#]+\/[^/\s#]+)#\d+$/.exec(key)
+  return m === null ? null : (m[1] as string)
 }
 
 /** The typed door's one refusal. */

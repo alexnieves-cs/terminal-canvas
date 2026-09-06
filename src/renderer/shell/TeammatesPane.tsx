@@ -1,3 +1,4 @@
+import { WORK_ITEM_MIME } from '@shared/work-items'
 import { memo, useState, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus } from '@renderer/icons'
@@ -28,6 +29,8 @@ export interface TeammatesPaneProps {
   onDelete: (id: string) => void
   /** Opens the folder dialog; the chosen folder is appended to the teammate's places. */
   onAddPlace: (id: string) => void
+  /** M114. A work item card dropped on a row: dispatch it to that teammate. */
+  onDispatch?: (itemId: string, teammateId: string) => void
   /** Start a chat as this teammate — refused by name (through the sheet's own rule) with no places. */
   onChat: (id: string) => void
   /** M102. Every service the app knows, for the grant toggles. */
@@ -71,7 +74,11 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
       ) : (
         <ul className="rail-list rail-list--teammates" data-teammates-list>
           {props.teammates.map((t) => (
-            <li key={t.id} className={`rail-row${t.id === props.selectedId ? ' rail-row--selected' : ''}`} data-teammate-row={t.id} aria-selected={t.id === props.selectedId}>
+            <li key={t.id} className={`rail-row${t.id === props.selectedId ? ' rail-row--selected' : ''}`} data-teammate-row={t.id} aria-selected={t.id === props.selectedId}
+              // M114. A drop target for a work item card ONLY: the MIME is the
+              // board's own, so a file or text drag falls through untouched.
+              onDragOver={(e) => { if (e.dataTransfer.types.includes(WORK_ITEM_MIME)) e.preventDefault() }}
+              onDrop={(e) => { const itemId = e.dataTransfer.getData(WORK_ITEM_MIME); if (itemId === '') return; e.preventDefault(); props.onDispatch?.(itemId, t.id) }}>
               <button type="button" className="rail-row__main" {...shellControl(() => props.onSelect(t.id === props.selectedId ? null : t.id))}>
                 <span className="rail-row__label">{teammateWord(t)}</span>
                 {/* Short nouns so the PERMISSION word survives the row's width — the critic saw `1 service · s…`. */}

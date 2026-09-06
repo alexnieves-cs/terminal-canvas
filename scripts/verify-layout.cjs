@@ -3675,6 +3675,34 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('work.1.b (threw)', false, String(e)) }
 }
 
+// M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE
+// function every Open PR button and the palette row read, so the five arms
+// are named once: no lane, nothing ahead, a source with no repository, GitHub
+// not connected (the credential rows' own sentence), the teammate lacking
+// the github service. And a `pr` field survives the carry.
+{
+  const W = L
+  const base = { id: 'w', source: 'github', key: 'acme/canvas#1', title: 't', state: 'todo', createdAt: 1, updatedAt: 1, teammateId: 't1', panelId: 'c1', worktreeId: 'wt1' }
+  const mate = { id: 't1', name: 'ada', brief: '', places: ['/r'], services: ['github'], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+  let okArm, noLane, zero, jira, notConnected, noService, carried
+  try {
+    const lane = { kind: 'lane', base: 'main', ahead: 2, behind: 0 }
+    okArm = W.prRefusal(base, lane, true, mate)
+    noLane = W.prRefusal({ ...base, panelId: undefined, worktreeId: undefined }, undefined, true, mate)
+    zero = W.prRefusal(base, { ...lane, ahead: 0 }, true, mate)
+    jira = W.prRefusal({ ...base, source: 'jira', key: 'PROJ-1' }, lane, true, mate)
+    notConnected = W.prRefusal(base, lane, false, mate)
+    noService = W.prRefusal(base, lane, true, { ...mate, services: [] })
+    carried = W.carryWorkItem({ ...base, pr: { number: 4, url: 'https://github.com/acme/canvas/pull/4' } })
+  } catch (e) { okArm = String(e) }
+  ok('work.4 prRefusal answers null when a lane is ahead, GitHub is connected and the teammate may spend github; and names no lane, nothing ahead of the base, a source with no repository, not connected (the credential rows\' sentence) and a teammate without the github service each by its own sentence; a pr field is carried',
+    okArm === null && typeof noLane === 'string' && /lane/.test(noLane) && typeof zero === 'string' && /ahead|commits/.test(zero) && /main/.test(zero) &&
+      typeof jira === 'string' && /jira/.test(jira) && typeof notConnected === 'string' && /github token/.test(notConnected) &&
+      typeof noService === 'string' && /ada/.test(noService) && /github/.test(noService) && /Teammates pane/.test(noService) &&
+      carried && carried.pr && carried.pr.number === 4,
+    JSON.stringify({ okArm, noLane, zero, jira, notConnected, noService, pr: carried && carried.pr }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

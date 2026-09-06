@@ -20,11 +20,7 @@ export interface RepoLookupDeps {
   subdirs: (dir: string) => string[]
 }
 
-/** `owner/repo#12` → `owner/repo`; a Jira key (`PROJ-12`) or anything else → null. */
-export function repoOfKey(key: string): string | null {
-  const m = /^([^/\s#]+\/[^/\s#]+)#\d+$/.exec(key)
-  return m === null ? null : (m[1] as string)
-}
+export { repoOfKey } from '../shared/work-items'
 
 /**
  * `git@github.com:Acme/Canvas.git`, `https://github.com/acme/canvas`,

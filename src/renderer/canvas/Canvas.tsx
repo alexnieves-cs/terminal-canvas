@@ -92,8 +92,7 @@ import { makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, is
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
-  type Panel, type TerminalPanel as TerminalPanelModel
-} from '@renderer/panels/panels'
+  type Panel, type TerminalPanel as TerminalPanelModel, setLinkLabel, CHAT_W } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
 import { shellQuote } from '@renderer/shell/file-tree-model'
@@ -106,7 +105,7 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
-import { getChat, insertIntoComposer, attachToComposer } from '@renderer/chat/chat-store'
+import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
@@ -114,7 +113,7 @@ import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/u
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState } from '@renderer/panels/panel-state'
-import { SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
+import { DISPATCH_PROMPT, SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
@@ -138,7 +137,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
-import { WORK_ITEM_STATES, type PersistedWorkItem } from '@shared/work-items'
+import { WORK_ITEM_STATES, carryWorkItem, repoOfKey, type PersistedWorkItem } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -212,6 +211,17 @@ function edgeWord(automation: LinkAutomation): string {
   return TRIGGER_WORDS[automation.trigger]
 }
 
+/**
+ * M114. The card kind lands with Track B (M116); until the union carries
+ * `work`, the two places that need "is this panel the card for that item"
+ * read the record loosely. Replace with `isWorkPanel(p) ? p.work.itemId :
+ * undefined` when the kind exists.
+ */
+function workCardItemId(p: Panel): string | undefined {
+  const loose = p as unknown as { kind: string; work?: { itemId?: unknown } }
+  return loose.kind === 'work' && typeof loose.work?.itemId === 'string' ? loose.work.itemId : undefined
+}
+
 export function Canvas({
   initial,
   liveSessionIds,
@@ -262,6 +272,17 @@ export function Canvas({
   workItemsRef.current = workItems
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
+  const markLaneClosed = useCallback((chatId: string) => {
+    setWorkItems((current) => current.some((i) => i.panelId === chatId)
+      ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
+      : current)
+  }, [])
+  // M114. `working` from the RUNTIME: the lane chat's first message start.
+  useEffect(() => onChatTurnStart((chatId) => {
+    setWorkItems((current) => current.some((i) => i.panelId === chatId && i.state === WORK_ITEM_STATES[0])
+      ? current.map((i) => (i.panelId === chatId && i.state === WORK_ITEM_STATES[0] ? carryWorkItem({ ...i, state: WORK_ITEM_STATES[1] as PersistedWorkItem['state'], updatedAt: Date.now() }) : i))
+      : current)
+  }), [])
   // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
   // or the strip's Done. A selected note is the canvas's, like a selected
   // edge; the editing note is the one whose input is open.
@@ -332,7 +353,22 @@ export function Canvas({
    * one's — producing a well-formed layout.json with wrong coordinates in
    * it, found launches later with nothing naming the drag that caused it.
    */
-  const displayPanels = merged && mergedView ? mergedView.panels : panels
+  // M114. A dispatched card FOLLOWS its lane: its rect is re-derived from the
+  // lane chat's every render (an M93 panel anchor, reached from the other
+  // side) and never written back — the record keeps the offset, the panel
+  // keeps the rect it had, and a drag of the card clears the anchor.
+  const anchoredPanels = useMemo(() => {
+    if (workItems.every((i) => i.anchor === undefined)) return panels
+    return panels.map((p) => {
+      const itemId = workCardItemId(p)
+      if (itemId === undefined) return p
+      const item = workItems.find((i) => i.anchor !== undefined && i.id === itemId)
+      const lane = item?.anchor === undefined ? undefined : panels.find((q) => q.rect.id === item.anchor?.panelId)
+      if (item?.anchor === undefined || lane === undefined) return p
+      return { ...p, rect: { ...p.rect, x: lane.rect.x + item.anchor.dx, y: lane.rect.y + item.anchor.dy } }
+    })
+  }, [panels, workItems])
+  const displayPanels = merged && mergedView ? mergedView.panels : anchoredPanels
   // Entry motion belongs to a panel's creation, not its mount. TerminalPanel
   // deliberately unmounts as it crosses LOD tiers, and replaying an entrance
   // after a pan would turn ordinary navigation into motion. The id is removed
@@ -1530,6 +1566,7 @@ export function Canvas({
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
         disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
+        markLaneClosed(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1965,6 +2002,9 @@ export function Canvas({
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
       disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
+      // M114. The lane's card stays, its state stays: `lane closed` is a note,
+      // never a silent trip back to todo.
+      markLaneClosed(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -3133,6 +3173,15 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M113/M114. The board's doors for verify:panels — the SAME verbs the
+    // palette rows and the card call, through the palette ref.
+    w.__m113 = {
+      add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
+        paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
+      dispatch: (itemId: string, teammateId: string, root?: string): void => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root),
+      items: (): PersistedWorkItem[] => workItemsRef.current,
+      close: (id: string): void => onClosePanel(id)
+    }
     // M59. The drop door, by screen point — see dropPath.
     // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
     // and subtracts the host's origin, exactly as the real onDrop does — the
@@ -3776,6 +3825,55 @@ export function Canvas({
     return { kind: 'spawned', id }
   }, [commitHistory, selectOnly])
   beginNewChatRef.current = beginNewChat
+  /**
+   * M114. DISPATCH — the one verb. In order, each step refusing by name into
+   * the record's `note` and minting nothing when it does: main's `board:lane`
+   * (the repository under the teammate's places, the gate on its root, the
+   * worktree), then `agent:create` in the lane as the teammate under
+   * DISPATCH_PROMPT, then the chat panel beside the card with a plain edge
+   * labelled `dispatched` (no trigger — the edge is a statement, not an
+   * automation), then the first message SENT (a dispatch is a hand-off, not
+   * a draft — the M80 insert rule is for templates a person finishes). The
+   * state stays `todo` here: `working` is the runtime's word (the turn-start
+   * effect above), never the click's.
+   */
+  const dispatchWorkItem = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<void> => {
+    if (mergedRef.current) return
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) =>
+      setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
+    const chatId = `c${nextIdRef.current++}`
+    const repo = item.key === undefined ? null : repoOfKey(item.key)
+    const lane = await window.canvas.board.lane({ itemId, chatPanelId: chatId, teammateId, ...(repo === null ? {} : { repo }), ...(root === undefined ? {} : { root }) })
+    if (lane.kind === 'refused') { patch({ note: lane.reason }); return }
+    const sessionId = crypto.randomUUID()
+    const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
+    if (created.kind === 'refused') { patch({ note: created.reason }); return }
+    const GAP = 48
+    let anchor: PersistedWorkItem['anchor']
+    setPanels((current) => {
+      const card = current.find((p) => workCardItemId(p) === itemId)
+      const centre = card === undefined
+        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
+        : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
+      const panel = makeChatPanel(chatId, centre, nextZ(current), { cwd: lane.path, sessionId, teammateId, dispatch: true })
+      let next: Panel[] = [...current, { ...panel, title: item.key ?? item.title }]
+      if (card !== undefined) {
+        next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
+        const placed = next.find((p) => p.rect.id === chatId)
+        if (placed !== undefined) anchor = { panelId: chatId, dx: card.rect.x - placed.rect.x, dy: card.rect.y - placed.rect.y }
+      }
+      commitHistory(next)
+      return next
+    })
+    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: undefined, anchor })
+    selectOnly(chatId)
+    const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
+    const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
+    await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
+  }, [commitHistory, selectOnly])
+  boardVerbsRef.current.dispatch = (itemId, teammateId, root) => { void dispatchWorkItem(itemId, teammateId, root) }
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -4296,6 +4394,7 @@ export function Canvas({
     },
     onSave: (t: PersistedTeammate) => { void window.canvas.teammate.save(t).then(reloadTeammates) },
     onDelete: (id: string) => { void window.canvas.teammate.remove(id).then(() => { reloadTeammates(); setSelectedTeammateId(null) }) },
+    onDispatch: (itemId: string, teammateId: string) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId),
     onAddPlace: (id: string) => {
       void window.canvas.teammate.choosePlace().then((folder) => {
         if (folder === null) return

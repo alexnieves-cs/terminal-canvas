@@ -1266,14 +1266,14 @@ app.whenReady().then(async () => {
   createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
   // M114. The REAL lane over the harness's own worktree manager and a real
   // Places gate, so dispatch.1 mints a real worktree in a fixture repository.
-  createBoardLane({
+  { laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root), ...createBoardLane({
     gate: createPlacesGate({ realpath: (p) => realpathSync(p), teammate: (id) => layoutStore.teammates().find((t) => t.id === id), worktreeRootOf: (p) => layoutStore.worktrees().find((w) => w.path === p)?.root }),
     worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
     teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
     recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-  }))
+  }) })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -17989,6 +17989,78 @@ app.whenReady().then(async () => {
       } finally {
         wc.removeListener('console-message', onC)
         try { rmSync(dirC, { recursive: true, force: true }) } catch {}
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
+    /* M114. Dispatch — the one verb, end to end through the fake runner  */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = ['dispatch.1 a GitHub item dispatched to a teammate whose place holds a clone of its repository mints a REAL worktree lane (the record names the chat and the worktree, the chat\'s record carries dispatch: true on disk and its cwd is the lane), the chat paints its backend word, the item reads working after the fake runner\'s first turn — never from the click — and closing the lane chat leaves the state working with the note `lane closed` and the panel id kept, never silently back to todo']
+      const cLog = []
+      const onC = (_e, _l, m) => { cLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onC)
+      const repoD = mkdtempSync(join(tmpdir(), 'tc panels board repo '))
+      try {
+        const g = (...args) => execFileSync('git', ['-C', repoD, ...args], { encoding: 'utf8' })
+        g('init', '-q', '.'); g('config', 'user.email', 'v@e.com'); g('config', 'user.name', 'v')
+        writeFileSync(join(repoD, 'a.txt'), 'a\n'); g('add', '-A'); g('commit', '-qm', 'init')
+        g('remote', 'add', 'origin', 'git@github.com:Acme/Canvas.git')
+        layoutStore.saveTeammate({ id: 'tm-ada', name: 'ada', brief: 'You are ada.', places: [repoD], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+        const chatCount = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-chat-status]').length`)
+        const before = await chatCount()
+        const itemId = await wc.executeJavaScript(`window.__m113 ? window.__m113.add({ source: 'github', key: 'acme/canvas#1', title: 'Fix the thing', url: 'https://github.com/acme/canvas/issues/1', description: 'do it' }) : null`)
+        const stateAtClick = await wc.executeJavaScript(`window.__m113 ? (window.__m113.items().find((i) => i.id === ${JSON.stringify(itemId)}) || {}).state : null`)
+        await wc.executeJavaScript(`window.__m113 ? window.__m113.dispatch(${JSON.stringify(itemId)}, 'tm-ada') : null`)
+        const chat = await waitUntil(async () => {
+          if ((await chatCount()) !== before + 1) return false
+          return wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-chat-status]')].pop(); if (!p) return false
+            const word = p.querySelector('[data-chat-backend]'); return { id: p.getAttribute('data-panel-id'), backend: word ? word.getAttribute('data-chat-backend') : null } })()`)
+        }, 8000)
+        // The record, on disk: the chat and the worktree named; the lane's record in the worktree list.
+        const recorded = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.panelId && it.worktreeId ? it : false
+        }, 6000)
+        const lane = chat ? layoutStore.worktrees().find((w) => w.panelId === chat.id) : undefined
+        const storedChat = chat ? (layoutStore.initial().panels || []).find((p) => p.id === chat.id) : undefined
+        // `working` comes from the runtime: the fake runner answers the first send, and the first message-start flips the word.
+        const working = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.state === 'working' ? it : false
+        }, 8000)
+        // Close the lane chat through the ordinary close path.
+        if (chat) await wc.executeJavaScript(`window.__m113.close(${JSON.stringify(chat.id)})`)
+        const closed = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === itemId)
+          return it && it.note ? it : false
+        }, 6000)
+        ok(IDS[0],
+          typeof itemId === 'string' && stateAtClick === 'todo' && chat && chat.backend === 'claude' &&
+            recorded && recorded.panelId === chat.id && recorded.teammateId === 'tm-ada' && lane !== undefined && recorded.worktreeId === lane.id && realpathSync(lane.root) === realpathSync(repoD) &&
+            storedChat && storedChat.kind === 'chat' && storedChat.chat.dispatch === true && storedChat.chat.teammateId === 'tm-ada' && storedChat.chat.cwd === lane.path &&
+            working && working.state === 'working' &&
+            closed && closed.note === 'lane closed' && closed.state === 'working' && closed.panelId === chat.id,
+          JSON.stringify({ itemId, stateAtClick, chat, recorded, lane: lane && { id: lane.id, root: lane.root, path: lane.path }, storedChat: storedChat && storedChat.chat, working: working && working.state, closed, log: cLog.slice(-4) }))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        try { layoutStore.deleteTeammate('tm-ada') } catch {}
+        const reD2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD2
+        await settle()
+      } catch (dErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(dErr && dErr.message || dErr) + ' | renderer: ' + (cLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onC)
+        try { rmSync(repoD, { recursive: true, force: true }) } catch {}
       }
     }
 
