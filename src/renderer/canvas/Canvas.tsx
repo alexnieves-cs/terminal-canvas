@@ -1772,7 +1772,7 @@ export function Canvas({
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
-    setMergedData
+    setMergedData, setFlipped
   })
 
   // The `window.__m4a*` surface verify:panels drives the renderer through,
@@ -4667,6 +4667,9 @@ export function Canvas({
         // mousemove (setCursor), so the class catches up within a frame or
         // two of the keypress rather than exactly on it. Cursor feedback
         // only; the gesture itself never consults this className.
+        // M121. The flip as a readable FACT on the host (verify:panels flip.1),
+        // never inferred from which panels happen to render summaries.
+        data-flipped={flipped ? '' : undefined}
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
