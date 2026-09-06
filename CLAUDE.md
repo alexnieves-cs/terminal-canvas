@@ -91,6 +91,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:control` | plain node | 13 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
 | `verify:agent-session` | plain node | ~89 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
+| `verify:teammates` | plain node | 6 checks (M100) against `shared/places.ts` and `main/places.ts` over a FAKE realpath: `..` walking out of a typed prefix, a symlink inside a place pointing out, a relative/`~`/`./` path refused outright, no places = nothing, a missing path outside, and the gate's named refusal with the fix (and an unknown teammate refused, a request with no teammate untouched); `carryTeammate`/`emptyTeammate` |
 | `verify:verbs` | plain node | 10 checks (M96–M97): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
 | `verify:styles` | plain node | 22 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
 | `verify:package` | plain node | 13 checks against `build/builder-config.cjs`'s returned value (a *function*, not a static JSON blob, which is what lets a check assert properties of a |
@@ -437,6 +438,29 @@ check does not, and should not, cover it.
   parser. The by-name copy sites use `carryBackend`; the sheet's rows come from `BACKEND_IDS`
   (`backendOptions`), disabled by name when a binary is absent. ACP is declined by name in the
   Act I spec — no ACP-speaking CLI on this machine to measure.
+- `src/shared/teammates.ts` / `src/shared/places.ts` / `src/main/places.ts` — M100. A teammate
+  is a record saved top level with the record rules (`parseTeammates`; `carryTeammate` at every
+  by-name copy); a chat carries `teammateId` and MAIN appends the brief from its own roster on
+  every spawn. `insidePlace` decides on the REAL, normalised path with an injected `realpath`:
+  `..` out, a symlink out, and a relative path (refused, never resolved against a root) are each
+  a check (`verify:teammates places.1–.3`); no places is nothing. `createPlacesGate` is asked in
+  `agent:create` and `spawn:sheet` BEFORE `resolveCwd` (whose home fallback would launder a
+  refused folder). The gate bounds what the app does for a teammate; the CLI's own tool calls
+  are the CLI's permission system's.
+- `src/shared/routines.ts` / `src/main/routine-runner.ts` — M101. A routine is a scheduled
+  fresh chat as a teammate. `routineRefusal` refuses at SAVE by name (a destructive verb in the
+  plan line against M96's table, no `scheduling` permission, under a minute, no prompt). The
+  runner arms one interval per unpaused routine in main over injected timers, marks a tick that
+  fell while the app was closed as MISSED with the due time (never fires it), and `routine:fire`
+  hands the tick to the renderer, which mints the chat, sends the prompt under `ROUTINE_PROMPT`
+  and reports through `routine:save`.
+- `src/main/broker.ts`'s `services`/`approve` deps and `AgentSessionManager.askExternal` — M102.
+  A request naming a teammate is refused `not-granted` BEFORE `store.read` (three readers stay
+  three); a WRITE (any method outside `READ_ONLY_METHODS`, data) asks on the teammate's chat
+  through `askExternal` — a question on the session's pending set that resolves through the one
+  `answerPermission` without writing to the process, honours M98's grants, and dies `false` with
+  the session; `not-answered` refuses a write nobody could approve. The teammate is derived in
+  main from the asking PANEL, never from a `tc api` field.
 - `src/main/layout-snapshots.ts` / `src/shared/annotations.ts` — M93. Snapshots are a side
   effect of a SUCCESSFUL layout write (`onWritten`, after the rename), a ring of twenty
   coalesced a minute apart; `restoreFromSnapshot` is pure, checks the JSON first (`parseLayout`
