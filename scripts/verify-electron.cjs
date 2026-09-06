@@ -47,7 +47,7 @@ const ok = (n, pass, detail) => {
    tell from the sentence whether the code or the list is wrong. */
 const ACCEPTED = [
   { check: 'CSP_GLOBAL_CHECK', file: 'src/renderer/index.html', sample: "content=\"default-src 'self'",
-    why: "script-src stays 'self' and nothing loads remotely; the tool flags the tag on principle, not on a directive it can point to" },
+    why: "xterm sets inline styles on its layers; script-src stays 'self' and nothing loads remotely" },
   { check: 'SANDBOX_JS_CHECK', file: 'src/main/index.ts', sample: 'sandbox: false,',
     why: "the preload needs require('electron') for contextBridge; node-pty stays in main" },
   { check: 'PRELOAD_JS_CHECK', file: 'src/main/index.ts', sample: "preload: join(__dirname, '../preload/index.js'),",
@@ -100,20 +100,43 @@ const sampleAt = (fileUnderSrc, region) => {
   }
 }
 
-const sarif = existsSync(SARIF) ? JSON.parse(readFileSync(SARIF, 'utf8')) : null
-const findings = (sarif?.runs?.[0]?.results ?? []).map((r) => {
-  const loc = r.locations[0].physicalLocation
+/* The read+parse is guarded because a timed-out or killed electronegativity
+   process can leave a missing or truncated SARIF file behind, and a thrown
+   SyntaxError here would abort the whole suite — eneg.2 through eneg.4 would
+   never print, and the run would exit on a stack trace instead of a FAIL
+   line (the global rule: a check that throws takes every check below it
+   down with it, silently). A bad file becomes zero findings plus a
+   `parseError` string eneg.2 reports and fails on, rather than a vacuous
+   pass — an unreadable report is not evidence of a clean one. */
+let sarif = null, parseError = null
+try {
+  sarif = existsSync(SARIF) ? JSON.parse(readFileSync(SARIF, 'utf8')) : null
+} catch (error) {
+  parseError = String(error.message ?? error)
+}
+
+/* A SARIF result with no usable location (an empty `locations` array, or a
+   ruleId the rules table doesn't carry a URL for) is skipped rather than
+   thrown on, but COUNTED — a finding the suite can't place must not vanish
+   from the tally the way a truncated CSV row silently did in the CSV path
+   this suite replaced. */
+let unplaced = 0
+const findings = (sarif?.runs?.[0]?.results ?? []).flatMap((r) => {
+  const loc = r.locations?.[0]?.physicalLocation
+  if (!loc?.artifactLocation?.uri || !loc?.region) { unplaced++; return [] }
   const file = relative(ROOT, join(ROOT, 'src', loc.artifactLocation.uri)).replace(/\\/g, '/')
   const rule = sarif.runs[0].tool.driver.rules.find((x) => x.id === r.ruleId)
-  return { check: r.ruleId, file, sample: sampleAt(loc.artifactLocation.uri, loc.region), url: rule?.helpUri }
+  return [{ check: r.ruleId, file, sample: sampleAt(loc.artifactLocation.uri, loc.region), url: rule?.helpUri }]
 })
 
 const matches = (row, f) => row.check === f.check && row.file === f.file && f.sample.includes(row.sample)
 
 const unexpected = findings.filter((f) => !ACCEPTED.some((row) => matches(row, f)))
 ok('eneg.2 no finding outside ACCEPTED — a new anti-pattern fails with its wiki page',
-  ran && unexpected.length === 0,
-  unexpected.map((f) => `${f.check} ${f.file} «${f.sample}» ${f.url}`).join(' | ') || `${findings.length} findings, all accepted`)
+  ran && !parseError && unplaced === 0 && unexpected.length === 0,
+  parseError ? `SARIF unreadable: ${parseError}`
+    : unplaced > 0 ? `${unplaced} finding(s) with no usable location`
+    : unexpected.map((f) => `${f.check} ${f.file} «${f.sample}» ${f.url}`).join(' | ') || `${findings.length} findings, all accepted`)
 
 const stale = ACCEPTED.filter((row) => !findings.some((f) => matches(row, f)))
 ok('eneg.3 every ACCEPTED row still fires — a row that stopped firing describes code that moved, and is edited by hand',
