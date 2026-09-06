@@ -165,6 +165,11 @@ const bridge: CanvasBridge = {
     remove: (id: string) => ipcRenderer.invoke(IPC.TEAMMATE_DELETE, id),
     choosePlace: () => ipcRenderer.invoke(IPC.TEAMMATE_CHOOSE_PLACE)
   },
+  // M126. The shelf, read and written whole.
+  shelf: {
+    list: () => ipcRenderer.invoke(IPC.SHELF_LIST),
+    save: (shelf) => ipcRenderer.invoke(IPC.SHELF_SAVE, shelf)
+  },
   routine: {
     list: () => ipcRenderer.invoke(IPC.ROUTINE_LIST),
     save: (routine) => ipcRenderer.invoke(IPC.ROUTINE_SAVE, routine),

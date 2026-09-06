@@ -16,6 +16,7 @@ import {
   type WorktreeRecord, RECENT_DIRECTORIES_CAP, TEMPLATES_MAX, type PersistedTemplate } from '../shared/layout-schema'
 import { resolveSetting, settingDef, type SettingValue } from '../shared/settings-schema'
 import { TEAMMATES_MAX, carryTeammate, type PersistedTeammate } from '../shared/teammates'
+import { SHELF_COLUMNS_MAX, carryShelf, type Shelf } from '../shared/skills'
 import { ROUTINES_MAX, carryRoutine, type PersistedRoutine } from '../shared/routines'
 import type { ActivateResult, MergedWorkspace, WorkspaceRow } from '../shared/ipc-contract'
 import type { ReviewBaseline } from '../shared/review'
@@ -103,6 +104,15 @@ export interface LayoutStore {
   /** M80. Saved templates (the user's; built-ins are code). */
   templates(): PersistedTemplate[]
   saveTemplate(template: PersistedTemplate): void
+  /**
+   * M126. The skill shelf, copied out and written whole.
+   *
+   * Whole, never per column: the columns are one arrangement, and a
+   * per-column write would let a drag that moved a card between two columns
+   * persist half of itself.
+   */
+  shelf(): Shelf
+  saveShelf(shelf: Shelf): Shelf
   /** M100. The roster, copied out; saved newest-first at TEAMMATES_MAX; a delete answers whether it held the id. */
   teammates(): PersistedTeammate[]
   saveTeammate(teammate: PersistedTeammate): void
@@ -557,6 +567,16 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     prompts: () => snapshot.prompts.map((p) => ({ ...p })),
 
     templates: () => snapshot.templates.map((t) => ({ ...t, nodes: t.nodes.map((n) => ({ ...n })), edges: t.edges.map((e) => ({ ...e })) })),
+
+    shelf: () => carryShelf(snapshot.shelf),
+    saveShelf(shelf) {
+      // Copied on the way IN as well as out, for presets()' own reason: the
+      // caller must not hold a reference into the record the store is about
+      // to serialise.
+      snapshot.shelf = carryShelf({ columns: shelf.columns.slice(0, SHELF_COLUMNS_MAX) })
+      scheduleWrite()
+      return carryShelf(snapshot.shelf)
+    },
 
     teammates: () => snapshot.teammates.map(carryTeammate),
     routines: () => snapshot.routines.map(carryRoutine),

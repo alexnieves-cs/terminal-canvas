@@ -28,6 +28,7 @@ import type { CanvasState, PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 import type { PersistedTeammate } from './teammates'
 import type { PersistedRoutine } from './routines'
+import type { Shelf } from './skills'
 
 /** M83. One memory as the renderer reads it. */
 /**
@@ -577,6 +578,16 @@ export const IPC = {
   ROUTINE_SAVE: 'routine:save',
   ROUTINE_DELETE: 'routine:delete',
   ROUTINE_RUN: 'routine:run',
+  /**
+   * M126. The skill shelf: the user's arrangement of the Skills pane, TOP
+   * LEVEL in the layout snapshot beside `templates` and `teammates` rather
+   * than on a workspace, and reached through its own pair of invokes for
+   * exactly that reason — `layout:save` carries a CanvasState, which is one
+   * workspace's record and has nowhere to put it. Never through the undo
+   * history: the shelf is a library, not layout.
+   */
+  SHELF_LIST: 'shelf:list',
+  SHELF_SAVE: 'shelf:save',
   /**
    * M103. The browser pane's text, read in MAIN: the scheme is checked on
    * the guest's LIVE url (not the record's, not only at navigation), the
@@ -1232,6 +1243,11 @@ export interface CanvasBridge {
     remove(id: string): Promise<boolean>
     /** The folder dialog; null when cancelled. */
     choosePlace(): Promise<string | null>
+  }
+  /** M126. The skill shelf, read and written whole: the columns are one record. */
+  shelf: {
+    list(): Promise<Shelf>
+    save(shelf: Shelf): Promise<Shelf>
   }
   /** M101. Routines. `save` answers the record as saved or a named refusal; `run` fires now. */
   routine: {

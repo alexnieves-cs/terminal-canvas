@@ -81,6 +81,7 @@ import {
   templateOf
 } from './presets'
 import { mergePrompts, readProjectPrompts } from './prompts'
+import { parseShelf } from '../shared/skills'
 import type { CapturedPanel } from '../shared/ipc-contract'
 
 let mainWindow: BrowserWindow | null = null
@@ -1563,6 +1564,15 @@ app.whenReady().then(async () => {
         return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
+      // M126. The shelf, whole. Parsed on the way in by the SAME rules the
+      // file is, so a malformed column reaching the store from the renderer
+      // is dropped by name rather than written back to disk.
+      shelf: () => layoutStore.shelf(),
+      saveShelf: (shelf) => {
+        const warnings: string[] = []
+        const parsed = parseShelf(shelf, warnings)
+        return layoutStore.saveShelf(parsed)
+      },
       // M100. The roster. A save is an upsert by id; the record is parsed by
       // the same rules the file is (a relative place never lands).
       listTeammates: () => layoutStore.teammates(),

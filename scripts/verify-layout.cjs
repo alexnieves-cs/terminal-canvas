@@ -3073,9 +3073,9 @@ const filePanelOnDisk = (id, over = {}) => ({
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
-  // M116 added `board` as the seventh.
-  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
-    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board']) &&
+  // M116 added `board` as the seventh; M126 `skills` as the eighth.
+  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board|skills, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+    nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board', 'skills']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
       tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&

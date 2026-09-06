@@ -1,4 +1,5 @@
 import type { PersistedWorkItem } from '@shared/work-items'
+import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
 import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
 // Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
@@ -463,6 +464,15 @@ export interface PaletteActions {
   markDone(itemId: string): void
   /** M116. Open the navigator on the Board pane. */
   openBoard(): void
+  /**
+   * M126. The ONE door a skill card's drop onto the canvas goes through.
+   *
+   * A named, typed STUB until M127 mints the `skill` panel kind: it records
+   * the request and opens nothing. Named and typed rather than absent so the
+   * drop has exactly one caller when the kind lands — a second mint path
+   * invented at the drop site is how two doors drift apart.
+   */
+  openSkillPanel(scope: ToolScope, name: string, world: { x: number; y: number }): void
 }
 
 export interface PaletteContext {

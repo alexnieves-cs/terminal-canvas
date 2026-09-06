@@ -1,4 +1,4 @@
-import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import { claudeAvailable, codexAvailable } from '@renderer/palette/commands'
 import { carryMarks } from '@renderer/panels/panels'
@@ -191,6 +191,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, toggleFlip,
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
+
+  /* M126. The skill drop's parking spot until M127 mints the `skill` panel
+     kind. A ref rather than state on purpose: nothing renders it yet, and a
+     setState here would re-render the canvas for a request nothing reads. */
+  const pendingSkillOpenRef = useRef<{ scope: string; name: string; world: { x: number; y: number } } | null>(null)
 
   return useMemo<PaletteActions>(() => ({
     spawnPreset: (id) => {
@@ -1840,7 +1845,14 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     commentPr: (itemId) => boardVerbsRef.current?.commentPr?.(itemId),
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
-    openBoard: () => chooseNavigator('board')
+    openBoard: () => chooseNavigator('board'),
+    // M126. The skill card's drop door, a named STUB until M127 mints the
+    // `skill` panel kind. It opens nothing and records the request, so the
+    // drop has one caller to change rather than a mint path invented at the
+    // drop site. Do NOT invent a panel record here.
+    openSkillPanel: (scope, name, world) => {
+      pendingSkillOpenRef.current = { scope, name, world }
+    }
 
   }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,

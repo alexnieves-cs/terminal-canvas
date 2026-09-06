@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ShellBreakpoint } from './useShellBreakpoint'
 
-export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board'
+export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
 export type ContextTab = 'detail' | 'work' | 'tools'
 
 export interface ShellChrome {
@@ -93,7 +93,7 @@ export function useShellChrome(deps: {
         if (tree) setTreeOpen(tree.value === true)
         // M85. A value from a LATER version of this app falls back to panels
         // rather than leaving the navigator on a pane that does not exist.
-        if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' || nav.value === 'integrations' || nav.value === 'teammates' || nav.value === 'board' ? nav.value : 'panels')
+        if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' || nav.value === 'integrations' || nav.value === 'teammates' || nav.value === 'board' || nav.value === 'skills' ? nav.value : 'panels')
         if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' ? tab.value : 'detail')
       })
     }

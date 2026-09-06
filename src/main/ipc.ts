@@ -21,6 +21,7 @@ import type { CanvasState } from '../shared/layout-schema'
 import type { PersistedTemplate } from '../shared/templates'
 import type { PersistedTeammate } from '../shared/teammates'
 import type { PersistedRoutine } from '../shared/routines'
+import type { Shelf } from '../shared/skills'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult, ScrollbackSearchHit } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
@@ -123,6 +124,9 @@ export interface PaletteHandlers {
   saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
   removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
+  /** M126. The skill shelf, whole. */
+  shelf(): Shelf
+  saveShelf(shelf: Shelf): Shelf
 }
 
 /** Registers the whole renderer -> main surface. One place, one call. */
@@ -490,6 +494,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.ROUTINE_SAVE, (_event, routine: PersistedRoutine) => palette.saveRoutine(routine))
   ipcMain.handle(IPC.ROUTINE_DELETE, (_event, id: string) => palette.removeRoutine(id))
   ipcMain.handle(IPC.ROUTINE_RUN, (_event, id: string) => palette.runRoutine(id))
+  // M126. The shelf is written WHOLE — the columns are one record and a
+  // per-column channel would let a half-applied drag persist.
+  ipcMain.handle(IPC.SHELF_LIST, () => palette.shelf())
+  ipcMain.handle(IPC.SHELF_SAVE, (_event, shelf: Shelf) => palette.saveShelf(shelf))
 
   // expandTilde, deliberately NOT resolveCwd: `~` expansion is main's job and
   // the renderer has no process.env to do it with — the same boundary

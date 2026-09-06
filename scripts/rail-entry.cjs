@@ -55,5 +55,9 @@ module.exports = {
   ...require('../src/renderer/shell/integration-model'),
   /* M116. The board's record: WORK_ITEM_STATES / USER_SET_STATES, the data
      board.1 reads its words off rather than spelling them. */
-  ...require('../src/shared/work-items')
+  ...require('../src/shared/work-items'),
+  /* M126. The Skills pane's columns, and the shelf vocabulary they read —
+     pure, the reason every model above joined this bundle. */
+  ...require('../src/shared/skills'),
+  ...require('../src/renderer/shell/skills-pane-model')
 }

@@ -135,6 +135,17 @@ import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantTe
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
+import { parseSkillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
+import type { ToolInventoryResult, ToolScope } from '@shared/toolbox'
+import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@renderer/shell/skills-pane-model'
+import type { SkillsInventoryState } from '@renderer/shell/SkillsPane'
+
+/* M126. Module scope, never a fresh literal per render: canvas-constants.ts's
+   own rule — a new object each render is re-render churn through every memo
+   that takes the shelf as a dependency. */
+const EMPTY_SHELF: Shelf = { columns: [] }
+/** Field by field, never a spread — a spread writes `key: undefined`. */
+const carryOneColumn = (c: ShelfColumn): ShelfColumn => ({ id: c.id, title: c.title, keys: [...c.keys] })
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
@@ -3143,6 +3154,22 @@ export function Canvas({
   }, [openFilePanel, palette, registry])
   const onDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
+    // M126. The Skills pane's OWN MIME, read here and nowhere else — M114's
+    // rule for the board's drops. A card dropped on the canvas opens the
+    // skill's panel at the drop point, through the ONE door
+    // `openSkillPanel`; the `skill` panel kind is M127's, so today that door
+    // records the request and opens nothing. Checked BEFORE the file arm,
+    // because a drag with no files would otherwise fall out of it silently.
+    const skill = event.dataTransfer.getData(SKILL_CARD_MIME)
+    if (skill !== '') {
+      const parsed = parseSkillKey(skill)
+      if (parsed !== null) {
+        const box = event.currentTarget.getBoundingClientRect()
+        const world = screenToWorld({ x: event.clientX - box.left, y: event.clientY - box.top }, viewportRef.current)
+        paletteActionsRef.current?.openSkillPanel(parsed.scope, parsed.name, world)
+      }
+      return
+    }
     // One file. A multi-file drop opening N panels at once is a decision to
     // ask for rather than to acquire as a side effect of a gesture.
     const file = event.dataTransfer.files[0]
@@ -4497,6 +4524,95 @@ export function Canvas({
       onToggle: chrome.toggleNavigator
     }
   }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator])
+  /* ---------------------------------------------------------- M126: skills --
+   * The Skills pane's state: the shelf (a TOP-LEVEL record, read and written
+   * through its own pair of invokes — never through the undo history, which
+   * is layout's, and never through `layout:save`, which carries one
+   * workspace's CanvasState), the inventory for the SELECTED panel's cwd (the
+   * inspector's Toolbox section's own rule, its `no-cwd` arm included), and
+   * the three filters.
+   */
+  const [shelf, setShelf] = useState<Shelf>(EMPTY_SHELF)
+  useEffect(() => { void window.canvas.shelf.list().then(setShelf) }, [])
+  const writeShelf = useCallback((next: Shelf): void => {
+    setShelf(next)
+    void window.canvas.shelf.save(next).then(setShelf)
+  }, [])
+  const [skillKindTab, setSkillKindTab] = useState<SkillPaneKind>('skill')
+  const [skillQuery, setSkillQuery] = useState('')
+  const [skillScopes, setSkillScopes] = useState<ToolScope[] | null>(null)
+  const [skillPlacedOnly, setSkillPlacedOnly] = useState(false)
+  const skillsCwd = (() => {
+    const p = panels.find((x) => x.rect.id === selectedId)
+    if (p === undefined) return null
+    if (isTerminalPanel(p)) return p.spec.cwd
+    if (isToolboxPanel(p)) return p.source.cwd
+    return null
+  })()
+  const [skillsInventory, setSkillsInventory] = useState<ToolInventoryResult | undefined>(undefined)
+  useEffect(() => {
+    // Cleared before the invoke, never after: the `live` flag stops a stale
+    // WRITE and nothing stops the stale RENDER, so panel A's skills would sit
+    // under panel B's heading for a whole round trip.
+    setSkillsInventory(undefined)
+    if (selectedId === null || skillsCwd === null) return
+    let live = true
+    void window.canvas.toolbox.read({ panelId: selectedId, cwd: skillsCwd })
+      .then((r) => { if (live) setSkillsInventory(r) })
+      .catch(() => { if (live) setSkillsInventory({ kind: 'no-cwd' }) })
+    return () => { live = false }
+  }, [selectedId, skillsCwd])
+  const skillsPaneProps = useMemo(() => {
+    const entries = skillsInventory?.kind === 'inventory' ? skillsInventory.inventory.entries : []
+    const state: SkillsInventoryState =
+      skillsCwd === null ? { kind: 'no-cwd' }
+        : skillsInventory === undefined ? { kind: 'pending' }
+          : skillsInventory.kind === 'no-cwd' ? { kind: 'no-cwd' }
+            : { kind: 'inventory', readAt: skillsInventory.inventory.readAt }
+    return {
+      onToggle: chrome.toggleNavigator,
+      state,
+      columns: buildSkillColumns(entries, shelf, { kind: skillKindTab, query: skillQuery, scopes: skillScopes, placedOnly: skillPlacedOnly }),
+      kind: skillKindTab,
+      onChooseKind: setSkillKindTab,
+      query: skillQuery,
+      onQuery: setSkillQuery,
+      scopes: skillScopes,
+      onToggleScope: (scope: ToolScope) => setSkillScopes((cur) => {
+        // A pressed scope on its own means "only this"; pressing it again is
+        // every scope, never an empty list — a filter that can hide
+        // everything reads as a broken pane.
+        if (cur !== null && cur.length === 1 && cur[0] === scope) return null
+        return [scope]
+      }),
+      placedOnly: skillPlacedOnly,
+      onTogglePlacedOnly: () => setSkillPlacedOnly((v) => !v),
+      onPlace: (key: SkillKey, columnId: string) => {
+        // The override, written whole: the key leaves every column it was in
+        // and joins exactly one. A card dropped where it already sits is a
+        // no-op rather than a duplicate.
+        const columns = shelf.columns.map((c) => ({ id: c.id, title: c.title, keys: c.keys.filter((k) => k !== key) }))
+        const target = columns.find((c) => c.id === columnId)
+        if (target === undefined) {
+          if (columnId !== UNGROUPED_COLUMN_ID) return
+          columns.push({ id: UNGROUPED_COLUMN_ID, title: 'Ungrouped', keys: [key] })
+        } else target.keys.push(key)
+        writeShelf({ columns })
+      },
+      onNewColumn: () => {
+        const id = `col-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+        writeShelf({ columns: [...shelf.columns.map(carryOneColumn), { id, title: `column ${shelf.columns.length + 1}`, keys: [] }] })
+      },
+      onDeleteColumn: (id: string) => {
+        // Ungrouped refuses in the model AND here: the pane's control is
+        // disabled with the reason, and this is the door a later caller would
+        // otherwise reach past it.
+        if (id === UNGROUPED_COLUMN_ID) return
+        writeShelf({ columns: shelf.columns.filter((c) => c.id !== id).map(carryOneColumn) })
+      }
+    }
+  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf])
+
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
     teammates: teammates ?? [],
@@ -4648,6 +4764,7 @@ export function Canvas({
         memoryReason={noteRoot === null ? REASON_NO_REPO_MEMORY : undefined}
         vault={vaultPaneProps}
         integrations={integrationsPaneProps}
+        skills={skillsPaneProps}
         teammates={teammatesPaneProps}
       />
       {/* M35 (Fix round 1). `canvas--ports-hidden` is a CLASS on the canvas
