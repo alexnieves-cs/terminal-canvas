@@ -46,6 +46,9 @@ const isDict = (v: unknown): v is Dict => typeof v === 'object' && v !== null &&
 function scrubString(s: string, paths: ScrubPaths): string {
   // userData first: it lives under home, so home-first would leave
   // `<home>/Library/Application Support/…`, which still names the app path.
+  // Guarded on non-empty: split('') on an empty string explodes it into one
+  // element per character, which join('<userData>') would then interleave
+  // through the whole string — an empty path is skipped, not replaced.
   let out = s
   if (paths.userData) out = out.split(paths.userData).join('<userData>')
   if (paths.home) out = out.split(paths.home).join('<home>')
@@ -75,6 +78,12 @@ function scrubException(x: unknown, paths: ScrubPaths): Dict | null {
 function scrubContexts(c: unknown, paths: ScrubPaths): Dict | undefined {
   if (!isDict(c)) return undefined
   const out: Dict = {}
+  // Closed to these four: each carries version and platform strings (OS
+  // name, app version, Electron/Node runtime version), never machine
+  // identity or user state. `device` is dropped for exactly the contrast —
+  // it names the machine (hostname, model) — and the same argument applies
+  // to anything added here later: it earns a place only by carrying a
+  // version string, not an identifier.
   for (const key of ['os', 'app', 'runtime', 'electron'] as const) {
     const v = c[key]
     if (!isDict(v)) continue

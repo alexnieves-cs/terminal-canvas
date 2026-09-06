@@ -678,6 +678,20 @@ console.log('\n' + '='.repeat(60))
 // exists to withhold; the boundary is the import graph, pinned as text, the
 // shape check 21 uses. And the credential store's reader list (readers.1)
 // stays exactly three — telemetry.ts is not one of them.
+//
+// Same honest limit as 20/21's own disclaimer, restated for this offender
+// list: this greps each offender file's OWN source for the literal
+// `@sentry/`, so a module that reaches the SDK through a one-hop wrapper
+// (say `./telemetry-sink.ts`, which itself imports `@sentry/electron`)
+// evades this check completely — the wrapper's name contains none of the
+// strings this regex looks for. The five-file offender list is a HARDCODED
+// SNAPSHOT of "the modules that hold raw bytes" as of M112, not a derived
+// fact: a sixth such module added later is UNCHECKED by construction until
+// someone adds it here. `telemetryReadsStore` has the identical limit —
+// a bare substring match against `telemetry.ts`'s own source, so a
+// destructured or aliased read routed through an intermediate module is
+// invisible to it too. A green telemetry.3 is a guard on a rule, not a
+// proof that no module can reach the SDK.
 {
   const offenders = ['src/main/shell-env.ts', 'src/main/pty-manager.ts', 'src/main/credential-store.ts', 'src/main/scrollback-log.ts', 'src/main/telemetry.ts']
     .filter((f) => /@sentry\//.test(stripComments(read(f) ?? '')))
