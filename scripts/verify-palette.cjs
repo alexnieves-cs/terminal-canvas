@@ -2470,6 +2470,7 @@ const WS = [
       calls.includes('goToPanel') && calls.includes('scrollChatTurn') &&
       offRows.some((r) => r.id === 'search.off' && /chats still answer/.test(r.disabledReason || '')) && offRows.some((r) => r.id === 'search.hit.c1.t1'),
     JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.title, r.disabledReason]), calls, offRows: offRows.map((r) => [r.id, r.disabledReason]) }))
+}
 
 // M123 — update.1. THE UPDATE NOTICE'S TWO ROWS. `Check for updates…` is a
 //     canvas-group row, present with NO credential and NO network and never
