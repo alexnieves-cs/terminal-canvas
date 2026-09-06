@@ -6,6 +6,8 @@ import type { PermissionAnswer } from '../shared/transcript'
 import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/ipc-contract'
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
+import type { BrowserHandlers } from './browser-read'
+import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { RunRow } from '../shared/run-ledger'
 import type {
   PanelId,
@@ -188,6 +190,11 @@ const INERT_WATCHERS: WatcherHandlers = {
   list: () => []
 }
 
+/** M103. The harnesses that construct positionally keep a handler; it refuses by name. */
+const INERT_BROWSER: BrowserHandlers = {
+  read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
+}
+
 const INERT_SCROLLBACK: ScrollbackHandlers = {
   tail: async () => [],
   clear: async () => {},
@@ -281,7 +288,9 @@ export function registerIpcHandlers(
    */
   agents: AgentHandlers = INERT_AGENTS,
   /** M84. The watcher runtime; see WatcherHandlers. */
-  watchers: WatcherHandlers = INERT_WATCHERS
+  watchers: WatcherHandlers = INERT_WATCHERS,
+  /** M103. Appended last, like every collaborator before it. */
+  browser: BrowserHandlers = INERT_BROWSER
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -307,6 +316,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.WATCHER_STOP, (_event, id: string) => watchers.stop(id))
   ipcMain.handle(IPC.WATCHER_DISPOSE, (_event, id: string) => watchers.dispose(id))
   ipcMain.handle(IPC.WATCHER_LIST, () => watchers.list())
+  // M103. The read is main's whole: the guest is resolved and checked here,
+  // the scheme on its live url, the cap, the outward gate — the renderer
+  // only names which panel.
+  ipcMain.handle(IPC.BROWSER_READ, (_event, req: BrowserReadRequest) => browser.read(req))
   ipcMain.handle(IPC.SCROLLBACK_TAIL, (_event, req: { panelId: PanelId; lines: number }) =>
     scrollback.tail(req.panelId, Math.max(1, Math.min(200, Math.floor(req.lines)))))
   ipcMain.handle(IPC.SCROLLBACK_CLEAR, () => scrollback.clear())

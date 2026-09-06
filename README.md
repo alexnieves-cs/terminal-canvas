@@ -391,6 +391,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:grants / agent:revoke-grants
                        snapshot:list / snapshot:restore
                        agent:auto-start / agent:auto-stop
+                       browser:read
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump

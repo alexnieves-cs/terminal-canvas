@@ -173,6 +173,7 @@ renderer --invoke--> agent:clipboard-image                                      
 renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
+renderer --invoke--> browser:read                                                --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
 main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer

@@ -1,4 +1,5 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
+import { isReadableUrl } from './browser-panel'
 import { parseAnnotations, type Annotation } from './annotations'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
@@ -289,6 +290,18 @@ export interface PersistedChatPanel extends PersistedPanelBase {
   chat: ChatSource
 }
 
+/**
+ * M103's browser pane. Sessionless like the file panel: no top-level cwd
+ * and no args, just the page it opens to. `url` is http(s) BY PARSE RULE —
+ * a `file:` or `data:` url is a malformed record, dropped with a warning,
+ * because a guest opened on the user's disk is not a smaller feature but a
+ * different one.
+ */
+export interface PersistedBrowserPanel extends PersistedPanelBase {
+  kind: 'browser'
+  url: string
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -299,6 +312,7 @@ export type PersistedPanel =
   | PersistedToolboxPanel
   | PersistedChatPanel
   | PersistedWatcherPanel
+  | PersistedBrowserPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -806,6 +820,17 @@ function parsePanel(
     const chat = parseChatSource((raw as Record<string, unknown>).chat, id, warnings)
     if (chat === null) return null
     return { ...base, kind: 'chat', chat }
+  }
+  if (kind === 'browser') {
+    // M103. The url is checked HERE, not only when the guest attaches: a
+    // record with a file: url would otherwise sit on the canvas as a panel
+    // whose guest main refused, blank, with the reason in main's log only.
+    const url = (raw as Record<string, unknown>).url
+    if (!isStr(url) || !isReadableUrl(url)) {
+      warnings.push(`dropped browser panel ${id}: url ${JSON.stringify(url)} is not an http(s) page`)
+      return null
+    }
+    return { ...base, kind: 'browser', url }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

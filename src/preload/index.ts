@@ -266,6 +266,9 @@ const bridge: CanvasBridge = {
     read: (req: ToolboxReadRequest) => ipcRenderer.invoke(IPC.TOOLBOX_READ, req),
     permissions: (req: ToolboxPermissionsRequest) => ipcRenderer.invoke(IPC.TOOLBOX_PERMISSIONS, req)
   },
+  browser: {
+    read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
+  },
   platform: process.platform
 }
 

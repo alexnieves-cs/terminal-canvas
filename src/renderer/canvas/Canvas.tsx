@@ -87,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -121,6 +121,8 @@ import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
+import { BrowserNode } from '@renderer/browser/BrowserNode'
+import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
 import type { PersistedTemplate } from '@shared/templates'
@@ -766,7 +768,7 @@ export function Canvas({
         // panel can be redone, and the redone panel carries the same session
         // id — its transcript must still be there to render. Only an
         // explicit close, a reset and a workspace delete drop the file.
-        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id) }
+        if (!ids.has(panel.rect.id)) { clearFileResult(panel.rect.id); clearToolbox(panel.rect.id); disposeChat(panel.rect.id, false); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id) }
         continue
       }
       if (!ids.has(panel.rect.id)) {
@@ -1485,7 +1487,7 @@ export function Canvas({
         clearFileResult(panel.rect.id)
         clearToolbox(panel.rect.id)
         // M73. See onClosePanel: main's session, main's file, no registry.
-        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id)
+        disposeChat(panel.rect.id, true); disposeWatcher(panel.rect.id); clearBrowser(panel.rect.id)
         continue
       }
       registry.dispose(panel.rect.id)
@@ -1919,7 +1921,7 @@ export function Canvas({
       // is still not a registry.dispose call site: the close ends the
       // process through agent:dispose and drops the durable file. A no-op
       // for the other sessionless kinds.
-      disposeChat(id, true); disposeWatcher(id)
+      disposeChat(id, true); disposeWatcher(id); clearBrowser(id)
       setPanels((current) => {
         const next = removePanel(current, id)
         commitHistory(next)
@@ -3719,7 +3721,7 @@ export function Canvas({
     // move restores the chat panel, and it must render its turns. The
     // ordinary close path would drop the file, so this is the one removal
     // that does not go through it.
-    disposeChat(id, false); disposeWatcher(id)
+    disposeChat(id, false); disposeWatcher(id); clearBrowser(id)
     setPanels((current) => { const next = removePanel(current, id); commitHistory(next); return next })
     setSelectedIds((current) => retainSelection(current, (sid) => sid !== id))
     setFocusedId((current) => (current === id ? null : current))
@@ -3968,6 +3970,38 @@ export function Canvas({
     selectOnly(memoryId)
   }, [commitHistory, selectOnly])
 
+  /**
+   * M103. Mint a browser panel at the world centre. The url is already
+   * http(s) by the caller's rule (`normaliseTypedUrl`); the record holds
+   * where the page OPENS, and every later navigation is written back onto it
+   * through `onBrowserNavigated` so a relaunch returns to the last page.
+   */
+  const openBrowserPanel = useCallback((url: string): void => {
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const browserId = `b${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeBrowserPanel(browserId, cascadeCentre(centre, current), nextZ(current), url)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(browserId)
+  }, [commitHistory, selectOnly])
+  /**
+   * M103. The guest navigated: the record follows, with NO history entry
+   * (M90's thread-id rule — a Cmd+Z that un-navigated a page would remove a
+   * panel two presses later with nothing on screen explaining why). The
+   * url written is the guest's own `getURL()`, never the page's word for it.
+   * Same array back when nothing changed, so a reload to the same page
+   * writes nothing.
+   */
+  const onBrowserNavigated = useCallback((id: string, url: string): void => {
+    setPanels((current) => {
+      const panel = current.find((p) => p.rect.id === id)
+      if (!panel || !isBrowserPanel(panel) || panel.url === url) return current
+      return current.map((p) => (p === panel ? { ...panel, url } : p))
+    })
+  }, [])
+
   const paletteActions = usePaletteActions({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
@@ -3980,7 +4014,7 @@ export function Canvas({
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput
+    setInputMode, setBroadcastInput, openBrowserPanel
   })
   // The link layer's remover, with an identity that outlives the palette's
   // captured id. `paletteActions` is rebuilt whenever `palette.capturedId`
@@ -4417,6 +4451,25 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onSetArmed={setWatcherArmed}
                   {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
+                />
+              )
+            }
+            // M103. The eleventh kind: a live page in a guest process, its
+            // chrome ours and its state the kind word.
+            if (isBrowserPanel(panel)) {
+              return (
+                <BrowserNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  onNavigated={onBrowserNavigated}
                 />
               )
             }

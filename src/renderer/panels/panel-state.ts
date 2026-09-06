@@ -21,7 +21,7 @@ import type { AgentState } from '@shared/types'
  */
 
 /** The display kind, `Panel['kind']` plus M27's `note` — see rail-rows.ts. */
-export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher'
+export type StateKind = 'terminal' | 'review' | 'file' | 'note' | 'toolbox' | 'jira' | 'github' | 'chat' | 'memory' | 'watcher' | 'browser'
 
 export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-you' | 'idle' | 'exited'
 
