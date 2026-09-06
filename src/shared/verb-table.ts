@@ -107,6 +107,7 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   setDefaultPreset: 'preset administration is the user\'s, not a plan\'s',
   insertPrompt: 'a prompt is inserted into a composer by the user; a plan uses `send`',
   answerApproval: 'M98\'s door — a plan may never answer a permission question for the user',
+  openWorkflow: 'opens a VIEW of a template — a plan runs a shape with `spawn` or the sheet, it does not open a diagram of one',
   beginSavePrompt: 'opens the palette\'s text mode',
   deletePrompt: 'prompt administration is the user\'s',
   beginRenamePanel: 'opens the palette\'s text mode',

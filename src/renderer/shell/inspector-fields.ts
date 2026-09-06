@@ -10,7 +10,7 @@ import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
-import { isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -416,6 +416,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  * string would have hidden the next one exactly as well; tsc will not.
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  workflow: 'A workflow panel',
   work: 'A work card',
   browser: 'A browser panel',
   memory: 'A memory node',
@@ -695,6 +696,12 @@ export function buildInspectorModelBare(
           ...(item.pr === undefined ? [] : [{ key: 'work-pr', label: 'pr', value: `#${item.pr.number}` }])
         ]
     return { kind: 'work', reviewable: false, state: { kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields }
+  }
+  // M132. The workflow panel: a projection of a template, so its identity
+  // IS the template's id — the one field, and the same reason the panel
+  // record carries nothing else.
+  if (isWorkflowPanel(panel)) {
+    return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }] }
   }
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows

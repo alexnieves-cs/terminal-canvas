@@ -70,7 +70,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'workflow'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -334,6 +334,8 @@ export interface PaletteActions {
   beginWatcher(): void
   /** M80. Save the selected panels and their edges as a template. */
   beginSaveTemplate(panelIds: readonly string[]): void
+  /** M132. Open a template as a workflow panel — a VIEW of the shape, not a run of it. */
+  openWorkflow(templateId: string): void
   /**
    * M61. Card or expand one group, and remove one. Ids rather than "the
    * captured panel's group", the rule every panel verb here obeys; both are
@@ -1176,6 +1178,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       group: 'panel',
       run: () => actions.beginSpawnSheet(t.id)
     }, t.refusal))
+  }
+  // M132. The workflow panel's door: one row per template, beside the row
+  // that RUNS it. Two verbs, never one — opening a shape and starting it are
+  // different acts, and the palette says which is which.
+  for (const t of templateRows) {
+    out.push({
+      id: `workflow.open.${t.id}`,
+      title: `Open ${t.name} as a workflow`,
+      subtitle: `${t.nodes} block${t.nodes === 1 ? '' : 's'} - the diagram, its runs and its triggers`,
+      searchText: 'workflow open diagram blocks template runs triggers',
+      group: 'panel',
+      run: () => actions.openWorkflow(t.id)
+    })
   }
   out.push(withReason({
     id: 'template.save',

@@ -387,6 +387,8 @@ const SCENES = [
       if (process.env.SHOT_PROBE) console.log('PROBE compact', await k.js(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.top), Math.round(b.bottom), Math.round(b.height), getComputedStyle(e).display, getComputedStyle(e).height] }
         return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
       await k.shot('compact'); await k.context(false) } },
+  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram — the scan, the pool of six over a shared list, the judge and the collect, each block naming its kind and the edges naming their triggers — with the header counting the blocks and the verbs (Run, Triggers, Save, Delete, Build with AI) above the Definition and Runs tabs. A PROJECTION of the saved record: the live canvas is still the editor.',
+    run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } }
 ]
@@ -482,12 +484,15 @@ app.whenReady().then(async () => {
         term('narrow', 1400, 1360, 320, 220, 30, { title: 'review: the health check wiring for the api repository' }),
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
-        term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX })
+        term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX }),
+        // M132. The workflow panel: a VIEW of the `nightly sweep` template
+        // below, off in its own space so the diagram is the whole picture.
+        { id: 'workflow', kind: 'workflow', x: 2600, y: 900, w: 620, h: 440, z: 19, title: 'nightly sweep', workflow: { templateId: 'tpl-sweep' } }
       ],
       groups: [{ id: 'g1', label: 'workers', colour: 'violet', panelIds: ['groupA', 'groupB'] }],
       // M79. A run that already happened: the chat and worker a handed off into twin.
       runs: [{ id: 'run-1', name: 'run 1', panelIds: ['chat', 'groupA', 'twin'], edges: [{ from: 'chat', to: 'twin' }, { from: 'groupA', to: 'twin' }], startedAt: Date.now() - 3600000, endedAt: Date.now() - 3480000, entries: [{ panelId: 'chat', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3590000, outcome: 'a turn' }, { panelId: 'groupA', startedAt: Date.now() - 3600000, endedAt: Date.now() - 3560000, outcome: 'exit 0' }, { panelId: 'twin', startedAt: Date.now() - 3560000, endedAt: Date.now() - 3480000, outcome: 'exit 0' }], costUsd: 0.2138 }],
-      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }],
+      bookmarks: [{ id: 'b1', name: 'the workers', camera: { x: 0, y: -1380, scale: 1 } }, { id: 'b2', name: 'the kinds', camera: { x: 0, y: 0, scale: 1 } }, { id: 'b3', name: 'the workflow', camera: { x: -2560, y: -860, scale: 1 } }],
       // M116. The board: one item dispatched to ada's chat (its card is
       // `card12` above), one still to do with no card, so the pane shows a
       // lane row and a `Show on canvas` row.
@@ -506,6 +511,23 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
+    // M132. The template the workflow panel projects: a scan, a pool of six
+    // over a shared list, a judge, and a collect — one of each M131 block
+    // beside an ordinary terminal, so the diagram shows the vocabulary.
+    templates: [{
+      id: 'tpl-sweep', name: 'nightly sweep', description: 'scan, work the list six at a time, judge, collect',
+      nodes: [
+        { key: 'scan', kind: 'terminal', cwd: REPO, command: '/bin/sh', args: ['-c', 'rg -n TODO src > todo.txt'], title: 'scan', dx: 0, dy: 0 },
+        { key: 'workers', kind: 'pool', cwd: REPO, width: 6, list: join(REPO, 'todo.txt'), prompt: 'Fix this TODO and report what you changed.', dx: 280, dy: 0 },
+        { key: 'judge', kind: 'orchestrator', cwd: REPO, prompt: 'Read every worker\'s report and reject anything untested.', dx: 0, dy: 170 },
+        { key: 'report', kind: 'collect', cwd: REPO, target: join(REPO, 'FINDINGS.md'), dx: 280, dy: 170 }
+      ],
+      edges: [
+        { from: 'scan', to: 'workers', trigger: 'exit-ok' },
+        { from: 'workers', to: 'judge', trigger: 'idle' },
+        { from: 'judge', to: 'report', trigger: 'idle' }
+      ]
+    }],
     // M100/M101. The roster and a routine: ada may work in the repo and spend
     // GitHub; her nightly routine last ran an hour ago at a ten-minute interval,
     // so arming marks it MISSED — the row must say so with the time.

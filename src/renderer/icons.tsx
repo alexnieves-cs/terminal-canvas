@@ -167,7 +167,13 @@ export const KindWork = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M2 6h12M5 9h6" /></Svg>
 )
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork } as const
+/* M132. The workflow panel: two blocks and the line between them — the
+   diagram it draws, at 16px. */
+export const KindWorkflow = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="1.5" y="5" width="5" height="6" rx="1" /><rect x="9.5" y="5" width="5" height="6" rx="1" /><path d="M6.5 8h3" /></Svg>
+)
+
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, workflow: KindWorkflow } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

@@ -38,6 +38,14 @@ export interface RunsDeps {
 
 export interface RunsApi {
   onRunEvent: (event: RunEvent) => void
+  /**
+   * M132. These panel ids were minted by that template. Called once, by
+   * M80's instantiation — the only moment anything knows it. The recorder
+   * still DECIDES nothing: it stamps the mark on a run it was already going
+   * to open, and a panel with no origin leaves the run unmarked rather than
+   * guessed into a template's list.
+   */
+  noteTemplate: (panelIds: readonly string[], templateId: string) => void
   /** M97. An auto run IS a run: opened on `running` at turn 0, sealed with its cost on any resolution. */
   onAutoEvent: (panelId: string, status: AutoStatus) => void
   /** Restart the run's terminal roots in order; a chat root is skipped by name. Returns the sentence. */
@@ -56,6 +64,13 @@ interface OpenRun {
 export function useRuns(deps: RunsDeps): RunsApi {
   const { panelsRef, runsRef, setRuns, restartWithSpec } = deps
   const openRef = useRef<Map<string, OpenRun>>(new Map())
+  // M132. panel id -> the template that minted it. A ref, never state and
+  // never persisted: it is read once, when a run opens, and the RUN is what
+  // carries the fact onto disk.
+  const originRef = useRef<Map<string, string>>(new Map())
+  const noteTemplate = useCallback((panelIds: readonly string[], templateId: string) => {
+    for (const id of panelIds) originRef.current.set(id, templateId)
+  }, [])
   // Roots this app is restarting on purpose: the kill's own exit is not a
   // run's fire, and recording it would write a `failed` run on every
   // Run again and every manual restart of a source (M79's verifier).
@@ -96,6 +111,10 @@ export function useRuns(deps: RunsDeps): RunsApi {
       if (!component.edges.some((e) => e.from === event.panelId)) return
       baseline = usageOf(component.panelIds)
       let run = beginRun(component, event.panelId, event.at, runName(current))
+      // M132. The mark, if any of this run's panels came from a template.
+      // ABSENT stays absent — never written as `templateId: undefined`.
+      const templateId = component.panelIds.map((id) => originRef.current.get(id)).find((t) => t !== undefined)
+      if (templateId !== undefined) run = { ...run, templateId }
       run = recordRunEvent(run, event)
       runId = run.id
       openRef.current.set(run.id, { component, baseline })
@@ -170,8 +189,11 @@ export function useRuns(deps: RunsDeps): RunsApi {
     return `${restarted} root${restarted === 1 ? '' : 's'} restarted${skipped.length > 0 ? ` · ${skipped.join('; ')}` : ''}`
   }, [panelsRef, restartWithSpec])
 
-  const forgetOpen = useCallback(() => { openRef.current.clear() }, [])
+  // A workspace switch replaces the panels, so the origins of the ones that
+  // left mean nothing — and a recycled id would inherit a dead panel's
+  // template, the failure every module-level store here names.
+  const forgetOpen = useCallback(() => { openRef.current.clear(); originRef.current.clear() }, [])
   const hasOpen = useCallback(() => openRef.current.size > 0, [])
 
-  return { onRunEvent, onAutoEvent, runAgain, forgetOpen, hasOpen }
+  return { onRunEvent, onAutoEvent, noteTemplate, runAgain, forgetOpen, hasOpen }
 }

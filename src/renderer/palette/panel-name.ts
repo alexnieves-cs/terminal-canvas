@@ -1,4 +1,4 @@
-import { isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 
 /**
@@ -60,6 +60,8 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
   // M116. `work · <title>` — the rail's own label, so the Go-to row agrees.
   if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
+  // M132. The workflow panel names its template, the work card's own shape.
+  if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -76,5 +78,7 @@ export function panelPath(panel: Panel): string | undefined {
   if (isBrowserPanel(panel)) return undefined
   // M116. A card has no directory; its lane's chat has one.
   if (isWorkPanel(panel)) return undefined
+  // M132. A workflow is a shape of work, not a place: its blocks carry the directories.
+  if (isWorkflowPanel(panel)) return undefined
   return panel.spec.cwd
 }

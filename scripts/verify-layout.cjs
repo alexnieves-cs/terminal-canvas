@@ -18,7 +18,7 @@ buildSync({
   platform: 'node',
   format: 'cjs',
   external: ['electron'],
-  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared'), '@renderer': join(__dirname, '..', 'src', 'renderer') }
 })
 const L = require(OUT)
 

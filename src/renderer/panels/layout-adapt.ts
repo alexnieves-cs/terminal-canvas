@@ -3,7 +3,7 @@ import { carryBackend } from '@shared/agent-backends'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { PersistedPanel } from '@shared/layout-schema'
 import type { ChatSource } from '@shared/chat-panel'
-import { isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
+import { isWorkflowPanel, isWorkPanel, isMemoryPanel, isFilePanel, isJiraPanel, isGithubPanel,
   isToolboxPanel, isChatPanel, isWatcherPanel, isReviewPanel, isBrowserPanel, type Panel } from './panels'
 
 /**
@@ -97,13 +97,15 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       return {
         ...base,
         kind: 'watcher' as const,
-        watch: { cwd: p.watch.cwd, command: p.watch.command, args: [...p.watch.args], ...(p.watch.armed === false ? { armed: false as const } : {}), trigger: copyTrigger(p.watch.trigger) }
+        watch: { cwd: p.watch.cwd, command: p.watch.command, args: [...p.watch.args], ...(p.watch.armed === false ? { armed: false as const } : {}), ...(p.watch.templateId === undefined ? {} : { templateId: p.watch.templateId }), trigger: copyTrigger(p.watch.trigger) }
       }
     }
     // M103. The browser pane: one field, copied by name.
     if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url }
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
+    // M132. The template id alone, field by field like every sibling.
+    if (p.kind === 'workflow') return { ...base, kind: 'workflow' as const, workflow: { templateId: p.workflow.templateId } }
     return {
       ...base,
       kind: 'terminal' as const,
@@ -188,13 +190,15 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       return {
         ...base,
         kind: 'watcher' as const,
-        watch: { cwd: panel.watch.cwd, command: panel.watch.command, args: [...panel.watch.args], ...(panel.watch.armed === false ? { armed: false as const } : {}), trigger: copyTrigger(panel.watch.trigger) }
+        watch: { cwd: panel.watch.cwd, command: panel.watch.command, args: [...panel.watch.args], ...(panel.watch.armed === false ? { armed: false as const } : {}), ...(panel.watch.templateId === undefined ? {} : { templateId: panel.watch.templateId }), trigger: copyTrigger(panel.watch.trigger) }
       }
     }
     // M103. Same no-cwd/no-args rule as every branch above.
     if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url }
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
+    // M132. The template id alone, field by field like every sibling.
+    if (isWorkflowPanel(panel)) return { ...base, kind: 'workflow' as const, workflow: { templateId: panel.workflow.templateId } }
     return {
       ...base,
       kind: 'terminal' as const,

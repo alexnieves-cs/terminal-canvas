@@ -3979,6 +3979,29 @@ body {
 .work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 
+/* M132. The workflow panel: a verb row, a tab strip, and one of two panes.
+   The Definition pane holds an <svg> that is a sibling LAYER, not a canvas —
+   it has a viewBox and nothing else, so it scrolls inside its own pane the
+   way every other wide body in this app does (`overflow: auto`), and the
+   frame's own rule holds: no transform anywhere below `.pf__body`. */
+.workflow-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); min-height: 0; }
+.workflow-node__count { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.workflow-node__verbs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.workflow-node__tabs { display: flex; align-items: center; gap: var(--sp-1); border-bottom: 1px solid var(--line); }
+.workflow-node__tab[aria-selected="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--iris); }
+.workflow-node__pane { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.workflow-node__diagram { display: block; max-width: none; }
+.workflow-node__block { fill: var(--s-2); stroke: var(--line-strong); stroke-width: 1; }
+.workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
+.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.04em; }
+.workflow-node__line { stroke: var(--line-strong); stroke-width: 1.5; }
+.workflow-node__edge-word { fill: var(--fg-3); font-family: var(--font-mono); font-size: var(--t-xs); }
+.workflow-node__empty { margin: 0; }
+.workflow-node__runs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); }
+.workflow-node__run { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); font-size: var(--t-xs); }
+.workflow-node__run-name { color: var(--fg-2); }
+.workflow-node__run-facts { font-family: var(--font-mono); color: var(--fg-3); }
+
 /* M103. The browser pane: the app's chrome above a guest that fills the
    rest. The guest is `display: block` and sized to its host — a <webview>
    is inline by default and an inline guest paints at 300x150 whatever its
