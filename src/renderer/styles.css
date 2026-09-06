@@ -3939,6 +3939,20 @@ body {
 .teammates-pane__routine { display: flex; flex-direction: column; gap: var(--sp-1); }
 .teammates-pane__routine-form { display: flex; flex-direction: column; gap: var(--sp-1); }
 .teammates-pane__minutes { width: 64px; font: inherit; }
+/* M116. The board pane: four columns stacked in the navigator's one column
+   (a 300px rail cannot hold four side by side), each a heading with its
+   state word and count over rail rows. A droppable column is marked by
+   `[data-board-drop]` and lights its edge while a row is over it. */
+.board-pane__columns { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) 0; min-height: 0; overflow: auto; }
+.board-pane__column { display: flex; flex-direction: column; gap: var(--sp-1); border-top: 1px solid var(--line); padding-top: var(--sp-2); }
+.board-pane__column[data-board-drop] { border-top-style: dashed; }
+.board-pane__heading { display: flex; align-items: baseline; justify-content: space-between; margin: 0; padding: 0 var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); font-weight: normal; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.board-pane__count { font-family: var(--font-mono); color: var(--fg-2); }
+.board-pane__empty { margin: var(--sp-3); }
+.board-row { flex-wrap: wrap; }
+.board-row__pr { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; padding: 0 var(--sp-2); }
+.board-row__note { flex: 1 0 100%; padding: 0 var(--sp-3) var(--sp-1); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+
 /* M116. The work card: the board's row in the world. A short frame whose
    body is a head line (key · the item's state word), the title, the facts
    as an inline list and a verb row. The Assign menu is spanned UNDER the

@@ -87,12 +87,12 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
-  type Panel, type TerminalPanel as TerminalPanelModel
+  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel
 } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
@@ -139,7 +139,7 @@ import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
-import type { PersistedWorkItem } from '@shared/work-items'
+import { carryWorkItem, USER_SET_STATES, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
@@ -255,7 +255,7 @@ export function Canvas({
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
   // M113. The board's records: layout on the workspace, absent on disk when empty (M93's rule).
-  const [workItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
+  const [workItems, setWorkItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
   const annotationsRef = useRef(annotations)
   annotationsRef.current = annotations
   // M93. Annotate mode is EXPLICIT: entered from the palette, left by Escape
@@ -570,6 +570,16 @@ export function Canvas({
     const id = `g${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeGithubPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
   }, [commitHistory])
+  // M116. A work card for an item, at the viewport's centre. The title is
+  // the item's at mint (the rail's `work · <title>`); a card for an item the
+  // board does not hold is refused by name — it would render "no longer on
+  // the board" from its first frame.
+  const spawnWorkCard = useCallback((itemId: string): void => {
+    const item = workItems.find((i) => i.id === itemId)
+    if (item === undefined) return
+    const id = `k${nextIdRef.current++}`
+    setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeWorkPanel(id, cascadeCentre(centre, current), nextZ(current), item.id, item.title)]; commitHistory(next); return next })
+  }, [commitHistory, workItems])
   const openJiraPanel = useCallback(() => {
     const id = `j${nextIdRef.current++}`
     setPanels((current) => { const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current); const next = [...current, makeJiraPanel(id, cascadeCentre(centre, current), nextZ(current))]; commitHistory(next); return next })
@@ -4258,6 +4268,34 @@ export function Canvas({
   })()
   // M100. The Teammates pane's model. Every write goes to main and reloads
   // the roster from the answer — never an optimistic local flip.
+  // M116. The Board pane's model. A row click flies through `centreOn` and
+  // NOTHING else — no focus, no raise (the minimap's rule: navigating is not
+  // interacting). A drop sets a state the USER may set and refuses the rest
+  // by the record's own list, so the pane's drop targets and this setter
+  // agree by construction. The card set is a signature so a drag's 60Hz
+  // rect churn does not rebuild the pane's props.
+  const cardItemIds = panels.filter(isWorkPanel).map((p) => p.work.itemId).sort().join('\u0000')
+  const setWorkItemState = useCallback((itemId: string, state: WorkItemState): void => {
+    if (!USER_SET_STATES.includes(state)) return
+    setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, state, updatedAt: Date.now() }) : i)))
+  }, [])
+  const goToWorkItem = useCallback((itemId: string): void => {
+    const card = panelsRef.current.find((p): p is WorkPanelModel => isWorkPanel(p) && p.work.itemId === itemId)
+    if (card !== undefined) centreOn(card.rect)
+  }, [centreOn])
+  const boardPaneProps = useMemo(() => {
+    const cards = new Set(cardItemIds.split('\u0000'))
+    return {
+      items: workItems,
+      teammates: teammates ?? [],
+      laneLabelOf: (panelId: string) => railRows.find((r) => r.id === panelId)?.label,
+      hasCard: (itemId: string) => cards.has(itemId),
+      onGoTo: goToWorkItem,
+      onSetState: setWorkItemState,
+      onShowOnCanvas: spawnWorkCard,
+      onToggle: chrome.toggleNavigator
+    }
+  }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator])
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
     teammates: teammates ?? [],
@@ -4370,6 +4408,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
+        board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
         navigator={chrome.navigator}

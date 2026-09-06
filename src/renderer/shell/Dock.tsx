@@ -3,7 +3,7 @@ import type { RailAttention } from './rail-sections'
 import type { NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, Folder, Grid, KindNote, Layers, Link } from '@renderer/icons'
+import { Bell, Folder, Grid, KindNote, KindWork, Layers, Link } from '@renderer/icons'
 
 export interface DockProps {
   /** M105. The quiet / live counts; absent hides the capsules (a fixture). */
@@ -46,7 +46,9 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
     // M89. Every service on one page.
     { id: 'integrations', label: 'Integrations', icon: <Link /> },
     // M100. The roster: identities with a brief, their own memory and explicit places.
-    { id: 'teammates', label: 'Teammates', icon: <Grid /> }
+    { id: 'teammates', label: 'Teammates', icon: <Grid /> },
+    // M116. The board: four columns over the workspace's work items.
+    { id: 'board', label: 'Board', icon: <KindWork /> }
   ]
   return (
     <nav className="shell__dock" aria-label="Dock">
