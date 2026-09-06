@@ -4657,7 +4657,6 @@ export function Canvas({
             const session = registry.get(panel.rect.id)
             if (!session) return null
             return (
-              <CardDetailContext.Provider key={panel.rect.id} value={flipped ? 'summary' : cardDetail}>
               <TerminalPanel
                 key={panel.rect.id}
                 session={session}
@@ -4665,7 +4664,8 @@ export function Canvas({
                 rect={panel.rect}
                 z={panel.z}
                 title={panel.title}
-                cardDetail={cardDetail}
+                // M106. Flip hands the far view's summary tier to every terminal deliberately.
+                cardDetail={flipped ? 'summary' : cardDetail}
                 selected={selectedIds.has(panel.rect.id)}
                 onSelect={onSelectPanel}
                 onSlotMount={onSlotMount}
@@ -4683,7 +4683,6 @@ export function Canvas({
                 linkTarget={linkDraw.state?.target === panel.rect.id}
                 onOpenAsChat={openAsChatVoid}
               />
-              </CardDetailContext.Provider>
             )
           })}
           {/* INSIDE .world, unlike the pips and the marquee below it: a lane
