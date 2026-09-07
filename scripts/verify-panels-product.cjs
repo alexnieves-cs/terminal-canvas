@@ -495,10 +495,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const r = document.querySelector('[data-vault-note="design.md"] .rail-row__main'); if (r) r.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!r })()`)
         const chip = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="file"]')]; const p = ps[ps.length - 1]; const c = p ? p.querySelector('[data-file-tag="design"]') : null; if (!c) return false; c.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 6000)
         const chipFiltered = await waitUntil(() => wc.executeJavaScript(`(() => { const notes = [...document.querySelectorAll('[data-vault-note]')].map((r) => r.getAttribute('data-vault-note')); const q = document.querySelector('[data-vault-filter]')?.value; return q === '#design' && notes.length === 1 && notes[0] === 'design.md' ? notes : false })()`), 4000)
+        // The pane is OPEN after the chip (the M150 critic: chooseNavigator is a
+        // toggle, and the first cut closed the pane the user was reading from —
+        // the navigator is always mounted, so the rows read fine from a
+        // collapsed rail) and the tag's row is marked.
+        const paneOpen = await wc.executeJavaScript(`(() => { const sh = document.querySelector('.shell'); return sh ? { collapsed: sh.classList.contains('shell--rail-collapsed'), vault: document.querySelector('[data-vault-pane]') !== null, marked: document.querySelector('[data-vault-tag="design"]')?.classList.contains('rail-row--selected') === true } : null })()`)
         ok('vault.tags.1 the Vault pane lists each tag with its count, a tag row filters the notes and writes #name into the search, Escape clears, and a note\'s tag chip filters from the other side',
           Array.isArray(tagRows) && tagRows[0].tag === 'todo' && tagRows[0].count === '2' && tagRows[1].tag === 'design' && tagRows[1].count === '1' &&
-            filtered !== false && cleared === true && chip === true && chipFiltered !== false,
-          JSON.stringify({ tagRows, filtered, cleared, chip, chipFiltered }))
+            filtered !== false && cleared === true && chip === true && chipFiltered !== false && paneOpen !== null && paneOpen.collapsed === false && paneOpen.vault === true && paneOpen.marked === true,
+          JSON.stringify({ tagRows, filtered, cleared, chip, chipFiltered, paneOpen }))
         layoutStore.setPreference('vault.root', '')
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()

@@ -61,7 +61,9 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
     // Newest first: a vault is a stream of writing, and the note somebody (or
     // some agent) just wrote is the one they are looking for.
     return matching.sort((a, b) => b.at - a.at)
-  }, [props.notes, query])
+  }, [props.notes, props.tags, query])
+  // Once per render, not four times (the M150 critic).
+  const tagList = useMemo(() => tagRows(props.tags), [props.tags])
 
   return (
     <div className="shell__tree vault-pane" aria-label="Vault" data-vault-pane>
@@ -144,11 +146,11 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
               section at all when the vault has none — absence, never a
               heading over nothing. A row is the filter's door; the field
               above shows what it did. */}
-          {tagRows(props.tags).length > 0 && (
+          {tagList.length > 0 && (
             <>
               <div className="shell__region-title vault-pane__tags-title">Tags</div>
               <ul className="rail-list vault-pane__tags" aria-label="Tags" data-vault-tags>
-                {tagRows(props.tags).slice(0, TAG_ROWS_MAX).map((row) => (
+                {tagList.slice(0, TAG_ROWS_MAX).map((row) => (
                   <li key={row.tag} className={`rail-row vault-pane__tag${query.trim().toLowerCase() === `#${row.tag}` ? ' rail-row--selected' : ''}`} data-vault-tag={row.tag}>
                     <button type="button" className="rail-row__main" title={`notes tagged #${row.tag}`} {...shellControl(() => setQuery(query.trim().toLowerCase() === `#${row.tag}` ? '' : `#${row.tag}`))}>
                       <span className="rail-row__label">#{row.tag}</span>
@@ -157,8 +159,8 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
                   </li>
                 ))}
               </ul>
-              {tagRows(props.tags).length > TAG_ROWS_MAX && (
-                <p className="pf__more" data-vault-tags-more>{tagRows(props.tags).length - TAG_ROWS_MAX} more tags — the pane lists the {TAG_ROWS_MAX} most used</p>
+              {tagList.length > TAG_ROWS_MAX && (
+                <p className="pf__more" data-vault-tags-more>{tagList.length - TAG_ROWS_MAX} more tags — the pane lists the {TAG_ROWS_MAX} most used</p>
               )}
             </>
           )}

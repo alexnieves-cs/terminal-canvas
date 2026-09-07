@@ -991,12 +991,12 @@ const p = (name) => join(DIR, name)
 {
   const V = F
   const has = typeof V.parseTags === 'function'
-  const body = '# Not a tag\n#todo at a line start, then a #Review/Api one and (#paren) and #done. and #1 and `#code` and\n```\n#fenced\n```\nend'
+  const body = '# Not a tag\n#todo at a line start, then a #Review/Api one and (#paren) and #done. and #1 and `#code` and #café and [see](#section) and \\#escaped and a#frag and #_ and #a/ and [[note|alias #inlink]]\n```\n#fenced\n```\nend #last'
   const tags = has ? V.parseTags(body) : null
   const names = tags ? tags.map((t) => t.name) : null
   const spans = tags ? tags.map((t) => body.slice(t.start, t.end)) : null
-  ok('tags.1 parseTags finds a tag at a line start, after a space, in parentheses and a nested one, and skips a heading, a bare number, a code span and a fence; positions are exact and trailing punctuation is not part of the tag',
-    has && names !== null && names.join(',') === 'todo,Review/Api,paren,done' && spans.join(',') === '#todo,#Review/Api,#paren,#done',
+  ok('tags.1 parseTags finds a tag at a line start, after a space, in parentheses, a nested one, a Unicode one and one at the very end, and skips a heading, a bare number, a code span, a fence, a markdown link target `](#x)`, an escaped `\\#`, a URL fragment, `#_`, a trailing `/` and a tag inside a wikilink alias; positions are exact and trailing punctuation is not part of the tag',
+    has && names !== null && names.join(',') === 'todo,Review/Api,paren,done,café,last' && spans.join(',') === '#todo,#Review/Api,#paren,#done,#café,#last' && tags[5].end === body.length,
     JSON.stringify({ names, spans }))
   const files = [
     { path: 'a.md', body: '# A\n#todo and [[b]]\nlater #TODO again\n', title: 'A' },

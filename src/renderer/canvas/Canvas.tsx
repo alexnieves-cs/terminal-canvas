@@ -4877,6 +4877,20 @@ export function Canvas({
     grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => t.name)]))
   }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations, teammates])
 
+  // M150. A note's chip asks the pane to filter: the request rides to the
+  // pane as data (tag + a counter, so the same tag asked twice lands twice)
+  // and the pane is SHOWN on the way — one door from either side.
+  // `chooseNavigator` is the dock's TOGGLE (it collapses the pane that is
+  // already showing), so it is called only when the vault is not the pane on
+  // screen — the first cut closed the pane the user had just read the note
+  // from (the M150 critic's Critical; product `vault.tags.1` reads the rail).
+  const vaultFilterSeq = useRef(0)
+  const [vaultFilterRequest, setVaultFilterRequest] = useState<{ tag: string; nonce: number } | null>(null)
+  const { chooseNavigator: chooseNavigatorPane, navVisible: navPaneVisible, navigator: navPane } = chrome
+  const filterVaultTag = useCallback((tag: string) => {
+    setVaultFilterRequest({ tag, nonce: (vaultFilterSeq.current += 1) })
+    if (!(navPaneVisible && navPane === 'vault')) chooseNavigatorPane('vault')
+  }, [chooseNavigatorPane, navPaneVisible, navPane])
   /**
    * M85. ONE object each for the pane and for every in-vault note, memoised
    * on the fields they carry: `Navigator` and `FileNode` are memo'd, and a
@@ -4884,14 +4898,6 @@ export function Canvas({
    * while a vault was set — the invisible churn the rail's signature freeze
    * exists to prevent (M85's verifier).
    */
-  // M150. A note's chip asks the pane to filter: the request rides to the
-  // pane as data (tag + nonce, so the same tag asked twice lands twice) and
-  // the pane is opened on the way — one door from either side.
-  const [vaultFilterRequest, setVaultFilterRequest] = useState<{ tag: string; nonce: number } | null>(null)
-  const filterVaultTag = useCallback((tag: string) => {
-    setVaultFilterRequest({ tag, nonce: Date.now() })
-    chrome.chooseNavigator('vault')
-  }, [chrome])
   const noteVault = useMemo(() => (
     vault.root === '' ? null : { root: vault.root.replace(/\/+$/, ''), index: vault.index, onOpenNote: openVaultNote, onCreateNote: beginCreateVaultNote, onFilterTag: filterVaultTag }
   ), [vault.root, vault.index, openVaultNote, beginCreateVaultNote, filterVaultTag])

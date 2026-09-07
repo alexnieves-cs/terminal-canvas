@@ -83,17 +83,24 @@ export interface Tag {
  * (`#done.` is `done`). Front matter is not read: a second syntax and a
  * second parser (backlog #85).
  */
-const TAG = /(^|[\s(])#([\p{L}\p{N}_][\p{L}\p{N}_\-/]*)/gu
+// A `(` lead that follows `]` is a markdown link's target (`[see](#section)`),
+// not a tag (the M150 critic); a name is segments of word characters joined
+// by single `/`, never a trailing `/` or an empty segment.
+const TAG = /(^|\s|(?<!\])\()#([\p{L}\p{N}_][\p{L}\p{N}_-]*(?:\/[\p{L}\p{N}_][\p{L}\p{N}_-]*)*)(?!\/)/gu
 
 export function parseTags(body: string): Tag[] {
   const out: Tag[] = []
   const code = codeSpans(body)
+  // A `#x` inside a `[[link|alias #x]]` is the alias's text, which the note
+  // paints as the link — the index and the painter must agree on it.
+  const links = parseWikiLinks(body).map((l) => [l.start, l.end] as [number, number])
   for (const m of body.matchAll(TAG)) {
     const lead = m[1] ?? ''
     const name = m[2] ?? ''
     const start = (m.index ?? 0) + lead.length
     if (code.some(([a, b]) => start >= a && start < b)) continue
-    if (/^\d+$/.test(name)) continue
+    if (links.some(([a, b]) => start >= a && start < b)) continue
+    if (/^\d+$/.test(name) || /^_+$/.test(name)) continue
     out.push({ name, start, end: start + 1 + name.length })
   }
   return out
