@@ -3791,20 +3791,27 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         const body = live.querySelector('.pf__body')
         return { id: live.getAttribute('data-panel-id'), chromeH: chrome.height, slotH: slot.height, bodyTransform: body ? getComputedStyle(body).transform : null, scaleVar: getComputedStyle(document.querySelector('.world')).getPropertyValue('--chrome-scale').trim() }
       })()`)
-      await zoomTo(wc, 1)
+      // The camera: Cmd+0 for scale 1, then Cmd+- (the harness's zoomTo takes a
+      // KEY) until the scale is at or under 0.6 — the ratios below are read
+      // against the ACTUAL scale, never an assumed 0.5.
+      await zoomTo(wc, '0')
       await settle()
       const atOne = await measure()
-      await zoomTo(wc, 0.5)
+      const scaleOne = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale
+      let scaleOut = scaleOne
+      for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
       await settle()
-      const atHalf = await measure()
-      await zoomTo(wc, 1)
+      const atOut = await measure()
+      await zoomTo(wc, '0')
       await settle()
-      const chromeRatio = atOne && atHalf ? atHalf.chromeH / atOne.chromeH : 0
-      const slotRatio = atOne && atHalf ? atHalf.slotH / atOne.slotH : 0
-      ok('frame.3 at scale 0.5 the chrome bar keeps its screen height (counter-scaled) while the body slot is exactly half and the body carries no transform',
-        atOne !== null && atHalf !== null && atOne.id === atHalf.id && chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
-          slotRatio >= 0.45 && slotRatio <= 0.55 && atHalf.bodyTransform === 'none' && atOne.scaleVar === '1' && /^2/.test(atHalf.scaleVar),
-        JSON.stringify({ atOne, atHalf, chromeRatio, slotRatio }))
+      const chromeRatio = atOne && atOut ? atOut.chromeH / atOne.chromeH : 0
+      const slotRatio = atOne && atOut ? atOut.slotH / atOne.slotH : 0
+      const expectedSlot = scaleOut / scaleOne
+      ok('frame.3 zoomed out, the chrome bar keeps its screen height (counter-scaled by 1/scale) while the body slot shrinks with the scale and the body carries no transform',
+        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.6 &&
+          chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
+          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.5,
+        JSON.stringify({ atOne, atOut, scaleOne, scaleOut, chromeRatio, slotRatio, expectedSlot }))
     }
   }
 })

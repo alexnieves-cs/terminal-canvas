@@ -1,7 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type DragEvent, type JSX, type MouseEvent
-} from 'react'
+  type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
@@ -5336,7 +5335,13 @@ export function Canvas({
         <div
           className="world"
           data-detail={cardDetail}
-          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+          // M144. `--chrome-scale`: the counter-scale every frame's chrome bar
+          // and resize handles read (backlog #60), clamped to [1, 2.5] — 1× at
+          // the working zoom and above, so nothing changes there; 2.5× at 0.4
+          // and below, where the panels are cards. ONE variable on the world,
+          // so no panel re-renders for a zoom; and a CSS transform on the
+          // chrome only, so no layout box moves and no agent is reflowed.
+          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`, '--chrome-scale': String(Math.min(2.5, Math.max(1, 1 / viewport.scale))) } as CSSProperties}
         >
           {/* M79. Run frames: derived, read-only, never groups. */}
           <GroupLayer
