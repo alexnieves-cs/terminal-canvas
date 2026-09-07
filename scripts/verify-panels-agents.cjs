@@ -1490,6 +1490,23 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const verbs = await wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-row="tool"]')]; return Object.fromEntries(rows.map((r) => [r.getAttribute('data-chat-tool'), !!r.querySelector('[data-chat-tool-diff]')])) })()`)
         // Declared before the assertion that reads it; measured after the close below.
         let baselineGone = false
+        // M170 — agent-card.1. THE AGENT CARD WHEN IT IS A TERMINAL: a
+        //     terminal started as `claude` wears the chat's glyph beside its
+        //     state dot and the chat's header line (folder · engine, from the
+        //     one builder); a plain shell wears neither. Read off the fixture's
+        //     panels by their spec, not by a scene. (Written beside M170's
+        //     code — not watched red; the rail's header.3 was.)
+        const agentCard = await wc.executeJavaScript(`(() => {
+          const frames = [...document.querySelectorAll('.panel[data-panel-kind="terminal"]')]
+          const withLine = frames.filter((p) => p.querySelector('[data-agent-header]'))
+          const first = withLine[0]
+          return { terminals: frames.length, withLine: withLine.length,
+            glyph: first ? first.querySelector('[data-agent-glyph]') !== null : null,
+            line: first ? first.querySelector('[data-agent-header]').textContent : null,
+            shellsWithLine: frames.filter((p) => !p.querySelector('[data-agent-glyph]') && p.querySelector('[data-agent-header]')).length } })()`)
+        ok('agent-card.1 a claude terminal wears the chat\'s glyph and the folder · engine header line; a plain shell wears neither',
+          agentCard.terminals >= 2 && agentCard.withLine >= 1 && agentCard.glyph === true && / · claude$/.test(agentCard.line || '') && agentCard.shellsWithLine === 0,
+          JSON.stringify(agentCard))
         // M168 — tools.3. A GROUP: the chat's two consecutive tool rows sit
         //     under one header, collapsed by default (the rows are in the DOM,
         //     display none); a dispatched click on the hidden Edit row's diff

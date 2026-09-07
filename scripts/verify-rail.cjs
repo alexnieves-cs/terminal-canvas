@@ -2414,6 +2414,19 @@ const session = (id, over = {}) => ({
     JSON.stringify([rows(''), rows('a\nb\nc'), rows('1\n2\n3\n4\n5\n6\n7\n8')]))
 }
 
+// M170 — header.3. THE AGENT CARD WHEN IT IS A TERMINAL: a claude / codex /
+//     copilot terminal wears the chat's header line — folder · engine — from
+//     the SAME builder (chatHeaderLine); a plain shell has no line (null, never
+//     an empty string); the engine word is the backend's own, never the
+//     spec's agent id.
+{
+  const ah = typeof R.agentHeader === 'function' ? R.agentHeader : () => null
+  ok('header.3 agentHeader gives an agent terminal the chat\'s folder · engine line from chatHeaderLine, and a plain shell none',
+    ah({ cwd: '/Users/ada/work/api', agent: 'claude-code' }) === 'api · claude' && ah({ cwd: '/Users/ada/work/api', agent: 'codex' }) === 'api · codex' &&
+      ah({ cwd: '/Users/ada/work/api', agent: 'claude-code' }, 'main') === 'api · main · claude' && ah({ cwd: '/Users/ada/work/api' }) === null,
+    JSON.stringify([ah({ cwd: '/a/b', agent: 'claude-code' }), ah({ cwd: '/a/b' })]))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when
