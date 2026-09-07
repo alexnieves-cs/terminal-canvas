@@ -3978,6 +3978,26 @@ try {
   ok('workflow.panel.1 (threw)', false, String(e && e.stack || e))
 }
 
+// M137 — runs.templateId.1. `parseRuns` dropped a malformed `templateId`
+// SILENTLY, where its sibling `parseWatch` warns for the same field: a run
+// whose workflow mark was a number on disk lost its attribution with no line
+// anywhere, and the Runs tab's "unattributed" arm then read as truth about
+// the run rather than about the file. The record rules: absent warns
+// nothing, present-but-malformed warns and is dropped, the run kept.
+{
+  const base = (templateId) => JSON.stringify({ version: 1, workspaces: [{ id: 'w1', panels: [{ id: 'p1', x: 0, y: 0, w: 320, h: 200, z: 1, cwd: '~', args: [] }], camera: { x: 0, y: 0, scale: 1 },
+    runs: [{ id: 'r1', name: 'a run', panelIds: ['p1'], startedAt: 1, entries: [], ...(templateId === undefined ? {} : { templateId }) }] }] })
+  const absent = L.parseLayout(base(undefined))
+  const bad = L.parseLayout(base(5))
+  const good = L.parseLayout(base('t1'))
+  const runsOf = (r) => (r.snapshot.workspaces[0] || { runs: [] }).runs
+  ok('runs.templateId.1 a malformed templateId on a run warns and is dropped with the run kept; absent warns nothing; a string is carried',
+    !absent.warnings.some((w) => /templateId/.test(w)) && runsOf(absent).length === 1 && !('templateId' in runsOf(absent)[0]) &&
+      bad.warnings.some((w) => /run r1.*templateId/.test(w)) && runsOf(bad).length === 1 && !('templateId' in runsOf(bad)[0]) &&
+      runsOf(good).length === 1 && runsOf(good)[0].templateId === 't1',
+    JSON.stringify({ absent: absent.warnings, bad: bad.warnings, good: runsOf(good)[0] }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

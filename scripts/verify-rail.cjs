@@ -2889,6 +2889,32 @@ console.log('\n' + '='.repeat(60))
       line === 'sandboxed · no folder · claude', JSON.stringify({ line }))
   }
 
+
+// M137 — workflow.trigger.1 / workflow.fire.1. Two text pins on the workflow
+// panel's blocked shape, deferred from the M126–M133 log's minors list.
+// Both are the same fact reached from two doors: a template holding a
+// `pool`/`orchestrator`/`collect` block (or a missing preset, or a cycle)
+// cannot run, and Run is disabled with `templateRefusal`'s sentence — but
+// Triggers was still ENABLED, so a person could arm a watcher whose every
+// fire would instantiate nothing (the fire path never consulted the refusal),
+// with the ledger recording a success. Pinned as text because the disabled
+// state is a prop the component wires, and the fire path is a callback in
+// Canvas.tsx that no pure model owns.
+{
+  const { readFileSync } = require('node:fs')
+  const wf = readFileSync(join(__dirname, '..', 'src', 'renderer', 'workflow', 'WorkflowNode.tsx'), 'utf8')
+  const triggers = wf.match(/verb\('triggers',[^\n]*/)
+  ok('workflow.trigger.1 the Triggers verb is disabled with the same runReason Run is — a watcher armed on a blocked shape fires into a refusal',
+    triggers !== null && /props\.runReason/.test(triggers[0]),
+    triggers ? triggers[0].trim() : 'no Triggers verb found')
+  const canvas = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  const start = canvas.indexOf('const runWorkflow = useCallback(')
+  const body = start === -1 ? '' : canvas.slice(start, canvas.indexOf('}, [', start))
+  ok('workflow.fire.1 runWorkflow consults templateRefusal before instantiating, so a fired trigger on a blocked template returns the refusal instead of minting nothing',
+    body.includes('templateRefusal(') && body.indexOf('templateRefusal(') < body.indexOf('instantiateTemplateRef.current('),
+    JSON.stringify({ found: start !== -1, consults: body.includes('templateRefusal(') }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

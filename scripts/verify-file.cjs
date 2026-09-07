@@ -1291,6 +1291,24 @@ const p = (name) => join(DIR, name)
        first.entries.length + second.entries.length === one.entries.length,
        'the tail resumes at a byte offset; a half-written line is not a dropped record')
 
+    // M137 — trail.stamp.1. A record with NO parseable timestamp still counts
+    // (dropping a real skill call would lie about the session), and its `at`
+    // is the PREVIOUS entry's — 0 when it is the first — so ordering holds
+    // with nothing invented. Untested until now.
+    const noStamp = [
+      JSON.stringify({ type: 'assistant', timestamp: '2026-09-06T10:00:00.000Z', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'first' } }] } }),
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'stampless' } }] } }),
+      JSON.stringify({ type: 'assistant', timestamp: 'not a date', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'bad-stamp' } }] } })
+    ].join('\n') + '\n'
+    const ns = F.scanTrailChunk(noStamp, '')
+    const firstAt = Date.parse('2026-09-06T10:00:00.000Z')
+    ok('trail.stamp.1 a record with no parseable timestamp keeps its place with the previous entry\'s `at`, never dropped and never given a fresh clock',
+       ns.entries.length === 3 && ns.entries[0].at === firstAt && ns.entries[1].at === firstAt && ns.entries[2].at === firstAt &&
+         ns.entries.map((e) => e.name).join(',') === 'first,stampless,bad-stamp',
+       JSON.stringify(ns.entries))
+    const nsFirst = F.scanTrailChunk(noStamp.split('\n').slice(1).join('\n'), '')
+    ok('trail.stamp.2 a stampless FIRST record sits at 0',
+       nsFirst.entries.length === 2 && nsFirst.entries[0].at === 0, JSON.stringify(nsFirst.entries))
     const many = []
     for (let i = 0; i < F.TRAIL_MAX + 7; i++) many.push({ at: i, name: `s${i}` })
     const capped = F.capTrail(many)

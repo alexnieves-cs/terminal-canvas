@@ -425,6 +425,13 @@ const write = (rel, text) => {
   write('proj/.claude/skills/has-resources/scripts/run.sh', '#!/bin/sh\n')
   write('proj/.claude/skills/bare/SKILL.md',
     '---\nname: bare\ndescription: Ships nothing beside itself.\n---\n')
+  // M137. A bare FILE beside SKILL.md (no references/ or scripts/ folder):
+  // it contributes 1 through the lister's ENOTDIR arm — a sibling that is
+  // not a directory is still a resource the skill ships. No fixture
+  // exercised that arm before; skill.sibling.1 does.
+  write('proj/.claude/skills/file-sibling/SKILL.md',
+    '---\nname: file-sibling\ndescription: Ships one loose file.\n---\n')
+  write('proj/.claude/skills/file-sibling/notes.txt', 'loose\n')
   write('proj/.claude/skills/locked/SKILL.md',
     '---\nname: locked\ndescription: Its own directory cannot be listed.\n---\n')
   chmodSync(join(CWD, '.claude', 'skills', 'locked'), 0o100)
@@ -746,9 +753,16 @@ const write = (rel, text) => {
        JSON.stringify(withRes.resources))
     ok('skill.1b SKILL.md alone is `none`, not `some: 0`',
        bare.resources.kind === 'none', JSON.stringify(bare.resources))
+    // Runs as ROOT, this fixture is listable regardless of its mode and the
+    // check fails loudly — root ignores 0o100 — which is the right outcome:
+    // the suite is not meant to run as root, and a silent pass would hide it.
     ok('skill.1c an unlistable directory is `unknown`, NEVER 0',
        locked.resources.kind === 'unknown' && typeof locked.resources.why === 'string',
        JSON.stringify(locked.resources))
+    const fileSibling = skills.find((e) => e.name === 'file-sibling')
+    ok('skill.sibling.1 a loose file beside SKILL.md counts as one resource through the ENOTDIR arm',
+       fileSibling !== undefined && fileSibling.resources.kind === 'some' && fileSibling.resources.n === 1,
+       JSON.stringify(fileSibling && fileSibling.resources))
     ok('skill.1d the count is capped at the boundary',
        skills.every((e) => e.resources.kind !== 'some' || e.resources.n <= T.RESOURCES_MAX), '')
     ok('skill.1e only skills carry resources',
