@@ -1305,7 +1305,14 @@ export interface CanvasBridge {
   /** M100. Teammates: the roster. `save` upserts by id and answers the record as saved; `remove` answers whether it held the id. */
   teammate: {
     list(): Promise<PersistedTeammate[]>
-    save(teammate: PersistedTeammate): Promise<PersistedTeammate>
+    /**
+     * M130 fix round 2. `cwd` — the pane's inventory cwd, present ONLY when
+     * the save comes from the assign door — lets main answer with the REAL
+     * visibility of every project-scoped key just saved: `notVisible` is
+     * absent when nothing is hidden, never an empty array written for its
+     * own sake.
+     */
+    save(teammate: PersistedTeammate, cwd?: string): Promise<{ teammate: PersistedTeammate; notVisible?: { name: string; repoRoot: string }[] }>
     remove(id: string): Promise<boolean>
     /** The folder dialog; null when cancelled. */
     choosePlace(): Promise<string | null>

@@ -4572,6 +4572,10 @@ export function Canvas({
   const [skillQuery, setSkillQuery] = useState('')
   const [skillScopes, setSkillScopes] = useState<ToolScope[] | null>(null)
   const [skillPlacedOnly, setSkillPlacedOnly] = useState(false)
+  // M130 fix round 2. Main's REAL verdict on the assign door's last save —
+  // never the renderer's own advisory guess. Absent means nothing to say;
+  // it is not persisted and clears on the pane's next assignment.
+  const [skillAssignNotice, setSkillAssignNotice] = useState<string | null>(null)
   const skillsCwd = (() => {
     const p = panels.find((x) => x.rect.id === selectedId)
     if (p === undefined) return null
@@ -4628,12 +4632,15 @@ export function Canvas({
       const suffix = `/.claude/skills/${parsed.name}/SKILL.md`
       return entry.sourcePath.endsWith(suffix) ? entry.sourcePath.slice(0, -suffix.length) : null
     }
-    // A light, renderer-side prefix check — never the authority: `@shared/places`
-    // pulls in `node:path`, which the renderer cannot bundle (it has no
-    // filesystem to realpath against anyway). The REAL, symlink-resolved
-    // check is main's own at the one brief-append site (`skillsForBrief`),
-    // which never trusts this one — this is only what stops a doomed
-    // assignment from ever reaching `teammate:save`.
+    // M130 fix round 2. A light, renderer-side prefix check — kept ONLY as
+    // an early sentence, never the authority: `@shared/places` pulls in
+    // `node:path`, which the renderer cannot bundle (it has no filesystem to
+    // realpath against anyway), so this can be wrong in either direction. It
+    // no longer blocks the save — main's own `saveTeammate` now computes the
+    // REAL (symlink-resolved) verdict on the same cwd and returns
+    // `notVisible` on its response, which is what `skillAssignNotice` below
+    // actually renders; a card the pane shows as "saved" never silently
+    // fails to reach the agent (this repo's "row that disappears" rule).
     const roughlyInside = (repoRoot: string, places: readonly string[]): boolean =>
       places.some((p) => { const norm = p.replace(/\/+$/, ''); return repoRoot === norm || repoRoot.startsWith(norm + '/') })
     const assignOne = (key: SkillKey, teammateId: string): void => {
@@ -4641,17 +4648,26 @@ export function Canvas({
       if (t === undefined) return
       const repoRoot = repoRootOfKey(key)
       if (repoRoot !== null && !roughlyInside(repoRoot, t.places)) {
-        window.alert(`${repoRoot} is outside every place of ${t.name} — add ${repoRoot} to this teammate's places in the Teammates pane`)
-        return
+        setSkillAssignNotice(`this may not be visible to ${t.name} yet — ${repoRoot} looks outside their places; saving anyway to let main's real check decide`)
+      } else {
+        setSkillAssignNotice(null)
       }
       const merged = Array.from(new Set([...(t.skills ?? []), key]))
-      void window.canvas.teammate.save({ ...t, skills: merged }).then(reloadTeammates)
+      void window.canvas.teammate.save({ ...t, skills: merged }, skillsCwd ?? undefined).then((r) => {
+        reloadTeammates()
+        if (r.notVisible !== undefined && r.notVisible.length > 0) {
+          setSkillAssignNotice(r.notVisible.map((n) => `not visible to ${t.name}: ${n.repoRoot} is outside their places`).join('; '))
+        } else {
+          setSkillAssignNotice(null)
+        }
+      })
     }
     return {
       onToggle: chrome.toggleNavigator,
       state,
       columns: paneColumns,
       teammates: teammates ?? [],
+      assignNotice: skillAssignNotice,
       onAssignColumn: (columnId: string, teammateId: string) => {
         const col = paneColumns.find((c) => c.id === columnId)
         if (col === undefined) return
@@ -4696,7 +4712,7 @@ export function Canvas({
         writeShelf({ columns: shelf.columns.filter((c) => c.id !== id).map(carryOneColumn) })
       }
     }
-  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates])
+  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,

@@ -172,6 +172,34 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
       !('skills' in carried), 'an absent optional field stays absent through every copy site')
     const carriedWith = T.carryTeammate({ ...carried, skills: [key] })
     ok('assign.1j a PRESENT skills list is carried by value', Array.isArray(carriedWith.skills) && carriedWith.skills[0] === key, JSON.stringify(carriedWith))
+
+    // fix round 1 — assign.1k. A teammate chat's cwd is often a worktree
+    // LANE (M113's board dispatch), never the repository; `repoRootForBrief`
+    // must translate it through the SAME `worktreeRootOf` shape
+    // `placesGate` uses, or a project skill whose repository IS in the
+    // teammate's places is dropped from the brief for a reason nobody could
+    // see — and WITHOUT the translation it is dropped.
+    const lanePath = '/Users/u/Library/Application Support/tc/userData/worktrees/lane-1'
+    const worktreeRootOf = (p) => (p === lanePath ? repoRoot : undefined)
+    const translated = A.repoRootForBrief(lanePath, worktreeRootOf)
+    ok('assign.1k1 repoRootForBrief translates a worktree lane to its repository root', translated === repoRoot, translated)
+    const briefViaLane = A.skillsForBrief(bo, translated, realpath)
+    ok('assign.1k2 a project-scoped skill IS named when the lane\'s repository is inside the teammate\'s places',
+      briefViaLane.named.length === 1 && briefViaLane.named[0] === 'plan', JSON.stringify(briefViaLane))
+    const briefWithoutTranslation = A.skillsForBrief(bo, lanePath, realpath)
+    ok('assign.1k3 WITHOUT the translation the same skill is dropped — the lane path is outside every place by construction',
+      briefWithoutTranslation.named.length === 0 && briefWithoutTranslation.refused.length === 1, JSON.stringify(briefWithoutTranslation))
+
+    // fix round 2 — assign.1l. `teammate:save`'s response carries
+    // `notVisible` for a refused key and NO key at all otherwise (absent,
+    // never an empty array written for its own sake).
+    const notVisible = A.notVisibleFor(ada, repoRoot, realpath)
+    ok('assign.1l1 notVisibleFor reports a refused project-scoped key', notVisible.length === 1 && notVisible[0].name === 'plan' && notVisible[0].repoRoot === repoRoot, JSON.stringify(notVisible))
+    const noneVisible = A.notVisibleFor(bo, repoRoot, realpath)
+    ok('assign.1l2 notVisibleFor reports nothing when every key is visible', noneVisible.length === 0, JSON.stringify(noneVisible))
+    const saveResponse = (t, root) => { const nv = A.notVisibleFor(t, root, realpath); return nv.length > 0 ? { teammate: t, notVisible: nv } : { teammate: t } }
+    ok('assign.1l3 the save response carries notVisible for a refused key', 'notVisible' in saveResponse(ada, repoRoot), '')
+    ok('assign.1l4 the save response carries NO notVisible key at all when nothing is hidden', !('notVisible' in saveResponse(bo, repoRoot)), '')
   }
 
   const failed = results.filter((r) => !r.pass)

@@ -60,6 +60,13 @@ export interface SkillsPaneProps {
   onDeleteColumn: (id: string) => void
   /** M130. The roster the assign door offers — choosing among it, never typing a name. */
   teammates: readonly PersistedTeammate[]
+  /**
+   * M130 fix round 2. Main's real verdict on the last assign-door save —
+   * `not visible to <teammate>: <repoRoot> is outside their places` — or an
+   * early, ADVISORY sentence from the renderer's own rough check while the
+   * real answer is in flight. Null when there is nothing to say.
+   */
+  assignNotice: string | null
   /** Assign every card in a column to a teammate, in one write. */
   onAssignColumn: (columnId: string, teammateId: string) => void
   /** Assign one card to a teammate. */
@@ -132,6 +139,10 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
           title="Show only the cards you placed yourself"
           {...shellControl(props.onTogglePlacedOnly)}>placed only</button>
       </div>
+
+      {props.assignNotice !== null && (
+        <p className="pf__note skills-pane__assign-notice" data-skills-assign-notice>{props.assignNotice}</p>
+      )}
 
       {props.state.kind === 'no-cwd' ? (
         <p className="pf__note skills-pane__empty" data-skills-empty>{SKILLS_NO_CWD}</p>

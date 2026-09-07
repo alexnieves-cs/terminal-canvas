@@ -19,6 +19,19 @@ import { parseSkillKey, type SkillKey } from '@shared/skills'
 import { insidePlace, placeRefusal, type Realpath } from '@shared/places'
 import type { PersistedTeammate } from '@shared/teammates'
 
+/**
+ * M130 fix round 1. A teammate chat's cwd is often a worktree LANE (M113's
+ * board dispatch), living under `userData/worktrees` and outside every
+ * place by construction (`main/places.ts`'s own reason for `worktreeRootOf`)
+ * — never the repository a project skill belongs to. Translate BEFORE
+ * `skillsForBrief` ever sees it, the same way `placesGate` already does,
+ * or a project skill whose repository IS in the teammate's places is
+ * dropped from the brief anyway, for a reason nobody could see.
+ */
+export function repoRootForBrief(cwd: string, worktreeRootOf: (path: string) => string | undefined): string {
+  return worktreeRootOf(cwd) ?? cwd
+}
+
 export interface SkillsForBrief {
   /** Names only — never a path, a scope or anything an agent could act on beyond reading the word. */
   named: string[]
@@ -70,6 +83,26 @@ export function assignRefusal(
   if (scope !== 'project') return null
   if (insidePlace(repoRoot, teammate.places, realpath)) return null
   return placeRefusal(teammate.name, repoRoot)
+}
+
+/**
+ * M130 fix round 2. Every project-scoped key the teammate's record now
+ * carries that this REPOSITORY makes invisible — the full list, computed
+ * with the REAL, symlink-resolved `insidePlace` (never the renderer's rough
+ * prefix guess), for `teammate:save`'s own response.
+ */
+export function notVisibleFor(
+  teammate: PersistedTeammate,
+  repoRoot: string,
+  realpath: Realpath
+): { name: string; repoRoot: string }[] {
+  const out: { name: string; repoRoot: string }[] = []
+  for (const key of teammate.skills ?? []) {
+    const parsed = parseSkillKey(key)
+    if (parsed === null) continue
+    if (assignRefusal(parsed.scope, repoRoot, teammate, realpath) !== null) out.push({ name: parsed.name, repoRoot })
+  }
+  return out
 }
 
 export type AssignResult = { ok: true; teammate: PersistedTeammate } | { ok: false; reason: string }
