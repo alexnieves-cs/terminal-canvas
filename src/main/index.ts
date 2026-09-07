@@ -55,6 +55,7 @@ import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { createPoolCaller, type PoolCaller } from './pool-caller'
+import { writeClipboardImage } from './clipboard-file'
 import { claudeCliRunner } from './claude-cli-runner'
 import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
 import { describePlugin } from './plugin-details'
@@ -1491,6 +1492,13 @@ app.whenReady().then(async () => {
       if (png.length > ATTACHMENT_MAX_BYTES) return { refused: `the clipboard image is larger than the ${Math.round(ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB attachment cap` }
       return { mediaType: 'image/png', base64: png.toString('base64'), size: png.length }
     },
+    // M145. The clipboard image as a FILE, for a terminal: the read is here
+    // (Electron's clipboard), the write and the cap are the module's.
+    clipboardFile: () => writeClipboardImage({
+      dir: join(app.getPath('userData'), 'attachments'),
+      now: () => Date.now(),
+      image: () => { const image = clipboard.readImage(); return image.isEmpty() ? null : image.toPNG() }
+    }),
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)

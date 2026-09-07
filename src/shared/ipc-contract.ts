@@ -116,6 +116,9 @@ import type { PoolNode } from './workflow-nodes'
 export interface SnapshotMeta { at: number; bytes: number; workspaces: number; panels: number }
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
+/** M145. See ATTACHMENT_CLIPBOARD_FILE. Three arms, never two. */
+export type ClipboardFile = { kind: 'ok'; path: string } | { kind: 'empty' } | { kind: 'failed'; why: string }
+
 export const IPC = {
   PTY_CREATE: 'pty:create',
   PTY_WRITE: 'pty:write',
@@ -559,6 +562,12 @@ export const IPC = {
   AGENT_IMPORT: 'agent:import',
   /** M75. The clipboard's image, for a ⌘V that carried no text. Main's `clipboard.readImage()`. */
   AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image',
+  /**
+   * M145. A clipboard IMAGE as a file under userData/attachments, for a
+   * TERMINAL panel: a PTY cannot take bytes, so the renderer pastes the path
+   * main answers with. The chat's door stays `agent:clipboard-image`.
+   */
+  ATTACHMENT_CLIPBOARD_FILE: 'attachment:clipboard-file',
   /** M97. A bounded auto run on a chat: main counts, main stops. */
   AGENT_AUTO_START: 'agent:auto-start',
   AGENT_AUTO_STOP: 'agent:auto-stop',
@@ -1443,6 +1452,8 @@ export interface CanvasBridge {
     send(id: string, text: string, attachments?: ChatAttachment[]): Promise<SendAnswer>
     /** M75. See AGENT_CLIPBOARD_IMAGE. */
     clipboardImage(): Promise<ClipboardImage>
+    /** M145. See ATTACHMENT_CLIPBOARD_FILE: the image written as a .png, its path; `empty` with no image; a named failure. */
+    clipboardFile(): Promise<ClipboardFile>
     /** True when a request was written; false with no turn in flight. */
     interrupt(id: string): Promise<boolean>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */

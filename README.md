@@ -388,6 +388,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:create / agent:send / agent:interrupt / agent:dispose
                        agent:answer / agent:list / agent:transcript / agent:import
                        agent:clipboard-image
+                       attachment:clipboard-file
                        agent:grants / agent:revoke-grants
                        snapshot:list / snapshot:restore
                        agent:auto-start / agent:auto-stop

@@ -195,6 +195,7 @@ renderer --invoke--> spawn:sheet / spawn:recent                                 
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
 renderer --invoke--> agent:clipboard-image                                       --> main
+renderer --invoke--> attachment:clipboard-file                                   --> main
 renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
 renderer --invoke--> agent:pool-start / agent:pool-stop                          --> main

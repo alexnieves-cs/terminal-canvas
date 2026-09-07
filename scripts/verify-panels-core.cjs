@@ -3891,7 +3891,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       wc.send(IPC_EVENTS.EDIT_PASTE, textOnClipboard)
       const echoedPath = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('.png') !== null && window.__m4aCellToScreen('attachments') !== null`), 6000)
       const bracketed = await wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`)
-      const written = readdirSync(join(app.getPath('userData'), 'attachments')).filter((f) => f.endsWith('.png'))
+      const written = readdirSync(harnessAttachmentsDir).filter((f) => f.endsWith('.png'))
       clipboard.clear()
       clipboard.writeText('PLAIN-TEXT-PASTE-4471')
       wc.send(IPC_EVENTS.EDIT_PASTE, clipboard.readText())

@@ -54,6 +54,12 @@ export interface BackendDef {
   reportsCost: boolean
   /** Whether the stream carries permission requests the host answers. False means its own policy decides. */
   asksPermission: boolean
+  /**
+   * M145 (backlog #13's per-CLI constraint). Whether this CLI reads an image
+   * PATH typed into its input, as a sentence — a path is pasted regardless
+   * (harmless in any terminal); this is what the inspector says about it.
+   */
+  pastesImagePath: string
   /** Whether a chat can continue in a terminal (`claude --resume`). */
   terminalDoor: boolean
   /** The prompt is an ARGUMENT: one process per turn, exiting when the turn does. */
@@ -103,6 +109,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: true,
     reportsCost: true,
     asksPermission: true,
+    pastesImagePath: 'reads an image path in its input',
     terminalDoor: true,
     oneProcessPerTurn: false,
     closeStdin: false,
@@ -130,6 +137,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: false,
     reportsCost: false,
     asksPermission: false,
+    pastesImagePath: 'reads an image path in its input',
     terminalDoor: false,
     oneProcessPerTurn: true,
     closeStdin: true,
@@ -163,6 +171,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: false,
     reportsCost: false,
     asksPermission: false,
+    pastesImagePath: 'unmeasured — a pasted path is plain text to it until someone checks',
     terminalDoor: false,
     oneProcessPerTurn: true,
     closeStdin: true,
@@ -200,6 +209,7 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     images: true,
     reportsCost: false,
     asksPermission: true,
+    pastesImagePath: 'unmeasured — the ACP door has no image-path measurement yet',
     terminalDoor: false,
     oneProcessPerTurn: false,
     closeStdin: false,

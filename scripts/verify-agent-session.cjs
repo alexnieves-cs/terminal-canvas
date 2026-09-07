@@ -2342,6 +2342,19 @@ const isResult = (l) => l.includes('"type":"result"')
     }
   }
 
+  // M145 — backends.imagePath.1. Every row says whether its CLI reads an
+  // image path (backlog #13's per-CLI constraint lives beside the per-model
+  // configuration, as the entry asked); copilot and acp say `unmeasured`
+  // rather than guessing.
+  {
+    const B = M.backends.BACKENDS
+    const rows = Object.keys(B)
+    ok('backends.imagePath.1 every backend row carries a pastesImagePath sentence, and the unmeasured rows say so',
+      rows.length >= 4 && rows.every((k) => typeof B[k].pastesImagePath === 'string' && B[k].pastesImagePath.length > 10) &&
+        /reads/.test(B.claude.pastesImagePath) && /unmeasured/.test(B.copilot.pastesImagePath),
+      JSON.stringify(Object.fromEntries(rows.map((k) => [k, B[k].pastesImagePath]))))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {

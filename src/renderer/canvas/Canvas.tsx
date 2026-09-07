@@ -1403,7 +1403,22 @@ export function Canvas({
       if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
-      if (text) session?.handle.paste(text)
+      if (text) { session?.handle.paste(text); return }
+      // M145 (backlog #13's bytes case). No TEXT on the clipboard: an image
+      // there becomes a file main writes, and a spawned terminal is handed the
+      // path — shell-quoted, bracketed, the drop's own rule — while a chat
+      // attaches it through its composer. A terminal that is not spawned gets
+      // nothing (a paste into a dormant card has nowhere to land), and an
+      // empty clipboard is the `empty` arm, not a paste of nothing.
+      if (id === null) return
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      const wantsFile = (panel !== undefined && isChatPanel(panel)) || (session !== undefined && session.spawned)
+      if (!wantsFile) return
+      void window.canvas.agentSession.clipboardFile().then((file) => {
+        if (file.kind !== 'ok') return
+        if (panel !== undefined && isChatPanel(panel)) attachToComposer(id, { kind: 'path', path: file.path })
+        else registry.get(id)?.handle.paste(shellQuote(file.path))
+      })
     })
     return () => {
       offCopy()

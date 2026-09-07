@@ -1,4 +1,4 @@
-import type { SnapshotMeta } from '@shared/ipc-contract'
+import type { SnapshotMeta , ClipboardFile } from '@shared/ipc-contract'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
@@ -166,6 +166,8 @@ export interface AgentHandlers {
   send(id: string, text: string, attachments: ChatAttachment[]): SendAnswer
   /** M75. */
   clipboardImage(): ClipboardImage
+  /** M145. See ATTACHMENT_CLIPBOARD_FILE. */
+  clipboardFile(): ClipboardFile
   interrupt(id: string): boolean
   dispose(req: { id: string; drop: boolean }): void
   /** M98. `scope: 'session'` grants the request's tool for the rest of the session before answering. */
@@ -191,6 +193,7 @@ const INERT_AGENTS: AgentHandlers = {
   create: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
   send: () => 'no-session',
   clipboardImage: () => null,
+  clipboardFile: () => ({ kind: 'failed', why: 'the agent runtime has not started yet' }),
   interrupt: () => false,
   dispose: () => {},
   answer: () => false,
@@ -417,6 +420,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
   ipcMain.handle(IPC.AGENT_CLIPBOARD_IMAGE, () => agents.clipboardImage())
+  ipcMain.handle(IPC.ATTACHMENT_CLIPBOARD_FILE, () => agents.clipboardFile())
   ipcMain.handle(IPC.AGENT_INTERRUPT, (_event, id: string) => agents.interrupt(id))
   ipcMain.handle(IPC.AGENT_DISPOSE, (_event, req: { id: string; drop: boolean }) => agents.dispose(req))
   ipcMain.handle(IPC.AGENT_ANSWER, (_event, req: { id: string; requestId: string; answer: PermissionAnswer; scope?: 'session' }) => agents.answer(req))
