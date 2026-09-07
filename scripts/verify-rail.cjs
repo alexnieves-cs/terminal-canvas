@@ -2931,9 +2931,13 @@ console.log('\n' + '='.repeat(60))
   step({ kind: 'stopped', why: 'budget' })
   const ended = st
   const refused = R.reducePool(R.EMPTY_POOL, { kind: 'refused', why: 'could not read the work list: ENOENT' })
-  ok('pool.model.1 reducePool keeps a queued item in its slot when it starts, marks finished by worker id, ends live on stop/refusal with the reason, and the closing words name the three ends',
+  const refusedThenStopped = R.reducePool(refused, { kind: 'stopped', why: 'by-hand' })
+  const rerun = R.reducePool(ended, { kind: 'started', id: 'w9', item: 'z' })
+  ok('pool.model.1 reducePool keeps a queued item in its slot when it starts, marks finished by worker id, ends live on stop/refusal with the reason (a stop after a refusal keeps the refusal), starts a new run clean after an end, and the closing words name the three ends',
     mid.live === true && mid.items.map((i) => i.item + ':' + i.state).join(',') === 'a:finished,b:started' && mid.items[1].id === 'w2' &&
       ended.live === false && ended.stopped === 'budget' && refused.live === false && /ENOENT/.test(refused.refused) &&
+      refusedThenStopped.refused !== undefined && refusedThenStopped.stopped === undefined &&
+      rerun.items.length === 1 && rerun.items[0].item === 'z' && rerun.live === true && rerun.stopped === undefined &&
       /by hand/.test(R.poolStoppedWord('by-hand')) && /every item/.test(R.poolStoppedWord('empty')) && /budget/.test(R.poolStoppedWord('budget')) &&
       typeof R.REASON_NO_POOL_LIVE === 'string',
     JSON.stringify({ mid, ended, refused }))

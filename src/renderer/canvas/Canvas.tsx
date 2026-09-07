@@ -1243,6 +1243,8 @@ export function Canvas({
   // block, so a `collect` joins the workers M78's way. Main sends the item;
   // nothing is typed here.
   useEffect(() => window.canvas.agentSession.onPoolEvent(applyPoolEvent), [])
+  /** M138. Per template, the edges out of its pool blocks and the ids the last Run minted for their targets. Declared ABOVE its reader (this file's create-then-assign rule). */
+  const poolTargetsRef = useRef(new Map<string, { edges: TemplateEdge[]; minted: Map<string, string> }>())
   useEffect(() => window.canvas.canvas.onPoolMint(async (req: PoolMintRequest): Promise<PoolMintReply> => {
     const id = `c${nextIdRef.current++}`
     const sessionId = crypto.randomUUID()
@@ -1270,8 +1272,6 @@ export function Canvas({
   }), [commitHistory])
   /** M138. Stop a live pool: main's, through the one invoke. */
   const stopPool = useCallback((templateId: string, key: string) => { void window.canvas.agentSession.poolStop({ templateId, key }) }, [])
-  /** M138. Per template, the edges out of its pool blocks and the ids the last Run minted for their targets. */
-  const poolTargetsRef = useRef(new Map<string, { edges: TemplateEdge[]; minted: Map<string, string> }>())
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -3876,7 +3876,8 @@ export function Canvas({
     // events use, so the Runs tab says why in main's words.
     poolTargetsRef.current.set(template.id, { edges: filled.edges.map((e) => ({ ...e })), minted })
     for (const node of poolNodes) {
-      const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node })
+      const joined = filled.edges.some((e) => e.from === node.key)
+      const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node, ...(joined ? { joined: true as const } : {}) })
       if (started.kind === 'refused') applyPoolEvent({ templateId: template.id, key: node.key, event: { kind: 'refused', why: started.reason } })
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)

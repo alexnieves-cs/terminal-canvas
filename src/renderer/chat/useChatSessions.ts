@@ -41,10 +41,15 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
   // its not-started arm rather than nothing.
   if (getChat(id).snapshot === null) seedChat(id, { snapshot: null })
   void window.canvas.agentSession
+    // M138 (critic's Critical). An orchestrator's prompt sits in the SAME
+    // chain as the supervisor's, dispatch's and routine's — one appended
+    // prompt per chat, never inside the teammate arm, where a first draft
+    // put it and a template-minted orchestrator (no teammate) resumed as an
+    // ordinary chat. Product `orchestrator.resume.1` pins the spawn's argv.
     // M81. A restored SUPERVISOR carries its system prompt again: the CLI
     // keeps no record of an appended prompt, so a resume without it would
     // leave a panel that looks like a supervisor and is not one.
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId , ...(panel.chat.orchestrator === undefined ? {} : { appendSystemPrompt: panel.chat.orchestrator }) }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : panel.chat.dispatch === true ? { appendSystemPrompt: DISPATCH_PROMPT } : panel.chat.routine === true ? { appendSystemPrompt: ROUTINE_PROMPT } : {}) })
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : panel.chat.dispatch === true ? { appendSystemPrompt: DISPATCH_PROMPT } : panel.chat.routine === true ? { appendSystemPrompt: ROUTINE_PROMPT } : panel.chat.orchestrator !== undefined ? { appendSystemPrompt: panel.chat.orchestrator } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {

@@ -735,6 +735,12 @@ const write = (rel, text) => {
          JSON.stringify(after.columns[0].keys))
       ok('shelf.4b a rename of an absent key changes nothing',
          JSON.stringify(renameInShelf(before, skillKey('user', 'ghost'), to)) === JSON.stringify(before), '')
+      // M136 hand check 8, decided at the Act I critic: one slot per key per column.
+      const occupied = { columns: [{ id: 'k', title: 'k', keys: [T.skillKey('user', 'alpha'), T.skillKey('user', 'beta'), T.skillKey('user', 'gamma')] }] }
+      const renamedOnto = T.renameInShelf(occupied, T.skillKey('user', 'alpha'), T.skillKey('user', 'beta'))
+      ok('shelf.rename.1 a rename onto a key the column already holds collapses onto the existing slot — one slot per key, the rest in order',
+        renamedOnto.columns[0].keys.map((k) => JSON.parse(k)[1]).join(',') === 'beta,gamma',
+        JSON.stringify(renamedOnto.columns[0].keys))
       ok('shelf.4c UNGROUPED is a real, reserved id',
          typeof UNGROUPED_COLUMN_ID === 'string' && UNGROUPED_COLUMN_ID.length > 0, UNGROUPED_COLUMN_ID)
     }

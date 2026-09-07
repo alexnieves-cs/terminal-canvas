@@ -233,6 +233,7 @@ const spyActions = () => {
     exportCanvasPng: record('exportCanvasPng'),
     beginRenameBookmark: record('beginRenameBookmark'),
     zoomToFit: record('zoomToFit'),
+    resetZoom: record('resetZoom'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
     // M20. The compound restart-with-a-mode verb the panel.mode rows call.
@@ -2170,6 +2171,16 @@ const WS = [
   // list — the one thing main cannot read for it.
   const noList = { id: 'f2', name: 'f2', nodes: [{ key: 'sweeper', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '', prompt: 'p' }], edges: [] }
   const noListWord = P.templateRefusal(noList, presets, true) ?? ''
+  const intoPool = { id: 'f3', name: 'f3', nodes: [
+    { key: 'lead', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: 'lead' },
+    { key: 'sweeper', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '/l', prompt: 'p' }
+  ], edges: [{ from: 'lead', to: 'sweeper', trigger: 'idle' }] }
+  const mute = { id: 'f4', name: 'f4', nodes: [{ key: 'lead', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: '  ' }], edges: [] }
+  const intoWord = P.templateRefusal(intoPool, presets, true) ?? ''
+  const muteWord = P.templateRefusal(mute, presets, true) ?? ''
+  ok('workflow.2c templateRefusal refuses by name an edge INTO a pool block (its workers are minted by the run) and an orchestrator with no prompt',
+    /lead/.test(intoWord) && /into the pool block sweeper/.test(intoWord) && /lead/.test(muteWord) && /no prompt/.test(muteWord),
+    JSON.stringify({ intoWord, muteWord }))
   ok('workflow.2a templateRefusal lets a template with a pool, an orchestrator or a collect block RUN, and refuses by name only a pool that names no work list',
     P.templateRefusal(withPool, presets, true) === undefined &&
       P.templateRefusal(withOrch, presets, true) === undefined &&
@@ -2538,6 +2549,29 @@ const WS = [
       current && /up to date — 3\.0\.0/.test(current.title) &&
       failed && /could not check — GitHub answered 403/.test(failed.title),
     JSON.stringify({ threw, door: door && [door.group, door.disabledReason], calls, titles: [notChecked, newer, current, failed].map((r) => r && r.title) }))
+}
+
+// M146 — zoom.fit.1. TWO verbs, two names (backlog #23's rule: zoom-to-fit
+// and maximise look the same in a screenshot and are different features; so
+// do zoom-to-fit and reset). `Reset zoom` (⌘0, the INITIAL camera) and
+// `Zoom to fit` (the selection when any, else every panel) are two rows
+// running two actions; before M146 the fit row was the reset row wearing
+// the spec's first name.
+{
+  const c = ctx({ presets: [] })
+  const rows = P.buildCommands(c)
+  const reset = rows.find((r) => r.id === 'canvas.fit')
+  const fit = rows.find((r) => r.id === 'canvas.zoom-fit')
+  c.actions.calls.length = 0
+  if (reset) reset.run()
+  const resetCalled = c.actions.calls.map((x) => x[0]).join(',')
+  c.actions.calls.length = 0
+  if (fit) fit.run()
+  const fitCalled = c.actions.calls.map((x) => x[0]).join(',')
+  ok('zoom.fit.1 the palette has a `Reset zoom` row and a `Zoom to fit` row, two titles running two actions (resetZoom, zoomToFit)',
+    reset !== undefined && /Reset zoom/.test(reset.title) && resetCalled === 'resetZoom' &&
+      fit !== undefined && /Zoom to fit/.test(fit.title) && fitCalled === 'zoomToFit' && reset.title !== fit.title,
+    JSON.stringify({ reset: reset && reset.title, fit: fit && fit.title, resetCalled, fitCalled }))
 }
 
 const failed = results.filter((r) => !r.pass)

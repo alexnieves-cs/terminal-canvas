@@ -41,6 +41,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # M135. verify:meta panels-split.2 reads scripts/verify-panels.cjs at
+          # the tag `pre-v7-run` through `git show`; a depth-1 checkout has no
+          # tags and the check would read as red on the runner for a reason
+          # that is not the code's.
+          fetch-tags: true
 
       - uses: actions/setup-node@v4
         with:

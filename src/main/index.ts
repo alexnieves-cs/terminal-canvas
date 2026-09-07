@@ -978,10 +978,12 @@ app.whenReady().then(async () => {
     })
   })
   // M138. The pool's production caller. The list is read HERE (main's, like
-  // every file the app reads for an agent), the mint is the RENDERER's over an
+  // every file the app reads for an agent; absolute path only, no Places
+  // gate — a pool has no teammate, and the file is the user's own), the mint is the RENDERER's over an
   // ephemeral reply (board:add's shape, with a longer wait: a chat is created
   // over IPC before it has an id), the ceilings are M82's read live, and the
-  // spend is the manager's own cumulative figure — never a second sum.
+  // spend is the sum of the sessions' own cumulative figures, the same fold
+  // the manager's ceiling reads (M82) — one rule, two readers.
   const poolAgents = agentSessions
   poolCaller = createPoolCaller({
     agents: poolAgents,

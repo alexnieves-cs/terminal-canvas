@@ -782,7 +782,7 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   // warns; the chat is kept.
   if (raw.orchestrator !== undefined) {
     if (isStr(raw.orchestrator) && raw.orchestrator.trim() !== '') chat.orchestrator = raw.orchestrator
-    else warnings.push(`chat panel ${id}: orchestrator was not a string - the chat is kept, its prompt dropped`)
+    else warnings.push(isStr(raw.orchestrator) ? `chat panel ${id}: orchestrator was an empty prompt - the chat is kept, the mark dropped` : `chat panel ${id}: orchestrator was not a string - the chat is kept, its prompt dropped`)
   }
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).

@@ -813,7 +813,7 @@ console.log('\n' + '='.repeat(60))
     const wd = text.match(/const WATCHDOG_MS = (\d+)\s*\/\/ measured ([^\n]+)/)
     if (!wd) partProblems.push(`${f}: no numeric WATCHDOG_MS with a "// measured" comment`)
     else if (!/\d{4}-\d{2}-\d{2}/.test(wd[2]) || !/\d+\s*s.*\d+\s*s/.test(wd[2])) partProblems.push(`${f}: the measured comment lacks a date and two figures`)
-    if (!chain.includes(f.replace(/^verify-panels-|\.cjs$/g, ''))) partProblems.push(`${f}: not in the verify:panels chain`)
+    if (!chain.includes('npm run verify:panels:' + f.replace(/^verify-panels-|\.cjs$/g, ''))) partProblems.push(`${f}: not in the verify:panels chain`)
   }
   ok('panels-split.1 verify-panels.cjs is gone, every scripts/verify-panels-*.cjs requires the harness, carries a measured numeric watchdog, and is in the verify:panels chain',
     oldFileGone && harnessExists && parts.length >= 2 && partProblems.length === 0,
