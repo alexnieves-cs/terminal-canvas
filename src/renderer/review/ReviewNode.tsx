@@ -9,6 +9,7 @@ import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-inde
 import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
+import { displayPath } from '@shared/display-path'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -151,8 +152,9 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
               <ul className="review-node__files">
                 {files.slice(0, NODE_FILE_CAP).map((f) => (
                   <li key={f.path} className="review-node__file" data-review-node-file={`${section.branch}:${f.path}`}>
-                    <span className="review-node__path">{f.path}</span>
-                    <span className="review-node__counts">{f.untracked ? 'new' : f.binary ? 'binary' : `+${f.added} −${f.removed}`}</span>
+                    {/* M165. The same card header the single-repository rows wear (the Act I critic). */}
+                    <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
+                    <span className="review-node__counts">{f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">binary</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}</span>
                   </li>
                 ))}
               </ul>
@@ -545,7 +547,8 @@ function ReviewNodeImpl({
         )}
         {subject.across === true ? renderAcross(across, sectionLabel) : (<>
         <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
-        <p className="review-node__root">{model.root}</p>
+        {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}
+        <p className="review-node__root" title={model.root}>{displayPath(model.root, model.root).short}</p>
         </>)}
         {model.note !== undefined && (
           <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>
@@ -564,16 +567,17 @@ function ReviewNodeImpl({
                   setExpandedPath(f.expanded ? null : f.path)
                 }}
               >
-                <span className="review-node__path">{f.path}</span>
+                {/* M165. The basename leads (the UI face, bold); the directory follows in mono. */}
+                <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
                 <span className="review-node__counts">
-                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
+                  {f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">bin</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}
                 </span>
                 {f.touches !== undefined && <span className="review-node__touches" data-review-node-touches={f.touches}>· {f.touches} tool call{f.touches === 1 ? '' : 's'}</span>}
               </button>
               {model.discard.kind !== 'none' && !readOnly && (
                 <button
                   type="button"
-                  className="review-node__discard"
+                  className={`review-node__discard${armedPath === f.path ? ' review-node__discard--armed' : ''}`}
                   data-review-node-discard={f.path}
                   disabled={model.discard.kind === 'blocked' || discarding}
                   title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard the changes to ${f.path}`}

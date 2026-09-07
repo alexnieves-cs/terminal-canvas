@@ -2,8 +2,6 @@ import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMo
 import { shellControl } from '@renderer/shell/shell-control'
 import { panelState } from '@renderer/panels/panel-state'
 import type { PanelSession } from '@renderer/session/panel-session'
-import { useMachineCost } from '@renderer/session/machine-cost-store'
-import type { PanelMachineCost } from '@shared/machine-cost'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
@@ -11,6 +9,7 @@ import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
 import type { AgentState } from '@shared/types'
 import { PanelFrame } from './PanelFrame'
+import { KindTerminal } from '@renderer/icons'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -137,7 +136,6 @@ function TerminalPanelImpl({
   const live = session.tier === 'live'
   // Per-panel subscription, not registry.version(): a CPU reading changes
   // independently and must never redraw the rest of the canvas.
-  const machineCost = useMachineCost(session.id)
 
   // Subscribed per id, so an agent's state change re-renders this panel and
   // no other. Deliberately NOT routed through registry.version(), which
@@ -276,7 +274,6 @@ function TerminalPanelImpl({
           <button type="button" className="pf__verb pf__verb--word" data-open-as-chat title="Open as chat — the same session, rendered as a transcript" aria-label="Open as chat"
             {...shellControl(() => onOpenAsChat(session.id))}>to chat</button>
         )}
-        {live && machineCost !== undefined && <MachineCostBadge cost={machineCost} />}
       </>}
     >
 
@@ -301,17 +298,16 @@ function TerminalPanelImpl({
           }}
         />
       ) : (
-        <PanelCard session={session} agentState={glow ? agentState : undefined} cost={machineCost} detail={flipped ? 'summary' : cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
+        <PanelCard session={session} agentState={glow ? agentState : undefined} detail={flipped ? 'summary' : cardDetail ?? 'tail'} title={panelLabel} state={agentState} shown={shown} />
       )}
 
     </PanelFrame>
   )
 }
 
-function PanelCard({ session, agentState, cost, detail, title, state, shown }: {
+function PanelCard({ session, agentState, detail, title, state, shown }: {
   session: PanelSession
   agentState?: AgentState
-  cost?: PanelMachineCost
   detail: CardDetail
   title: string
   state?: AgentState
@@ -343,20 +339,15 @@ function PanelCard({ session, agentState, cost, detail, title, state, shown }: {
           <span className="panel__card-block-title">{title}</span>
         </div>
       ) : detail === 'summary' ? (
-        <div className="panel__card-summary" data-card-summary>
+        <div className="panel__card-summary" data-card-summary data-tone={shown.tone}>
+          {/* M166. The terminal's glyph: at a fifth of the size a card is a light with a name. */}
+          <span className="panel__card-summary-glyph" aria-hidden="true"><KindTerminal /></span>
           <div className="panel__card-summary-title">{title}</div>
           {/* The same affordance element the tail tier renders, with the same
               exact text: an unstarted panel's summary IS "not started", and
               three checks read this element wherever the camera is. */}
           <div className="panel__card-summary-state" data-tone={shown.tone}>{shown.word}</div>
           {!session.spawned && <div className="panel__card-idle">click to start</div>}
-          {(() => {
-            const last = session.spawned ? lines[lines.length - 1] : (recorded?.[recorded.length - 1])
-            return last ? <div className="panel__card-summary-line">{last}</div> : null
-          })()}
-          {cost !== undefined && (
-            <div className="panel__card-summary-cost">CPU {formatCpu(cost.cpuPercent)} · RAM {formatMemory(cost.memoryBytes)}</div>
-          )}
         </div>
       ) : session.spawned ? (
         lines.map((line, i) => (
@@ -387,33 +378,11 @@ function PanelCard({ session, agentState, cost, detail, title, state, shown }: {
           <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </>
       )}
-      {cost !== undefined && (
-        <div className="panel__card-cost" data-machine-cost>
-          <span>CPU {formatCpu(cost.cpuPercent)}</span>
-          <span>RAM {formatMemory(cost.memoryBytes)}</span>
-        </div>
-      )}
     </div>
   )
 }
 
-function MachineCostBadge({ cost }: { cost: PanelMachineCost }): JSX.Element {
-  return (
-    <span className="panel__machine-cost" data-machine-cost title="Process tree CPU and resident memory">
-      CPU {formatCpu(cost.cpuPercent)} · RAM {formatMemory(cost.memoryBytes)}
-    </span>
-  )
-}
 
-function formatCpu(percent: number): string {
-  return `${percent.toLocaleString(undefined, { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`
-}
-
-function formatMemory(bytes: number): string {
-  const mib = bytes / (1024 * 1024)
-  if (mib < 1024) return `${Math.round(mib)} MB`
-  return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
-}
 
 
 // Memoized because Canvas re-renders far more often than a panel changes:

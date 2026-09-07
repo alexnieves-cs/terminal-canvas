@@ -7,6 +7,7 @@ import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Pencil, Refresh } from '@renderer/icons'
+import { displayPath } from '@shared/display-path'
 
 /**
  * The conflict banner's wording.
@@ -688,7 +689,8 @@ function FileNodeImpl({
         // over it.
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <p className="file-node__directory" data-file-node-directory>{model.directory}</p>
+        {/* M164. The path rule: the last two segments at rest (the file panel knows no repository root — the review engine resolves one; M164 records this), the full path on hover. */}
+        <p className="file-node__directory" data-file-node-directory title={model.directory}>{displayPath(model.directory).short}</p>
         {editing ? (
           <>
             {conflict !== null && (

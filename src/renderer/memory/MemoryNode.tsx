@@ -6,6 +6,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Refresh } from '@renderer/icons'
 import { MEMORY_MAX } from '@shared/ipc-contract'
+import { displayPath } from '@shared/display-path'
 
 /**
  * M83. THE MEMORY NODE — the seventh kind, and a document one: what this
@@ -47,17 +48,8 @@ const PLACEHOLDER: Record<(typeof KINDS)[number], string> = {
   note: 'something worth remembering'
 }
 
-/**
- * The repository, truncated from the LEFT. A memory node is usually opened on
- * a path deep enough to be cut, and cutting the right-hand end removes the
- * only part that says which repository this is.
- */
-function rootLabel(root: string): string {
-  const trimmed = root.replace(/\/+$/, '')
-  const parts = trimmed.split('/').filter((p) => p !== '')
-  if (parts.length <= 2) return trimmed
-  return `…/${parts.slice(-2).join('/')}`
-}
+/** M164. The path rule's one helper; the memory node used to carry its own left-truncation. */
+const rootLabel = (root: string): string => displayPath(root, root).short // M83 resolves the root to the repository, so this reads its basename
 
 function clock(at: number): string {
   const d = new Date(at)

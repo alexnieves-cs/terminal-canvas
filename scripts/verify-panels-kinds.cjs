@@ -3561,5 +3561,20 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           typeof weekLine === 'string' && /\$/.test(weekLine) && /session/.test(weekLine),
         JSON.stringify({ chId, usageSeen, ledgerProbe, row, weekLine }))
     }
+
+    // M164 — path.1 (the path rule, on real bodies). Every review root and
+    //     file/toolbox directory line on the canvas prints no temp-dir prefix
+    //     (`/private/var` or `/var/folders` — the harness's fixtures live
+    //     there, which is what made the 4.0 goldens' bodies unreadable) and
+    //     carries the full path on its title. Read over the whole DOM, so the
+    //     check also says when there was nothing to read.
+    {
+      const read = await wc.executeJavaScript(`(() => {
+        const els = [...document.querySelectorAll('.review-node__root, .file-node__directory, .toolbox-node__directory, .memory-node__root')]
+        return els.map((el) => ({ cls: el.className, text: el.textContent, title: el.getAttribute('title') || '' })) })()`)
+      const bad = read.filter((r) => /\/private\/var|\/var\/folders/.test(r.text) || !/^\//.test(r.title))
+      ok('path.1 every review root, file, toolbox and memory directory line on the canvas shows a short path at rest with the full path on its title',
+        read.length >= 2 && bad.length === 0, JSON.stringify({ read: read.length, bad: bad.slice(0, 3), sample: read.slice(0, 2) }))
+    }
   }
 })

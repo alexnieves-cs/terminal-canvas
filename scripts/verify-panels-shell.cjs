@@ -1509,6 +1509,31 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     //     The SECOND clause is the pane's stated reason to exist: the spec link
     //     is shown SEPARATELY, so "why does this say login shell" is answerable.
     //     A merged single-command implementation passes the first clause alone.
+    // M163 — machine.1 (the metrics rule's other half). The inspector's Detail
+    //     tab carries a Machine section: for a LIVE panel a CPU · RAM figure or
+    //     `no reading yet` (the harness samples no process table — the arm says
+    //     so rather than showing 0%); for a DORMANT panel `not running`. Three
+    //     arms, never a blank.
+    {
+      const sessions = await settledSessionMap(wc)
+      const liveInDom = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel[data-panel-id] .xterm')].map((x) => x.closest('.panel').getAttribute('data-panel-id'))`)
+      const liveId = [...sessions.keys()].find((id) => liveInDom.includes(id)) ?? null
+      const dormantId = await wc.executeJavaScript(`(() => { const r = [...document.querySelectorAll('.rail-list--panels .rail-row')].find((row) => row.querySelector('.rail-row__start') && !row.querySelector('.rail-row__start--empty')); return r ? r.getAttribute('data-rail-row') : null })()`)
+      const readFor = async (id) => {
+        if (!id) return null
+        await wc.executeJavaScript(`document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(id)} + '"] .rail-row__main').dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+        await settle()
+        return wc.executeJavaScript(`(() => { const el = document.querySelector('[data-inspector-machine]'); return el ? { arm: el.getAttribute('data-inspector-machine'), text: el.textContent.trim() } : null })()`)
+      }
+      const live = await readFor(liveId)
+      const dormant = await readFor(dormantId)
+      ok('machine.1 the inspector\'s Machine section shows a CPU · RAM figure or `no reading yet` for a live panel and `not running` for a dormant one — never a blank',
+        live !== null && (live.arm === 'reading' ? /CPU .*RAM/.test(live.text) : live.arm === 'none' && /no reading yet/.test(live.text)) &&
+          dormant !== null && dormant.arm === 'not-running' && /not running/.test(dormant.text),
+        JSON.stringify({ liveId, dormantId, live, dormant }))
+    }
+
     {
       const sessions = await settledSessionMap(wc)
       // M135. In the un-split file the first pty:list key was a panel core's

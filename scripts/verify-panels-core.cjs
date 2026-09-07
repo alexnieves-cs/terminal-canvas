@@ -4,10 +4,10 @@
    checks the old file held at lines 1474–5259, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 49000 // measured 2026-09-07 alone in the Electron tier after the M149 checks, two green runs: 38.5s, 37.6s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 63000 // measured 2026-09-07 alone in the Electron tier after M163–M166 (rest.1, far.1, check 8 on the tail tier), two green runs: 49.98s, 49.83s; 1.25x the slower, to the next second
 
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, zoomToScale, state } = ctx
   {
 
     // ---------------------------------------------------------------------
@@ -374,7 +374,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     if (!bg) throw new Error('typing check: found no background point on the canvas')
     wc.sendInputEvent({ type: 'mouseDown', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
     wc.sendInputEvent({ type: 'mouseUp', x: bg.x, y: bg.y, button: 'left', clickCount: 1 })
-    await zoomTo(wc, '1')
+    // M166. The TAIL tier (0.4: below LIVE_MIN_SCALE, above SUMMARY_LEAVE) — Cmd+1
+    // used to land here by luck of the fixture's extent; since M166 the summary
+    // tier carries no scrollback line to read the echo from, on purpose.
+    await zoomToScale(wc, 0.4)
     const echoed = await waitUntil(
       async () => (await cardTexts(wc)).find((text) => text.includes(MARKER)) ?? false,
       6000
@@ -3973,6 +3976,67 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length >= 1 && echoedText !== false,
         JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText, clipboardHadImage: !clipboard.readImage().isEmpty(), pngEmpty: png.isEmpty() }))
       if (typeof piId === 'string') await clickPanelClose(wc, piId)
+    }
+
+    // M163 — rest.1 (the rest rule, on a real frame). A LIVE, unselected panel
+    //     with the pointer elsewhere: its ⋯ has computed opacity 0. A REAL
+    //     pointer move over its chrome (sendInputEvent — a dispatched mouseover
+    //     never matches :hover) reveals it at 1. Then, with the pointer away
+    //     again, a script's .click() on the hidden ⋯ opens the menu — hidden at
+    //     rest is never unreachable. Read AFTER the --dur-1 transition (settle),
+    //     the reveal.1 lesson: a computed opacity mid-transition is still 0.
+    {
+      await clickEmptyCanvas(wc)
+      await settle()
+      const away = await backgroundPoint(wc)
+      wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
+      await settle()
+      const target = await wc.executeJavaScript(`(() => {
+        // Any kind's frame, live or carded: the rest rule is the FRAME's. A live one
+        // first when there is one; the end of this part may have carded them all.
+        const frames = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('[data-panel-more]') && !p.classList.contains('panel--selected') && !p.matches(':hover'))
+        const p = frames.find((f) => f.querySelector('.xterm')) ?? frames[0]; if (!p) return null
+        const c = p.querySelector('.pf__chrome').getBoundingClientRect()
+        const more = p.querySelector('[data-panel-more]')
+        return { id: p.getAttribute('data-panel-id'), x: c.left + Math.min(60, c.width / 4), y: c.top + c.height / 2, rest: more ? getComputedStyle(more).opacity : null } })()`)
+      let hovered = null; let clicked = null
+      if (target) {
+        wc.sendInputEvent({ type: 'mouseMove', x: Math.round(target.x), y: Math.round(target.y) })
+        await settle(); await sleep(250)
+        hovered = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-more]'); return m ? getComputedStyle(m).opacity : null })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
+        await settle(); await sleep(250)
+        clicked = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}]'); const m = p.querySelector('[data-panel-more]'); const before = getComputedStyle(m).opacity; m.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return { before } })()`)
+        // The click's state update lands on React's next render (menu.1's lesson), never synchronously.
+        clicked.menu = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-menu]') !== null`), 3000)
+        await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-menu-close]'); if (c) c.click() })()`)
+        await settle()
+      }
+      ok('rest.1 an unselected frame hides its ⋯ at rest (opacity 0), a real pointer over its chrome reveals it (1), and a script\'s click on the hidden ⋯ still opens the menu',
+        target !== null && target.rest === '0' && hovered === '1' && clicked !== null && clicked.before === '0' && clicked.menu === true,
+        JSON.stringify({ target, hovered, clicked }))
+    }
+
+    // M166 — far.1 (the status wall, on a real canvas). At a fifth of the
+    //     size every card is at the SUMMARY tier: it shows its kind glyph and
+    //     its title, and no last line of scrollback and no machine figure —
+    //     a wall of lights with names, the same wash the minimap draws.
+    {
+      await zoomToScale(wc, 0.2)
+      await settle(); await sleep(300)
+      const read = await wc.executeJavaScript(`(() => {
+        const cards = [...document.querySelectorAll('[data-card-summary]')]
+        return { cards: cards.length,
+          glyphs: cards.filter((c) => c.querySelector('.panel__card-summary-glyph')).length,
+          titles: cards.filter((c) => (c.querySelector('.panel__card-summary-title')?.textContent ?? '') !== '').length,
+          lines: document.querySelectorAll('.panel__card-summary-line').length,
+          costs: document.querySelectorAll('[data-machine-cost]').length,
+          washed: cards.filter((c) => { const s = c.querySelector('.panel__card-summary') || c; return getComputedStyle(s).backgroundColor !== 'rgba(0, 0, 0, 0)' }).length } })()`)
+      await zoomTo(wc, '0')
+      await settle()
+      ok('far.1 at a fifth of the size every summary card shows a kind glyph and its title on a tone wash, with no last line and no machine figure',
+        read.cards >= 3 && read.glyphs === read.cards && read.titles === read.cards && read.lines === 0 && read.costs === 0 && read.washed === read.cards,
+        JSON.stringify(read))
     }
   }
 })

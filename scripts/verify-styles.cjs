@@ -703,7 +703,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // What it cannot see: a face set from a component's inline style, a family
 // aliased through a second token, or a prose class this list does not name.
 // The goldens are the check for those. `.pf__body--text`, the reading
-// bodies' ancestor, is still mono at 4.0 and is M164's red, not this one's.
+// bodies' ancestor, joined the ancestor arm in M164.
 {
   const PROSE = [
     '.pf__title', '.launcher__title', '.launcher__verb-name', '.launcher__env',
@@ -713,10 +713,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
     '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
     '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
-    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay', '.trail-card__name',
     '.panel__card', '.sheet__preview', '.lane-header__name', '.edge-indicator__name', '.inspector__run-name'
   ]
-  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous']
+  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous', '.pf__body--text' /* M164 */]
   const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
   const esc = (p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // The subject of one selector: its last compound, combinators and
@@ -756,6 +756,73 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   }
   ok('polish.1', 'the brief\'s tokens: --bubble hex in both blocks (and a measured ground), --measure / --t-base / --inset on :root',
     Object.values(facts).every(Boolean), JSON.stringify(facts))
+}
+
+// M163 — rest.1. THE REST RULE on the frame: at rest a header shows the kind
+// glyph, the title and one state; the verbs, the marks and the close sit in
+// their box at opacity 0 and come to 1 on the frame's :hover, :focus-within
+// and .panel--selected, through a transition on --dur-1. Opacity, never
+// display: the box stays (targets.1's 24px, header.1's widths) and a script's
+// click lands without a hover. 0 and 1 only — check 3 refuses a fraction.
+{
+  const at = (re) => all.filter((r) => re.test(r.sel))
+  const hidden = at(/\.pf__chrome\s+\.pf__verb/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body) && /transition:[^;]*var\(--dur-1\)/.test(r.body))
+  const marks = at(/\.pf__chrome\s+\.pf__mark/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const close = at(/\.pf__chrome\s+\.pf__close/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const revealed = all.filter((r) => /\.pf:hover/.test(r.sel) && /\.pf:focus-within/.test(r.sel) && /\.panel--selected/.test(r.sel))
+    .some((r) => /opacity:\s*1\b/.test(r.body))
+  const reduced = /@media[^{]*prefers-reduced-motion[^{]*\{[\s\S]*?\.pf__chrome[\s\S]*?transition:\s*none/.test(bare)
+  ok('rest.1', 'the chrome verbs, marks and close rest at opacity 0 (a --dur-1 transition) and reveal at 1 on the frame\'s :hover, :focus-within and .panel--selected; reduced motion drops the transition',
+    hidden && marks && close && revealed && reduced, JSON.stringify({ hidden, marks, close, revealed, reduced }))
+}
+
+// M163 — metrics.1. THE METRICS RULE: CPU and RAM belong in the inspector.
+// `data-machine-cost` (the per-panel readout) appears under src/renderer in
+// the inspector alone — never on a header, a card tier or the rail — and the
+// stylesheet has no rule for a header or card cost. The HUD's TOTAL
+// (`data-machine-cost-total`) is M173's, matched apart by its suffix.
+{
+  const root = path.join(__dirname, '..', 'src', 'renderer')
+  const files = []
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx?$/.test(e.name)) files.push(f) } }
+  walk(root)
+  const sites = files.filter((f) => /data-machine-cost(?!-total)/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(root, f))
+  const allowed = new Set(['shell/Inspector.tsx'])
+  const stray = sites.filter((f) => !allowed.has(f))
+  const rules = all.filter((r) => /\.panel__machine-cost|\.panel__card-cost|\.panel__card-summary-cost/.test(r.sel)).map((r) => r.sel.slice(0, 40))
+  ok('metrics.1', 'the per-panel CPU/RAM readout lives in the inspector only (no header, card or rail site) and the stylesheet has no header/card cost rule',
+    sites.length >= 1 && stray.length === 0 && rules.length === 0, JSON.stringify({ sites, stray, rules }))
+}
+
+// M165 — diff.1. DIFFS AS CARDS. A review file row is a CARD (the control
+// radius, a hairline), its `discard` verb rests at opacity 0 and reveals on
+// the card's :hover / :focus-within (the rest rule) — and stays at 1 while
+// ARMED (`keep` must be readable without a pointer over it), and the two count
+// pills read the add/remove washes that already exist (--green-dim, --red-dim).
+{
+  const card = all.find((r) => /(^|,)\s*\.review-node__file\s*(,|$)/.test(r.sel))
+  const isCard = card ? /border-radius:\s*var\(--r-md\)/.test(card.body) && /border:\s*1px solid var\(--line\)/.test(card.body) : false
+  const discard = all.filter((r) => /(^|,)\s*\.review-node__discard\s*(,|$)/.test(r.sel)).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const reveal = all.some((r) => /\.review-node__file:hover/.test(r.sel) && /\.review-node__file:focus-within/.test(r.sel) && /\.review-node__discard--armed/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const pills = all.some((r) => /\.review-node__add\b/.test(r.sel) && /--green-dim/.test(r.body)) && all.some((r) => /\.review-node__del\b/.test(r.sel) && /--red-dim/.test(r.body))
+  ok('diff.1', 'a review file row is a card (--r-md, a hairline), its discard rests at opacity 0 and reveals on hover/focus-within or while armed, and its counts are two washed pills',
+    isCard && discard && reveal && pills, JSON.stringify({ isCard, discard, reveal, pills }))
+}
+
+// M166 — far.2. THE FAR VIEW AS A STATUS WALL. The summary tier fills with
+// the SAME tone wash the block tier and the minimap use (far.1's color-mix,
+// 26% of the tone over --s-1), shows a kind glyph beside the name, and prints
+// no last line: at a fifth of the size a card is a light with a name, not a
+// paragraph (the brief, finding 10).
+{
+  const block = all.find((r) => /\.panel__card-block\[data-tone\]/.test(r.sel))
+  const mix = block && (block.body.match(/color-mix\([^)]*\)/) || [null])[0]
+  const summary = all.filter((r) => /\.panel__card-summary\[data-tone\]|\.panel__card--summary\[data-tone\]/.test(r.sel))
+  const sameWash = mix !== null && summary.some((r) => r.body.replace(/\s+/g, '').includes(mix.replace(/\s+/g, '')))
+  const glyph = all.some((r) => /\.panel__card-summary-glyph\b/.test(r.sel))
+  const noLine = !all.some((r) => /\.panel__card-summary-line\b/.test(r.sel))
+  ok('far.2', 'the summary tier fills with the block tier\'s own tone wash, carries a kind glyph, and has no last-line rule',
+    sameWash && glyph && noLine, JSON.stringify({ mix, sameWash, glyph, noLine }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

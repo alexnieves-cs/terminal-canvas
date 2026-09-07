@@ -2337,6 +2337,30 @@ const session = (id, over = {}) => ({
     JSON.stringify([isCode({ file_path: '/x/y.ts' }), isCode({ description: 'a' }), isCode({})]))
 }
 
+// M164 — path.1. THE PATH RULE's one helper. `displayPath(path, root)`:
+//     under a root, the root's basename plus the path relative to it (never
+//     the root's own absolute prefix); the root itself is its basename; outside
+//     every root, the last two segments behind `…/` (the palette's shortPath —
+//     one shortening, not two); the home prefix reads `~` when no root is
+//     given; `full` is always the absolute path for the tooltip; the empty
+//     string is never returned. A second helper would differ from this one
+//     exactly where nobody looks — every body that prints a path calls it.
+{
+  const dp = typeof R.displayPath === 'function' ? R.displayPath : () => null
+  const root = '/private/var/folders/hl/x/T/tc shot fixtures golden/repo'
+  const a = dp(root + '/src/server.ts', root)
+  const b = dp(root, root)
+  const c = dp('/private/var/folders/hl/x/T/tc shot fixtures golden/notes/plan.md', root)
+  const d = dp('/Users/ada/work/api/src/a.ts', undefined, '/Users/ada')
+  const e = dp('/Users/ada', undefined, '/Users/ada')
+  const f = dp(root + '/src/server.ts', root + '/')
+  ok('path.1 displayPath shows the repository basename and the path relative to it, the root as its basename, a path outside every root as its last two segments, ~ for home, and the full path beside each',
+    a && a.short === 'repo/src/server.ts' && a.full === root + '/src/server.ts' &&
+      b && b.short === 'repo' && c && c.short === '…/notes/plan.md' && d && d.short === '~/work/api/src/a.ts' && e && e.short === '~' &&
+      f && f.short === 'repo/src/server.ts' && dp('', root).short !== '',
+    JSON.stringify({ a, b, c, d, e, f, empty: dp('', root) }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

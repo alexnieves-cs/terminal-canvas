@@ -222,11 +222,11 @@
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
 
-  --glass-1:    rgba(18, 22, 31, .74);
+  --glass-1:    rgba(18, 22, 31, .88);   /* M163 (finding 8): one clear step from --s-0; was .74 */
   --glass-2:    rgba(13, 16, 24, .82);
-  --edge-light: rgba(255, 255, 255, .06);
+  --edge-light: rgba(255, 255, 255, .11); /* M163: a lit edge you can see at the golden's scale; was .06 */
   --bezel:      rgba(0, 0, 0, .45);
-  --lift:       0 20px 40px -22px rgba(0, 0, 0, .75);
+  --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
   --aura-1:     rgba(99, 102, 241, .22);
   --aura-2:     rgba(45, 212, 191, .12);
   --on-iris:    #06111a;
@@ -872,7 +872,7 @@ body {
 .github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
 .github-item__title { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg); }
 .github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.github-node__scope { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.github-node__scope { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); } /* M164 (the Act I critic): a sentence */
 .github-item__verbs { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .github-item__link { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; text-underline-offset: 2px; }
 .github-node__note { margin: 0; }
@@ -1956,9 +1956,15 @@ body {
    element rather than the page. */
 .pf__body--text {
   overflow: auto;
-  padding: var(--sp-4) var(--sp-4);
-  font: var(--t-sm) / var(--lh-body) var(--font-mono);
-  color: var(--muted);
+  /* M164. THE BODY'S MATERIAL (the brief): a reading body is PROSE — the UI
+     face at --t-base/--lh-body, the --inset, --fg-2 ink — and the leaves that
+     hold code opt into mono by name (.file-node__pre, .review-node__line, the
+     directory lines, .skill-node__verbatim, the ids and facts). Until this
+     milestone this rule set mono once and every sentence in a review, a
+     toolbox, a work card and a GitHub item inherited it (face.1's ancestor arm). */
+  padding: var(--inset);
+  font: var(--t-base) / var(--lh-body) var(--font-ui);
+  color: var(--fg-2);
   background: var(--panel-bg);
   user-select: text;
 }
@@ -2174,15 +2180,6 @@ body {
   color: var(--green);
 }
 
-/* The card remains the readable many-panel surface, but a promoted terminal
-   should not make its resource cost disappear. */
-.panel__machine-cost {
-  flex: none;
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
 /* Never shrunk to make room for a long title — see .panel__title. Everything
    else comes from .icon-button. */
@@ -2288,8 +2285,15 @@ body {
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
 .panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
-.panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.panel__card-summary-cost { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+/* M166. THE STATUS WALL: the summary tier is a glyph, a name and the tone's
+   wash — the SAME color-mix the block tier and the minimap draw (far.1 / far.2)
+   — and nothing else. The last line of scrollback went with M105's rail; the
+   machine figure with M163's inspector. */
+.panel__card-summary[data-tone] { background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); border-radius: var(--r-md); padding: var(--sp-5); }
+.panel__card-summary[data-tone="asleep"], .panel__card-summary[data-tone="none"], .panel__card-summary[data-tone="starting"], .panel__card-summary[data-tone="kind"] { background: var(--s-4); }
+.panel__card-summary-glyph { display: inline-flex; width: 32px; height: 32px; color: var(--tone); }
+.panel__card-summary-glyph svg { width: 100%; height: 100%; }
+.panel__card-summary[data-tone="asleep"] .panel__card-summary-glyph, .panel__card-summary[data-tone="none"] .panel__card-summary-glyph, .panel__card-summary[data-tone="starting"] .panel__card-summary-glyph, .panel__card-summary[data-tone="kind"] .panel__card-summary-glyph { color: var(--fg-2); }
 .panel__card--block { padding: 0; }
 .panel__card-block {
   flex: 1;
@@ -2320,18 +2324,6 @@ body {
   color: var(--fg-3);
 }
 
-/* The card tier is the ordinary many-panel view, so this is the primary
-   machine-cost readout. */
-.panel__card-cost {
-  display: flex;
-  gap: var(--sp-4);
-  margin-top: auto;
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-variant-numeric: tabular-nums;
-}
 
 /* M63. The state WORD on the card, chrome-sized, in its tone, and under it
    the affordance at the same size in the UI face. The 32px headline that
@@ -2724,7 +2716,7 @@ body {
 
 /* --fg-3, not --fg-4: --fg-4 is the DISABLED step and this is ordinary
    running text. */
-.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
+.review-node__root { font-family: var(--font-mono); font-size: var(--t-sm); margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
 .review-node__file-button {
@@ -2791,9 +2783,21 @@ body {
    control's weight, and reads "keep" while armed so the same press cancels.
    The armed sentence is the disclosure and takes --red only on its confirm:
    destructive, once, and on the control that does it. */
-.review-node__file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+/* M165. DIFFS AS CARDS (the brief, Codex): a file row is a card — the control
+   radius, a hairline, a header of basename (bold, the UI face) and directory
+   (mono, quiet), the counts as two washed pills, the hunk beneath — and its
+   `discard` rests at opacity 0 (the rest rule), revealed on the card's hover
+   or focus and held at 1 while ARMED so `keep` can be read. */
+.review-node__file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-3); background: var(--s-1); }
+.review-node__base { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 600; color: var(--fg); }
+.review-node__dir { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.review-node__add, .review-node__del, .review-node__new { font-family: var(--font-mono); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); }
+.review-node__add { color: var(--green); background: var(--green-dim); }
+.review-node__del { color: var(--red); background: var(--red-dim); }
+.review-node__new { color: var(--blue); background: var(--blue-dim); }
+.review-node__file:hover .review-node__discard, .review-node__file:focus-within .review-node__discard, .review-node__discard--armed { opacity: 1; }
 .review-node__file > .review-node__file-button { flex: 1 1 auto; width: auto; }
-.review-node__discard {
+.review-node__discard { opacity: 0; transition: opacity var(--dur-1) var(--ease);
   flex: none;
   min-height: 24px;
   background: none;
@@ -2851,7 +2855,7 @@ body {
   word-break: break-word;
 }
 
-.file-node__directory {
+.file-node__directory { font-family: var(--font-mono); font-size: var(--t-sm);
   margin: 0 0 var(--sp-4);
   color: var(--fg-3);
   word-break: break-all;
@@ -2859,7 +2863,7 @@ body {
 
 .file-node__pre {
   margin: 0;
-  font: inherit;
+  font: var(--t-md) / var(--lh-body) var(--font-mono); /* M164. Source is code: the terminal's 13px */
 }
 
 .file-node__line {
@@ -2891,7 +2895,7 @@ body {
 .file-node__prose {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: var(--t-md);
+  font-size: var(--t-base);
   line-height: var(--lh-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -3559,7 +3563,7 @@ body {
    any notation outside a theme block, and 4-6 refuse literal type, radius and
    spacing values. */
 
-.toolbox-node__directory {
+.toolbox-node__directory { font-family: var(--font-mono); font-size: var(--t-sm);
   margin: 0 0 var(--sp-4);
   color: var(--fg-3);
   word-break: break-all;
@@ -4099,7 +4103,8 @@ body {
 .work-node__summary { cursor: grab; }
 .work-node__remote { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .work-node__title { margin: 0; font-size: var(--t-sm); color: var(--fg); }
-.work-node__facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.work-node__facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+.work-node__facts .work-node__key, .work-node__facts .work-node__remote { font-family: var(--font-mono); } /* M164 (the critic): a teammate's name and a lane's label are prose; the key and remote stay code */
 .work-node__facts dt { display: inline; }
 .work-node__facts dt::after { content: ': '; }
 .work-node__facts dd { display: inline; margin: 0; color: var(--fg-2); }
@@ -4220,10 +4225,6 @@ body {
    full title lives in the title attribute and the ⋯ menu. */
 .pf__title { min-width: 8ch; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__word, .pf__chrome .pf__kind { flex: 0 0 auto; }
-/* The readouts give AFTER the title and BEFORE the verbs: a live 320px frame
-   with a CPU · RAM badge pushed `fill` and `×` past its own edge in the first
-   header shot, with the title already at its floor. */
-.pf__chrome .panel__machine-cost { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* The ⋯ menu spans the frame beneath the chrome — the CHROME is its containing
    block — because `.panel` clips its overflow and a menu hung off the ⋯ button
    was cut at the frame's left edge on a narrow panel. */
@@ -4251,6 +4252,33 @@ body {
 .world { --chrome-scale: 1; }
 .panel__resize--e { transform-origin: right center; }
 .panel__resize--s { transform-origin: center bottom; }
+
+/* M163. THE REST RULE (the brief, rule 2). At rest a header is the kind glyph,
+   the title and one state — a dot, or the pill for a kind whose word IS the
+   state — plus the kind's summary line. Every BUTTON in the chrome (⋯, the
+   kind's own verbs, fill, the close) and every MARK (lock, pin) sit in their
+   box at opacity 0 and come to 1 on the frame's :hover, :focus-within and
+   selection. Opacity, never display: the box stays, so header.1's widths,
+   targets.1's 24px and a script's click (menu.1, the close arming) all hold
+   without a hover, and a keyboard reaches every control by name (M44). 0 and
+   1 only (check 3). The ⋯ menu's own rows are exempt: an open menu is being
+   looked at. `.pf__chrome button` rather than a class list: the first cut
+   listed .pf__verb and .icon-button and the review's `commit` and the file's
+   pencil — neither class — stayed on every golden. */
+.pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
+.pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
+.panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close,
+.pf__menu button, .pf__menu .pf__verb,
+/* Exempt (the Act I critic): the skill-trail capsule is a COUNT — `3 skills` is the
+   lane's only stated size and M130 says it never disappears — and the auto chip's
+   dismiss sits INSIDE a state pill, where a hidden box reads as a hole. Both sit
+   below the hiding rule at equal specificity: SOURCE ORDER is what wins here. */
+.pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { transition: none; } }
+/* M163. The inspector's Machine section (the metrics rule): the one place the
+   per-panel CPU · RAM figure lives. */
+.inspector__machine { font-variant-numeric: tabular-nums; }
 .panel__resize--se { transform-origin: right bottom; }
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }
@@ -4287,9 +4315,12 @@ body {
    name, so a cut one names nothing the user can act on. It wraps to two
    lines; the DESCRIPTION, which is prose and repeats what the shelf already
    says, takes the single clamped line instead. */
-.trail-card__name { color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.trail-card__name { color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .trail-card__note { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+.trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); } /* M164 (finding 14): the phase is a sentence, not a caps label */
 @keyframes trail-card-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 /* The capsule in the chrome. A word control like `fill`, never a glyph. */
 .pf__trail { flex: 0 0 auto; }
+
+/* M164. The measure: prose wraps at --measure, never at the panel's width. */
+.file-node__prose, .pf__note, .skill-node__line, .github-item__body, .work-node__title, .toolbox-node__detail { max-width: var(--measure); }

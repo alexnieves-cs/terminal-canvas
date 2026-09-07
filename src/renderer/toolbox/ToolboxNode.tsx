@@ -5,6 +5,7 @@ import { applyToolbox, useToolbox } from '@renderer/session/toolbox-store'
 import { buildToolboxNodeModel } from './toolbox-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
+import { displayPath } from '@shared/display-path'
 
 export interface ToolboxNodeProps {
   panel: ToolboxPanel
@@ -159,7 +160,8 @@ function ToolboxNodeImpl({
         // is on `window`, above this in the bubble path.
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <p className="toolbox-node__directory" data-toolbox-directory>{model.directory}</p>
+        {/* M164. The path rule. */}
+        <p className="toolbox-node__directory" data-toolbox-directory title={model.directory}>{displayPath(model.directory).short}</p>
 
         {model.stale && (
           // A fact about FILES, never a claim about the running agent, and
