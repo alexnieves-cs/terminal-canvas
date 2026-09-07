@@ -19063,6 +19063,15 @@ app.whenReady().then(async () => {
         'editor.2b Rename carries the SHELF SLOT: the flushed shelf holds the new scope:name key and no longer holds the old one',
         'editor.2c Delete asks main to trash the skill\'s DIRECTORY, and its confirm NAMES the resource count'
       ]
+      // Electron answers a throwing executeJavaScript with one generic
+      // sentence and no inner error, which is useless for a check that
+      // splices ids and JSON keys into page scripts. `nsJs` wraps every
+      // source in an in-page try/catch and rethrows the REAL message here.
+      const nsJs = async (src) => {
+        const r = await wc.executeJavaScript(`(() => { try { return (${src}) } catch (e) { return { __nsErr: String(e && e.stack || e) } } })()`)
+        if (r !== null && typeof r === 'object' && typeof r.__nsErr === 'string') throw new Error('in page: ' + r.__nsErr)
+        return r
+      }
       try {
         const NS_DIR = mkdtempSync(join(tmpdir(), 'tc skill doors '))
         const NS_ROOT = join(NS_DIR, '.claude', 'skills')
@@ -19080,70 +19089,98 @@ app.whenReady().then(async () => {
         const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reN
         await settle()
-        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="nsT"]') !== null`), 8000)
+        await waitUntil(() => nsJs(`document.querySelector('.panel[data-panel-id="nsT"]') !== null`), 8000)
 
         // Into the Skills pane through the dock's own button — the pane must
         // be REACHABLE, not merely renderable.
-        await waitUntil(() => wc.executeJavaScript(
+        await waitUntil(() => nsJs(
           `(() => { const b = document.querySelector('[data-dock="skills"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`), 8000)
-        await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-skills-pane]') !== null`), 8000)
+        await waitUntil(() => nsJs(`document.querySelector('[data-skills-pane]') !== null`), 8000)
 
         // 2a — New skill, at project scope, through the real controls.
-        await waitUntil(() => wc.executeJavaScript(
-          `(() => { const b = document.querySelector('[data-skills-new-skill]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return document.querySelector('[data-skills-new-skill-draft]') !== null })()`), 8000)
-        await wc.executeJavaScript(`(() => {
+        // CLICK, not mousedown: every pane control mounts `shellControl`,
+        // whose mousedown only calls preventDefault (it keeps focus off the
+        // button) and whose CLICK is what runs the verb — the panel's own
+        // doors are the opposite, and mixing the two presses nothing.
+        // Pressed exactly ONCE, then awaited separately: a waitUntil that
+        // re-dispatches would toggle this draft open and shut for ever,
+        // and the next script would read a null input.
+        await waitUntil(() => nsJs(`document.querySelector('[data-skills-new-skill]') !== null`), 8000)
+        await nsJs(`(() => { document.querySelector('[data-skills-new-skill]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`)
+        await waitUntil(() => nsJs(`document.querySelector('[data-skills-new-skill-draft]') !== null`), 8000)
+        const scoped = await nsJs(`(() => {
           const scope = document.querySelector('[data-skills-new-skill-scope="project"]')
-          if (scope && !scope.disabled) scope.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          if (!scope || scope.disabled) return false
+          scope.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+          return true
+        })()`)
+        if (scoped !== true) throw new Error('editor.2a: the project scope was absent or disabled — the fixture panel has a directory, so it should be neither')
+        await nsJs(`(() => {
           const input = document.querySelector('[data-skills-new-skill-name]')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
           setter.call(input, 'minted-here')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           return true
         })()`)
-        await wc.executeJavaScript(
-          `(() => { const b = document.querySelector('[data-skills-new-skill-create]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        // The Create button is disabled until the name lands, so wait for it
+        // to go live rather than pressing into a disabled control.
+        await waitUntil(() => nsJs(
+          `(() => { const b = document.querySelector('[data-skills-new-skill-create]'); return b !== null && b.disabled === false })()`), 8000)
+        await nsJs(
+          `(() => { document.querySelector('[data-skills-new-skill-create]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true })()`)
         const madeOnDisk = await waitUntil(() => {
           try { return readFileSync(join(NS_ROOT, 'minted-here', 'SKILL.md'), 'utf8').startsWith('---\n') } catch { return false }
         }, 10000)
-        const cardShown = await waitUntil(() => wc.executeJavaScript(
-          `document.querySelector('[data-skill-card=${JSON.stringify(JSON.stringify(['project', 'minted-here']))}]') !== null`), 12000)
+        // The key is compared as an ATTRIBUTE VALUE, never spliced into a
+        // CSS selector: `["project","minted-here"]` carries quotes and
+        // brackets, and a selector built from it throws rather than missing.
+        const cardShown = await waitUntil(() => nsJs(
+          `[...document.querySelectorAll('[data-skill-card]')].some((n) => n.getAttribute('data-skill-card') === ${JSON.stringify(JSON.stringify(['project', 'minted-here']))})`), 12000)
         ok(IDS[0], madeOnDisk === true && cardShown === true,
           JSON.stringify({ madeOnDisk, cardShown }))
 
         // 2b/2c — the panel's own two folder doors. Drop the card that has
         // the resources so the confirm has a count to name.
-        await wc.executeJavaScript(`(() => {
+        await nsJs(`(() => {
           const host = document.querySelector('[role="application"]'); if (!host) return false
           const r = host.getBoundingClientRect()
           const dt = new DataTransfer(); dt.setData('application/x-tc-skill', ${JSON.stringify(JSON.stringify(['project', 'renameable']))})
           return host.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 220, clientY: r.top + 420 })) || true
         })()`)
-        const nsId = await waitUntil(() => wc.executeJavaScript(
+        const nsId = await waitUntil(() => nsJs(
           `(() => { const n = document.querySelector('.panel[data-panel-kind="skill"]'); return n ? n.getAttribute('data-panel-id') : false })()`), 10000)
         const nsSel = `.panel[data-panel-id=${JSON.stringify(nsId)}]`
-        await waitUntil(() => wc.executeJavaScript(
-          `(() => { const b = document.querySelector('${nsSel} [data-skill-tab="edit"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return document.querySelector('${nsSel} [data-skill-folder-doors]') !== null })()`), 12000)
+        // MOUSEDOWN here: every control INSIDE a panel arms on mousedown
+        // (PanelFrame's rule, so a press cannot be lost to a drag) — the
+        // opposite of the pane's shellControl above. Pressed once.
+        await waitUntil(() => nsJs(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-tab="edit"]'); return b !== null && b.disabled === false })()`), 12000)
+        await nsJs(`(() => { document.querySelector('${nsSel} [data-skill-tab="edit"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await waitUntil(() => nsJs(`document.querySelector('${nsSel} [data-skill-folder-doors]') !== null`), 12000)
 
         // 2c's confirm FIRST, while the skill still exists: arm the delete,
         // read the sentence, then disarm by re-reading (the second press is
         // what commits, and it happens below).
-        await waitUntil(() => wc.executeJavaScript(
-          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`), 8000)
-        const confirmText = await waitUntil(() => wc.executeJavaScript(
+        await waitUntil(() => nsJs(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); return b !== null && b.disabled === false })()`), 8000)
+        await nsJs(`(() => { document.querySelector('${nsSel} [data-skill-door="delete"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        const confirmText = await waitUntil(() => nsJs(
           `(() => { const n = document.querySelector('${nsSel} [data-skill-delete-confirm]'); return n ? n.textContent : false })()`), 8000)
 
         // 2b — rename, then the SHELF: the key is `scope:name`, so a rename
         // that could not carry the slot leaves the old key rendering `not
         // installed here`, which reads as a skill that was never installed.
-        await wc.executeJavaScript(`(() => {
+        await nsJs(`(() => {
           const input = document.querySelector('${nsSel} [data-skill-rename-name]')
           const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
           setter.call(input, 'renamed-away')
           input.dispatchEvent(new Event('input', { bubbles: true }))
           return true
         })()`)
-        await wc.executeJavaScript(
-          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="rename"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await waitUntil(() => nsJs(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="rename"]'); return b !== null && b.disabled === false })()`), 8000)
+        await nsJs(
+          `(() => { document.querySelector('${nsSel} [data-skill-door="rename"]').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
         const movedOnDisk = await waitUntil(() => {
           try { return readdirSync(NS_ROOT).includes('renamed-away') && !readdirSync(NS_ROOT).includes('renameable') } catch { return false }
         }, 10000)
@@ -19157,12 +19194,13 @@ app.whenReady().then(async () => {
 
         // The delete, committed: two presses, and main is asked to trash the
         // DIRECTORY. The harness's trash records rather than moves.
+        // The door is STILL armed from the confirm read above (nothing
+        // disarms it), so exactly ONE more press commits — a second would
+        // re-arm it and trash nothing, which is the two-step working.
         const before = skillTrashCalls.length
-        for (let i = 0; i < 2; i++) {
-          await wc.executeJavaScript(
-            `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
-          await settle()
-        }
+        await nsJs(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await settle()
         const trashed = await waitUntil(() => (skillTrashCalls.length > before ? skillTrashCalls[skillTrashCalls.length - 1] : false), 10000)
         ok(IDS[2],
           typeof confirmText === 'string' && /3 resources/.test(confirmText) &&
