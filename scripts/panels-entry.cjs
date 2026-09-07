@@ -219,6 +219,9 @@ module.exports = {
   /* Check 30 drives the capture round trip through the SAME helper main uses,
      rather than a lambda here that could drift from production. */
   requestFromRenderer: require('../src/main/ipc').requestFromRenderer,
+  /* M138. The pool's production caller and the payload-carrying request, wired here the way main/index.ts wires them. */
+  requestFromRendererWith: require('../src/main/ipc').requestFromRendererWith,
+  createPoolCaller: require('../src/main/pool-caller.ts').createPoolCaller,
   IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS,
   // Check 174's own reason: window.canvas.jira is deep-frozen by
   // contextBridge (Electron's own protection against exactly this kind of

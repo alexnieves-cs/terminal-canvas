@@ -7,6 +7,7 @@ import { isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { undoHistory, type History } from '@renderer/panels/history'
 import type { PresetTemplate } from '@shared/ipc-contract'
 import type { Viewport, WorldRect } from './viewport'
+import { skillEditorFocused } from '../skills/editor-focus'
 
 export interface CanvasTestHooksDeps {
   /** M133. The instantiation counter — see `__m132Instantiations` below. */
@@ -100,6 +101,8 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
     })
     /** M116. The focused id, so a check can assert a flight moved the camera and NOT the focus. */
     w.__m4aFocusedId = (): string | null => focusedIdRef.current
+    /** M135. The skill editor's keyboard flag, so a check can tell a guard that never armed from a paste that reached two places. */
+    w.__m129EditorFocused = (): boolean => skillEditorFocused()
     /** Screen-space centre of the first cell of `word` in the focused panel. */
     w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
       const id = focusedIdRef.current

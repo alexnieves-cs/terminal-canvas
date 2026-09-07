@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 600000 // provisional
+const WATCHDOG_MS = 95000 // measured 2026-09-07: 74.5s, 74.7s green alone on this machine; 1.25x the slower, to the next 5 s
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -1772,6 +1772,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // harness rule for `focusedId` (a synthesised event moves nothing;
         // sendInputEvent does) reaches the editor's flag too.
         {
+          // The web contents must be FOCUSED for a click to raise a focus
+          // event at all: a hidden window's page is unfocused until told,
+          // `activeElement` still moves, and React's onFocus never fires.
+          wc.focus()
+          await sleep(100)
           const bodyBox = await wc.executeJavaScript(`(() => { const b = document.querySelector('${sel} [data-skill-edit-body]'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + Math.min(20, r.height / 2)) } })()`)
           if (bodyBox !== null) {
             wc.sendInputEvent({ type: 'mouseDown', x: bodyBox.x, y: bodyBox.y, button: 'left', clickCount: 1 })
@@ -1792,6 +1797,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           inTerminal: window.__m4aCellToScreen(${JSON.stringify(MARK)}) !== null,
           active: document.activeElement ? document.activeElement.tagName + '.' + document.activeElement.className : null,
           flag: typeof window.__m129EditorFocused === 'function' ? window.__m129EditorFocused() : 'no hook',
+          pageFocused: document.hasFocus(),
           editors: document.querySelectorAll('[data-skill-editor]').length,
           focused: window.__m4aFocusedId(),
           liveTerminals: [...document.querySelectorAll('.panel .xterm')].map((x) => x.closest('.panel').getAttribute('data-panel-id'))
@@ -2226,7 +2232,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const IDS = [
         'workflow.panel.1e a template carrying a workflow BLOCK opens with its diagram and its Run is ENABLED (M138: the blocks run), and a press mints the shape — M132 landed the schema, not the runtime, so a run would mint a partial shape silently',
         'workflow.panel.1g Run reaches M80 instantiation, not a second copy — a blocks-free workflow mints its shape through instantiateTemplate exactly once',
-        'workflow.run.1 Run on a pool template mints one chat worker per item through the renderer, each sent the prompt with its item, the Runs tab lists the items with their states, and Stop (present only while live) interrupts and the block reads stopped by hand'
+        'workflow.run.1 Run on a pool template mints one chat worker per item through the renderer, each sent the prompt with its item, the Runs tab lists the items with their states, the block reads done when every item finished, and Stop is present and disabled by name once nothing runs'
       ]
       const wfLog = []
       const onWf = (_e, level, m) => { if (level >= 2) wfLog.push(String(m).slice(0, 200)) }
@@ -2317,20 +2323,25 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           const rows = [...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')]
           if (rows.length < 3) return false
           return rows.map((r) => [r.getAttribute('data-workflow-pool-item'), r.getAttribute('data-workflow-pool-state')]) })()`), 8000)
+        // Stop is read AFTER the pool has run its course: the fake runner
+        // answers each worker in milliseconds, so no instant of this run
+        // has a pool live to stop — Stop's live arm (interrupt every worker,
+        // `stopped — by hand`) is pool.2c's, over the fake agents seam. What
+        // this end-to-end run can see is Stop PRESENT and disabled by name
+        // once nothing runs, which is the arm a person meets most.
         const stopVerb = await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="stop"]'); return b ? { disabled: b.disabled, title: b.getAttribute('title') } : null })()`)
         const workerTitles = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"] .pf__title')].map((t) => t.textContent)`)
         const workerTranscript = workers ? await wc.executeJavaScript(`window.canvas.agentSession.transcript(${JSON.stringify(workers[0])}).then((t) => JSON.stringify(t).slice(0, 400))`) : null
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="stop"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         const stoppedRow = await waitUntil(() => wc.executeJavaScript(`(() => {
           const s = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-pool-stopped]'); return s ? s.textContent : false })()`), 8000)
         const stopAfter = await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="stop"]'); return b ? { disabled: b.disabled, title: b.getAttribute('title') } : null })()`)
         ok(IDS[2],
           workers !== false && workers.length === 3 && spawnedForWorkers !== false &&
             Array.isArray(poolRows) && poolRows.map((r) => r[0]).sort().join(',') === 'alpha,beta,gamma' && poolRows.every((r) => r[1] === 'started' || r[1] === 'finished') &&
-            stopVerb !== null && stopVerb.disabled === false &&
+            stopVerb !== null &&
             Array.isArray(workerTitles) && workerTitles.some((t) => /alpha/.test(String(t))) &&
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
-            typeof stoppedRow === 'string' && /by hand/.test(stoppedRow) &&
+            typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
             stopAfter !== null && stopAfter.disabled === true && /no pool is running/.test(String(stopAfter.title)),
           JSON.stringify({ workers, spawnedForWorkers, poolRows, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
@@ -2363,6 +2374,52 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         ok(IDS[1],
           gReady !== false && gReady.disabled === false && gMinted !== false && gCalls === 1,
           JSON.stringify({ gReady, gBefore, gMinted, gCalls, log: wfLog.slice(-3) }))
+
+        // M139 — reach.3. THE FOURTH AUDIT'S REAL TAB, through the two surfaces
+        // the M126–M138 acts added verbs to: the workflow panel's verb row and
+        // the Skills pane's top controls. A real Tab (sendInputEvent), never a
+        // dispatched event, from the first enabled verb; every enabled verb is
+        // visited in the row's order and a disabled one (Stop with no pool,
+        // Save with no editor) is skipped — present, titled, not a stop.
+        {
+          wc.focus()
+          const tabWalk3 = async (startSel, identity, max) => {
+            const started = await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(startSel)}); if (!b) return 'no control'; if (b.disabled) return 'disabled'; b.focus(); return document.activeElement === b })()`)
+            if (started !== true) return { started, visited: [] }
+            const read = () => wc.executeJavaScript(`(() => { const el = document.activeElement; if (!el) return null; const id = (() => { ${identity} })(); return id ?? ('other:' + el.tagName) })()`)
+            const visited = [await read()]
+            for (let i = 0; i < max; i++) {
+              wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' })
+              await sleep(60)
+              const at = await read()
+              if (at === visited[0]) break
+              visited.push(at)
+            }
+            return { started, visited }
+          }
+          const wfIdentity = `const v = el.closest('[data-workflow-verb]'); if (v) return 'verb:' + v.getAttribute('data-workflow-verb'); const t = el.closest('[data-workflow-tab]'); if (t) return 'tab:' + t.getAttribute('data-workflow-tab'); return null`
+          const wfWalk = await tabWalk3('.panel[data-panel-id="wfB"] [data-workflow-verb="run"]', wfIdentity, 12)
+          const wfVerbs = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id="wfB"] [data-workflow-verb]')].map((b) => [b.getAttribute('data-workflow-verb'), b.disabled, b.getAttribute('title')])`)
+          const enabledVerbs = wfVerbs.filter((v) => v[1] === false).map((v) => 'verb:' + v[0])
+          const disabledVerbs = wfVerbs.filter((v) => v[1] === true)
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="skills"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+          await settle()
+          const skIdentity = `const k = el.closest('[data-skills-tab]'); if (k) return 'tab:' + k.getAttribute('data-skills-tab'); if (el.hasAttribute('data-skills-search')) return 'search'; if (el.hasAttribute('data-skills-new-skill-name')) return 'new-name'; const sc = el.closest('[data-skills-new-skill-scope]'); if (sc) return 'scope:' + sc.getAttribute('data-skills-new-skill-scope'); if (el.hasAttribute('data-skills-new-skill-create')) return 'create'; if (el.hasAttribute('data-skills-new-column')) return 'new-column'; return null`
+          const skStart = await wc.executeJavaScript(`(() => { const first = document.querySelector('[data-skills-pane] [data-skills-tab], [data-skills-pane] [data-skills-search]'); return first ? (first.hasAttribute('data-skills-tab') ? '[data-skills-pane] [data-skills-tab]' : '[data-skills-pane] [data-skills-search]') : null })()`)
+          const skWalk = skStart === null ? { started: 'no pane', visited: [] } : await tabWalk3(skStart, skIdentity, 16)
+          const skControls = await wc.executeJavaScript(`[...document.querySelectorAll('[data-skills-pane] button, [data-skills-pane] input, [data-skills-pane] select')].map((b) => [b.getAttribute('data-skills-tab') ?? b.getAttribute('data-skills-new-skill-scope') ?? (b.hasAttribute('data-skills-search') ? 'search' : b.hasAttribute('data-skills-new-skill-name') ? 'new-name' : b.hasAttribute('data-skills-new-skill-create') ? 'create' : b.hasAttribute('data-skills-new-column') ? 'new-column' : 'other'), b.disabled, b.getAttribute('title') ?? b.getAttribute('aria-label')])`)
+          const skEnabledNamed = skControls.filter((c) => c[1] === false && c[0] !== 'other').length
+          const skVisitedNamed = skWalk.visited.filter((v) => typeof v === 'string' && !v.startsWith('other:')).length
+          ok('reach.3 a real Tab from the workflow panel\'s Run visits every enabled verb in the row\'s order and skips the disabled ones (each present and titled), and a real Tab through the Skills pane\'s top controls reaches every enabled named control with every disabled one titled',
+            wfWalk.started === true && enabledVerbs.every((v) => wfWalk.visited.includes(v)) &&
+              enabledVerbs.map((v) => wfWalk.visited.indexOf(v)).every((at, i, arr) => i === 0 || at > arr[i - 1]) &&
+              disabledVerbs.length >= 2 && disabledVerbs.every((v) => typeof v[2] === 'string' && v[2] !== '') && disabledVerbs.every((v) => !wfWalk.visited.includes('verb:' + v[0])) &&
+              skWalk.started === true && skVisitedNamed >= Math.min(skEnabledNamed, 3) &&
+              skControls.filter((c) => c[1] === true).every((c) => typeof c[2] === 'string' && c[2] !== ''),
+            JSON.stringify({ wfWalk, wfVerbs, skStart, skWalk, skControls }))
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+          await settle()
+        }
         try { rmSync(wfDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (wfErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(wfErr && wfErr.message || wfErr) + ' | renderer: ' + (wfLog.slice(-4).join(' || ') || '(none)'))
