@@ -794,5 +794,36 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     sites.length >= 1 && stray.length === 0 && rules.length === 0, JSON.stringify({ sites, stray, rules }))
 }
 
+// M165 — diff.1. DIFFS AS CARDS. A review file row is a CARD (the control
+// radius, a hairline), its `discard` verb rests at opacity 0 and reveals on
+// the card's :hover / :focus-within (the rest rule) — and stays at 1 while
+// ARMED (`keep` must be readable without a pointer over it), and the two count
+// pills read the add/remove washes that already exist (--green-dim, --red-dim).
+{
+  const card = all.find((r) => /(^|,)\s*\.review-node__file\s*(,|$)/.test(r.sel))
+  const isCard = card ? /border-radius:\s*var\(--r-md\)/.test(card.body) && /border:\s*1px solid var\(--line\)/.test(card.body) : false
+  const discard = all.filter((r) => /(^|,)\s*\.review-node__discard\s*(,|$)/.test(r.sel)).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const reveal = all.some((r) => /\.review-node__file:hover/.test(r.sel) && /\.review-node__file:focus-within/.test(r.sel) && /\.review-node__discard--armed/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const pills = all.some((r) => /\.review-node__add\b/.test(r.sel) && /--green-dim/.test(r.body)) && all.some((r) => /\.review-node__del\b/.test(r.sel) && /--red-dim/.test(r.body))
+  ok('diff.1', 'a review file row is a card (--r-md, a hairline), its discard rests at opacity 0 and reveals on hover/focus-within or while armed, and its counts are two washed pills',
+    isCard && discard && reveal && pills, JSON.stringify({ isCard, discard, reveal, pills }))
+}
+
+// M166 — far.2. THE FAR VIEW AS A STATUS WALL. The summary tier fills with
+// the SAME tone wash the block tier and the minimap use (far.1's color-mix,
+// 26% of the tone over --s-1), shows a kind glyph beside the name, and prints
+// no last line: at a fifth of the size a card is a light with a name, not a
+// paragraph (the brief, finding 10).
+{
+  const block = all.find((r) => /\.panel__card-block\[data-tone\]/.test(r.sel))
+  const mix = block && (block.body.match(/color-mix\([^)]*\)/) || [null])[0]
+  const summary = all.filter((r) => /\.panel__card-summary\[data-tone\]|\.panel__card--summary\[data-tone\]/.test(r.sel))
+  const sameWash = mix !== null && summary.some((r) => r.body.replace(/\s+/g, '').includes(mix.replace(/\s+/g, '')))
+  const glyph = all.some((r) => /\.panel__card-summary-glyph\b/.test(r.sel))
+  const noLine = !all.some((r) => /\.panel__card-summary-line\b/.test(r.sel))
+  ok('far.2', 'the summary tier fills with the block tier\'s own tone wash, carries a kind glyph, and has no last-line rule',
+    sameWash && glyph && noLine, JSON.stringify({ mix, sameWash, glyph, noLine }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

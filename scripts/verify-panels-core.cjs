@@ -4013,5 +4013,34 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         target !== null && target.rest === '0' && hovered === '1' && clicked !== null && clicked.before === '0' && clicked.menu === true,
         JSON.stringify({ target, hovered, clicked }))
     }
+
+    // M166 — far.1 (the status wall, on a real canvas). At a fifth of the
+    //     size every card is at the SUMMARY tier: it shows its kind glyph and
+    //     its title, and no last line of scrollback and no machine figure —
+    //     a wall of lights with names, the same wash the minimap draws.
+    {
+      // A pinch is a wheel with ctrlKey (canvas-input.ts); step until the scale lands near 0.2 — the shot harness's own loop.
+      for (let i = 0; i < 80; i++) {
+        const scale = await wc.executeJavaScript(`window.__m4aScale()`)
+        if (Math.abs(scale - 0.2) / 0.2 < 0.04) break
+        await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); const r = host.getBoundingClientRect()
+          host.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: ${scale > 0.2 ? 60 : -60}, deltaMode: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
+        await sleep(40)
+      }
+      await settle(); await sleep(600)
+      const read = await wc.executeJavaScript(`(() => {
+        const cards = [...document.querySelectorAll('[data-card-summary]')]
+        return { cards: cards.length,
+          glyphs: cards.filter((c) => c.querySelector('.panel__card-summary-glyph')).length,
+          titles: cards.filter((c) => (c.querySelector('.panel__card-summary-title')?.textContent ?? '') !== '').length,
+          lines: document.querySelectorAll('.panel__card-summary-line').length,
+          costs: document.querySelectorAll('[data-machine-cost]').length,
+          washed: cards.filter((c) => { const s = c.querySelector('.panel__card-summary') || c; return getComputedStyle(s).backgroundColor !== 'rgba(0, 0, 0, 0)' }).length } })()`)
+      await zoomTo(wc, '0')
+      await settle()
+      ok('far.1 at a fifth of the size every summary card shows a kind glyph and its title on a tone wash, with no last line and no machine figure',
+        read.cards >= 3 && read.glyphs === read.cards && read.titles === read.cards && read.lines === 0 && read.costs === 0 && read.washed === read.cards,
+        JSON.stringify(read))
+    }
   }
 })
