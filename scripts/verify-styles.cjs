@@ -703,7 +703,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // What it cannot see: a face set from a component's inline style, a family
 // aliased through a second token, or a prose class this list does not name.
 // The goldens are the check for those. `.pf__body--text`, the reading
-// bodies' ancestor, is still mono at 4.0 and is M164's red, not this one's.
+// bodies' ancestor, joined the ancestor arm in M164.
 {
   const PROSE = [
     '.pf__title', '.launcher__title', '.launcher__verb-name', '.launcher__env',
@@ -713,10 +713,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
     '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
     '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
-    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay', '.trail-card__name',
     '.panel__card', '.sheet__preview', '.lane-header__name', '.edge-indicator__name', '.inspector__run-name'
   ]
-  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous']
+  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous', '.pf__body--text' /* M164 */]
   const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
   const esc = (p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // The subject of one selector: its last compound, combinators and

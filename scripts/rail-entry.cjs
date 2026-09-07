@@ -59,6 +59,7 @@ module.exports = {
   /* M127. The Skills pane's columns, and the shelf vocabulary they read —
      pure, the reason every model above joined this bundle. */
   ...require('../src/shared/skills'),
+  ...require('../src/shared/display-path'),
   ...require('../src/renderer/shell/skills-pane-model'),
   /* M138. The pool block's Runs-tab projection: pure over main's events. */
   ...require('../src/renderer/workflow/pool-model')
