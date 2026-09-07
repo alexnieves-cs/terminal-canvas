@@ -77,3 +77,14 @@ export function useMachineCostTotal(): MachineCostSnapshot['total'] {
     () => total
   )
 }
+
+/** M163. The figure's words, once: the inspector's Machine section is the readout's one home (the metrics rule). */
+export function formatCpu(percent: number): string {
+  return `${percent.toLocaleString(undefined, { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`
+}
+
+export function formatMemory(bytes: number): string {
+  const mib = bytes / (1024 * 1024)
+  if (mib < 1024) return `${Math.round(mib)} MB`
+  return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
+}

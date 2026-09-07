@@ -1,5 +1,6 @@
 import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
+import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machine-cost-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
@@ -445,6 +446,7 @@ function InspectorPanel({
   automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
   const state = useAgentState(model.id)
+  const machine = useMachineCost(model.id)
   // M46. Close is DESTRUCTIVE and gated by the same one-click arming the
   // panel's own × uses (never a modal — this app has one modal-shaped surface
   // and keeps it that way). A button pinned at a fixed corner of the pane is
@@ -557,6 +559,24 @@ function InspectorPanel({
         )
       })()}
       </dl>
+      {/* M163. THE MACHINE SECTION (the brief's metrics rule): the per-panel
+          CPU · RAM figure's one home, moved here from every header and card
+          tier. Three arms, never a blank: a reading; a live panel main has
+          not sampled yet (`no reading yet` — never a confident 0%, which is
+          the wrong answer costOf refuses too); a panel with no process. */}
+      {(() => {
+        const pid = model.fields.find((f) => f.key === 'pid')
+        const running = pid !== undefined && pid.value !== '—'
+        const arm = machine !== undefined ? 'reading' : running ? 'none' : 'not-running'
+        return (
+          <section className="inspector__section inspector__machine" data-inspector-machine={arm}>
+            <h3 className="inspector__section-heading">Machine</h3>
+            <div className="inspector__value" data-machine-cost>{arm === 'reading' && machine !== undefined
+              ? `CPU ${formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
+              : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : 'not running — nothing to measure'}</div>
+          </section>
+        )
+      })()}
       {model.links.length > 0 && (
         <div className="inspector__links" data-inspector-links>
           <div className="inspector__links-label">links</div>

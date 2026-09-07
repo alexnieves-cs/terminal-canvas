@@ -222,11 +222,11 @@
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
 
-  --glass-1:    rgba(18, 22, 31, .74);
+  --glass-1:    rgba(18, 22, 31, .88);   /* M163 (finding 8): one clear step from --s-0; was .74 */
   --glass-2:    rgba(13, 16, 24, .82);
-  --edge-light: rgba(255, 255, 255, .06);
+  --edge-light: rgba(255, 255, 255, .11); /* M163: a lit edge you can see at the golden's scale; was .06 */
   --bezel:      rgba(0, 0, 0, .45);
-  --lift:       0 20px 40px -22px rgba(0, 0, 0, .75);
+  --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
   --aura-1:     rgba(99, 102, 241, .22);
   --aura-2:     rgba(45, 212, 191, .12);
   --on-iris:    #06111a;
@@ -2174,15 +2174,6 @@ body {
   color: var(--green);
 }
 
-/* The card remains the readable many-panel surface, but a promoted terminal
-   should not make its resource cost disappear. */
-.panel__machine-cost {
-  flex: none;
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 
 /* Never shrunk to make room for a long title — see .panel__title. Everything
    else comes from .icon-button. */
@@ -2289,7 +2280,6 @@ body {
 .panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
 .panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
 .panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
-.panel__card-summary-cost { font-size: var(--t-sm); color: var(--fg-3); font-variant-numeric: tabular-nums; }
 .panel__card--block { padding: 0; }
 .panel__card-block {
   flex: 1;
@@ -2320,18 +2310,6 @@ body {
   color: var(--fg-3);
 }
 
-/* The card tier is the ordinary many-panel view, so this is the primary
-   machine-cost readout. */
-.panel__card-cost {
-  display: flex;
-  gap: var(--sp-4);
-  margin-top: auto;
-  padding-top: var(--sp-4);
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-variant-numeric: tabular-nums;
-}
 
 /* M63. The state WORD on the card, chrome-sized, in its tone, and under it
    the affordance at the same size in the UI face. The 32px headline that
@@ -4220,10 +4198,6 @@ body {
    full title lives in the title attribute and the ⋯ menu. */
 .pf__title { min-width: 8ch; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pf__chrome .pf__verb, .pf__chrome .pf__close, .pf__chrome .pf__word, .pf__chrome .pf__kind { flex: 0 0 auto; }
-/* The readouts give AFTER the title and BEFORE the verbs: a live 320px frame
-   with a CPU · RAM badge pushed `fill` and `×` past its own edge in the first
-   header shot, with the title already at its floor. */
-.pf__chrome .panel__machine-cost { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* The ⋯ menu spans the frame beneath the chrome — the CHROME is its containing
    block — because `.panel` clips its overflow and a menu hung off the ⋯ button
    was cut at the frame's left edge on a narrow panel. */
@@ -4251,6 +4225,25 @@ body {
 .world { --chrome-scale: 1; }
 .panel__resize--e { transform-origin: right center; }
 .panel__resize--s { transform-origin: center bottom; }
+
+/* M163. THE REST RULE (the brief, rule 2). At rest a header is the kind glyph,
+   the title and one state — a dot, or the pill for a kind whose word IS the
+   state — plus the kind's summary line. Every VERB (⋯, the kind's own, fill),
+   every MARK (lock, pin) and the close sit in their box at opacity 0 and come
+   to 1 on the frame's :hover, :focus-within and selection. Opacity, never
+   display: the box stays, so header.1's widths, targets.1's 24px and a
+   script's click (menu.1, the close arming) all hold without a hover, and a
+   keyboard reaches every control by name (M44). 0 and 1 only (check 3).
+   The ⋯ menu's own rows are exempt: a menu that is open is being looked at. */
+.pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .pf__control, .pf__chrome .icon-button { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close, .pf:hover .pf__control, .pf:hover .icon-button,
+.pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close, .pf:focus-within .pf__control, .pf:focus-within .icon-button,
+.panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close, .panel--selected .pf__control, .panel--selected .icon-button,
+.pf__menu .pf__verb { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .pf__control, .pf__chrome .icon-button { transition: none; } }
+/* M163. The inspector's Machine section (the metrics rule): the one place the
+   per-panel CPU · RAM figure lives. */
+.inspector__machine { font-variant-numeric: tabular-nums; }
 .panel__resize--se { transform-origin: right bottom; }
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }
