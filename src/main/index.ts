@@ -55,6 +55,7 @@ import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
 import { createPoolCaller, type PoolCaller } from './pool-caller'
+import { writeClipboardImage } from './clipboard-file'
 import { claudeCliRunner } from './claude-cli-runner'
 import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
 import { describePlugin } from './plugin-details'
@@ -978,10 +979,12 @@ app.whenReady().then(async () => {
     })
   })
   // M138. The pool's production caller. The list is read HERE (main's, like
-  // every file the app reads for an agent), the mint is the RENDERER's over an
+  // every file the app reads for an agent; absolute path only, no Places
+  // gate — a pool has no teammate, and the file is the user's own), the mint is the RENDERER's over an
   // ephemeral reply (board:add's shape, with a longer wait: a chat is created
   // over IPC before it has an id), the ceilings are M82's read live, and the
-  // spend is the manager's own cumulative figure — never a second sum.
+  // spend is the sum of the sessions' own cumulative figures, the same fold
+  // the manager's ceiling reads (M82) — one rule, two readers.
   const poolAgents = agentSessions
   poolCaller = createPoolCaller({
     agents: poolAgents,
@@ -1489,6 +1492,13 @@ app.whenReady().then(async () => {
       if (png.length > ATTACHMENT_MAX_BYTES) return { refused: `the clipboard image is larger than the ${Math.round(ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB attachment cap` }
       return { mediaType: 'image/png', base64: png.toString('base64'), size: png.length }
     },
+    // M145. The clipboard image as a FILE, for a terminal: the read is here
+    // (Electron's clipboard), the write and the cap are the module's.
+    clipboardFile: () => writeClipboardImage({
+      dir: join(app.getPath('userData'), 'attachments'),
+      now: () => Date.now(),
+      image: () => { const image = clipboard.readImage(); return image.isEmpty() ? null : image.toPNG() }
+    }),
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)
@@ -1646,6 +1656,8 @@ app.whenReady().then(async () => {
       // walked the user's entire home directory and listed it as the vault
       // (M85's verifier). A missing root is the reader's own "no vault" arm.
       snapshotList: () => layoutSnapshots.list(),
+      // M142. History on #46's ledger; the renderer prices it.
+      ledgerUsage: (since) => runLedger.usage(since),
       snapshotRestore: (at, afterId) => {
         const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
         let bytes: string

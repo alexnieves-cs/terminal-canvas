@@ -1,5 +1,5 @@
 import type { WatchTrigger } from './watch-trigger'
-import type { RunRow } from './run-ledger'
+import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
@@ -116,6 +116,9 @@ import type { PoolNode } from './workflow-nodes'
 export interface SnapshotMeta { at: number; bytes: number; workspaces: number; panels: number }
 
 /** Renderer -> main, request/response via ipcRenderer.invoke. */
+/** M145. See ATTACHMENT_CLIPBOARD_FILE. Three arms, never two. */
+export type ClipboardFile = { kind: 'ok'; path: string } | { kind: 'empty' } | { kind: 'failed'; why: string }
+
 export const IPC = {
   PTY_CREATE: 'pty:create',
   PTY_WRITE: 'pty:write',
@@ -526,6 +529,8 @@ export const IPC = {
   LINK_OPEN: 'link:open',
   /** M52. A panel's recent runs from the ledger, newest first. */
   LEDGER_LIST: 'ledger:list',
+  /** M142. This week's usage rows from the run ledger, priced in the renderer. */
+  LEDGER_USAGE: 'ledger:usage',
   /**
    * M65. The spawn sheet: main resolves a preset (absent command included)
    * or a typed command into a template, refuses a directory that does not
@@ -559,6 +564,12 @@ export const IPC = {
   AGENT_IMPORT: 'agent:import',
   /** M75. The clipboard's image, for a ⌘V that carried no text. Main's `clipboard.readImage()`. */
   AGENT_CLIPBOARD_IMAGE: 'agent:clipboard-image',
+  /**
+   * M145. A clipboard IMAGE as a file under userData/attachments, for a
+   * TERMINAL panel: a PTY cannot take bytes, so the renderer pastes the path
+   * main answers with. The chat's door stays `agent:clipboard-image`.
+   */
+  ATTACHMENT_CLIPBOARD_FILE: 'attachment:clipboard-file',
   /** M97. A bounded auto run on a chat: main counts, main stops. */
   AGENT_AUTO_START: 'agent:auto-start',
   AGENT_AUTO_STOP: 'agent:auto-stop',
@@ -1050,6 +1061,8 @@ export interface PresetTemplate {
   title?: string
   /** M65. Focus the new panel: a sheet spawn is a user-initiated one, and focus is what promotes it live. */
   focus?: true
+  /** M147. Environment overrides (a preset's, then the sheet's over them); main merges them over the login env at spawn. */
+  env?: Record<string, string>
 }
 
 /** M65. What the spawn sheet submits. Exactly one of presetId / command. */
@@ -1064,6 +1077,8 @@ export interface SpawnRequest {
   worktree?: boolean
   /** M100. The teammate the panel speaks as; main checks its places before resolving the cwd. */
   teammateId?: string
+  /** M147. Environment overrides typed into the sheet, merged over the preset's own, then the login env — in main. */
+  env?: Record<string, string>
 }
 /** `id` is present when the caller minted the panel itself (a chat); main's spawn answers without one. */
 export type SpawnResult = { kind: 'spawned'; id?: string } | { kind: 'refused'; reason: string }
@@ -1430,6 +1445,8 @@ export interface CanvasBridge {
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
     list(panelId: string, limit: number): Promise<RunRow[]>
+    /** M142. Every usage row at or after `since` (epoch ms), newest first — the history half of backlog #19. */
+    usage(since: number): Promise<UsageRow[]>
   }
   /** M73. The agent-session runtime. `agent` below is the older agent-STATE surface (M6c/M6d); the two are different facts. */
   agentSession: {
@@ -1439,6 +1456,8 @@ export interface CanvasBridge {
     send(id: string, text: string, attachments?: ChatAttachment[]): Promise<SendAnswer>
     /** M75. See AGENT_CLIPBOARD_IMAGE. */
     clipboardImage(): Promise<ClipboardImage>
+    /** M145. See ATTACHMENT_CLIPBOARD_FILE: the image written as a .png, its path; `empty` with no image; a named failure. */
+    clipboardFile(): Promise<ClipboardFile>
     /** True when a request was written; false with no turn in flight. */
     interrupt(id: string): Promise<boolean>
     /** `drop`: also remove the durable transcript (an explicit close, never a quit). */

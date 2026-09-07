@@ -237,7 +237,11 @@ app.whenReady().then(() => {
   // M138 agent:pool-start / agent:pool-stop (122) — the pool's production
   // caller: main reads the list and drives the engine, the renderer mints
   // each worker on request (`pool:mint`, an ephemeral reply like board:add).
-  const EXPECTED_CHANNELS = 122
+  // M145 attachment:clipboard-file (123) — a clipboard image as a file under
+  // userData/attachments, so a terminal can be handed its path.
+  // M142 ledger:usage (124) — this week's usage rows from the run ledger,
+  // folded and priced in the renderer.
+  const EXPECTED_CHANNELS = 124
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

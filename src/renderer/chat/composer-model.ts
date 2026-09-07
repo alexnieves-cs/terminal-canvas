@@ -50,6 +50,33 @@ export function placeholders(body: string): string[] {
 }
 
 /**
+ * M141 (backlog #27). The four BUILT-IN holes: filled from the target panel
+ * before any question is asked, never asked. `{{cwd}}` is the target's LIVE
+ * directory (the read PRESET_CAPTURE makes, M12 — a spawn cwd is confidently
+ * wrong for the panel a person `cd`'d somewhere on purpose); `{{branch}}` is
+ * main's `git:status` answer for that cwd; `{{selection}}` is the terminal's
+ * own selection; `{{panel}}` is the panel's title. Only a SAVED prompt is
+ * expanded: a project prompt is a file this app does not own, and expanding
+ * a name the CLI's format does not define would make the same file behave
+ * differently in the app than in a plain terminal.
+ */
+export const BUILT_IN_HOLES: readonly string[] = ['cwd', 'branch', 'selection', 'panel']
+
+/** The built-ins filled from `values`; one with no value (absent, or '') stays AS TYPED — M75's rule, kept. */
+export function fillBuiltIns(body: string, values: Partial<Record<'cwd' | 'branch' | 'selection' | 'panel', string>>): string {
+  return body.replace(HOLE, (whole, name: string) => {
+    if (!BUILT_IN_HOLES.includes(name)) return whole
+    const value = (values as Record<string, string | undefined>)[name]
+    return typeof value === 'string' && value !== '' ? value : whole
+  })
+}
+
+/** The holes a person is ASKED for: every placeholder that is not a built-in. */
+export function askableHoles(body: string): string[] {
+  return placeholders(body).filter((name) => !BUILT_IN_HOLES.includes(name))
+}
+
+/**
  * A hole with no value stays as typed — never blanked into a prompt that
  * silently says less. An EMPTY string is no value: a field typed into and
  * cleared is the same as one never touched (M75's verifier).

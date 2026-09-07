@@ -2230,7 +2230,8 @@ const isResult = (l) => l.includes('"type":"result"')
       const subs = []
       const a = {
         sends: [], interrupts: [],
-        send: (id, text) => { a.sends.push([id, text]); return { kind: 'sent' } },
+        sendWord: 'sent',
+        send: (id, text) => { a.sends.push([id, text]); return a.sendWord },
         interrupt: (id) => { a.interrupts.push(id); return true },
         subscribe: (cb) => { subs.push(cb); return () => { subs.splice(subs.indexOf(cb), 1) } },
         emit: (e) => { for (const cb of [...subs]) cb(e) }
@@ -2294,16 +2295,64 @@ const isResult = (l) => l.includes('"type":"result"')
           const refusedMint = caller.start({ templateId: 't3', key: 'p', node: poolNode(2) })
           await tick(20)
           const refusedEvent = events.find((e) => e.templateId === 't3' && e.event.kind === 'refused')
-          ok('pool.2d an unreadable list refuses by name before any mint; a mint the renderer refuses becomes a `refused` event naming the reason, and that pool is not left running',
+          ok('pool.2d an unreadable list refuses by name before any mint; a mint the renderer refuses becomes a `refused` event naming the reason, no `stopped` follows it, and that pool is not left running',
             missing.kind === 'refused' && /could not read the work list/.test(missing.reason) && mintsAfterMissing === 0 &&
               refusedMint.kind === 'started' && mints === 1 && refusedEvent !== undefined && /still starting/.test(refusedEvent.event.why) &&
+              !events.some((e) => e.templateId === 't3' && e.event.kind === 'stopped') &&
               agents.sends.length === 0 && caller.list().length === 0,
-            JSON.stringify({ missing, refusedMint, mints, refusedEvent, live: caller.list() }))
+            JSON.stringify({ missing, refusedMint, mints, refusedEvent, kinds: events.map((e) => e.event.kind), live: caller.list() }))
+        }
+        // 2e. a send the manager refuses ends the pool by name — a worker that will never turn would sit `started` forever.
+        {
+          const agents = fakeAgents(); agents.sendWord = 'refused-sandbox'; const events = []; let n = 0
+          const caller = PC.createPoolCaller({
+            agents, mint: async () => ({ kind: 'ok', id: `w${++n}` }),
+            readList: () => ({ kind: 'ok', items: ['a', 'b', 'c'] }),
+            limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }), spend: () => 0,
+            emit: (e) => events.push(e)
+          })
+          const started = caller.start({ templateId: 't4', key: 'p', node: poolNode(2) })
+          await tick(20)
+          const refused = events.find((e) => e.event.kind === 'refused')
+          ok('pool.2e a worker whose send the manager refuses ends the pool by name with the manager\'s word, interrupting the live workers, never a `by hand`',
+            started.kind === 'started' && refused !== undefined && /refused-sandbox/.test(refused.event.why) && /w1/.test(refused.event.why) &&
+              agents.interrupts.includes('w1') && !events.some((e) => e.event.kind === 'stopped') && caller.list().length === 0,
+            JSON.stringify({ started, kinds: events.map((e) => e.event.kind), refused, interrupts: agents.interrupts }))
+        }
+        // 2f. a joined pool (an edge into a collect) must run every worker at once, or it is refused by name before any mint.
+        {
+          const agents = fakeAgents(); const events = []; let mints = 0
+          const caller = PC.createPoolCaller({
+            agents, mint: async () => { mints += 1; return { kind: 'ok', id: `w${mints}` } },
+            readList: () => ({ kind: 'ok', items: ['a', 'b', 'c', 'd', 'e'] }),
+            limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }), spend: () => 0,
+            emit: (e) => events.push(e)
+          })
+          const wide = caller.start({ templateId: 't5', key: 'p', node: poolNode(8), joined: true })
+          const narrow = caller.start({ templateId: 't6', key: 'p', node: poolNode(8) })
+          await tick(20)
+          ok('pool.2f a pool that hands off into a collect is refused by name when its items outnumber the workers the live ceiling allows at once; the same pool without the join starts',
+            wide.kind === 'refused' && /every worker must run at once/.test(wide.reason) && /5 items/.test(wide.reason) && /2 at a time/.test(wide.reason) &&
+              narrow.kind === 'started' && mints === 2,
+            JSON.stringify({ wide, narrow, mints }))
         }
       } catch (e) {
         ok('pool.2 the caller runs without throwing', false, String((e && e.stack) || e).slice(0, 400))
       }
     }
+  }
+
+  // M145 — backends.imagePath.1. Every row says whether its CLI reads an
+  // image path (backlog #13's per-CLI constraint lives beside the per-model
+  // configuration, as the entry asked); copilot and acp say `unmeasured`
+  // rather than guessing.
+  {
+    const B = M.backends.BACKENDS
+    const rows = Object.keys(B)
+    ok('backends.imagePath.1 every backend row carries a pastesImagePath sentence, and the unmeasured rows say so',
+      rows.length >= 4 && rows.every((k) => typeof B[k].pastesImagePath === 'string' && B[k].pastesImagePath.length > 10) &&
+        /reads/.test(B.claude.pastesImagePath) && /unmeasured/.test(B.copilot.pastesImagePath),
+      JSON.stringify(Object.fromEntries(rows.map((k) => [k, B[k].pastesImagePath]))))
   }
 
   const failed = results.filter((r) => !r.pass)

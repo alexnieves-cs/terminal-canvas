@@ -187,7 +187,7 @@ renderer --invoke--> diagnostics:sample / diagnostics:export                  --
 renderer --invoke--> export:panel-text / export:canvas-png                    --> main
 renderer --invoke--> env:report                                                   --> main
 renderer --invoke--> link:open                                                    --> main
-renderer --invoke--> ledger:list                                                  --> main
+renderer --invoke--> ledger:list / ledger:usage                                   --> main
 renderer --invoke--> memory:list / memory:add / vault:read                        --> main
 renderer --invoke--> watcher:create / watcher:run / watcher:stop                   --> main
 renderer --invoke--> watcher:dispose / watcher:list                               --> main
@@ -195,6 +195,7 @@ renderer --invoke--> spawn:sheet / spawn:recent                                 
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
 renderer --invoke--> agent:clipboard-image                                       --> main
+renderer --invoke--> attachment:clipboard-file                                   --> main
 renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
 renderer --invoke--> agent:pool-start / agent:pool-stop                          --> main

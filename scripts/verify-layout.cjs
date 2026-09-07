@@ -3856,6 +3856,39 @@ try {
     JSON.stringify({ threw, stored, warnings, carried, bare }))
 }
 
+// M147 — preset.env.1 / preset.env.2 (backlog #34). A preset and a persisted
+// terminal panel carry `env`, a string→string map merged over the login
+// environment at spawn (`buildPtyEnv`, which existed; the FIELD did not — the
+// schema's own comment called the omission silent). Absent stays absent;
+// present-but-malformed (not a record, or a value that is not a string) drops
+// the WHOLE map with a warning, never a partial one — one bad value beside
+// good ones would spawn an environment nobody wrote. `carry` writes no key
+// for an absent map.
+{
+  const w = []
+  const withEnv = L.parsePresets([preset({ env: { FOO: 'bar', PATH_EXTRA: '/opt/x' } })], w)
+  const badValue = L.parsePresets([preset({ id: 'u2', env: { FOO: 1 } })], w)
+  const notRecord = L.parsePresets([preset({ id: 'u3', env: 'FOO=bar' })], w)
+  const absent = L.parsePresets([preset({ id: 'u4' })], [])
+  ok('preset.env.1 parsePresets carries a string map as env, drops a malformed map whole with a warning (the preset kept), and writes no env key when absent',
+    withEnv.length === 1 && withEnv[0].env && withEnv[0].env.FOO === 'bar' && withEnv[0].env.PATH_EXTRA === '/opt/x' &&
+      badValue.length === 1 && !('env' in badValue[0]) && notRecord.length === 1 && !('env' in notRecord[0]) &&
+      w.filter((x) => /env/.test(x)).length === 2 && absent.length === 1 && !('env' in absent[0]),
+    JSON.stringify({ withEnv: withEnv[0] && withEnv[0].env, warnings: w }))
+}
+{
+  const out = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [
+    { id: 'e1', x: 0, y: 0, w: 320, h: 200, z: 1, cwd: '~', args: [], env: { FOO: 'bar' } },
+    { id: 'e2', x: 0, y: 0, w: 320, h: 200, z: 2, cwd: '~', args: [] },
+    { id: 'e3', x: 0, y: 0, w: 320, h: 200, z: 3, cwd: '~', args: [], env: { FOO: 2 } }
+  ], camera: { x: 0, y: 0, scale: 1 } }] }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('preset.env.2 a terminal panel\'s env round-trips through parseLayout, an absent env stays absent, and a malformed one is dropped whole with a warning while the panel survives',
+    panels.length === 3 && panels[0].env && panels[0].env.FOO === 'bar' && !('env' in panels[1]) && !('env' in panels[2]) &&
+      out.warnings.some((x) => /e3.*env/.test(x)),
+    JSON.stringify({ panels: panels.map((p) => [p.id, p.env]), warnings: out.warnings }))
+}
+
 // M122 — search.active.1. THE HANDLER'S SOURCE OF PANELS. `initial()` applies
 // `restore.layout` and answers no panels with it off; a search built over it
 // went quiet with nothing to say why. The active row of `mergedWorkspaces()`

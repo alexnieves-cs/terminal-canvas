@@ -6,7 +6,7 @@
  * `poolStart` answered `refused`) lands here through the same reducer, so
  * the tab has one source.
  */
-import { useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import type { PoolCallerEvent } from '@shared/ipc-contract'
 import { EMPTY_POOL, reducePool, type PoolBlockState } from './pool-model'
 
@@ -51,15 +51,15 @@ export function livePoolKeys(templateId: string, keys: readonly string[]): strin
  */
 export function usePoolsLive(templateId: string, keys: readonly string[]): string[] {
   const keyList = keys.join('\u0000')
-  const snapshot = (): string => livePoolKeys(templateId, keyList === '' ? [] : keyList.split('\u0000')).join('\u0000')
-  const live = useSyncExternalStore(
-    (cb) => {
-      const offs = (keyList === '' ? [] : keyList.split('\u0000')).map((k) => subscribePool(addressOf(templateId, k), cb))
-      return () => { for (const off of offs) off() }
-    },
-    snapshot,
-    snapshot
-  )
+  // Both callbacks keyed on the template and the key list: a fresh subscribe
+  // per render would tear every block's subscription down and up on every
+  // WorkflowNode render (the critic's finding), which is once per event.
+  const subscribe = useCallback((cb: () => void) => {
+    const offs = (keyList === '' ? [] : keyList.split('\u0000')).map((k) => subscribePool(addressOf(templateId, k), cb))
+    return () => { for (const off of offs) off() }
+  }, [templateId, keyList])
+  const snapshot = useCallback((): string => livePoolKeys(templateId, keyList === '' ? [] : keyList.split('\u0000')).join('\u0000'), [templateId, keyList])
+  const live = useSyncExternalStore(subscribe, snapshot, snapshot)
   return live === '' ? [] : live.split('\u0000')
 }
 

@@ -3718,5 +3718,188 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+
+    // M146 — fit.1. ZOOM TO FIT, named apart from reset and from maximise
+    // (backlog #23): with two panels selected by a real shift-click, the
+    // palette row `Zoom to fit` flies the camera to frame BOTH — every
+    // selected rect lands inside the viewport — while `Reset zoom` returns to
+    // the INITIAL camera; nothing spawns and no panel's rect changes (a camera
+    // move only). Read through the viewport hook and the DOM, never a word.
+    {
+      wc.focus()
+      const ids = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].slice(0, 2).map((p) => p.getAttribute('data-panel-id'))`)
+      const chromeBox = async (id) => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) } })()`)
+      const click = async (box, modifiers) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1, modifiers })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1, modifiers })
+        await sleep(120)
+      }
+      const rectsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
+      const sessionsBefore = (await sessionMap(wc)).size
+      const a = ids.length === 2 ? await chromeBox(ids[0]) : null
+      const b = ids.length === 2 ? await chromeBox(ids[1]) : null
+      if (a) await click(a, [])
+      if (b) await click(b, ['shift'])
+      const selected = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id'))`)
+      // The row is run the way a person runs it: Cmd+K, the title typed, the row pressed (check 52's shape).
+      const runRow = async (title) => {
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+        const found = await wc.executeJavaScript(`(async () => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const input = document.querySelector('.palette__input')
+          setter.call(input, ${JSON.stringify(title)})
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const row = [...document.querySelectorAll('.palette__row')].find((r) => r.textContent.includes(${JSON.stringify(title)}))
+          if (!row) return 'not found'
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return 'ok'
+        })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+        return found
+      }
+      const ranFit = await runRow('Zoom to fit')
+      const framed = await waitUntil(async () => {
+        const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left && r.top >= host.top && r.right <= host.right && r.bottom <= host.bottom }) })()`)
+        return inside ? vp : false
+      }, 4000)
+      const ranReset = await runRow('Reset zoom')
+      const reset = await waitUntil(async () => { const vp = await wc.executeJavaScript(`window.__m4aViewport()`); return vp.scale === 1 && vp.x === DEFAULT_CAMERA.x && vp.y === DEFAULT_CAMERA.y ? vp : false }, 4000)
+      const rectsAfter = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
+      const sessionsAfter = (await sessionMap(wc)).size
+      ok('fit.1 Zoom to fit frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
+        ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
+          rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
+        JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+    }
+
+    // M144 — frame.3. ZOOM-INDEPENDENT CHROME, measured from both sides: at
+    // scale 0.5 a live panel's chrome bar keeps its screen height (the
+    // counter-scale) while its `.panel__slot` — the body xterm lives in —
+    // is exactly half, and the body's computed transform is `none`. The
+    // boundary is the whole feature: a counter-scaled body would move every
+    // click onto the wrong cell (pointer-correct.ts), and a reflowed one
+    // would SIGWINCH a running agent on every zoom.
+    {
+      const measure = () => wc.executeJavaScript(`(() => {
+        const live = [...document.querySelectorAll('.panel[data-panel-id]')].find((p) => p.querySelector('.xterm'))
+        if (!live) return null
+        const chrome = live.querySelector('.panel__chrome').getBoundingClientRect()
+        const slot = live.querySelector('.panel__slot').getBoundingClientRect()
+        const body = live.querySelector('.pf__body')
+        return { id: live.getAttribute('data-panel-id'), chromeH: chrome.height, slotH: slot.height, bodyTransform: body ? getComputedStyle(body).transform : null, scaleVar: getComputedStyle(document.querySelector('.world')).getPropertyValue('--chrome-scale').trim() }
+      })()`)
+      // The camera: Cmd+0 for scale 1, then Cmd+- (the harness's zoomTo takes a
+      // KEY) until the scale is at or under 0.6 — the ratios below are read
+      // against the ACTUAL scale, never an assumed 0.5.
+      await zoomTo(wc, '0')
+      await settle()
+      const atOne = await measure()
+      const scaleOne = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale
+      let scaleOut = scaleOne
+      for (let i = 0; i < 12 && scaleOut > 0.6; i++) { await zoomTo(wc, '-'); await sleep(80); scaleOut = (await wc.executeJavaScript(`window.__m4aViewport()`)).scale }
+      await settle()
+      const atOut = await measure()
+      await zoomTo(wc, '0')
+      await settle()
+      const chromeRatio = atOne && atOut ? atOut.chromeH / atOne.chromeH : 0
+      const slotRatio = atOne && atOut ? atOut.slotH / atOne.slotH : 0
+      const expectedSlot = scaleOut / scaleOne
+      ok('frame.3 zoomed out, the chrome bar keeps its screen height (counter-scaled by 1/scale) while the body slot shrinks with the scale and the body carries no transform',
+        atOne !== null && atOut !== null && atOne.id === atOut.id && scaleOne === 1 && scaleOut <= 0.6 &&
+          chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
+          Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.5,
+        JSON.stringify({ atOne, atOut, scaleOne, scaleOut, chromeRatio, slotRatio, expectedSlot }))
+    }
+
+    // M141 — prompt.builtin.1. A SAVED prompt's {{cwd}} and {{panel}} are
+    // filled from the target's LIVE cwd (the same read PRESET_CAPTURE makes,
+    // never spec.cwd) and its title before the paste, with no question asked
+    // for either; the paste is bracketed (check 40's rule). Read off the
+    // terminal's own screen: the default panel is `/bin/cat -v`, which echoes
+    // what it receives.
+    {
+      await wc.executeJavaScript(`window.canvas.prompt.save('where am i', 'PBI-cwd={{cwd}} PBI-panel={{panel}}')`)
+      await settle()
+      const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const pbId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !panelsBefore.includes(id)) ?? false
+      }, 8000)
+      if (typeof pbId === 'string') {
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .xterm') !== null`), 8000)
+        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`)
+        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId, 5000)
+        await sleep(400)
+      }
+      const liveCwd = typeof pbId === 'string' ? (ptyManager.list().find((s) => s.panelId === pbId) || { cwd: null }).cwd : null
+      const title = typeof pbId === 'string' ? await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .pf__title') || {}).textContent ?? null`) : null
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const inserted = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'insert prompt where am i')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        const selected = document.querySelector('.palette__row--selected')
+        if (!selected || !selected.textContent.includes('where am i')) return selected ? selected.textContent : 'no row'
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        return true
+      })()`)
+      // No question may open: the input mode would keep the palette open with a `cwd (1 of 2)` label.
+      await sleep(400)
+      const asked = await wc.executeJavaScript(`(document.querySelector('.palette__mode-label, .palette__label') || {}).textContent ?? (document.querySelector('.palette') ? 'palette open' : null)`)
+      const cwdTail = typeof liveCwd === 'string' ? liveCwd.split('/').filter(Boolean).slice(-1)[0] : null
+      const echoedCwd = cwdTail ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-cwd=') !== null && window.__m4aCellToScreen(${JSON.stringify(cwdTail)}) !== null`), 5000) : false
+      const echoedPanel = typeof title === 'string' && title !== '' ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-panel=' + ${JSON.stringify(title.split(' ')[0])}) !== null`), 3000) : false
+      const literal = await wc.executeJavaScript(`window.__m4aCellToScreen('{{cwd}}') !== null || window.__m4aCellToScreen('{{panel}}') !== null`)
+      ok('prompt.builtin.1 a saved prompt\'s {{cwd}} and {{panel}} paste the target\'s live cwd and title into the terminal with no question asked, and the literal holes never reach the agent',
+        typeof pbId === 'string' && inserted === true && (asked === null || asked === 'palette open' && false || !/1 of/.test(String(asked))) &&
+          echoedCwd !== false && echoedPanel !== false && literal === false,
+        JSON.stringify({ pbId, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
+      if (typeof pbId === 'string') await clickPanelClose(wc, pbId)
+    }
+
+    // M145 — paste.image.1 (backlog #13's bytes case). With an IMAGE on the
+    // clipboard and no text, a menu paste into a spawned terminal hands the
+    // agent a PATH: main writes the image under attachments/ and the renderer
+    // pastes the shell-quoted path (bracketed, check 40's rule); a text paste
+    // is unchanged. The terminal is `/bin/cat -v`, which echoes what it gets.
+    {
+      const { clipboard, nativeImage } = require('electron')
+      const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const piId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !panelsBefore.includes(id)) ?? false
+      }, 8000)
+      if (typeof piId === 'string') {
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(piId)}] .xterm') !== null`), 8000)
+        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(piId)}] .panel__slot`)
+        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === piId, 5000)
+        await sleep(300)
+      }
+      // A 2x2 red PNG on the clipboard, and NO text (a text paste wins when both are there).
+      const png = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2P8z8DwnwEIGGEMAD3JBP0e4nFXAAAAAElFTkSuQmCC')
+      clipboard.clear()
+      clipboard.writeImage(png)
+      const textOnClipboard = clipboard.readText()
+      wc.send(IPC_EVENTS.EDIT_PASTE, textOnClipboard)
+      const echoedPath = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('.png') !== null && window.__m4aCellToScreen('attachments') !== null`), 6000)
+      const bracketed = await wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`)
+      const written = readdirSync(harnessAttachmentsDir).filter((f) => f.endsWith('.png'))
+      clipboard.clear()
+      clipboard.writeText('PLAIN-TEXT-PASTE-4471')
+      wc.send(IPC_EVENTS.EDIT_PASTE, clipboard.readText())
+      const echoedText = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PLAIN-TEXT-PASTE-4471') !== null`), 4000)
+      ok('paste.image.1 a clipboard image pasted into a spawned terminal lands as a bracketed shell-quoted path to a .png main wrote under attachments/, and a text paste is unchanged',
+        typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length >= 1 && echoedText !== false,
+        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText }))
+      if (typeof piId === 'string') await clickPanelClose(wc, piId)
+    }
   }
 })

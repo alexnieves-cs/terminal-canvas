@@ -1525,6 +1525,71 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ newer, same, ahead, bare, forbidden, threw, notJson, notList, onlyPre, cmp, cmpEq, repo, repoStr, noRepo, url: urls[0] }))
   } catch (e) { ok('update.1 (threw)', false, String(e)) }
 
+// M145 — clipboard.1–.3 (backlog #13's bytes case). An image on the
+// clipboard pasted into a TERMINAL becomes a file main writes under the
+// attachments directory, and its PATH is what the terminal receives (a PTY
+// cannot take bytes; the agent CLIs read a path). The directory is pruned to
+// the newest ATTACHMENTS_KEEP files — a cap, not an age, because a cap cannot
+// grow without bound and needs no clock to be right. No image on the
+// clipboard is the `empty` arm, never a zero-byte file.
+;(async () => {
+  const { mkdtempSync, readdirSync, readFileSync, existsSync } = require('node:fs')
+  const { join } = require('node:path')
+  const { tmpdir } = require('node:os')
+  const has = typeof F.writeClipboardImage === 'function' && typeof F.ATTACHMENTS_KEEP === 'number'
+  const dir = mkdtempSync(join(tmpdir(), 'tc file clipboard '))
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+  let now = 1000
+  const write = (bytes) => F.writeClipboardImage({ dir, now: () => (now += 1), image: () => bytes })
+  const first = has ? write(png) : null
+  ok('clipboard.1 an image on the clipboard is written as a .png under the directory and the result names its path',
+    has && first !== null && first.kind === 'ok' && /\.png$/.test(first.path) && first.path.startsWith(dir) && existsSync(first.path) && readFileSync(first.path).equals(png),
+    JSON.stringify({ has, first }))
+  const empty = has ? write(null) : null
+  ok('clipboard.2 no image on the clipboard is the `empty` arm — no file is written',
+    has && empty !== null && empty.kind === 'empty' && readdirSync(dir).length === 1,
+    JSON.stringify({ empty, files: has ? readdirSync(dir).length : null }))
+  if (has) for (let i = 0; i < F.ATTACHMENTS_KEEP + 5; i++) write(png)
+  const files = has ? readdirSync(dir).filter((f) => f.endsWith('.png')) : []
+  ok('clipboard.3 the directory is pruned to the newest ATTACHMENTS_KEEP files after each write, and the newest survives',
+    has && files.length === F.ATTACHMENTS_KEEP && F.ATTACHMENTS_KEEP >= 10 && files.some((f) => f.includes(String(now))),
+    JSON.stringify({ keep: has ? F.ATTACHMENTS_KEEP : null, files: files.length, now }))
+})()
+
+// M142 — ledger.usage.1 (backlog #19's history half). Usage HISTORY rides
+// #46's run ledger, never a third store: at a panel's kill or exit main
+// appends ONE usage row beside the command rows (per-model token totals, the
+// turn count, when it ended — priced by the RENDERER with the summary's own
+// rule, so main holds no price table). `list` (the inspector's Ledger
+// section) still answers command rows only; `usage(since)` answers the
+// usage rows at or after `since`, newest first. A malformed usage row costs
+// that row.
+await (async () => {
+  const { mkdtempSync } = require('node:fs')
+  const { join } = require('node:path')
+  const { tmpdir } = require('node:os')
+  const has = typeof F.createRunLedger === 'function'
+  const file = join(mkdtempSync(join(tmpdir(), 'tc file ledger-usage ')), 'ledger.jsonl')
+  const ledger = has ? F.createRunLedger({ file }) : null
+  const totals = (input, output) => ({ input, output, cacheWrite: 0, cacheRead: 0 })
+  if (ledger) {
+    await ledger.append({ panelId: 'n1', command: 'ls', cwd: '/w', startedAt: 10, endedAt: 20, exitCode: 0 })
+    await ledger.append({ kind: 'usage', panelId: 'n1', byModel: { 'claude-sonnet-5': totals(1000, 100) }, turns: 3, endedAt: 5000 })
+    await ledger.append({ kind: 'usage', panelId: 'n2', byModel: { 'claude-sonnet-5': totals(500, 50) }, turns: 1, endedAt: 9000 })
+    await ledger.append({ kind: 'usage', panelId: 'n3', byModel: { 'nobody-knows': totals(1, 1) }, turns: 1, endedAt: 12000 })
+    const { appendFileSync } = require('node:fs')
+    appendFileSync(file, '{"kind":"usage","panelId":"n4","byModel":"nope","turns":1,"endedAt":13000}\n')
+  }
+  const commands = ledger ? await ledger.list('n1', 10) : null
+  const since8k = ledger && typeof ledger.usage === 'function' ? await ledger.usage(8000) : null
+  const all = ledger && typeof ledger.usage === 'function' ? await ledger.usage(0) : null
+  ok('ledger.usage.1 a usage row beside the command rows: list answers commands only, usage(since) answers the usage rows at or after since newest first, and a malformed usage row costs that row',
+    has && ledger !== null && typeof ledger.usage === 'function' && Array.isArray(commands) && commands.length === 1 && commands[0].command === 'ls' &&
+      Array.isArray(since8k) && since8k.map((r) => r.panelId).join(',') === 'n3,n2' && since8k[0].byModel['nobody-knows'].input === 1 &&
+      Array.isArray(all) && all.length === 3 && all.every((r) => r.kind === 'usage' && typeof r.turns === 'number' && typeof r.endedAt === 'number'),
+    JSON.stringify({ has, commands, since8k: since8k && since8k.map((r) => r.panelId), all: all && all.length }))
+})()
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -134,11 +134,18 @@ export function carryShelf(shelf: Shelf): Shelf {
  */
 export function renameInShelf(shelf: Shelf, from: SkillKey, to: SkillKey): Shelf {
   return {
-    columns: shelf.columns.map((c) => ({
-      id: c.id,
-      title: c.title,
-      keys: c.keys.map((k) => (k === from ? to : k))
-    }))
+    columns: shelf.columns.map((c) => {
+      // One slot per key per column (M136's hand check 8, decided at the Act I
+      // critic): a rename onto a key the column already holds collapses onto
+      // that slot — the existing slot stays where it is, the renamed one's old
+      // slot goes. Two slots for one key rendered as a phantom card.
+      const keys: SkillKey[] = []
+      for (const k of c.keys) {
+        const next = k === from ? to : k
+        if (!keys.includes(next)) keys.push(next)
+      }
+      return { id: c.id, title: c.title, keys }
+    })
   }
 }
 

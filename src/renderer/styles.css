@@ -4162,6 +4162,24 @@ body {
    block — because `.panel` clips its overflow and a menu hung off the ⋯ button
    was cut at the frame's left edge on a narrow panel. */
 .pf__chrome { position: relative; }
+/* M144. ZOOM-INDEPENDENT CHROME (backlog #60): the chrome bar and the resize
+   handles counter-scale by `--chrome-scale` (Canvas stamps it on .world:
+   1/scale, clamped to [1, 2.5]) so a header and a corner keep a usable screen
+   size when the canvas is zoomed out. A TRANSFORM, deliberately: it changes no
+   layout box, so the body beneath is not reflowed, xterm sees no resize, and
+   no SIGWINCH reaches a running agent on a zoom. The chrome grows DOWN over the
+   body's top rows at those scales — stated, not hidden; at 0.4 and below the
+   body is a card. `.pf__body` is NEVER transformed (frame.2 / frame.3): a
+   transform on the subtree hosting xterm breaks the pointer arithmetic
+   pointer-correct.ts compensates for. The fallback of 1 keeps a frame outside
+   .world unscaled. */
+.pf__chrome { transform: scale(var(--chrome-scale, 1)); transform-origin: top left; width: calc(100% / var(--chrome-scale, 1)); }
+.panel__resize { transform: scale(var(--chrome-scale, 1)); }
+/* Declared here at 1 so the token exists in the stylesheet (styles check 2); Canvas overrides it inline per zoom. */
+.world { --chrome-scale: 1; }
+.panel__resize--e { transform-origin: right center; }
+.panel__resize--s { transform-origin: center bottom; }
+.panel__resize--se { transform-origin: right bottom; }
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }
 

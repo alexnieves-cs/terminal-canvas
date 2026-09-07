@@ -21,7 +21,11 @@ export interface PoolBlockState {
 export const EMPTY_POOL: PoolBlockState = { items: [], live: false }
 
 export function reducePool(state: PoolBlockState, event: PoolEvent): PoolBlockState {
-  const items = state.items.map((i) => ({ ...i }))
+  // A run that ENDED (stopped or refused) is history: the first event of the
+  // next Run starts a clean list, so a finished row from last time cannot
+  // stand beside this run's items as if it were one of them.
+  const fresh = !state.live && (state.stopped !== undefined || state.refused !== undefined) && (event.kind === 'queued' || event.kind === 'started')
+  const items = fresh ? [] : state.items.map((i) => ({ ...i }))
   const upsert = (item: string, next: PoolItemState, id?: string): void => {
     const at = items.findIndex((i) => i.item === item)
     const row = { item, state: next, ...(id === undefined ? {} : { id }) }
@@ -37,7 +41,9 @@ export function reducePool(state: PoolBlockState, event: PoolEvent): PoolBlockSt
       return { ...state, items }
     }
     case 'refused': return { items, live: false, refused: event.why }
-    case 'stopped': return { items, live: false, stopped: event.why }
+    // A `stopped` after a `refused` keeps the refusal: the reason is the
+    // sentence a person needs, and "by hand" would say they stopped it.
+    case 'stopped': return state.refused !== undefined ? { items, live: false, refused: state.refused } : { items, live: false, stopped: event.why }
   }
 }
 

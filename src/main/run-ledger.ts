@@ -16,12 +16,15 @@ import { existsSync } from 'node:fs'
  * before-quit waits on — a lost last row is a lost row, not a lost file.
  */
 import type { RunRow } from '../shared/run-ledger'
-export type { RunRow } from '../shared/run-ledger'
+export type { RunRow, UsageRow, LedgerRow } from '../shared/run-ledger'
+import { parseUsageRow, type LedgerRow, type UsageRow } from '../shared/run-ledger'
 
 export interface RunLedger {
-  append(row: RunRow): Promise<void>
-  /** A panel's rows, newest first, at most `limit`. */
+  append(row: LedgerRow): Promise<void>
+  /** A panel's COMMAND rows, newest first, at most `limit`. Usage rows are `usage()`'s. */
   list(panelId: string, limit: number): Promise<RunRow[]>
+  /** M142. Every usage row at or after `since`, newest first. */
+  usage(since: number): Promise<UsageRow[]>
 }
 
 export const RUN_LEDGER_MAX_LINES = 2000
@@ -60,6 +63,18 @@ export function createRunLedger(o: { file: string; maxLines?: number }): RunLedg
         if (count > max) { await trim(); count = max }
       }).catch(() => {})
       return queue
+    },
+    async usage(since) {
+      await queue
+      const lines = await readLines()
+      const out: UsageRow[] = []
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        try {
+          const row = parseUsageRow(JSON.parse(lines[i]!))
+          if (row !== null && row.endedAt >= since) out.push(row)
+        } catch { /* a malformed line costs that line */ }
+      }
+      return out
     },
     async list(panelId, limit) {
       await queue

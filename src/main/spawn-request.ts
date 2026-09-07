@@ -36,6 +36,8 @@ export function resolveSpawnRequest(
     template.agentOptions = { ...(template.agentOptions ?? {}), ...req.agentOptions }
   }
   if (req.worktree !== undefined) template.worktree = req.worktree
+  // M147. The sheet's overrides sit over the preset's own; both are merged over the login env at spawn.
+  if (req.env !== undefined && Object.keys(req.env).length > 0) template.env = { ...(template.env ?? {}), ...req.env }
   if (req.title !== undefined && req.title.trim() !== '') template.title = req.title.trim()
   return { kind: 'spawned', template }
 }

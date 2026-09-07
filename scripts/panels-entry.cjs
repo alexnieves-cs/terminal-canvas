@@ -222,6 +222,8 @@ module.exports = {
   /* M138. The pool's production caller and the payload-carrying request, wired here the way main/index.ts wires them. */
   requestFromRendererWith: require('../src/main/ipc').requestFromRendererWith,
   createPoolCaller: require('../src/main/pool-caller.ts').createPoolCaller,
+  /* M145. The clipboard file writer, pure over its directory. */
+  writeClipboardImage: require('../src/main/clipboard-file.ts').writeClipboardImage,
   IPC_EVENTS: require('../src/shared/ipc-contract').IPC_EVENTS,
   // Check 174's own reason: window.canvas.jira is deep-frozen by
   // contextBridge (Electron's own protection against exactly this kind of

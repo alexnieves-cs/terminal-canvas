@@ -3517,5 +3517,35 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
     }
 
     // -------------------------------------------------------------------
+
+    // M142 — cost.history.1 (backlog #19's history half). A panel with usage
+    // that is CLOSED leaves one usage row in the run ledger (main's, at kill),
+    // and the no-selection summary's `this week` line reads it back through
+    // `ledger:usage` — three states on screen, the priced one here. The usage
+    // comes from the harness's transcript fixture (the same file M17's cost
+    // checks read), so the figure is the fixture's, never a number typed here.
+    {
+      const beforeRows = await runLedger.usage(0)
+      const spec = { cwd: '/tmp', command: '/bin/cat', args: ['-v'], agent: 'claude-code', w: 400, h: 300 }
+      const idsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, spec)
+      const chId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !idsBefore.includes(id)) ?? false
+      }, 8000)
+      if (typeof chId === 'string') await waitUntil(async () => (await sessionMap(wc)).has(chId), 8000)
+      // The usage fixture: the harness maps every pinned session id to its fixture transcript.
+      const usageSeen = typeof chId === 'string' ? await waitUntil(() => wc.executeJavaScript(`(() => { const u = window.__m17Usage ? window.__m17Usage(${JSON.stringify(chId)}) : null; return u && u.totals && u.totals.input > 0 ? u.totals : false })()`), 8000) : false
+      if (typeof chId === 'string') await clickPanelClose(wc, chId)
+      const rowsAfter = await waitUntil(async () => { const rows = await runLedger.usage(0); return rows.length > beforeRows.length ? rows : false }, 6000)
+      const row = Array.isArray(rowsAfter) ? rowsAfter.find((r) => r.panelId === chId) : undefined
+      await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas'); if (host) host.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 5, clientY: 5 })); return true })()`)
+      await settle()
+      const weekLine = await waitUntil(() => wc.executeJavaScript(`(document.querySelector('[data-summary="history"]') || {}).textContent ?? false`), 6000)
+      ok('cost.history.1 closing a panel with usage appends one usage row to the run ledger, and the no-selection summary reads this week\'s history back as a priced figure with its session count',
+        typeof chId === 'string' && usageSeen !== false && row !== undefined && row.kind === 'usage' && typeof row.turns === 'number' && Object.keys(row.byModel).length >= 1 &&
+          typeof weekLine === 'string' && /\$/.test(weekLine) && /session/.test(weekLine),
+        JSON.stringify({ chId, usageSeen, row, weekLine }))
+    }
   }
 })

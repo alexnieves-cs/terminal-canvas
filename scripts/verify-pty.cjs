@@ -83,7 +83,10 @@ function run(cmd, args, opts = {}) {
       ok(`${n} ${name} on PTY PATH (SKIPPED — ${name} not found on the login shell's PATH)`, true, `install ${name} to cover this`)
       return
     }
-    ok(`${n} ${name} on PTY PATH`, versionRe.test(r.buf), `${which} | ${lines.slice(1, 2).join(' ')}`)
+    // The version is tested on the lines AFTER `which`'s path: a path such as
+    // ~/.nvm/versions/node/v22.1.0/bin/claude carries a version-shaped run of
+    // digits of its own, and the whole buffer would match with nothing printed.
+    ok(`${n} ${name} on PTY PATH`, versionRe.test(lines.slice(lines.indexOf(which) + 1).join('\n')), `${which} | ${lines.slice(1, 2).join(' ')}`)
   }
   await agentOnPath('8', 'claude', /\d+\.\d+\.\d+/)
   await agentOnPath('9', 'codex', /codex-cli \d+\.\d+\.\d+/)

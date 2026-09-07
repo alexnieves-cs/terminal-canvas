@@ -155,6 +155,8 @@ export interface PaletteActions {
   beginRenamePanel(id: string, currentTitle: string): void
   resetCanvas(): void
   zoomToFit(): void
+  /** M146. Cmd+0's INITIAL camera — the row that was called `Reset zoom` all along. */
+  resetZoom(): void
   /**
    * Task 7 implements the real wiring (main's settings:set, then a reload of
    * the row list from the answer it gives back — never an optimistic local
@@ -180,6 +182,8 @@ export interface PaletteActions {
   beginChooseVault(): void
   switchWorkspace(id: string): void
   beginCreateWorkspace(): void
+  /** M147. A fresh workspace named after the template, switched to, the shape minted there. */
+  workspaceFromTemplate(templateId: string): void
   beginRenameWorkspace(id: string, currentName: string): void
   /**
    * `liveCount` is passed in rather than looked up because the confirm names
@@ -1395,18 +1399,39 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'workspace',
     run: () => actions.beginCreateWorkspace()
   })
+  // M147 (backlog #34's "new workspace from a template set"): one row per
+  // template — a fresh workspace named after the shape, switched to, holding
+  // the shape. A template that cannot run carries its refusal, never absent.
+  for (const t of ctx.templates ?? []) {
+    out.push(withReason({
+      id: `workspace.from-template.${t.id}`,
+      title: `New workspace from ${t.name}`,
+      subtitle: `${t.nodes} panel${t.nodes === 1 ? '' : 's'} in a workspace of their own`,
+      searchText: 'new workspace from template set shape',
+      group: 'workspace',
+      run: () => actions.workspaceFromTemplate(t.id)
+    }, t.refusal))
+  }
 
   // --- Canvas --------------------------------------------------------------
 
   out.push({
-    // "Reset zoom", not "Zoom to fit": useViewport exposes resetViewport
-    // (Cmd+0's INITIAL) and deliberately not fitTo (Cmd+1), because the camera
-    // setter stays private and only named verbs get out. The row says what it
-    // does rather than what the spec first called it.
+    // M146. TWO rows, two names (backlog #23's rule): `Reset zoom` is Cmd+0's
+    // INITIAL camera; `Zoom to fit` frames the selection when there is one and
+    // every panel otherwise (Cmd+1's fitAll, reached as a named verb at last).
+    // The `canvas.fit` id is kept for the row that has always run the reset.
     id: 'canvas.fit',
     title: 'Reset zoom',
     group: 'canvas',
     shortcut: '⌘0',
+    run: () => actions.resetZoom()
+  })
+  out.push({
+    id: 'canvas.zoom-fit',
+    title: 'Zoom to fit',
+    subtitle: 'the selected panels, or every panel',
+    group: 'canvas',
+    shortcut: '⌘1',
     run: () => actions.zoomToFit()
   })
   out.push({

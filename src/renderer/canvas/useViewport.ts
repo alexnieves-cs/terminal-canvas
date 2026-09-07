@@ -88,6 +88,13 @@ export interface ViewportControls {
    */
   fitAll: () => void
   /**
+   * M146. Frame a SELECTION (backlog #23's "zoom to fit", named apart from
+   * maximise): a flight to `fitTo` over the given rects — the same math
+   * fitAll uses over every panel, so the two arms of one verb cannot drift.
+   * A camera move only; no session state changes, nothing is resized.
+   */
+  fitSelection: (rects: WorldRect[]) => void
+  /**
    * M56. The named verbs behind bookmarks and the trail. Same stability
    * requirement as every verb above: each sits in Canvas.tsx's paletteActions
    * dep array. `flying` is STATE, not a ref: the tier-assignment effect has
@@ -388,6 +395,13 @@ export function useViewport(
     jump(fitTo(rectsRef.current, { width: bounds.width, height: bounds.height }))
   }, [hostRef, jump])
 
+  const fitSelection = useCallback((rects: WorldRect[]) => {
+    const host = hostRef.current
+    if (!host || rects.length === 0) return
+    const bounds = host.getBoundingClientRect()
+    flyTo(fitTo(rects, { width: bounds.width, height: bounds.height }))
+  }, [hostRef, flyTo])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
@@ -636,7 +650,7 @@ export function useViewport(
   }, [])
 
   return {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying
   }

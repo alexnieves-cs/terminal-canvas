@@ -86,9 +86,10 @@ const STEPS = [
     n: 7, arm: 'auto',
     title: 'A first-ever skill on a machine with no ~/.claude/skills (M129)',
     run: async (ctx) => {
-      // A genuinely fresh home under the fence `main/toolbox-read.ts` reads
-      // (`TC_TOOLBOX_HOME`), never the real one: `createSkill` is the real
-      // writer, and the `mkdir` arm is the one under test.
+      // A genuinely fresh temp HOME, never the real one: `createSkill` takes
+      // the skills ROOT it writes under, so the fence is the root itself (no
+      // environment variable is involved), and the `mkdir` arm is the one
+      // under test.
       const home = mkdtempSync(join(tmpdir(), 'tc handcheck home '))
       const root = join(home, '.claude', 'skills')
       const res = await ctx.createSkill(root, 'first-ever-skill', {
@@ -107,17 +108,19 @@ const STEPS = [
     title: 'A rename into an OCCUPIED shelf slot (M129)',
     run: async (ctx) => {
       // Pure, over the shipped `renameInShelf`: the destination key already
-      // sits in a column. The rename must carry the slot in place and leave
-      // the column with BOTH entries — the occupied one untouched and the
-      // renamed one where the old one was — never a silent drop or a
-      // duplicate that reorders the user's arrangement.
+      // sits in a column. The rule (decided at the Act I critic's finding): a
+      // key is ONE slot per column, so the rename collapses onto the existing
+      // slot — the occupied entry stays where it was, the renamed one's old
+      // slot goes, order otherwise untouched. Two slots for one key rendered
+      // as a phantom card; a refusal would make a rename fail for a reason
+      // about the shelf, which the person cannot see from the editor.
       const a = ctx.skillKey('user', 'alpha'), b = ctx.skillKey('user', 'beta'), c = ctx.skillKey('user', 'gamma')
       const shelf = { columns: [{ id: 'k1', title: 'Kept', keys: [a, b, c] }, { id: 'ungrouped', title: 'Ungrouped', keys: [] }] }
       const after = ctx.renameInShelf(shelf, a, b)
       const keys = after.columns[0].keys
-      const inPlace = keys.length === 3 && keys[0] === b && keys[1] === b && keys[2] === c
+      const collapsed = keys.length === 2 && keys[0] === b && keys[1] === c
       const untouched = shelf.columns[0].keys[0] === a && after.columns[1].keys.length === 0
-      return { pass: inPlace && untouched, detail: `column after: ${keys.map((k) => JSON.parse(k)[1]).join(', ')} — the occupied slot stays, the renamed one lands where alpha was (a duplicate key the pane renders once, by key)` }
+      return { pass: collapsed && untouched, detail: `column after: ${keys.map((k) => JSON.parse(k)[1]).join(', ')} — one slot per key: the occupied slot stays, alpha's old slot goes` }
     }
   },
   {

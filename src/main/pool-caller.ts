@@ -7,8 +7,9 @@
  * The division of labour is the board's (M113, `board:add`): the RENDERER owns
  * the workspace it renders, so every worker is a chat panel the renderer
  * mints on request (`pool:mint`, an ephemeral reply channel) and main never
- * writes a panel. Main owns what main already owns — the list file (read
- * under the Places gate, `readList`), the ceilings and the spend (M82's, read
+ * writes a panel. Main owns what main already owns — the list file (`readList`:
+ * an absolute path the user named; there is no Places gate because a pool has
+ * no teammate), the ceilings and the spend (M82's, read
  * LIVE on every pump through the injected `limits`/`spend`), the send (the
  * ordinary `AgentSessionManager.send`, so M82's queue and budget apply
  * unchanged and a worker is a chat like any other), and the engine's two
@@ -50,13 +51,25 @@ export interface PoolStartRequest {
   templateId: string
   key: string
   node: PoolNode
+  /**
+   * True when the template hands the pool's workers off into a collect.
+   * M78's join fires when the edges PRESENT at the first arrival are all in,
+   * and a worker minted later joins an expected set that grew under it — so
+   * a joined pool must mint every worker at once, and one that cannot
+   * (items > the width the live ceiling allows) is refused BY NAME here
+   * rather than joining wrong quietly.
+   */
+  joined?: true
 }
 
 export type PoolStartResult = { kind: 'started' } | { kind: 'refused'; reason: string }
 
 /** The slice of `AgentSessionManager` the caller needs — a fake in the suite, the real one in main. */
+/** The manager's own answer to a send; anything but `sent`/`queued` means the worker will never turn. */
+export type PoolSendResult = 'sent' | 'queued' | 'no-session' | 'refused-backend' | 'refused-sandbox' | 'refused-images' | 'refused-budget' | string
+
 export interface PoolAgents {
-  send: (id: string, text: string) => unknown
+  send: (id: string, text: string) => PoolSendResult | { kind?: string }
   interrupt: (id: string) => boolean
   subscribe: (cb: (event: { id: string; type: string; status?: string }) => void) => () => void
 }
@@ -85,7 +98,7 @@ export function workerMessage(prompt: string, item: string): string {
 const addressOf = (templateId: string, key: string): string => `${templateId} ${key}`
 
 export function createPoolCaller(deps: PoolCallerDeps): PoolCaller {
-  interface Live { templateId: string; key: string; handle: PoolHandle; workers: Set<string>; stopped: boolean }
+  interface Live { templateId: string; key: string; handle: PoolHandle; workers: Set<string>; ended: boolean }
   const live = new Map<string, Live>()
   // One subscription for every pool, installed once: a worker's event is
   // routed by id to the pool that minted it, and an id no pool minted moves
@@ -110,38 +123,59 @@ export function createPoolCaller(deps: PoolCallerDeps): PoolCaller {
     if (live.has(address)) return { kind: 'refused', reason: `${req.key} is already running — stop it before running it again` }
     const listed = deps.readList(req.node.list)
     if (listed.kind === 'error') return { kind: 'refused', reason: `could not read the work list: ${listed.why}` }
-    const entry: Live = { templateId: req.templateId, key: req.key, handle: { stop: () => {}, finished: () => {}, tick: () => {} }, workers: new Set(), stopped: false }
+    if (req.joined === true) {
+      const atOnce = Math.min(req.node.width, deps.limits().maxConcurrent || Infinity)
+      if (listed.items.length > atOnce) return { kind: 'refused', reason: `${req.key} hands off into a collect, so every worker must run at once — ${listed.items.length} items but only ${atOnce} at a time (raise the width${deps.limits().maxConcurrent ? ' and agents.maxConcurrent' : ''}, shorten the list, or drop the collect edge)` }
+    }
+    const entry: Live = { templateId: req.templateId, key: req.key, handle: { stop: () => {}, finished: () => {}, tick: () => {} }, workers: new Set(), ended: false }
     live.set(address, entry)
     let index = 0
+    // The pool's END by refusal (critic M1/M2): said once with the reason,
+    // every live worker interrupted (never killed), the engine stopped with
+    // its own `stopped` MUTED — a `stopped — by hand` after a refusal would
+    // tell the user they stopped a pool they never touched.
+    const endRefused = (why: string): void => {
+      if (entry.ended) return
+      entry.ended = true
+      deps.emit({ templateId: req.templateId, key: req.key, event: { kind: 'refused', why } })
+      for (const id of entry.workers) { deps.agents.interrupt(id); byWorker.delete(id) }
+      live.delete(address)
+      entry.handle.stop()
+    }
     const handle = startPool(req.node, {
       readList: () => listed,
       limits: deps.limits,
       spend: deps.spend,
       createWorker: async (prompt, item) => {
+        if (entry.ended) return { id: '' }
         const reply = await deps.mint({ templateId: req.templateId, key: req.key, cwd: req.node.cwd, prompt, item, index: index++ })
+        if (entry.ended) return { id: '' }
         if (reply.kind === 'refused') {
           // The renderer could not mint: the engine gets no worker and the
           // pool ends, saying why — never a pool that waits on a worker that
-          // will not come.
-          deps.emit({ templateId: req.templateId, key: req.key, event: { kind: 'refused', why: reply.reason } })
-          entry.stopped = true
-          live.delete(address)
-          entry.handle.stop()
-          // The engine still expects a worker; an empty id is one it will
-          // never hear `finished` for, and every event after this is muted
-          // above. Throwing here would reject the pump's await instead.
+          // will not come. The engine still expects a worker; an empty id is
+          // one it will never hear `finished` for, and every event after this
+          // is muted. Throwing here would reject the pump's own await.
+          endRefused(reply.reason)
           return { id: '' }
         }
         entry.workers.add(reply.id)
         byWorker.set(reply.id, entry)
-        deps.agents.send(reply.id, workerMessage(prompt, item))
+        // The send's answer is read (critic M2): a worker whose send the
+        // manager refused — no session, a backend without a sandbox, the
+        // budget — will never turn, so `finished` would never fire and its
+        // item would sit `started` until Stop. The pool ends by name instead.
+        const answer = deps.agents.send(reply.id, workerMessage(prompt, item))
+        const word = typeof answer === 'string' ? answer : String((answer as { kind?: string })?.kind ?? answer)
+        if (word !== 'sent' && word !== 'queued') endRefused(`worker ${reply.id} for ${item} could not be sent its item: ${word}`)
         return { id: reply.id }
       },
       interrupt: (id) => { deps.agents.interrupt(id) },
       onEvent: (event) => {
-        if (entry.stopped && event.kind !== 'stopped') return
+        if (entry.ended) return
         deps.emit({ templateId: req.templateId, key: req.key, event })
         if (event.kind === 'stopped' || event.kind === 'refused') {
+          entry.ended = true
           for (const id of entry.workers) byWorker.delete(id)
           live.delete(address)
         }

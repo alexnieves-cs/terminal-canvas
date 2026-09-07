@@ -1,7 +1,6 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState,
-  type DragEvent, type JSX, type MouseEvent
-} from 'react'
+  type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
@@ -1199,7 +1198,7 @@ export function Canvas({
   )
 
   const {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying
   } = useViewport(
@@ -1243,6 +1242,8 @@ export function Canvas({
   // block, so a `collect` joins the workers M78's way. Main sends the item;
   // nothing is typed here.
   useEffect(() => window.canvas.agentSession.onPoolEvent(applyPoolEvent), [])
+  /** M138. Per template, the edges out of its pool blocks and the ids the last Run minted for their targets. Declared ABOVE its reader (this file's create-then-assign rule). */
+  const poolTargetsRef = useRef(new Map<string, { edges: TemplateEdge[]; minted: Map<string, string> }>())
   useEffect(() => window.canvas.canvas.onPoolMint(async (req: PoolMintRequest): Promise<PoolMintReply> => {
     const id = `c${nextIdRef.current++}`
     const sessionId = crypto.randomUUID()
@@ -1270,8 +1271,6 @@ export function Canvas({
   }), [commitHistory])
   /** M138. Stop a live pool: main's, through the one invoke. */
   const stopPool = useCallback((templateId: string, key: string) => { void window.canvas.agentSession.poolStop({ templateId, key }) }, [])
-  /** M138. Per template, the edges out of its pool blocks and the ids the last Run minted for their targets. */
-  const poolTargetsRef = useRef(new Map<string, { edges: TemplateEdge[]; minted: Map<string, string> }>())
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -1404,7 +1403,22 @@ export function Canvas({
       if (shouldIgnoreKeys()) return
       const id = focusedIdRef.current
       const session = id ? registry.get(id) : undefined
-      if (text) session?.handle.paste(text)
+      if (text) { session?.handle.paste(text); return }
+      // M145 (backlog #13's bytes case). No TEXT on the clipboard: an image
+      // there becomes a file main writes, and a spawned terminal is handed the
+      // path — shell-quoted, bracketed, the drop's own rule — while a chat
+      // attaches it through its composer. A terminal that is not spawned gets
+      // nothing (a paste into a dormant card has nowhere to land), and an
+      // empty clipboard is the `empty` arm, not a paste of nothing.
+      if (id === null) return
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      const wantsFile = (panel !== undefined && isChatPanel(panel)) || (session !== undefined && session.spawned)
+      if (!wantsFile) return
+      void window.canvas.agentSession.clipboardFile().then((file) => {
+        if (file.kind !== 'ok') return
+        if (panel !== undefined && isChatPanel(panel)) attachToComposer(id, { kind: 'path', path: file.path })
+        else registry.get(id)?.handle.paste(shellQuote(file.path))
+      })
     })
     return () => {
       offCopy()
@@ -3838,7 +3852,8 @@ export function Canvas({
           panelId: '', cwd: node.cwd, args: [...resolved.args],
           ...(resolved.command === undefined ? {} : { command: resolved.command }),
           ...(resolved.agent === undefined ? {} : { agent: resolved.agent }),
-          ...(resolved.agentOptions === undefined ? {} : { agentOptions: resolved.agentOptions })
+          ...(resolved.agentOptions === undefined ? {} : { agentOptions: resolved.agentOptions }),
+          ...(resolved.env === undefined ? {} : { env: { ...resolved.env } })
         }
       } else if ((node.command ?? '') !== '') {
         spec = { panelId: '', cwd: node.cwd, command: node.command as string, args: [...(node.args ?? [])] }
@@ -3876,7 +3891,8 @@ export function Canvas({
     // events use, so the Runs tab says why in main's words.
     poolTargetsRef.current.set(template.id, { edges: filled.edges.map((e) => ({ ...e })), minted })
     for (const node of poolNodes) {
-      const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node })
+      const joined = filled.edges.some((e) => e.from === node.key)
+      const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node, ...(joined ? { joined: true as const } : {}) })
       if (started.kind === 'refused') applyPoolEvent({ templateId: template.id, key: node.key, event: { kind: 'refused', why: started.reason } })
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
@@ -4683,7 +4699,7 @@ export function Canvas({
   const paletteActions = usePaletteActions({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
-    broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
@@ -5335,7 +5351,13 @@ export function Canvas({
         <div
           className="world"
           data-detail={cardDetail}
-          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})` }}
+          // M144. `--chrome-scale`: the counter-scale every frame's chrome bar
+          // and resize handles read (backlog #60), clamped to [1, 2.5] — 1× at
+          // the working zoom and above, so nothing changes there; 2.5× at 0.4
+          // and below, where the panels are cards. ONE variable on the world,
+          // so no panel re-renders for a zoom; and a CSS transform on the
+          // chrome only, so no layout box moves and no agent is reflowed.
+          style={{ transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`, '--chrome-scale': String(Math.min(2.5, Math.max(1, 1 / viewport.scale))) } as CSSProperties}
         >
           {/* M79. Run frames: derived, read-only, never groups. */}
           <GroupLayer
@@ -5550,6 +5572,7 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
+                  onOpenFile={(path) => openFilePanel(path, worldCentre())}
                 />
               )
             }

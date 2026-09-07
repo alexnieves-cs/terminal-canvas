@@ -2931,12 +2931,90 @@ console.log('\n' + '='.repeat(60))
   step({ kind: 'stopped', why: 'budget' })
   const ended = st
   const refused = R.reducePool(R.EMPTY_POOL, { kind: 'refused', why: 'could not read the work list: ENOENT' })
-  ok('pool.model.1 reducePool keeps a queued item in its slot when it starts, marks finished by worker id, ends live on stop/refusal with the reason, and the closing words name the three ends',
+  const refusedThenStopped = R.reducePool(refused, { kind: 'stopped', why: 'by-hand' })
+  const rerun = R.reducePool(ended, { kind: 'started', id: 'w9', item: 'z' })
+  ok('pool.model.1 reducePool keeps a queued item in its slot when it starts, marks finished by worker id, ends live on stop/refusal with the reason (a stop after a refusal keeps the refusal), starts a new run clean after an end, and the closing words name the three ends',
     mid.live === true && mid.items.map((i) => i.item + ':' + i.state).join(',') === 'a:finished,b:started' && mid.items[1].id === 'w2' &&
       ended.live === false && ended.stopped === 'budget' && refused.live === false && /ENOENT/.test(refused.refused) &&
+      refusedThenStopped.refused !== undefined && refusedThenStopped.stopped === undefined &&
+      rerun.items.length === 1 && rerun.items[0].item === 'z' && rerun.live === true && rerun.stopped === undefined &&
       /by hand/.test(R.poolStoppedWord('by-hand')) && /every item/.test(R.poolStoppedWord('empty')) && /budget/.test(R.poolStoppedWord('budget')) &&
       typeof R.REASON_NO_POOL_LIVE === 'string',
     JSON.stringify({ mid, ended, refused }))
+}
+
+// M141 — holes.builtin.1–.3. BACKLOG #27's four placeholders as BUILT-IN
+// holes: {{cwd}}, {{branch}}, {{selection}}, {{panel}} are filled from the
+// TARGET panel before any question is asked and are never among the holes
+// the palette asks for; a built-in with no value stays AS TYPED (M75's rule —
+// a {{branch}} outside a repository stays visible rather than vanishing); an
+// ordinary hole is untouched by the built-in fill and still asked.
+{
+  const R2 = R
+  const has = typeof R2.fillBuiltIns === 'function' && Array.isArray(R2.BUILT_IN_HOLES) && typeof R2.askableHoles === 'function'
+  const body = 'review {{selection}} in {{cwd}} on {{branch}} for {{panel}} — then {{ticket}}'
+  const filled = has ? R2.fillBuiltIns(body, { cwd: '/w/repo', branch: 'main', selection: 'foo()', panel: 'api' }) : ''
+  ok('holes.builtin.1 fillBuiltIns fills the four built-in holes from the target and leaves an ordinary hole for the question',
+    has && filled === 'review foo() in /w/repo on main for api — then {{ticket}}',
+    JSON.stringify({ has, filled }))
+  const partial = has ? R2.fillBuiltIns(body, { cwd: '/w/repo', panel: 'api', selection: '' }) : ''
+  ok('holes.builtin.2 a built-in with no value (absent, or an empty selection) stays as typed, never blanked',
+    has && partial === 'review {{selection}} in /w/repo on {{branch}} for api — then {{ticket}}',
+    JSON.stringify({ partial }))
+  const asked = has ? R2.askableHoles(body) : null
+  ok('holes.builtin.3 askableHoles lists only the holes a person is asked for — the four built-ins are never questions — and BUILT_IN_HOLES names exactly cwd, branch, selection, panel',
+    has && Array.isArray(asked) && asked.join(',') === 'ticket' && [...R2.BUILT_IN_HOLES].sort().join(',') === 'branch,cwd,panel,selection',
+    JSON.stringify({ asked, builtIns: R2.BUILT_IN_HOLES }))
+}
+
+// M142 — summary.history.1. The summary's `history` — this week's usage
+// rows folded and PRICED by the same per-model rule the live totals use
+// (an unpriceable model makes the figure undefined, never smaller) — has
+// three states, never two: no rows (nothing ran this week), rows with no
+// price (`unpriced`), and a figure with its session count. `historyWord`
+// is the sentence the pane prints for each.
+{
+  const totals = (input, output) => ({ input, output, cacheWrite: 0, cacheRead: 0 })
+  const has = typeof R.foldUsageHistory === 'function' && typeof R.historyWord === 'function'
+  const rows = [
+    { kind: 'usage', panelId: 'n1', byModel: { 'claude-sonnet-5': totals(1000, 100) }, turns: 3, endedAt: 5000 },
+    { kind: 'usage', panelId: 'n2', byModel: { 'claude-sonnet-5': totals(500, 50) }, turns: 1, endedAt: 9000 }
+  ]
+  const priced = has ? R.foldUsageHistory(rows) : null
+  const unpriced = has ? R.foldUsageHistory([...rows, { kind: 'usage', panelId: 'n3', byModel: { 'nobody-knows': totals(1, 1) }, turns: 1, endedAt: 1 }]) : null
+  const none = has ? R.foldUsageHistory([]) : null
+  ok('summary.history.1 foldUsageHistory sums tokens and prices per model across the rows (undefined when any model is unpriced), counts sessions, and historyWord names the three states',
+    has && priced !== null && priced.sessions === 2 && priced.tokens === 1650 && typeof priced.costUsd === 'number' && priced.costUsd > 0 &&
+      unpriced.sessions === 3 && unpriced.costUsd === undefined && none.sessions === 0 &&
+      /nothing/.test(R.historyWord(none)) && /unpriced/.test(R.historyWord(unpriced)) && /\$/.test(R.historyWord(priced)) && /2 sessions/.test(R.historyWord(priced)),
+    JSON.stringify({ has, priced, unpriced, none, words: has ? [R.historyWord(none), R.historyWord(unpriced), R.historyWord(priced)] : null }))
+}
+
+// M140 — toolbox.open.1 (backlog #26's write half beyond skills). Every
+// toolbox row carries the FILE it came from (`sourcePath`, the same field the
+// inventory already holds), so the node can open it in the file panel — M22's
+// editor, the one write door every markdown and JSON file under `.claude`
+// already had. A command, a subagent, a hook's settings file and an MCP
+// server's config all open there; a skill keeps its own editor beside it. The
+// path rides the row rather than being looked up again at click time, so the
+// door and the row cannot name different files.
+{
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' },
+    title: undefined,
+    result: inventory({ entries: [
+      { id: 'c1', kind: 'command', scope: 'project', sourcePath: '/repo/.claude/commands/greet.md', active: { kind: 'active' }, alsoDefinedIn: [], name: 'greet', description: 'says hi' },
+      { id: 'm1', kind: 'mcp', scope: 'user', sourcePath: '/h/.claude.json', active: { kind: 'active' }, alsoDefinedIn: [], name: 'railway', transport: 'stdio', command: 'npx', argCount: 3, envKeys: [], envKeysOverflow: 0 },
+      { id: 'h1', kind: 'hook', scope: 'user', sourcePath: '/h/.claude/settings.json', active: { kind: 'active' }, alsoDefinedIn: [], event: 'PreToolUse', matcher: 'Bash', matcherTruncated: false, index: 0, hookType: 'command', program: 'node guard.js', commandChars: 92 }
+    ] })
+  })
+  const rows = node.groups.flatMap((g) => g.rows)
+  const byName = (name) => rows.find((r) => r.name.includes(name))
+  ok('toolbox.open.1 every toolbox row carries the sourcePath its entry came from — a command, an MCP server and a hook alike — so the node\'s Open door names the same file the inventory read',
+    rows.length === 3 && byName('greet') && byName('greet').sourcePath === '/repo/.claude/commands/greet.md' &&
+      byName('railway') && byName('railway').sourcePath === '/h/.claude.json' &&
+      byName('PreToolUse') && byName('PreToolUse').sourcePath === '/h/.claude/settings.json',
+    JSON.stringify(rows.map((r) => [r.name, r.sourcePath])))
 }
 
 const failed = results.filter((r) => !r.pass)

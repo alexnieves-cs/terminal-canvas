@@ -133,6 +133,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
         // fields is what keeps this ONE conditional line instead of three.
         ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }),
         ...(p.worktree === undefined ? {} : { worktree: p.worktree }),
+        // M147. The overrides, absent when absent.
+        ...(p.env === undefined ? {} : { env: { ...p.env } }),
         args: [...p.args]
       }
     }
@@ -217,6 +219,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       ...(panel.spec.agent === undefined ? {} : { agent: panel.spec.agent }),
       ...(panel.spec.agentOptions === undefined ? {} : { agentOptions: panel.spec.agentOptions }),
       ...(panel.spec.worktree === undefined ? {} : { worktree: panel.spec.worktree }),
+      ...(panel.spec.env === undefined ? {} : { env: { ...panel.spec.env } }),
       args: [...panel.spec.args]
     }
   })

@@ -211,12 +211,14 @@ const bridge: CanvasBridge = {
     report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
   },
   ledger: {
-    list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)
+    list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit),
+    usage: (since: number) => ipcRenderer.invoke(IPC.LEDGER_USAGE, since)
   },
   agentSession: {
     create: (spec) => ipcRenderer.invoke(IPC.AGENT_CREATE, spec),
     send: (id, text, attachments) => ipcRenderer.invoke(IPC.AGENT_SEND, id, text, attachments ?? []),
     clipboardImage: () => ipcRenderer.invoke(IPC.AGENT_CLIPBOARD_IMAGE),
+    clipboardFile: () => ipcRenderer.invoke(IPC.ATTACHMENT_CLIPBOARD_FILE),
     interrupt: (id) => ipcRenderer.invoke(IPC.AGENT_INTERRUPT, id),
     dispose: (req) => ipcRenderer.invoke(IPC.AGENT_DISPOSE, req),
     answer: (req) => ipcRenderer.invoke(IPC.AGENT_ANSWER, req),

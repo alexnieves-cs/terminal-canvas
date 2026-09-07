@@ -14,7 +14,9 @@ import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
-import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
+import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/composer-model'
+import { allTemplates } from '@shared/templates'
+import { panelLabel } from './canvas-constants'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { Registry } from '@renderer/session/session-registry'
@@ -27,7 +29,7 @@ import { clearLiveSession, getLiveSession } from '@renderer/session/live-session
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
 import { getChat } from '@renderer/chat/chat-store'
-import { templateRefusal } from '@renderer/palette/template-model'
+import { templateRefusal, templateHoles } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
@@ -76,6 +78,10 @@ export interface PaletteActionsDeps {
   broadcastInput: boolean
   broadcastReady: boolean
   resetViewport: () => void
+  /** M146. Zoom to fit's two arms: the selection when any, else every panel. */
+  fitAll: () => void
+  fitSelection: (rects: WorldRect[]) => void
+  selectedIdsRef: RefObject<ReadonlySet<string>>
   centreOn: (rect: WorldRect) => void
   worldCentre: () => Point
   /** M56. The camera's named verbs and the bookmark state, read through refs. */
@@ -190,7 +196,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
-    broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
@@ -202,7 +208,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
 
-  return useMemo<PaletteActions>(() => ({
+  // M147. `self` names the object being built, for the one verb that opens
+  // another verb's door (workspaceFromTemplate → beginSpawnSheet); the shape
+  // of the memo is otherwise unchanged (ONE useMemo, CLAUDE.md's rule).
+  return useMemo<PaletteActions>(() => { const self: PaletteActions = ({
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -335,12 +344,28 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // question per hole through the palette's own text line; a project
       // prompt is never expanded (M5b's decision — the same file must behave
       // the same inside and outside this app), so its holes stay as typed.
-      const holes = id.startsWith('proj:') ? [] : placeholders(body)
-      if (holes.length === 0) { deliver(body); return }
+      // M141. A SAVED prompt's four built-in holes are filled from the target
+      // first — live cwd, branch (main's), selection, title — and never
+      // asked; only the ordinary holes become questions. A project prompt is
+      // untouched by both (`proj:` ids skip every expansion).
+      const isProject = id.startsWith('proj:')
+      const holes = isProject ? [] : askableHoles(body)
+      const withBuiltIns = async (text: string): Promise<string> => {
+        if (isProject) return text
+        const panel = panelsRef.current.find((p) => p.rect.id === target)
+        const session = registry.get(target)
+        const cwd = panel !== undefined && isChatPanel(panel) ? panel.chat.cwd : (getLiveSession(target)?.cwd ?? (panel !== undefined && isTerminalPanel(panel) ? panel.spec.cwd : ''))
+        let branch = ''
+        if (cwd !== '' && /\{\{branch\}\}/.test(text)) {
+          try { const status = await window.canvas.git.status(cwd); if (status.kind === 'status') branch = status.branch } catch { branch = '' }
+        }
+        return fillBuiltIns(text, { cwd, branch, selection: session?.handle.getSelection() ?? '', panel: panel === undefined ? '' : panelLabel(panel) })
+      }
+      if (holes.length === 0) { void withBuiltIns(body).then(deliver); return }
       const values: Record<string, string> = {}
       const ask = (i: number): void => {
         const name = holes[i]
-        if (name === undefined) { setInputMode(null); deliver(fillPlaceholders(body, values)); return }
+        if (name === undefined) { setInputMode(null); void withBuiltIns(fillPlaceholders(body, values)).then(deliver); return }
         setInputMode({
           kind: 'text',
           label: `${name} (${i + 1} of ${holes.length}) — the value for {{${name}}}`,
@@ -560,8 +585,19 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // nothing about whether a reset happened and nothing here may act on it.
       void window.canvas.canvas.requestReset()
     },
-    // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
-    zoomToFit: () => resetViewport(),
+    // M146. TWO verbs, two names (backlog #23): `Reset zoom` is Cmd+0's
+    // INITIAL; `Zoom to fit` frames the SELECTION when there is one and every
+    // panel otherwise, as a flight, moving nothing but the camera. An empty
+    // canvas has nothing to fit and resets instead — a verb that did nothing
+    // would read as broken.
+    resetZoom: () => resetViewport(),
+    zoomToFit: () => {
+      const selected = selectedIdsRef.current
+      const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
+      if (rects.length > 0) fitSelection(rects)
+      else if (panelsRef.current.length > 0) fitAll()
+      else resetViewport()
+    },
     // M56. Bookmarks and the trail. Names are minted as "View N" over the
     // current count; a rename is a later milestone's, and a place with a
     // number is still a place.
@@ -747,6 +783,22 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       palette.openPalette()
     },
     switchWorkspace,
+    // M147. Three existing doors in order — workspace:create (named after the
+    // template), the switch, then M80's instantiation in the new workspace —
+    // and a template with parameters opens the sheet there instead (M80's
+    // rule: a hole is asked, never guessed).
+    workspaceFromTemplate: (templateId) => {
+      void window.canvas.template.list().then(async (templates) => {
+        const template = allTemplates(templates).find((t) => t.id === templateId)
+        if (template === undefined) return
+        const id = await window.canvas.workspace.create(template.name)
+        const switched = await switchWorkspace(id)
+        reloadWorkspaces()
+        if (!switched) return
+        if (templateHoles(template).length > 0) { self.beginSpawnSheet(templateId); return }
+        await instantiateTemplate(template, {})
+      })
+    },
     beginCreateWorkspace: () => {
       setInputMode({
         kind: 'text',
@@ -1730,7 +1782,15 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
             return { kind: 'ran' }
           }
-          case 'zoom-fit': resetViewport(); return { kind: 'ran' }
+          case 'zoom-fit': {
+            const selected = selectedIdsRef.current
+            const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
+            if (rects.length > 0) fitSelection(rects)
+            else if (panelsRef.current.length > 0) fitAll()
+            else resetViewport()
+            return { kind: 'ran' }
+          }
+          case 'zoom-reset': resetViewport(); return { kind: 'ran' }
           case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
           case 'review': openReview(a.panel!); return { kind: 'ran' }
           case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
@@ -1903,7 +1963,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

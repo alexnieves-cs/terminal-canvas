@@ -150,6 +150,16 @@ app.whenReady().then(async () => {
   // fail — this is the one check in the suite that a regression back to
   // "wraps sometimes turn into real breaks" cannot pass.
   const sw = probe.serializeWrap || {}
+  // M143 — card.rows.1. See the probe's comment: rows as rows, blanks kept, the same detached.
+  {
+    const c = probe.cardRows || {}
+    const rows = Array.isArray(c.attached) ? c.attached : []
+    const blankInside = rows.length >= 5 && rows.indexOf('') > 0 && rows.indexOf('') < rows.length - 1
+    ok('card.rows.1 tail(n) answers the buffer rows as rows — the interior blank row of a box KEPT between its lines, only trailing blanks trimmed — and the same rows detached',
+      !c.error && blankInside && rows[0] === '+----+' && rows[rows.length - 1] === '+----+' && rows.join('\n') === (Array.isArray(c.detached) ? c.detached.join('\n') : null),
+      JSON.stringify(c))
+  }
+
   ok('serialize.2 a single run long enough to wrap across several real terminal rows comes back as ONE unbroken line — isWrapped correctly joined every continuation',
     !sw.error && sw.containsWholeRun === true,
     JSON.stringify({ error: sw.error, containsWholeRun: sw.containsWholeRun, cols: sw.cols, len: sw.len }))

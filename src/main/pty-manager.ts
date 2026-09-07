@@ -434,6 +434,22 @@ export class PtyManager {
   /** One per manager, like idleTimer and liveTimer. See USAGE_TICK_MS. */
   private usageTimer: NodeJS.Timeout | null = null
   private usageState = createUsageState()
+
+  /**
+   * M142 (backlog #19's history half). ONE usage row on the run ledger when a
+   * panel's usage is about to be dropped — every site that calls `dropUsage`
+   * (kill, the process's exit, a detach that forgets the panel) — so "what
+   * did this canvas cost last week" is answerable from #46's ledger rather
+   * than a third store. Per-model totals only, never a price: the renderer
+   * prices with the summary's rule. A panel with no turns writes nothing (a
+   * shell that never ran an agent is not a session that cost nothing; it is
+   * not a session).
+   */
+  private recordUsage(panelId: PanelId): void {
+    const u = usageFor(this.usageState, panelId)
+    if (u === undefined || u.turns === 0 || this.runs.ledger === null) return
+    void this.runs.ledger.append({ kind: 'usage', panelId, byModel: { ...u.byModel }, turns: u.turns, endedAt: this.runs.now() })
+  }
   /** Resolved transcript paths, cached: the glob runs once per session. */
   private transcriptPaths = new Map<PanelId, string>()
   /**
@@ -984,6 +1000,7 @@ export class PtyManager {
       this.subagentWatch.drop(panelId)
       this.firstSpawnedAt.delete(panelId)
       this.configStamps.delete(panelId)
+      this.recordUsage(panelId)
       dropUsage(this.usageState, panelId)
       this.transcriptPaths.delete(panelId)
       this.forceResend.delete(panelId)
@@ -1012,6 +1029,7 @@ export class PtyManager {
     this.subagentWatch.drop(panelId)
     this.firstSpawnedAt.delete(panelId)
     this.configStamps.delete(panelId)
+    this.recordUsage(panelId)
     dropUsage(this.usageState, panelId)
     this.transcriptPaths.delete(panelId)
     this.forceResend.delete(panelId)

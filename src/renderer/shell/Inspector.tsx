@@ -1,7 +1,7 @@
 import { memo, useEffect, useState, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel, handoffControl, KIND_NOUN, visibleDetailFields } from './inspector-fields'
+import { agentStateLabel, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
 import { shortPath } from '@renderer/palette/panel-name'
 import { panelState } from '@renderer/panels/panel-state'
@@ -378,6 +378,14 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
         <div className="inspector__field">
           <dt className="inspector__label">list price</dt>
           <dd className="inspector__value" data-summary="cost">{summary.cost === undefined ? '—' : `$${summary.cost.toFixed(2)}`}</dd>
+        </div>
+        {/* M142 (#19's history half). This week's CLOSED sessions from the run
+            ledger, three states: reading, nothing closed, a figure (or
+            unpriced) with its count. The live totals above are what is on the
+            canvas now; this is what already ended. */}
+        <div className="inspector__field">
+          <dt className="inspector__label">this week</dt>
+          <dd className="inspector__value" data-summary="history">{historyWord(summary.history)}</dd>
         </div>
       </dl>
     </div>

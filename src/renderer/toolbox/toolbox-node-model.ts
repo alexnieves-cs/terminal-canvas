@@ -26,6 +26,13 @@ export interface ToolboxNodeRow {
   detail: string
   /** True when this entry is NOT active — the row the user came to find. */
   muted: boolean
+  /**
+   * M140 (backlog #26's write half beyond skills). The FILE this entry came
+   * from, carried on the row so the node's Open door names the same file the
+   * inventory read — a command, a subagent, a hook's settings file, an MCP
+   * server's config — and opens it in the file panel, M22's editor.
+   */
+  sourcePath: string
 }
 
 export interface ToolboxNodeGroup {
@@ -96,7 +103,8 @@ function rowOf(entry: ToolEntry): ToolboxNodeRow {
       // HookToolEntry.program for why the command itself never crosses IPC at
       // all, so there is nothing here to render even if this wanted to.
       detail: `${entry.program} · ${String(entry.commandChars)} chars`,
-      muted
+      muted,
+      sourcePath: entry.sourcePath
     }
   }
   if (entry.kind === 'mcp') {
@@ -114,7 +122,8 @@ function rowOf(entry: ToolEntry): ToolboxNodeRow {
       // is partial rather than looking whole, which is what makes the omission
       // honest instead of invisible.
       detail: `${entry.transport} · ${entry.command} · ${String(entry.argCount)} args${env}`,
-      muted
+      muted,
+      sourcePath: entry.sourcePath
     }
   }
   return {
@@ -127,7 +136,8 @@ function rowOf(entry: ToolEntry): ToolboxNodeRow {
     // reported as a number the model was handed and never recomputed from the
     // rendered string — file-node-model's `truncatedLines` rule.
     detail: entry.descriptionTruncated ? `${entry.description}…` : entry.description,
-    muted
+    muted,
+    sourcePath: entry.sourcePath
   }
 }
 

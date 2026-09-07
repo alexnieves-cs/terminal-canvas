@@ -2338,6 +2338,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         ok(IDS[2],
           workers !== false && workers.length === 3 && spawnedForWorkers !== false &&
             Array.isArray(poolRows) && poolRows.map((r) => r[0]).sort().join(',') === 'alpha,beta,gamma' && poolRows.every((r) => r[1] === 'started' || r[1] === 'finished') &&
+            (typeof stoppedRow !== 'string' || !/every item finished/.test(stoppedRow) || (await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id="wfA"] [data-workflow-pool-item]')].every((r) => r.getAttribute('data-workflow-pool-state') === 'finished')`)) === true) &&
             stopVerb !== null &&
             Array.isArray(workerTitles) && workerTitles.some((t) => /alpha/.test(String(t))) &&
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
@@ -2374,6 +2375,31 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         ok(IDS[1],
           gReady !== false && gReady.disabled === false && gMinted !== false && gCalls === 1,
           JSON.stringify({ gReady, gBefore, gMinted, gCalls, log: wfLog.slice(-3) }))
+
+        // M138 (critic C1) — orchestrator.resume.1. A RESTORED orchestrator's
+        // first spawn carries `--append-system-prompt <its prompt>`: the CLI
+        // keeps no record of the flag, and a draft had the prompt nested inside
+        // the teammate arm, so every template-minted orchestrator (no teammate)
+        // resumed as an ordinary chat — M81's failure, one block kind later.
+        // Read off the fake runner's own argv, never a renderer word.
+        {
+          layoutStore.save({
+            panels: [{ id: 'orc1', kind: 'chat', x: 60, y: 60, w: 500, h: 360, z: 1, title: 'lead', chat: { cwd: wfDir, sessionId: 'orc-11111111-2222-4333-8444-555555555555', orchestrator: 'You lead the sweep and never edit files.' } }],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          flushLayoutStore()
+          const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reO
+          await settle()
+          const spawnsBefore = chatSpawns.length
+          const sent = await wc.executeJavaScript(`window.canvas.agentSession.send('orc1', 'who are you?')`)
+          const spawned = await waitUntil(() => (chatSpawns.length > spawnsBefore ? chatSpawns[chatSpawns.length - 1] : false), 6000)
+          const argv = spawned ? spawned.args : []
+          const at = argv.indexOf('--append-system-prompt')
+          ok('orchestrator.resume.1 a restored orchestrator chat resumes with --append-system-prompt carrying its own prompt on the first spawn, with no teammate on the record',
+            spawned !== false && at !== -1 && /never edit files/.test(String(argv[at + 1])) && argv.includes('--resume'),
+            JSON.stringify({ sent, argv, log: wfLog.slice(-2) }))
+        }
 
         // M139 — reach.3. THE FOURTH AUDIT'S REAL TAB, through the two surfaces
         // the M126–M138 acts added verbs to: the workflow panel's verb row and
@@ -2530,5 +2556,40 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+
+    // M140 — editor.cmd.1 (backlog #26's write half beyond skills). A toolbox
+    // node's COMMAND row has an Open door that opens the command's own file in
+    // the file panel — M22's editor, the one write door every `.claude` file
+    // already had — and a save there lands on disk. A project command is a
+    // file someone will commit: the editor is where that deliberate edit
+    // happens, never a one-click toggle (hooks, permissions and MCP servers
+    // get the same door and no toggle, by the entry's own argument).
+    {
+      const CMD_DIR = mkdtempSync(join(tmpdir(), 'tc panels cmd-editor '))
+      mkdirSync(join(CMD_DIR, '.claude', 'commands'), { recursive: true })
+      const cmdFile = join(CMD_DIR, '.claude', 'commands', 'greet.md')
+      writeFileSync(cmdFile, 'Say hello to the user.\n')
+      await wc.executeJavaScript(`window.__m20Toolbox(${JSON.stringify(CMD_DIR)}, ${JSON.stringify('cmd fixture')})`)
+      const opened = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-toolbox-open="greet"]'); return b ? true : false })()`), 8000)
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-toolbox-open="greet"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      const fileId = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="file"]')].find((el) => (el.getAttribute('data-file-path') || el.textContent || '').includes('greet.md')); return p ? p.getAttribute('data-panel-id') : false })()`), 8000)
+      const editOpened = fileId ? await (async () => {
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-edit]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]') !== null`), 6000)
+      })() : false
+      const saved = editOpened ? await (async () => {
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]'); if (!t) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          setter.call(t, 'Say hello to the user, warmly.\n'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-save]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        return waitUntil(() => readFileSync(cmdFile, 'utf8').includes('warmly'), 6000)
+      })() : false
+      ok('editor.cmd.1 a toolbox node\'s command row opens its own file in the file panel through the Open door, and a save in that editor lands on disk',
+        opened === true && typeof fileId === 'string' && editOpened === true && saved === true,
+        JSON.stringify({ opened, fileId, editOpened, saved, onDisk: readFileSync(cmdFile, 'utf8') }))
+      if (typeof fileId === 'string') await clickPanelClose(wc, fileId)
+      try { rmSync(CMD_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
   }
 })

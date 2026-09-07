@@ -124,6 +124,28 @@ export interface SheetValues {
   title: string
   agentOptions: AgentOptions
   worktree?: boolean
+  /** M147. `KEY=value` lines from the sheet's env field, parsed by `parseEnvLines`; absent when the field is empty. */
+  env?: Record<string, string>
+}
+
+/**
+ * M147. The sheet's env field: one `KEY=value` per line. A line without `=`
+ * or with an empty key is SKIPPED and named in `bad`, never guessed at;
+ * `#` lines are comments; a repeated key keeps the LAST line, the way a
+ * shell would. An empty field is `undefined`, not `{}`.
+ */
+export function parseEnvLines(text: string): { env: Record<string, string> | undefined; bad: string[] } {
+  const env: Record<string, string> = {}
+  const bad: string[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (line === '' || line.startsWith('#')) continue
+    const at = line.indexOf('=')
+    const key = at === -1 ? '' : line.slice(0, at).trim()
+    if (at === -1 || key === '' || /\s/.test(key)) { bad.push(line); continue }
+    env[key] = line.slice(at + 1)
+  }
+  return { env: Object.keys(env).length === 0 ? undefined : env, bad }
 }
 
 export interface SheetPreset {
@@ -184,7 +206,7 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   }
   if (what.kind === 'command') {
     const command = what.command.trim()
-    return { command, cwd, title: title === '' ? command : title }
+    return { command, cwd, title: title === '' ? command : title, ...(values.env === undefined ? {} : { env: { ...values.env } }) }
   }
   const presetId = what.id
   const preset = presets.find((p) => p.id === presetId)
@@ -192,6 +214,8 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
   if (title !== '') req.title = title
   if (preset?.agent !== undefined && Object.keys(values.agentOptions).length > 0) req.agentOptions = { ...values.agentOptions }
   if (values.worktree !== undefined) req.worktree = values.worktree
+  // M147. Absent when the field was empty — a `{}` would read as "overrides: none" in a file that never had the key.
+  if (values.env !== undefined) req.env = { ...values.env }
   return req
 }
 

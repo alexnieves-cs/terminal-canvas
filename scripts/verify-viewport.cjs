@@ -2105,6 +2105,30 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ p1, moved, p2, orphan, inside, outside, pruned: pruned.map((a) => a.id) }))
 }
 
+// M146 — fit.sel.1. Zoom to fit over a SELECTION is the same math fitAll
+// uses (`fitTo`), over fewer rects: the selected rects land inside the canvas
+// with the margin, and the scale is at least fitAll's over the whole set
+// (a subset never needs a smaller camera). Pinned so the verb's two arms
+// cannot drift apart in the one function they share.
+{
+  const size = { width: 1200, height: 800 }
+  const all = [
+    { id: 'a', x: 0, y: 0, w: 400, h: 300 }, { id: 'b', x: 500, y: 0, w: 400, h: 300 },
+    { id: 'c', x: 3000, y: 2000, w: 400, h: 300 }
+  ]
+  const sel = all.slice(0, 2)
+  const whole = V.fitTo(all, size, 64)
+  const some = V.fitTo(sel, size, 64)
+  const inside = sel.every((r) => {
+    const tl = V.worldToScreen({ x: r.x, y: r.y }, some)
+    const br = V.worldToScreen({ x: r.x + r.w, y: r.y + r.h }, some)
+    return tl.x >= 63 && tl.y >= 63 && br.x <= size.width - 63 && br.y <= size.height - 63
+  })
+  ok('fit.sel.1 fitTo over a selection frames the selected rects inside the margin at a scale no smaller than the whole canvas needs',
+    inside && some.scale >= whole.scale && some.scale > whole.scale,
+    JSON.stringify({ whole, some }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
