@@ -955,7 +955,10 @@ function parsePanel(
     // not, and coercing would put a panel on the canvas that can never match.
     const skill = (raw as Record<string, unknown>).skill
     if (!isRecord(skill) || !isStr(skill.name) || skill.name.trim() === '') {
-      warnings.push(`dropped skill panel ${id}: skill.name was not a string`)
+      // M137. Two sentences: an absent record and a present record with a bad
+      // name are different files, and "skill.name was not a string" about a
+      // record that has no `skill` at all sent a reader looking for a field.
+      warnings.push(!isRecord(skill) ? `dropped skill panel ${id}: it carried no skill record` : `dropped skill panel ${id}: skill.name was not a string`)
       return null
     }
     if (skill.scope !== 'user' && skill.scope !== 'project' && skill.scope !== 'local') {
@@ -1692,7 +1695,11 @@ function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string
     const costUsd = num(entry.costUsd)
     // M133. ABSENT stays absent — never spread as `templateId: undefined`,
     // which survives IPC and reads as present.
+    // M137. Present-but-malformed WARNS (parseWatch's rule for the same
+    // field); absent stays silent. A mark lost without a line made the Runs
+    // tab's "unattributed" arm read as truth about the run rather than the file.
     const templateId = isStr(entry.templateId) && entry.templateId.trim() !== '' ? entry.templateId : undefined
+    if (entry.templateId !== undefined && templateId === undefined) warnings.push(`run ${entry.id}: templateId was not a string — the run is kept, its workflow mark dropped`)
     runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }) })
   })
   return runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, RUNS_MAX)

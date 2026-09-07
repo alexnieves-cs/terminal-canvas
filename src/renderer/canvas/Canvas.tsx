@@ -150,9 +150,6 @@ import { SkillNode } from '@renderer/skills/SkillNode'
 /* M127. Module scope, never a fresh literal per render: canvas-constants.ts's
    own rule — a new object each render is re-render churn through every memo
    that takes the shelf as a dependency. */
-const EMPTY_SHELF: Shelf = { columns: [] }
-/** Field by field, never a spread — a spread writes `key: undefined`. */
-const carryOneColumn = (c: ShelfColumn): ShelfColumn => ({ id: c.id, title: c.title, keys: [...c.keys] })
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
@@ -181,6 +178,11 @@ import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
 // M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
+
+// M137. Moved below the import block, where a module-scope constant belongs.
+const EMPTY_SHELF: Shelf = { columns: [] }
+/** Field by field, never a spread — a spread writes `key: undefined`. */
+const carryOneColumn = (c: ShelfColumn): ShelfColumn => ({ id: c.id, title: c.title, keys: [...c.keys] })
 
 
 const registry = createRegistry({
@@ -2429,6 +2431,10 @@ export function Canvas({
   // palette-only, and the comment here still said so — see that effect for why
   // the top bar cannot wait for a first Cmd+K.
   const [presetRows, setPresetRows] = useState<PresetRow[]>(EMPTY_PRESETS)
+  // M137. Read by `runWorkflow`, which is installed once (a fired trigger
+  // reaches it through a ref), so the rows it refuses against must be live.
+  const presetRowsRef = useRef(presetRows)
+  presetRowsRef.current = presetRows
   // M100. The roster: loaded once, reloaded after every save; a ref for the
   // sheet's submit and the palette's actions, state for the pane.
   const [teammates, setTeammates] = useState<PersistedTeammate[] | null>(null)
@@ -3283,6 +3289,8 @@ export function Canvas({
     // The DROP's own screen point, so the panel lands under the cursor at
     // every zoom rather than where the cursor would have been at 1:1.
     dropPath(path, { x: event.clientX - host.left, y: event.clientY - host.top })
+    // M137. `palette.isOpen()` is read through a stable ref, so `dropPath` is
+    // the one dependency; if the palette ever becomes a value, it joins this list.
   }, [dropPath])
 
   /**
@@ -4364,6 +4372,12 @@ export function Canvas({
       paletteActionsRef.current?.beginSpawnSheet(templateId)
       return undefined
     }
+    // M137. The same refusal Run's door shows (a block that cannot run yet, a
+    // missing preset, a cycle), consulted HERE so the fire path returns it —
+    // `instantiateTemplate` refuses the same shapes silently, which left a
+    // watcher recording a success per tick while minting nothing.
+    const refusal = templateRefusal(template, presetRowsRef.current, claudeAvailable(presetRowsRef.current))
+    if (refusal !== undefined) return `not run: ${refusal}`
     void instantiateTemplateRef.current(template, {})
     return undefined
   }, [])
@@ -4912,6 +4926,8 @@ export function Canvas({
    * A panel with no directory is absent rather than listed as "no": it was
    * never a candidate, and listing it would read as a refusal.
    */
+  // M137. Terminal, chat and toolbox panels only: a watcher's cwd is deliberately
+  // absent from "Available in" — a watcher runs a command, it never reads a skill.
   const skillSources = useMemo(() => panels.flatMap((p) => {
     const cwd = isTerminalPanel(p) ? p.spec.cwd : isChatPanel(p) ? p.chat.cwd : isToolboxPanel(p) ? p.source.cwd : undefined
     if (cwd === undefined || cwd === '') return []

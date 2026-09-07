@@ -4,8 +4,7 @@ import {
   frontmatterGrammatical,
   frontmatterValue,
   type ReadStamp,
-  type SkillWriteResult
-} from '@shared/skill-edit'
+  type SkillWriteResult, KEY_LINE } from '@shared/skill-edit'
 import { setSkillEditorFocused } from './editor-focus'
 
 /**
@@ -282,7 +281,7 @@ function splitDraft(text: string): { name: string; description: string; body: st
   if (close === -1) return { name: '', description: '', body: text }
   const field = (key: string): string => {
     for (let i = 1; i < close; i++) {
-      const m = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/.exec(lines[i])
+      const m = KEY_LINE.exec(lines[i])
       if (m !== null && m[1] === key) return frontmatterValue(m[2])
     }
     return ''

@@ -28,7 +28,8 @@
  * A key is what a bare YAML scalar key can be; a line the pattern rejects is
  * a line this module refuses to touch.
  */
-const KEY_LINE = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/
+/** One grammar for a frontmatter line; the editor's own splitter reads it too (M137), never a copy. */
+export const KEY_LINE = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/
 
 /**
  * The value a `key: value` line carries, unquoted the way

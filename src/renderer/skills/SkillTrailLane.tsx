@@ -125,7 +125,11 @@ export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: Ski
   // repository still cost one parse.
   const wants = trail.kind === 'entries'
   useEffect(() => {
-    if (!wants || cwd === null) { setInventory(undefined); return }
+    if (!wants) { setInventory(undefined); return }
+    // M137. A panel with NO directory resolves at once to the reader's own
+    // `no-cwd` arm — the card then says "this panel has no directory" — where
+    // it used to sit at `reading the inventory…` forever, an ask nobody made.
+    if (cwd === null) { setInventory({ kind: 'no-cwd' }); return }
     let live = true
     void window.canvas.toolbox.read({ panelId: panel.rect.id, cwd })
       .then((r) => { if (live) setInventory(r) })

@@ -105,6 +105,8 @@ export interface SkillColumn {
 
 /** `unknown`, never a confident `none`: only a skill bundles resources. */
 const NOT_A_SKILL: SkillResources = { kind: 'unknown', why: 'only a skill bundles resources' }
+/** M137. A skill whose resources were not counted is not "not a skill"; the sentence was false for it. */
+const UNCOUNTED: SkillResources = { kind: 'unknown', why: 'its resources were not counted' }
 const GONE: SkillResources = { kind: 'unknown', why: 'not installed — its file was not read' }
 
 /** The title a derived column wears; a placed one wears its record's. */
@@ -173,7 +175,7 @@ export function buildSkillColumns(
       name: entry.name,
       description: entry.description,
       why: where.why,
-      resources: entry.kind === 'skill' && entry.resources !== undefined ? entry.resources : NOT_A_SKILL,
+      resources: entry.kind === 'skill' ? (entry.resources !== undefined ? entry.resources : UNCOUNTED) : NOT_A_SKILL,
       // Field by field, never a spread: a spread writes `pluginId: undefined`,
       // which survives IPC and reads as present.
       ...(entry.pluginId === undefined ? {} : { pluginId: entry.pluginId }),

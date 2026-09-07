@@ -1639,6 +1639,11 @@ app.whenReady().then(async () => {
       saveShelf: (shelf) => {
         const warnings: string[] = []
         const parsed = parseShelf(shelf, warnings)
+        // M137. Said, never swallowed: a column dropped here is a column the
+        // renderer just showed the user, and the only other trace is its
+        // absence from the file. Not thrown (saveTeammate's shape) — the
+        // shelf is many columns and the good ones still land.
+        for (const w of warnings) console.warn(`[shelf] ${w}`)
         return layoutStore.saveShelf(parsed)
       },
       // M100. The roster. A save is an upsert by id; the record is parsed by

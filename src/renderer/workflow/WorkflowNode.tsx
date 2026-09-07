@@ -152,7 +152,8 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
           <>
             <div className="workflow-node__verbs" data-workflow-verbs>
               {verb('run', 'Run', props.runReason, () => props.onRun(id))}
-              {verb('triggers', 'Triggers', null, () => props.onTrigger(id))}
+              {/* M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence. */}
+              {verb('triggers', 'Triggers', props.runReason, () => props.onTrigger(id))}
               {verb('save', 'Save', REASON_NO_EDITOR, () => {})}
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
               {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
