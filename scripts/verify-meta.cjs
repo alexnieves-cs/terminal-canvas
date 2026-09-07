@@ -774,6 +774,61 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ settingOk, moduleOk, offenders }))
 }
 
+// panels-split.1 / panels-split.2 (M135). `verify:panels` was one 19,813-line
+// file with 357 checks and a 600 s watchdog it had outgrown three times; the
+// M130 note said the fourth raise must be a split. The split is a HARNESS
+// (`scripts/panels-harness.cjs`) plus parts (`scripts/verify-panels-*.cjs`),
+// and two facts about it fail silently: a part whose watchdog is a number
+// nobody measured (the old constant, copied) is the un-split file's problem
+// wearing five names; and a check id that fell out in the move is a check
+// that stopped running with no red anywhere — its citations in CLAUDE.md and
+// docs/load-bearing.md keep reading as evidence. So the parts' id SET is
+// compared against the old file's at `pre-v7-run`, read from git, never from
+// a stored list that would itself go stale.
+{
+  const { readdirSync } = require('node:fs')
+  const { execFileSync } = require('node:child_process')
+  const scripts = readdirSync(join(ROOT, 'scripts'))
+  const parts = scripts.filter((f) => /^verify-panels-[a-z]+\.cjs$/.test(f)).sort()
+  const oldFileGone = !existsSync(join(ROOT, 'scripts', 'verify-panels.cjs'))
+  const harnessExists = existsSync(join(ROOT, 'scripts', 'panels-harness.cjs'))
+  const chain = String((pkg.scripts || {})['verify:panels'] || '')
+  const partProblems = []
+  for (const f of parts) {
+    const text = read(join('scripts', f))
+    if (!/require\('\.\/panels-harness\.cjs'\)/.test(text)) partProblems.push(`${f}: does not require the harness`)
+    const wd = text.match(/const WATCHDOG_MS = (\d+)\s*\/\/ measured ([^\n]+)/)
+    if (!wd) partProblems.push(`${f}: no numeric WATCHDOG_MS with a "// measured" comment`)
+    else if (!/\d{4}-\d{2}-\d{2}/.test(wd[2]) || !/\d+\s*s.*\d+\s*s/.test(wd[2])) partProblems.push(`${f}: the measured comment lacks a date and two figures`)
+    if (!chain.includes(f.replace(/^verify-panels-|\.cjs$/g, ''))) partProblems.push(`${f}: not in the verify:panels chain`)
+  }
+  ok('panels-split.1 verify-panels.cjs is gone, every scripts/verify-panels-*.cjs requires the harness, carries a measured numeric watchdog, and is in the verify:panels chain',
+    oldFileGone && harnessExists && parts.length >= 2 && partProblems.length === 0,
+    JSON.stringify({ oldFileGone, harnessExists, parts, partProblems }))
+
+  const idsOf = (text) => {
+    const out = new Set()
+    const re = /^\s*ok\((?:'((?:[^'\\]|\\.)*)'|`([^`]*)`)/gm
+    let m
+    while ((m = re.exec(text))) {
+      const label = (m[1] !== undefined ? m[1] : m[2]).replace(/\\'/g, "'")
+      out.add(label.split(' ')[0])
+    }
+    return out
+  }
+  let oldIds = new Set()
+  let gitErr = null
+  try {
+    oldIds = idsOf(execFileSync('git', ['show', 'pre-v7-run:scripts/verify-panels.cjs'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }))
+  } catch (e) { gitErr = String(e && e.message || e).split('\n')[0] }
+  const newIds = new Set()
+  for (const f of parts) for (const id of idsOf(read(join('scripts', f)) || '')) newIds.add(id)
+  const lost = [...oldIds].filter((id) => !newIds.has(id))
+  ok('panels-split.2 the parts hold every check id the old file held at pre-v7-run — nothing lost in the move',
+    gitErr === null && oldIds.size > 300 && lost.length === 0,
+    JSON.stringify({ gitErr, old: oldIds.size, now: newIds.size, lost: lost.slice(0, 20) }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
