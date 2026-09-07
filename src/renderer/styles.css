@@ -4265,8 +4265,6 @@ body {
    to `c..` beside it. */
 .rail-row { flex-wrap: wrap; }
 .rail-row__last { display: block; flex: 1 0 100%; order: 10; padding: 0 var(--sp-2) var(--sp-1) var(--sp-4); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dock__capsules { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; }
-.dock__capsule { font-size: var(--t-xs); white-space: nowrap; }
 
 /* M106. HEADER DISCIPLINE, once, for every kind: the title is what gives —
    whole words first, then an ellipsis — and the verbs never shrink, so a
@@ -4407,3 +4405,17 @@ body {
 .rail-row:hover .rail-row__start, .rail-row:focus-within .rail-row__start { opacity: 1; }
 .rail-row--selected { background: var(--iris-dim); border-radius: var(--r-md); }
 @media (prefers-reduced-motion: reduce) { .rail-row__start { transition: none; } }
+
+/* M172. THE DOCK AND TOP BAR. A button's name is a tag beside it, at rest at
+   0 and revealed on hover or keyboard focus (the dock stays one icon wide —
+   the navigator is the wide thing); the current place is a soft filled pill;
+   the capsules are gone (the metrics rule). The top bar's search reads as a
+   FIELD — a hairline and the pill radius — and stays a button (shell 78 opens
+   the palette through it). */
+.dock__button { position: relative; }
+.dock__label { position: absolute; left: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); z-index: 1; }
+.dock__button:hover .dock__label, .dock__button:focus-visible .dock__label { opacity: 1; }
+.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); }
+.shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
+.shell__search:hover { color: var(--fg); background: var(--s-3); }
+@media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
