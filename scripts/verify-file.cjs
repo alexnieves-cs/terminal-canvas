@@ -1556,6 +1556,40 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ keep: has ? F.ATTACHMENTS_KEEP : null, files: files.length, now }))
 })()
 
+// M142 — ledger.usage.1 (backlog #19's history half). Usage HISTORY rides
+// #46's run ledger, never a third store: at a panel's kill or exit main
+// appends ONE usage row beside the command rows (per-model token totals, the
+// turn count, when it ended — priced by the RENDERER with the summary's own
+// rule, so main holds no price table). `list` (the inspector's Ledger
+// section) still answers command rows only; `usage(since)` answers the
+// usage rows at or after `since`, newest first. A malformed usage row costs
+// that row.
+;(async () => {
+  const { mkdtempSync } = require('node:fs')
+  const { join } = require('node:path')
+  const { tmpdir } = require('node:os')
+  const has = typeof F.createRunLedger === 'function'
+  const file = join(mkdtempSync(join(tmpdir(), 'tc file ledger-usage ')), 'ledger.jsonl')
+  const ledger = has ? F.createRunLedger({ file }) : null
+  const totals = (input, output) => ({ input, output, cacheWrite: 0, cacheRead: 0 })
+  if (ledger) {
+    await ledger.append({ panelId: 'n1', command: 'ls', cwd: '/w', startedAt: 10, endedAt: 20, exitCode: 0 })
+    await ledger.append({ kind: 'usage', panelId: 'n1', byModel: { 'claude-sonnet-5': totals(1000, 100) }, turns: 3, endedAt: 5000 })
+    await ledger.append({ kind: 'usage', panelId: 'n2', byModel: { 'claude-sonnet-5': totals(500, 50) }, turns: 1, endedAt: 9000 })
+    await ledger.append({ kind: 'usage', panelId: 'n3', byModel: { 'nobody-knows': totals(1, 1) }, turns: 1, endedAt: 12000 })
+    const { appendFileSync } = require('node:fs')
+    appendFileSync(file, '{"kind":"usage","panelId":"n4","byModel":"nope","turns":1,"endedAt":13000}\n')
+  }
+  const commands = ledger ? await ledger.list('n1', 10) : null
+  const since8k = ledger && typeof ledger.usage === 'function' ? await ledger.usage(8000) : null
+  const all = ledger && typeof ledger.usage === 'function' ? await ledger.usage(0) : null
+  ok('ledger.usage.1 a usage row beside the command rows: list answers commands only, usage(since) answers the usage rows at or after since newest first, and a malformed usage row costs that row',
+    has && ledger !== null && typeof ledger.usage === 'function' && Array.isArray(commands) && commands.length === 1 && commands[0].command === 'ls' &&
+      Array.isArray(since8k) && since8k.map((r) => r.panelId).join(',') === 'n3,n2' && since8k[0].byModel['nobody-knows'].input === 1 &&
+      Array.isArray(all) && all.length === 3 && all.every((r) => r.kind === 'usage' && typeof r.turns === 'number' && typeof r.endedAt === 'number'),
+    JSON.stringify({ has, commands, since8k: since8k && since8k.map((r) => r.panelId), all: all && all.length }))
+})()
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

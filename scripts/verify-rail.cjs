@@ -2967,6 +2967,29 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ asked, builtIns: R2.BUILT_IN_HOLES }))
 }
 
+// M142 — summary.history.1. The summary's `history` — this week's usage
+// rows folded and PRICED by the same per-model rule the live totals use
+// (an unpriceable model makes the figure undefined, never smaller) — has
+// three states, never two: no rows (nothing ran this week), rows with no
+// price (`unpriced`), and a figure with its session count. `historyWord`
+// is the sentence the pane prints for each.
+{
+  const totals = (input, output) => ({ input, output, cacheWrite: 0, cacheRead: 0 })
+  const has = typeof R.foldUsageHistory === 'function' && typeof R.historyWord === 'function'
+  const rows = [
+    { kind: 'usage', panelId: 'n1', byModel: { 'claude-sonnet-5': totals(1000, 100) }, turns: 3, endedAt: 5000 },
+    { kind: 'usage', panelId: 'n2', byModel: { 'claude-sonnet-5': totals(500, 50) }, turns: 1, endedAt: 9000 }
+  ]
+  const priced = has ? R.foldUsageHistory(rows) : null
+  const unpriced = has ? R.foldUsageHistory([...rows, { kind: 'usage', panelId: 'n3', byModel: { 'nobody-knows': totals(1, 1) }, turns: 1, endedAt: 1 }]) : null
+  const none = has ? R.foldUsageHistory([]) : null
+  ok('summary.history.1 foldUsageHistory sums tokens and prices per model across the rows (undefined when any model is unpriced), counts sessions, and historyWord names the three states',
+    has && priced !== null && priced.sessions === 2 && priced.tokens === 1650 && typeof priced.costUsd === 'number' && priced.costUsd > 0 &&
+      unpriced.sessions === 3 && unpriced.costUsd === undefined && none.sessions === 0 &&
+      /nothing/.test(R.historyWord(none)) && /unpriced/.test(R.historyWord(unpriced)) && /\$/.test(R.historyWord(priced)) && /2 sessions/.test(R.historyWord(priced)),
+    JSON.stringify({ has, priced, unpriced, none, words: has ? [R.historyWord(none), R.historyWord(unpriced), R.historyWord(priced)] : null }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
