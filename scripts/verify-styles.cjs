@@ -594,7 +594,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const col = all.find((r) => /(^|,)\s*\.skills-pane__column\s*(,|$)/.test(r.sel))
   const colFixed = col ? /(^|;|\s)width:\s*[\d.]+r?em/.test(col.body) && /min-width:\s*0/.test(col.body) : false
-  const title = all.find((r) => /\.skills-pane__column-title\b/.test(r.sel))
+  // The title's OWN rule, not the heading's `:not(.skills-pane__column-title)`
+  // sibling clause, which names it and declares nothing about it.
+  const title = all.find((r) => /(^|,)\s*\.skills-pane__column-title\s*(,|$)/.test(r.sel))
   const titleGives = title ? /text-overflow:\s*ellipsis/.test(title.body) && /min-width:\s*0/.test(title.body) : false
   const rack = all.find((r) => /\.skills-pane__columns\b/.test(r.sel))
   const rackScrolls = rack ? /overflow-x:\s*auto/.test(rack.body) : false

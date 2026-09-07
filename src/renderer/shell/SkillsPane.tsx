@@ -1,6 +1,6 @@
 import { memo, useState, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Plus } from '@renderer/icons'
+import { ChevronLeft, More, Plus } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
@@ -132,6 +132,15 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
   const [drafting, setDrafting] = useState(false)
   const [draftName, setDraftName] = useState('')
   const [draftScope, setDraftScope] = useState<'user' | 'project'>('user')
+  // M127 fix. ONE menu open at a time, named by its owner (`col:<id>` /
+  // `card:<key>`). The navigator is a fixed ~300px wide (M46: its width is the
+  // breakpoint's), so a heading that spelled its two verbs out made the column
+  // wider than the pane it scrolls inside — the first column rendered half off
+  // the left edge. M106's one header rule applies here as it does to a panel:
+  // the title GIVES and every control is `flex: 0 0 auto`, which means the
+  // verbs collapse into one control rather than shrinking.
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const toggleMenu = (key: string): void => setOpenMenu((m) => (m === key ? null : key))
   const dropHandlers = (columnId: string): { onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
     onDragOver: (e) => {
       if (e.dataTransfer.types.includes(SKILL_CARD_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
@@ -243,32 +252,67 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
             // PRESENT and disabled with the reason — a control that vanished
             // would read as a feature that was never built.
             const undeletable = col.id === UNGROUPED_COLUMN_ID
+            const menuKey = `col:${col.id}`
+            const menuOpen = openMenu === menuKey
             return (
               <section key={col.id} className="skills-pane__column" data-skills-column={col.id} {...dropHandlers(col.id)}>
                 <h3 className="skills-pane__heading">
-                  <span className="skills-pane__column-title">{col.title}</span>
+                  <span className="skills-pane__column-title" title={col.title}>{col.title}</span>
                   <span className="skills-pane__count">{col.cards.length}</span>
-                  <select className="skills-pane__assign" data-skills-assign-column={col.id}
-                    aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
-                    disabled={col.cards.length === 0 || props.teammates.length === 0}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onChange={(e) => { const id = e.target.value; if (id !== '') props.onAssignColumn(col.id, id) }}>
-                    <option value="">Assign to teammate…</option>
-                    {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
-                  </select>
-                  <button type="button" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
-                    disabled={undeletable}
-                    title={undeletable ? 'Ungrouped is where an unplaced card sits — it cannot be deleted' : `Delete ${col.title}; its cards go back to where they derive`}
-                    {...shellControl(() => { if (!undeletable) props.onDeleteColumn(col.id) })}>Delete</button>
+                  <span className="skills-pane__menu-host">
+                    <button type="button" className="icon-button skills-pane__menu-button" data-skills-column-menu={col.id}
+                      aria-haspopup="menu" aria-expanded={menuOpen}
+                      title={`Actions for ${col.title}`} aria-label={`Actions for ${col.title}`}
+                      {...shellControl(() => toggleMenu(menuKey))}><More /></button>
+                    {menuOpen && (
+                      <div className="skills-pane__menu" role="menu" data-skills-column-menu-open={col.id}
+                        onMouseDown={(e) => e.stopPropagation()}>
+                        <select className="skills-pane__assign" data-skills-assign-column={col.id}
+                          aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
+                          disabled={col.cards.length === 0 || props.teammates.length === 0}
+                          onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignColumn(col.id, id); setOpenMenu(null) } }}>
+                          <option value="">Assign to teammate…</option>
+                          {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                        </select>
+                        {/* Ungrouped's Delete stays PRESENT and disabled with its
+                            reason: a verb that vanished inside the menu would read
+                            as a feature that was never built. */}
+                        <button type="button" role="menuitem" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
+                          disabled={undeletable}
+                          title={undeletable ? 'Ungrouped is where an unplaced card sits — it cannot be deleted' : `Delete ${col.title}; its cards go back to where they derive`}
+                          {...shellControl(() => { if (!undeletable) { props.onDeleteColumn(col.id); setOpenMenu(null) } })}>Delete</button>
+                      </div>
+                    )}
+                  </span>
                 </h3>
                 <ul className="rail-list rail-list--skills">
                   {col.cards.length === 0 ? (
                     <li className="rail-empty" data-skills-column-empty>drop a card here</li>
-                  ) : col.cards.map((card) => (
+                  ) : col.cards.map((card) => {
+                  const cardMenuKey = `card:${card.key}`
+                  const cardMenuOpen = openMenu === cardMenuKey
+                  return (
                     <li key={card.key} className="rail-row skill-card" data-skill-card={card.key}
                       data-skill-installed={card.installed ? 'yes' : 'no'} draggable
                       onDragStart={(e) => { e.dataTransfer.setData(SKILL_CARD_MIME, card.key); e.dataTransfer.effectAllowed = 'move' }}>
                       <span className="rail-row__label skill-card__name" title={card.name}>{card.name}</span>
+                      <span className="skills-pane__menu-host skill-card__menu-host">
+                        <button type="button" className="icon-button skills-pane__menu-button" data-skill-card-menu={card.key}
+                          aria-haspopup="menu" aria-expanded={cardMenuOpen}
+                          title={`Assign ${card.name} to teammate`} aria-label={`Assign ${card.name} to teammate`}
+                          {...shellControl(() => toggleMenu(cardMenuKey))}><More /></button>
+                        {cardMenuOpen && (
+                          <div className="skills-pane__menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
+                            <select className="skills-pane__assign" data-skills-assign-card={card.key}
+                              aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
+                              disabled={props.teammates.length === 0}
+                              onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignCard(card.key, id); setOpenMenu(null) } }}>
+                              <option value="">Assign to teammate…</option>
+                              {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </span>
                       {card.description !== '' && <span className="skill-card__description" data-skill-description>{card.description}</span>}
                       <span className="skill-card__facts" data-skill-facts>
                         {[WHY_WORD[card.why], resourceWord(card), card.pluginId].filter((x) => x !== undefined).join(' · ')}
@@ -276,16 +320,8 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       {!card.installed && (
                         <span className="skill-card__note" data-skill-gone>not installed — the shelf kept its slot</span>
                       )}
-                      <select className="skills-pane__assign" data-skills-assign-card={card.key}
-                        aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
-                        disabled={props.teammates.length === 0}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onChange={(e) => { const id = e.target.value; if (id !== '') props.onAssignCard(card.key, id) }}>
-                        <option value="">Assign to teammate…</option>
-                        {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
-                      </select>
                     </li>
-                  ))}
+                  ) })}
                 </ul>
               </section>
             )
