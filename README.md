@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v3.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v3.1.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and

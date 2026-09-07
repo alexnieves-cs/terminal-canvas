@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 3.0 (M125).** The seventh run, M126 to M133, made the
+running a coding-agent CLI. **This is 3.1 (M134 — the version the M126–M133 act shipped under no number, paid in the v7 run's Act 0).** The seventh run, M126 to M133, made the
 canvas a place a skill LIVES: a skill's identity is `scope:name` and the shelf is the user's
 own arrangement of them, a top-level record whose placement carries its why (M126); the Skills
 pane racks those columns over the selected panel's inventory with `Ungrouped` last and always

@@ -1,6 +1,6 @@
 {
   "name": "terminal-canvas",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "An infinite-canvas workspace where every node is a live terminal running a coding agent CLI.",
   "main": "./out/main/index.js",
   "author": "Alex Nieves",
