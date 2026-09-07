@@ -32,8 +32,14 @@ export interface DisplayPath {
 
 const strip = (p: string): string => p.replace(/\/+$/, '')
 
-/** The palette's shortening, duplicated in name only: `shortPath` lives in the renderer and this module is shared. */
-function lastSegments(path: string, keep = 2): string {
+/**
+ * The last `keep` segments with a leading `…/`; a path that short is returned
+ * whole. The LEFTMOST kept segment must not be a one-letter fragment: `…/T/tc
+ * shot` opens on macOS's temp `T` and says nothing — drop it rather than reach
+ * past it. Moved here from the palette's `panel-name.ts` in M164 so the app
+ * has ONE shortening (`panel-name.ts` re-exports it).
+ */
+export function shortPath(path: string, keep = 2): string {
   const trimmed = strip(path)
   const parts = trimmed.split('/').filter((s) => s !== '')
   if (parts.length <= keep) return trimmed
@@ -58,5 +64,5 @@ export function displayPath(path: string, root?: string, home?: string): Display
     if (p === h) return { short: '~', full }
     if (p.startsWith(h + '/')) return { short: `~/${p.slice(h.length + 1)}`, full }
   }
-  return { short: lastSegments(path), full }
+  return { short: shortPath(path), full }
 }

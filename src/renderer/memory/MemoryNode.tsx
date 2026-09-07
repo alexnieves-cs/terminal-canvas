@@ -49,7 +49,7 @@ const PLACEHOLDER: Record<(typeof KINDS)[number], string> = {
 }
 
 /** M164. The path rule's one helper; the memory node used to carry its own left-truncation. */
-const rootLabel = (root: string): string => displayPath(root).short
+const rootLabel = (root: string): string => displayPath(root, root).short // M83 resolves the root to the repository, so this reads its basename
 
 function clock(at: number): string {
   const d = new Date(at)

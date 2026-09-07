@@ -565,15 +565,16 @@ function InspectorPanel({
           not sampled yet (`no reading yet` — never a confident 0%, which is
           the wrong answer costOf refuses too); a panel with no process. */}
       {(() => {
-        const pid = model.fields.find((f) => f.key === 'pid')
-        const running = pid !== undefined && pid.value !== '—'
-        const arm = machine !== undefined ? 'reading' : running ? 'none' : 'not-running'
+        // A chat's process is main's (M71) and the sampler walks terminal pids
+        // only (Canvas.tsx's isTerminalPanel targets): for every kind but a
+        // terminal the honest arm is `not measured`, never `not running`.
+        const arm = model.kind !== 'terminal' ? 'not-measured' : machine !== undefined ? 'reading' : model.running === true ? 'none' : 'not-running'
         return (
           <section className="inspector__section inspector__machine" data-inspector-machine={arm}>
             <h3 className="inspector__section-heading">Machine</h3>
             <div className="inspector__value" data-machine-cost>{arm === 'reading' && machine !== undefined
               ? `CPU ${formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
-              : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : 'not running — nothing to measure'}</div>
+              : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured — only a terminal\'s process tree is sampled' : 'not running — nothing to measure'}</div>
           </section>
         )
       })()}

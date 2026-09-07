@@ -68,6 +68,8 @@ export interface InspectorModel {
    * compile with those controls silently always-enabled.
    */
   kind: Panel['kind']
+  /** M163. A terminal whose process is live (the Machine section's arm); absent on every other kind. */
+  running?: boolean
   /** The user's own name, if any. The rename control echoes it. */
   title?: string
   /** The COLLAPSED honest chain — the one answer the header and rail show. */
@@ -870,6 +872,10 @@ export function buildInspectorModelBare(
   const restartable = isRestartable(status)
   return {
     kind: 'terminal',
+    // M163 (the Act I critic): the Machine section reads this, never the pid
+    // field's display dash — a literal compared across two files is silent
+    // the day the dash changes.
+    running: running !== undefined,
     reviewable: restartable,
     ...(restartable ? {} : { reviewReason: REASON_NOT_STARTED }),
     frontEnd: {

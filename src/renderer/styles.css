@@ -2789,7 +2789,7 @@ body {
    `discard` rests at opacity 0 (the rest rule), revealed on the card's hover
    or focus and held at 1 while ARMED so `keep` can be read. */
 .review-node__file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-3); background: var(--s-1); }
-.review-node__base { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
+.review-node__base { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 600; color: var(--fg); }
 .review-node__dir { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .review-node__add, .review-node__del, .review-node__new { font-family: var(--font-mono); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); }
 .review-node__add { color: var(--green); background: var(--green-dim); }
@@ -2895,7 +2895,7 @@ body {
 .file-node__prose {
   margin: 0;
   font-family: var(--font-ui);
-  font-size: var(--t-md);
+  font-size: var(--t-base);
   line-height: var(--lh-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4103,7 +4103,8 @@ body {
 .work-node__summary { cursor: grab; }
 .work-node__remote { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .work-node__title { margin: 0; font-size: var(--t-sm); color: var(--fg); }
-.work-node__facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.work-node__facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+.work-node__facts .work-node__key, .work-node__facts .work-node__remote { font-family: var(--font-mono); } /* M164 (the critic): a teammate's name and a lane's label are prose; the key and remote stay code */
 .work-node__facts dt { display: inline; }
 .work-node__facts dt::after { content: ': '; }
 .work-node__facts dd { display: inline; margin: 0; color: var(--fg-2); }
@@ -4268,7 +4269,12 @@ body {
 .pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
 .pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
 .panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close,
-.pf__menu button, .pf__menu .pf__verb { opacity: 1; }
+.pf__menu button, .pf__menu .pf__verb,
+/* Exempt (the Act I critic): the skill-trail capsule is a COUNT — `3 skills` is the
+   lane's only stated size and M130 says it never disappears — and the auto chip's
+   dismiss sits INSIDE a state pill, where a hidden box reads as a hole. Both sit
+   below the hiding rule at equal specificity: SOURCE ORDER is what wins here. */
+.pf__chrome .pf__trail, .pf__chrome .chat__auto-dismiss { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { transition: none; } }
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */

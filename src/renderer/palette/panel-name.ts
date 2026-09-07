@@ -16,19 +16,8 @@ import { browserHost } from '@shared/browser-panel'
  * checks read).
  */
 
-/** The last `keep` segments with a leading `…/`; a path that short is returned whole. */
-export function shortPath(path: string, keep = 2): string {
-  const trimmed = path.replace(/\/+$/, '')
-  const parts = trimmed.split('/').filter((s) => s !== '')
-  if (parts.length <= keep) return trimmed
-  // The LEFTMOST kept segment must not be a one-letter fragment: `…/T/tc
-  // shot` opens on macOS's temp `T` and says nothing. Drop it rather than
-  // reach past it — the segment before `T` is a 30-character hash, and the
-  // repository name is what has to survive.
-  let n = keep
-  while (n > 1 && parts[parts.length - n].length < 2) n -= 1
-  return `…/${parts.slice(-n).join('/')}`
-}
+/** M164. ONE shortening: the palette's cut lives in `shared/display-path.ts` now and is re-exported here for its callers. */
+export { shortPath } from '@shared/display-path'
 
 /** What a row leads with: the user's title, else the honest name without path or id. */
 export function panelName(panel: Panel, resolvedCommand?: string): string {

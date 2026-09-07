@@ -2432,3 +2432,15 @@ name there, each its own shape:
   cap left unread).
 - **A tag graph** (tags × notes as a diagram). The workflow diagram's painter (M133) is the
   nearest shape.
+
+## 86. A repository root on the file and toolbox models — what M164's path rule left
+
+M164's `displayPath(path, root)` shows `repo/src/server.ts` wherever the ROOT is known — the
+review engine's root, the memory store's root. The file panel and the toolbox panel know only
+their own path or directory, so their line reads the last two segments (`…/repo/src`), which
+is the rule's fallback and not its intent. What closes it: a `repoRoot` resolved once in main
+(the review engine's `resolveRepo` already does this for a cwd) carried on `FileNodeModel` and
+`ToolboxNodeModel`, and the two directory lines calling `displayPath(dir, repoRoot)`. Small,
+and it needs an IPC answer the file kind does not have today — its own milestone or a rider
+on the next one that touches the file model.
+
