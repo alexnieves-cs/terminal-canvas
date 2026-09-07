@@ -984,7 +984,7 @@ body {
 .review-node__touches { flex: none; font-size: var(--t-xs); color: var(--fg-3); }
 .review-node__touch-list { flex: 1 1 100%; margin: 0 0 var(--sp-2); padding: 0 0 0 var(--sp-3); list-style: none; font-size: var(--t-xs); color: var(--fg-2); }
 /* M76. The questions, pinned between the well and the composer. */
-.chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
+
 .chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
 
@@ -3816,7 +3816,6 @@ body {
    role stays in the DOM as the row's accessible name — clipped, never a column.
    A timestamp rests at 0 and reveals on the row's hover (the rest rule). */
 .chat__row { display: flex; flex-direction: column; position: relative; padding: var(--sp-2) 0; }
-.chat__row:last-child { border-bottom: 0; }
 .chat__role { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; font-family: var(--font-ui); }
 .chat__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 /* M111. A user turn is a BAND — a tinted, rounded row rather than a labelled
@@ -3839,13 +3838,16 @@ body {
 /* M168. TOOL ROWS: one collapsed row per call — the family's glyph in a soft
    tint, the verb, the target, a state pill — and no `TOOL` label. A GROUP of
    consecutive rows folds under one header collapsed by default; its rows stay
-   in the DOM (the checks count and click them) and are hidden by the class. */
+   in the DOM (the checks count and click them) and are hidden by the class —
+   display: none, so a folded row's verbs leave the tab order; the group's
+   header button is what a keyboard reaches, and it reveals them (M44). */
 .chat__row--tool { flex-direction: row; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; padding: var(--sp-1) 0; font-size: var(--t-md); }
 .chat__tool-glyph { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; align-self: flex-start; margin-top: 1px; } /* flex-start: an opened diff wraps beneath the row, and a centred glyph floated to the well's middle (the critic's auto scene) */
 .chat__tool-glyph svg { width: 12px; height: 12px; }
 .chat__tool-state { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); flex: 0 0 auto; color: var(--green); background: var(--green-dim); }
 .chat__tool-state[data-chat-tool-state="running"] { color: var(--blue); background: var(--blue-dim); }
 .chat__tool-state[data-chat-tool-state="error"] { color: var(--red); background: var(--red-dim); }
+.chat__tool-state[data-chat-tool-state="no result"] { color: var(--fg-3); background: var(--s-4); }
 .chat__tools { display: flex; flex-direction: column; }
 .chat__tools-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; text-align: left; }
 .chat__tools-head:hover { color: var(--fg-2); }
@@ -3861,14 +3863,13 @@ body {
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 /* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
 .chat__tool-input--code, .chat__far-question--code { font-family: var(--font-mono); font-size: var(--t-sm); }
-.chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .chat__row--tool-error .chat__tool-name { color: var(--red); }
 .chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
 .chat__tool-toggle:hover { color: var(--fg-2); }
-.chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); font-size: var(--t-sm); max-height: calc(12 * var(--lh-body) * var(--t-sm)); overflow: auto; }
+.chat__tool-result { margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); font-size: var(--t-sm); max-height: calc(12 * var(--lh-body) * var(--t-sm)); overflow: auto; }
 .chat__tool-result--all { max-height: none; } /* M168. `show all` lifts the twelve-line cap */ /* M162. The family AFTER `font: inherit`: the shorthand resets it to the transcript's UI face, and the M162 critic saw a diff hunk in SF */
 .chat__empty, .chat__queued, .chat__exited { margin: var(--sp-2) 0; }
-.chat__permission { padding: var(--sp-2) 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: var(--sp-2); row-gap: var(--sp-2); align-items: baseline; }
+.chat__permission { padding: var(--sp-2) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .chat__permission-line { min-width: 0; overflow-wrap: anywhere; font-size: var(--t-sm); color: var(--fg); }
 .chat__permission-verbs { grid-column: 2; }
 .chat__permission-verbs, .chat__verbs { display: flex; gap: var(--sp-2); }
@@ -3898,7 +3899,7 @@ body {
    into looks like it — a hairline box on the raised surface, an iris ring
    on focus (the focus outline is relocated, not removed). */
 .chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
-.chat__input:focus { outline: none; border-color: var(--iris); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
+.chat__input:focus { outline: none; } /* M169. The WELL wears the ring (:focus-within); the field inside it draws none */
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
 /* M110. ONE FILLED CONTROL PER SURFACE. The interface accent as a fill and

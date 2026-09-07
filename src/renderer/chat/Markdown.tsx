@@ -1,12 +1,14 @@
 import { useMemo, type JSX } from 'react'
 import { parseMarkdown, type Block, type Inline } from '@shared/markdown'
 import { shellControl } from '@renderer/shell/shell-control'
+import { CopyIcon } from '@renderer/icons'
 
 /**
  * M167. The assistant's turn, rendered from `parseMarkdown`'s TREE — React
  * elements built from parsed nodes, never a string handed to `innerHTML`.
  * A fenced block carries a `Copy` verb that writes the fence's text through
- * the clipboard bridge (the same door `edit:copy` uses); a link renders as
+ * `navigator.clipboard` — the door `Palette.tsx` and `Canvas.tsx` already use
+ * (`edit:copy` is main→renderer and could not carry a fence's text); a link renders as
  * TEXT with the URL on its title — a transcript is not a page, and `link:open`
  * is a verb, not a click on prose.
  */
@@ -28,8 +30,9 @@ function BlockView({ block }: { block: Block }): JSX.Element {
     case 'code':
       return (
         <div className="md__fence" data-md-fence={block.lang || 'text'}>
-          <button type="button" className="md__copy pf__verb pf__verb--word" data-md-copy title="Copy this block"
-            {...shellControl(() => { void navigator.clipboard.writeText(block.text) })}>Copy</button>
+          {/* An ICON with a name: the button sits inside the element a check reads the answer's text from, so its label must not be text. */}
+          <button type="button" className="md__copy pf__verb icon-button" data-md-copy title="Copy this block" aria-label="Copy this block"
+            {...shellControl(() => { void navigator.clipboard.writeText(block.text) })}><CopyIcon /></button>
           <pre className="md__code"><code>{block.text}</code></pre>
         </div>
       )
@@ -44,7 +47,8 @@ function Runs({ runs }: { runs: Inline[] }): JSX.Element {
       case 'code': return <code key={i} className="md__code-inline">{r.text}</code>
       case 'bold': return <strong key={i}><Runs runs={r.children} /></strong>
       case 'italic': return <em key={i}><Runs runs={r.children} /></em>
-      case 'link': return <span key={i} className="md__link" title={r.href}>{r.text}</span>
+      /* Reachable by keyboard and announced with its URL (the Act II critic); never navigable — `link:open` is a verb. */
+      case 'link': return <span key={i} className="md__link" title={r.href} tabIndex={0} aria-label={`${r.text} — ${r.href}`}>{r.text}</span>
       default: return <span key={i}>{r.text}</span>
     }
   })}</>

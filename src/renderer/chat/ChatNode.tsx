@@ -14,7 +14,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
-import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows } from './chat-model'
+import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -188,15 +188,23 @@ const ToolRow = memo(function ToolRow({ row, panelId, reveal }: { row: Extract<C
  * and a person's land on the same state.
  */
 const ToolGroup = memo(function ToolGroup({ group, panelId }: { group: Extract<ChatGroup, { kind: 'tools' }>; panelId: string }): JSX.Element {
+  // A group of ONE is a row with no header, rendered through the same
+  // component so the row keeps its key — and its open diff — when a second
+  // tool arrives and the run becomes a group (the Act II critic).
+  const single = group.rows.length === 1
   const [open, setOpen] = useState(false)
+  const reveal = useCallback(() => setOpen(true), [])
+  const shown = single || open
   return (
-    <div className={`chat__tools${open ? '' : ' chat__tools--collapsed'}`} data-chat-tools={group.rows.length} data-chat-tools-open={open}>
-      <button type="button" className="chat__tools-head" data-chat-tools-toggle aria-expanded={open} title={open ? 'Fold these tool calls away' : 'Show each tool call'}
-        {...shellControl(() => setOpen((v) => !v))}>
-        <span className="chat__tools-chevron" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
-        {toolGroupLabel(group)}
-      </button>
-      {group.rows.map((row) => <ToolRow key={row.id} row={row} panelId={panelId} reveal={() => setOpen(true)} />)}
+    <div className={`chat__tools${shown ? '' : ' chat__tools--collapsed'}`} data-chat-tools={single ? undefined : group.rows.length} data-chat-tools-open={single ? undefined : open}>
+      {!single && (
+        <button type="button" className="chat__tools-head" data-chat-tools-toggle aria-expanded={open} title={open ? 'Fold these tool calls away' : 'Show each tool call'}
+          {...shellControl(() => setOpen((v) => !v))}>
+          <span className="chat__tools-chevron" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
+          {toolGroupLabel(group)}
+        </button>
+      )}
+      {group.rows.map((row) => <ToolRow key={row.id} row={row} panelId={panelId} reveal={reveal} />)}
     </div>
   )
 })
@@ -608,7 +616,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               case 'thinking':
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':
-                return <ToolRow key={row.id} row={row} panelId={id} />
+                return <ToolGroup key={`tools:${row.id}`} group={{ kind: 'tools', id: `tools:${row.id}`, rows: [row] }} panelId={id} />
               case 'image':
                 return <div key={row.id} className="chat__row chat__row--user" data-chat-row="image"><span className="chat__role">you</span><span className="chat__image">image · {row.mediaType.replace('image/', '')} · {kb(row.size)}</span></div>
               default:
@@ -635,8 +643,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             an approval is a sentence and two buttons in the same well (M76's
             "between the well and the composer" rule still holds — the question
             is never inside the scroll host). */}
-        {/* `--live` is A TURN IN FLIGHT (streaming, or starting with a queue behind it — the Act II critic's auto scene), not the Interrupt arm's enabled bit: a codex chat mid-turn shows Interrupt disabled with its reason rather than a Send it cannot use. */}
-        <div className={`chat__composer${snapshot !== null && (snapshot.status === 'streaming' || snapshot.status === 'starting') ? ' chat__composer--live' : ''}`} data-chat-composer>
+        {/* `--live` is composerLive — the ONE predicate composerState reads, so Send is never hidden while it is enabled (the Act II critic). */}
+        <div className={`chat__composer${composerLive(snapshot) ? ' chat__composer--live' : ''}`} data-chat-composer>
         {snapshot !== null && snapshot.pending.length > 0 && <div className="chat__questions" data-chat-questions>
           {snapshot.pending.map((p) => (
             <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
@@ -644,7 +652,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                   its argument are the sentence's object; the role stays as the
                   group's accessible name. */}
               <span className="chat__role">asks</span>
-              <p className="chat__permission-sentence">{backend} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</p>
+              <p className="chat__permission-sentence">{BACKENDS[backend].label} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</p>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
                 {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}

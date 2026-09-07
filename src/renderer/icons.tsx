@@ -197,6 +197,9 @@ export const ToolSearch = (p: IconProps): JSX.Element => (
 export const ToolOther = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M8 2l1.5 3 3.5.5-2.5 2.5.5 3.5L8 10l-3 1.5.5-3.5L3 5.5 6.5 5z" /></Svg>
 )
+export const CopyIcon = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10V3h7" /></Svg>
+)
 export const TOOL_GLYPH: Record<string, (p: IconProps) => JSX.Element> = { Read: ToolRead, Edit: ToolEdit, Run: ToolRun, Search: ToolSearch }
 
 export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow } as const

@@ -165,6 +165,17 @@ export interface ComposerArm {
  * the first send is what starts the process, and a send after an exit is
  * what resumes it.
  */
+/**
+ * M169 (the Act II critic). ONE predicate for "a turn is in flight": the
+ * composer's Send/Interrupt arms and the well's `--live` class both read it,
+ * so Send can never be hidden while it is enabled. `starting` counts only as
+ * the first turn's spawn with nothing queued (M90's reading); a restored
+ * chat's `starting` with turns behind it is a send the person may still make.
+ */
+export function composerLive(snapshot: AgentSessionSnapshot | null): boolean {
+  return snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
+}
+
 export function composerState(
   snapshot: AgentSessionSnapshot | null,
   claudeAvailable: boolean,
@@ -179,7 +190,7 @@ export function composerState(
   // M90. A backend with no interrupt door: mid-turn the verb stays, disabled
   // with the fix (closing the panel kills the process), never enabled to a no-op.
   const noInterrupt: ComposerArm = row.interrupts ? { enabled: true } : { enabled: false, reason: row.reasons.noInterrupt }
-  const streaming = snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
+  const streaming = composerLive(snapshot)
   if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: reasonChatPending(row.label) }, interrupt: noInterrupt }
   // M119. A handshake in flight is its own state: Send waits, Interrupt cannot reach a session that has not opened (the manager refuses it), so both say so.
   if (snapshot !== null && snapshot.awaitingHandshake === true) return { send: { enabled: false, reason: reasonChatHandshake(row.label) }, interrupt: { enabled: false, reason: REASON_CHAT_HANDSHAKE_INTERRUPT } }
@@ -279,9 +290,11 @@ export function toolVerb(name: string): string {
 }
 
 /** M168. The state pill's word: three states, never a blank. */
-export function toolState(row: ToolRowOf): 'running' | 'done' | 'error' {
+export function toolState(row: ToolRowOf): 'running' | 'done' | 'error' | 'no result' {
   if (row.result !== undefined) return row.result.isError ? 'error' : 'done'
-  return row.live ? 'running' : 'done'
+  // A stored call with no result — an interrupted turn, a budget stop, an
+  // exit, a truncated transcript — never READ `done` (the Act II critic).
+  return row.live ? 'running' : 'no result'
 }
 
 /** M168. `worked for 2m · 6 tools` — the header's words; without a span, the count alone. */

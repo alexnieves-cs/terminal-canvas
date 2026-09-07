@@ -2376,7 +2376,12 @@ const session = (id, over = {}) => ({
   ok('md.1 the markdown grammar: heading, a paragraph with bold/italic/code/link runs, two lists, a fence with its language, a table as code, an image as its alt text, an unclosed fence as code; plainText round-trips',
     kinds === 'heading,paragraph,list,list,code,code,paragraph,code' && runs === 'text,bold,text,italic,text,code,text,link,text' &&
       t[4].lang === 'ts' && t[4].text === 'const a = 1' && t[5].text.startsWith('| a | b |') && t[6].children[0].text === 'alt text' && t[7].text === 'unclosed' &&
-      plain(md('hi **there**')) === 'hi there',
+      plain(md('hi **there**')) === 'hi there' && plain(md('```\nx = 1\n```')) === 'x = 1' &&
+      // The Act II critic's two: a code span is found FIRST, and emphasis never crosses it.
+      JSON.stringify(md('2 * 3 = `6 * 1` done')[0].children.map((r) => r.kind)) === JSON.stringify(['text', 'code', 'text']) &&
+      JSON.stringify(md('**`a*b`**')[0].children.map((r) => r.kind)) === JSON.stringify(['text', 'code', 'text']) &&
+      md('[w](https://en.wikipedia.org/wiki/Foo_(bar)) x')[0].children[0].href === 'https://en.wikipedia.org/wiki/Foo_(bar)' &&
+      md('# Title #')[0].children[0].text === 'Title',
     JSON.stringify({ kinds, runs }))
 }
 
@@ -2396,11 +2401,11 @@ const session = (id, over = {}) => ({
   const g = groups(rows)
   const kinds = g ? g.map((x) => x.kind).join(',') : null
   const first = g && g[1]
-  ok('chat-model.7 consecutive tool rows fold into one group with the elapsed span when the times exist, a lone tool row stays a row, the rest pass through; toolVerb and toolState name the family and the pill',
+  ok('chat-model.7 consecutive tool rows fold into one group with the elapsed span when the times exist, a lone tool row stays a row, the rest pass through; toolVerb and toolState name the family and the pill (a stored call with no result reads `no result`, never `done`)',
     kinds === 'user,tools,text,tool' && first && first.rows.length === 3 && first.elapsedMs === 60000 &&
       groups([tool('x', 'Read')])[0].kind === 'tool' && groups([tool('x', 'Read', 5), tool('y', 'Read')])[0].elapsedMs === undefined && groups([tool('x', 'Read', 5), tool('y', 'Read', 900)])[0].elapsedMs === undefined &&
       verb('Read') === 'Read' && verb('Bash') === 'Run' && verb('Grep') === 'Search' && verb('WebFetch') === 'WebFetch' && verb('Write') === 'Edit' &&
-      state(tool('a', 'Read')) === 'done' && state({ ...tool('a', 'Read'), live: true }) === 'running' && state({ ...tool('a', 'Read'), result: { content: 'x', isError: true } }) === 'error',
+      state({ ...tool('a', 'Read'), result: { content: 'x', isError: false } }) === 'done' && state(tool('a', 'Read')) === 'no result' && state({ ...tool('a', 'Read'), live: true }) === 'running' && state({ ...tool('a', 'Read'), result: { content: 'x', isError: true } }) === 'error',
     JSON.stringify({ kinds, first: first && { n: first.rows.length, elapsedMs: first.elapsedMs }, verbs: [verb('Bash'), verb('Grep'), verb('Write')] }))
 }
 
@@ -2425,6 +2430,24 @@ const session = (id, over = {}) => ({
     ah({ cwd: '/Users/ada/work/api', agent: 'claude-code' }) === 'api · claude' && ah({ cwd: '/Users/ada/work/api', agent: 'codex' }) === 'api · codex' &&
       ah({ cwd: '/Users/ada/work/api', agent: 'claude-code' }, 'main') === 'api · main · claude' && ah({ cwd: '/Users/ada/work/api' }) === null,
     JSON.stringify([ah({ cwd: '/a/b', agent: 'claude-code' }), ah({ cwd: '/a/b' })]))
+}
+
+// M169 — composer-live.1 (the Act II critic). ONE predicate says whether a
+//     turn is in flight: `composerLive` is what composerState's arms and the
+//     well's `--live` class both read, so Send is never hidden while it is
+//     enabled — a restored chat `starting` with turns behind it, or any
+//     `starting` with a queue, is NOT live.
+{
+  const live = typeof R.composerLive === 'function' ? R.composerLive : () => null
+  const cs = typeof R.composerState === 'function' ? R.composerState : () => null
+  const snap = (over) => ({ status: 'ready', queued: 0, turns: 0, pending: [], ...over })
+  const restored = snap({ status: 'starting', turns: 1, pid: 42 })
+  const queued = snap({ status: 'starting', turns: 0, queued: 1, pid: 42 })
+  const fresh = snap({ status: 'starting', turns: 0, queued: 0, pid: 42 })
+  ok('composer-live.1 composerLive is composerState\'s own in-flight predicate: streaming is live, a fresh first spawn is live, a restored or queued `starting` is not — and Send is enabled exactly when the well is not live',
+    live(null) === false && live(snap({ status: 'streaming' })) === true && live(fresh) === true && live(restored) === false && live(queued) === false &&
+      cs(restored, true).send.enabled === true && cs(fresh, true).send.enabled === false && cs(snap({ status: 'streaming' }), true).send.enabled === false,
+    JSON.stringify({ restored: live(restored), queued: live(queued), fresh: live(fresh), sendRestored: cs(restored, true).send.enabled }))
 }
 
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
