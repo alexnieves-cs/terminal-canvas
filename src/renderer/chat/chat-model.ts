@@ -30,6 +30,8 @@ export type ChatRow =
       live: boolean
       /** M77. The file this call names, when it names one — the `diff` verb's subject. */
       file?: string
+      /** M168. The turn's record time, for a group's elapsed span; absent on a live row. */
+      at?: number
     }
   | { kind: 'unknown'; id: string; kindName: string }
   /** M75. An attached image: its type and size, never the picture. */
@@ -59,7 +61,7 @@ function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolea
         rows.push({ kind: 'thinking', id, text: texts?.[i] ?? block.text, live })
         return
       case 'tool_use':
-        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live, ...((): { file?: string } => { const f = toolFilePath(block.input); return f === null ? {} : { file: f } })() })
+        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live, ...(at === undefined ? {} : { at }), ...((): { file?: string } => { const f = toolFilePath(block.input); return f === null ? {} : { file: f } })() })
         return
       case 'tool_result':
         // Folded below, never a row of its own.
@@ -226,4 +228,72 @@ export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   if (typeof first === 'string') return first.length > 96 ? first.slice(0, 93) + '…' : first
   const keys = Object.keys(input)
   return keys.length === 0 ? '' : keys.join(', ')
+}
+
+/**
+ * M168. TOOL ROWS AS ONE ROW EACH, AND CONSECUTIVE ROWS AS ONE GROUP (the
+ * brief: "worked for 2m · 6 tools", collapsed by default). Pure over the rows
+ * `chatRows` built: a run of two or more `tool` rows folds into a `tools`
+ * group; a lone tool row stays a row (no header for one); every other row
+ * passes through in order. The elapsed span is the first and last tool's
+ * record times among the STAMPED rows (a live row has none yet); a group with
+ * fewer than two stamps says how many tools, never a number it made up.
+ */
+export type ToolRowOf = Extract<ChatRow, { kind: 'tool' }>
+export type ChatGroup = ChatRow | { kind: 'tools'; id: string; rows: ToolRowOf[]; elapsedMs?: number }
+
+export function toolGroups(rows: readonly ChatRow[]): ChatGroup[] {
+  const out: ChatGroup[] = []
+  let run: ToolRowOf[] = []
+  const flush = (): void => {
+    if (run.length === 0) return
+    if (run.length === 1) { out.push(run[0]); run = []; return }
+    // The first and the last STAMPED rows: a live last row has no stamp yet,
+    // and the span to the last one that does is still a true span.
+    const stamped = run.filter((r) => r.at !== undefined)
+    const first = stamped[0]?.at
+    const last = stamped[stamped.length - 1]?.at
+    const elapsed = stamped.length >= 2 && first !== undefined && last !== undefined && last >= first ? { elapsedMs: last - first } : {}
+    out.push({ kind: 'tools', id: `tools:${run[0].id}`, rows: run, ...elapsed })
+    run = []
+  }
+  for (const row of rows) {
+    if (row.kind === 'tool') { run.push(row); continue }
+    flush()
+    out.push(row)
+  }
+  flush()
+  return out
+}
+
+/** M168. The VERB a tool row leads with: a family word for the CLI's own tool names, else the name as given. */
+export function toolVerb(name: string): string {
+  switch (name) {
+    case 'Read': case 'NotebookRead': return 'Read'
+    case 'Edit': case 'Write': case 'MultiEdit': case 'NotebookEdit': return 'Edit'
+    case 'Bash': case 'Shell': case 'Run': return 'Run'
+    case 'Grep': case 'Glob': case 'WebSearch': case 'Search': return 'Search'
+    default: return name
+  }
+}
+
+/** M168. The state pill's word: three states, never a blank. */
+export function toolState(row: ToolRowOf): 'running' | 'done' | 'error' {
+  if (row.result !== undefined) return row.result.isError ? 'error' : 'done'
+  return row.live ? 'running' : 'done'
+}
+
+/** M168. `worked for 2m · 6 tools` — the header's words; without a span, the count alone. */
+export function toolGroupLabel(group: Extract<ChatGroup, { kind: 'tools' }>): string {
+  const n = `${group.rows.length} tools`
+  if (group.elapsedMs === undefined) return n
+  const s = Math.round(group.elapsedMs / 1000)
+  const span = s < 60 ? `${s}s` : `${Math.round(s / 60)}m`
+  return `worked for ${span} · ${n}`
+}
+
+/** M169. The composer's rows: two at rest, one per line of the draft, six at most — pure, so the node only renders it. */
+export function composerRows(text: string): number {
+  const lines = text === '' ? 1 : text.split('\n').length
+  return Math.min(6, Math.max(2, lines))
 }

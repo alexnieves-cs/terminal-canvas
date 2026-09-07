@@ -14,12 +14,14 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
-import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, toolArgumentIsCode } from './chat-model'
+import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
 } from './composer-model'
 import { Markdown } from './Markdown'
+import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown } from '@renderer/icons'
+import { useTrailFor } from '@renderer/skills/skill-trail-store'
 
 /**
  * M73. THE CHAT PANEL — a conversation with an agent, on the canvas, through
@@ -96,8 +98,9 @@ function clockOf(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, { kind: 'tool' }>; panelId: string }): JSX.Element {
+const ToolRow = memo(function ToolRow({ row, panelId, reveal }: { row: Extract<ChatRow, { kind: 'tool' }>; panelId: string; reveal?: () => void }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [all, setAll] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
   const [diff, setDiff] = useState<ToolDiff>(null)
   const hasResult = row.result !== undefined
@@ -131,13 +134,15 @@ const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, 
   }, [diffOpen, row.file, panelId])
   return (
     <div className={`chat__row chat__row--tool${row.result?.isError ? ' chat__row--tool-error' : ''}`} data-chat-row="tool" data-chat-tool={row.name}>
-      <span className="chat__tool-name">{row.name}</span>
+      {/* M168. ONE ROW: the family's glyph, the verb, the target under the path rule, a state pill. */}
+      <span className="chat__tool-glyph" aria-hidden="true">{(() => { const G = TOOL_GLYPH[toolVerb(row.name)] ?? ToolOther; return <G /> })()}</span>
+      <span className="chat__tool-name" title={row.name}>{toolVerb(row.name)}</span>
       <span className={`chat__tool-input${toolArgumentIsCode(row.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(row.input)}</span>
-      {row.live && !hasResult && <span className="chat__tool-running">running</span>}
+      <span className="chat__tool-state" data-chat-tool-state={toolState(row)}>{toolState(row)}</span>
       {row.file !== undefined && (
         <button type="button" className="chat__tool-toggle" data-chat-tool-diff
           title={diffOpen ? 'Hide the diff' : `Show this file's diff against the chat's baseline`} aria-expanded={diffOpen}
-          {...shellControl(() => setDiffOpen((v) => !v))}>
+          {...shellControl(() => { reveal?.(); setDiffOpen((v) => !v) })}>
           {diffOpen ? 'hide diff' : 'diff'}
         </button>
       )}
@@ -157,11 +162,41 @@ const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, 
       {hasResult && (
         <button type="button" className="chat__tool-toggle" data-chat-tool-toggle
           title={open ? 'Hide the result' : 'Show the result'} aria-label={open ? 'Hide the result' : 'Show the result'}
-          aria-expanded={open} {...shellControl(() => setOpen((v) => !v))}>
+          aria-expanded={open} {...shellControl(() => { reveal?.(); setOpen((v) => !v) })}>
           {open ? 'hide result' : 'show result'}
         </button>
       )}
-      {open && row.result && <pre className="chat__tool-result" data-chat-tool-result>{row.result.content === '' ? '(no output)' : row.result.content}</pre>}
+      {open && row.result && (
+        <>
+          <pre className={`chat__tool-result${all ? ' chat__tool-result--all' : ''}`} data-chat-tool-result>{row.result.content === '' ? '(no output)' : row.result.content}</pre>
+          {/* M168. The well is capped at twelve lines; `show all` lifts the cap. */}
+          {row.result.content.split('\n').length > 12 && (
+            <button type="button" className="chat__tool-toggle" data-chat-tool-all aria-expanded={all} title={all ? 'Cap the result at twelve lines' : 'Show the whole result'}
+              {...shellControl(() => setAll((v) => !v))}>{all ? 'show less' : 'show all'}</button>
+          )}
+        </>
+      )}
+    </div>
+  )
+})
+
+/**
+ * M168. A GROUP of consecutive tool rows under one header, collapsed by
+ * default. The rows stay MOUNTED (tools.1, tools.2 and front.1 count and
+ * click them); collapsed rows are hidden by the group's class, and a verb on a
+ * hidden row REVEALS the group before it acts, so a script's dispatched click
+ * and a person's land on the same state.
+ */
+const ToolGroup = memo(function ToolGroup({ group, panelId }: { group: Extract<ChatGroup, { kind: 'tools' }>; panelId: string }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className={`chat__tools${open ? '' : ' chat__tools--collapsed'}`} data-chat-tools={group.rows.length} data-chat-tools-open={open}>
+      <button type="button" className="chat__tools-head" data-chat-tools-toggle aria-expanded={open} title={open ? 'Fold these tool calls away' : 'Show each tool call'}
+        {...shellControl(() => setOpen((v) => !v))}>
+        <span className="chat__tools-chevron" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
+        {toolGroupLabel(group)}
+      </button>
+      {group.rows.map((row) => <ToolRow key={row.id} row={row} panelId={panelId} reveal={() => setOpen(true)} />)}
     </div>
   )
 })
@@ -206,6 +241,9 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   // M90. The backend from the record (absent is claude); the snapshot's word
   // agrees once main answers. Every codex difference is a named reason.
   const backend = backendOf(props.panel.chat)
+  // M169. The skills capsule's count: the trail's one door (M130).
+  const trail = useTrailFor(id, 'chat')
+  const trailCount = trail.entries.length
   const composer = composerState(snapshot, props.claudeAvailable, backend)
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
@@ -557,8 +595,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               {props.claudeAvailable ? `No turns yet. Send a message to start ${backend} here.` : `${backend} was not found on the login PATH, so this panel cannot start.`}
             </p>
           )}
-          {rows.map((row) => {
+          {toolGroups(rows).map((row) => {
             switch (row.kind) {
+              case 'tools':
+                return <ToolGroup key={row.id} group={row} panelId={id} />
               case 'user':
                 /* M167. A BUBBLE: the role stays as the row's accessible name (clipped, never a column); the time reveals on hover. */
                 return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user" data-chat-row-id={row.id}><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}</div>
@@ -588,14 +628,22 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             inside the scroll host: a block at the bottom of a long transcript
             was scrolled out of view the moment it mattered (the approval
             scene). */}
+        {/* M169. THE COMPOSER: a rounded well anchored to the panel's bottom. The
+            chips above the text state the model, the skills seen and the attach
+            door; Send is the one filled control and Interrupt takes its place
+            while a turn runs (`--live`; the button stays in the DOM for codex.1);
+            an approval is a sentence and two buttons in the same well (M76's
+            "between the well and the composer" rule still holds — the question
+            is never inside the scroll host). */}
+        <div className={`chat__composer${composer.interrupt.enabled ? ' chat__composer--live' : ''}`} data-chat-composer>
         {snapshot !== null && snapshot.pending.length > 0 && <div className="chat__questions" data-chat-questions>
           {snapshot.pending.map((p) => (
             <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>
-              {/* The transcript's own tool-row idiom (M76's critic): a caps
-                  margin label, the tool and its argument in mono — the same
-                  line the popover and the pane show — then the two verbs. */}
+              {/* M169. A SENTENCE and two buttons (the brief, Codex): the tool and
+                  its argument are the sentence's object; the role stays as the
+                  group's accessible name. */}
               <span className="chat__role">asks</span>
-              <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · <span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span></span>
+              <p className="chat__permission-sentence">{backend} wants to run <span className="chat__tool-name">{p.toolName}</span>{' '}<span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span> — allow it?</p>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
                 {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
@@ -605,7 +653,6 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             </div>
           ))}
         </div>}
-        <div className="chat__composer" data-chat-composer>
           {chat.refusal !== null ? (
             <p className="pf__note chat__refusal" data-chat-refusal role="alert">{chat.refusal}</p>
           ) : (
@@ -690,16 +737,22 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                   )}
                 </div>
               )}
+              <div className="chat__chips" data-chat-chips>
+                <span className="chat__chip chat__chip--quiet" data-chat-chip="model" title="The model this conversation runs on">{snapshot?.model ?? backend}</span>
+                {trailCount > 0 && <span className="chat__chip chat__chip--quiet" data-chat-chip="skills" title="Skills this agent has used">{trailCount} {trailCount === 1 ? 'skill' : 'skills'}</span>}
+                <button type="button" className="chat__chip chat__chip--quiet chat__chip--verb" data-chat-chip="attach" title="Attach a file from this repository (@ in the message)" aria-label="Attach a file"
+                  {...shellControl(() => { const next = draft === '' || /\s$/.test(draft) ? `${draft}@` : `${draft} @`; setDraft(next); refreshPopup(next, next.length); textareaRef.current?.focus() })}>@ attach</button>
+              </div>
               <textarea
                 ref={textareaRef}
                 className="chat__input"
                 data-chat-input
                 value={draft}
-                placeholder={composer.send.enabled ? 'your next message (⌘↩ sends)' : composer.send.reason}
+                placeholder={composer.send.enabled ? `Message ${backend}…` : composer.send.reason}
                 disabled={!composer.send.enabled}
                 title={composer.send.enabled ? 'Your next message' : composer.send.reason}
                 spellCheck={false}
-                rows={2}
+                rows={composerRows(draft)}
                 onChange={(e) => { setDraft(e.target.value); setRefusal(null); refreshPopup(e.target.value, e.target.selectionStart ?? e.target.value.length) }}
                 // Stopped (a click into a text field must not start a drag)
                 // AND focused: the palette captures focusedId at open, so a
@@ -711,7 +764,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               {refusal !== null && <p className="pf__note chat__refusal" data-chat-send-refusal role="alert">{refusal}</p>}
               <div className="chat__verbs">
                 <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || (draft.trim() === '' && attachments.length === 0)}
-                  title={composer.send.enabled ? 'Send (⌘↩)' : composer.send.reason} aria-label="Send" {...shellControl(send)}>Send</button>
+                  title={composer.send.enabled ? 'Send — ⌘↩ sends' : composer.send.reason} aria-label="Send" {...shellControl(send)}>Send</button>
                 <button type="button" className="chat__verb chat__verb--interrupt" data-chat-interrupt disabled={!composer.interrupt.enabled}
                   title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}>Interrupt</button>
               </div>
