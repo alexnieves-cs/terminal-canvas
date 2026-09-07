@@ -102,10 +102,11 @@ DECLINED (and why), or OWED (the scene it needs).
     sentence (`verify:rail summary.history.2`, `verify:panels kinds cost.history.1`).
   The goldens from `runs` on were regenerated after both fixes and walked again below.
 
-- **composer.** The first fresh capture after F.8's fix still showed the wrong panel: the
-  scene's palette jump `api (chat)` now also matches the review node `review: claude — api
-  (chat)` a later scene mints, so the drop landed on the canvas and minted a file panel.
-  Scene fixed (the rail row, not a search); walked again below.
+- **composer.** Three fresh captures after F.8's fix still showed the wrong panel: the
+  scene's palette jump `api (chat)` also matched the review node `review: claude — api
+  (chat)` the tool-objects scene had opened OVER the chat, the rail row selected without
+  flying, and the drop at the chat's centre hit whatever was on top. Scene fixed: it runs
+  BEFORE tool-objects and flies by the chat's full title. Walked with its golden below.
 - **reduced-motion** (added). The jump to `worker b` under the real media feature lands
   in one frame: the target framed, selected and inspected a beat after Enter. As intended.
 - **file-missing** (added). `not found` in the chrome, `This file no longer exists. It will
@@ -130,9 +131,31 @@ DECLINED (and why), or OWED (the scene it needs).
   repositories must be told apart). The highlight shows why the row matched, which is the
   M61 remedy for a match that surprises.
 - **header.** **F.12** The fresh capture shows the narrow panel's `⋯` control but NO open
-  menu, where the intent is the menu with the full title. OWED: a probe was added to the
-  scene (`[shot] header menu open:`) and the next capture decides whether the scene or the
-  control is at fault.
+  menu, where the intent is the menu with the full title. The probe said the menu was OPEN
+  in the DOM; the capture said it was not on screen. FIXED, and a real defect of THIS run:
+  M144's counter-scale transform made `.pf__chrome` a stacking context that painted under
+  the positioned slot after it, so the menu was invisible over every live terminal —
+  `menu.1` reads the DOM and stayed green. `.pf__chrome { z-index: 2 }` with `.pf__body {
+  isolation: isolate }` (`verify:styles menu.stack.1`; `verify:panels product menu.paint.1`
+  asks `elementFromPoint` on a live terminal). One consequence, stated: at a zoom where the
+  counter-scaled chrome overhangs the body's top rows, those rows are the chrome's — three
+  checks that had reached xterm THROUGH the chrome (core 9, agents `hover.1`, `links.1`) now
+  write their content below the overhang.
+- **attention / approval.** **F.14** The dock badge counts one and there is NO popover, in
+  both scenes, where the intent is the popover listing the waiting panel. The probe said the
+  popover was open. FIXED, and the oldest defect the walk found: M109's glass blur made
+  `.shell__dock` a stacking context AND the containing block of its fixed popover, so the
+  shell-wide `overflow: hidden` clipped the popover to the column's 48 px — open in the DOM
+  and invisible since 2.3.0, through every DOM check of it. The dock now declares
+  `overflow: visible` and a z-index above the navigator's drawer (`popover.stack.1`,
+  `popover.paint.1`). The scene also uses `dock()` (a bare click had toggled shut what the
+  approval scene left open).
+- **F.13** In one full run the live `claude — api (2)` terminal painted an EMPTY body from
+  `subagents` to the end, its chrome and state pill live, and painted its rows in the runs
+  before and after. `verify:xterm repaint.1` now counts ink through the real attach path
+  (the spike page had never loaded xterm's stylesheet — its first capture was a cursor box)
+  and is green; the blank did not recur in three later runs. OWED as an observation: backlog
+  #82 names what would close it.
 
 (The remaining scenes are walked below as the audit proceeds; each is listed with its verdict.)
 

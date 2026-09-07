@@ -125,7 +125,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 120 channels as of M133 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
-| `verify:xterm` | real Electron | 9 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
+| `verify:xterm` | real Electron | 11 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | M135: FIVE parts over one harness (`scripts/panels-harness.cjs`), each `verify:panels:<part>` its own script with a watchdog pinned at 1.25× its own measured green run — `core` (tiering, input, undo, presets, palette, settings, attention), `shell` (workspaces, merged, rail, inspector, dock, groups, links), `kinds` (usage, file, review, toolbox, jira, link drawing, worktrees, scrollback, broadcast), `agents` (handoff, search, keyboard, theme, the M46–M52 shell, composer, templates, runs, graph, tools, approvals, budget, memory, the M61–M74 surfaces), `product` (chat, watchers, vault, github, integrations, verbs, browser, header, board, engines, sandbox, skills, workflow). Every check id the un-split file held is still here (`verify:meta panels-split.2` compares the set against `pre-v7-run`); `npm run verify:panels` is the chain of the five |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
@@ -853,6 +853,27 @@ check does not, and should not, cover it.
   with the price computed in the RENDERER by the summary's own rule (main holds no price
   table). `toolbox-node-model.ts`'s `sourcePath` on every row and `ToolboxNode`'s Open door
   — M140, the file panel (M22's editor) as the write half beyond skills.
+
+- Act III of the v7 run (M148–M149): `scripts/verify-visual.cjs` and `verify/visual/goldens/`
+  — M148, the shot harness given teeth (goldens at half scale, a per-channel tolerance and a
+  pixel budget with a sentence each, three outcomes per scene, `UPDATE_GOLDENS=1` only after
+  looking). `docs/ux-audit-4.0.md` — M149, every golden walked; what the walk found in the
+  CODE: `useInspectorDetail.ts` now READS `ledger:usage` (M142 had shipped every other piece and
+  never the call — `historyWord` has a fourth arm for a rejected read); `usePaletteActions`'
+  `intoNewWorkspace` runs the three `New workspace from` doors on the sheet's Enter, never
+  before it (`beginSpawnSheet`'s `into` seam — an Escape used to strand the user in an empty
+  workspace); `.pf__chrome { z-index: 2 }` with `.pf__body { isolation: isolate }` — M144's
+  transform had made the chrome a stacking context that painted UNDER the slot, so the `⋯`
+  menu was open in the DOM and invisible (`menu.stack.1`, `menu.paint.1`), and at a zoom where
+  the chrome overhangs the body's top rows those rows are the chrome's; `verify:xterm repaint.1`
+  counts ink through the real attach path (the spike page injects xterm's stylesheet — without
+  it nothing lays out, and the first capture was a cursor box); `.shell__dock { z-index: 910;
+  overflow: visible }` — M109's blur had made the dock a stacking context AND the containing
+  block of its fixed attention popover, which the shell-wide `overflow: hidden` clipped to
+  48 px: open in the DOM and invisible since 2.3.0 (`popover.stack.1`, `popover.paint.1`).
+  A paint check is `elementFromPoint`; a DOM read stayed green through both. Scenes added: `reduced-motion`
+  (the real media feature through the DevTools protocol), `file-missing`; `scale-100` tried and
+  dropped because `capturePage` ignores the device-scale override.
 
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through

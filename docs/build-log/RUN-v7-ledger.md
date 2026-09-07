@@ -110,7 +110,7 @@ commits that close the act (see `git log`).
   landed. Declined in this act: none by backlog number (the sweep's declines are M137's, by
   item, above).
 
-## Act II — M140–M147 (closing; the Electron tier's tallies follow)
+## Act II — M140–M147, closed 2026-09-07
 
 Build log: `docs/build-log/m140-m147-act2-backlog-eight.md`. Built in a worktree and merged at
 `d78018c`; the merge carried a committed `node_modules` symlink that emptied `main`'s
@@ -132,3 +132,36 @@ in `docs/load-bearing.md`).
   is that very shape, so the refusal was reverted.
 - The Act I critic's fix wave (one Critical, six Majors) landed before Act II's code —
   `docs/build-log/m140-m147-act2-backlog-eight.md` lists each.
+- **The Electron tier over the merged tree** (after `138d323`): every part green — core
+  75/75, shell 94/94, kinds 48/48, agents 77/77, product 57/57 — once the walk's fixes landed
+  (the two M142/M147 defects the audit found are recorded under Act III; three harness
+  mistakes of Act II's own — a doubly quoted selector that threw and aborted the core part,
+  `cat` spawned with the agent flag, a newline inside an injected script — are in the build
+  log). Watchdogs pinned from two green runs each in the Electron tier: shell 96 s (76.5,
+  76.7), kinds 60 s (47.1, 47.4), agents 109 s (86.2, 86.7), product 95 s (74.7, 75.2), core
+  from its own two runs after check 9 moved below the chrome's overhang (38.5, 37.6 → 49 s).
+
+## Act III — M148–M149, closed 2026-09-07
+
+Build log: `docs/build-log/m148-m149-act3-visual.md`. Spec and plan:
+`docs/superpowers/specs/2026-09-07-v7-act3-visual-design.md`, `docs/superpowers/plans/2026-09-07-v7-act3-visual.md`.
+
+- **M148 `verify:visual`**: red `visual.1` at `720798e`; the suite at `41fabf6`; goldens at
+  half scale (54 scenes); watchdog 200 s from two runs of 159.2 s. Outside the chain beside
+  `verify:packaged` (`verify:meta` 19's second exclusion).
+- **M149 the audit** (`docs/ux-audit-4.0.md`): every golden walked. Found in the CODE and
+  fixed with a red first: M142's ledger read never wired (F.8); M147's workspace minted before
+  its sheet (F.8); the `⋯` menu invisible over a live terminal since M144 (F.12); the
+  attention popover invisible since 2.3.0 (F.14); the toolbox Open door's line (F.2); the
+  board's empty columns (F.7); the routine line's wrap (F.10). Declined by name: F.1 (the
+  minimap yields on hover — Act V's #33), F.3 (the appearance control is a chooser, not a
+  toggle), F.4/F.5 (the containers already scroll), F.6 (M127's "words, not ellipses"), F.9
+  (M80's parameter label rule), F.11 (M62's section-first order and M73's full directory).
+  Owed and named: F.13, a live terminal that painted blank once — backlog #82; the 100 %
+  density — manual-only (a `scale-100` scene was tried and dropped: `capturePage` ignores the
+  device-scale override). Scenes added: `reduced-motion`, `file-missing`.
+- The two pixel checks the act adds — `menu.paint.1`, `popover.paint.1` — and the rule they
+  teach: a surface that opens is proven by `elementFromPoint`, never by a DOM read.
+- Reviews: the fresh-context critic and verifier over Acts II and III ran after the goldens
+  landed; their findings and what was done are in the build log.
+

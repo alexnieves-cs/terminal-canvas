@@ -4,7 +4,7 @@
    checks the old file held at lines 14042–17397, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 600000 // provisional: re-measured after Act II's checks, see the M140–M147 build log
+const WATCHDOG_MS = 109000 // measured 2026-09-07 alone in the Electron tier after the M149 checks, two green runs: 86.2s, 86.7s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -1569,7 +1569,9 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // a person saw a badge and nothing else.
         const popPaint = await wc.executeJavaScript(`(() => { const t = document.querySelector('.dock__popover .shell__region-title'); if (!t) return 'no popover title'
           const r = t.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
-          return top ? (top.closest('.dock__popover') !== null ? true : (top.className || top.tagName)) : 'nothing' })()`)
+          const cs = (sel) => { const e = document.querySelector(sel); if (!e) return null; const c = getComputedStyle(e); const b = e.getBoundingClientRect(); return { pos: c.position, z: c.zIndex, filter: c.backdropFilter, rect: [Math.round(b.left), Math.round(b.top), Math.round(b.width), Math.round(b.height)] } }
+          const hit = top ? (top.closest('.dock__popover') !== null ? true : (top.className || top.tagName)) : 'nothing'
+          return hit === true ? true : { hit, at: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)], popover: cs('.dock__popover'), dock: cs('.shell__dock'), rail: cs('.shell__rail'), attention: cs('.dock__attention'), navigator: cs('.navigator') } })()`)
         ok('popover.paint.1 the attention popover, open, is the element under its own title\'s centre — painted above the navigator column, not merely present in the DOM', popPaint === true, JSON.stringify({ popPaint }))
         await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
         const cleared = await pendingIs(0)
@@ -2106,8 +2108,12 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const slotPt = await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="lA"] .panel__slot'); if (!s) return null; const r = s.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
         if (slotPt) { wc.sendInputEvent({ type: 'mouseDown', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: slotPt.x, y: slotPt.y, button: 'left', clickCount: 1 }) }
         await settle()
-        // Known content through the session handle: a URL on its own line.
-        await wc.executeJavaScript(`window.__m4aWrite('\\r\\nopen http://localhost:5173/ok now\\r\\n')`)
+        // Known content through the session handle: a URL on its own line,
+        // six blank rows down (M149): at ~48% the M144 chrome overhangs the
+        // body's top rows and, painted above them (menu.stack.1), owns the
+        // pointer there — the link must sit below the overhang to be hovered
+        // or clicked, exactly as a person would find it.
+        await wc.executeJavaScript(`window.__m4aWrite('\\r\\n\\r\\n\\r\\n\\r\\n\\r\\n\\r\\nopen http://localhost:5173/ok now\\r\\n')`)
         const marked = await waitUntil(async () => wc.executeJavaScript(`window.__m4aCellToScreen('localhost') !== null`), 8000)
         // Zoom out to ~48% through the canvas's own path.
         for (let i = 0; i < 4; i++) await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '-', metaKey: true }))`)

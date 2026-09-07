@@ -2307,6 +2307,21 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
   display, the dark theme's hairlines — and the harness renders one machine's Chromium at
   one device pixel ratio. The minimap's drag on a real trackpad (a preview, then a flight on
   release) was confirmed once by hand; `verify:panels overview.2` drives a synthetic click.
+  **M148 changed half of this:** `verify:visual` now compares every scene with a committed
+  golden, so a scene that CHANGES is red; what stays manual is whether the golden is RIGHT —
+  a person looked, once, at every golden it holds (`docs/ux-audit-4.0.md`).
+- **The 100 % density (M149).** Every golden is one machine's capture at a device scale
+  factor of 2. A `scale-100` scene was tried through `Emulation.setDeviceMetricsOverride`
+  and dropped: `capturePage` renders at the display's own scale whatever the override says
+  (the capture came back 2880 × 1800). Hairlines, the glass blur and the WebGL glyphs on a
+  non-retina display are a hand look, not a golden.
+- **A live terminal that painted BLANK once (M149, the audit's fifth visual run).** In one
+  full run of the shot harness the live `claude — api (2)` terminal painted an empty body
+  from the `subagents` scene to the end — chrome, state pill and CPU figure all live — while
+  the same panel painted its rows in the runs before and after. `verify:xterm repaint.1`
+  pins the plain path (detach, re-attach through `attachTerminal`, the ink returns) and it
+  is green; the blank had some other cause the run did not record, and it did not recur.
+  Recorded as an OBSERVATION, not a fixed defect: backlog #82.
 
 **A note is a file panel in PROSE mode, and refusing a sixth `kind` is the
 whole of M27's design (`shared/file-panel.ts`'s `FileSource.prose`).** Every
@@ -4193,3 +4208,56 @@ symptom was `sh: tsc: command not found` at the head of a build. The pattern is 
 now — a name, matching a directory or a link — and a worktree that needs the dependencies
 should point its link at an absolute path and never `git add -A` without `git status` first.
 
+**The chrome bar carries `z-index: 2` and the body `isolation: isolate`, and the `⋯` menu
+is invisible without both (M149, `styles.css`'s `.pf__chrome` / `.pf__body`).** M144's
+counter-scale transform on `.pf__chrome` made it a stacking context; with `z-index: auto`
+that context paints in DOM order, and the positioned slot after it — xterm's layers, whose
+own z-indexes run to 10 — covered the menu (absolute at the chrome's foot) completely on a
+live terminal. The menu was OPEN in the DOM the whole time, which is what `menu.1` reads, so
+that check stayed green through it; the `header` golden of the 4.0 audit was the only thing
+that noticed. `menu.paint.1` asks `elementFromPoint` at the menu title's centre on a live
+terminal; `menu.stack.1` pins both declarations as text. The isolation is what keeps the
+chrome's number small: without it the chrome would have to outrank every layer inside xterm.
+The lift has one consequence M144 had stated and never enforced: at a zoom where the
+counter-scaled chrome overhangs the body's top rows, those rows are the CHROME's — a click
+there reaches its controls, not xterm. Core check 9 (a double-click at 50 %) writes six blank
+rows first so its word sits below the overhang; it had been reaching xterm THROUGH the chrome.
+
+**`New workspace from <template>` asks the sheet FIRST and mints on its Enter, never before
+(M149, `usePaletteActions.ts`'s `intoNewWorkspace` and `beginSpawnSheet`'s `into`).** The
+first cut minted the workspace, switched to it, then opened the sheet for the template's
+holes — so an Escape on the sheet left the user in an empty workspace named after the
+template, with nothing saying why. The shot harness found it: every scene after `templates`
+painted that empty workspace, and the `composer` scene stopped painting at all because its
+chat was in the other one. The three doors (create, switch, instantiate) now run inside the
+sheet's own `instantiate`, threaded through beginSpawnSheet's `into` seam, and a template
+with no holes takes the same helper directly (`workspace.template.2`).
+
+**The renderer's read of `ledger:usage` was never wired when M142 landed, and the summary's
+week line said `reading the ledger…` for three milestones (M149, `useInspectorDetail.ts`,
+`historyWord`).** A partial patch left the channel, the handler, the fold and the sentence
+in place and the one `window.canvas.ledger.usage` call missing; the asked-but-unanswered
+arm rendered forever and read as an answer. `cost.history.1` (kinds) had been red since,
+which the merge's Electron tail had not yet run. The read is on mount, on every registry
+version (a close is what appends a row) and on a slow clock; a rejected read is a FOURTH arm
+with its own sentence (`summary.history.2`), because a rejection painting the reading
+sentence would hide the next hole of this shape the same way.
+
+**`capturePage` renders at the display's scale factor whatever
+`Emulation.setDeviceMetricsOverride` says, so a scene cannot prove a density it does not
+run on (M149, `scripts/shot.cjs`).** The `scale-100` scene set `deviceScaleFactor: 1` and
+the capture came back 2880 × 1800; the DOM laid out at the override and the compositor
+painted at the display's. A golden from it would have pinned a lie. Dropped by name, and
+the 100 % density is on the manual-only list.
+
+**The dock declares `overflow: visible` and `z-index: 910`, and the attention popover is
+invisible without both (M149, `styles.css`'s `.shell__dock`).** M109 made the dock glass:
+`backdrop-filter` turns an element into a stacking context AND into the containing block of
+every `position: fixed` descendant. The popover is fixed inside the dock, so from 2.3.0 the
+shell-wide `overflow: hidden` on the four columns clipped it to the dock's 48 px, and the
+popover's own `z-index: 950` never left the dock's context, which sat at `auto` under the
+rail's drawer. Every check that read the popover from the DOM (M76's rows, M63's caret) was
+green through it; the `attention` golden of the 4.0 audit showed a badge and nothing else.
+`popover.paint.1` asks `elementFromPoint` at the popover's title; `popover.stack.1` pins both
+declarations against every rule that names `.shell__rail`. The general rule this joins:
+**a surface that opens is proven by a pixel question, never by its presence in the DOM.**

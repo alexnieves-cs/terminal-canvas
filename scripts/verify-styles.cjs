@@ -382,10 +382,16 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // `attention` golden showed a badge and no popover.
 {
   const dock = (bare.match(/\.shell__dock\s*\{[^}]*backdrop-filter[^}]*\}/g) || [])[0] || ''
-  const railZ = (bare.match(/\.shell__rail\s*\{[^}]*z-index:\s*(\d+)/) || [])[1]
   const dockZ = (dock.match(/z-index:\s*(\d+)/) || [])[1]
-  ok('popover.stack.1', '.shell__dock (a glass stacking context) carries a z-index above .shell__rail\'s, so the attention popover paints over the navigator',
-    dockZ !== undefined && railZ !== undefined && Number(dockZ) > Number(railZ), JSON.stringify({ dockZ, railZ }))
+  // The rail is glass too (a stacking context at z auto, painted after the
+  // dock in DOM order) and its compact DRAWER form carries 900: the dock must
+  // outrank the highest z-index any rule naming .shell__rail declares.
+  const railZ = Math.max(0, ...[...bare.matchAll(/([^{}]*\.shell__rail[^{}]*)\{([^}]*)\}/g)].map((m) => Number((m[2].match(/z-index:\s*(\d+)/) || [, 0])[1])))
+  // The blur also makes the column the CONTAINING BLOCK of its fixed
+  // popover, so the shell-wide `overflow: hidden` clipped it to 48px.
+  const unclipped = /overflow:\s*visible/.test(dock)
+  ok('popover.stack.1', '.shell__dock (a glass stacking context) carries a z-index above every .shell__rail rule\'s and overflow: visible, so the attention popover paints over the navigator in every layout',
+    dockZ !== undefined && Number(dockZ) > railZ && unclipped, JSON.stringify({ dockZ, railZ, unclipped }))
 }
 
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each

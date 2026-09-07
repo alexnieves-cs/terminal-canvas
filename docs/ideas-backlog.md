@@ -2366,3 +2366,21 @@ harness setting `TC_TOOLBOX_HOME` at entry load), and declines the rest here, ea
 - **`verify-panels` asserting `TC_TOOLBOX_HOME` at suite start.** `panels-entry.cjs` SETS it
   at module load when it is unset, before any module that reads it is required; a guard after
   that point would be asserting the line above it.
+
+## 82. A live terminal that painted blank once — an observation from the 4.0 audit (M149)
+
+In one full run of the shot harness (the fifth `verify:visual` run of Act III) the live
+`claude — api (2)` terminal painted an EMPTY body from the `subagents` scene to the end of the
+run: the chrome, the `idle` pill and the CPU figure were all live, the buffer's rows were
+not on screen. The runs before and after painted the same panel's rows. The scene between
+was `auto`, which maximises a chat (M92) and so cards and later re-promotes every other
+live panel; `verify:xterm repaint.1` pins that plain path — detach, re-attach through the
+real `attachTerminal`, the ink returns — and it is green. What the blank run did not record
+is which renderer the panel was on afterwards (`rendererKind`) or whether a context-loss
+event fired (`onContextLoss` disables WebGL for that terminal and falls back to the DOM
+renderer, which draws). Not reproduced in three later runs.
+
+**What would close it:** a `[terminal] context lost` console line at `onContextLoss` (the
+harness echoes the renderer's console) and a scene that cards every live panel and brings
+them back, captured twice. If it recurs, the repaint after a re-promotion is the suspect —
+a `term.refresh` after the new WebGL addon's first frame rather than synchronously.

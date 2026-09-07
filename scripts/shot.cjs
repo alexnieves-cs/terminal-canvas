@@ -362,6 +362,28 @@ const SCENES = [
       await sleep(700)
       await kit.shot('graph')
     } },
+  // The composer scene runs BEFORE tool-objects on purpose: tool-objects opens
+  // the chat's review node OVER the chat, and a drop at the chat's centre then
+  // hits the node (the hit test is topmost-first) and mints a file panel.
+  { name: 'composer', intent: 'The chat panel\'s composer at work: a dropped image as a dim mono line above the textarea (its name and a labelled `remove`), and the `@` file list open under a half-typed reference — rows in mono, directories first, the same hairline family as the frame; nothing floats over the canvas.',
+    run: async (kit) => {
+      // By the rail row, not a palette search: `api (chat)` also matches the
+      // review node `review: claude — api (chat)` a later scene minted, and
+      // the drop then landed on the canvas and opened a file panel instead.
+      await kit.goTo('claude — api (chat)'); await sleep(300)
+      // Raise the chat first: the tool-objects scene opened its review node
+      // OVER it, and a drop at the chat's centre hit the node on top (the
+      // hit test is topmost-first), which opened a file panel instead.
+      await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`)
+      await sleep(300)
+      console.log('[shot] composer chat on top:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); if (!p) return 'no chat'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); const tp = top && top.closest('.panel'); return tp ? tp.getAttribute('data-panel-id') : String(top && top.className) })()`))
+      console.log('[shot] composer drop:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; const under = document.elementFromPoint(at.x, at.y); const up = under && under.closest('.panel'); const out = window.__m59Drop(${JSON.stringify(join(FIX, 'shot.png'))}, at.x - host.left, at.y - host.top); return JSON.stringify({ out, rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], host: [Math.round(host.left), Math.round(host.top)], under: up ? up.getAttribute('data-panel-id') : (under ? under.className : null), palette: document.querySelector('.palette') !== null }) })()`))
+      await sleep(300)
+      await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(ta, 'wire /health like @s'); ta.setSelectionRange(20, 20); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); return true })()`)
+      await sleep(700)
+      await kit.shot('composer')
+    } },
   { name: 'tool-objects', intent: 'A tool call as an object: in the chat, the Edit row\'s `diff` verb is open and shows the hunk against the chat\'s baseline in the review node\'s own line idiom; the context pane\'s Changes section answers for the chat; a review node opened from it lists server.ts with `· 2 tool calls` and, expanded, the Read and the Edit that touched it. One vocabulary for what happened to a file, whichever surface says it.',
     run: async (kit) => {
       await kit.goTo('api (chat)')
@@ -382,25 +404,6 @@ const SCENES = [
       await kit.js(`(() => { const t = document.querySelector('[data-context-tab="work"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) }; return !!t })()`)
       await sleep(700)
       await kit.shot('tool-objects')
-    } },
-  { name: 'composer', intent: 'The chat panel\'s composer at work: a dropped image as a dim mono line above the textarea (its name and a labelled `remove`), and the `@` file list open under a half-typed reference — rows in mono, directories first, the same hairline family as the frame; nothing floats over the canvas.',
-    run: async (kit) => {
-      // By the rail row, not a palette search: `api (chat)` also matches the
-      // review node `review: claude — api (chat)` a later scene minted, and
-      // the drop then landed on the canvas and opened a file panel instead.
-      await kit.selectRail('chat'); await sleep(700)
-      // Raise the chat first: the tool-objects scene opened its review node
-      // OVER it, and a drop at the chat's centre hit the node on top (the
-      // hit test is topmost-first), which opened a file panel instead.
-      await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`)
-      await sleep(300)
-      console.log('[shot] composer chat on top:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); if (!p) return 'no chat'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); const tp = top && top.closest('.panel'); return tp ? tp.getAttribute('data-panel-id') : String(top && top.className) })()`))
-      await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); return window.__m59Drop(${JSON.stringify(join(FIX, 'shot.png'))}, r.left + r.width / 2 - host.left, r.top + r.height / 2 - host.top) })()`)
-      await sleep(300)
-      await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
-        const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(ta, 'wire /health like @s'); ta.setSelectionRange(20, 20); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); return true })()`)
-      await sleep(700)
-      await kit.shot('composer')
     } },
   { name: 'approval', intent: 'An agent asking permission, seen from afar: the chat card reads `needs you` in amber with the question (tool and argument in mono) and Allow / Deny; the dock badge counts one; the attention popover\'s row for it names the tool on its Allow verb with the argument beneath, while a terminal\'s row (if any) says only jump; the context pane\'s action bar leads with Allow Bash and Deny. The same question, answerable in three places, one vocabulary.',
     run: async (kit) => {
@@ -480,7 +483,7 @@ const SCENES = [
   { name: 'navigator-files', intent: 'The dock\'s Files pane: a file tree rooted on the selected panel\'s directory.',
     run: async (k) => { await k.dock('files'); await sleep(500); await k.shot('navigator-files'); await k.dock('panels') } },
   { name: 'attention', intent: 'A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it.',
-    run: async (k) => { await k.focus('live'); await k.ring(); /* dock(): the approval scene left the popover OPEN and a bare click toggled it shut — the golden had no popover. */ await k.dock('attention'); await sleep(400); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
+    run: async (k) => { await k.focus('live'); await k.ring(); /* dock(): the approval scene left the popover OPEN and a bare click toggled it shut — the golden had no popover. */ await k.dock('attention'); await sleep(400); console.log('[shot] attention:', await k.js(`JSON.stringify({ pressed: document.querySelector('[data-dock="attention"]')?.getAttribute('aria-pressed'), popover: document.querySelector('.dock__popover') !== null, badge: document.querySelector('[data-dock-badge]')?.textContent })`)); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
   { name: 'overview', intent: 'The minimap in the top-right corner at 100%: one block per panel in its state colour — the waiting panel amber — and the camera as an iris rectangle; the status board while working.',
     run: async (k) => { await k.shot('overview') } },
   { name: 'group', intent: 'A named, coloured group frame around two panels, with its label, member count, and its card and remove controls in the header.',

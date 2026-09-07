@@ -43,9 +43,10 @@ const PIXEL_BUDGET = 0.005 // of the frame: a moved control is far over it, a bl
 // under the tolerance shrinks with it. The fresh capture is resized the same
 // way before the comparison, so the two sides see one scale.
 const GOLDEN_SCALE = 0.5
-// The whole run: the harness paints ~53 scenes in about two minutes alone.
-// Provisional until measured (the M135 rule: 1.25x two green runs, where it runs).
-const WATCHDOG_MS = 600000
+// The whole run: the harness paints 54 scenes in about two and a half minutes.
+// Measured (M149): two runs of 159.2 s and 159.2 s, alone in the Electron
+// tier, times 1.25 — the M135 rule; re-measure when a milestone adds scenes.
+const WATCHDOG_MS = 200000
 
 const results = []
 const ok = (n, pass, detail) => {

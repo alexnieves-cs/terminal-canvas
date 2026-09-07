@@ -398,6 +398,19 @@ body {
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border-right: 1px solid var(--line);
+  /* M149 (audit F.14). The blur above makes this column a stacking context,
+     so the attention popover's own z-index (950) can never leave it; with
+     z-index auto the column painted under .shell__rail's 900 and the popover
+     was open in the DOM and invisible from 2.3.0 on. Above the rail, the
+     column — and everything it holds — paints over the navigator.
+     And the popover must not be CLIPPED: the same blur makes this column the
+     containing block of its fixed descendant, so the shell-wide
+     `overflow: hidden` above cut the popover to the column's 48px. A column
+     of icons has nothing to clip.
+     `verify:styles popover.stack.1`, `verify:panels agents popover.paint.1`. */
+  position: relative;
+  z-index: 910;
+  overflow: visible;
 }
 .dock__button {
   width: 32px;
@@ -1915,7 +1928,10 @@ body {
    the same state said twice on one frame. The element stays (checks read its
    attributes); it is not painted. */
 .pf--kind-terminal .pf__state { display: none; }
-.pf__body { flex: 1; min-height: 0; }
+.pf__body { flex: 1; min-height: 0; isolation: isolate; }
+/* M149 (audit F.12). `isolation: isolate` keeps every z-index INSIDE the body
+   (xterm's layers run to 10) in the body's own stacking context, so the
+   chrome's z-index above needs to beat only the body itself. */
 /* The reading kinds' body: scrolls on its own, mono, and SELECTABLE —
    .panel sets user-select: none so a drag on the chrome never leaves a text
    selection behind, and a surface built for reading has to lift that. Both
@@ -4171,7 +4187,13 @@ body {
 /* The ⋯ menu spans the frame beneath the chrome — the CHROME is its containing
    block — because `.panel` clips its overflow and a menu hung off the ⋯ button
    was cut at the frame's left edge on a narrow panel. */
-.pf__chrome { position: relative; }
+.pf__chrome { position: relative; z-index: 2; }
+/* M149 (audit F.12). The z-index is what keeps the chrome — and the ⋯ menu it
+   holds, absolute at its foot — ABOVE the body that follows it in the DOM.
+   M144's transform below makes the chrome a stacking context; with z-index
+   auto that context paints in DOM order, and the positioned slot after it
+   (xterm's layers) covered the open menu completely on a live terminal.
+   `verify:styles menu.stack.1`, `verify:panels product menu.paint.1`. */
 /* M144. ZOOM-INDEPENDENT CHROME (backlog #60): the chrome bar and the resize
    handles counter-scale by `--chrome-scale` (Canvas stamps it on .world:
    1/scale, clamped to [1, 2.5]) so a header and a corner keep a usable screen
