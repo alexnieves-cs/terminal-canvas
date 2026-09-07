@@ -135,10 +135,10 @@ import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantTe
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
-import { parseSkillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
+import { parseSkillKey, renameInShelf, skillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
 import type { NamedToolEntry, ToolInventoryResult, ToolScope } from '@shared/toolbox'
 import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@renderer/shell/skills-pane-model'
-import type { SkillsInventoryState } from '@renderer/shell/SkillsPane'
+import type { ShelfState, SkillsInventoryState } from '@renderer/shell/SkillsPane'
 import { SkillNode } from '@renderer/skills/SkillNode'
 
 /* M126. Module scope, never a fresh literal per render: canvas-constants.ts's
@@ -4611,11 +4611,58 @@ export function Canvas({
    * the three filters.
    */
   const [shelf, setShelf] = useState<Shelf>(EMPTY_SHELF)
-  useEffect(() => { void window.canvas.shelf.list().then(setShelf) }, [])
+  // The shelf's own three states, kept apart from the inventory's: an
+  // unread shelf and an empty shelf paint the same columns, and only one of
+  // them means "a card you move now will not be saved". A rejected invoke
+  // used to be an unhandled rejection with an empty pane and nothing on
+  // screen saying why — this is that failure, named.
+  const [shelfState, setShelfState] = useState<ShelfState>({ kind: 'pending' })
+  // The shelf as a ref, for the same reason panelsRef exists: a rename has
+  // to read the CURRENT shelf outside a state updater.
+  const shelfRef = useRef(shelf)
+  shelfRef.current = shelf
+  useEffect(() => {
+    void window.canvas.shelf.list()
+      .then((s) => { setShelf(s); setShelfState({ kind: 'loaded' }) })
+      .catch((e) => setShelfState({ kind: 'unavailable', why: String(e && (e as Error).message ? (e as Error).message : e) }))
+  }, [])
   const writeShelf = useCallback((next: Shelf): void => {
     setShelf(next)
-    void window.canvas.shelf.save(next).then(setShelf)
+    void window.canvas.shelf.save(next)
+      .then((s) => { setShelf(s); setShelfState({ kind: 'loaded' }) })
+      .catch((e) => setShelfState({ kind: 'unavailable', why: String(e && (e as Error).message ? (e as Error).message : e) }))
   }, [])
+  /**
+   * M128 fix. One rename, two authorities, ONE call.
+   *
+   * The panel record holds `{scope, name}` and the shelf holds
+   * `scope:name` — a rename that moved the folder and updated neither would
+   * leave the panel describing a skill that is gone and the shelf slot
+   * rendering `not installed here`, which is indistinguishable from a skill
+   * that was never installed. The record goes through `commitHistory` (it is
+   * layout); the shelf goes through its own invoke (it is a library).
+   */
+  const renameSkillEverywhere = useCallback((panelId: string, newName: string): void => {
+    // Read through the REF, never inside a setPanels updater: an updater
+    // must stay pure (this file's own rule, stated at commitHistory), and
+    // this one has to fire an invoke and a second setState.
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isSkillPanel(target)) return
+    const scope = target.skill.scope
+    const oldName = target.skill.name
+    setPanels((current) => {
+      const next = current.map((p) =>
+        p.rect.id === panelId && isSkillPanel(p) ? { ...p, skill: { scope, name: newName } } : p)
+      commitHistory(next)
+      return next
+    })
+    const carried = renameInShelf(shelfRef.current, skillKey(scope, oldName), skillKey(scope, newName))
+    setShelf(carried)
+    void window.canvas.shelf.save(carried)
+      .then((saved) => { setShelf(saved); setShelfState({ kind: 'loaded' }) })
+      .catch((e) => setShelfState({ kind: 'unavailable', why: String(e && (e as Error).message ? (e as Error).message : e) }))
+    setSkillsReadTick((t) => t + 1)
+  }, [commitHistory])
   const [skillKindTab, setSkillKindTab] = useState<SkillPaneKind>('skill')
   const [skillQuery, setSkillQuery] = useState('')
   const [skillScopes, setSkillScopes] = useState<ToolScope[] | null>(null)
@@ -4632,6 +4679,15 @@ export function Canvas({
     return null
   })()
   const [skillsInventory, setSkillsInventory] = useState<ToolInventoryResult | undefined>(undefined)
+  // M128 fix. Main's own answer to the last `skill:create`, as a sentence —
+  // the refusals (an existing name, a plugin's folder, a path outside every
+  // writable root) all arrive here, and a door that swallowed them would
+  // leave the user watching a pane that never grew a card.
+  const [newSkillResult, setNewSkillResult] = useState<string | null>(null)
+  // Bumped after a create, a rename or a delete so the pane and the panels
+  // re-read the inventory through the ordinary door rather than being handed
+  // a row this renderer invented.
+  const [skillsReadTick, setSkillsReadTick] = useState(0)
   useEffect(() => {
     // Cleared before the invoke, never after: the `live` flag stops a stale
     // WRITE and nothing stops the stale RENDER, so panel A's skills would sit
@@ -4643,7 +4699,7 @@ export function Canvas({
       .then((r) => { if (live) setSkillsInventory(r) })
       .catch(() => { if (live) setSkillsInventory({ kind: 'no-cwd' }) })
     return () => { live = false }
-  }, [selectedId, skillsCwd])
+  }, [selectedId, skillsCwd, skillsReadTick])
   /**
    * M127. Every OPEN panel that HAS a directory, with the rail's own label.
    * The skill panel asks each one's inventory — the cache is keyed by
@@ -4713,6 +4769,31 @@ export function Canvas({
     return {
       onToggle: chrome.toggleNavigator,
       state,
+      shelfState,
+      // M128 fix. The `skill:create` door. The scope names a ROOT main
+      // derives itself from the asking cwd — the renderer sends the word,
+      // never a path. The project word stays present and disabled with its
+      // reason when no selected panel has a directory.
+      projectScopeReason: skillsCwd === null || skillsCwd === ''
+        ? 'select a panel with a directory to write a skill into its repository'
+        : null,
+      newSkillResult,
+      onNewSkill: (scope: 'user' | 'project', name: string) => {
+        setNewSkillResult(`creating ${name}…`)
+        void window.canvas.skill.create({ cwd: skillsCwd ?? '', scope, name })
+          .then((r) => {
+            setNewSkillResult(
+              r.kind === 'created' ? `created ${r.path}`
+                : r.kind === 'refused' ? r.why
+                  : r.kind === 'failed' ? `the skill could not be created — ${r.why}`
+                    : r.kind
+            )
+            // Re-read through the ordinary door: the card must come from the
+            // inventory, never from a row invented here.
+            if (r.kind === 'created') setSkillsReadTick((t) => t + 1)
+          })
+          .catch(() => setNewSkillResult('the create did not answer'))
+      },
       columns: paneColumns,
       teammates: teammates ?? [],
       assignNotice: skillAssignNotice,
@@ -4760,7 +4841,7 @@ export function Canvas({
         writeShelf({ columns: shelf.columns.filter((c) => c.id !== id).map(carryOneColumn) })
       }
     }
-  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
+  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
@@ -5231,7 +5312,13 @@ export function Canvas({
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // INSERTED into the composer, never sent — M80's rule for a
                 // template's first message. `beginNewChat` is the one mint.
-                onChat={(cwd, message) => { void beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), message }) }} />
+                onChat={(cwd, message) => { void beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), message }) }}
+                // M128 fix. A rename that LANDED: the panel record's name and
+                // the shelf's `scope:name` key are both stale the instant the
+                // folder moves, and both are written here — one history entry
+                // for the record, and the shelf through its own invoke (the
+                // shelf is a library, never layout, so it is not in history).
+                onRenamed={(panelId, newName) => { renameSkillEverywhere(panelId, newName) }} />
             }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)

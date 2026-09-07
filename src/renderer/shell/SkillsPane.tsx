@@ -1,4 +1,4 @@
-import { memo, type DragEvent, type JSX } from 'react'
+import { memo, useState, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
@@ -36,6 +36,21 @@ import {
 export const SKILLS_NO_CWD = 'no directory — select a panel with one to read what it can do'
 export const SKILLS_PENDING = 'reading…'
 
+/**
+ * Whether the SHELF itself — the user's own arrangement, a separate record
+ * from the inventory — could be read and written.
+ *
+ * Three states, never two: an unread shelf and an empty shelf both paint no
+ * placed cards, but one of them means "you have arranged nothing yet" and
+ * the other means "your arrangement is not on screen and a drag you make now
+ * will not be saved". Collapsing them tells the user to redo work they have
+ * already done.
+ */
+export type ShelfState =
+  | { kind: 'pending' }
+  | { kind: 'loaded' }
+  | { kind: 'unavailable'; why: string }
+
 export type SkillsInventoryState =
   | { kind: 'no-cwd' }
   | { kind: 'pending' }
@@ -44,6 +59,8 @@ export type SkillsInventoryState =
 export interface SkillsPaneProps {
   onToggle: () => void
   state: SkillsInventoryState
+  /** The shelf's own three states — see `ShelfState`. */
+  shelfState: ShelfState
   columns: readonly SkillColumn[]
   kind: SkillPaneKind
   onChooseKind: (kind: SkillPaneKind) => void
@@ -71,6 +88,21 @@ export interface SkillsPaneProps {
   onAssignColumn: (columnId: string, teammateId: string) => void
   /** Assign one card to a teammate. */
   onAssignCard: (key: SkillKey, teammateId: string) => void
+  /**
+   * M128 fix. The `skill:create` door, wired at last: `skill:create` had no
+   * renderer caller at all, so the channel and its refusals existed and
+   * nothing could reach them.
+   *
+   * The pane offers the two roots it ALREADY knows — the user's own
+   * `~/.claude/skills` and the current inventory's repository — and nothing
+   * else: main derives the real path from the asking panel's cwd, and a
+   * renderer that could name a root could widen one.
+   */
+  onNewSkill: (scope: 'user' | 'project', name: string) => void
+  /** Non-null disables the project scope with this sentence, never removes it. */
+  projectScopeReason: string | null
+  /** Main's own answer to the last create, as a sentence. Null when there is nothing to say. */
+  newSkillResult: string | null
 }
 
 const SCOPES: readonly ToolScope[] = ['user', 'project', 'local']
@@ -94,6 +126,12 @@ function resourceWord(card: SkillCard): string {
 }
 
 function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
+  // The New-skill draft, local to the pane: a name the user is typing is not
+  // a fact anything outside this component needs, and lifting it would
+  // re-render the shell on every keystroke.
+  const [drafting, setDrafting] = useState(false)
+  const [draftName, setDraftName] = useState('')
+  const [draftScope, setDraftScope] = useState<'user' | 'project'>('user')
   const dropHandlers = (columnId: string): { onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
     onDragOver: (e) => {
       if (e.dataTransfer.types.includes(SKILL_CARD_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
@@ -111,6 +149,8 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
         <span className="shell__tree-root">Skills</span>
         <span className="navigator__header-actions">
           <button type="button" className="shell__region-add icon-button" title="New column" aria-label="New column" data-skills-new-column {...shellControl(props.onNewColumn)}><Plus /></button>
+          <button type="button" className="rail-row__verb" data-skills-new-skill
+            title="Scaffold a new skill's SKILL.md" {...shellControl(() => setDrafting((d) => !d))}>New skill</button>
           <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
@@ -139,6 +179,48 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
           title="Show only the cards you placed yourself"
           {...shellControl(props.onTogglePlacedOnly)}>placed only</button>
       </div>
+
+      {drafting && (
+        /* An inline draft, not a dialog: Electron's renderer has no
+           `window.prompt`, and a name is one field. The project scope stays
+           PRESENT and disabled with its reason — a scope that vanished when
+           no panel had a directory would read as a feature that only ever
+           writes to the home folder. */
+        <div className="skills-pane__filters" data-skills-new-skill-draft>
+          <input className="skills-pane__search" type="text" value={draftName} placeholder="skill name"
+            aria-label="New skill name" data-skills-new-skill-name
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => setDraftName(e.target.value)} />
+          {(['user', 'project'] as const).map((sc) => {
+            const reason = sc === 'project' ? props.projectScopeReason : null
+            return (
+              <button key={sc} type="button" className="skills-pane__filter" data-skills-new-skill-scope={sc}
+                aria-pressed={draftScope === sc} disabled={reason !== null}
+                title={reason ?? `Write it into the ${sc} skills folder`}
+                {...shellControl(() => { if (reason === null) setDraftScope(sc) })}>{sc}</button>
+            )
+          })}
+          <button type="button" className="rail-row__verb" data-skills-new-skill-create
+            disabled={draftName.trim() === ''}
+            title={draftName.trim() === '' ? 'a skill needs a name' : `Create ${draftName.trim()}`}
+            {...shellControl(() => {
+              const name = draftName.trim()
+              if (name === '') return
+              props.onNewSkill(draftScope, name)
+              setDraftName('')
+            })}>Create</button>
+        </div>
+      )}
+
+      {props.newSkillResult !== null && (
+        <p className="pf__note skills-pane__empty" data-skills-new-skill-result>{props.newSkillResult}</p>
+      )}
+
+      {props.shelfState.kind === 'unavailable' && (
+        <p className="pf__note skills-pane__shelf-why" data-skills-shelf-why>
+          your columns could not be read, so every card is showing where it derives and a card you move here will not be saved — {props.shelfState.why}
+        </p>
+      )}
 
       {props.assignNotice !== null && (
         <p className="pf__note skills-pane__assign-notice" data-skills-assign-notice>{props.assignNotice}</p>

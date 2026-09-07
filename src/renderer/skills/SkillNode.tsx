@@ -5,7 +5,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import type { NamedToolEntry, ToolInventoryResult } from '@shared/toolbox'
 import type { PluginDetailsResult } from '@shared/skills'
-import { skillNodeSections, REASON_NO_SOURCE, type SkillPanelSighting, type SkillTextState } from './skill-node-model'
+import { deleteConfirmText, skillNodeSections, REASON_NO_SOURCE, type SkillPanelSighting, type SkillTextState } from './skill-node-model'
 import { SkillEditor } from './SkillEditor'
 import type { ReadStamp } from '@shared/skill-edit'
 
@@ -47,6 +47,15 @@ export interface SkillNodeProps {
   linkTarget: boolean
   /** Mint a chat in `cwd` whose composer is seeded with `message` — inserted, never sent. */
   onChat: (cwd: string | undefined, message: string) => void
+  /**
+   * M128 fix. A rename LANDED on disk. The panel record's `skill.name` and
+   * the shelf's `scope:name` key are both stale the instant the folder moves,
+   * and both are the canvas's to write: a shelf slot that could not be
+   * carried leaves the old key rendering `not installed here`, which is this
+   * repo's "a row that disappears" failure wearing a rename's clothes.
+   * Canvas does both in ONE history entry.
+   */
+  onRenamed: (panelId: string, newName: string) => void
 }
 
 export const REASON_MERGED_VIEW = 'leave merged view to act on this panel'
@@ -83,6 +92,12 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
   // it, so a project skill must be written against the repository that holds
   // it rather than against whichever panel happens to be first in the list.
   const [entryCwd, setEntryCwd] = useState('')
+  // M128 fix. The folder doors' own drafts. Local to the panel: a half-typed
+  // rename is not a fact the canvas needs, and the delete is armed in two
+  // steps rather than one, PanelFrame's own close rule.
+  const [renameTo, setRenameTo] = useState('')
+  const [arming, setArming] = useState(false)
+  const [folderResult, setFolderResult] = useState<string | null>(null)
 
   // One read per DISTINCT cwd — main's cache is keyed by resolved cwd, and
   // asking twice for one directory would spend a parse to learn nothing.
@@ -233,6 +248,60 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
             )
           })}
         </div>
+        {tab === 'edit' && (
+          /* M128 fix. The rename and delete doors, wired at last: both
+             channels existed with no renderer caller at all. They live BESIDE
+             the editor rather than inside it because both are about the
+             skill's FOLDER, which the editor never touches — it writes one
+             file — and because both outlive a failed text read: a skill whose
+             SKILL.md cannot be parsed is exactly one a user may want to
+             delete. Each is present and disabled with its own reason. */
+          <div className="skill-node__doors" data-skill-folder-doors>
+            <input type="text" className="skill-editor__input" data-skill-rename-name
+              value={renameTo} placeholder="new name" aria-label="New skill name"
+              readOnly={editReason !== null}
+              title={editReason ?? 'the folder this skill will be renamed to'}
+              onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => setRenameTo(e.target.value)} />
+            {door('rename', 'Rename', editReason ?? (renameTo.trim() === '' ? 'type the new name first' : null), () => {
+              const to = renameTo.trim()
+              if (to === '' || sourcePath === undefined) return
+              setFolderResult('renaming…')
+              void window.canvas.skill.rename({ cwd: entryCwd, dir: dirOf(sourcePath), name: to })
+                .then((r) => {
+                  setFolderResult(r.kind === 'renamed' ? `renamed to ${to}`
+                    : r.kind === 'refused' ? r.why
+                      : r.kind === 'failed' ? `the rename failed — ${r.why}` : r.kind)
+                  // The shelf slot and the panel record follow only a rename
+                  // that actually LANDED.
+                  if (r.kind === 'renamed') { setRenameTo(''); props.onRenamed(id, to) }
+                })
+                .catch(() => setFolderResult('the rename did not answer'))
+            })}
+            {/* Two steps, and the second one NAMES the resource count: a
+                delete trashes the whole folder, so what goes with the skill
+                is the fact the user is agreeing to. */}
+            {door('delete', arming ? 'Confirm delete' : 'Delete', editReason, () => {
+              if (!arming) { setArming(true); return }
+              if (sourcePath === undefined) return
+              setArming(false)
+              setFolderResult('deleting…')
+              void window.canvas.skill.remove({ cwd: entryCwd, dir: dirOf(sourcePath) })
+                .then((r) => {
+                  if (r.kind === 'deleted') { props.onClose(id); return }
+                  setFolderResult(r.kind === 'refused' ? r.why
+                    : r.kind === 'failed' ? `the delete failed — ${r.why}` : r.kind)
+                })
+                .catch(() => setFolderResult('the delete did not answer'))
+            })}
+            {arming && (
+              <span className="skill-node__line" data-skill-delete-confirm>{deleteConfirmText(name, entry?.resources)}</span>
+            )}
+            {folderResult !== null && (
+              <span className="skill-node__line" data-skill-folder-result>{folderResult}</span>
+            )}
+          </div>
+        )}
         {tab === 'edit' && sourcePath !== undefined && text.kind === 'some' ? (
           <SkillEditor
             panelId={id}

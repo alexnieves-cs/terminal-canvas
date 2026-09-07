@@ -99,6 +99,8 @@ const {
   createLayoutSnapshots, restoreFromSnapshot,
   listGithubWorkItems,
   createBrokerAudit,
+  parseShelf,
+  skillWriteHandlers,
   credentialDir: harnessCredentialDir,
 } = require(ENTRY_OUT)
 
@@ -905,6 +907,11 @@ app.whenReady().then(async () => {
   // the string the panel must show, byte for byte — newlines included.
   const PLUGIN_DETAILS_TEXT = 'fixture-plugin@1.0.0\n  Skills (1)  plugged-skill\n  Always-on: ~688 tok\n  plugged-skill   on-invoke   ~120 tok\n'
   let pluginFixtureOn = false
+  // M128 fix. Every path `skill:delete` handed to `trash`, in order. The
+  // harness never trashes anything: what a check needs to see is that main
+  // was asked to remove the skill's DIRECTORY, which a recorder answers and
+  // a real `shell.trashItem` would answer only by moving a fixture.
+  const skillTrashCalls = []
   // M129. The skill trail's fixture: a panel id and a real JSONL file on
   // disk. `null` until trail.lane.1 arms it, so every read before that block
   // gets the same named `unreadable` an unwired harness has always got.
@@ -1233,6 +1240,12 @@ app.whenReady().then(async () => {
     memoryList: (root, limit) => memoryStore.list(root, limit),
     memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
+    // M126 fix. The shelf, whole, through the SAME parser main uses. It was
+    // missing entirely: `palette.shelf()` threw, both invokes rejected, and
+    // Canvas's un-caught `.then` chains left the pane empty with nothing on
+    // screen saying so — in every boot of this harness.
+    shelf: () => layoutStore.shelf(),
+    saveShelf: (shelf) => layoutStore.saveShelf(parseShelf(shelf, [])),
     // M100/M101. The roster and routines over the harness's own store; the
     // folder dialog and the runner are main's and stay out of a harness.
     listTeammates: () => layoutStore.teammates(),
@@ -1344,15 +1357,22 @@ app.whenReady().then(async () => {
   async (id) => (pluginFixtureOn && id === PLUGIN_ID
     ? { kind: 'ok', text: PLUGIN_DETAILS_TEXT }
     : { kind: 'unknown', why: `claude plugin details ${id} did not answer` }),
-  // M128. The four writers stay INERT here: no check in this suite saves a
-  // skill, and a harness that could write would be one relaunch away from
-  // editing the running developer's real ~/.claude.
-  {
-    write: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
-    create: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
-    rename: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
-    remove: async () => ({ kind: 'refused', reason: 'writing is not wired here' })
-  },
+  // M128 fix. The REAL writers, so editor.2 drives the same create / rename
+  // / delete path production does rather than three inert fakes that could
+  // never have caught the three channels having NO renderer caller at all.
+  //
+  // Nothing here can reach the running developer's `~/.claude`: `home()` is
+  // the suite's fenced `TC_TOOLBOX_HOME` (the same fence every toolbox read
+  // in this file already runs behind — an unfenced home attributes the
+  // developer's own skills to a fixture panel), and `trash` RECORDS rather
+  // than trashes, so a delete is observable and moves nothing on disk.
+  skillWriteHandlers({
+    resolveCwd,
+    home: () => process.env.TC_TOOLBOX_HOME,
+    realpath: (x) => realpathSync(x),
+    plugins: async () => (pluginFixtureOn ? [{ id: PLUGIN_ID, installPath: PLUGIN_DIR }] : []),
+    trash: async (path) => { skillTrashCalls.push(path) }
+  }),
   // M129. The REAL trailFor over the harness's own fixture transcript — the
   // same byte-offset tail main wires, with the projects lookup replaced by
   // this suite's file so nothing reads the developer's ~/.claude/projects.
@@ -19026,6 +19046,138 @@ app.whenReady().then(async () => {
       }
     }
 
+
+    /* ========== M128 fix: the three write doors, WIRED ================== */
+    //
+    // `skill:create`, `skill:rename` and `skill:delete` shipped with NO
+    // renderer caller at all — three channels, their refusals and
+    // `renameInShelf` itself, all unreachable from the app. Nothing in this
+    // suite could have caught that, because every check drove main directly.
+    // These three do it the only way that proves the wiring: through the real
+    // controls, against the real writers (fenced to TC_TOOLBOX_HOME, with a
+    // RECORDING trash), reading the answer off disk and off the flushed
+    // layout.
+    {
+      const IDS = [
+        'editor.2a New skill on the Skills pane reaches skill:create — a SKILL.md lands under the fixture root and the pane grows the card',
+        'editor.2b Rename carries the SHELF SLOT: the flushed shelf holds the new scope:name key and no longer holds the old one',
+        'editor.2c Delete asks main to trash the skill\'s DIRECTORY, and its confirm NAMES the resource count'
+      ]
+      try {
+        const NS_DIR = mkdtempSync(join(tmpdir(), 'tc skill doors '))
+        const NS_ROOT = join(NS_DIR, '.claude', 'skills')
+        mkdirSync(join(NS_ROOT, 'renameable', 'references'), { recursive: true })
+        writeFileSync(join(NS_ROOT, 'renameable', 'SKILL.md'),
+          '---\nname: renameable\ndescription: A skill these doors move.\n---\n\nbody\n')
+        for (const r of ['a.md', 'b.md', 'c.md']) writeFileSync(join(NS_ROOT, 'renameable', 'references', r), 'ref\n')
+
+        layoutStore.save({
+          panels: [{ id: 'nsT', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: NS_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'doors host' }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: 'nsT', focusedId: 'nsT'
+        })
+        layoutStore.saveShelf({ columns: [{ id: 'doors-col', title: 'doors', keys: [JSON.stringify(['project', 'renameable'])] }] })
+        flushLayoutStore()
+        const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reN
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="nsT"]') !== null`), 8000)
+
+        // Into the Skills pane through the dock's own button — the pane must
+        // be REACHABLE, not merely renderable.
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-dock="skills"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`), 8000)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-skills-pane]') !== null`), 8000)
+
+        // 2a — New skill, at project scope, through the real controls.
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-skills-new-skill]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return document.querySelector('[data-skills-new-skill-draft]') !== null })()`), 8000)
+        await wc.executeJavaScript(`(() => {
+          const scope = document.querySelector('[data-skills-new-skill-scope="project"]')
+          if (scope && !scope.disabled) scope.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          const input = document.querySelector('[data-skills-new-skill-name]')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'minted-here')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('[data-skills-new-skill-create]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        const madeOnDisk = await waitUntil(() => {
+          try { return readFileSync(join(NS_ROOT, 'minted-here', 'SKILL.md'), 'utf8').startsWith('---\n') } catch { return false }
+        }, 10000)
+        const cardShown = await waitUntil(() => wc.executeJavaScript(
+          `document.querySelector('[data-skill-card=${JSON.stringify(JSON.stringify(['project', 'minted-here']))}]') !== null`), 12000)
+        ok(IDS[0], madeOnDisk === true && cardShown === true,
+          JSON.stringify({ madeOnDisk, cardShown }))
+
+        // 2b/2c — the panel's own two folder doors. Drop the card that has
+        // the resources so the confirm has a count to name.
+        await wc.executeJavaScript(`(() => {
+          const host = document.querySelector('[role="application"]'); if (!host) return false
+          const r = host.getBoundingClientRect()
+          const dt = new DataTransfer(); dt.setData('application/x-tc-skill', ${JSON.stringify(JSON.stringify(['project', 'renameable']))})
+          return host.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + 220, clientY: r.top + 420 })) || true
+        })()`)
+        const nsId = await waitUntil(() => wc.executeJavaScript(
+          `(() => { const n = document.querySelector('.panel[data-panel-kind="skill"]'); return n ? n.getAttribute('data-panel-id') : false })()`), 10000)
+        const nsSel = `.panel[data-panel-id=${JSON.stringify(nsId)}]`
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-tab="edit"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return document.querySelector('${nsSel} [data-skill-folder-doors]') !== null })()`), 12000)
+
+        // 2c's confirm FIRST, while the skill still exists: arm the delete,
+        // read the sentence, then disarm by re-reading (the second press is
+        // what commits, and it happens below).
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`), 8000)
+        const confirmText = await waitUntil(() => wc.executeJavaScript(
+          `(() => { const n = document.querySelector('${nsSel} [data-skill-delete-confirm]'); return n ? n.textContent : false })()`), 8000)
+
+        // 2b — rename, then the SHELF: the key is `scope:name`, so a rename
+        // that could not carry the slot leaves the old key rendering `not
+        // installed here`, which reads as a skill that was never installed.
+        await wc.executeJavaScript(`(() => {
+          const input = document.querySelector('${nsSel} [data-skill-rename-name]')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(input, 'renamed-away')
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await wc.executeJavaScript(
+          `(() => { const b = document.querySelector('${nsSel} [data-skill-door="rename"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        const movedOnDisk = await waitUntil(() => {
+          try { return readdirSync(NS_ROOT).includes('renamed-away') && !readdirSync(NS_ROOT).includes('renameable') } catch { return false }
+        }, 10000)
+        const shelfCarried = await waitUntil(() => {
+          flushLayoutStore()
+          const keys = layoutStore.shelf().columns.flatMap((c) => c.keys)
+          return keys.includes(JSON.stringify(['project', 'renamed-away'])) && !keys.includes(JSON.stringify(['project', 'renameable']))
+        }, 10000)
+        ok(IDS[1], movedOnDisk === true && shelfCarried === true,
+          JSON.stringify({ movedOnDisk, shelf: layoutStore.shelf() }))
+
+        // The delete, committed: two presses, and main is asked to trash the
+        // DIRECTORY. The harness's trash records rather than moves.
+        const before = skillTrashCalls.length
+        for (let i = 0; i < 2; i++) {
+          await wc.executeJavaScript(
+            `(() => { const b = document.querySelector('${nsSel} [data-skill-door="delete"]'); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+          await settle()
+        }
+        const trashed = await waitUntil(() => (skillTrashCalls.length > before ? skillTrashCalls[skillTrashCalls.length - 1] : false), 10000)
+        ok(IDS[2],
+          typeof confirmText === 'string' && /3 resources/.test(confirmText) &&
+            typeof trashed === 'string' && trashed === join(NS_ROOT, 'renamed-away'),
+          JSON.stringify({ confirmText, trashed, calls: skillTrashCalls }))
+
+        await clickPanelClose(wc, 'nsT')
+        await settle()
+        layoutStore.saveShelf({ columns: [] })
+        flushLayoutStore()
+        try { rmSync(NS_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (nsErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(nsErr && nsErr.message || nsErr))
+      }
+    }
 
     /* ========== M129: the trail's anchored lane ========================= */
     //

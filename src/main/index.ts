@@ -1784,7 +1784,21 @@ app.whenReady().then(async () => {
     () => listPlugins(runClaudePluginList),
     // M127. The same CLI, the same login env and the same timeout as the
     // list above — two calls onto one binary, kept in step deliberately.
-    (id) => describePlugin(runClaudePluginDetails(id), id),
+    //
+    // The id is CHECKED against the list first, and never passed through
+    // from the renderer as given: `runClaudePluginDetails` builds an argv
+    // for a real binary, and the only ids this app has any business asking
+    // about are the ones `listPlugins` just answered with. `unknown` with a
+    // why is the same three-state shape every other arm returns, so an id
+    // that is not on the list reads as "we could not look this up" rather
+    // than as a plugin that ships nothing.
+    async (id) => {
+      const listed = await listPlugins(runClaudePluginList)
+      if (listed.kind === 'ok' && !listed.plugins.some((p) => p.id === id)) {
+        return { kind: 'unknown', why: 'not an enabled plugin' }
+      }
+      return describePlugin(runClaudePluginDetails(id), id)
+    },
     // M128. The four writers, with every dependency resolved HERE and none
     // of them nameable by the renderer: the writable roots are derived from
     // the asking panel's own cwd (through `resolveCwd`, the same expansion a

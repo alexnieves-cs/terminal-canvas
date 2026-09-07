@@ -1008,6 +1008,22 @@ const write = (rel, text) => {
        first.kind === 'created' && readFileSync(join(absent, 'first-ever', 'SKILL.md'), 'utf8').startsWith('---\n'),
        JSON.stringify(first))
 
+    // edit.5i. The ROOT is not a skill. `insidePlace` answers TRUE for
+    // `real === place`, so the containment gate alone lets `deleteSkill`
+    // trash `~/.claude/skills` itself — every skill the user has, in one
+    // call, with the same `deleted` answer a single skill gives. A delete is
+    // exactly one folder DIRECTLY under a root that holds a SKILL.md.
+    const rootTrash = []
+    const rootDeps = { realpath: (x) => x, skillRoots: [root], pluginPaths: [], trash: async (p) => { rootTrash.push(p) } }
+    const killRoot = await deleteSkill(root, rootDeps)
+    const nested = join(root, 'occupied', 'references')
+    require('node:fs').mkdirSync(nested, { recursive: true })
+    const killNested = await deleteSkill(nested, rootDeps)
+    ok('edit.5i delete refuses the skills ROOT itself and anything that is not one folder under it holding a SKILL.md — by name, and the trash is never called',
+       killRoot.kind === 'refused' && /root|not a skill/i.test(killRoot.why) &&
+       killNested.kind === 'refused' && rootTrash.length === 0,
+       JSON.stringify({ killRoot, killNested, rootTrash }))
+
     const src = readFileSync(join(__dirname, '..', 'src', 'main', 'skill-write.ts'), 'utf8')
     ok('edit.5g skill-write.ts never unlinks — the trash is the only removal',
        !/unlink/.test(src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), 'unlink found in source')

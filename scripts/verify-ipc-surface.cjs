@@ -222,6 +222,13 @@ app.whenReady().then(() => {
   // M100 teammate:list / teammate:save / teammate:delete / teammate:choose-place (102).
   // M101 routine:list / routine:save / routine:delete / routine:run (106).
   // M103 browser:read (107) — the browser pane's text, read in main and passed outward.
+  // M113–M115 board:lane / board:lane-status / board:open-pr /
+  // board:comment-pr (111) — the dispatch into a lane and the two outward
+  // halves behind the broker's spend card.
+  // M126 shelf:list / shelf:save (113) — the Skills pane's arrangement, a
+  // TOP-LEVEL record read and written whole rather than through layout:save.
+  // M127 plugin:details (114) — `claude plugin details <id>` as TEXT,
+  // rendered verbatim and parsed nowhere.
   // M128 skill:write / skill:create / skill:rename / skill:delete (118) —
   // the only channels in the contract that put bytes into ~/.claude.
   // M129 skill:trail (119) — a terminal panel's live skill trail, tailed

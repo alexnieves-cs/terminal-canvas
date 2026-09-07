@@ -47,6 +47,17 @@ export interface ScanResult {
   entries: TrailEntry[]
   carry: string
   malformed: number
+  /**
+   * How many entries this chunk's OWN cap threw away.
+   *
+   * Counted rather than silently sliced: the caller assembles chunk after
+   * chunk and caps the result again, so an overflow discarded HERE is one
+   * `capTrail` can no longer see. Without this number a 200-skill session
+   * paints TRAIL_MAX cards and says nothing about the rest — a truncation
+   * with no `more` to announce it, which is the one thing TRAIL_MAX's own
+   * comment promises will not happen.
+   */
+  dropped: number
 }
 
 /**
@@ -109,9 +120,14 @@ export function scanTrailChunk(chunk: string, carry: string): ScanResult {
   // far more than TRAIL_MAX records (a big backfill read, or a fixture
   // repeated many times over in a check), and a caller that forgot to cap
   // the assembled result must not get to paint hundreds of cards either.
-  const bounded = entries.length > TRAIL_MAX ? entries.slice(entries.length - TRAIL_MAX) : entries
+  // What the cap threw away is REPORTED, never discarded: `capTrail` runs
+  // over the already-bounded list downstream and can only count its own
+  // overflow, so a chunk that silently sliced would leave `more` describing
+  // a truncation smaller than the one on screen.
+  const dropped = entries.length > TRAIL_MAX ? entries.length - TRAIL_MAX : 0
+  const bounded = dropped > 0 ? entries.slice(entries.length - TRAIL_MAX) : entries
 
-  return { entries: bounded, carry: nextCarry, malformed }
+  return { entries: bounded, carry: nextCarry, malformed, dropped }
 }
 
 /** Caps to the newest `TRAIL_MAX` entries, counting what was dropped. */

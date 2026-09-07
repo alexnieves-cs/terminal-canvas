@@ -262,6 +262,38 @@ export async function renameSkill(
 export async function deleteSkill(dir: string, deps: SkillWriteDeps): Promise<SkillWriteResult> {
   const refusal = gate(dir, deps)
   if (refusal !== null) return { kind: 'refused', why: refusal }
+  // CONTAINMENT IS NOT ENOUGH HERE, and this is the one writer where that
+  // matters. `insidePlace` answers TRUE for `real === place` (a place holds
+  // itself), so the gate alone lets a caller trash `~/.claude/skills`
+  // ITSELF — every skill the user has, in one call, answering `deleted`
+  // exactly as a single skill would, with the Finder as the only clue. A
+  // skill is one folder DIRECTLY under a root, holding a `SKILL.md`, and
+  // both halves are checked: the parent must BE a root (never merely inside
+  // one, which a `references/` subfolder also is), and the folder must
+  // actually be a skill.
+  const norm = normalisePath(dir) as string
+  const real = (p: string): string | null => {
+    try {
+      return deps.realpath(p)
+    } catch {
+      return null
+    }
+  }
+  const parent = real(dirname(norm))
+  const isRootChild = parent !== null && deps.skillRoots.some((r) => real(r) === parent)
+  if (!isRootChild) {
+    return {
+      kind: 'refused',
+      why: `${norm} is not a skill folder — a skill is one folder directly inside ~/.claude/skills or a repository's .claude/skills, and the root itself is never deleted`
+    }
+  }
+  try {
+    if (!readdirSync(norm).includes(SKILL_FILE)) {
+      return { kind: 'refused', why: `${norm} holds no ${SKILL_FILE}, so it is not a skill this app may trash` }
+    }
+  } catch (error) {
+    return { kind: 'failed', why: `the skill folder could not be read before deleting — ${String(error)}` }
+  }
   try {
     await deps.trash(dir)
   } catch (error) {

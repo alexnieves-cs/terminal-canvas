@@ -1341,6 +1341,34 @@ const p = (name) => join(DIR, name)
     ok('trail.1i a multibyte character split across two byte chunks reassembles through the shared decoder',
        scan1.entries.length === 0 && scan2.entries.length === 1 && scan2.entries[0].args === 'résumé — ✓',
        JSON.stringify({ scan1, scan2 }))
+
+    // trail.1j: `more` ACCUMULATES across polls. The overflow is dropped in
+    // two different places — `scanTrailChunk` bounds one chunk, `capTrail`
+    // bounds the assembled list — and only a count carried on the panel's
+    // own state survives both. Without it a 200-skill session paints 40
+    // cards and says nothing, because the number that would have said so was
+    // recomputed from a list that had already been trimmed.
+    const rec = (i) => `{"type":"assistant","message":{"content":[{"type":"tool_use","id":"j${i}","name":"Skill","input":{"skill":"j${i}"}}]},"timestamp":"2026-09-06T13:00:0${i % 10}.000Z"}\n`
+    let jText = ''
+    for (let i = 0; i < 50; i++) jText += rec(i)
+    let jBuf = Buffer.from(jText, 'utf8')
+    const jDeps = {
+      backend: 'claude',
+      panelId: 'trail-more-j',
+      pinnedSession: () => 's-j',
+      resolveTranscript: () => 'p-j',
+      readDelta: (_p, from) => ({ bytes: jBuf.subarray(from), size: jBuf.length })
+    }
+    const j1 = await F.trailFor(jDeps)
+    jBuf = Buffer.from(jText + rec(50), 'utf8')
+    const j2 = await F.trailFor(jDeps)
+    const j3 = await F.trailFor(jDeps)
+    ok('trail.1j `more` accumulates across polls — the chunk cap and the list cap are both counted, and a poll with no new bytes never resets it',
+       j1.kind === 'entries' && j1.more === 10 &&
+       j2.kind === 'entries' && j2.more === 11 &&
+       j3.kind === 'entries' && j3.more === 11 &&
+       j3.entries.length === F.TRAIL_MAX,
+       JSON.stringify({ more: [j1.more, j2.more, j3.more], len: j3.entries && j3.entries.length }))
   } catch (e) { ok('trail.1 (threw)', false, String(e)) }
 
   /* ---- M129: a CHAT's trail, derived from turns already in memory ---- */

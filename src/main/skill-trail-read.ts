@@ -43,6 +43,16 @@ interface PanelTrailState {
   carry: string
   entries: TrailEntry[]
   /**
+   * How many entries this panel has dropped over its WHOLE life, across
+   * every poll — accumulated, never recomputed. Both caps discard here (one
+   * inside `scanTrailChunk`, one in `capTrail` over the assembled list), and
+   * the stored `entries` are already bounded, so a `more` derived from them
+   * would count only the drop this one poll happened to make and would reset
+   * to 0 on the next poll that read no new bytes: a 200-skill session would
+   * paint 40 cards under no notice at all.
+   */
+  dropped: number
+  /**
    * One decoder per panel, carrying whatever incomplete trailing UTF-8
    * sequence its last read ended on — `pty-manager.ts`'s own
    * `transcriptDecoders` map, for the identical reason: a read can land at
@@ -53,7 +63,7 @@ interface PanelTrailState {
 }
 
 function freshPanelState(): PanelTrailState {
-  return { offset: 0, carry: '', entries: [], decoder: new StringDecoder('utf8') }
+  return { offset: 0, carry: '', entries: [], dropped: 0, decoder: new StringDecoder('utf8') }
 }
 
 /**
@@ -157,9 +167,13 @@ export async function trailFor(deps: Partial<TrailDeps> & Pick<TrailDeps, 'backe
   const scan = scanTrailBytes(prior.decoder, read.bytes, prior.carry)
   const entries = [...prior.entries, ...scan.entries]
   const capped = capTrail(entries)
+  // Everything ever dropped for this panel: what it had already lost, plus
+  // what this chunk's own cap threw away, plus what the assembled list's cap
+  // just threw away. Stored back, so the next poll starts from the total.
+  const dropped = prior.dropped + scan.dropped + capped.more
 
-  state.set(panelId, { offset: read.size, carry: scan.carry, entries: capped.entries, decoder: prior.decoder })
+  state.set(panelId, { offset: read.size, carry: scan.carry, entries: capped.entries, dropped, decoder: prior.decoder })
 
-  if (capped.entries.length === 0) return { kind: 'none' }
-  return { kind: 'entries', entries: capped.entries, more: capped.more }
+  if (capped.entries.length === 0 && dropped === 0) return { kind: 'none' }
+  return { kind: 'entries', entries: capped.entries, more: dropped }
 }

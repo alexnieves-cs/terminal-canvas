@@ -161,4 +161,24 @@ export function skillNodeSections(input: SkillNodeInput): SkillSection[] {
 }
 
 /** M127. The door's refusal when the entry carries no file to reveal. */
+/**
+ * M128 fix. The delete confirm, which NAMES WHAT GOES WITH THE SKILL.
+ *
+ * `deleteSkill` trashes the DIRECTORY, so a skill's bundled `references/`,
+ * `scripts/` and `assets/` go with it. A confirm that said "delete this
+ * skill?" would understate what the user is about to lose by however many
+ * files the folder holds, and the three-state resource count is already read
+ * — so all three states are said, and each says something different: a
+ * count, an admission that the folder could not be listed (never a confident
+ * `0`, `costOf`'s rule), and — for a skill that ships nothing — nothing at
+ * all, because there is nothing extra to warn about.
+ */
+export function deleteConfirmText(name: string, resources: SkillResources | undefined): string {
+  const tail =
+    resources === undefined ? ''
+      : resources.kind === 'some' ? ` and its ${resources.n} resource${resources.n === 1 ? '' : 's'}`
+        : resources.kind === 'unknown' ? ' — its resources folder could not be read' : ''
+  return `Move ${name}${tail} to the Trash? The Finder is the way back.`
+}
+
 export const REASON_NO_SOURCE = 'no inventory has been read for this skill yet, so there is no folder to open'
