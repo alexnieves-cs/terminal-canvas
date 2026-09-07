@@ -10,6 +10,8 @@
  * repo's to version).
  */
 
+import type { TranscriptTurn } from './transcript'
+
 export interface TrailEntry {
   at: number
   name: string
@@ -116,4 +118,36 @@ export function scanTrailChunk(chunk: string, carry: string): ScanResult {
 export function capTrail(entries: TrailEntry[]): { entries: TrailEntry[]; more: number } {
   if (entries.length <= TRAIL_MAX) return { entries, more: 0 }
   return { entries: entries.slice(entries.length - TRAIL_MAX), more: entries.length - TRAIL_MAX }
+}
+
+/**
+ * A CHAT's trail, derived from turns already in the renderer's memory.
+ *
+ * The chat side of `scanTrailChunk`, and deliberately the same file: a
+ * terminal's skills are read out of the CLI's transcript FILE and a chat's
+ * out of the store, and two definitions of "a `Skill` tool_use with a string
+ * `skill` input" would differ exactly in the cases nobody tests. Capped by
+ * the SAME `capTrail`, so a 200-skill conversation paints TRAIL_MAX cards
+ * and says how many it did not paint, on both sides.
+ *
+ * `none` rather than an empty `entries`: "no skills used" and "we cannot see
+ * this session's skills" are different sentences, and this function can only
+ * ever produce the first.
+ */
+export function trailFromTurns(turns: readonly TranscriptTurn[]): Trail {
+  const entries: TrailEntry[] = []
+  for (const turn of turns) {
+    for (const block of turn.blocks) {
+      if (block.type !== 'tool_use' || block.name !== 'Skill') continue
+      const skill = block.input.skill
+      if (typeof skill !== 'string' || skill === '') continue
+      const args = block.input.args
+      // Field by field, never a spread: `args: undefined` survives a copy and
+      // reads as present.
+      entries.push(typeof args === 'string' ? { at: turn.at, name: skill, args } : { at: turn.at, name: skill })
+    }
+  }
+  if (entries.length === 0) return { kind: 'none' }
+  const capped = capTrail(entries)
+  return { kind: 'entries', entries: capped.entries, more: capped.more }
 }

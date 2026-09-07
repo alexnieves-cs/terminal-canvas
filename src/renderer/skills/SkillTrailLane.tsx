@@ -43,13 +43,44 @@ export interface SkillTrailLaneProps {
   onOpenSkill: (scope: ToolScope, name: string, world: { x: number; y: number }) => void
 }
 
-/** The three outcomes of resolving a trail entry BY NAME (spec §6.3). */
+/**
+ * The outcomes of resolving a trail entry BY NAME. Spec §6.3 names three;
+ * the fourth is the one the spec's table assumes away.
+ *
+ * `unknown` is NOT a fourth flavour of `none`, and collapsing the two is the
+ * bug this repo bans by name: `not installed here` is a statement about the
+ * user's MACHINE, and printing it when the inventory could not be read at
+ * all — the panel has no directory, main refused, the invoke rejected —
+ * tells the user to install something they already have. Three-state
+ * results, never two: nothing to show, asked but unanswered, and a real
+ * answer.
+ */
 type Resolved =
   | { kind: 'one'; scope: ToolScope; description: string; column: string }
   | { kind: 'several'; count: number }
   | { kind: 'none' }
+  /** The inventory could not be read; `why` is the reader's own reason. */
+  | { kind: 'unknown'; why: string }
   /** The inventory has not answered yet: neither a match nor a refusal. */
   | { kind: 'asking' }
+
+/**
+ * What the lane holds while it waits, plus the arm `ToolInventoryResult` has
+ * no room for: an invoke that REJECTED. Main's type is two arms and neither
+ * of them is "the read threw", so the refusal is carried here rather than
+ * laundered into `no-cwd`, which would read as a panel with no directory.
+ */
+type LaneInventory = ToolInventoryResult | { kind: 'refused'; why: string }
+
+/**
+ * An IPC rejection's message arrives prefixed with the channel and the
+ * remote stack (`Error invoking remote method 'toolbox:read': Error: …`); the
+ * card has one line, and the reader's own sentence is the useful half.
+ */
+function lastLineOfMessage(message: string): string {
+  const tail = message.split('Error: ').pop() ?? message
+  return tail.trim() === '' ? 'the read did not answer' : tail.trim()
+}
 
 function isSkill(entry: { kind: string }): entry is NamedToolEntry {
   return entry.kind === 'skill'
@@ -70,9 +101,11 @@ function columnWord(shelf: Shelf, scope: ToolScope, name: string): string {
   return columnId
 }
 
-function resolve(name: string, inventory: ToolInventoryResult | undefined, shelf: Shelf): Resolved {
+function resolve(name: string, inventory: LaneInventory | undefined, shelf: Shelf): Resolved {
   if (inventory === undefined) return { kind: 'asking' }
-  if (inventory.kind !== 'inventory') return { kind: 'none' }
+  if (inventory.kind === 'refused') return { kind: 'unknown', why: inventory.why }
+  if (inventory.kind === 'no-cwd') return { kind: 'unknown', why: 'this panel has no directory' }
+  if (inventory.kind !== 'inventory') return { kind: 'unknown', why: 'the inventory came back in a shape this version does not know' }
   const matches = inventory.inventory.entries.filter((e) => isSkill(e) && (e as NamedToolEntry).name === name) as NamedToolEntry[]
   if (matches.length === 0) return { kind: 'none' }
   // M21's refusal, reused verbatim: several scopes define this name and this
@@ -84,7 +117,7 @@ function resolve(name: string, inventory: ToolInventoryResult | undefined, shelf
 
 export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: SkillTrailLaneProps): JSX.Element | null {
   const trail = useTrailFor(panel.rect.id, panel.kind)
-  const [inventory, setInventory] = useState<ToolInventoryResult | undefined>(undefined)
+  const [inventory, setInventory] = useState<LaneInventory | undefined>(undefined)
 
   // ONE read per cwd, asked only once the trail has something to resolve: a
   // panel that used no skills must not spend a toolbox read to say so. The
@@ -96,7 +129,9 @@ export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: Ski
     let live = true
     void window.canvas.toolbox.read({ panelId: panel.rect.id, cwd })
       .then((r) => { if (live) setInventory(r) })
-      .catch(() => { if (live) setInventory({ kind: 'no-cwd' }) })
+      // The reader's own words, never `no-cwd`: an invoke that rejected is
+      // not a panel without a directory, and the card says which.
+      .catch((error: unknown) => { if (live) setInventory({ kind: 'refused', why: error instanceof Error ? lastLineOfMessage(error.message) : 'the read did not answer' }) })
     return () => { live = false }
   }, [wants, cwd, panel.rect.id])
 
@@ -149,7 +184,9 @@ export function SkillTrailLane({ panel, selected, cwd, shelf, onOpenSkill }: Ski
                   ? `defined in ${r.count} scopes`
                   : r.kind === 'none'
                     ? 'not installed here'
-                    : 'reading the inventory…'}
+                    : r.kind === 'unknown'
+                      ? `cannot read this project's skills: ${r.why}`
+                      : 'reading the inventory…'}
             </div>
             {r.kind === 'one' && <div className="trail-card__column" data-skill-trail-column={r.column}>{r.column}</div>}
           </div>

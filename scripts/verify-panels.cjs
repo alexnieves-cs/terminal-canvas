@@ -383,16 +383,25 @@ app.on('window-all-closed', () => {})
 // line, M98's grants) the suite reached check 246 at 300s under the chain
 // while passing alone — the ceiling had become a race against the machine,
 // which is the load-flake rule, not a hang. A real hang still lands here.
-// Raised 480s → 900s at M129, the third time and for the third time for the
-// same reason: Act III added the skills pane, the skill panel, the editor and
-// the trail's lane to the tail of this file, and a run that PASSES every
-// check now reaches the frame.2 block at 480s and is killed with ~4500 lines
-// of checks still ahead. That is the load-flake rule again, not a hang — a
-// real hang still lands here, ten minutes later than it used to. The note
-// above says whoever raises it a third time should split the suite instead;
-// splitting it is a milestone of its own and is recorded as owed rather than
-// smuggled into this task.
-const WATCHDOG_MS = 900000
+// Raised 480s → 600s at M129, the third time, and this one is MEASURED
+// rather than positional. Two green runs of `npm run verify:panels` alone on
+// this machine on 2026-09-06: 5:11 and 5:12 wall clock (311s, 312s) for
+// 329 checks — so 1.25x the measured figure is ~390s.
+//
+// It is set at 600s and not at 390s, and the gap is the whole reason to
+// write this down: a run of the SAME suite on the SAME day, green on every
+// check it reached, was killed at 480s having only reached the frame.2 block
+// (~77% of the file) while several Electron harnesses shared the machine.
+// The quiet figure is what the suite costs; the contended one is what it
+// costs in the conditions this repo is actually worked in, and a watchdog
+// pitched at 1.25x the quiet figure is a race against the machine — the
+// load-flake rule, which is what this ceiling has already been raised twice
+// for. 600s is ~1.9x the measured green run and still fails a real hang in
+// ten minutes.
+//
+// The note above still stands: whoever raises it a FOURTH time should split
+// the suite instead. That split is owed, not smuggled into this milestone.
+const WATCHDOG_MS = 600000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -900,6 +909,11 @@ app.whenReady().then(async () => {
   // disk. `null` until trail.lane.1 arms it, so every read before that block
   // gets the same named `unreadable` an unwired harness has always got.
   let trailFixture = null
+  // M129 fix round. A cwd whose toolbox read main REFUSES, so the lane's
+  // fourth outcome is reachable from a check: a refusal is not an inventory
+  // and must never be rendered as `not installed here`, which is a claim
+  // about the user's machine.
+  let toolboxRefusedCwd = null
   const linkOpens = []
   let harnessEnvReport = {
     probedAt: Date.now(),
@@ -1250,7 +1264,17 @@ app.whenReady().then(async () => {
   // the one thing in this milestone that would otherwise read the running
   // developer's real ~/.claude, which is the rule M9a's git fence and M15's
   // projects-root fence each cost a fix round to learn.
-  toolboxCache,
+  // Wrapped, not replaced: every read still goes to the REAL cache except the
+  // one cwd a check has armed a refusal for.
+  { read: (input, resolvePlugins) => {
+    // Compared on the REAL path: the request's cwd has already been through
+    // resolveCwd, and a temp directory under /var is /private/var once
+    // resolved — an equality on the raw string would arm nothing.
+    let real = input.cwd
+    try { real = realpathSync(input.cwd) } catch { /* a missing dir is not this fixture's subject */ }
+    if (toolboxRefusedCwd !== null && real === toolboxRefusedCwd) throw new Error('the toolbox read is refused in this fixture')
+    return toolboxCache.read(input, resolvePlugins)
+  } },
   // Backlog #75's export directory, scoped to this suite's own temp home so
   // an export check never writes into the running developer's real userData.
   join(mkdtempSync(join(tmpdir(), 'tc-panels-diagnostics-')), 'diagnostics'),
@@ -1332,7 +1356,7 @@ app.whenReady().then(async () => {
   // M129. The REAL trailFor over the harness's own fixture transcript — the
   // same byte-offset tail main wires, with the projects lookup replaced by
   // this suite's file so nothing reads the developer's ~/.claude/projects.
-  async (panelId) => (trailFixture !== null && trailFixture.panelId === panelId
+  async (panelId) => (trailFixture !== null && trailFixture.panelIds.includes(panelId)
     ? trailFor({
       backend: 'claude',
       panelId,
@@ -19019,7 +19043,8 @@ app.whenReady().then(async () => {
         'trail.lane.1e a host drawn as a card (the far tiers) paints no trail',
         'trail.lane.1f order on screen matches transcript order',
         'trail.lane.1g a name defined in two scopes picks NO winner',
-        'trail.lane.1h a name the inventory does not know says `not installed here`'
+        'trail.lane.1h a name the inventory does not know says `not installed here`',
+        'trail.lane.1i an inventory that could not be READ says so and never `not installed here` — a refusal is not a claim about the user\'s machine'
       ]
       try {
         // A path with a SPACE in it, this suite's standing fixture rule.
@@ -19045,10 +19070,19 @@ app.whenReady().then(async () => {
           rec('2026-09-06T10:01:00.000Z', 'shared-trail'),
           rec('2026-09-06T10:02:00.000Z', 'ghost-skill')
         ].join('\n') + '\n')
-        trailFixture = { panelId: 'trT', path: TR_LOG }
+        // 1i's host: the same trail, over a directory whose toolbox read main
+        // REFUSES. Its cards can say nothing about what is installed, and
+        // saying `not installed here` would be a false statement about the
+        // user's machine — the two-into-three-state collapse this repo bans.
+        const TR_BAD = realpathSync(mkdtempSync(join(tmpdir(), 'tc skill trail refused ')))
+        toolboxRefusedCwd = TR_BAD
+        trailFixture = { panelIds: ['trT', 'trU'], path: TR_LOG }
 
         layoutStore.save({
-          panels: [{ id: 'trT', x: 160, y: 140, w: 420, h: 260, z: 1, cwd: TR_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'trail host' }],
+          panels: [
+            { id: 'trT', x: 160, y: 140, w: 420, h: 260, z: 1, cwd: TR_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'trail host' },
+            { id: 'trU', x: 160, y: 900, w: 420, h: 260, z: 2, cwd: TR_BAD, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'refused host' }
+          ],
           camera: { x: 0, y: 0, scale: 1 }, selectedId: 'trT', focusedId: 'trT'
         })
         flushLayoutStore()
@@ -19083,9 +19117,9 @@ app.whenReady().then(async () => {
         const onDiskTr = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
         const wsTr = onDiskTr.workspaces.find((w) => w.id === onDiskTr.activeWorkspaceId) || onDiskTr.workspaces[0]
         ok(IDS[0],
-          lane !== false && lane.panels.length === 1 && lane.panels[0] === 'trT' &&
+          lane !== false && lane.panels.join(',') === 'trT,trU' &&
             lane.inPanel === false && lane.isPanel === false &&
-            wsTr !== undefined && wsTr.panels.length === 1 && wsTr.panels[0].id === 'trT',
+            wsTr !== undefined && wsTr.panels.map((p) => p.id).join(',') === 'trT,trU',
           JSON.stringify({ lane: lane && { names: lane.names, panels: lane.panels, inPanel: lane.inPanel, isPanel: lane.isPanel }, onDisk: wsTr && wsTr.panels.map((p) => p.id) }))
 
         // 1f — transcript order, top to bottom.
@@ -19097,6 +19131,23 @@ app.whenReady().then(async () => {
         ok(IDS[6], /defined in 2 scopes/.test(textOf('shared-trail')) && !/wins|shadows|overrides/.test(textOf('shared-trail')),
           JSON.stringify(textOf('shared-trail')))
         ok(IDS[7], /not installed here/.test(textOf('ghost-skill')), JSON.stringify(textOf('ghost-skill')))
+
+        // 1i — the refused read, on the second host. Its cards carry the same
+        // three names and NONE of them may claim anything about what is
+        // installed.
+        const refused = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const l = document.querySelector('[data-skill-trail-lane="trU"]'); if (!l) return false
+          const cards = [...l.querySelectorAll('[data-skill-trail-card]')]
+          if (cards.length < 3) return false
+          const texts = cards.map((c) => c.textContent)
+          if (texts.some((t) => /reading the inventory/.test(t))) return false
+          return { texts, glyphs: texts.some((t) => /[‹›»«▶◀]/.test(t)) }
+        })()`), 12000)
+        ok(IDS[8],
+          refused !== false && refused.glyphs === false &&
+            refused.texts.every((t) => /cannot read/.test(t)) &&
+            refused.texts.every((t) => !/not installed here/.test(t)),
+          JSON.stringify(refused))
 
         // 1b — a move of the host moves the lane by the same world delta,
         // re-derived rather than stored: the record must not gain a rect.
@@ -19159,7 +19210,10 @@ app.whenReady().then(async () => {
         const collapsed = await wc.executeJavaScript(`(() => {
           const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]')
           return { present: b !== null, text: b ? b.textContent : null, state: b ? b.getAttribute('data-skill-trail-toggle') : null,
-                   cards: document.querySelectorAll('[data-skill-trail-card]').length,
+                   // trT's OWN lane: the second host's lane is still up, and
+                   // counting every card on the canvas would read as a
+                   // collapse that did nothing.
+                   cards: document.querySelectorAll('[data-skill-trail-lane="trT"] [data-skill-trail-card]').length,
                    glyphs: b ? /[‹›»«▶◀]/.test(b.textContent) : true }
         })()`)
         ok(IDS[3],
@@ -19179,7 +19233,7 @@ app.whenReady().then(async () => {
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="trT"]') !== null`), 8000)
         const afterReload = await wc.executeJavaScript(`(() => ({
-          cards: document.querySelectorAll('[data-skill-trail-card]').length,
+          cards: document.querySelectorAll('[data-skill-trail-lane="trT"] [data-skill-trail-card]').length,
           toggle: (document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]') || {}).getAttribute ? document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]').getAttribute('data-skill-trail-toggle') : null
         }))()`)
         ok(IDS[2],
@@ -19188,12 +19242,15 @@ app.whenReady().then(async () => {
           JSON.stringify({ recMark, afterReload }))
 
         await clickPanelClose(wc, 'trT')
+        await clickPanelClose(wc, 'trU')
         await settle()
         try { rmSync(TR_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+        try { rmSync(TR_BAD, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (trErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(trErr && trErr.message || trErr))
       } finally {
         trailFixture = null
+        toolboxRefusedCwd = null
       }
     }
 

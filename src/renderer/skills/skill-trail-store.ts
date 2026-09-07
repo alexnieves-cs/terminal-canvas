@@ -1,6 +1,9 @@
 import { useSyncExternalStore } from 'react'
-import { capTrail, type Trail, type TrailEntry } from '@shared/skill-trail'
-import type { TranscriptTurn } from '@shared/transcript'
+// `trailFromTurns` lives in shared/skill-trail.ts beside `scanTrailChunk`:
+// one definition of what counts as a skill invocation, for the two places
+// this app can see one — and pure, so verify:file drives it under plain node
+// (trail.chat.1a–d) rather than through a rendered panel.
+import { trailFromTurns, type Trail } from '@shared/skill-trail'
 import { getChat, subscribeChat } from '@renderer/chat/chat-store'
 import type { Panel } from '@renderer/panels/panels'
 
@@ -88,30 +91,6 @@ export function useTrail(id: string): Trail {
   return useSyncExternalStore((cb) => subscribeTrail(id, cb), () => getTrail(id), () => getTrail(id))
 }
 
-/**
- * A CHAT's trail, derived from turns already in memory.
- *
- * `Skill` by name with a string `skill` input, exactly the record
- * `scanTrailChunk` looks for on the terminal side — one definition of what
- * counts as a skill invocation, reached from the two places the app can see
- * one. Capped by the SAME `capTrail`, so a 200-skill conversation paints
- * forty cards and says how many it did not paint, on both sides.
- */
-export function trailFromTurns(turns: readonly TranscriptTurn[]): Trail {
-  const entries: TrailEntry[] = []
-  for (const turn of turns) {
-    for (const block of turn.blocks) {
-      if (block.type !== 'tool_use' || block.name !== 'Skill') continue
-      const skill = block.input.skill
-      if (typeof skill !== 'string' || skill === '') continue
-      const args = block.input.args
-      entries.push(typeof args === 'string' ? { at: turn.at, name: skill, args } : { at: turn.at, name: skill })
-    }
-  }
-  if (entries.length === 0) return { kind: 'none' }
-  const capped = capTrail(entries)
-  return { kind: 'entries', entries: capped.entries, more: capped.more }
-}
 
 /**
  * The ONE door every surface asks for a panel's trail — a chat's from the
@@ -122,6 +101,8 @@ export function trailFromTurns(turns: readonly TranscriptTurn[]): Trail {
  * subscription to an id that never changes and a chat pays nothing for the
  * trail map it does not use.
  */
+export { trailFromTurns }
+
 export function useTrailFor(id: string, kind: Panel['kind']): Trail {
   const stored = useTrail(id)
   const chat = useSyncExternalStore((cb) => subscribeChat(id, cb), () => getChat(id).turns, () => getChat(id).turns)

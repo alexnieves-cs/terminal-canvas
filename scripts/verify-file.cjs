@@ -1343,6 +1343,46 @@ const p = (name) => join(DIR, name)
        JSON.stringify({ scan1, scan2 }))
   } catch (e) { ok('trail.1 (threw)', false, String(e)) }
 
+  /* ---- M129: a CHAT's trail, derived from turns already in memory ---- */
+  //
+  // The renderer half of the same idea, and pure over `TranscriptTurn[]` so
+  // it is checked HERE rather than through a rendered panel: the terminal
+  // side reads a file and the chat side reads the store, and the ONE
+  // definition of "a skill invocation" has to give both sides the same
+  // answer. It lives in shared/skill-trail.ts beside `scanTrailChunk` for
+  // exactly that reason.
+  try {
+    const turn = (at, blocks) => ({ id: `m${at}`, role: 'assistant', blocks, at })
+    const skill = (name, input) => ({ type: 'tool_use', id: `tu-${name}`, name, input })
+    const mixed = [
+      turn(10, [{ type: 'text', text: 'thinking about it' }, skill('Skill', { skill: 'brainstorming' })]),
+      // A tool that is NOT Skill, a Skill whose input names no skill, and a
+      // Skill whose `skill` is not a string: none of the three is an entry.
+      turn(20, [skill('Bash', { command: 'ls' }), skill('Skill', {}), skill('Skill', { skill: 7 })]),
+      turn(30, [skill('Skill', { skill: 'writing-plans', args: 'the M129 spec' })])
+    ]
+    const out = F.trailFromTurns(mixed)
+    ok('trail.chat.1a only `Skill` tool_use blocks with a string skill become entries, in turn order',
+       out.kind === 'entries' && out.entries.length === 2 &&
+       out.entries[0].name === 'brainstorming' && out.entries[1].name === 'writing-plans' &&
+       out.entries[0].at === 10 && out.entries[1].at === 30,
+       JSON.stringify(out))
+    ok('trail.chat.1b args ride when present and are ABSENT when not — never `args: undefined`, which survives a copy and reads as present',
+       out.kind === 'entries' && !('args' in out.entries[0]) && out.entries[1].args === 'the M129 spec',
+       JSON.stringify(out.kind === 'entries' ? out.entries : out))
+    // The SAME cap the file side takes: a 200-skill conversation paints
+    // TRAIL_MAX and says how many it did not paint.
+    const many = []
+    for (let i = 0; i < F.TRAIL_MAX + 7; i++) many.push(turn(i, [skill('Skill', { skill: `s${i}` })]))
+    const capped = F.trailFromTurns(many)
+    ok('trail.chat.1c a long conversation caps through capTrail — the NEWEST TRAIL_MAX, with the rest counted as `more`',
+       capped.kind === 'entries' && capped.entries.length === F.TRAIL_MAX && capped.more === 7 &&
+       capped.entries[0].name === 's7' && capped.entries[F.TRAIL_MAX - 1].name === `s${F.TRAIL_MAX + 6}`,
+       JSON.stringify(capped.kind === 'entries' ? { n: capped.entries.length, more: capped.more, first: capped.entries[0].name } : capped))
+    ok('trail.chat.1d a conversation that used no skills is `none`, never an empty `entries` — the two say different things',
+       F.trailFromTurns([turn(1, [{ type: 'text', text: 'no tools at all' }])]).kind === 'none', '')
+  } catch (e) { ok('trail.chat.1 (threw)', false, String(e)) }
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
