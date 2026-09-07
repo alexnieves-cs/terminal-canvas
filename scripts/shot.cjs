@@ -148,6 +148,21 @@ writeFileSync(join(scrollbackDir, 'dormant.log'), [
   ''
 ].join('\r\n'))
 
+// M130 critic wave. The trail's host gets a RESTORED tail of its own, the
+// same shape `dormant.log` has: a dormant panel with a trail but an empty
+// well made the scene read as a panel that had done nothing, beside four
+// cards claiming it had. The lines are the session those four skills were
+// used in.
+writeFileSync(join(scrollbackDir, 'trail.log'), [
+  '$ claude',
+  '> Plan the milestone from the spec.',
+  'Using skill brainstorming',
+  'Using skill writing-plans',
+  'Using skill test-driven-development',
+  'Wrote docs/plans/m134.md — four tasks, checks first.',
+  ''
+].join('\r\n'))
+
 const layoutPath = join(mkdtempSync(join(tmpdir(), 'tc shot layout ')), 'layout.json')
 
 // M103. A dev server the browser panel opens to — the harness's own, so the
@@ -178,9 +193,9 @@ const SCENES = [
     run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
-  { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of the terminal whose agent used them, in the order it used them, each naming the skill and either its own description and shelf column, or `not installed here` for a name this project cannot see (the fourth card). The cards are not panels — they are derived from the transcript and stored nowhere — and the panel\'s chrome carries one capsule reading `hide 4 skills` that folds the lane away. Judge the GEOMETRY: does a column of four cards sit beside its host without crowding it?',
+  { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of the terminal whose agent used them, in the order it used them, each naming the skill and either its own description and shelf column, or `not installed here` for a name this project cannot see (the fourth card). The cards are not panels — they are derived from the transcript and stored nowhere — and the panel\'s chrome carries one capsule reading `hide 4 skills` that folds the lane away. The cards read as DERIVED, not as panels: a dashed hairline tether crosses the gap from the host\'s right edge to the lane, and the cards are flat (no shadow, a dimmer hairline and a smaller radius than the frame). A skill\'s NAME wraps to two lines and never truncates — `superpowers:verification-before-completion` is the fourth card, the `not installed here` one, where the full name is the whole point — while the description takes the single clamped line. The host itself has a restored tail from the session those four skills were used in. Judge the GEOMETRY: does a column of four cards sit beside its host without crowding it, and does the tether say where they came from?',
     run: async (kit) => { await kit.goTo('claude — plan the milestone'); await sleep(1200); await kit.shot('trail') } },
-  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the SELECTED panel\'s own inventory, as a horizontal RACK of columns — the user\'s own placed columns first, then the derived ones, then `Ungrouped` last and always, a real column that can be dropped into and cannot be deleted. Each card carries its name, its own sentence clamped to two lines, and a word saying WHICH authority put it there (`placed` · `by plugin` · `by scope`). Above them: three tabs (Skills · Agents · Commands) over the one inventory, a search box, and the scope filters. A column is a fixed 12rem inside the 300px navigator and its heading follows M106\'s one header rule — the title gives and ellipsises, the count sits beside it, and the two column verbs (Assign to teammate…, Delete) collapse into one `…` menu; a card\'s own assign verb is the same small control at its right. The picture is the rack scrolled 210px in: a WHOLE column plus the edge of the next is in frame, which is what tells the reader the rack scrolls sideways. Judge whether a reader can tell a column they arranged from a column the app derived, and whether anything is still cut mid-word.',
+  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the SELECTED panel\'s own inventory, as a horizontal RACK of columns — the user\'s own placed columns first, then the derived ones, then `Ungrouped` last and always, a real column that can be dropped into and cannot be deleted. Each card carries its name, its own sentence clamped to two lines, and a word saying WHICH authority put it there (`placed` · `by plugin` · `by scope`). Above them: three tabs (Skills · Agents · Commands) over the one inventory, a search box, and the scope filters. A column is a fixed 12rem inside the 300px navigator and its heading follows M106\'s one header rule — the title gives and ellipsises, the count sits beside it, and the two column verbs (Assign to teammate…, Delete) collapse into one `…` menu; a card\'s own assign verb is the same small control at its right. The picture is the rack at rest: the PLACED column whole at the left, the edge of the derived one beside it, and the rack\'s own scrollbar beneath. Every heading carries its provenance word beside the count — `STARTING A MILESTONE 3 · placed by you`, `DOCUMENTS 2 · derived`, `UNGROUPED 0` — and a card states its resources on its OWN line under the provenance word, wrapped rather than cut. The two header doors are both words (New column, New skill); no bare glyph. Judge whether a reader can tell a column they arranged from a column the app derived, and whether anything is still cut mid-word.',
     run: async (k) => {
       await k.selectRail('live'); await k.dock('skills'); await sleep(1200)
       // The rack scrolls horizontally and the navigator is a fixed 300px, so
@@ -188,15 +203,16 @@ const SCENES = [
       // therefore the one place the harness moves a scroller directly: a
       // SYNTHESISED wheel is untrusted and Chromium does not scroll on it, so
       // the gesture the rest of this file insists on is not available here.
-      // 210px in: far enough that the DERIVED plugin column (`documents`,
-      // whose cards read `by plugin`) and `Ungrouped` — last and always, and
-      // the one column that cannot be deleted — are both in frame, close
-      // enough that the placed column `starting a milestone` is still the
-      // thing on the left. All three placements in one picture is only
-      // possible at three columns; see the fixture's own note. The offset is
-      // logged so a critic knows the picture is not the pane at rest.
+      // 0, and the number came DOWN in the critic wave: at 210 the
+      // PLACED column — the whole point of the rack's order — was scrolled
+      // off the left edge, so the picture showed two derived columns and
+      // proved nothing about arrangement. At 40 the placed column
+      // `starting a milestone · placed by you` is whole at the left, the
+      // derived `documents · derived` shows its edge beside it, and the
+      // scrollbar under the rack is what says the rack scrolls. The offset
+      // is logged so a critic knows the picture is the pane at rest.
       const at = await k.js(`(() => { const r = document.querySelector('.skills-pane__columns'); if (!r) return -1
-        r.scrollLeft = 210; return Math.round(r.scrollLeft) + ' of ' + Math.round(r.scrollWidth - r.clientWidth) })()`)
+        r.scrollLeft = 0; return Math.round(r.scrollLeft) + ' of ' + Math.round(r.scrollWidth - r.clientWidth) })()`)
       console.log(`[shot] skills rack scrolled to ${at}`)
       await sleep(400)
       await k.shot('skills'); await k.dock('panels')
@@ -473,7 +489,7 @@ const SCENES = [
       if (process.env.SHOT_PROBE) console.log('PROBE compact', await k.js(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.top), Math.round(b.bottom), Math.round(b.height), getComputedStyle(e).display, getComputedStyle(e).height] }
         return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
       await k.shot('compact'); await k.context(false) } },
-  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram — the scan, the pool of six over a shared list, the judge and the collect, each block naming its kind and the edges naming their triggers — with the header counting the blocks and the verbs (Run, Triggers, Save, Delete, Build with AI) above the Definition and Runs tabs. A PROJECTION of the saved record: the live canvas is still the editor.',
+  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram — the scan, the pool of six over a shared list, the judge and the collect, each block naming its kind and the edges naming their triggers — with the header counting the blocks. Every edge carries an ARROWHEAD at its target end and its trigger word sits on a small ground rectangle at the midpoint of its own segment. Every block names its kind first (SCRIPT - SH, POOL - 6 AT A TIME, ORCHESTRATOR - LEADS, COLLECT - JOINS RESULTS). Run is the surface\'s ONE filled primary control, and here it is disabled — so under the verb row two dim sentences name the reasons by verb (Run, because a pool block cannot run yet; Save, because the live canvas is the editor). A PROJECTION of the saved record: the live canvas is still the editor.',
     run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } }

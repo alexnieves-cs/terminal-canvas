@@ -2854,13 +2854,29 @@ console.log('\n' + '='.repeat(60))
        'the shelf is the user arrangement; a git pull does not get to edit it')
 
     const none = R.buildSkillColumns(entries, shelf, { kind: 'skill', query: 'zzzz', scopes: null, placedOnly: false })
-    ok('skills.1f a search matching nothing yields NO columns, so the pane can say so',
-       none.length === 0, 'an empty pane and "no skill matches zzzz" are different renderings')
+    // The SENTENCE too, not just the empty list: `[]` and the words the pane
+    // paints over it are one decision, and a check on the list alone leaves
+    // the half the user reads unpinned — which is how "no skill matches" and
+    // "no skill in this directory" drift into each other.
+    ok('skills.1f a search matching nothing yields NO columns AND the pane\'s own two sentences say which',
+       none.length === 0 &&
+       R.noMatchSentence('skill', 'zzzz') === 'no skill matches zzzz' &&
+       R.noMatchSentence('agent', '') === 'no agent in this directory',
+       JSON.stringify({ n: none.length, q: R.noMatchSentence('skill', 'zzzz'), empty: R.noMatchSentence('agent', '') }))
 
     const placed = R.buildSkillColumns(entries, shelf, { kind: 'skill', query: '', scopes: null, placedOnly: true })
     ok('skills.1g placedOnly hides derived cards but never the Ungrouped column',
        placed.every((c) => c.cards.every((k) => k.why === 'placed')) &&
        placed.some((c) => c.id === R.UNGROUPED_COLUMN_ID), JSON.stringify(placed.map((c) => c.id)))
+    // M127 fix wave. Spec §3's "Ungrouped refuses deletion BY NAME" was
+    // structural only: the column is always injected and its Delete is
+    // disabled, and nothing pinned the sentence the user actually reads. A
+    // refusal with no words is the failure this repo bans — a control that
+    // is merely grey is indistinguishable from one that is broken — so the
+    // sentence is an exported constant the pane renders and this asserts.
+    ok('skills.1h Ungrouped refuses deletion in WORDS, and the pane and the check share the one sentence',
+       R.UNGROUPED_DELETE_REASON === 'Ungrouped is where an unplaced card sits - it cannot be deleted',
+       JSON.stringify({ reason: R.UNGROUPED_DELETE_REASON }))
   } catch (e) { ok('skills.1 (threw)', false, String(e)) }
 }
   // M120 — header.2. A sandboxed chat's header says so where the folder

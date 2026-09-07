@@ -59,8 +59,15 @@ export const DIAGRAM_PAD = 28
 function sublabelOf(node: TemplateNode): string {
   switch (node.kind) {
     case 'pool': return `POOL - ${node.width} AT A TIME`
-    case 'orchestrator': return 'LEADS THE OTHERS'
-    case 'collect': return 'JOINS EVERY RESULT'
+    // M133 critic wave. EVERY sublabel names the KIND first: `POOL` and
+    // `SCRIPT` did and these two did not, so two of the four blocks stated a
+    // behaviour with no vocabulary word behind it and the reader could not
+    // tell which of M132's kinds they were looking at.
+    // Short enough to fit `BLOCK_W`: the sublabel is drawn as SVG text and
+    // an SVG text node does not wrap or clip, so a long one simply runs out
+    // over the block's own edge — which is what the first pass showed.
+    case 'orchestrator': return 'ORCHESTRATOR - LEADS'
+    case 'collect': return 'COLLECT - JOINS RESULTS'
     case 'chat': return 'CHAT'
     default: {
       // A terminal node: its preset, else the binary it runs, else the login

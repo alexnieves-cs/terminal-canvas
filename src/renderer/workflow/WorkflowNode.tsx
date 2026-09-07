@@ -100,13 +100,25 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const diagram = useMemo(() => (template === undefined ? null : buildDiagram(template)), [template])
   const mine = useMemo(() => (template === undefined ? [] : runsForTemplate(props.runs, template.id)), [props.runs, template])
 
+  /**
+   * M133 critic wave. A disabled verb's reason is ON SCREEN, not in `title`
+   * alone: a tooltip needs a hover the reader must already suspect is worth
+   * making, so a verb that simply looks grey reads as broken. Every disabled
+   * verb contributes one dim sentence under the row; three states stay three
+   * (a verb that can act says nothing, and the row is absent when none is
+   * disabled rather than printing an empty box).
+   */
+  const disabled: { label: string; why: string }[] = []
   const verb = (key: string, label: string, own: string | null, run: () => void): JSX.Element => {
     const reason = readOnly ? REASON_MERGED_VIEW : own
+    if (reason !== null) disabled.push({ label, why: reason })
     return (
       <button type="button" className="pf__verb pf__verb--word" data-workflow-verb={key} disabled={reason !== null}
         title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })}>{label}</button>
     )
   }
+  /** The arrowhead's id is per PANEL: two workflow panels on one canvas share a document. */
+  const arrowId = `wf-arrow-${panel.rect.id}`
   const id = template?.id ?? panel.workflow.templateId
 
   return (
@@ -145,6 +157,13 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
               {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
             </div>
+            {disabled.length > 0 && (
+              <div className="workflow-node__why" data-workflow-why>
+                {disabled.map((d) => (
+                  <p key={d.label} className="pf__note workflow-node__why-line" data-workflow-why-verb={d.label}>{`${d.label} — ${d.why}`}</p>
+                ))}
+              </div>
+            )}
             <div className="workflow-node__tabs" role="tablist">
               {(['definition', 'runs'] as const).map((t) => (
                 <button key={t} type="button" role="tab" aria-selected={tab === t} className="pf__verb pf__verb--word workflow-node__tab"
@@ -156,6 +175,15 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   and nothing else — no pan, no zoom, no hit testing. */}
               <svg className="workflow-node__diagram" data-workflow-diagram viewBox={`0 0 ${diagram.width} ${diagram.height}`}
                 width={diagram.width} height={diagram.height} role="img" aria-label={`${template.name}, ${blockCount(template)} blocks`}>
+                {/* An edge has a DIRECTION and the record knows it; a plain
+                    line does not say it, so the reader had to guess which
+                    way `after a turn` ran. One marker, referenced by every
+                    edge, at the TARGET end. */}
+                <defs>
+                  <marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path className="workflow-node__arrow" d="M 0 0 L 8 4 L 0 8 z" />
+                  </marker>
+                </defs>
                 {diagram.edges.map((e) => {
                   const from = diagram.blocks.find((b) => b.key === e.from)
                   const to = diagram.blocks.find((b) => b.key === e.to)
@@ -167,10 +195,22 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   const rightward = to.x >= from.x
                   const x1 = rightward ? from.x + from.w : from.x, y1 = from.y + from.h / 2
                   const x2 = rightward ? to.x : to.x + to.w, y2 = to.y + to.h / 2
+                  // The label sits at the midpoint of ITS OWN segment, over a
+                  // ground rectangle in the pane's surface colour: a word
+                  // floating in open space between two diagonals belongs to
+                  // neither of them, and the shot showed exactly that. The
+                  // width is ESTIMATED from the character count — an SVG
+                  // cannot measure its own text before it lays out, and the
+                  // face is the mono one, so a per-character advance is the
+                  // honest approximation rather than a measurement.
+                  const word = edgeWord(e)
+                  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
+                  const wordW = word.length * 6.3 + 10
                   return (
                     <g key={`${e.from}:${e.to}`} data-workflow-edge={`${e.from}>${e.to}`}>
-                      <line className="workflow-node__line" x1={x1} y1={y1} x2={x2} y2={y2} />
-                      <text className="workflow-node__edge-word" x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 6} textAnchor="middle">{edgeWord(e)}</text>
+                      <line className="workflow-node__line" x1={x1} y1={y1} x2={x2} y2={y2} markerEnd={`url(#${arrowId})`} />
+                      <rect className="workflow-node__edge-ground" x={mx - wordW / 2} y={my - 9} width={wordW} height={16} rx={3} />
+                      <text className="workflow-node__edge-word" x={mx} y={my + 3} textAnchor="middle">{word}</text>
                     </g>
                   )
                 })}

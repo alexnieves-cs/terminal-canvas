@@ -28,6 +28,33 @@ import type { NamedToolEntry, SkillResources, ToolEntry, ToolScope } from '@shar
 export type SkillPaneKind = NamedToolEntry['kind']
 export const SKILL_PANE_KINDS: readonly SkillPaneKind[] = ['skill', 'agent', 'command']
 
+/**
+ * M127 fix wave. THE UNGROUPED REFUSAL, in words and in one place.
+ *
+ * Ungrouped is a real column and the only one that cannot be deleted — it is
+ * where an unplaced card sits, so deleting it would delete a place the model
+ * re-creates on the next render. Its Delete control therefore stays PRESENT
+ * and disabled with this sentence; a control that is merely grey is
+ * indistinguishable from one that is broken. The constant lives beside the
+ * model rather than inside the component so the check and the pane cannot
+ * drift into two different refusals (`verify:rail skills.1h`).
+ *
+ * A hyphen, never an en dash or `›`: renderer text, `verify:styles icons.1`.
+ */
+export const UNGROUPED_DELETE_REASON = 'Ungrouped is where an unplaced card sits - it cannot be deleted'
+
+/**
+ * What the pane says when the rack is empty — two sentences, not one, and
+ * the difference is the fix: an empty DIRECTORY means "install something or
+ * select a panel in a project that has skills", and an empty SEARCH means
+ * "clear the query". `buildSkillColumns` returning `[]` is what makes the
+ * distinction renderable at all; this is the half the user reads, so it is
+ * pinned beside it (`verify:rail skills.1f`).
+ */
+export function noMatchSentence(kind: SkillPaneKind, query: string): string {
+  return query === '' ? `no ${kind} in this directory` : `no ${kind} matches ${query}`
+}
+
 /** The pane's own MIME, read by nothing else — M114's rule for the board's drops. */
 export const SKILL_CARD_MIME = 'application/x-tc-skill'
 
@@ -63,6 +90,17 @@ export interface SkillColumn {
   id: string
   title: string
   cards: SkillCard[]
+  /**
+   * M127 critic wave. WHICH AUTHORITY MADE THIS COLUMN, on the column rather
+   * than only on its cards.
+   *
+   * A card already wears `placed` / `by plugin` / `by scope`, but the heading
+   * did not, so a column the user arranged and a column the app derived read
+   * identically at a glance — and the whole point of the rack's ORDER (placed
+   * first, derived after) is invisible if the two look the same. `null` is
+   * Ungrouped, which is neither: it is where an unplaced card sits.
+   */
+  origin: 'placed' | 'derived' | null
 }
 
 /** `unknown`, never a confident `none`: only a skill bundles resources. */
@@ -180,18 +218,19 @@ export function buildSkillColumns(
     // A column the USER made stays, empty or not: it is a place, not a
     // projection, and one that vanished when its last card moved out would
     // take the drop target with it.
-    out.push({ id: col.id, title: col.title, cards })
+    out.push({ id: col.id, title: col.title, cards, origin: 'placed' })
   }
   for (const id of order) {
     if (taken.has(id)) continue
     const cards = placedFor.get(id) ?? []
     if (cards.length === 0) continue
-    out.push({ id, title: derivedTitle(id), cards })
+    out.push({ id, title: derivedTitle(id), cards, origin: 'derived' })
   }
   out.push({
     id: UNGROUPED_COLUMN_ID,
     title: 'Ungrouped',
-    cards: placedFor.get(UNGROUPED_COLUMN_ID) ?? []
+    cards: placedFor.get(UNGROUPED_COLUMN_ID) ?? [],
+    origin: null
   })
   return out
 }

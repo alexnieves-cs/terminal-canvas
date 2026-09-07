@@ -177,6 +177,16 @@ the user's arrangement; it does not get to be edited by a `git pull`.
 - `verify:file plugins.1` — `plugin-list.ts` over a FAKE runner: the recorded JSON parsed,
   only `enabled` paths returned, a non-zero exit and a timeout each yielding `unknown`.
 
+> **Where these actually landed (2026-09-07).** The text above is left as
+> written. The shelf's checks are `verify:toolbox shelf.1a–.4c` (the parser and
+> `placement`, beside the inventory they read against) plus `verify:layout
+> shelf.disk.1–.3` (the on-disk half: absent, malformed, `carryShelf`, empty
+> shelf absent). There is no `verify:palette shelf.1`: the palette bundle never
+> carried `shared/skills.ts`, and adding it there would have meant a second
+> esbuild entry for a module the toolbox bundle already holds — the
+> `@shared`/`@renderer` alias trap this repo documents. The pane's own model is
+> `verify:rail skills.1a–.1h`.
+
 ## 3. M127 — the Skills pane
 
 `shell.navigator` gains `skills`. Columns of cards, horizontally scrolling, each card a

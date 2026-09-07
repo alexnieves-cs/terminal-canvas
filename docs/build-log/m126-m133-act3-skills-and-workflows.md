@@ -386,30 +386,33 @@ Spec §12's five, unchanged:
    change to how the CLI writes a `Skill` tool_use reads as an empty trail, not an error.
 2. **`claude plugin list --json` on another machine and another version.** Measured once. The
    `unknown` arm is what protects the pane; the shape is pinned by nothing but §2.6's fixture.
-3. **A pool of N against a real budget**, with `agents.budgetUsd` set deliberately low.
+3. **A pool of N against a real budget**, with `agents.budgetUsd` set deliberately low — and
+   against a real `AgentSessionManager` rather than the fake, which is the SAME hand check and
+   is why the manual-only list carries it as one bullet: `pool.1` drives a fake runner and a
+   fake limits dep together, and the module has no production caller (see M132's known gap).
 4. **A saved `SKILL.md` still loading in the CLI.** `edit.1` proves the bytes round-trip; no
    suite in this repository runs a skill.
 5. **`shell.trashItem` on this machine.** Electron's, unreachable from plain node;
    `verify:toolbox` drives an injected `trash` dep.
 
-The two final reviews added seven more:
+The two final reviews added six more (the pool's two halves — a real budget and a real
+`AgentSessionManager` — are one owed run, merged into 3 above, so this list and
+`docs/load-bearing.md`'s block are both ELEVEN):
 
 6. **The >40-skill truncation notice**, on a real session that used more than `TRAIL_MAX` skills.
    The `more` bug means no run before the fix wave ever produced one.
 7. **A first-ever skill created on a machine with no `~/.claude/skills`** — the `mkdir` arm, on a
    genuinely fresh home rather than a fixture.
 8. **A rename into an OCCUPIED shelf slot**, and what the column looks like afterwards.
-9. **The pool against a real `AgentSessionManager`** — `pool.1` drives a fake runner and a fake
-   limits dep, and the module has no production caller (see M132's known gap).
-10. **`--append-system-prompt` surviving an orchestrator RESUME.** The CLI keeps no record of it,
+9. **`--append-system-prompt` surviving an orchestrator RESUME.** The CLI keeps no record of it,
     so a resumed orchestrator without it stops being one — M81's supervisor rule, unverified for
     this block kind.
-11. **A `collect` join against real workers**, rather than the recorded shape.
-12. **A workflow watcher ARMED for real**, firing on its own schedule, including what the ledger
+10. **A `collect` join against real workers**, rather than the recorded shape.
+11. **A workflow watcher ARMED for real**, firing on its own schedule, including what the ledger
     row naming `/usr/bin/true` looks like beside it.
 
 Add these to the manual-only list at the end of `docs/load-bearing.md`; a green
-`npm run verify` is silent on all twelve.
+`npm run verify` is silent on all eleven.
 
 ## Deferred minors, by file
 

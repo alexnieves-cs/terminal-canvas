@@ -1,12 +1,14 @@
 import { memo, useState, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
-import { ChevronLeft, More, Plus } from '@renderer/icons'
+import { ChevronLeft, More } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import {
+  noMatchSentence,
   SKILL_CARD_MIME,
   SKILL_PANE_KINDS,
+  UNGROUPED_DELETE_REASON,
   type SkillCard,
   type SkillColumn,
   type SkillPaneKind
@@ -107,6 +109,18 @@ export interface SkillsPaneProps {
 
 const SCOPES: readonly ToolScope[] = ['user', 'project', 'local']
 
+/**
+ * M127 critic wave. The heading's own provenance word — the same fact the
+ * cards carry, said once for the whole column, so the rack's ORDER (the
+ * user's own columns first, the derived ones after) is legible without
+ * reading every card. Ungrouped is neither and says nothing extra.
+ */
+function columnWhy(column: SkillColumn): string | null {
+  if (column.origin === 'placed') return 'placed by you'
+  if (column.origin === 'derived') return 'derived'
+  return null
+}
+
 /** The word every card wears; the shelf has two authorities and this names which. */
 const WHY_WORD: Readonly<Record<SkillCard['why'], string>> = {
   placed: 'placed',
@@ -157,7 +171,11 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
       <div className="shell__region-title shell__region-title--action navigator__header">
         <span className="shell__tree-root">Skills</span>
         <span className="navigator__header-actions">
-          <button type="button" className="shell__region-add icon-button" title="New column" aria-label="New column" data-skills-new-column {...shellControl(props.onNewColumn)}><Plus /></button>
+          {/* M127 critic wave. ONE control, named with words. A bare `+`
+              beside a worded `New skill` read as a second, unexplained verb;
+              the column door says what it makes. */}
+          <button type="button" className="rail-row__verb" data-skills-new-column
+            title="Add a column to the shelf" {...shellControl(props.onNewColumn)}>New column</button>
           <button type="button" className="rail-row__verb" data-skills-new-skill
             title="Scaffold a new skill's SKILL.md" {...shellControl(() => setDrafting((d) => !d))}>New skill</button>
           <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
@@ -241,9 +259,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
         <p className="pf__note skills-pane__empty" data-skills-empty>{SKILLS_PENDING}</p>
       ) : props.columns.length === 0 ? (
         <p className="pf__note skills-pane__empty" data-skills-empty>
-          {props.query === ''
-            ? `no ${props.kind} in this directory`
-            : `no ${props.kind} matches ${props.query}`}
+          {noMatchSentence(props.kind, props.query)}
         </p>
       ) : (
         <div className="skills-pane__columns" data-skills-columns>
@@ -256,6 +272,11 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
             const menuOpen = openMenu === menuKey
             return (
               <section key={col.id} className="skills-pane__column" data-skills-column={col.id} {...dropHandlers(col.id)}>
+                {/* The provenance word sits on its OWN line under the title,
+                    not beside it: the column is 12rem and a word beside the
+                    title ate it down to `STARTI…`. M106's rule is unchanged —
+                    the title still gives and still ellipsises — but it now
+                    gives against the count and the menu alone. */}
                 <h3 className="skills-pane__heading">
                   <span className="skills-pane__column-title" title={col.title}>{col.title}</span>
                   <span className="skills-pane__count">{col.cards.length}</span>
@@ -279,12 +300,15 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                             as a feature that was never built. */}
                         <button type="button" role="menuitem" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
                           disabled={undeletable}
-                          title={undeletable ? 'Ungrouped is where an unplaced card sits — it cannot be deleted' : `Delete ${col.title}; its cards go back to where they derive`}
+                          title={undeletable ? UNGROUPED_DELETE_REASON : `Delete ${col.title}; its cards go back to where they derive`}
                           {...shellControl(() => { if (!undeletable) { props.onDeleteColumn(col.id); setOpenMenu(null) } })}>Delete</button>
                       </div>
                     )}
                   </span>
                 </h3>
+                {columnWhy(col) !== null && (
+                  <p className="skills-pane__origin" data-skills-column-origin={col.origin ?? ''}>{columnWhy(col)}</p>
+                )}
                 <ul className="rail-list rail-list--skills">
                   {col.cards.length === 0 ? (
                     <li className="rail-empty" data-skills-column-empty>drop a card here</li>
@@ -314,9 +338,17 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                         )}
                       </span>
                       {card.description !== '' && <span className="skill-card__description" data-skill-description>{card.description}</span>}
+                      {/* M127 critic wave. TWO lines, not one ellipsised
+                          one: the provenance word is three characters and
+                          the resource sentence is a sentence, and joining
+                          them cut the sentence mid-word (`no bundled fi…`),
+                          which is the one thing a fact line must never do.
+                          The word stays on its own nowrap line; the sentence
+                          WRAPS beneath it, clamped at two lines. */}
                       <span className="skill-card__facts" data-skill-facts>
-                        {[WHY_WORD[card.why], resourceWord(card), card.pluginId].filter((x) => x !== undefined).join(' · ')}
+                        {[WHY_WORD[card.why], card.pluginId].filter((x) => x !== undefined).join(' · ')}
                       </span>
+                      <span className="skill-card__resources" data-skill-resources>{resourceWord(card)}</span>
                       {!card.installed && (
                         <span className="skill-card__note" data-skill-gone>not installed — the shelf kept its slot</span>
                       )}
