@@ -2129,6 +2129,21 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ whole, some }))
 }
 
+// M149 — fit.target.1 (the Act II critic: fit.sel.1 exercised fitTo, never
+// the CHOICE). zoomTarget's three arms, pure: the selection when any, every
+// panel otherwise, a reset on an empty canvas; a selected id that names no
+// panel is not a selection.
+{
+  const all = [{ id: 'a', x: 0, y: 0, w: 10, h: 10 }, { id: 'b', x: 50, y: 0, w: 10, h: 10 }]
+  const sel = V.zoomTarget(new Set(['b']), all)
+  const none = V.zoomTarget(new Set(), all)
+  const stale = V.zoomTarget(new Set(['zz']), all)
+  const empty = V.zoomTarget(new Set(['a']), [])
+  ok('fit.target.1 zoomTarget frames the selection when any, every panel otherwise, resets on an empty canvas, and treats a stale selected id as no selection',
+    sel.kind === 'selection' && sel.rects.length === 1 && sel.rects[0].id === 'b' && none.kind === 'all' && stale.kind === 'all' && empty.kind === 'reset',
+    JSON.stringify({ sel, none, stale, empty }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

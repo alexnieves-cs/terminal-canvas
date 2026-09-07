@@ -103,6 +103,9 @@ export function rowCapabilitySentence(backend: AgentBackend): string {
     row.asksPermission ? 'asks before a command runs' : 'runs every tool on its own policy',
     row.interrupts ? 'interrupts' : 'no interrupt',
     row.images ? 'images' : 'no images',
+    // M145/M149. The path fact rides the same sentence (the Act II critic:
+    // the row's field had been pinned and rendered nowhere).
+    row.pastesImagePath,
     row.sandboxArgs === undefined ? 'no read-only mode' : 'a read-only mode'
   ].join(' · ')
 }

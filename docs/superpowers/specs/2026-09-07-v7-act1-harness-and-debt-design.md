@@ -157,7 +157,7 @@ between `instantiateTemplate` (the renderer's, M80) and `startPool` (main's, M13
   panel order; a `target` that is a file path is written by main under the run's own directory
   and named in the chat's first message.
 - `workflowBlockRefusal` narrows to what is STILL refused: a pool whose `list` is not inside a
-  place (the Places gate on the file, by name), and nothing else. `Run` on a blocked template
+  place (the Places gate on the file, by name), and nothing else. `Run` on a blocked template **(Struck in review, M6 of the Act I critic's wave: there is no teammate on a pool, so no Places gate applies to its list file — the module header and CLAUDE.md say the same.)**
   becomes `Run` on a running one, with `Stop` beside it while a pool is live.
 
 The renderer never spends: every mint goes through `agent:create`, and the budget stop is

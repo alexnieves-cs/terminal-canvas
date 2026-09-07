@@ -130,6 +130,8 @@ M75). A terminal cannot take bytes, so main writes them to a file and the path i
 
 ## M143 — #53, the live tier's card from a serialised screen
 
+> **As built (M149 note).** No `@xterm/addon-serialize`, no `lastScreen`, no `<pre>` card, no `serialize.1` / `card.screen.1`: M112 had tried the addon and dropped it by measurement, and M63 already renders the card's rows as rows. M143 is the pin the design lacked — `verify:xterm card.rows.1`, attached and detached. Do not "finish" the paragraphs below; they describe the road not taken.
+
 M39 made the dormant card honest (the durable log's tail). A panel that ran THIS session and
 was carded by tiering still shows `handle.tail(6)` — six colour-stripped fragments of a
 TUI's box frame. The entry's first source is the right one: `@xterm/addon-serialize`,
@@ -151,6 +153,8 @@ snapshotted at `detachSlot` (before the WebGL context goes), as the card's text.
 
 ## M142 — #19, cost history and the totals that reach the screen
 
+> **As built (M149 note).** The per-workspace totals line was DECLINED in Act II by name (one workspace is on screen at a time; the canvas-wide figure is the one that changes what a person does — `docs/ideas-backlog.md` #19) and not built. The renderer's read of `ledger:usage` was not wired in Act II at all and landed in M149 (`9c75f6d`); `cost.history.1` was red until then.
+
 Three open halves in the entry; two are answered by name and one is built.
 
 - **History and retention** — built on #46's ledger, as the entry asked, not a third store:
@@ -171,6 +175,8 @@ Three open halves in the entry; two are answered by name and one is built.
   (a killed panel with fixture usage leaves a usage row and the summary reads it).
 
 ## M140 — #26, the toolbox's write half beyond skills
+
+> **As built (recorded after the Act II critic's review, M149).** The write half shipped as ONE door, not the skill editor generalised: every toolbox row carries the file it came from and an `open` control opens it in M22's file panel — the editor every `.claude` file already had — including project-scope command rows, hooks' `settings.json` and MCP's `~/.claude.json`. The splice/stamp gate and the `verify:toolbox edit.cmd.1–.3` checks named below were NOT built; `editor.cmd.1` (product) drives a command row end to end and hook/MCP rows are pinned as data (`toolbox.open.1`, rail). M5b's "project prompts are read, never written" stands for the PALETTE's prompt store; a person opening a project command file in the editor and saving it is a deliberate edit of a file they own, which `docs/load-bearing.md` records beside M5b.
 
 M129 built the editor for SKILLS. The entry's remaining write half lists commands, subagents,
 hooks, permissions and MCP servers, and its own argument decides the line: a markdown file

@@ -742,6 +742,26 @@ const tick = () => new Promise((r) => setImmediate(r))
     JSON.stringify({ reqA, reqB }))
 }
 
+// M149 — env.1 (the Act II critic's Critical, at its last hop). `env` on the
+// spec reaches the create request as a COPY; a spec without it produces a
+// request without the key (`in`, never truthiness — the worktree.1 rule).
+// The request is the seventh field-by-field copy of the spec, and the sixth
+// had been carrying env into it for nothing.
+{
+  const { bridge, registry } = setup()
+  registry.ensure('env-a', { ...SPEC, panelId: 'env-a', env: { TC_ENV_PROBE: 'x' } })
+  registry.ensure('env-b', { ...SPEC, panelId: 'env-b' })
+  registry.applyTiers({ 'env-a': 'live', 'env-b': 'live' })
+  registry.attachSlot('env-a')
+  registry.attachSlot('env-b')
+  await tick()
+  const reqA = bridge.calls.create.find((c) => c.panelId === 'env-a')
+  const reqB = bridge.calls.create.find((c) => c.panelId === 'env-b')
+  ok('env.1 the create request carries the spec\'s env as a copy, and keeps absence absent',
+    reqA !== undefined && reqB !== undefined && reqA.env !== undefined && reqA.env.TC_ENV_PROBE === 'x' && !('env' in reqB),
+    JSON.stringify({ reqA, reqB }))
+}
+
 // copy-site.1. FOUND WHILE PINNING THE ABOVE, and older than this milestone:
 //      the request never carried `agentOptions` either. M23's permission mode,
 //      effort and model rendered in the chrome and the inspector — both read

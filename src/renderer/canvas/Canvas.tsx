@@ -103,7 +103,7 @@ import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
-import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
+import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY, REASON_NOT_STARTED } from '@renderer/palette/commands'
 import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -600,7 +600,13 @@ export function Canvas({
                   // looks exactly like a user who never asked for any.
                   ...(chosen.agentOptions !== undefined ? { agentOptions: chosen.agentOptions } : {}),
                   // M37. The same rule, a fifth time.
-                  ...(chosen.worktree !== undefined ? { worktree: chosen.worktree } : {})
+                  ...(chosen.worktree !== undefined ? { worktree: chosen.worktree } : {}),
+                  // M147/M149. A sixth time, and the one the Act II critic
+                  // caught: without this line a preset's env — and the
+                  // sheet's Env field, which main merges into this same
+                  // template — was dropped here, after the parser and before
+                  // buildPtyEnv, so the form did nothing (core env.spawn.1).
+                  ...(chosen.env !== undefined ? { env: { ...chosen.env } } : {})
                 }
               : undefined,
             chosen ? { w: chosen.w, h: chosen.h } : undefined
@@ -1379,6 +1385,10 @@ export function Canvas({
   // Cmd+V arrive as main-side menu accelerators via edit:copy/edit:paste,
   // not as a canvas keydown, so they are unrelated to useViewport's "every
   // shortcut requires Cmd" rule for bare keys reaching the PTY.)
+  // M149. The palette's feedback line, reachable from the one edit:paste
+  // subscription below (installed once): a ref, assigned once the actions
+  // object exists further down, so a refusal on a paste is SAID, never swallowed.
+  const sayRef = useRef<(sentence: string) => void>(() => {})
   useEffect(() => {
     const offCopy = window.canvas.edit.onCopy(() => {
       // With the palette open the user is looking at a text field, not a
@@ -1412,12 +1422,20 @@ export function Canvas({
       // empty clipboard is the `empty` arm, not a paste of nothing.
       if (id === null) return
       const panel = panelsRef.current.find((p) => p.rect.id === id)
-      const wantsFile = (panel !== undefined && isChatPanel(panel)) || (session !== undefined && session.spawned)
-      if (!wantsFile) return
+      // A chat keeps its OWN door: ChatNode subscribes to this same event and
+      // attaches the clipboard's bytes when its textarea is focused. The first
+      // cut attached a path here too — one ⌘V, two attachments and a .png the
+      // chat never needed (the Act II critic's Major).
+      if (panel !== undefined && isChatPanel(panel)) return
+      if (session === undefined || !session.spawned) {
+        // Named, never silent: a paste into a card has nowhere to land.
+        sayRef.current(`${REASON_NOT_STARTED} — an image pasted here has no process to receive it`)
+        return
+      }
       void window.canvas.agentSession.clipboardFile().then((file) => {
-        if (file.kind !== 'ok') return
-        if (panel !== undefined && isChatPanel(panel)) attachToComposer(id, { kind: 'path', path: file.path })
-        else registry.get(id)?.handle.paste(shellQuote(file.path))
+        if (file.kind === 'empty') return
+        if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+        registry.get(id)?.handle.paste(shellQuote(file.path))
       })
     })
     return () => {
@@ -3221,6 +3239,9 @@ export function Canvas({
     // single-panel selector goes through here.
     selectOnly(id)
   }, [commitHistory, selectOnly])
+  // M149 (the Act II critic). A STABLE door for the memo'd toolbox nodes: a
+  // fresh arrow per render defeated ToolboxNode's memo for every node.
+  const openFileAtCentre = useCallback((path: string) => openFilePanel(path, worldCentre()), [openFilePanel, worldCentre])
 
   /**
    * Open a toolbox node for one panel's directory.
@@ -4712,6 +4733,7 @@ export function Canvas({
     teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v),
     workItemsRef, setWorkItems, boardVerbsRef
   })
+  sayRef.current = paletteActions.say
   addToBoardRef.current = (item, source) => {
     paletteActions.addWorkItem({ source, key: item.id, title: item.title, url: item.url, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'], ...(item.description === '' ? {} : { description: item.description }), ...(item.state === null ? {} : { remoteState: item.state }) })
   }
@@ -5572,7 +5594,7 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
-                  onOpenFile={(path) => openFilePanel(path, worldCentre())}
+                  onOpenFile={openFileAtCentre}
                 />
               )
             }

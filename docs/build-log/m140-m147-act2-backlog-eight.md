@@ -27,14 +27,18 @@ worktree before any Act II code:
   ceiling allows is REFUSED by name before any mint (`pool.2f`); the alternative — minting
   every edge up front — cannot exist for workers that do not yet.
 - **M5** — CI fetches tags (`panels-split.2` reads `pre-v7-run` through `git show`).
-- **M6** — the Places-gate claim on the list file was struck from the spec, the module header
-  and `CLAUDE.md`; there is no teammate on a pool.
+- **M6** — the Places-gate claim on the list file was struck from the module header and
+  `CLAUDE.md` (and, after the verifier found it still standing, from the Act I spec); there
+  is no teammate on a pool.
 - **M7** — hand check 8 decided: a rename onto an occupied shelf key collapses to ONE slot
   (`renameInShelf` dedupes; `shelf.rename.1`).
 - Minors: `verify:pty` 8/9 test the version AFTER the path; `panels-split.1` matches the
   script name; `pool-model` starts a new run clean and keeps a refusal through a stop;
-  `usePoolsLive` memoised; an edge INTO a pool block and a blank orchestrator prompt refused
-  by name (`workflow.2c`); `poolTargetsRef` above its reader; the `handcheck-trash` header.
+  `usePoolsLive` memoised; a blank orchestrator prompt refused by name (`workflow.2c` — the
+  critic had also asked for an edge INTO a pool block to be refused, and that refusal was
+  REVERTED on `main` at `ecb7dff`: the M133 fixture is that very shape and the pool starts
+  with the run; `workflow.2c` now asserts the edge is allowed); `poolTargetsRef` above its
+  reader; the `handcheck-trash` header.
 - The verifier's one false count ("twelve mutable names": eleven) is corrected here.
 
 ## The watchdogs, measured where the suite runs
@@ -50,9 +54,12 @@ beside each constant (`389d5a2`). The harness prints each part's wall clock with
 Red: `c547fe5` (`fit.sel.1`, `zoom.fit.1`). `fitSelection` is a flight over `fitTo`, the
 same math `fitAll` uses; `zoomToFit` frames the selection when any, every panel otherwise,
 and resets on an empty canvas (a verb that did nothing would read as broken). `Reset zoom`
-keeps `canvas.fit`'s id and ⌘0; `Zoom to fit` carries ⌘1, the chord `useViewport` had bound
-to `fitAll` since M56. Palette check 48's shortcut set gained the row. Core `fit.1` selects
-two panels by a REAL shift-click and runs both rows through the palette.
+keeps `canvas.fit`'s id and ⌘0. Palette check 48's shortcut set gained the row. Core `fit.1`
+selects the second panel by a DISPATCHED shift-mousedown on its chrome (a real
+`sendInputEvent` click did not add to the selection in the hidden window — the check's own
+comment says so) and runs both rows through the palette. (The Act II critic: the row had
+carried a `⌘1` hint while the chord ran `fitAll`, not the selection-aware verb — the hint was
+dropped in the review wave, M149.)
 
 ## M144 — zoom-independent chrome
 
@@ -60,7 +67,10 @@ Red: styles `chrome.scale.1`, core `frame.3`. A CSS transform on `.pf__chrome` a
 `.panel__resize` — no layout box moves — with `--chrome-scale` stamped once on `.world`
 (`clamp(1, 1/scale, 2.5)`), declared at 1 in the stylesheet so styles check 2 sees the token.
 `frame.3` zooms out with the harness's ⌘- until the scale is at or under 0.6 and reads the
-ratios against the ACTUAL scale, never an assumed 0.5.
+ratios against the ACTUAL scale, never an assumed 0.5. ("No layout box moves" is the BODY's
+box: the chrome's own rule also sets `width: calc(100% / var(--chrome-scale))` so the
+scaled bar spans the frame, which is a layout property of the chrome alone — the verifier's
+narrower truth.)
 
 ## M141 — prompt placeholders
 
@@ -95,14 +105,19 @@ detached. No code.
 Red: file `ledger.usage.1`, rail `summary.history.1`, kinds `cost.history.1`, `verify:ipc` at
 124. The usage row carries per-model totals and NO price; the renderer prices with `costOf`,
 the summary's own rule. The first insertion into `verify:file` ran its async block after the
-tally (the suite's checks are `await`ed inside one IIFE); both new blocks are awaited now.
+tally (the suite's checks are `await`ed inside one IIFE); the `ledger.usage.1` block is
+awaited now (the clipboard block holds no `await` and completes synchronously, which the
+verifier noted). **What Act II did NOT ship, found by the 4.0 audit (M149):** the renderer's
+READ of `ledger:usage` — every other piece landed and `cost.history.1` (kinds) was red from
+the merge until `9c75f6d`, when the Electron tail first ran over the merged tree.
 `ledger:usage` rides the palette handlers object rather than `registerIpcHandlers`' positional
 list, whose later params would have shifted under every caller.
 
 ## M140 — the toolbox's write half
 
 Red: rail `toolbox.open.1`, product `editor.cmd.1`. Every row carries `sourcePath`; the Open
-door opens the file panel. The first `feat` commit did not typecheck (`props` in a component
+door opens the file panel — driven end to end for a COMMAND row; the hook and MCP rows carry
+the path as data (`toolbox.open.1` pins all three) and are not clicked by any Electron check. The first `feat` commit did not typecheck (`props` in a component
 that destructures); fixed on `main` at `a4caabb` before the tail ran.
 
 ## The worktree's node_modules symlink, committed — and what the merge did
@@ -118,4 +133,19 @@ lesson is in `docs/load-bearing.md`.
 
 ## The Electron tier over the merged tree
 
-Recorded at the act's close below.
+After `138d323`, every part green: core 75/75, shell 94/94, kinds 48/48, agents 77/77,
+product 57/57 (the tallies include M149's checks, which landed before the tier was green —
+see the Act III log). Three harness mistakes of this act's own were found by that tier:
+`fit.1`'s selector was quoted twice (`data-panel-id=""n19""`) and THREW, which aborted the
+whole core part as `infrastructure` — a thrown check is not a red, it is every check below it
+never running; `cost.history.1` spawned `cat -v` with the agent flag, and cat read
+`--session-id <uuid>` as a file name and exited, taking the pin with it; `editor.cmd.1`'s
+injected script carried a real newline inside a quoted string. Watchdogs re-pinned from two
+green runs each in the Electron tier: core 49 s (38.5, 37.6), shell 96 s (76.5, 76.7), kinds
+60 s (47.1, 47.4), agents 109 s (86.2, 86.7), product 95 s (74.7, 75.2).
+
+## Reviewed in Act III
+
+The fresh-context critic and verifier over this act ran after Act III's goldens landed;
+their findings and the fix wave are recorded in `docs/build-log/m148-m149-act3-visual.md`
+under *Reviews*. The one Critical was this act's: a preset's `env` never reached the process.

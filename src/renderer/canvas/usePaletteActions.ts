@@ -57,6 +57,7 @@ import { railLabel } from '../shell/rail-rows'
 import type { LinkMode } from './useLinkMode'
 import type { Point, WorldRect } from './viewport'
 import type { Viewport } from './viewport'
+import { zoomTarget } from './viewport'
 import type { PersistedBookmark } from '@shared/layout-schema'
 import type { PersistedTeammate } from '@shared/teammates'
 import type { NavigatorPane } from '@renderer/shell/useShellChrome'
@@ -214,11 +215,29 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   // workspace named after the template, the switch, then M80's instantiation
   // there — run only once the shape is fully answered, never before.
   const intoNewWorkspace = async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
-    const id = await window.canvas.workspace.create(template.name)
+    // A name that is already taken gets a counter: `two shells (2)`. The
+    // store appends without deduping, and two identical names in the
+    // switcher are two rows nothing tells apart (the Act II critic).
+    const taken = new Set((await window.canvas.workspace.list()).map((w) => w.name))
+    let name = template.name
+    for (let n = 2; taken.has(name); n += 1) name = `${template.name} (${n})`
+    const from = await window.canvas.workspace.list().then((ws) => ws.find((w) => w.active)?.id)
+    const id = await window.canvas.workspace.create(name)
     const switched = await switchWorkspace(id)
     reloadWorkspaces()
     if (!switched) return { kind: 'refused', reason: 'the new workspace could not be opened' }
-    return instantiateTemplate(template, values)
+    const result = await instantiateTemplate(template, values)
+    // A refusal AFTER the mint (a preset gone unavailable between the row
+    // and the click) would strand the user in an empty workspace named after
+    // the template — the very failure workspace.template.2 closed for
+    // Escape. Undo the mint and say why, in the refusal's own words.
+    if (result.kind === 'refused') {
+      if (from !== undefined) await switchWorkspace(from)
+      await window.canvas.workspace.remove(id)
+      reloadWorkspaces()
+      return { kind: 'refused', reason: `${result.reason} — the new workspace was not kept` }
+    }
+    return result
   }
   return useMemo<PaletteActions>(() => { const self: PaletteActions = ({
     spawnPreset: (id) => {
@@ -605,10 +624,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // would read as broken.
     resetZoom: () => resetViewport(),
     zoomToFit: () => {
-      const selected = selectedIdsRef.current
-      const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
-      if (rects.length > 0) fitSelection(rects)
-      else if (panelsRef.current.length > 0) fitAll()
+      const target = zoomTarget(selectedIdsRef.current, panelsRef.current.map((p) => p.rect))
+      if (target.kind === 'selection') fitSelection(target.rects)
+      else if (target.kind === 'all') fitAll()
       else resetViewport()
     },
     // M56. Bookmarks and the trail. Names are minted as "View N" over the
@@ -1326,6 +1344,14 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       })
       palette.openPalette()
     },
+    // M149. The feedback line as a door of its own: the shape every refusal
+    // reopen already uses (a text mode with `feedback`), for a refusal that
+    // arrives on a keystroke and would otherwise be swallowed. Enter or
+    // Escape closes it; nothing is submitted.
+    say: (sentence: string) => {
+      setInputMode({ kind: 'text', label: sentence, initial: '', feedback: true as const, submit: () => setInputMode(null) })
+      palette.openPalette()
+    },
     beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
       // the spawn cwd), then main's recent list, then every panel's directory.
@@ -1804,6 +1830,33 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             return { kind: 'ran' }
           }
           case 'zoom-reset': resetViewport(); return { kind: 'ran' }
+          // M149. The table had advertised the verb with no arm here (the Act
+          // II critic): a plan naming it was refused as `no executor`.
+          case 'workspace-from-template': self.workspaceFromTemplate(String(step.args.template ?? '')); return { kind: 'ran' }
+          // M149. `dispatch` and `board` had sat in the table since M113–M116
+          // with no arm here — `verify:verbs executor.1` found both beside
+          // the workspace verb. Each binds by KEY and refuses by name.
+          case 'dispatch': {
+            const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
+            if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
+            const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
+            if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
+            self.dispatchWorkItem(item.id, mate.id); return { kind: 'ran' }
+          }
+          case 'board': {
+            const what = String(a.what ?? '').trim()
+            if (a.op === 'add') {
+              if (what === '') return { kind: 'refused', reason: 'board add needs a title' }
+              const id = self.addWorkItem({ source: 'typed', title: what, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+              return { kind: 'ran', note: `added ${id}` }
+            }
+            if (a.op === 'done') {
+              const item = (workItemsRef.current ?? []).find((w) => w.id === what || w.key === what)
+              if (item === undefined) return { kind: 'refused', reason: `no work item is called ${what}` }
+              self.markDone(item.id); return { kind: 'ran' }
+            }
+            return { kind: 'refused', reason: `board ${String(a.op)} is not a verb — add <title> or done <id>` }
+          }
           case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
           case 'review': openReview(a.panel!); return { kind: 'ran' }
           case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }

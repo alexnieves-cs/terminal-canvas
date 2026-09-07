@@ -447,6 +447,15 @@ Obsidian note, an Xcode file, a browser tab.
 > which an annotation stored in `layout.json` never will; if that turns out to
 > be the property people actually wanted, this entry is smaller than it looks.
 
+> **M155 (the v7 run's Act V) built INK on M93's layer:** a draw tool in annotate mode,
+> freehand strokes as world- or panel-anchored annotations (points relative to the anchor,
+> simplified by RDP, one world width that thins as the camera pulls back — the choice this
+> entry recommends), painted as SVG paths, selected and deleted like a label, persisted on
+> the workspace record with the absent-vs-malformed rule. **Left by name:** highlights (a
+> stroke with a translucent wide width), arrows (a stroke with an end marker), a width
+> palette and a colour, an eraser, and the "behind the panels" toggle — each a small slice
+> over the same record.
+
 
 Let the user write and draw directly on the canvas and on panels: freehand ink,
 highlights, arrows, sticky notes, text labels. The point is to make the canvas feel like
@@ -2384,3 +2393,42 @@ renderer, which draws). Not reproduced in three later runs.
 harness echoes the renderer's console) and a scene that cards every live panel and brings
 them back, captured twice. If it recurs, the repaint after a re-promotion is the suspect —
 a `term.refresh` after the new WebGL addon's first frame rather than synchronously.
+
+## 83. The minimap yields on hover — from the 4.0 audit (M149, F.1)
+
+The minimap is an overlay in the canvas's top-right corner (M60, #33 shipped it), and a panel
+parked under it loses its `×` and `fill` to the minimap: the `kinds` golden shows the
+`tests` panel's chrome under it. The minimap should YIELD — fade to a hairline outline on
+hover so the controls beneath are reachable, and come back when the pointer leaves. A
+`minimap-hover` scene would pin it. Declined in Act III as a scene problem (the fixture parks
+a panel there); the yield is real work and belongs to a minimap milestone.
+
+## 84. The counter-scaled chrome owns the body's top rows at a far zoom (M144 + M149, F.12)
+
+At a zoom where `--chrome-scale` is above 1 (below ~100 %), the chrome bar is drawn taller
+than its world box and overhangs the body's top rows; since M149 lifted the chrome above the
+body (so the `⋯` menu paints), those rows are the CHROME's — a click or a hover there
+reaches its controls, not xterm. Before the lift the overhung CHROME was the unreachable
+half. Neither is what a person wants: the body could take a top padding from
+`--chrome-scale` on the slot's host (a padding, not a resize — the SIGWINCH objection in
+M144 is to a change of the terminal's width). Three checks write blank rows first to sit
+below the overhang (core 9, agents `hover.1`, `links.1`); they would come back up.
+
+## 85. The lone note's vault, front-matter tags, tag rename, a tag graph — what M150 left
+
+M150 built `#tags` for a vault: parsed from the body beside `[[wikilinks]]` (one code-span
+exclusion for both syntaxes), indexed in one pass, a TAGS section in the Vault pane that
+filters the notes, a chip in the note panel that filters from the other side. Declined by
+name there, each its own shape:
+
+- **A note OUTSIDE a vault.** A lone `.md` in a repository paints its `[[links]]` as text
+  today. A "local vault" — the note's own directory walked once, capped, as a second root —
+  would resolve them; it is a second root and a second walk, and the pane's one `vault.root`
+  setting would become two. Worth doing when a person asks for it by name.
+- **Front-matter `tags:`.** Obsidian reads a YAML key too. A second syntax and a second
+  parser; the body form covers what people type.
+- **Tag rename.** A write across every note carrying the tag — the first vault WRITE this
+  app would make, which needs its own refusal list (a note open in an editor, a note the
+  cap left unread).
+- **A tag graph** (tags × notes as a diagram). The workflow diagram's painter (M133) is the
+  nearest shape.

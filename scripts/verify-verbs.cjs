@@ -271,6 +271,18 @@ const FACTS = {
       JSON.stringify({ running, done, stuck, perm }))
   }
 
+  // M149 — executor.1 (the Act II critic). Every verb the table advertises has
+  // an ARM in the executor: `closure.1` proves the table covers the interface,
+  // and nothing proved the executor covers the table — `workspace-from-template`
+  // sat in the table and fell to `has no executor` at run time.
+  {
+    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', 'canvas', 'usePaletteActions.ts'), 'utf8')
+    const ids = V.VERBS.map((v) => v.id)
+    const missing = ids.filter((id) => !src.includes(`case '${id}'`))
+    ok('executor.1 every verb in the table has a `case` in beginRunVerb (read as text) — no verb advertised without an arm',
+      ids.length > 0 && missing.length === 0, JSON.stringify({ ids: ids.length, missing }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)

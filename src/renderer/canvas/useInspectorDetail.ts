@@ -215,12 +215,14 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   // render defeats Inspector's memo on its own, whatever the model does.
   // M142. This week's usage rows from main's run ledger, folded and priced
   // here by the summary's own rule. Read once on mount, again whenever the
-  // registry's version moves (a close is what appends a row — main records
-  // usage before it drops it), and on a slow clock for the week's edge. The
+  // PANEL COUNT changes (a close is what appends a row — main records usage
+  // before it drops it), and on a slow clock for the week's edge. Not the
+  // registry's version: that moves on every tier change of every pan, and a
+  // JSONL read over IPC per bump is heat with no symptom (both critics). The
   // read's three fates are three values: unanswered (undefined), rejected
   // (null — the sentence names it), answered (the fold). Never a two-state.
   const [history, setHistory] = useState<UsageHistory | null | undefined>(undefined)
-  const registryVersion = registry.version()
+  const panelCount = panels.length
   useEffect(() => {
     let live = true
     const read = (): void => {
@@ -231,7 +233,7 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
     read()
     const timer = setInterval(read, 60_000)
     return () => { live = false; clearInterval(timer) }
-  }, [registryVersion])
+  }, [panelCount])
   const summaryBuilt = buildInspectorSummary(
     panels, (id) => registry.get(id)?.status, waitingIds, getUsage, history)
   // M46: the canvas-wide totals join the signature, so a usage tick moves

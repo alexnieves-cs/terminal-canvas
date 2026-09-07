@@ -331,6 +331,8 @@ export interface PaletteActions {
   /** M80. `templateId` opens the sheet on that template. */
   /** M149. `into` threads the three `New workspace from` doors to the sheet's Enter, so a template with holes asks before any workspace exists. */
   beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }): void
+  /** M149. A sentence on the palette's feedback line — the one place a refusal from a keystroke (a paste) can be said; nothing runs. */
+  say(sentence: string): void
   /** M83. Open the project memory for the captured panel's repository. */
   openMemory(): void
   /** M88. Open the GitHub work panel. */
@@ -1430,9 +1432,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push({
     id: 'canvas.zoom-fit',
     title: 'Zoom to fit',
+    // No ⌘1 hint: that chord runs useViewport's fitAll (every panel), not
+    // this selection-aware verb — a hint naming it lied when a selection
+    // existed (the Act II critic). The row is the verb's one door.
     subtitle: 'the selected panels, or every panel',
     group: 'canvas',
-    shortcut: '⌘1',
     run: () => actions.zoomToFit()
   })
   out.push({

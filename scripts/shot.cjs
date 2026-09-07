@@ -377,7 +377,7 @@ const SCENES = [
       await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`)
       await sleep(300)
       console.log('[shot] composer chat on top:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); if (!p) return 'no chat'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); const tp = top && top.closest('.panel'); return tp ? tp.getAttribute('data-panel-id') : String(top && top.className) })()`))
-      console.log('[shot] composer drop:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; const under = document.elementFromPoint(at.x, at.y); const up = under && under.closest('.panel'); const out = window.__m59Drop(${JSON.stringify(join(FIX, 'shot.png'))}, at.x - host.left, at.y - host.top); return JSON.stringify({ out, rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], host: [Math.round(host.left), Math.round(host.top)], under: up ? up.getAttribute('data-panel-id') : (under ? under.className : null), palette: document.querySelector('.palette') !== null }) })()`))
+      console.log('[shot] composer drop:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; const under = document.elementFromPoint(at.x, at.y); const up = under && under.closest('.panel'); /* CLIENT coordinates: __m59Drop subtracts the host's origin itself (the M59 hook's own comment); this scene had handed it host-relative ones, and the double subtraction put the drop outside the chat — a file panel every time. */ const out = window.__m59Drop(${JSON.stringify(join(FIX, 'shot.png'))}, at.x, at.y); return JSON.stringify({ out, rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], host: [Math.round(host.left), Math.round(host.top)], under: up ? up.getAttribute('data-panel-id') : (under ? under.className : null), palette: document.querySelector('.palette') !== null }) })()`))
       await sleep(300)
       await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
         const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; set.call(ta, 'wire /health like @s'); ta.setSelectionRange(20, 20); ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); return true })()`)
@@ -512,6 +512,12 @@ const SCENES = [
     run: async (k) => {
       try { k.wc.debugger.attach('1.3') } catch { /* attached by an earlier scene */ }
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      // The harness sets the M56 OVERRIDE at boot (every scene's flight is one
+      // frame so the captures are deterministic), and the override is read
+      // BEFORE the media query — with it on, this scene proved nothing (the
+      // Act III critic). Off for the jump, so the real media feature is what
+      // lands it; back on after.
+      await k.js(`window.__m56ReducedMotion(null)`)
       console.log('[shot] reduced-motion matches:', await k.js(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`))
       await k.goTo('claude — api'); await sleep(300)
       await k.press('k', { metaKey: true }); await sleep(300)
@@ -521,6 +527,7 @@ const SCENES = [
       await sleep(80)
       await k.shot('reduced-motion')
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+      await k.js(`window.__m56ReducedMotion(true)`)
     } },
   // A `scale-100` scene (a device scale factor of 1 through
   // Emulation.setDeviceMetricsOverride) was tried and DROPPED by measurement:

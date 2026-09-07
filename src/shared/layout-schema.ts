@@ -1054,7 +1054,10 @@ function parsePanel(
  */
 export function parseEnvMap(raw: unknown, label: string, warnings: string[]): Record<string, string> | undefined {
   if (raw === undefined) return undefined
-  if (!isRecord(raw) || Object.values(raw).some((v) => typeof v !== 'string') || Object.keys(raw).some((k) => k.trim() === '')) {
+  // A key is what the sheet's own parser accepts (`parseEnvLines`): no
+  // whitespace, no `=`, not empty. One rule for the file and the form — the
+  // first cut let a hand-edited `"A B": "1"` through to the process unwarned.
+  if (!isRecord(raw) || Object.values(raw).some((v) => typeof v !== 'string') || Object.keys(raw).some((k) => k.trim() === '' || /[\s=]/.test(k))) {
     warnings.push(`${label} had a malformed env map; dropped it whole`)
     return undefined
   }

@@ -66,7 +66,10 @@ export type PoolStartResult = { kind: 'started' } | { kind: 'refused'; reason: s
 
 /** The slice of `AgentSessionManager` the caller needs — a fake in the suite, the real one in main. */
 /** The manager's own answer to a send; anything but `sent`/`queued` means the worker will never turn. */
-export type PoolSendResult = 'sent' | 'queued' | 'no-session' | 'refused-backend' | 'refused-sandbox' | 'refused-images' | 'refused-budget' | string
+// The named members, and any OTHER word the manager may answer with (its
+// send returns a string it owns) — typed so the named members survive as
+// documentation instead of collapsing the union to `string`.
+export type PoolSendResult = 'sent' | 'queued' | 'no-session' | 'refused-backend' | 'refused-sandbox' | 'refused-images' | 'refused-budget' | (string & Record<never, never>)
 
 export interface PoolAgents {
   send: (id: string, text: string) => PoolSendResult | { kind?: string }

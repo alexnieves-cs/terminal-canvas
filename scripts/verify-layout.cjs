@@ -4053,6 +4053,20 @@ try {
     JSON.stringify({ absent: absent.warnings, bad: bad.warnings, good: runsOf(good)[0] }))
 }
 
+// M149 — preset.env.3 (the Act II critic). The FILE's env keys obey the
+// SHEET's rule: a key with whitespace or `=` drops the map whole with a
+// warning — `parseEnvLines` refused such a line, and `parseEnvMap` had let a
+// hand-edited `"A B": "1"` through to the process unwarned.
+{
+  const w = []
+  const spaced = L.parseEnvMap({ 'A B': '1', OK: '2' }, 'p', w)
+  const eq = L.parseEnvMap({ 'A=B': '1' }, 'p', w)
+  const fine = L.parseEnvMap({ A_B: '1' }, 'p', w)
+  ok('preset.env.3 parseEnvMap drops a map whole for a key with whitespace or `=`, with a warning each, and keeps a plain key',
+    spaced === undefined && eq === undefined && fine !== undefined && fine.A_B === '1' && w.length === 2 && w.every((x) => /malformed env map/.test(x)),
+    JSON.stringify({ spaced, eq, fine, w }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

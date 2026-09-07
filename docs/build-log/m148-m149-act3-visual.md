@@ -12,11 +12,13 @@ golden with `nativeImage` and compares with two constants that carry their own s
 (differing pixels in red over the dimmed golden) beside `<scene>.fresh.png`. `verify:meta` 19
 names `verify:visual` as the second exclusion beside `verify:packaged`.
 
-The goldens are stored at HALF scale (`GOLDEN_SCALE` 0.5): a full-size refresh was 34 MB of
-PNG for 53 scenes, ten at half — and a moved control or a changed word is still orders of
-magnitude over the budget there. The first run against the first goldens reproduced at
-0.077 % worst case; the harness echoes the renderer's console so a scene that fails to
-paint says why. Watchdog: two runs of 159.2 s, times 1.25, 200 s.
+The goldens are stored at HALF scale (`GOLDEN_SCALE` 0.5): the first full-size refresh of
+the 52 scenes then declared (51 landed — `composer` did not paint) was 34 MB of PNG on disk,
+and the committed half-scale set is 14 MB for 54 — a moved control or a changed word is
+still orders of magnitude over the budget there. The harness echoes the renderer's console
+so a scene that fails to paint says why. Watchdog: two runs of 159.2 s, times 1.25, 200 s.
+(The first comparison run's worst-case ratio was read off a terminal and not kept as an
+artifact; the verifier is right that it is unrecorded, and it is not claimed.)
 
 ## M149 — the audit
 
@@ -61,4 +63,54 @@ OWED with what would close it. The ones that mattered:
 
 ## Reviews
 
-Recorded below once the fresh-context critic and verifier have run over Acts II and III.
+Four fresh-context reviews ran after the goldens landed (`64ff1a1`): a critic and a verifier
+for Act II, a critic and a verifier for Act III, each seeing only the diff, the spec, the
+checks and the docs. Everything below landed in one wave (the commit after this one).
+
+**Act II critic — FIX-FIRST, 2 Critical, 5 Major, 11 Minor.**
+- *Critical 1:* `Canvas.onSpawn` built the PanelSpec field by field and never copied `env`,
+  so M147's environment half — the preset's map and the sheet's field — was dropped after the
+  parser and before `buildPtyEnv`: the form did nothing, and the checks stopped at the
+  parser. Red `env.spawn.1` (core; the variable read back off the terminal), then the one
+  spread. *Critical 2* was F.12, already fixed at HEAD.
+- *Majors:* `workspace-from-template` sat in the verb table with no executor arm — and the
+  new `verify:verbs executor.1` (every table id has a `case`) found `dispatch` and `board`
+  had never had one either since M113–M116; all three have arms now, refusing by name. M145's
+  chat arm double-attached an image (the chat's own `edit:paste` door already attaches the
+  bytes) — dropped; its silent arms (a paste into a card, a write that failed) now SAY why on
+  the palette's feedback line through a `say` member (excluded from every plan). M140's
+  divergence from its spec is recorded in the spec and `docs/load-bearing.md` beside M5b (the
+  store stays read-only; the door is a deliberate edit); M142's per-workspace line is marked
+  declined in the spec; M143's spec section says the road not taken.
+- *Minors, each landed:* the `⌘1` hint dropped from `Zoom to fit` (the chord runs `fitAll`);
+  `zoomTarget` pure with `fit.target.1` (the arms had only the Electron check); the row's
+  `pastesImagePath` fact now rides the sheet's capability sentence; the ledger read keyed on
+  the panel count, not the registry's version; `intoNewWorkspace` undoes its mint on a
+  refusal and dedupes the name; `parseEnvMap` refuses a key with whitespace or `=`
+  (`preset.env.3`); `PoolSendResult` keeps its named members; `onOpenFile` stable for the
+  memo'd toolbox nodes; the join refusal says `target`.
+
+**Act II verifier — 52 SUPPORTED, 8 OVERCLAIMED, 1 UNSUPPORTED.** The Act II build log now
+carries the Electron-tier tallies it lacked, the `workflow.2c` bullet as reverted, `fit.1`'s
+dispatched shift-mousedown, M144's narrower "no layout box moves", M140's hook/MCP rows as
+data at the Electron tier, and the note that M142 shipped without its renderer read; the Act
+I spec's Places-gate sentence is struck by name; the styles check that shared `toolbox.open.1`
+with the rail is `toolbox.open.style.1`.
+
+**Act III critic — FIX-FIRST, 2 Major, 9 Minor.**
+- *Major 1:* the `reduced-motion` scene proved nothing — the harness sets M56's OVERRIDE at
+  boot and the override is read before the media query. The scene now clears the override
+  for the jump and restores it after, so the real media feature is what lands the flight.
+- *Major 2:* `PIXEL_BUDGET`'s sentence overstated the suite by orders of magnitude — a
+  changed word is a few hundred pixels, under the frame's jitter. The suite gained a second
+  question: 32 px TILES, any tile more than 35 % different fails (jitter scatters, a change
+  clusters); both sentences say what each budget sees.
+- *Minors:* the watchdog kills the shot child; a 1x display is refused once by name; the
+  ledger keying (above); F.7's prose quotes the code; F.1's home is backlog #83 (the minimap
+  yields), F.3 cites M45's three-way choice; the chrome-overhang loss has a home, #84;
+  CLAUDE.md's suite counts updated.
+
+**Act III verifier — 46 SUPPORTED, 4 OVERCLAIMED, 2 UNSUPPORTED.** The golden-size figures
+are the real ones (52 declared / 51 landed at `41fabf6`; 14 MB at half scale), the
+unrecorded 0.077 % is no longer claimed, the README's declined list names F.11, and this
+section replaces the placeholder the verifier found.

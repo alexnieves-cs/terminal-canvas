@@ -99,6 +99,10 @@ export const VERBS: readonly VerbDef[] = [
  * list, so adding an action means choosing.
  */
 export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
+  // M149. A sentence on the palette's feedback line, for a refusal that a
+  // keystroke (a paste) has no other place to say — nothing runs, so no plan
+  // may name it.
+  say: 'a sentence on the feedback line — nothing runs',
   // M123. The update notice: one GET of a public feed, but a GET a plan could
   // fire is a beacon on a schedule; the setting that automates it is not
   // planWritable for the same reason.

@@ -21,6 +21,8 @@ export interface Bridge {
       args: string[]
       /** Which integrated agent CLI this launches. */
       agent?: AgentKind
+      /** M147. Overrides over the login environment; absent stays absent. */
+      env?: Record<string, string>
       cols: number
       rows: number
     }): Promise<PtyCreateResult>
@@ -255,6 +257,11 @@ export function createRegistry(deps: RegistryDeps): Registry {
         agent: session.spec.agent,
         ...(session.spec.agentOptions === undefined ? {} : { agentOptions: session.spec.agentOptions }),
         ...(session.spec.worktree === undefined ? {} : { worktree: session.spec.worktree }),
+        // M147/M149. The seventh copy site, and the one this comment's own
+        // warning describes: `env` was carried by the spec from the sheet
+        // through onSpawn and dropped HERE, so the process never saw it
+        // (core env.spawn.1; verify:registry env.1 reads this request).
+        ...(session.spec.env === undefined ? {} : { env: { ...session.spec.env } }),
         cols,
         rows
       })

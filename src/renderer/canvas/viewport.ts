@@ -211,3 +211,19 @@ export function fitTo(rects: WorldRect[], size: Size, margin = 64): Viewport {
     y: size.height / 2 - centreY * scale
   }
 }
+
+/**
+ * M149. What `Zoom to fit` frames, as a pure decision over the SELECTION and
+ * the canvas: the selected rects when any, every panel otherwise, and a reset
+ * on an empty canvas (a verb that did nothing would read as broken). Kept
+ * pure so the three arms are pinned under plain node (`fit.target.1`) rather
+ * than only by the Electron `fit.1` — the Act II critic's point: `fit.sel.1`
+ * exercised `fitTo` and never this choice.
+ */
+export type ZoomTarget = { kind: 'selection'; rects: WorldRect[] } | { kind: 'all' } | { kind: 'reset' }
+export function zoomTarget(selectedIds: ReadonlySet<string>, all: readonly WorldRect[]): ZoomTarget {
+  const rects = all.filter((r) => selectedIds.has(r.id))
+  if (rects.length > 0) return { kind: 'selection', rects }
+  if (all.length > 0) return { kind: 'all' }
+  return { kind: 'reset' }
+}

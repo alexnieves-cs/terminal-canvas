@@ -4261,3 +4261,13 @@ green through it; the `attention` golden of the 4.0 audit showed a badge and not
 `popover.paint.1` asks `elementFromPoint` at the popover's title; `popover.stack.1` pins both
 declarations against every rule that names `.shell__rail`. The general rule this joins:
 **a surface that opens is proven by a pixel question, never by its presence in the DOM.**
+
+**The toolbox's Open door opens a project command file in the editor, and that is not M5b's
+"project prompts are read, never written" reversed (M140/M149, `ToolboxNode.tsx`).** M5b's
+rule is about the PALETTE's prompt store: a `.claude/commands/*.md` file under a panel's cwd
+is merged into the prompt list read-only, so the palette never writes into a repository it
+does not own. The Open door hands the same file to M22's file panel — the editor every file
+on disk already had — where a person reads it, edits it on purpose and presses Save, the way
+they would in any editor. The distinction the Act II critic asked to be recorded: the store
+stays read-only and the door is a deliberate edit, never a toggle; hooks' `settings.json`
+and MCP's `~/.claude.json` get the same door and no toggle, by #26's own argument.

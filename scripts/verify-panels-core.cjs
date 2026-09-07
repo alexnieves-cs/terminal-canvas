@@ -3724,6 +3724,37 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     }
 
 
+    // M147 — env.spawn.1 (the Act II critic's Critical). A preset's `env` —
+    // and so the sheet's Env field, which main merges into the same template
+    // — must REACH the process: `Canvas.onSpawn` builds the PanelSpec field
+    // by field, and the first cut copied command, agent, agentOptions and
+    // worktree and never `env`, so the form did nothing and no check noticed
+    // (`preset.env.1–.2` stop at the parser). The variable is read back off
+    // the terminal itself, never off the spec.
+    {
+      const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: ['-c', 'echo "ENVMARK=$TC_ENV_PROBE"; sleep 300'], env: { TC_ENV_PROBE: 'pass-4471' }, w: 400, h: 300 })
+      const envId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !panelsBefore.includes(id)) ?? false
+      }, 8000)
+      // __m4aCellToScreen reads the FOCUSED panel's buffer: click into the new
+      // one first (the neighbouring checks' shape) — the first cut read the
+      // previous panel and reported the variable missing from a process that
+      // had it.
+      if (typeof envId === 'string') {
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(envId)}] .xterm') !== null`), 8000)
+        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(envId)}] .panel__slot`)
+        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === envId, 5000)
+      }
+      const echoed = typeof envId === 'string' ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('ENVMARK=pass-4471') !== null`), 8000) : false
+      const live = typeof envId === 'string' ? ptyManager.list().find((s) => s.panelId === envId) : undefined
+      ok('env.spawn.1 a preset\'s env reaches the spawned process — the variable echoes back from the terminal itself',
+        typeof envId === 'string' && echoed !== false && live !== undefined,
+        JSON.stringify({ envId, echoed, live: live !== undefined }))
+      if (typeof envId === 'string') await clickPanelClose(wc, envId)
+    }
+
     // M146 — fit.1. ZOOM TO FIT, named apart from reset and from maximise
     // (backlog #23): with two panels selected by a real shift-click, the
     // palette row `Zoom to fit` flies the camera to frame BOTH — every

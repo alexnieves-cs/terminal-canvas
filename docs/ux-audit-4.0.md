@@ -20,15 +20,17 @@ DECLINED (and why), or OWED (the scene it needs).
   - **F.1** The minimap sits over the `tests` panel's chrome controls (top right). The minimap
     is an overlay by design; a panel parked under it loses its `×` and `fill` to it. DECLINED
     as a scene problem — the fixture parks a panel there; the minimap's corner is the one
-    place the canvas cannot be — but the minimap should yield on hover. OWED: `minimap-hover`
-    scene, Act V's #33 milestone.
+    place the canvas cannot be — but the minimap should yield on hover. OWED: backlog #83
+    (the yield and a `minimap-hover` scene; #33 is the minimap itself, shipped).
   - **F.2** The toolbox row's new `open` control (M140) drops to its own line under the
     description, where every other row verb sits on the row's first line. FIXED: the row's
     header is a flex line with the verb `flex: 0 0 auto` at its end (`styles.css`,
-    `verify:styles toolbox.open.1`).
+    `verify:styles toolbox.open.style.1`).
   - **F.3** The dark theme's top-bar appearance control shows a sun on the dark theme too.
-    DECLINED: the control opens the appearance choice (system / light / dark), it is not a
-    toggle, and one glyph for "appearance" on both themes is the honest one.
+    DECLINED by M45's rule: `appearance.theme` is a three-way CHOICE (system / light / dark)
+    the menu's radio group and this control both open — not a toggle — so one glyph for
+    "appearance" on both themes is the honest one; a moon-on-light / sun-on-dark pair would
+    promise a flip that the control does not perform.
 - **workflow.** The verb row, three disabled sentences beneath (Stop, Save, Delete each with
   its why — M133's rule, M137's Triggers reason joins them when it applies), the tabs, the
   diagram. **F.4** The diagram's second block is CLIPPED at the panel's right edge at the panel's
@@ -45,9 +47,10 @@ DECLINED (and why), or OWED (the scene it needs).
   intended.
 - **board.** Four columns, two cards, the verbs. An empty column is a heading and a count of
   `0`. **F.7** An empty column says nothing about what it is for; it is also a drop target
-  that does not look like one. FIXED: an empty user-set column reads `drop a card here`, a
-  runtime column reads what sets it (`working · set when a lane starts`, `review · set when a
-  PR opens`) — three states for a column, never a bare zero.
+  that does not look like one. FIXED: an empty user-set column reads `nothing here — drop a card, or add one from the
+  palette`, a runtime column reads what sets it (`set when a dispatched lane starts its first
+  turn`, `set when a lane opens its pull request`) — three states for a column, never a bare
+  zero (`verify:rail board.empty.1` pins the words).
 
 - **trail.** The skill trail beside a dormant claude card: four cards to the right, each the
   skill's name, its one-line purpose and the caps phase, the fourth `not installed here`; the
@@ -140,7 +143,8 @@ DECLINED (and why), or OWED (the scene it needs).
   asks `elementFromPoint` on a live terminal). One consequence, stated: at a zoom where the
   counter-scaled chrome overhangs the body's top rows, those rows are the chrome's — three
   checks that had reached xterm THROUGH the chrome (core 9, agents `hover.1`, `links.1`) now
-  write their content below the overhang.
+  write their content below the overhang. That loss has a home: backlog #84 (a top padding
+  from `--chrome-scale`).
 - **attention / approval.** **F.14** The dock badge counts one and there is NO popover, in
   both scenes, where the intent is the popover listing the waiting panel. The probe said the
   popover was open. FIXED, and the oldest defect the walk found: M109's glass blur made
