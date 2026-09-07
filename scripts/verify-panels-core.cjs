@@ -3774,5 +3774,37 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
         JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
     }
+
+    // M144 — frame.3. ZOOM-INDEPENDENT CHROME, measured from both sides: at
+    // scale 0.5 a live panel's chrome bar keeps its screen height (the
+    // counter-scale) while its `.panel__slot` — the body xterm lives in —
+    // is exactly half, and the body's computed transform is `none`. The
+    // boundary is the whole feature: a counter-scaled body would move every
+    // click onto the wrong cell (pointer-correct.ts), and a reflowed one
+    // would SIGWINCH a running agent on every zoom.
+    {
+      const measure = () => wc.executeJavaScript(`(() => {
+        const live = [...document.querySelectorAll('.panel[data-panel-id]')].find((p) => p.querySelector('.xterm'))
+        if (!live) return null
+        const chrome = live.querySelector('.panel__chrome').getBoundingClientRect()
+        const slot = live.querySelector('.panel__slot').getBoundingClientRect()
+        const body = live.querySelector('.pf__body')
+        return { id: live.getAttribute('data-panel-id'), chromeH: chrome.height, slotH: slot.height, bodyTransform: body ? getComputedStyle(body).transform : null, scaleVar: getComputedStyle(document.querySelector('.world')).getPropertyValue('--chrome-scale').trim() }
+      })()`)
+      await zoomTo(wc, 1)
+      await settle()
+      const atOne = await measure()
+      await zoomTo(wc, 0.5)
+      await settle()
+      const atHalf = await measure()
+      await zoomTo(wc, 1)
+      await settle()
+      const chromeRatio = atOne && atHalf ? atHalf.chromeH / atOne.chromeH : 0
+      const slotRatio = atOne && atHalf ? atHalf.slotH / atOne.slotH : 0
+      ok('frame.3 at scale 0.5 the chrome bar keeps its screen height (counter-scaled) while the body slot is exactly half and the body carries no transform',
+        atOne !== null && atHalf !== null && atOne.id === atHalf.id && chromeRatio >= 0.9 && chromeRatio <= 1.1 &&
+          slotRatio >= 0.45 && slotRatio <= 0.55 && atHalf.bodyTransform === 'none' && atOne.scaleVar === '1' && /^2/.test(atHalf.scaleVar),
+        JSON.stringify({ atOne, atHalf, chromeRatio, slotRatio }))
+    }
   }
 })

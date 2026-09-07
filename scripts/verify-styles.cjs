@@ -321,6 +321,24 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   kindFamilies.length === 0 && frameFamilies.length === 4,
   `kind rules: ${kindFamilies.join(' ') || 'none'}; frame families: ${frameFamilies.join(' ')}`)
 
+// M144 — chrome.scale.1. ZOOM-INDEPENDENT CHROME (backlog #60), the boundary
+// pinned as text from both sides: `.pf__chrome` and `.panel__resize` are
+// counter-scaled by `--chrome-scale` (a CSS `transform`, which changes NO
+// layout box — so no refit, no SIGWINCH, no reflow of a running agent when
+// the camera zooms), and `.pf__body` carries no transform at all, because a
+// transform on the subtree hosting xterm is the arithmetic pointer-correct.ts
+// exists to compensate for. The variable has a fallback of 1, so a frame
+// rendered outside `.world` (a check's fixture, a future overlay) is unscaled.
+{
+  const chromeRule = (bare.match(/\.pf__chrome\s*\{[^}]*\}/g) || []).find((r) => /transform:\s*scale\(var\(--chrome-scale/.test(r)) || null
+  const handleRule = (bare.match(/\.panel__resize\s*\{[^}]*\}/g) || []).find((r) => /transform:\s*scale\(var\(--chrome-scale/.test(r)) || null
+  const bodyRules = bare.match(/\.pf__body\s*\{[^}]*\}/g) || []
+  const bodyTransformed = bodyRules.some((r) => /transform:/.test(r))
+  ok('chrome.scale.1', '.pf__chrome and .panel__resize counter-scale by --chrome-scale (a transform, with a fallback of 1) and .pf__body carries no transform',
+    chromeRule !== null && /var\(--chrome-scale,\s*1\)/.test(chromeRule) && handleRule !== null && bodyRules.length > 0 && !bodyTransformed,
+    JSON.stringify({ chrome: chromeRule && chromeRule.slice(0, 120), handle: handleRule && handleRule.slice(0, 120), bodyTransformed }))
+}
+
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
 // render a <section hidden={tab !== id}>, and `.context__panel { display:
 // block }` — a selector with higher specificity than the UA's `[hidden]`
