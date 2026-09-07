@@ -234,6 +234,7 @@ const spyActions = () => {
     beginRenameBookmark: record('beginRenameBookmark'),
     zoomToFit: record('zoomToFit'),
     resetZoom: record('resetZoom'),
+    workspaceFromTemplate: record('workspaceFromTemplate'),
     toggleSetting: record('toggleSetting'),
     beginEditSetting: record('beginEditSetting'),
     // M20. The compound restart-with-a-mode verb the panel.mode rows call.
@@ -2574,6 +2575,25 @@ const WS = [
     reset !== undefined && /Reset zoom/.test(reset.title) && resetCalled === 'resetZoom' &&
       fit !== undefined && /Zoom to fit/.test(fit.title) && fitCalled === 'zoomToFit' && reset.title !== fit.title,
     JSON.stringify({ reset: reset && reset.title, fit: fit && fit.title, resetCalled, fitCalled }))
+}
+
+// M147 — workspace.template.1 (backlog #34's "new workspace from a template
+// set"). One row per template under the workspace group, `New workspace from
+// <name>`, running `workspaceFromTemplate(id)`; a template that cannot run
+// carries its refusal (disabled, never absent); no templates, no rows — the
+// existing `template.none` row already says so.
+{
+  const c = ctx({ templates: [{ id: 't1', name: 'two shells', nodes: 2, edges: 0 }, { id: 't2', name: 'broken', nodes: 1, edges: 0, refusal: 'x names neither a preset nor a command' }] })
+  const rows = P.buildCommands(c)
+  const row1 = rows.find((r) => r.id === 'workspace.from-template.t1')
+  const row2 = rows.find((r) => r.id === 'workspace.from-template.t2')
+  c.actions.calls.length = 0
+  if (row1) row1.run()
+  ok('workspace.template.1 the palette offers `New workspace from <template>` per template under the workspace group, running workspaceFromTemplate with its id, disabled with the template\'s own refusal when it cannot run',
+    row1 !== undefined && /New workspace from two shells/.test(row1.title) && row1.group === 'workspace' && row1.disabled === undefined &&
+      c.actions.calls.map((x) => x.join(':')).join(',') === 'workspaceFromTemplate:t1' &&
+      row2 !== undefined && typeof row2.disabled === 'string' && /neither a preset/.test(row2.disabled),
+    JSON.stringify({ row1: row1 && [row1.title, row1.group], row2: row2 && row2.disabled, calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

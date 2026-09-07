@@ -5346,5 +5346,43 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+
+    // M147 — workspace.template.1. "New workspace from a template set": one
+    // palette row mints a FRESH workspace named after the template, switches
+    // to it, and instantiates the shape there — three existing doors in order
+    // (workspace:create, activate, M80's instantiation). Read from the
+    // workspace list and the canvas, never a word.
+    {
+      await wc.executeJavaScript(`window.canvas.template.save({ id: 'wsT', name: 'two shells', nodes: [
+        { key: 'a', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'a', dx: -200, dy: 0 },
+        { key: 'b', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'b', dx: 200, dy: 0 }
+      ], edges: [] })`)
+      await settle()
+      const before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
+      const activeBefore = await activeWorkspaceId()
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const ran = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'New workspace from two shells')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        const row = [...document.querySelectorAll('.palette__row')].find((r) => r.textContent.includes('New workspace from two shells'))
+        if (!row) return 'no row'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return 'ok'
+      })()`)
+      const after = await waitUntil(async () => {
+        const ws = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => [w.id, w.name]))`)
+        return ws.length === before.length + 1 ? ws : false
+      }, 6000)
+      const activeAfter = await waitUntil(async () => { const id = await activeWorkspaceId(); return id !== activeBefore ? id : false }, 6000)
+      const minted = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.panel[data-panel-id] .pf__title')].map((e) => e.textContent); return t.includes('a') && t.includes('b') ? t : false })()`), 8000)
+      const fresh = Array.isArray(after) ? after.find((w) => !before.includes(w[0])) : undefined
+      ok('workspace.template.1 `New workspace from <template>` mints a fresh workspace named after the template, switches to it, and the shape is minted there',
+        ran === 'ok' && Array.isArray(after) && fresh !== undefined && fresh[1] === 'two shells' && activeAfter === fresh[0] && minted !== false,
+        JSON.stringify({ ran, before, after, activeBefore, activeAfter, minted }))
+    }
   }
 })
