@@ -2995,6 +2995,15 @@ export function Canvas({
       hintsLoadedRef.current = true
     })
   }, [settingRows])
+  // M174. The launcher's recents row: asked once whenever the canvas is empty
+  // (the only time the launcher shows), never polled.
+  const [launcherRecents, setLauncherRecents] = useState<string[]>([])
+  useEffect(() => {
+    if (panels.length !== 0) return
+    let live = true
+    void window.canvas.spawn.recent().then((r) => { if (live) setLauncherRecents(r) }).catch(() => { if (live) setLauncherRecents([]) })
+    return () => { live = false }
+  }, [panels.length])
   const markHint = useCallback((id: string) => {
     if (!hintsLoadedRef.current) return
     setHintsSeen((prev) => {
@@ -5863,6 +5872,7 @@ export function Canvas({
         {panels.length === 0 && !merged && (
           <Launcher
             presets={presetRows}
+            recents={launcherRecents}
             tmux={backendInfo?.kind === 'direct' && !hintsSeen.has('tmux') ? backendInfo.reason : null}
             onDismissTmux={() => markHint('tmux')}
             report={envReport}

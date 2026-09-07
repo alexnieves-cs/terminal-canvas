@@ -5,6 +5,7 @@ import type { EnvReport } from '@shared/env-report'
 import { shellControl } from '@renderer/shell/shell-control'
 import { probeOutcome } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
+import { displayPath } from '@shared/display-path'
 
 export interface LauncherProps {
   presets: PresetRow[]
@@ -14,6 +15,8 @@ export interface LauncherProps {
   /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
   tmux?: string | null
   onDismissTmux?: () => void
+  /** M174. The last folders panels were started in (`spawn:recent`), newest first; a chip opens the sheet, which lists them. Absent or empty: no row. */
+  recents?: string[]
   onSpawnPreset: (id: string) => void
   /** M65. The fifth line: choose where and what. */
   onOpenSheet: () => void
@@ -60,7 +63,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, tmux, onDismissTmux, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, recents, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -99,6 +102,16 @@ export function Launcher({ presets, report, tmux, onDismissTmux, onSpawnPreset, 
           <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
       </div>
+      {/* M174. RECENTS: the last folders as chips, newest first; a chip opens the
+          sheet (whose WHERE field lists them) — the launcher mints nothing itself. */}
+      {recents !== undefined && recents.length > 0 && (
+        <div className="launcher__recents" data-launcher-recents>
+          <span className="launcher__recents-label">Recent</span>
+          {recents.slice(0, 5).map((dir) => (
+            <button key={dir} type="button" className="launcher__recent" data-launcher-recent={dir} title={`New panel in ${dir}`} {...shellControl(onOpenSheet)}>{displayPath(dir).short}</button>
+          ))}
+        </div>
+      )}
       <div className="launcher__verbs">
         {presets.map((p) => {
           const cli = p.subtitle.split(' ')[0]
@@ -116,6 +129,8 @@ export function Launcher({ presets, report, tmux, onDismissTmux, onSpawnPreset, 
               {/* M91. A verb reads as an invitation, not a preset's name: `Start Claude…`
                   says what the click does where `Claude` only says what it is. */}
               <span className="launcher__verb-name">Start {p.name}…</span>
+              {/* M174. The face rule: the COMMAND alone is mono; the name and the hint are sentences. */}
+              <span className="launcher__verb-command">{cli}</span>
               <span className="launcher__verb-hint">{p.available ? `in ${p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
             </button>
           )
@@ -146,7 +161,8 @@ export function Launcher({ presets, report, tmux, onDismissTmux, onSpawnPreset, 
         const outcome = probeOutcome(report)
         return (
           <p className="launcher__env" data-launcher-env data-launcher-env-kind={outcome.kind}>
-            <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'}>{outcome.sentence}</span>
+            {/* M174. ONE calm sentence; the probe's `asked … · checked …` tail rides the title. */}
+            {(() => { const i = outcome.sentence.indexOf(' · asked '); const main = i === -1 ? outcome.sentence : outcome.sentence.slice(0, i); const tail = i === -1 ? undefined : outcome.sentence.slice(i + 3); return <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'} title={tail}>{main}</span> })()}
             {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
             {onCheckAgain !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>

@@ -2513,7 +2513,6 @@ body {
   font: inherit;
 }
 /* The prompt line: a `>` in the mono face before every verb. */
-.launcher__verb-name::before { content: "> "; color: var(--fg-4); }
 .launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
 .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 500; flex: none; }
@@ -2528,11 +2527,10 @@ body {
 .launcher { width: min(720px, 90%); }
 .launcher__hero { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-7) var(--sp-6) var(--sp-6); text-align: center; }
 .launcher__hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 80% at 50% 30%, var(--aura-1), transparent 70%); }
-.launcher__wordmark { font-family: var(--font-mono); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
+.launcher__wordmark { font-family: var(--font-ui); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
 .launcher__tagline { font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__doors { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); margin: 0 0 var(--sp-6); }
 .launcher__verb--door { flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light); }
-.launcher__verb--door .launcher__verb-name::before { content: none; }
 .launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
 .launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
 .launcher__verb--door:hover:not(:disabled) { border-color: var(--iris); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
@@ -4384,3 +4382,17 @@ body {
 .launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
 .launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
 .canvas-hud__notice { color: var(--amber); font-family: var(--font-ui); font-size: var(--t-xs); pointer-events: auto; }
+
+/* M174. THE LAUNCHER AS A WELCOME (the brief, finding 9): the wordmark in the
+   UI face; three large soft doors as cards; a recents row of folder chips; the
+   verbs as a quiet list in the UI face with mono on the COMMAND alone; the
+   environment line one calm sentence. No `>` prompt glyph before a verb. */
+.launcher__wordmark { font-family: var(--font-ui); font-weight: 600; letter-spacing: var(--track-tight); }
+.launcher__verb--door { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); padding: var(--sp-5) var(--sp-6); box-shadow: inset 0 1px 0 var(--edge-light); }
+.launcher__verb--door:hover:not(:disabled) { background: var(--s-3); border-color: var(--line-strong); }
+.launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
+.launcher__verb-command { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--s-2); margin: 0 var(--sp-2); }
+.launcher__recents { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-5); }
+.launcher__recents-label { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); margin-right: var(--sp-2); }
+.launcher__recent { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); padding: var(--sp-1) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); cursor: pointer; }
+.launcher__recent:hover { color: var(--fg); background: var(--s-3); }
