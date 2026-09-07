@@ -372,6 +372,7 @@ app.on('window-all-closed', () => {})
  * an assignment to it reaches nothing.
  */
 function runPanelsSuite(name, WATCHDOG_MS, body) {
+const startedAt = Date.now()
 console.log(`[verify:panels:${name}] watchdog ${WATCHDOG_MS}ms`)
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -1613,6 +1614,10 @@ app.whenReady().then(async () => {
       console.log('\n' + '='.repeat(60))
       const failed = results.filter((r) => !r.pass)
       console.log(`${results.length - failed.length}/${results.length} passed`)
+      // M135. The part's own wall clock, printed with the tally so a watchdog
+      // is pinned against the figure the suite MEASURED in the conditions it
+      // ran in — the chain's, not a quiet run's (the M130 note's whole point).
+      console.log(`[verify:panels:${name}] ${((Date.now() - startedAt) / 1000).toFixed(1)}s wall`)
       if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
       try {
         ptyManager.killAll() // the seed panels' shells would otherwise outlive this process
