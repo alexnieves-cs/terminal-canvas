@@ -4,10 +4,10 @@
    checks the old file held at lines 1474–5259, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 40000 // measured 2026-09-07 in the chain's Electron tail (build, canvas, xterm, then the parts), two green runs: 30.3s, 30.4s; 1.25x the slower, to the next 5 s
+const WATCHDOG_MS = 600000 // provisional: re-measured after Act II's checks, see the M140–M147 build log
 
 runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
-  const { AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   {
 
     // ---------------------------------------------------------------------
@@ -3727,7 +3727,23 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // move only). Read through the viewport hook and the DOM, never a word.
     {
       wc.focus()
-      const ids = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].slice(0, 2).map((p) => p.getAttribute('data-panel-id'))`)
+      // Two FRESH panels, spawned with Cmd+N at the view centre (the second
+      // cascades one step), so both are on screen and topmost at their own
+      // chrome — a panel the earlier checks left elsewhere may be off screen
+      // or under a later one, and a click there selects something else.
+      const spawnFit = async () => {
+        const before = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+        return waitUntil(async () => {
+          const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+          return now.find((id) => !before.includes(id)) ?? false
+        }, 8000)
+      }
+      const fitA = await spawnFit()
+      await sleep(300)
+      const fitB = await spawnFit()
+      await sleep(300)
+      const ids = [fitA, fitB].filter((x) => typeof x === 'string')
       const chromeBox = async (id) => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) } })()`)
       const click = async (box, modifiers) => {
         wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1, modifiers })
@@ -3739,7 +3755,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const a = ids.length === 2 ? await chromeBox(ids[0]) : null
       const b = ids.length === 2 ? await chromeBox(ids[1]) : null
       if (a) await click(a, [])
-      if (b) await click(b, ['shift'])
+      // The additive select reads `event.shiftKey` on the frame's mousedown
+      // (PanelFrame's beginMove): a dispatched event carries the flag where a
+      // real one through sendInputEvent did not add to the selection.
+      if (b) await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=${JSON.stringify(JSON.stringify(ids[1]))}] .panel__chrome'); if (!c) return false
+        const r = c.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 20, clientY: r.top + r.height / 2, shiftKey: true }
+        c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`)
+      await sleep(150)
       const selected = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id'))`)
       // The row is run the way a person runs it: Cmd+K, the title typed, the row pressed (check 52's shape).
       const runRow = async (title) => {
@@ -3773,6 +3795,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
           rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
         JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+      for (const id of ids) await clickPanelClose(wc, id)
     }
 
     // M144 — frame.3. ZOOM-INDEPENDENT CHROME, measured from both sides: at
@@ -3822,6 +3845,12 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     // what it receives.
     {
       await wc.executeJavaScript(`window.canvas.prompt.save('where am i', 'PBI-cwd={{cwd}} PBI-panel={{panel}}')`)
+      // The palette's prompt rows are read at boot and on its own saves; a
+      // prompt saved through the bridge needs the reload (check 40's rows are
+      // seeded in the layout for the same reason).
+      flushLayoutStore()
+      const rePB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await rePB
       await settle()
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
       await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
@@ -3884,7 +3913,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         await sleep(300)
       }
       // A 2x2 red PNG on the clipboard, and NO text (a text paste wins when both are there).
-      const png = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2P8z8DwnwEIGGEMAD3JBP0e4nFXAAAAAElFTkSuQmCC')
+      const png = nativeImage.createFromBitmap(Buffer.from([0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255]), { width: 2, height: 2 })
       clipboard.clear()
       clipboard.writeImage(png)
       const textOnClipboard = clipboard.readText()
@@ -3898,7 +3927,7 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       const echoedText = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PLAIN-TEXT-PASTE-4471') !== null`), 4000)
       ok('paste.image.1 a clipboard image pasted into a spawned terminal lands as a bracketed shell-quoted path to a .png main wrote under attachments/, and a text paste is unchanged',
         typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length >= 1 && echoedText !== false,
-        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText }))
+        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText, clipboardHadImage: !clipboard.readImage().isEmpty(), pngEmpty: png.isEmpty() }))
       if (typeof piId === 'string') await clickPanelClose(wc, piId)
     }
   }

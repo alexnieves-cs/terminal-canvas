@@ -89,12 +89,13 @@ export function workflowBlockRefusal(template: PersistedTemplate): string | unde
   // An orchestrator with nothing to say is an ordinary chat wearing the name.
   const mute = template.nodes.find((n) => n.kind === 'orchestrator' && n.prompt.trim() === '')
   if (mute !== undefined) return `${mute.key} is an orchestrator block with no prompt — give it its instructions`
-  // A pool's workers are minted BY THE RUN, one per item, after the shape is
-  // committed: nothing can hand off INTO them, and an edge that tried was
-  // dropped without a word at instantiation (the critic's finding).
-  const poolKeys = new Set(template.nodes.filter((n) => n.kind === 'pool').map((n) => n.key))
-  const into = template.edges.find((e) => poolKeys.has(e.to))
-  return into === undefined ? undefined : `${into.from} has an edge into the pool block ${into.to} — a pool's workers are minted by the run, so nothing can hand off into them`
+  // An edge INTO a pool block is the diagram's own shape (M133's fixture draws
+  // `sweep → pool`): the pool starts with the run, and the edge is drawn, not
+  // acted on — its workers are minted by the run, so nothing hands off into
+  // them. Gating the pool's start on that edge is backlog work, named in the
+  // M140–M147 log; it is not refused here, because the shape is one the app
+  // itself saves.
+  return undefined
 }
 
 export function templateRefusal(

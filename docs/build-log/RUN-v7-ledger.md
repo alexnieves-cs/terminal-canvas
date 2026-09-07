@@ -109,3 +109,26 @@ commits that close the act (see `git log`).
   next command is `git push origin main && gh run watch`. The fourth audit and `reach.3`
   landed. Declined in this act: none by backlog number (the sweep's declines are M137's, by
   item, above).
+
+## Act II — M140–M147 (closing; the Electron tier's tallies follow)
+
+Build log: `docs/build-log/m140-m147-act2-backlog-eight.md`. Built in a worktree and merged at
+`d78018c`; the merge carried a committed `node_modules` symlink that emptied `main`'s
+dependencies (`138d323` untracked it, fixed the ignore pattern, `npm ci` re-ran — the lesson is
+in `docs/load-bearing.md`).
+
+- Every one of the eight entries was read whole and rewritten down in `docs/ideas-backlog.md`
+  with what the milestone left.
+- **M143 (#53)** and most of **M140 (#26)** were already built (M63's rows-as-rows; M22's file
+  editor as the write door): the milestones are the pins and the door they lacked, said so.
+- Declined by name in this act: #19's second adapter (codex reports no cost — M90; copilot
+  unmeasured) and its un-pinned panel (a guess is worse than nothing); #19's per-workspace
+  totals (one workspace on screen; the canvas-wide figure is the one that changes what a
+  person does); #26's cross-panel palette scope, the three resolution unknowns, managed
+  settings and a second vendor (each its own milestone); #13's per-CLI capability beyond a
+  named sentence on the row; #53's `capture-pane` (the entry's own words). An edge INTO a pool
+  block stays drawn and not acted on (the pool starts with the run; gating its start on the
+  edge is backlog work) — the Act I critic had asked for a refusal there, and the M133 fixture
+  is that very shape, so the refusal was reverted.
+- The Act I critic's fix wave (one Critical, six Majors) landed before Act II's code —
+  `docs/build-log/m140-m147-act2-backlog-eight.md` lists each.

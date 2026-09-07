@@ -1199,7 +1199,9 @@ app.whenReady().then(async () => {
         layoutStore.prompts(),
         PROMPT_DIRS.has(cwd) ? readProjectPrompts(resolveCwd(cwd)) : []
       ),
-    savePrompt: () => {},
+    // M141. The REAL store, the way main/index.ts saves: a check that saves a
+    // prompt through the bridge needs it on the next load (prompt.builtin.1).
+    savePrompt: (name, body) => { layoutStore.addPrompt({ id: `hp${Date.now()}`, name, body }) },
     removePrompt: () => false,
     // M80. The real store, through the same three verbs main wires.
     // M80. The preset's resolved template — main's own answer, never a spawn.

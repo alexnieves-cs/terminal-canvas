@@ -2181,8 +2181,8 @@ const WS = [
   const mute = { id: 'f4', name: 'f4', nodes: [{ key: 'lead', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: '  ' }], edges: [] }
   const intoWord = P.templateRefusal(intoPool, presets, true) ?? ''
   const muteWord = P.templateRefusal(mute, presets, true) ?? ''
-  ok('workflow.2c templateRefusal refuses by name an edge INTO a pool block (its workers are minted by the run) and an orchestrator with no prompt',
-    /lead/.test(intoWord) && /into the pool block sweeper/.test(intoWord) && /lead/.test(muteWord) && /no prompt/.test(muteWord),
+  ok('workflow.2c templateRefusal lets an edge INTO a pool block stand (the diagram\'s own shape — the pool starts with the run) and refuses by name an orchestrator with no prompt',
+    intoWord === '' && /lead/.test(muteWord) && /no prompt/.test(muteWord),
     JSON.stringify({ intoWord, muteWord }))
   ok('workflow.2a templateRefusal lets a template with a pool, an orchestrator or a collect block RUN, and refuses by name only a pool that names no work list',
     P.templateRefusal(withPool, presets, true) === undefined &&

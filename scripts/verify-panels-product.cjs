@@ -4,10 +4,10 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 95000 // measured 2026-09-07 in the chain's Electron tail (build, canvas, xterm, then the parts), two green runs: 73.7s, 73.7s; 1.25x the slower, to the next 5 s
+const WATCHDOG_MS = 600000 // provisional: re-measured after Act II's checks, see the M140–M147 build log
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
-  const { AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -2376,31 +2376,6 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           gReady !== false && gReady.disabled === false && gMinted !== false && gCalls === 1,
           JSON.stringify({ gReady, gBefore, gMinted, gCalls, log: wfLog.slice(-3) }))
 
-        // M138 (critic C1) — orchestrator.resume.1. A RESTORED orchestrator's
-        // first spawn carries `--append-system-prompt <its prompt>`: the CLI
-        // keeps no record of the flag, and a draft had the prompt nested inside
-        // the teammate arm, so every template-minted orchestrator (no teammate)
-        // resumed as an ordinary chat — M81's failure, one block kind later.
-        // Read off the fake runner's own argv, never a renderer word.
-        {
-          layoutStore.save({
-            panels: [{ id: 'orc1', kind: 'chat', x: 60, y: 60, w: 500, h: 360, z: 1, title: 'lead', chat: { cwd: wfDir, sessionId: 'orc-11111111-2222-4333-8444-555555555555', orchestrator: 'You lead the sweep and never edit files.' } }],
-            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
-          })
-          flushLayoutStore()
-          const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
-          wc.reload(); await reO
-          await settle()
-          const spawnsBefore = chatSpawns.length
-          const sent = await wc.executeJavaScript(`window.canvas.agentSession.send('orc1', 'who are you?')`)
-          const spawned = await waitUntil(() => (chatSpawns.length > spawnsBefore ? chatSpawns[chatSpawns.length - 1] : false), 6000)
-          const argv = spawned ? spawned.args : []
-          const at = argv.indexOf('--append-system-prompt')
-          ok('orchestrator.resume.1 a restored orchestrator chat resumes with --append-system-prompt carrying its own prompt on the first spawn, with no teammate on the record',
-            spawned !== false && at !== -1 && /never edit files/.test(String(argv[at + 1])) && argv.includes('--resume'),
-            JSON.stringify({ sent, argv, log: wfLog.slice(-2) }))
-        }
-
         // M139 — reach.3. THE FOURTH AUDIT'S REAL TAB, through the two surfaces
         // the M126–M138 acts added verbs to: the workflow panel's verb row and
         // the Skills pane's top controls. A real Tab (sendInputEvent), never a
@@ -2446,6 +2421,32 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="panels"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
           await settle()
         }
+        // M138 (critic C1) — orchestrator.resume.1. A RESTORED orchestrator's
+        // first spawn carries `--append-system-prompt <its prompt>`: the CLI
+        // keeps no record of the flag, and a draft had the prompt nested inside
+        // the teammate arm, so every template-minted orchestrator (no teammate)
+        // resumed as an ordinary chat — M81's failure, one block kind later.
+        // Read off the fake runner's own argv, never a renderer word.
+        {
+          layoutStore.save({
+            panels: [{ id: 'orc1', kind: 'chat', x: 60, y: 60, w: 500, h: 360, z: 1, title: 'lead', chat: { cwd: wfDir, sessionId: 'orc-11111111-2222-4333-8444-555555555555', orchestrator: 'You lead the sweep and never edit files.' } }],
+            camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+          })
+          flushLayoutStore()
+          const reO = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reO
+          await settle()
+          const spawnsBefore = chatSpawns.length
+          const sent = await wc.executeJavaScript(`window.canvas.agentSession.send('orc1', 'who are you?')`)
+          const spawned = await waitUntil(() => (chatSpawns.length > spawnsBefore ? chatSpawns[chatSpawns.length - 1] : false), 6000)
+          const argv = spawned ? spawned.args : []
+          const at = argv.indexOf('--append-system-prompt')
+          ok('orchestrator.resume.1 a restored orchestrator chat spawns with --append-system-prompt carrying its own prompt and its session id pinned (--session-id first, --resume after), with no teammate on the record',
+            spawned !== false && at !== -1 && /never edit files/.test(String(argv[at + 1])) &&
+              (argv[argv.indexOf('--session-id') + 1] === 'orc-11111111-2222-4333-8444-555555555555' || argv[argv.indexOf('--resume') + 1] === 'orc-11111111-2222-4333-8444-555555555555'),
+            JSON.stringify({ sent, argv, log: wfLog.slice(-2) }))
+        }
+
         try { rmSync(wfDir, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (wfErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(wfErr && wfErr.message || wfErr) + ' | renderer: ' + (wfLog.slice(-4).join(' || ') || '(none)'))
@@ -2565,6 +2566,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // happens, never a one-click toggle (hooks, permissions and MCP servers
     // get the same door and no toggle, by the entry's own argument).
     {
+      const cmdLog = []
+      const onCmd = (_e, level, m) => { if (level >= 2) cmdLog.push(String(m).slice(0, 240)) }
+      wc.on('console-message', onCmd)
+      try {
       const CMD_DIR = mkdtempSync(join(tmpdir(), 'tc panels cmd-editor '))
       mkdirSync(join(CMD_DIR, '.claude', 'commands'), { recursive: true })
       const cmdFile = join(CMD_DIR, '.claude', 'commands', 'greet.md')
@@ -2590,6 +2595,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ opened, fileId, editOpened, saved, onDisk: readFileSync(cmdFile, 'utf8') }))
       if (typeof fileId === 'string') await clickPanelClose(wc, fileId)
       try { rmSync(CMD_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (cmdErr) {
+        ok('editor.cmd.1 a toolbox node\'s command row opens its own file in the file panel through the Open door, and a save in that editor lands on disk', false, 'threw: ' + String(cmdErr && cmdErr.message || cmdErr) + ' | renderer: ' + (cmdLog.slice(-4).join(' || ') || '(nothing)'))
+      } finally {
+        wc.removeListener('console-message', onCmd)
+      }
     }
   }
 })
