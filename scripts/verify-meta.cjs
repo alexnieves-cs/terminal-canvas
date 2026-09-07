@@ -313,8 +313,12 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     }
   }
   walk(pkg.scripts.verify ?? '')
+  // M148: verify:visual is the second named exclusion — it consumes a build
+  // and paints every scene of the shot harness (about two minutes of real
+  // Electron), a hand-run gate like verify:packaged, and it is pinned as one
+  // by visual.1 below.
   const suites = Object.keys(pkg.scripts)
-    .filter((k) => k.startsWith('verify:') && k !== 'verify:packaged')
+    .filter((k) => k.startsWith('verify:') && k !== 'verify:packaged' && k !== 'verify:visual')
   const unwired = suites.filter((k) => !reachable.has(k))
   ok('19 every verify suite is wired into the chain',
     suites.length > 10 && unwired.length === 0,
@@ -870,6 +874,31 @@ console.log('\n' + '='.repeat(60))
       hand.every((s) => Array.isArray(s.steps) && s.steps.length >= 2) && auto.every((s) => typeof s.run === 'function') &&
       missing.length === 0 && typeof pkg.scripts.handcheck === 'string' && !chain.includes('handcheck'),
     JSON.stringify({ loadErr, count: Array.isArray(steps) ? steps.length : null, hand: hand.length, auto: auto.length, missing, script: pkg.scripts.handcheck ?? null }))
+}
+
+// visual.1 (M148). The visual-regression suite over the shot harness: the
+// script exists and is its own Electron entry, `package.json` names it OUTSIDE
+// the chain (it is a hand-run gate, like verify:packaged), the goldens hold
+// one PNG per scene the harness DECLARES (read from scripts/shot.cjs as text —
+// a scene added to the harness without a golden is a scene the suite cannot
+// see, silently), and the two tolerance constants are numbers with a sentence
+// each, because the constant that turns the suite off is one nobody explained.
+{
+  const { readdirSync } = require('node:fs')
+  const script = read('scripts/verify-visual.cjs')
+  const shot = read('scripts/shot.cjs') || ''
+  const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)'/g)].map((m) => m[1])
+  const goldensDir = join(ROOT, 'verify', 'visual', 'goldens')
+  const goldens = existsSync(goldensDir) ? readdirSync(goldensDir).filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')) : []
+  const missing = declared.filter((n) => !goldens.includes(n))
+  const stray = goldens.filter((n) => !declared.includes(n))
+  const chain = String(pkg.scripts.verify || '')
+  const channel = script ? script.match(/const CHANNEL_TOLERANCE = (\d+)\s*\/\/ [^\n]{20,}/) : null
+  const budget = script ? script.match(/const PIXEL_BUDGET = ([\d.]+)\s*\/\/ [^\n]{20,}/) : null
+  ok('visual.1 verify:visual exists as an Electron entry outside the chain, holds one golden per scene the shot harness declares, and states its two tolerance constants with a sentence each',
+    script !== null && /require\('electron'\)/.test(script) && typeof pkg.scripts['verify:visual'] === 'string' && !chain.includes('verify:visual') &&
+      declared.length >= 50 && missing.length === 0 && stray.length === 0 && channel !== null && budget !== null,
+    JSON.stringify({ script: script !== null, declared: declared.length, goldens: goldens.length, missing: missing.slice(0, 8), stray: stray.slice(0, 8), channel: channel && channel[1], budget: budget && budget[1] }))
 }
 
 const failed = results.filter((r) => !r.pass)
