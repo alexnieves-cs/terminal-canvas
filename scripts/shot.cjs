@@ -1005,6 +1005,10 @@ app.whenReady().then(async () => {
     resize: async (w, h) => { win.setSize(w, h); await sleep(900) }
   }
 
+  // M148. A renderer error is PRINTED with its scene: a scene that fails
+  // with `Script failed to execute` says nothing about why, and the only
+  // place the why lives is the renderer's console.
+  win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
   await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
   await sleep(1500)
 

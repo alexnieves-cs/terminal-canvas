@@ -31,6 +31,7 @@
     "verify:package": "node scripts/verify-package.cjs",
     "verify:packaged": "unset ELECTRON_RUN_AS_NODE && node scripts/verify-packaged.cjs",
     "handcheck": "node scripts/handcheck.cjs",
+    "verify:visual": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-visual.cjs",
     "shot": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/shot.cjs",
     "verify:pty": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty.cjs",
     "verify:pty-manager": "ELECTRON_RUN_AS_NODE=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-pty-manager.cjs",

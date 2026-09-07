@@ -236,3 +236,34 @@ and `verify:panels` product `workflow.run.1` end to end.
 **M139's checks**: `verify:pty` 8/9 are machine facts — the SKIP shape when a binary is
 absent (the CI runner has neither `claude` nor `codex`; 9 had been green there because
 `/codex/` matches `codex not found`), a real path-and-version assertion when present.
+
+## The v7 run, Act II (M140–M147)
+
+Every milestone's checks are named in `docs/build-log/m140-m147-act2-backlog-eight.md`.
+Three harness facts they added: **a check that picks panels to click must pick ones that are
+TOPMOST at their own chrome point** (`fit.1` first took the first two in DOM order — one was a
+dormant fixture parked at 50000,50000 and the other's chrome sat under a later panel, so the
+clicks selected a third); **an async block inserted into `verify:file` must be `await`ed**
+(the suite's checks run inside one async IIFE and the tally prints when it ends — an
+un-awaited block ran after the tally with its checks uncounted and the suite green);
+**`verify:ipc`'s `EXPECTED_CHANNELS` moved twice in one act** (123 with `attachment:clipboard-file`,
+124 with `ledger:usage`), and the pin is what made each new channel's missing handler a red
+rather than a hang.
+
+## The v7 run, Act III (M148–M149)
+
+**`verify:visual` (M148)** is `scripts/verify-visual.cjs`, its own Electron entry and NOT in the
+chain (`verify:meta` 19 names it as the second exclusion beside `verify:packaged`; `visual.1`
+pins the shape). It paints every scene of `scripts/shot.cjs` into a scratch `SHOT_DIR` through
+a child `npm run shot`, then decodes each capture and its golden under
+`verify/visual/goldens/<scene>.png` with Electron's own `nativeImage` and compares: a pixel
+differs when any channel differs by more than `CHANNEL_TOLERANCE` (24 of 255 — antialiasing
+and WebGL subpixel jitter sit under it), a scene fails when more than `PIXEL_BUDGET` (0.5 %)
+of its pixels differ or its size changed, and every red writes `out/visual/<scene>.diff.png`
+(differing pixels in red over the dimmed golden) beside `<scene>.fresh.png`. Three outcomes
+per scene: PASS with the ratio, FAIL with the ratio and the diff's path, MISSING with no golden.
+A golden with no scene is a red too. **To update goldens:** `UPDATE_GOLDENS=1 npm run
+verify:visual` writes every fresh capture over its golden — ONLY after looking at the fresh
+image and the diff and deciding the change is the intended one; a golden updated to turn a
+red green is the suite turned off. A milestone that changes a scene commits its golden in the
+same commit, so `git log -- verify/visual/goldens` is the visual changelog.
