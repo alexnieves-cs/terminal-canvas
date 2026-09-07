@@ -16,8 +16,9 @@ import { shortPath } from '@renderer/palette/panel-name'
  */
 
 export type ChatRow =
-  | { kind: 'user'; id: string; text: string }
-  | { kind: 'text'; id: string; text: string; live: boolean }
+  /** M167. `at` is the turn's record time when it has one; a live row has none — absent stays absent. */
+  | { kind: 'user'; id: string; text: string; at?: number }
+  | { kind: 'text'; id: string; text: string; live: boolean; at?: number }
   | { kind: 'thinking'; id: string; text: string; live: boolean }
   | {
       kind: 'tool'
@@ -46,13 +47,13 @@ export interface LiveMessage {
   blocks: LiveBlock[]
 }
 
-function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolean, texts?: readonly string[]): ChatRow[] {
+function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolean, texts?: readonly string[], at?: number): ChatRow[] {
   const rows: ChatRow[] = []
   blocks.forEach((block, i) => {
     const id = `${turnId}:${i}`
     switch (block.type) {
       case 'text':
-        rows.push({ kind: 'text', id, text: texts?.[i] ?? block.text, live })
+        rows.push({ kind: 'text', id, text: texts?.[i] ?? block.text, live, ...(at === undefined ? {} : { at }) })
         return
       case 'thinking':
         rows.push({ kind: 'thinking', id, text: texts?.[i] ?? block.text, live })
@@ -96,7 +97,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
   for (const turn of turns) {
     if (turn.role === 'user') {
       const text = turn.blocks.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-      if (text !== '') rows.push({ kind: 'user', id: turn.id, text })
+      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}) })
       turn.blocks.forEach((b, i) => { if (b.type === 'image') rows.push({ kind: 'image', id: `${turn.id}:${i}`, mediaType: b.mediaType, size: b.size }) })
       for (const block of turn.blocks) {
         if (block.type !== 'tool_result') continue
@@ -106,7 +107,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
       continue
     }
     if (live !== null && turn.id === live.messageId) storedForLive = turn.blocks.length
-    for (const row of blockRows(turn.id, turn.blocks, false)) {
+    for (const row of blockRows(turn.id, turn.blocks, false, undefined, typeof turn.at === 'number' ? turn.at : undefined)) {
       rows.push(row)
       if (row.kind === 'tool') toolRows.set(row.id, row)
     }

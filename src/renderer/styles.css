@@ -3808,16 +3808,26 @@ body {
    marks through [data-tone], never here. */
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
 .chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
-.chat__row { display: grid; grid-template-columns: 52px 1fr; column-gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+/* M167. TURNS (the brief: the Claude desktop app's register). One column, no
+   caps label, no rule between rows: the user's turn is a bubble on --bubble
+   aligned right at ≤ 75%, the assistant's is unboxed prose at the measure. The
+   role stays in the DOM as the row's accessible name — clipped, never a column.
+   A timestamp rests at 0 and reveals on the row's hover (the rest rule). */
+.chat__row { display: flex; flex-direction: column; position: relative; padding: var(--sp-2) 0; }
 .chat__row:last-child { border-bottom: 0; }
-.chat__role { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); padding-top: var(--sp-1); }
+.chat__role { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; font-family: var(--font-ui); }
 .chat__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 /* M111. A user turn is a BAND — a tinted, rounded row rather than a labelled
    column — so the eye finds the turns at a glance; the agent's answer stays
    on the ground, the loudest thing in the panel. */
-.chat__row--user { background: var(--s-2); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: var(--sp-2) 0; border-bottom: 0; }
+.chat__row--user { background: var(--bubble); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-5); margin: var(--sp-2) 0; max-width: 75%; align-self: flex-end; margin-left: auto; font-size: var(--t-base); line-height: var(--lh-body); }
+.chat__row--assistant { max-width: var(--measure); font-size: var(--t-base); line-height: var(--lh-body); }
+.chat__when { position: absolute; right: var(--sp-2); top: var(--sp-1); font-size: var(--t-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none; }
+.chat__row:hover .chat__when { opacity: 1; }
 .chat__row--user .chat__text { color: var(--fg-2); }
-.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-3); }
+.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret 1s steps(2, start) infinite; }
+@keyframes chat-caret { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .chat__row--live .chat__text::after { animation: none; } }
 .chat__row--thinking, .chat__row--tool { grid-template-columns: 52px 1fr; }
 .chat__thinking-toggle { grid-column: 2; justify-self: start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__thinking-toggle:disabled { cursor: default; }
@@ -4324,3 +4334,21 @@ body {
 
 /* M164. The measure: prose wraps at --measure, never at the panel's width. */
 .file-node__prose, .pf__note, .skill-node__line, .github-item__body, .work-node__title, .toolbox-node__detail { max-width: var(--measure); }
+
+/* M167. The markdown tree's material: prose at the measure, headings one
+   step up, lists indented, a fence in mono with its Copy verb, inline code as a
+   quiet chip, a link as text with its URL on the title (never navigable). */
+.chat__prose { white-space: normal; }
+.md__p { margin: 0 0 var(--sp-4); }
+.md__p:last-child { margin-bottom: 0; }
+.md__h { margin: var(--sp-5) 0 var(--sp-3); font-weight: 600; color: var(--fg); }
+.md__h--1 { font-size: var(--t-lg); }
+.md__h--2, .md__h--3 { font-size: var(--t-base); }
+.md__list { margin: 0 0 var(--sp-4); padding-left: var(--sp-7); }
+.md__list li { margin: 0 0 var(--sp-1); }
+.md__fence { position: relative; margin: 0 0 var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.md__code { margin: 0; padding: var(--sp-4) var(--sp-5); font-family: var(--font-mono); font-size: var(--t-sm); line-height: var(--lh-body); white-space: pre; overflow-x: auto; color: var(--fg); }
+.md__copy { position: absolute; top: var(--sp-2); right: var(--sp-2); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.md__fence:hover .md__copy, .md__fence:focus-within .md__copy { opacity: 1; }
+.md__code-inline { font-family: var(--font-mono); font-size: var(--t-sm); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--s-2); }
+.md__link { color: var(--iris); text-decoration: underline; text-decoration-color: var(--iris-dim); }

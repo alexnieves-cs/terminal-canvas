@@ -19,6 +19,7 @@ import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
 } from './composer-model'
+import { Markdown } from './Markdown'
 
 /**
  * M73. THE CHAT PANEL — a conversation with an agent, on the canvas, through
@@ -89,6 +90,11 @@ type ToolDiff =
   | { kind: 'no-baseline' }
   | { kind: 'unchanged' }
   | { kind: 'diff'; diff: ReviewDiff }
+
+/** M167. The turn's time as a clock reading — hours and minutes, the day on the title. */
+function clockOf(at: number): string {
+  return new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
 
 const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, { kind: 'tool' }>; panelId: string }): JSX.Element {
   const [open, setOpen] = useState(false)
@@ -554,9 +560,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           {rows.map((row) => {
             switch (row.kind) {
               case 'user':
-                return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user" data-chat-row-id={row.id}><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre></div>
+                /* M167. A BUBBLE: the role stays as the row's accessible name (clipped, never a column); the time reveals on hover. */
+                return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user" data-chat-row-id={row.id}><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}</div>
               case 'text':
-                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><pre className="chat__text" data-chat-assistant-text>{row.text}</pre></div>
+                /* M167. Unboxed PROSE at the measure, rendered from the markdown tree; `data-chat-assistant-text` stays on the element whose textContent is the answer (chat.2, chat.3). */
+                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><div className="chat__text chat__prose" data-chat-assistant-text><Markdown text={row.text} /></div>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}</div>
               case 'thinking':
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':
