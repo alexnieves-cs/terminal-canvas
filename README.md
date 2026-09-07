@@ -952,23 +952,6 @@ price of not killing something.
 | M160 | Act VI — 4.0.0: the version, the local tag `v4.0.0`, README / `CLAUDE.md` / the manual-only list / the dead-end audit current, `npm run verify` and `npm run verify:packaged` green and pasted in the run's ledger, the release body as `docs/release-notes/4.0.0.md`; nothing pushed, no GitHub release | ✅ done |
 | M161 | v8 Act 0 — the baseline: `npm run verify`, `verify:packaged` and an unchanged `verify:visual` over `7049dab`, the tallies in `docs/build-log/m161-m179-ledger.md`, every golden read; the shot window's content size pinned to the goldens' 1440x865 (a display work-area clamp had moved it) | ✅ done |
 | M162 | v8 Act 0 — the brief (`docs/superpowers/specs/2026-09-07-m162-product-polish-brief.md`): the three references measured, twenty-two findings with dispositions, the face / rest / path / metrics rules, four tokens; `verify:styles face.1` and the sweep that makes it green, `polish.1` | ✅ done |
-| M163 | v8 Act I — the quiet header: glyph · title · state at rest, the verbs and marks on hover/focus, the machine cost to the inspector, the dark lift | ⏳ this run |
-| M164 | v8 Act I — the body's material: the UI face for prose, the reading inset, `displayPath` and the path rule in every body | ⏳ this run |
-| M165 | v8 Act I — diffs as cards | ⏳ this run |
-| M166 | v8 Act I — the far view as a status wall | ⏳ this run |
-| M167 | v8 Act II — turns | ⏳ this run |
-| M168 | v8 Act II — tool rows | ⏳ this run |
-| M169 | v8 Act II — the composer | ⏳ this run |
-| M170 | v8 Act II — the agent card when it is a terminal | ⏳ this run |
-| M171 | v8 Act III — the rail as places | ⏳ this run |
-| M172 | v8 Act III — the dock and top bar | ⏳ this run |
-| M173 | v8 Act III — the status bar at rest says nothing | ⏳ this run |
-| M174 | v8 Act III — the launcher as a welcome | ⏳ this run |
-| M175 | v8 Act III — palette and sheets | ⏳ this run |
-| M176 | v8 Act IV — motion with intent | ⏳ this run |
-| M177 | v8 Act IV — empty states as places | ⏳ this run |
-| M178 | v8 Act IV — the second full audit | ⏳ this run |
-| M179 | v8 Act IV — reconcile: 4.1.0, README, `CLAUDE.md`, the release body, the tag | ⏳ this run |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

@@ -40,4 +40,22 @@ before `UPDATE_GOLDENS=1`.
 
 ## Reviews
 
-(filled below once the fresh-context critic and verifier have run)
+Both ran over the act's diff, the brief, the spec, the ledger and the logs, after the goldens
+landed; everything below is in the ledger with the evidence beside it.
+
+**Critic — FIX-FIRST, 0 Critical, 4 Major, 8 Minor.** The Majors: the ledger's filename
+satisfied `milestones.1` for seventeen rows ahead of the work (a ledger is no longer a log;
+the README rows are the acts' to add); `face.1` matched any compound and would have refused
+the code leaf the brief prescribes (subject arm + ancestor arm); the tool argument's class
+had put a Task description in mono (`toolArgumentIsCode`, `chat-model.6`); the M162 evidence
+lacked exit codes and a plain pass against the rewritten goldens. Two Minors turned out to be
+harness facts worth their sentences: the title bar is 32px and a `setSize` after creation is
+never clamped, so `resize` pins `h − 32`; and the fixture directory's per-run name was a flake
+source in three scenes (now a fixed name). The rest: rule 5's check, `CLAUDE.md`'s
+re-valuation sentence, the diagnostics export path, four more names in the list.
+
+**Verifier — 25 claims: 21 SUPPORTED, 3 OVERCLAIMED, 1 UNSUPPORTED.** The overclaims were
+counts and a duration ("thirty" rules is ~33; "a minute" was three); the unsupported claim
+was the update run it could not see finish. Each is corrected in the ledger.
+
+**Goldens after the wave:** nine more scenes, each sentenced; a plain `verify:visual` 57/57.

@@ -75,7 +75,14 @@ app.on('window-all-closed', () => {})
 // project directory with a toolbox, a note, a scrollback log for a panel that
 // is never started (the dormant card's tail, and something for search to hit).
 // ---------------------------------------------------------------------------
-const FIX = realpathSync(mkdtempSync(join(tmpdir(), 'tc shot fixtures ')))
+// M162. A FIXED name, not mkdtemp: the review, file and toolbox bodies print
+// this path in full at 4.0, and a six-character suffix minted per run moved a
+// word in three scenes past the tile budget on some runs and not others — a
+// golden that flaps for a reason the app does not own. (M164's path rule stops
+// printing the path; the fixed name stays so the goldens are one machine's
+// captures of one path.) Wiped first: a previous run's files would otherwise
+// leak into this one's fixture.
+const FIX = (() => { const p = join(tmpdir(), 'tc shot fixtures golden'); rmSync(p, { recursive: true, force: true }); mkdirSync(p, { recursive: true }); return realpathSync(p) })()
 const REPO = join(FIX, 'repo')
 const NOTE = join(FIX, 'notes', 'plan.md')
 mkdirSync(join(REPO, 'src'), { recursive: true })
@@ -1087,7 +1094,12 @@ app.whenReady().then(async () => {
     // One bell from the dormant panel's twin: the agent-state detector
     // counts it and the dock badge follows.
     ring: async () => { ptyManager.write('twin', String.fromCharCode(13)); await sleep(1500) },
-    resize: async (w, h) => { win.setSize(w, h); await sleep(900) }
+    // M162. The content is pinned to `h - 32` (the title bar's height: a
+    // setSize after creation is never clamped, and the resized goldens are
+    // 900 → 868, 760 → 728) so a resized scene is as immune to the work-area
+    // clamp as the first window is (the Act 0 critic). The FIRST window's 865
+    // is a clamped 897 minus the same 32.
+    resize: async (w, h) => { win.setSize(w, h); win.setContentSize(w, h - 32); await sleep(900) }
   }
 
   // M148. A renderer error is PRINTED with its scene: a scene that fails

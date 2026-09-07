@@ -154,3 +154,51 @@ Branches: `m161-polish-brief` (Act 0), `m163-frame` (Act I), `m167-conversation`
     (the `.review-node__line` fix), the fixture id.
 - `UPDATE_GOLDENS=1 npm run verify:visual` — 56/56, exit 0; 40 goldens rewritten (the 37
   plus the three above), every one with its sentence above.
+- **Reviews (Act 0).** A fresh-context critic (FIX-FIRST: 0 Critical, 4 Major, 8 Minor) and
+  a fresh-context verifier (25 claims: 21 SUPPORTED, 3 OVERCLAIMED, 1 UNSUPPORTED) over the
+  diff, the brief, the spec, the ledger and the logs. The fix wave, every item landed:
+  - *Major 1* — the ledger's filename (`m161-m179-ledger.md`, the prompt's) matched
+    `milestones.1`'s range regex, so seventeen `⏳` README rows were "logged" by a file with
+    no section for them: `verify:meta` now excludes `*-ledger.md` from the logs (a ledger is
+    the run's state, not a log), and the README carries rows only for M161–M162, whose log
+    exists; each act adds its rows with its log.
+  - *Major 2* — `face.1` matched ANY compound, so `.chat__text code { mono }` (the code leaf
+    the brief prescribes) would have failed: it now reads the selector's SUBJECT (last
+    compound, `:is`/`:where` unwrapped) and has a second ANCESTOR arm for the four containers.
+    `.pf__body--text` is named in its comment as M164's red.
+  - *Major 3* — `.chat__tool-input` had gone mono as a class, which put a Task's
+    `description` and a search's `query` in mono: `toolArgumentIsCode` decides beside the
+    text (path / command / pattern / url → code), the node stamps `--code`, `verify:rail
+    chat-model.6` pins it (184/184).
+  - *Major 4* — evidence: the M162 runs below carry their exit codes; the missing plain
+    pass against the rewritten goldens was run (57/57, exit 0, below); the 57-vs-56 tally is
+    the `goldens every golden names a scene` check, which runs only in comparison mode.
+  - *Minors:* the brief's rule 5 names its check (the golden and the critic's sentence,
+    M177); `CLAUDE.md` says a new NAME is both blocks' and a RE-VALUATION one theme's, and
+    its credentials count is 18; `.diagnostics-overlay__export-result` (a path) is mono;
+    `.sheet__preview`, `.lane-header__name`, `.edge-indicator__name`, `.inspector__run-name`
+    (names and a sentence) joined the list and the sweep; the harness's `resize` pins the
+    content to `h − 32` (the title bar; a `setSize` after creation is never clamped, and the
+    resized goldens are 900 → 868, 760 → 728 — the first cut had guessed 35 from the clamped
+    first window and moved every resized scene by three pixels, caught by the plain pass);
+    the fixture directory is a FIXED name (`tc shot fixtures golden`, wiped first) because the
+    review, file and toolbox bodies print it in full and a per-run suffix moved three scenes
+    past the tile budget on some runs and not others; owed to M167 by name: a code fence in
+    an assistant turn renders proportional until the markdown lands.
+  - The verifier's three OVERCLAIMED: "thirty rules" is ~33 (the diff removes 32 mono lines
+    and adds 6); "a minute later" was ~3 minutes; the M162 lines lacked exit codes — all
+    corrected here. Its UNSUPPORTED (no completed update log) was the run it could not see
+    finish; the log completed at 56/56, exit 0, and is quoted above.
+- **Golden sentences, the fix wave** (nine scenes, `UPDATE_GOLDENS=1`, 56/56, exit 0):
+  - workflow · the block sub-labels (`claude — api (2)` beneath each block), the edge words `on exit 0` / `after a turn` and the edge indicator `claude — api (2) · needs you` are in SF.
+  - wide · the same workflow diagram words at 1800px; the inspector's pid is jitter.
+  - merged · the lane headers' workspace names are in SF.
+  - supervisor · the sheet's preview sentence beneath HOW is in SF; the WHERE field shows the fixed fixture name.
+  - chat-copilot · the copilot sheet's preview sentence is in SF; the fixed fixture name.
+  - tool-objects · the review body's root path reads the fixed fixture name (`…/tc shot fixtures golden/repo`).
+  - approval · the same root path; nothing else.
+  - verbs · the same root path; nothing else.
+  - file-missing · the file panel's and the review body's root paths read the fixed name; the edge indicator's name is in SF.
+- **Evidence (M162):** `node scripts/verify-styles.cjs` 41/41, exit 0. `npm run verify:meta`
+  38/38, exit 0. `npm run verify:rail` 184/184, exit 0. `npm run typecheck` exit 0. `npm run
+  build` exit 0. `npm run verify:visual` (plain, after every golden above) **57/57, exit 0**.

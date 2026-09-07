@@ -690,16 +690,20 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // and terminal cells; everything a person reads as a sentence or a name is
 // set in `--font-ui`. `body` already defaults to the UI face, so mono is an
 // explicit opt-in, and this check is the closed list of surfaces that may
-// NOT opt in: a rule whose selector names one of them and whose body sets
-// the mono face fails. The failure this exists for is the mono ANCESTOR —
-// `.chat__transcript` set mono once in M73 and every sentence the agent wrote
-// inherited it for eleven milestones, with nothing on screen to say so. The
-// list is prose SURFACES, not prose words: a leaf inside one of them that
-// holds code (`.chat__tool-result`, a path beside a note) opts in by its own
-// name, which this check does not list.
-//
-// What it cannot see: a face set from a component's inline style, or a prose
-// class this list does not name. The goldens are the check for those.
+// NOT opt in. Two arms, because the failure has two shapes:
+//   - the SUBJECT arm: a rule whose subject (the last compound of a selector)
+//     is a listed prose surface and whose body sets the mono face fails.
+//     Only the subject is read, so `.chat__text code { mono }` — a code leaf
+//     under a prose surface, the very shape the brief prescribes — passes
+//     (the Act 0 critic: the first cut matched any compound and forbade it).
+//   - the ANCESTOR arm: the four containers that once set mono for everything
+//     beneath them (`.chat__transcript` did, from M73 until this milestone,
+//     and every sentence the agent wrote inherited it with nothing on screen
+//     to say so) may not set it again under any selector shape.
+// What it cannot see: a face set from a component's inline style, a family
+// aliased through a second token, or a prose class this list does not name.
+// The goldens are the check for those. `.pf__body--text`, the reading
+// bodies' ancestor, is still mono at 4.0 and is M164's red, not this one's.
 {
   const PROSE = [
     '.pf__title', '.launcher__title', '.launcher__verb-name', '.launcher__env',
@@ -710,18 +714,24 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
     '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
     '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay',
-    '.panel__card'
+    '.panel__card', '.sheet__preview', '.lane-header__name', '.edge-indicator__name', '.inspector__run-name'
   ]
+  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous']
   const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
+  const esc = (p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // The subject of one selector: its last compound, combinators and
+  // pseudo-elements stripped, `:is(...)`/`:where(...)` unwrapped.
+  const subject = (sel) => sel.replace(/:(?:is|where)\(([^)]*)\)/g, '$1').trim().split(/\s*[\s>+~]\s*/).pop().replace(/::?[\w-]+(?:\([^)]*\))?/g, '')
   const hits = []
   for (const r of all) {
     if (!sets(r.body)) continue
-    const parts = r.sel.split(',').map((x) => x.trim())
-    for (const p of PROSE) {
-      if (parts.some((part) => new RegExp(`(^|[\\s>+~])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(part))) hits.push(`${p} ← ${r.sel.slice(0, 60)}`)
+    for (const part of r.sel.split(',')) {
+      const subj = subject(part)
+      for (const p of PROSE) if (new RegExp(`(^|[^\\w-])${esc(p)}(?![\\w-])`).test(subj)) hits.push(`${p} ← ${part.trim().slice(0, 60)}`)
+      for (const a of ANCESTORS) if (new RegExp(`(^|[^\\w-])${esc(a)}(?![\\w-])`).test(part) && !hits.includes(`${a} ← ${part.trim().slice(0, 60)}`)) hits.push(`${a} ← ${part.trim().slice(0, 60)}`)
     }
   }
-  ok('face.1', 'no prose surface sets the mono face (the face rule: mono is for code, commands, paths and cells)',
+  ok('face.1', 'no prose surface sets the mono face, and no former mono ancestor does under any selector (the face rule)',
     hits.length === 0, `${hits.length} mono on prose: ${[...new Set(hits)].slice(0, 12).join(' | ')}`)
 }
 

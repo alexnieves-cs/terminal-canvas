@@ -965,7 +965,7 @@ body {
 .rail-run__word { flex: none; font-size: var(--t-xs); color: var(--tone); }
 .rail-run .rail-row__verb { flex: none; white-space: nowrap; }
 .inspector__run { display: flex; flex-direction: column; gap: var(--sp-1); }
-.inspector__run-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.inspector__run-name { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
 .inspector__run-facts { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .inspector__run-facts [data-tone] { color: var(--tone); }
 .inspector__run .inspector__action { align-self: flex-start; }
@@ -986,7 +986,7 @@ body {
 /* M76. The questions, pinned between the well and the composer. */
 .chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
 .chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
-.chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
 
 /* M47. ONE status dot. The rail's dot, the context pane's dot and the
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
@@ -2676,6 +2676,7 @@ body {
 }
 
 .diagnostics-overlay__export-result {
+  font-family: var(--font-mono); /* M162. The export's result is a file path (the path rule) */
   color: var(--fg-3);
   word-break: break-all;
 }
@@ -3736,7 +3737,7 @@ body {
 /* M81. Its OWN row, and it WRAPS: this is the only text that says what a
    supervisor is, and it shared a line with the key hints until it was cut off
    mid-sentence (the critic). */
-.sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-mono); white-space: normal; }
+.sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-ui); white-space: normal; }
 .sheet__refusal { color: var(--red); }
 .sheet__keys { flex: 1 1 100%; }
 
@@ -3763,7 +3764,7 @@ body {
   z-index: 5;
   transform: translate(0, -100%);
 }
-.lane-header__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.lane-header__name { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
 .lane-header__note { color: var(--iris); }
 /* The attention pip's chip: the panel's name and the word, inward of the wedge. */
 .edge-indicator__label {
@@ -3781,7 +3782,7 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
-.edge-indicator__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.edge-indicator__name { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
 .edge-indicator__word[data-tone] { color: var(--tone); }
 /* A settings row's hint is a sentence: it wraps, it is not cut mid-word. */
 .palette__row[data-group="setting"] { align-items: flex-start; }
@@ -3824,7 +3825,9 @@ body {
 .chat__tool-name { font-weight: 600; }
 .chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
 /* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
-.chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--t-sm); } /* M162. A path or a command: mono by the face rule */
+.chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
+/* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
+.chat__tool-input--code, .chat__far-question--code { font-family: var(--font-mono); font-size: var(--t-sm); }
 .chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .chat__row--tool-error .chat__tool-name { color: var(--red); }
 .chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }

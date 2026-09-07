@@ -651,6 +651,11 @@ console.log('\n' + '='.repeat(60))
     // and every number in it counts as logged (the v5 run keeps one log per
     // act, a section per milestone; a per-milestone stub would be ceremony
     // that says nothing).
+    // M162: a run's LEDGER (`m161-m179-ledger.md`, the resumable state the v8
+    // prompt names) spans the whole run and has no section per milestone, so it
+    // is not a log — counting its range would satisfy the second direction for
+    // seventeen rows invented ahead of the work (the Act 0 critic).
+    .filter((f) => !/-ledger\.md$/.test(f))
     .map((f) => /^m(\d+)(?:-m(\d+))?[a-z]?-.*\.md$/.exec(f)).filter(Boolean)
     .flatMap((m) => { const a = Number(m[1]); const b = m[2] === undefined ? a : Number(m[2]); const out = []; for (let n = a; n <= b; n += 1) out.push(n); return out })
   const readme = read('README.md') ?? ''

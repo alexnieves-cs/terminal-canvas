@@ -2325,6 +2325,16 @@ const session = (id, over = {}) => ({
     arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }) === '…/src/server.ts' &&
       arg({ command: 'echo hi' }) === 'echo hi' && arg({ command: 'x'.repeat(200) }).length === 94 && arg({}) === '',
     JSON.stringify([arg({ file_path: '/private/var/folders/hl/x/T/tc shot/repo/src/server.ts' }), arg({ command: 'x'.repeat(200) }).length]))
+  // M162 — chat-model.6. THE FACE of the argument is decided beside its text:
+  //     a path, a command, a pattern or a URL is code (mono); a Task's
+  //     description or a search's query is a sentence (the UI face). The Act 0
+  //     critic found the M162 sweep had styled the argument's CLASS mono and
+  //     put a Task description in mono with nothing owing it.
+  const isCode = typeof R.toolArgumentIsCode === 'function' ? R.toolArgumentIsCode : () => null
+  ok('chat-model.6 a tool argument is code (mono) for a path, command, pattern or url and a sentence (the UI face) for a description or query',
+    isCode({ file_path: '/x/y.ts' }) === true && isCode({ command: 'ls' }) === true && isCode({ pattern: '*.ts' }) === true && isCode({ url: 'https://a' }) === true &&
+      isCode({ description: 'Find the failing test' }) === false && isCode({ query: 'electron work area' }) === false && isCode({}) === false,
+    JSON.stringify([isCode({ file_path: '/x/y.ts' }), isCode({ description: 'a' }), isCode({})]))
 }
 
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each

@@ -150,6 +150,9 @@ with the kind's glyph. No state is a bare zero, a bare ellipsis or a bare dash. 
 vocabulary of states stays `panel-state.ts`'s five words and nowhere else (`verify:rail
 state.2`).
 
+- **Check:** the golden and the critic's sentence, per M177's scenes — an empty state's words
+  are looked at, not parsed; `verify:rail state.2` pins only the vocabulary.
+
 ## The findings — the prompt's ten and this walk's twelve
 
 Read on 2026-09-07 from the 4.0 goldens (`verify/visual/goldens/`, 55 scenes, every one

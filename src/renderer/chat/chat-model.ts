@@ -205,6 +205,19 @@ export function chatStateInput(snapshot: AgentSessionSnapshot | null, hasHistory
  * file name survives (brief principle 3: a row that begins with
  * `/private/var/folders/…` is wrong); a command is cut from the right.
  */
+/**
+ * M162. Whether `toolArgument`'s text is CODE — a path, a command, a
+ * pattern or a URL — and so set in the mono face, or a sentence (a Task's
+ * `description`, a search's `query`) set in the UI face. The Act 0 critic
+ * found the M162 sweep had put a Task description in mono by styling the
+ * argument's class; the face is decided here, once, from the same keys.
+ */
+export function toolArgumentIsCode(input: Record<string, unknown>): boolean {
+  const pathLike = input.file_path ?? input.path ?? input.notebook_path
+  if (typeof pathLike === 'string') return true
+  return typeof (input.command ?? input.pattern ?? input.url) === 'string'
+}
+
 export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   const pathLike = input.file_path ?? input.path ?? input.notebook_path
   if (typeof pathLike === 'string') return shortPath(pathLike, keep)

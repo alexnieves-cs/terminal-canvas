@@ -120,8 +120,9 @@ new or touched surface is held to, so the gap stops widening:
 - **Material comes from the Obsidian brief and is sharpened, not replaced**
   (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`): dark flagship, cyan accent,
   glass over blur, 12px corners, system SF, one filled primary control per surface, one
-  resting shadow. Any new value is a NEW token declared in both theme blocks (`verify:styles
-  theme.1`); `--well` stays the xterm background and `--amber` a literal. No styling
+  resting shadow. A new NAME is declared in both theme blocks (`verify:styles theme.1`); a
+  RE-VALUATION of an existing token is one theme's, recorded in the run's ledger with its
+  finding; `--well` stays the xterm background and `--amber` a literal. No styling
   dependency is added — no Tailwind, no component library, no icon font; `icons.tsx` grows.
 - **A golden changes on purpose or not at all.** A restyle regenerates its scenes with
   `npm run verify:visual`, and each changed scene gets a critic's sentence in the build log
@@ -158,7 +159,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 38 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
 | `verify:layout` | plain node | 234 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
-| `verify:credentials` | plain node | 17 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
+| `verify:credentials` | plain node | 18 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:github` | plain node | 7 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
 | `verify:palette` | plain node | 140 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
