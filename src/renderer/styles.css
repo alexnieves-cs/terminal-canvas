@@ -4409,3 +4409,13 @@ body {
 .palette__state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: var(--sp-3); }
 .palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"], .palette__state-dot[data-tone="starting"] { background: var(--fg-4); }
 .palette__state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* M177. EMPTY STATES AS PLACES: one shape — the kind's glyph, one sentence
+   saying what the surface is for, one verb where it has a door — centred, in
+   the UI face. A pane's inline `reading…` lines are not empty states. */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-6) var(--sp-5); text-align: center; font-family: var(--font-ui); color: var(--fg-3); }
+.empty-state__glyph { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: var(--r-md); background: var(--iris-dim); color: var(--iris); }
+.empty-state__glyph svg { width: 16px; height: 16px; }
+.empty-state__sentence { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); max-width: var(--measure); color: var(--fg-2); }
+.empty-state__verb { margin-top: var(--sp-1); }
+.rail-empty .empty-state { padding: var(--sp-4) 0; }

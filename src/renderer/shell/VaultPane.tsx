@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState, type JSX } from 'react'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Refresh } from '@renderer/icons'
+import { ChevronLeft, Refresh, KindNote } from '@renderer/icons'
+import { EmptyState } from './EmptyState'
 import type { VaultNoteRow } from '@shared/ipc-contract'
 import type { TagEntry } from '@shared/vault'
 
@@ -97,15 +98,20 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
       </div>
       {props.root === '' ? (
         <div className="vault-pane__empty" data-vault-arm="unset">
-          <p className="rail-empty">no vault folder yet — a vault is a folder of markdown notes that link to each other</p>
-          <button type="button" className="vault-pane__verb" data-vault-choose {...shellControl(props.onChooseRoot)}>Choose a folder…</button>
+          {/* M177. One shape; the verb keeps data-vault-choose for the checks. */}
+          <EmptyState id="vault-unset" glyph={<KindNote />}>
+            <button type="button" className="vault-pane__verb empty-state__verb pf__verb pf__verb--word" data-vault-choose {...shellControl(props.onChooseRoot)}>Choose a folder…</button>
+          </EmptyState>
         </div>
       ) : props.pending && props.notes.length === 0 ? (
         <p className="rail-empty" data-vault-arm="reading">reading…</p>
       ) : props.reason !== undefined ? (
         <div className="vault-pane__empty" data-vault-arm="missing">
-          <p className="rail-empty">{props.reason}</p>
-          <button type="button" className="vault-pane__verb" data-vault-choose {...shellControl(props.onChooseRoot)}>Choose another folder…</button>
+          <div className="empty-state" data-empty-state="vault-missing">
+            <span className="empty-state__glyph" aria-hidden="true"><KindNote /></span>
+            <p className="empty-state__sentence">{props.reason}</p>
+            <button type="button" className="vault-pane__verb empty-state__verb pf__verb pf__verb--word" data-vault-choose {...shellControl(props.onChooseRoot)}>Choose another folder…</button>
+          </div>
         </div>
       ) : (
         <>
