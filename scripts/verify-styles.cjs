@@ -951,5 +951,21 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     wordmark && doorOk && doorName && noPrompt && command && recents, JSON.stringify({ wordmark, doorOk, doorName, noPrompt, command, recents }))
 }
 
+// M175 — material.1. PALETTE AND SHEETS, one material: rows and controls at
+// --t-md in the UI face (the brief's own ramp — 13px is a row, 14px is prose),
+// mono ONLY on the palette's path rows and the sheet's `--mono` inputs, the
+// section headings in caps tracking, the palette's state a DOT with the word
+// clipped beside it (the rest rule; the word stays for data-state-word).
+{
+  const monoRules = all.filter((r) => /\.palette__|\.sheet__/.test(r.sel) && /font(?:-family)?\s*:[^;}]*--font-mono/.test(r.body)).map((r) => r.sel.trim())
+  const monoOk = monoRules.every((sel) => /--mono|__fill-name|__fill-input|__preview|__suggestion/.test(sel)) // the suggestion row holds a path
+  const section = all.some((r) => /(^|,)\s*\.palette__section\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
+  const state = all.some((r) => /(^|,)\s*\.palette__state\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body))
+  const dot = all.some((r) => /\.palette__state-dot\b/.test(r.sel) && /border-radius:\s*50%/.test(r.body))
+  const label = all.some((r) => /(^|,)\s*\.sheet__label\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
+  ok('material.1', 'the palette and sheets: mono only on path rows and --mono inputs, caps section headings and sheet labels, the palette\'s state a dot with the word clipped',
+    monoOk && section && state && dot && label, JSON.stringify({ monoRules, section, state, dot, label }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
