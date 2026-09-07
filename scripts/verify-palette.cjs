@@ -2164,13 +2164,19 @@ const WS = [
   ], edges: [] }
   const withOrch = { id: 'g', name: 'g', nodes: [{ key: 'lead', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: 'lead' }], edges: [] }
   const withColl = { id: 'h', name: 'h', nodes: [{ key: 'gather', kind: 'collect', cwd: '~', dx: 0, dy: 0, target: '/o' }], edges: [] }
-  const poolWord = P.templateRefusal(withPool, presets, true) ?? ''
-  ok('workflow.2a templateRefusal names the FIRST workflow block and its kind, so a blocks-only template is never half-minted',
-    /sweeper/.test(poolWord) && /pool/.test(poolWord) && /cannot run yet/.test(poolWord) &&
-      /orchestrator/.test(P.templateRefusal(withOrch, presets, true) ?? '') &&
-      /collect/.test(P.templateRefusal(withColl, presets, true) ?? '') &&
+  // M138. The blocks have a runtime now (the pool's production caller, an
+  // orchestrator's appended prompt, a collect's join), so a template holding
+  // one RUNS; what is still refused by name is a pool that names no work
+  // list — the one thing main cannot read for it.
+  const noList = { id: 'f2', name: 'f2', nodes: [{ key: 'sweeper', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '', prompt: 'p' }], edges: [] }
+  const noListWord = P.templateRefusal(noList, presets, true) ?? ''
+  ok('workflow.2a templateRefusal lets a template with a pool, an orchestrator or a collect block RUN, and refuses by name only a pool that names no work list',
+    P.templateRefusal(withPool, presets, true) === undefined &&
+      P.templateRefusal(withOrch, presets, true) === undefined &&
+      P.templateRefusal(withColl, presets, true) === undefined &&
+      /sweeper/.test(noListWord) && /work list/.test(noListWord) &&
       P.templateRefusal(okTpl, presets, true) === undefined,
-    JSON.stringify({ poolWord, orch: P.templateRefusal(withOrch, presets, true), coll: P.templateRefusal(withColl, presets, true) }))
+    JSON.stringify({ noListWord, orch: P.templateRefusal(withOrch, presets, true), coll: P.templateRefusal(withColl, presets, true) }))
 
   // workflow.2b — the workflow panel's palette door refuses the merged view
   // BY NAME like its neighbours, rather than running and returning silently.
