@@ -83,6 +83,55 @@ The milestone table in `README.md` is the roadmap contract — several modules a
 deliberately shaped for a milestone that has not landed yet, and the code comments say so.
 Don't "simplify" those away.
 
+## What it is supposed to be
+
+The line above says "every node is a live terminal panel". That was 1.0's truth and it is the
+sentence this app has to outgrow. The destination, named in `docs/ideas-backlog.md` #9 and in
+the v7 and v8 run prompts, is an **agent super app**: one calm native window where a person
+arranges agents, conversations, files, boards and integrations on a canvas, and a terminal is
+*one* thing a panel can be — content inside a frame, not the material everything is made of.
+The register to hold it to is the Claude desktop app and Codex for the panels, and BridgeMind
+One for the posture (modes, a rail of named places, panes that split and tidy). The 4.0
+goldens under `verify/visual/goldens/` show how far off that register the build still is: six
+controls on every header at rest, raw `/private/var/folders/…` paths at full width, monospace
+wherever a human reads English, a status bar reciting CPU and RAM. Being *correct* is not the
+same as being *finished*, and everything below this section is about correctness.
+
+The run that closes the gap is written down: `docs/superpowers/specs/2026-09-07-v8-product-polish-prompt.md`
+(M161–M179, in `/goal` mode). Until it has run, the following rules are the standard every
+new or touched surface is held to, so the gap stops widening:
+
+- **The face rule.** `--font-mono` is for code, commands, paths and terminal cells. Titles,
+  labels, rail rows, chat turns, descriptions, empty states, the launcher and hints are set in
+  `--font-ui`. If a human reads it as a sentence, it is not mono.
+- **The rest rule.** A surface at rest shows what identifies it — glyph, name, one state
+  word or dot. Verbs, marks and metrics appear on hover or focus. A control hidden at rest
+  stays in the tab order with its name (M44's reach rule still applies).
+- **The path rule.** Show the repository's basename and the path relative to it. The full
+  absolute path lives in a tooltip or the inspector, never in a panel body at rest.
+- **The metrics rule.** CPU, RAM, tokens and dollars belong in the inspector and the context
+  pane. No number of that kind appears in a panel header, the rail or the status bar.
+- **Words, not codes.** Every empty state says what the surface is for and offers one verb
+  (M127's critic, M149 F.7). No state is a bare zero or a bare ellipsis.
+- **Conversation panels look like the conversation they are.** The user's turn is a soft
+  bubble, the assistant's is unboxed prose at a readable measure, a tool call is one collapsed
+  row (verb, target, state) that expands on click. The composer is a rounded well with one
+  filled primary control. A chat is never a terminal wearing a header.
+- **Material comes from the Obsidian brief and is sharpened, not replaced**
+  (`docs/superpowers/specs/2026-09-05-design-brief-obsidian.md`): dark flagship, cyan accent,
+  glass over blur, 12px corners, system SF, one filled primary control per surface, one
+  resting shadow. Any new value is a NEW token declared in both theme blocks (`verify:styles
+  theme.1`); `--well` stays the xterm background and `--amber` a literal. No styling
+  dependency is added — no Tailwind, no component library, no icon font; `icons.tsx` grows.
+- **A golden changes on purpose or not at all.** A restyle regenerates its scenes with
+  `npm run verify:visual`, and each changed scene gets a critic's sentence in the build log
+  before it is accepted. A blind re-baseline is a regression that cannot be seen.
+- **What a restyle may not touch.** The DOM aliases (`.panel__*`, the `*-node__*` hooks) that
+  roughly two hundred checks select on — restyle the classes, never rename them. `.pf__body`,
+  which is never transformed (`verify:panels frame.2`). xterm's cell metrics, the pointer
+  correction, OSC 133, the PTY flush gate, dormancy tiers and the WebGL budget. The frame gets
+  the new material; the cells inside it do not change unless a milestone specs it with a golden.
+
 ## Commands
 
 ```sh
@@ -1197,7 +1246,10 @@ Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, the
 implementation plan in `docs/superpowers/plans/`, then tasks executed test-first — failing
 checks written and *watched failing* against a non-existent module before it is implemented.
 M2 and M3 are both worked examples of this. Follow it when starting the next unscheduled
-milestone — see `docs/ideas-backlog.md` for candidates.
+milestone — see `docs/ideas-backlog.md` for candidates. The next *scheduled* work is the
+product-polish run in `docs/superpowers/specs/2026-09-07-v8-product-polish-prompt.md`
+(M161–M179); anything built before it runs is held to the rules in "What it is supposed to
+be" above so the run inherits less, not more.
 
 ## Conventions
 
