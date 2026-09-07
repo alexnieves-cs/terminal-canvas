@@ -758,5 +758,41 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     Object.values(facts).every(Boolean), JSON.stringify(facts))
 }
 
+// M163 — rest.1. THE REST RULE on the frame: at rest a header shows the kind
+// glyph, the title and one state; the verbs, the marks and the close sit in
+// their box at opacity 0 and come to 1 on the frame's :hover, :focus-within
+// and .panel--selected, through a transition on --dur-1. Opacity, never
+// display: the box stays (targets.1's 24px, header.1's widths) and a script's
+// click lands without a hover. 0 and 1 only — check 3 refuses a fraction.
+{
+  const at = (re) => all.filter((r) => re.test(r.sel))
+  const hidden = at(/\.pf__chrome\s+\.pf__verb/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body) && /transition:[^;]*var\(--dur-1\)/.test(r.body))
+  const marks = at(/\.pf__chrome\s+\.pf__mark/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const close = at(/\.pf__chrome\s+\.pf__close/).some((r) => /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const revealed = all.filter((r) => /\.pf:hover/.test(r.sel) && /\.pf:focus-within/.test(r.sel) && /\.panel--selected/.test(r.sel))
+    .some((r) => /opacity:\s*1\b/.test(r.body))
+  const reduced = /@media[^{]*prefers-reduced-motion[^{]*\{[\s\S]*?\.pf__chrome[\s\S]*?transition:\s*none/.test(bare)
+  ok('rest.1', 'the chrome verbs, marks and close rest at opacity 0 (a --dur-1 transition) and reveal at 1 on the frame\'s :hover, :focus-within and .panel--selected; reduced motion drops the transition',
+    hidden && marks && close && revealed && reduced, JSON.stringify({ hidden, marks, close, revealed, reduced }))
+}
+
+// M163 — metrics.1. THE METRICS RULE: CPU and RAM belong in the inspector.
+// `data-machine-cost` (the per-panel readout) appears under src/renderer in
+// the inspector alone — never on a header, a card tier or the rail — and the
+// stylesheet has no rule for a header or card cost. The HUD's TOTAL
+// (`data-machine-cost-total`) is M173's, matched apart by its suffix.
+{
+  const root = path.join(__dirname, '..', 'src', 'renderer')
+  const files = []
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx?$/.test(e.name)) files.push(f) } }
+  walk(root)
+  const sites = files.filter((f) => /data-machine-cost(?!-total)/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(root, f))
+  const allowed = new Set(['shell/Inspector.tsx'])
+  const stray = sites.filter((f) => !allowed.has(f))
+  const rules = all.filter((r) => /\.panel__machine-cost|\.panel__card-cost|\.panel__card-summary-cost/.test(r.sel)).map((r) => r.sel.slice(0, 40))
+  ok('metrics.1', 'the per-panel CPU/RAM readout lives in the inspector only (no header, card or rail site) and the stylesheet has no header/card cost rule',
+    sites.length >= 1 && stray.length === 0 && rules.length === 0, JSON.stringify({ sites, stray, rules }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

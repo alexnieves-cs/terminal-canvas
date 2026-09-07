@@ -3974,5 +3974,40 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText, clipboardHadImage: !clipboard.readImage().isEmpty(), pngEmpty: png.isEmpty() }))
       if (typeof piId === 'string') await clickPanelClose(wc, piId)
     }
+
+    // M163 — rest.1 (the rest rule, on a real frame). A LIVE, unselected panel
+    //     with the pointer elsewhere: its ⋯ has computed opacity 0. A REAL
+    //     pointer move over its chrome (sendInputEvent — a dispatched mouseover
+    //     never matches :hover) reveals it at 1. Then, with the pointer away
+    //     again, a script's .click() on the hidden ⋯ opens the menu — hidden at
+    //     rest is never unreachable. Read AFTER the --dur-1 transition (settle),
+    //     the reveal.1 lesson: a computed opacity mid-transition is still 0.
+    {
+      await clickEmptyCanvas(wc)
+      await settle()
+      const away = await backgroundPoint(wc)
+      wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
+      await settle()
+      const target = await wc.executeJavaScript(`(() => {
+        const live = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('.xterm') && !p.classList.contains('panel--selected') && !p.matches(':hover'))
+        const p = live[0]; if (!p) return null
+        const c = p.querySelector('.pf__chrome').getBoundingClientRect()
+        const more = p.querySelector('[data-panel-more]')
+        return { id: p.getAttribute('data-panel-id'), x: c.left + Math.min(60, c.width / 4), y: c.top + c.height / 2, rest: more ? getComputedStyle(more).opacity : null } })()`)
+      let hovered = null; let clicked = null
+      if (target) {
+        wc.sendInputEvent({ type: 'mouseMove', x: Math.round(target.x), y: Math.round(target.y) })
+        await settle(); await sleep(250)
+        hovered = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-more]'); return m ? getComputedStyle(m).opacity : null })()`)
+        wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
+        await settle(); await sleep(250)
+        clicked = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}]'); const m = p.querySelector('[data-panel-more]'); const before = getComputedStyle(m).opacity; m.click(); return { before, menu: p.querySelector('[data-panel-menu]') !== null } })()`)
+        await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-menu-close]'); if (c) c.click() })()`)
+        await settle()
+      }
+      ok('rest.1 a live unselected frame hides its ⋯ at rest (opacity 0), a real pointer over its chrome reveals it (1), and a script\'s click on the hidden ⋯ still opens the menu',
+        target !== null && target.rest === '0' && hovered === '1' && clicked !== null && clicked.before === '0' && clicked.menu === true,
+        JSON.stringify({ target, hovered, clicked }))
+    }
   }
 })
