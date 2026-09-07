@@ -1352,7 +1352,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       setInputMode({ kind: 'text', label: sentence, initial: '', feedback: true as const, submit: () => setInputMode(null) })
       palette.openPalette()
     },
-    beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }) => {
+    // M174. `seed.cwd` is the launcher's recents chip: the sheet opens ON that folder.
+    beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
       // the spawn cwd), then main's recent list, then every panel's directory.
       // The captured id while the palette is open; from the menu (palette
@@ -1361,7 +1362,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const lastFocused = Object.keys(focusedAt).sort((a, b) => focusedAt[b] - focusedAt[a])[0]
       const captured = palette.capturedId ?? lastFocused ?? null
       const focusedPanel = captured === null ? undefined : panelsRef.current.find((p) => p.rect.id === captured)
-      const focusedCwd = focusedPanel !== undefined && isTerminalPanel(focusedPanel)
+      const focusedCwd = seed !== undefined ? seed.cwd : focusedPanel !== undefined && isTerminalPanel(focusedPanel)
         ? (getLiveSession(focusedPanel.rect.id)?.cwd ?? focusedPanel.spec.cwd)
         : undefined
       const panelDirs = panelsRef.current.filter(isTerminalPanel).map((p) => getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd)

@@ -5,12 +5,21 @@ import type { EnvReport } from '@shared/env-report'
 import { shellControl } from '@renderer/shell/shell-control'
 import { probeOutcome } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
+import { displayPath } from '@shared/display-path'
+import { TMUX_HINT } from './hints'
 
 export interface LauncherProps {
   presets: PresetRow[]
   report: EnvReport | null
   /** M107. Ask the login shell again; absent hides the control (a fixture). */
   onCheckAgain?: () => void
+  /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
+  tmux?: string | null
+  onDismissTmux?: () => void
+  /** M174. The last folders panels were started in (`spawn:recent`), newest first; a chip opens the sheet, which lists them. Absent or empty: no row. */
+  recents?: string[]
+  /** M174. A recents chip opens the sheet SEEDED with its folder (the Act III critic: a chip that names a folder and opens a sheet on another lies). */
+  onOpenRecent?: (dir: string) => void
   onSpawnPreset: (id: string) => void
   /** M65. The fifth line: choose where and what. */
   onOpenSheet: () => void
@@ -57,7 +66,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -65,6 +74,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
       {/* M111. No chrome row: the wordmark in the hero below is the name, and a
           second "terminal canvas" above it read as a caption to itself. */}
       <div className="launcher__well">
+        {tmux !== undefined && tmux !== null && (
+          <p className="launcher__banner" data-launcher-tmux role="status" title={tmux}>
+            {TMUX_HINT.text}
+            <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Dismiss this notice" {...shellControl(() => onDismissTmux?.())}>Got it</button>
+          </p>
+        )}
       {/* M111. The one place the app is allowed a moment: the wordmark over a
           light drawn from the aura tokens, and THREE DOORS as cards — the
           considered door first (`claude` at `~` is almost never the right
@@ -90,6 +105,16 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
           <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
       </div>
+      {/* M174. RECENTS: the last folders as chips, newest first; a chip opens the
+          sheet (whose WHERE field lists them) — the launcher mints nothing itself. */}
+      {recents !== undefined && recents.length > 0 && (
+        <div className="launcher__recents" data-launcher-recents>
+          <span className="launcher__recents-label">Recent</span>
+          {recents.slice(0, 5).map((dir) => (
+            <button key={dir} type="button" className="launcher__recent" data-launcher-recent={dir} title={`New panel in ${dir}`} {...shellControl(() => (onOpenRecent ?? onOpenSheet)(dir))}>{displayPath(dir).short}</button>
+          ))}
+        </div>
+      )}
       <div className="launcher__verbs">
         {presets.map((p) => {
           const cli = p.subtitle.split(' ')[0]
@@ -101,13 +126,16 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
               className="launcher__verb"
               data-launcher-preset={p.id}
               disabled={!p.available}
-              title={p.available ? `Start ${p.name} ${p.subtitle.replace(/^.*— /, 'in ')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
+              title={p.available ? `Start ${p.name} in ${p.cwd ?? p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
               {...shellControl(() => { if (p.available) onSpawnPreset(p.id) })}
             >
               {/* M91. A verb reads as an invitation, not a preset's name: `Start Claude…`
                   says what the click does where `Claude` only says what it is. */}
               <span className="launcher__verb-name">Start {p.name}…</span>
-              <span className="launcher__verb-hint">{p.available ? `in ${p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
+              {/* M174. The face rule: the COMMAND alone is mono; the name and the hint are sentences. */}
+              {p.command !== undefined && <span className="launcher__verb-command">{p.command}</span>}
+              {/* The path rule: the directory's short form at rest, the full path on the button's title (above). */}
+              <span className="launcher__verb-hint">{p.available ? `in ${p.cwd === undefined ? p.subtitle.replace(/^.*— /, '') : displayPath(p.cwd).short}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
             </button>
           )
         })}
@@ -137,7 +165,8 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
         const outcome = probeOutcome(report)
         return (
           <p className="launcher__env" data-launcher-env data-launcher-env-kind={outcome.kind}>
-            <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'}>{outcome.sentence}</span>
+            {/* M174. ONE calm sentence; the probe's `asked … · checked …` tail rides the title. */}
+            {(() => { const i = outcome.sentence.indexOf(' · asked '); const main = i === -1 ? outcome.sentence : outcome.sentence.slice(0, i); const tail = i === -1 ? undefined : outcome.sentence.slice(i + 3); return <span data-tone={outcome.kind === 'found' ? 'idle' : outcome.kind === 'no-answer' ? 'needs-you' : 'exited'} title={tail}>{main}</span> })()}
             {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
             {onCheckAgain !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>

@@ -3,7 +3,7 @@ import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import type { RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
-import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
+import { Close, KIND_GLYPH, Lock, Pin, KindTerminal } from '@renderer/icons'
 import { panelState } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
 import { useWatch } from '@renderer/watcher/watcher-store'
@@ -64,7 +64,11 @@ function RailPanelRowImpl({
   // M84 (critic). A watcher is a PROCESS node, so it carries the state dot
   // every process row carries AND its kind glyph — scanning the rail's left
   // column, a row with only a glyph reads as a document.
-  const Glyph = row.state.kind === 'terminal' ? null : KIND_GLYPH[row.state.kind]
+  // M171. Every row leads with its kind's glyph in a soft tint — a terminal's
+  // too (KindTerminal); the state is a DOT after the label with the word on
+  // the row's title, and the tail keeps the word for the checks, clipped.
+  const Glyph = row.state.kind === 'terminal' ? KindTerminal : KIND_GLYPH[row.state.kind]
+  const stateful = shown.tone !== 'kind'
   return (
     <li
       className={`rail-row${selected ? ' rail-row--selected' : ''}`}
@@ -79,7 +83,7 @@ function RailPanelRowImpl({
       <button
         type="button"
         className="rail-row__main"
-        title={`Go to ${row.label}`}
+        title={stateful ? `Go to ${row.label} — ${shown.word}` : `Go to ${row.label}`}
         {...shellControl(() => onGoTo(row.id))}
       >
         {/*
@@ -88,21 +92,7 @@ function RailPanelRowImpl({
           answer to "what is that agent doing" — the same split check 54
           already draws for the panel itself.
         */}
-        {Glyph === null ? (
-          <span
-            className="rail-row__dot status-dot"
-            data-agent-state={state ?? 'none'}
-            data-tone={shown.tone}
-            aria-hidden="true"
-          />
-        ) : row.state.kind === 'watcher' ? (
-          // A process node's glyph carries the state's tone: the dot column
-          // is where a person scans for pass and fail, and the watcher is the
-          // one kind whose glyph sits in it while having a real state.
-          <span className="rail-row__kind rail-row__kind--stateful" data-tone={shown.tone} aria-hidden="true"><Glyph /></span>
-        ) : (
-          <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
-        )}
+        <span className="rail-row__kind" aria-hidden="true"><Glyph /></span>
         {/* M105. Unread: the turn ended while the user was elsewhere; cleared on focus. */}
         {last.unread && <span className="rail-row__unread" data-rail-unread title="finished while you were elsewhere" aria-label="unread" />}
         <span className="rail-row__label">{row.label}</span>
@@ -112,6 +102,9 @@ function RailPanelRowImpl({
         {/* M63. The kind already sits in the glyph column; the state column
             is for state, so a sessionless row leaves it empty rather than
             saying its kind a second time. */}
+        {/* The dot a person reads — `.rail-row__dot` stays as its alias (shell 83 and the harness read it; restyle, never rename); the tail keeps the WORD for state-word.1 / 84, clipped. */}
+        {stateful && <span className="rail-row__state-dot rail-row__dot status-dot" {...(row.state.kind === 'terminal' ? { 'data-agent-state': state ?? 'none' } : {})} data-tone={shown.tone} aria-hidden="true" />}
+        {/* data-agent-state is the TERMINAL store's word (check 54's split); a chat row's state is its tone (the Act III critic). */}
         <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
       {/* M105. The agent's last line said — a second line on a chat's row, from
@@ -132,7 +125,8 @@ function RailPanelRowImpl({
         >
           start
         </button>
-      ) : (row.state.kind === 'terminal' ? <span className="rail-row__start rail-row__start--empty" aria-hidden="true" /> : null)}
+      ) : <span className="rail-row__start rail-row__start--empty" aria-hidden="true" />}
+      {/* M171 (the Act III critic): EVERY row keeps the start slot, so the dot column lines up across kinds. */}
       <button
         type="button"
         className="rail-row__close icon-button"

@@ -426,7 +426,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const IDS = [
         'theme.1 switching to dark stamps data-theme, retunes the xterm theme on a live AND a detached session, and the card slot follows',
         'targets.1 every icon control measures at least 24x24',
-        'reveal.1 a rail row\'s close control is hidden at rest and revealed on :focus-within, and the dormant start control is always visible'
+        'reveal.1 a rail row\'s close and start controls are hidden at rest and revealed on :focus-within (the rest rule, M171)'
       ]
       try {
         state.backend = createDirectBackend('verify: direct (m45 visual)')
@@ -542,8 +542,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           const closeA = document.querySelector('.rail-row[data-rail-row="vA"] .rail-row__close')
           return closeA ? getComputedStyle(closeA).opacity : null })()`)
         reveal.focused = { close: revealed, active: reveal.active }
+        // M171. The rest rule reached the rail: `start` rests at 0 like the close
+        //     and reveals with it on :focus-within (it was pinned at 1 at rest
+        //     from M66 to M170 — a dormant row's only stated verb).
+        const startB = await wc.executeJavaScript(`(() => { const s = document.querySelector('.rail-row[data-rail-row="vB"] .rail-row__start'); if (!s) return null; s.focus(); return true })()`)
+        await settle()
+        reveal.startFocused = startB ? await wc.executeJavaScript(`(() => { const s = document.querySelector('.rail-row[data-rail-row="vB"] .rail-row__start'); return s ? getComputedStyle(s).opacity : null })()`) : null
         ok(IDS[2],
-          reveal.rest.close === '0' && reveal.rest.start === '1' && reveal.focused.active && reveal.focused.close === '1',
+          reveal.rest.close === '0' && reveal.rest.start === '0' && reveal.focused.active && reveal.focused.close === '1' && reveal.startFocused === '1',
           JSON.stringify(reveal))
         // Restore the setting so later checks (and the next run) start light.
         await wc.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'system')`)
@@ -1878,9 +1884,13 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[1], dormant !== null && dormant.dormant === true && dormant.spawned === false && upDormant === false,
           JSON.stringify({ dormant, upDormant }))
 
-        // firstrun.3. The hint strip: four hints at rest; opening the palette
-        //             fades the ⌘K hint; the fade survives a reload.
-        const hintsAtRest = await wc.executeJavaScript(`[...document.querySelectorAll('[data-hint]')].map((h) => h.dataset.hint)`)
+        // firstrun.3 (M173). THE HINTS IN THE EMPTY STATE: on an EMPTY canvas the
+        //             rail's empty state carries the four gesture hints; opening
+        //             the palette fades the ⌘K hint; the fade survives a reload.
+        //             (The strip that carried them over a panel is gone — with a
+        //             panel on the canvas there is no hint to read, on purpose.)
+        await reloadWith([])
+        const hintsAtRest = await wc.executeJavaScript(`[...document.querySelectorAll('.rail-empty [data-hint]')].map((h) => h.dataset.hint)`)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
         await settle()
         await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`)
@@ -1889,12 +1899,31 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           const v = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => rows.find((r) => r.id === 'hints.seen')?.value ?? null)`)
           return Array.isArray(v) && v.includes('palette') ? v : false
         }, 4000)
-        await reloadWith([{ kind: 'terminal', rect: { id: 'dA', x: 60, y: 60, w: 300, h: 220 }, z: 1, spec: { panelId: 'dA', cwd: home, command: '/bin/sh', args: [] } }])
-        const afterReload = await wc.executeJavaScript(`[...document.querySelectorAll('[data-hint]')].map((h) => h.dataset.hint)`)
+        await reloadWith([])
+        const afterReload = await wc.executeJavaScript(`[...document.querySelectorAll('.rail-empty [data-hint]')].map((h) => h.dataset.hint)`)
         ok(IDS[2],
           hintsAtRest.includes('palette') && hintsAtRest.includes('pan') && hintsAtRest.includes('zoom') && hintsAtRest.includes('new-panel') &&
             faded === true && seen !== false && !afterReload.includes('palette') && afterReload.includes('pan'),
           JSON.stringify({ hintsAtRest, faded, seen, afterReload }))
+
+        // firstrun.4 (M173). THE TMUX NOTICE AS A FIRST-RUN BANNER: the harness
+        //             runs the direct backend, so the launcher shows the banner;
+        //             `Got it` dismisses it into hints.seen and it stays gone
+        //             across a reload; the HUD no longer carries the sentence.
+        const bannerAtRest = await wc.executeJavaScript(`document.querySelector('[data-launcher-tmux]') !== null`)
+        const hudWarn = await wc.executeJavaScript(`document.querySelector('.canvas-hud')?.textContent ?? ''`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-launcher-tmux-dismiss]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) // a shellControl acts on CLICK (menu.1's lesson)
+        const bannerGone = await waitUntil(async () => wc.executeJavaScript(`document.querySelector('[data-launcher-tmux]') === null`), 4000)
+        const tmuxSeen = await waitUntil(async () => {
+          const v = await wc.executeJavaScript(`window.canvas.settings.list().then((rows) => rows.find((r) => r.id === 'hints.seen')?.value ?? null)`)
+          return Array.isArray(v) && v.includes('tmux') ? v : false
+        }, 4000)
+        await reloadWith([])
+        const bannerAfterReload = await wc.executeJavaScript(`document.querySelector('[data-launcher-tmux]') !== null`)
+        ok('firstrun.4 the tmux notice is a dismissible first-run banner in the launcher — present on the direct backend, gone on Got it and across a reload — and the HUD pill no longer says it',
+          bannerAtRest === true && !/no tmux/.test(hudWarn) && bannerGone === true && tmuxSeen !== false && bannerAfterReload === false,
+          JSON.stringify({ bannerAtRest, hudWarn, bannerGone, tmuxSeen, bannerAfterReload }))
+        await reloadWith([{ kind: 'terminal', rect: { id: 'dA', x: 60, y: 60, w: 300, h: 220 }, z: 1, spec: { panelId: 'dA', cwd: home, command: '/bin/sh', args: [] } }])
 
         // env.1. Swap in a failed probe, reload, read the banner and the scope.
         const good = state.harnessEnvReport

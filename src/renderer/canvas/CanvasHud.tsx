@@ -1,28 +1,14 @@
-import { panelState, type StateInput } from '@renderer/panels/panel-state'
-import { useAgentState } from '@renderer/session/agent-state-store'
 import type { JSX } from 'react'
-import type { SessionBackendInfo } from '@shared/ipc-contract'
-import type { MachineCostSnapshot } from '@shared/machine-cost'
-import type { Point, Viewport } from './viewport'
+import type { Viewport } from './viewport'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Maximize, Minus, Plus } from '@renderer/icons'
 
 export interface CanvasHudProps {
   viewport: Viewport
-  cursor: Point
-  selectedId: string | null
-  /** M63. The selected panel's title and state word, so the strip says who and what, not an id. */
-  selected?: { id: string; label: string; state: StateInput } | null
-  /** M123. The last update check's answer, when it said newer — the one line a user with panels sees. */
-  updateNewer?: { version: string; url: string } | null
-  /** M78. A selected EDGE, when one is: the strip names it as `source → target`. */
-  selectedEdge?: { source: string; target: string } | null
-  /** null until the one-shot probe answers. */
-  backend: SessionBackendInfo | null
-  machineCost: MachineCostSnapshot['total']
-  /** M46. The zoom cluster's verbs — useViewport's own, never a copy. */
   onZoomBy: (factor: number) => void
   onFit: () => void
+  /** M123. The last update check's `newer` result, or absent. */
+  updateNewer?: { version: string; url: string } | null
 }
 
 /**
@@ -42,7 +28,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected, backend, machineCost, onZoomBy, onFit, updateNewer }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
@@ -57,25 +43,13 @@ export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected
         <button type="button" className="icon-button" data-hud-fit title="Fit everything (⌘1)"
           aria-label="Fit everything" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">fit</span></button>
       </span>
-      <span>
-        {Math.round(cursor.x)}, {Math.round(cursor.y)}
-      </span>
-      {/* M63. Labelled: a bare panel id in the strip read as a word nobody
-          would guess (M61's critic could not identify it). */}
-      <span className="canvas-hud__focus" title="The selected panel" data-hud-selected={selectedId ?? undefined}>
-        {selected ? <SelectedToken id={selected.id} label={selected.label} state={selected.state} /> : selectedEdge ? <span className="hud__edge" data-hud-edge>edge {selectedEdge.source} → {selectedEdge.target}</span> : 'nothing selected'}
-      </span>
-      <span className="canvas-hud__cost" data-machine-cost-total>
-        CPU {formatCpu(machineCost.cpuPercent)} · RAM {formatMemory(machineCost.memoryBytes)}
-      </span>
-      {backend?.kind === 'direct' && (
-        <span className="canvas-hud__warn" title={backend.reason}>
-          no tmux — sessions end on reload
-        </span>
-      )}
+      {/* M173. THE STATUS BAR AT REST SAYS NOTHING (the brief, finding 4): the
+          coordinates, the selected panel's name, the CPU · RAM total and the tmux
+          sentence left this pill — the inspector holds the machine figure, the
+          launcher's banner and the environment report the tmux fact. */}
       {/* M123. The launcher's notice reaches only an empty canvas; a user with panels sees it HERE. */}
       {updateNewer !== undefined && updateNewer !== null && (
-        <span className="canvas-hud__warn" data-hud-update={updateNewer.version} title="Open release — the app does not install it">
+        <span className="canvas-hud__notice" data-hud-update={updateNewer.version} title="Open release — the app does not install it">
           <a href={updateNewer.url} onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()} onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: '', target: updateNewer.url }) }}>{updateNewer.version} is out</a>
         </span>
       )}
@@ -83,24 +57,5 @@ export function CanvasHud({ selectedEdge, viewport, cursor, selectedId, selected
   )
 }
 
-function formatCpu(percent: number): string {
-  return `${percent.toLocaleString(undefined, { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`
-}
 
-function formatMemory(bytes: number): string {
-  const mib = bytes / (1024 * 1024)
-  if (mib < 1024) return `${Math.round(mib)} MB`
-  return `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
-}
 
-/**
- * M63. The strip's selected token: the panel's TITLE and its state word,
- * from the one vocabulary. Subscribes to the agent state itself, per id, so
- * a busy/idle flip on the selected panel re-renders this span and not the
- * canvas — the rule every module-level store follows.
- */
-function SelectedToken({ id, label, state }: { id: string; label: string; state: StateInput }): JSX.Element {
-  const agent = useAgentState(id)
-  const shown = panelState(state, agent)
-  return <>{label} <span className="canvas-hud__word" data-tone={shown.tone} data-state-word>{shown.word}</span></>
-}

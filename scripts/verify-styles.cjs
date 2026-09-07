@@ -469,13 +469,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const drawer = /\.shell--nav-drawer \.shell__rail,\s*\.shell--ctx-drawer \.shell__inspector\s*\{([^}]*)\}/.exec(bare)
   const drawerZ = drawer ? Number((/z-index:\s*(\d+)/.exec(drawer[1]) || [])[1]) : NaN
   const hudZ = Number((/\.canvas-hud\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
-  const hintZ = Number((/\.hint-strip\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
+  // M173: the hint strip is gone (its hints are the empty state's); only the HUD pill is probed.
   const hudOpaque = /\.canvas-hud\s*\{[^}]*background:\s*var\(--s-[0-9]\)/.test(bare)
   const drawerTop = drawer ? /top:\s*var\(--shell-top-h\)/.test(drawer[1]) : false
   const drawerBottom = drawer ? /bottom:\s*0\b/.test(drawer[1]) : false
   ok('compact.1', 'the compact drawers run from the top bar to the bottom, under the status strip and the hint strip, which sit on an opaque ground',
-    Number.isFinite(drawerZ) && hudZ > drawerZ && hintZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
-    JSON.stringify({ drawerZ, hudZ, hintZ, hudOpaque, drawerTop, drawerBottom }))
+    Number.isFinite(drawerZ) && hudZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
+    JSON.stringify({ drawerZ, hudZ, hudOpaque, drawerTop, drawerBottom }))
 }
 
 // M67 — ground.1 / shadow.1 / hairline.1. THE FRAME, SECOND PASS. The brief
@@ -877,6 +877,94 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const approval = all.some((r) => /\.chat__permission-sentence\b/.test(r.sel))
   ok('composer.1', 'the composer is a rounded well with an inset shadow and an iris ring on focus; Interrupt is out of the flow at rest and replaces Send while a turn runs; the chips row and the approval sentence live in the well',
     rounded && ring && interruptRest && interruptLive && sendLive && chips && approval, JSON.stringify({ rounded, ring, interruptRest, interruptLive, sendLive, chips, approval }))
+}
+
+// M171 — rail.1. THE RAIL AS PLACES: a quiet heading rule (`.rail-heading`,
+// the caps tracking, never `.rail-row` — empty.1 counts rows); the kind glyph
+// in a soft tint; a state DOT slot on every stateful row with the word kept
+// in the tail but clipped (the checks read its text; a person reads the dot
+// and the title); `start` at opacity 0 revealed on the row's hover /
+// focus-within (the rest rule); the selected row a soft filled pill.
+{
+  const heading = all.find((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel))
+  const headingOk = heading ? /letter-spacing:\s*var\(--track-caps\)/.test(heading.body) && /text-transform:\s*uppercase/.test(heading.body) : false
+  const tint = all.some((r) => /(^|,)\s*\.rail-row__kind\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
+  // `some`, not `find`: these subjects have an M46/M66 rule earlier in the file and the M171 rule later.
+  const clipped = all.some((r) => /\.rail-list--panels \.rail-row__tail\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body)) && !all.some((r) => /(^|,)\s*\.rail-row__tail\s*(,|$)/.test(r.sel) && /clip/.test(r.body)) // scoped to the Panels list: other lists' tails are facts
+  const dot = all.some((r) => /\.rail-row__state-dot\b/.test(r.sel))
+  const startHidden = all.some((r) => /(^|,)\s*\.rail-row__start\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const startReveal = all.some((r) => /\.rail-row:hover \.rail-row__start/.test(r.sel) && /\.rail-row:focus-within \.rail-row__start/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const pill = all.some((r) => /(^|,)\s*\.rail-row--selected\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body) && /border-radius:\s*var\(--r-md\)/.test(r.body))
+  ok('rail.1', 'a caps heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
+    headingOk && tint && clipped && dot && startHidden && startReveal && pill, JSON.stringify({ headingOk, tint, clipped, dot, startHidden, startReveal, pill }))
+}
+
+// M172 — dock.1. THE DOCK AS NAMED PLACES: each button carries a `.dock__label`
+// at opacity 0 that reveals on the button's :hover / :focus-visible (a tag
+// beside the icon, never a wider dock); the current place is a filled pill
+// (--iris-dim); the `N live / N quiet` capsules are gone from the dock (the
+// metrics rule — the count lives in the rail's `Agents · N` heading), so no
+// `.dock__capsule` rule remains and `Dock.tsx` renders no `data-dock-capsules`;
+// the top bar's search is a FIELD-shaped button (`.shell__search` stays a
+// button for shell 78) with a hairline and --r-full.
+{
+  const label = all.some((r) => /(^|,)\s*\.dock__label\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const reveal = all.some((r) => /\.dock__button:hover \.dock__label/.test(r.sel) && /\.dock__button:focus-visible \.dock__label/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const on = all.some((r) => /(^|,)\s*\.dock__button--on\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
+  const noCapsule = !all.some((r) => /\.dock__capsule/.test(r.sel))
+  const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
+  const noCapsuleDom = !/data-dock-capsules/.test(dockSrc)
+  const search = all.some((r) => /\.shell__top \.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body)) // (0,2,0): the bar's generic button rule must not win
+  ok('dock.1', 'the dock buttons carry a hidden label revealed on hover/focus-visible, the current place is a filled pill, the capsules are gone from the dock and its CSS, and the top bar\'s search is a field-shaped button',
+    label && reveal && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, on, noCapsule, noCapsuleDom, search }))
+}
+
+// M173 — hud.2. THE STATUS BAR AT REST SAYS NOTHING: `.canvas-hud` is a
+// floating pill (--r-full) holding the zoom controls and the update notice
+// alone — no coordinates, no selected name, no CPU · RAM total, no tmux
+// sentence — so no `__cost`, `__warn`, `__focus` or `__word` rule remains,
+// and no `.hint-strip` rule (the strip is gone; its hints are the empty
+// state's sentences, `hints.1`).
+{
+  // `some`: a breakpoint block declares `.canvas-hud` before the main rule does.
+  const pill = all.some((r) => /(^|,)\s*\.canvas-hud\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body))
+  const gone = ['.canvas-hud__cost', '.canvas-hud__warn', '.canvas-hud__focus', '.canvas-hud__word', '.hint-strip'].filter((c) => all.some((r) => r.sel.includes(c)))
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'CanvasHud.tsx'), 'utf8')
+  const noFigures = !/data-machine-cost-total|canvas-hud__warn|canvas-hud__focus/.test(src)
+  ok('hud.2', 'the HUD is a pill with the zoom controls and the update notice alone — no cost, tmux, coordinates or selected-name rule, no hint strip',
+    pill && gone.length === 0 && noFigures, JSON.stringify({ pill, gone, noFigures }))
+}
+
+// M174 — launcher.1. THE LAUNCHER AS A WELCOME: the wordmark in the UI face
+// (the last mono prose), the three doors as soft cards (--r-lg, --s-1, a
+// hairline, the name at --t-lg), the verb list in the UI face with mono ONLY
+// on the command itself (`.launcher__verb-command`), a recents row, and the
+// environment line as one sentence — no `>` prompt glyph before a verb.
+{
+  const wordmark = all.some((r) => /(^|,)\s*\.launcher__wordmark\s*(,|$)/.test(r.sel) && /font-family:\s*var\(--font-ui\)/.test(r.body))
+  const doorOk = all.some((r) => /(^|,)\s*\.launcher__verb--door\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-lg\)/.test(r.body) && /background:\s*var\(--s-1\)/.test(r.body))
+  const doorName = all.some((r) => /\.launcher__verb--door \.launcher__verb-name/.test(r.sel) && /font-size:\s*var\(--t-lg\)/.test(r.body))
+  const noPrompt = !all.some((r) => /\.launcher__verb-name::before/.test(r.sel) && /content:/.test(r.body))
+  const command = all.some((r) => /(^|,)\s*\.launcher__verb-command\s*(,|$)/.test(r.sel) && /font-family:\s*var\(--font-mono\)/.test(r.body))
+  const recents = all.some((r) => /(^|,)\s*\.launcher__recents\s*(,|$)/.test(r.sel))
+  ok('launcher.1', 'the wordmark in the UI face, the doors as soft cards with the name at --t-lg, no > prompt glyph, mono only on .launcher__verb-command, a recents row',
+    wordmark && doorOk && doorName && noPrompt && command && recents, JSON.stringify({ wordmark, doorOk, doorName, noPrompt, command, recents }))
+}
+
+// M175 — material.1. PALETTE AND SHEETS, one material: rows and controls at
+// --t-md in the UI face (the brief's own ramp — 13px is a row, 14px is prose),
+// mono ONLY on the palette's path rows and the sheet's `--mono` inputs, the
+// section headings in caps tracking, the palette's state a DOT with the word
+// clipped beside it (the rest rule; the word stays for data-state-word).
+{
+  const monoRules = all.filter((r) => /\.palette__|\.sheet__/.test(r.sel) && /font(?:-family)?\s*:[^;}]*--font-mono/.test(r.body)).map((r) => r.sel.trim())
+  const monoOk = monoRules.every((sel) => /--mono|__fill-name|__fill-input|__preview|__suggestion/.test(sel)) // the suggestion row holds a path
+  const section = all.some((r) => /(^|,)\s*\.palette__section\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
+  const state = all.some((r) => /(^|,)\s*\.palette__state\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body))
+  const dot = all.some((r) => /\.palette__state-dot\b/.test(r.sel) && /border-radius:\s*50%/.test(r.body))
+  const label = all.some((r) => /(^|,)\s*\.sheet__label\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
+  ok('material.1', 'the palette and sheets: mono only on path rows and --mono inputs, caps section headings and sheet labels, the palette\'s state a dot with the word clipped',
+    monoOk && section && state && dot && label, JSON.stringify({ monoRules, section, state, dot, label }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

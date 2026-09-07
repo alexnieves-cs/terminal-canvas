@@ -758,5 +758,6 @@ function LiveStateWord({ id, input }: { id: string; input: StateInput }): JSX.El
   const shown = panelState(input, useAgentState(id))
   // A sessionless kind has no state: its column stays empty (the kind is
   // the rail glyph's to say, not this slot's).
-  return <span className="palette__state" data-tone={shown.tone} data-state-word>{shown.tone === 'kind' ? '' : shown.word}</span>
+  // M175. The state a DOT a person reads; the word stays in the DOM (clipped) for data-state-word and the row's title.
+  return <>{shown.tone !== 'kind' && <span className="palette__state-dot" data-tone={shown.tone} title={shown.word} aria-hidden="true" />}<span className="palette__state" data-tone={shown.tone} data-state-word>{shown.tone === 'kind' ? '' : shown.word}</span></>
 }

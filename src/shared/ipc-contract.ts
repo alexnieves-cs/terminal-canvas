@@ -1233,6 +1233,8 @@ export interface PresetListRow {
   agent?: AgentKind
   /** M65. The preset's own directory, the sheet's default `where` when no panel is focused. */
   cwd: string
+  /** M174. The preset's command word, when it has one; absent for the login shell (the launcher's mono chip renders only a real command). */
+  command?: string
   /** M65. The preset's own agent options, so the sheet can show them as the resolved defaults. */
   agentOptions?: AgentOptions
 }

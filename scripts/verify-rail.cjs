@@ -2450,6 +2450,37 @@ const session = (id, over = {}) => ({
     JSON.stringify({ restored: live(restored), queued: live(queued), fresh: live(fresh), sendRestored: cs(restored, true).send.enabled }))
 }
 
+// M171 — groups.1. THE RAIL AS PLACES: every row lands in exactly one group
+//     (agents · files · reviews · boards · integrations · workflows), in array
+//     order within it; an empty group is omitted; the group order is fixed;
+//     a kind the table does not name lands with the integrations rather than
+//     vanishing (a row that disappears is indistinguishable from a feature
+//     that was never built).
+{
+  const groups = typeof R.railGroups === 'function' ? R.railGroups : () => null
+  const row = (id, kind) => ({ id, state: { kind } })
+  const g = groups([row('a', 'chat'), row('b', 'file'), row('c', 'terminal'), row('d', 'work'), row('e', 'note'), row('f', 'workflow'), row('g', 'mystery'), row('h', 'review')])
+  const ids = g ? g.map((x) => `${x.id}:${x.rows.map((r) => r.id).join('')}`).join(' ') : null
+  ok('groups.1 railGroups: one group per row in a fixed order, array order within, empty groups omitted, an unknown kind with the integrations',
+    ids === 'agents:ac files:be reviews:h boards:d integrations:g workflows:f' && groups([]).length === 0 && g.every((x) => typeof x.label === 'string' && x.label !== ''),
+    JSON.stringify({ ids }))
+}
+
+// M173 — hints.1. THE HINTS AS DATA: the four gesture hints (pan, zoom,
+//     palette, new-panel) and the tmux notice are one list with ids, each a
+//     SENTENCE; `hintsLeft(seen)` is what the empty state and the launcher
+//     render — a seen id never comes back, an unknown id in `seen` is ignored.
+{
+  const hints = Array.isArray(R.HINTS) ? R.HINTS : null
+  const left = typeof R.hintsLeft === 'function' ? R.hintsLeft : () => null
+  const ids = hints ? hints.map((h) => h.id).join(',') : null
+  ok('hints.1 the hints are data — four gestures and the tmux notice, each a sentence — and hintsLeft filters the seen ones',
+    ids === 'pan,zoom,palette,new-panel,tmux' && hints.every((h) => typeof h.text === 'string' && h.text.length > 8) &&
+      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5 &&
+      left(new Set(), 'rail').length === 4 && left(new Set(), 'launcher').map((h) => h.id).join(',') === 'tmux' && hints.every((h) => h.where === 'rail' || h.where === 'launcher'),
+    JSON.stringify({ ids }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

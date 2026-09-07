@@ -268,6 +268,7 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     // absent command and the renderer must not guess (it would get zsh).
     subtitle: `${preset.command ?? 'login shell'} — ${preset.cwd}`,
     cwd: preset.cwd,
+    ...(preset.command !== undefined ? { command: preset.command } : {}),
     ...(preset.agent !== undefined ? { agent: preset.agent } : {}),
     ...(preset.agentOptions !== undefined ? { agentOptions: { ...preset.agentOptions } } : {}),
     // M37. Absent stays absent, so the palette's toggle row can say "off"

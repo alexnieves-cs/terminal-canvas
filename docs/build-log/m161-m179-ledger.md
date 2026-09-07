@@ -518,3 +518,155 @@ Spec `docs/superpowers/specs/2026-09-07-v8-act3-shell-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act3-shell.md`, branch `m171-shell`. Owed into this
 act: the palette's raw path rows and the sheet's WHERE field (M175, by the map); the
 markdown parse bound (recorded, not owed).
+- **M171 — the rail as places.** Red: rail `groups.1` (190/191), styles `rail.1` (48/49 on the
+  working tree; at the commit `check(m171,m172)` styles read 48/50 because `dock.1` rode in
+  the same commit — the verifier reproduced it),
+  agents `reveal.1` rewritten to the rest rule and watched red (78/79). Feature:
+  `railGroups` (agents · files · reviews · boards · integrations · workflows; a kind the
+  table does not name lands with the integrations rather than vanishing), headings as
+  `.rail-heading` `<li>`s with counts (never `.rail-row`, so `empty.1` holds), every row's
+  kind glyph in a soft tint (`KindTerminal` for a terminal), the state a dot after the
+  label (`.rail-row__state-dot`, keeping the `.rail-row__dot` alias shell 83 reads — the
+  first run threw on that rename: "restyle, never rename" — the alias fix rode in M173's
+  feature commit `d5bac5c`, not an M171 fix) with the word on the row's title,
+  the tail clipped but present (84, state-word.1), `start` at 0 revealed on hover /
+  focus-within, the selected row a filled pill. Green: agents 79/79, shell 95/95, kinds
+  49/49, product 59/59, core 78/78 (exit 0 each, m172-run.log / m173-run.log).
+- **M172 — the dock and top bar.** Red: styles `dock.1` (49/50 on the working tree; 48/50 at
+  the commit, beside `rail.1`). Feature: each dock button's
+  name as a `.dock__label` tag revealed on hover / focus-visible, the current place a filled
+  pill, the `N live / N quiet` capsules gone from the dock and Canvas (`railCapsules` stays a
+  pure export for `lastline.1`), the search a field-shaped button (`.shell__search` stays a
+  button, shell 78). **Declined:** a separate appearance control in the bar — the settings
+  door already opens M45's three-way chooser, and a second control for one setting is a
+  control with no distinct name (`targets.1` pins `.shell__settings`).
+- **M173 — the status bar at rest says nothing.** Red: rail `hints.1` on a stub (191/192 on
+  the working tree; the stub was never committed, so the check commit does not bundle —
+  `rail-entry` cannot resolve `canvas/hints` there — and no log holds the red; the verifier
+  could not reproduce it, recorded as such),
+  styles `hud.2` (50/51), `compact.1` rewritten without the strip's probe. Feature:
+  `canvas/hints.ts` (four gestures and the tmux notice as one list of sentences;
+  `hintsLeft`), the HUD a floating pill with the zoom controls and the update notice alone
+  (`.canvas-hud__notice`; the coordinates, the selected name, the CPU · RAM total and the
+  tmux sentence gone — `CanvasHud` no longer reads them), `HintStrip.tsx` deleted and the
+  gestures rendered in the rail's empty state (`[data-hint]` there; `firstrun.3` rewritten
+  to an EMPTY canvas — with a panel on the canvas there is no hint, on purpose), the tmux
+  notice a dismissible amber banner in the launcher (`firstrun.4`, written beside the code,
+  dismissed into `hints.seen` as `tmux`). Green: agents 80/80 (exit 0, m173-agents.log).
+- **M174 — the launcher as a welcome.** Red: styles `launcher.1` (51/52). Feature: the
+  wordmark in the UI face (the last mono prose), the three doors as cards (`--r-lg`, `--s-1`,
+  the name at `--t-lg`), a recents row (`spawn:recent`, newest five, each chip opening the
+  sheet whose WHERE lists them — the launcher mints nothing itself), the verb list in the
+  UI face with the COMMAND alone in mono (`.launcher__verb-command`), no `>` prompt glyph,
+  the environment line one sentence with the probe's `asked … · checked …` tail on its
+  title. `launcher-codex.1` and `reach.1` untouched.
+- **M175 — palette and sheets.** Red: styles `material.1` (52/53). Feature: the palette's
+  state column a dot in its tone with the word clipped beside it (`data-state-word` kept).
+  **Found and recorded:** the palette, the sheet and the context pane were ALREADY in the UI
+  face at the brief's row size with mono only on path rows and `--mono` inputs — finding 11
+  was the fixture's raw path in the mono rows (M162's revert kept a path mono, by the rule)
+  and finding 12 the caps labels, which are UI-face caps, the section idiom. `material.1`
+  pins that state. **Declined:** 14px for these surfaces — the brief's own ramp says 13px
+  is a row or control and 14px is prose; a 260px pane at 14px is a narrower pane. Kind
+  glyphs in palette rows — the section headings already say what a row is; a glyph per
+  row needs a `kind` on every `Command`, its own milestone.
+- **The critic's walk of Act III's 55 changed scenes** (M171–M173; M174 and M175 landed
+  after the walk and are sentenced beneath). Its questions and the dispositions, each landed
+  before any golden was written: (Q1, a defect) the tail clip was unscoped and hid a
+  workspace row's `23 panels` and `1 waiting`, a teammate's facts, a routine's cadence and
+  the dock badge's word — scoped to `.rail-list--panels` (and `rail.1` refuses an unscoped
+  clip); (Q2) nine goldens predate Act I because their scenes' drift stayed under the budget
+  through Acts I and II — their sentences below name that drift, never "rail and HUD only";
+  (Q3) the dot column was ragged because only terminal rows kept the hidden `start` slot —
+  every row keeps it; (Q4) the search field's rule lost to the bar's generic button rule
+  (`.shell__top .shell__search`, `dock.1` pins the specificity); (Q5) the chrome and per-panel
+  figures gone from unfocused panels in five scenes are Act I's rest rule reaching goldens
+  that had not moved since — Q2's sentences. Its minor: a terminal-kind review sits under
+  AGENTS by kind (correct; the heading says what a row is, not what it is about).
+- **Golden sentences, Act III** (55 scenes after the wave — the first draft said 56, the
+  `FAILED:` summary line counted; the critic's, amended):
+  - navigator-panels · the Panels list grouped under `AGENTS · 10 / FILES · 2 / REVIEWS · 3 / BOARDS · 3 / INTEGRATIONS · 4`, tinted glyphs, a dot per stateful row in one column, `start` hidden, the selected row a pill; the HUD a pill; the capsules gone; the search a field.
+  - navigator-workspaces · the rail, dock and HUD as above; the Workspaces pane keeps `23 panels` / `2 panels` and `all workspaces` (Q1's fix).
+  - navigator-files · the dock capsules, the hint strip and the HUD changed; the tree column identical.
+  - launcher · the rail's empty state carries the four hint sentences; the amber tmux banner with `Got it`; the wordmark in the UI face, the doors as cards, the recents row absent (the fixture has none), the verbs with the command chip, the env line one sentence (M174); the strip and status bar gone.
+  - compact · the capsules gone, the badge on the bell, the HUD pill bottom-right, the grouped rail.
+  - wide · the grouped rail with `WORKFLOWS · 1`, the dock and HUD; the workflow panel's `⋯ fill ×` chrome hidden at rest and its hint lines in the UI face — Act I and Act 0 drift this scene had carried under the budget until now.
+  - merged · `AGENTS · 12`, the groups intact, the read-only chip unchanged, the HUD pill at 22 %.
+  - attention · the badge on the bell, the popover painted above the dock; the amber dot on `claude — api (2)` agrees with its `needs you` pill.
+  - zoomed-out, zoomed-out-dark · the rail, dock and HUD only; the far cards untouched.
+  - kinds, kinds-dark · the rail, dock and HUD only (`REVIEWS · 2` in this fixture); the bodies identical.
+  - group, group-collapsed, reduced-motion, ink · the rail, dock and HUD, and — carried under the budget since Act I — `worker a`'s `CPU 0% · RAM n MB` readout gone from its header and card, the unfocused neighbour's `⋯ fill ×` hidden at rest.
+  - browser · the rail and HUD, and — since Act I — the browser's `Back Forward Reload` as icons, the asleep card's chrome hidden.
+  - teammate, routine · the rail and HUD; the teammate rows keep `1 place · 1 svc · scheduled` and the routines their `every 10m` (Q1's fix); since Act I the place path reads its short form and the browser's nav is icons.
+  - palette, palette-query, palette-dark · the rail, dock and HUD; the palette's state column a dot with the word clipped (M175).
+  - chat, integrations, github, across, vault, watcher, memory, supervisor, templates, subagents, chat-copilot, board, trail, skills, workflow, overview, lineup, flip, spawn-sheet, search, search-empty, inspector-detail, inspector-work, inspector-tools, header, runs, graph, composer, tool-objects, approval, verbs, auto, file-missing · the rail grouped with dots and hidden `start`, the dock without capsules with the current place filled, the HUD a pill, the hint strip gone, the search a field; pid / port / clock jitter where the critic named it.
+- **The sheet's WHERE field (owed into this act by the map): DECLINED with its reason.** The
+  field is an editable INPUT whose value must be the real path the panel will start in — a
+  shortened value would be a lie the next keystroke edits; the path rule's tooltip form has
+  no home in an input. The sheet's suggestion rows beneath it already read `…/repo` through
+  `shortPath` (M64). Recorded here rather than left silent (the verifier).
+- The dead `machineCost` prop on `CanvasHud` (declared and passed, read by nothing since
+  M173) is removed in the reviews' wave below.
+- **Reviews (Act III).** A fresh-context critic (FIX-FIRST: 0 Critical, 5 Major, 12 Minor) and
+  a fresh-context verifier (25 claims: 19 SUPPORTED, 4 OVERCLAIMED, 1 UNSUPPORTED, 1 in
+  progress). The wave, every item landed or recorded (`fix(m171–m175)`):
+  - *Major 1* — `Canvas` still subscribed to `useMachineCostTotal()` for the HUD readout M173
+    deleted: every 2 s sample re-rendered the whole component to feed a prop nothing read.
+    The subscription and the six dead HUD props are gone (`CanvasHudProps` is `viewport`,
+    `onZoomBy`, `onFit`, `updateNewer`). The same shape one level down — the `cursor` state
+    set on every mousemove for the readout M173 removed — is backlog #87 (a hook `Deps`
+    change with three memo comments to re-read; its own milestone).
+  - *Major 2* — the launcher's mono chip read `login` for the shell preset (a `split` that
+    had only keyed an install hint): `PresetListRow` / `PresetRow` carry `command?` and the
+    chip renders only a real command.
+  - *Major 3* — the verb list printed the preset's absolute cwd at rest: `displayPath` at
+    rest with the full path on the button's title (its last-two-segments arm — the launcher
+    knows no home; the env report carries none).
+  - *Major 4* — evidence per milestone: below, with the chain.
+  - *Major 5* — a recents chip opened the sheet on whatever folder it would have chosen: the
+    door takes `seed.cwd` (`beginSpawnSheet(templateId?, into?, seed?)`, the `focusedCwd`
+    the sheet already ranks first) and each chip passes its own folder.
+  - *Minors:* the M45 comment that still called `start` the one always-visible exception
+    now points at the M171 rule; `data-agent-state` only on a TERMINAL row's dot (a chat's
+    state is its tone — the store is the terminal's); the rail headings are real list items
+    (no `aria-hidden` — a screen reader hears the places); `hintsLoaded` is a STATE gating
+    the banner and the rail's hints, so a dismissed banner no longer paints and vanishes on
+    launch; `Hint` carries `where` and both surfaces read `hintsLeft` (the banner's text is
+    `TMUX_HINT.text`, the sentence `hints.1` pins); a dismissal outliving an install is
+    right and the doc comment says why; `.canvas-hud__notice { pointer-events: auto }` is
+    a fix this act made without saying so — the M123 update link had sat under the HUD's
+    `pointer-events: none` since 3.0, unclickable; a `notice.1` that clicks it is OWED to
+    M178's audit (the harness fakes the link door; the check is a paint-and-click);
+    `railGroups`' fallback is looked up by id with its policy stated (a named `Other`
+    heading declined: a heading for a kind that cannot occur today costs a golden); the
+    palette's path column reads `displayPath` (one helper; the root is #86's). Recorded, not
+    changed: a recents chip's `displayPath(dir)` has no home to shorten against.
+  - The verifier's corrections landed above (the tallies at the commits, the 55 scenes, the
+    uncommitted stub, the WHERE decline, the `.rail-row__dot` alias in M173's commit).
+
+- After the reviews' wave: agents 79/80 once (`handoff.1`, `delivered: false` — the source's
+  tail had not echoed in the live target when the check read it; the same paste-echo timing
+  the memory notes record), **80/80, exit 0** on the immediate re-run (act3-agents2.log);
+  product 59/59, shell 95/95, exit 0 (act3-wave.log); a plain `verify:visual` **57/57** —
+  the wave's one visible change (the launcher's `login` chip gone from the shell preset's
+  row, its cwd hint through the path rule) sat under the budget, so the `launcher` golden is
+  forced by deletion. Sentence: launcher · the shell preset's row reads `Start Login shell…
+  in ~` with no mono chip (a chip only for a real command); the other rows keep their
+  command chip; nothing else moved.
+
+Act III closed 2026-09-07. **Evidence:** `UPDATE_GOLDENS=1 npm run verify:visual` after the
+critic's dispositions — 56/56, exit 0 (55 goldens, sentenced above); after the reviews'
+wave the forced `launcher` golden (56/56, exit 0) and a plain `npm run verify:visual` **57/57,
+exit 0**; `npm run verify` — **exit 0**; tallies in chain order: meta 38, styles 53, viewport
+137, groups 6, merged 12, registry 38, layout 234, credentials 18, jira 15, github 7, palette
+143, rail 192, review 98, subagent 27, file 83, toolbox 103, usage 26, machine-cost 7, tmux
+35, agent-state 27, agent-session 141, verbs 14, teammates 25, electron 4, control 15,
+package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels core 78 /
+shell 95 / kinds 49 / agents 80 / product 59. Build log
+`docs/build-log/m171-m175-act3-shell.md`. Merged to `main`.
+
+## Act IV — M176–M179 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act4-finish-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act4-finish.md`, branch `m176-finish`. Owed into this
+act: `notice.1` (the update link's click, M178); the audit's own findings.

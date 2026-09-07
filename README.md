@@ -960,6 +960,11 @@ price of not killing something.
 | M168 | v8 Act II — tool rows: one row per call (glyph · verb · target · state pill), the result well capped at twelve lines, consecutive rows under one header collapsed by default with the rows kept in the DOM — `chat-model.7`, `tools.1`, agents `tools.3` | ✅ done |
 | M169 | v8 Act II — the composer: a rounded well, the chips row, the textarea growing two to six rows, Send the one filled control with Interrupt in its place while a turn runs, the approval as a sentence — `composer.1`, `composer-rows.1` | ✅ done |
 | M170 | v8 Act II — the agent card when it is a terminal: `agentHeader` over `chatHeaderLine`, the chat's glyph beside the state dot — `header.3`, agents `agent-card.1` | ✅ done |
+| M171 | v8 Act III — the rail as places: rows grouped under quiet headings with counts (`railGroups`), every row's kind glyph in a soft tint, the state a dot with the word on the row's title, start revealed on hover, the selected row a pill — `groups.1`, `rail.1`, agents `reveal.1` rewritten | ✅ done |
+| M172 | v8 Act III — the dock and top bar: each dock button's name a tag revealed on hover or focus, the current place a filled pill, the live/quiet capsules gone, the search a field-shaped button — `dock.1` | ✅ done |
+| M173 | v8 Act III — the status bar at rest says nothing: the HUD a floating pill with the zoom controls and the update notice alone; the hint strip removed, its gestures the rail's empty-state sentences (`canvas/hints.ts`), the tmux notice a dismissible first-run banner in the launcher — `hints.1`, `hud.2`, agents `firstrun.3` rewritten, `firstrun.4` | ✅ done |
+| M174 | v8 Act III — the launcher as a welcome: the wordmark in the UI face, three soft doors, a recents row, the verbs with the command alone in mono, the environment line one sentence — `launcher.1` | ✅ done |
+| M175 | v8 Act III — palette and sheets: the palette's state a dot with the word clipped; the material the surfaces already had pinned — `material.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

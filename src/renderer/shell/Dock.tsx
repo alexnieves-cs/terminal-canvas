@@ -6,8 +6,6 @@ import { agentWord } from '@renderer/panels/panel-state'
 import { Bell, Folder, Grid, KindNote, KindToolbox, KindWork, Layers, Link } from '@renderer/icons'
 
 export interface DockProps {
-  /** M105. The quiet / live counts; absent hides the capsules (a fixture). */
-  capsules?: { liveWord: string; quietWord: string }
   /** Which pane the navigator shows, when it shows. */
   navigator: NavigatorPane
   /** The navigator is on screen; a dock icon is pressed only then. */
@@ -36,7 +34,7 @@ export interface DockProps {
  *
  * Every control mounts shellControl(): focus never leaves the terminal.
  */
-function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, capsules }: DockProps): JSX.Element {
+function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer }: DockProps): JSX.Element {
   const entries: Array<{ id: NavigatorPane; label: string; icon: JSX.Element }> = [
     { id: 'panels', label: 'Panels', icon: <Grid /> },
     { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
@@ -68,6 +66,8 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
             {...shellControl(() => onChoose(e.id))}
           >
             {e.icon}
+            {/* M172. The place's NAME, revealed on hover or focus as a tag beside the icon (the dock stays one icon wide). */}
+            <span className="dock__label" aria-hidden="true">{e.label}</span>
           </button>
         )
       })}
@@ -134,13 +134,7 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
           </div>
         )}
       </div>
-      {/* M105. Two capsules beside the badge: how many chats are live and how many quiet, from the rail's rows. */}
-      {capsules !== undefined && (
-        <span className="dock__capsules" data-dock-capsules>
-          <span className="dock__capsule" data-dock-capsule="live" data-tone="working" title="chats with a turn in flight">{capsules.liveWord}</span>
-          <span className="dock__capsule" data-dock-capsule="quiet" data-tone="idle" title="chats waiting for you or asleep">{capsules.quietWord}</span>
-        </span>
-      )}
+      {/* M172. The `N live / N quiet` capsules left the dock (the metrics rule): the count is the rail's `Agents · N` heading. */}
     </nav>
   )
 }

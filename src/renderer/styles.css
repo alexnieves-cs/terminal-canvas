@@ -1052,10 +1052,12 @@ body {
    opacity: 0 alone would not. On a twelve-panel canvas that is twelve close
    buttons that stop competing with the twelve names they sit beside.
 
-   THE ONE EXCEPTION: .rail-row__start, a dormant panel's ▶, is ALWAYS
-   visible. It is the only affordance a dormant panel has, and a control that
-   disappears is indistinguishable from a feature that is missing — the rule
-   verify:palette 31 states. verify:panels reveal.1 pins both halves. */
+   M171 reached .rail-row__start too: it rests at 0 like the close and reveals
+   with the row's :hover / :focus-within (the M171 rule near the end of this
+   file; verify:panels reveal.1 pins both at 0 and revealed). From M66 to M170
+   it was the one exception — always visible as a dormant panel's only
+   affordance; the rest rule moved that affordance to the row's hover, and the
+   row itself (its glyph, name and dot) is what a person reads at rest. */
 .rail-row__rename,
 .rail-row__close {
   opacity: 0;
@@ -2427,6 +2429,7 @@ body {
 .shell[data-bp="compact"] .minimap { display: none; }
 
 .canvas-hud {
+  border-radius: var(--r-full); /* M173. A floating PILL: the zoom controls and the update notice, nothing else */
   position: absolute;
   right: var(--sp-5);
   bottom: var(--sp-5);
@@ -2462,9 +2465,6 @@ body {
   color: var(--fg-2);
 }
 
-.canvas-hud__cost {
-  color: var(--fg);
-}
 
 /* M48. The launcher: a raised card, centred over an EMPTY canvas — a
    sibling of .world so the camera never scales it, and a card rather than a
@@ -2515,7 +2515,6 @@ body {
   font: inherit;
 }
 /* The prompt line: a `>` in the mono face before every verb. */
-.launcher__verb-name::before { content: "> "; color: var(--fg-4); }
 .launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
 .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 500; flex: none; }
@@ -2530,11 +2529,10 @@ body {
 .launcher { width: min(720px, 90%); }
 .launcher__hero { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-7) var(--sp-6) var(--sp-6); text-align: center; }
 .launcher__hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 80% at 50% 30%, var(--aura-1), transparent 70%); }
-.launcher__wordmark { font-family: var(--font-mono); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
+.launcher__wordmark { font-family: var(--font-ui); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
 .launcher__tagline { font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__doors { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); margin: 0 0 var(--sp-6); }
 .launcher__verb--door { flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light); }
-.launcher__verb--door .launcher__verb-name::before { content: none; }
 .launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
 .launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
 .launcher__verb--door:hover:not(:disabled) { border-color: var(--iris); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
@@ -2543,39 +2541,6 @@ body {
 .launcher__env-hint { color: var(--iris); }
 .launcher__check { margin-left: var(--sp-3); }
 
-/* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
-   gesture has been used. Never a click target. */
-.hint-strip {
-  z-index: 950;
-  position: absolute;
-  left: var(--sp-5);
-  bottom: var(--sp-5);
-  display: flex;
-  gap: var(--sp-5);
-  padding: var(--sp-2) var(--sp-5);
-  border: 1px solid var(--line);
-  border-radius: var(--r-full);
-  background: var(--s-3);
-  color: var(--fg-3);
-  font-size: var(--t-xs);
-  white-space: nowrap;
-  pointer-events: none;
-  /* M67. One line, and it yields to the HUD: whole hints drop from the
-     OLDEST end when the strip does not fit (they wrap onto rows the strip
-     is too short to show; the last row, with the newest hints and the rule
-     line, is the one kept), so the strips never collide at 1440 (M66's
-     critic, finding 12) and no hint is ever cut mid-word. */
-  max-width: 40%;
-}
-.hint-strip__row {
-  display: flex;
-  gap: var(--sp-5);
-  row-gap: 0;
-  flex-wrap: wrap;
-  align-content: flex-end;
-  max-height: 1lh;
-  overflow: hidden;
-}
 
 /* M48. The probe banner: shown only when the login shell could not be read,
    because that is the case where every panel says "command not found" with
@@ -2986,13 +2951,7 @@ body {
 /* M63: NOT amber. Amber is "needs you" and nothing else (brief §6); a
    standing warning in the strip in the same hue was the critic's finding 4.
    It stays a sentence, in the strip's second ink. */
-.canvas-hud__warn {
-  color: var(--fg-2);
-}
 /* Capped: a long title would push the strip under the hint pill on its left. */
-.canvas-hud__focus { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.canvas-hud__word[data-tone] { color: var(--tone); font-weight: 600; }
-.canvas-hud__word[data-tone="none"], .canvas-hud__word[data-tone="starting"], .canvas-hud__word[data-tone="asleep"], .canvas-hud__word[data-tone="kind"] { color: var(--fg-3); }
 
 /* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
    are world-space facts. Inside the transform they would zoom and pan away
@@ -3793,8 +3752,6 @@ body {
 /* A settings row's hint is a sentence: it wraps, it is not cut mid-word. */
 .palette__row[data-group="setting"] { align-items: flex-start; }
 .palette__row[data-group="setting"] .palette__hint { white-space: normal; max-width: 55%; text-align: right; }
-/* The strip's rule line. */
-.hint-strip__rule { color: var(--fg-4); }
 /* The fit control names itself where there is room. */
 .canvas-hud__fit-label { font-size: var(--t-xs); }
 /* The word sits beside the glyph, on the strip's one line — stacked under
@@ -4265,8 +4222,6 @@ body {
    to `c..` beside it. */
 .rail-row { flex-wrap: wrap; }
 .rail-row__last { display: block; flex: 1 0 100%; order: 10; padding: 0 var(--sp-2) var(--sp-1) var(--sp-4); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dock__capsules { display: flex; flex-direction: column; gap: var(--sp-1); align-items: center; }
-.dock__capsule { font-size: var(--t-xs); white-space: nowrap; }
 
 /* M106. HEADER DISCIPLINE, once, for every kind: the title is what gives —
    whole words first, then an ellipsis — and the verbs never shrink, so a
@@ -4391,3 +4346,63 @@ body {
 .md__fence:hover .md__copy, .md__fence:focus-within .md__copy { opacity: 1; }
 .md__code-inline { font-family: var(--font-mono); font-size: var(--t-sm); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--s-2); }
 .md__link { color: var(--iris); text-decoration: underline; text-decoration-color: var(--iris-dim); }
+
+/* M171. THE RAIL AS PLACES. A quiet caps heading with its count (never a
+   `.rail-row`); the kind glyph in a soft tint on every row; the state a DOT
+   after the label with the word on the row's title — the tail keeps the word
+   for the checks, clipped; `start` rests at 0 and reveals with the row's hover
+   or focus-within (the rest rule — reveal.1 pinned it at 1 from M66 to M170);
+   the selected row a soft filled pill. */
+.rail-heading { display: flex; align-items: center; min-height: 24px; margin: var(--sp-3) 0 var(--sp-1); padding: 0 var(--sp-4); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.rail-row__kind { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; }
+.rail-row__kind svg { width: 12px; height: 12px; }
+.rail-row__state-dot { flex: 0 0 auto; margin-left: auto; }
+/* SCOPED to the Panels list (the Act III critic): the same class carries a workspace row's `23 panels` and `1 waiting`, a teammate's facts and a routine's cadence — none a state word. */
+.rail-list--panels .rail-row__tail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rail-row__start { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.rail-row:hover .rail-row__start, .rail-row:focus-within .rail-row__start { opacity: 1; }
+.rail-row--selected { background: var(--iris-dim); border-radius: var(--r-md); }
+@media (prefers-reduced-motion: reduce) { .rail-row__start { transition: none; } }
+
+/* M172. THE DOCK AND TOP BAR. A button's name is a tag beside it, at rest at
+   0 and revealed on hover or keyboard focus (the dock stays one icon wide —
+   the navigator is the wide thing); the current place is a soft filled pill;
+   the capsules are gone (the metrics rule). The top bar's search reads as a
+   FIELD — a hairline and the pill radius — and stays a button (shell 78 opens
+   the palette through it). */
+.dock__button { position: relative; }
+.dock__label { position: absolute; left: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); z-index: 1; }
+.dock__button:hover .dock__label, .dock__button:focus-visible .dock__label { opacity: 1; }
+.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); }
+/* `.shell__top .shell__search`: the bar's generic button rule is (0,1,1) and won over a bare class — the first golden showed no field (the Act III critic). */
+.shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
+.shell__top .shell__search:hover { color: var(--fg); background: var(--s-3); }
+@media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
+
+/* M173. The empty state's hints and the launcher's tmux banner: sentences in
+   the UI face where a person needs them; the strip that carried them is gone. */
+.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.rail-hint { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
+.launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
+.canvas-hud__notice { color: var(--amber); font-family: var(--font-ui); font-size: var(--t-xs); pointer-events: auto; }
+
+/* M174. THE LAUNCHER AS A WELCOME (the brief, finding 9): the wordmark in the
+   UI face; three large soft doors as cards; a recents row of folder chips; the
+   verbs as a quiet list in the UI face with mono on the COMMAND alone; the
+   environment line one calm sentence. No `>` prompt glyph before a verb. */
+.launcher__wordmark { font-family: var(--font-ui); font-weight: 600; letter-spacing: var(--track-tight); }
+.launcher__verb--door { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); padding: var(--sp-5) var(--sp-6); box-shadow: inset 0 1px 0 var(--edge-light); }
+.launcher__verb--door:hover:not(:disabled) { background: var(--s-3); border-color: var(--line-strong); }
+.launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
+.launcher__verb-command { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border-radius: var(--r-sm); background: var(--s-2); margin: 0 var(--sp-2); }
+.launcher__recents { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-5); }
+.launcher__recents-label { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); margin-right: var(--sp-2); }
+.launcher__recent { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); padding: var(--sp-1) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); cursor: pointer; }
+.launcher__recent:hover { color: var(--fg); background: var(--s-3); }
+
+/* M175. PALETTE AND SHEETS: one material. The palette's state is a dot in its
+   tone; the word is clipped beside it (data-state-word and the title keep it). */
+.palette__state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: var(--sp-3); }
+.palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"], .palette__state-dot[data-tone="starting"] { background: var(--fg-4); }
+.palette__state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

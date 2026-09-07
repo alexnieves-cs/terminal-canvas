@@ -19,7 +19,7 @@ import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
 import { snapRect, SNAP_PX, type SnapGuide } from './placement'
-import { HintStrip } from './HintStrip'
+import { hintsLeft } from './hints'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
@@ -72,7 +72,7 @@ import { applySubagents, clearSubagents } from '@renderer/session/subagent-store
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { applyUsage, clearUsage, getUsage } from '@renderer/session/usage-store'
-import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
+import { applyMachineCosts, clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
@@ -137,10 +137,10 @@ import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
-import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
+import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
-import { lastLineOf, railCapsules } from '../shell/rail-rows'
+import { lastLineOf } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { parseSkillKey, renameInShelf, skillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
 import type { NamedToolEntry, ToolInventoryResult, ToolScope } from '@shared/toolbox'
@@ -758,7 +758,9 @@ export function Canvas({
     })
   }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
-  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+  // M173: the HUD no longer prints the cursor; the state stays (the pointer hook
+  // sets it per mousemove — backlog #87 owns removing that re-render) and nothing reads it.
+  const [, setCursor] = useState<Point>({ x: 0, y: 0 })
   /**
    * The rubber band, in SCREEN pixels, or null when no marquee is in
    * progress. Screen rather than world because that is what the band is
@@ -1292,7 +1294,6 @@ export function Canvas({
   // app's own focusedId/palette/draft state.
   const spaceHeld = useSpaceHeld()
   const version = useRegistryVersion(registry)
-  const machineCostTotal = useMachineCostTotal()
 
   // Main reads ONE process table for this whole list, then walks each root's
   // descendants there. The renderer owns this low-frequency schedule because
@@ -2988,13 +2989,25 @@ export function Canvas({
   // carries.
   const [hintsSeen, setHintsSeen] = useState<ReadonlySet<string>>(() => new Set())
   const hintsLoadedRef = useRef(false)
+  // M173 (the Act III critic): a STATE beside the ref, so the banner and the rail's hints render only once `hints.seen` has been read — the banner painted and vanished on every launch when the backend probe answered first.
+  const [hintsLoaded, setHintsLoaded] = useState(false)
   useEffect(() => {
     void window.canvas.settings.list().then((rows) => {
       const row = rows.find((r) => r.id === 'hints.seen')
       if (row && Array.isArray(row.value)) setHintsSeen(new Set(row.value as string[]))
       hintsLoadedRef.current = true
+      setHintsLoaded(true)
     })
   }, [settingRows])
+  // M174. The launcher's recents row: asked once whenever the canvas is empty
+  // (the only time the launcher shows), never polled.
+  const [launcherRecents, setLauncherRecents] = useState<string[]>([])
+  useEffect(() => {
+    if (panels.length !== 0) return
+    let live = true
+    void window.canvas.spawn.recent().then((r) => { if (live) setLauncherRecents(r) }).catch(() => { if (live) setLauncherRecents([]) })
+    return () => { live = false }
+  }, [panels.length])
   const markHint = useCallback((id: string) => {
     if (!hintsLoadedRef.current) return
     setHintsSeen((prev) => {
@@ -3689,11 +3702,9 @@ export function Canvas({
   useHandoff({ registry, panelsRef, restartWithSpec, wakeTarget, setResult: setHandoffResult, scrollbackEnabled, onRunEvent: runsApi.onRunEvent })
   const [runAgainResult, setRunAgainResult] = useState<{ id: string; sentence: string } | null>(null)
   useEffect(() => { forgetOpenRunsRef.current = runsApi.forgetOpen }, [runsApi])
-  // M105. The capsules count ACROSS chats from the chat store (the rail's
-  // rows re-derive a chat's state per row and carry none); the store's one
-  // version is what re-renders this when any chat moves.
-  const chatsVersion = useChatsVersion()
-  const capsules = useMemo(() => railCapsules(panels.filter(isChatPanel).map((p) => { const c = getChat(p.rect.id); return { id: p.rect.id, kind: 'chat', state: { kind: 'chat' as const, status: undefined, dormant: false, chat: chatStateInput(c.snapshot, c.turns.length > 0 || (c.meta?.turns ?? 0) > 0) ?? { status: 'not-started' as const, pending: 0 } } } })), [panels, chatsVersion])
+  // M172. The `N live / N quiet` capsules left the dock (the metrics rule); the
+  // rail's `Agents · N` heading carries the count. `railCapsules` stays a pure
+  // export for `verify:rail lastline.1`.
   // M105. A chat's turn end sets its LAST LINE SAID and, when the user was
   // elsewhere, the unread mark — per id, in its own store, never on version().
   useEffect(() => onChatTurnEnd((id) => { setLastLine(id, lastLineOf(lastAssistantText(id)), focusedIdRef.current !== id) }), [])
@@ -5325,7 +5336,6 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
-        capsules={capsules}
       />
       <TopBar
         presets={presetRows}
@@ -5339,6 +5349,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
+        hints={hintsLoaded ? hintsLeft(hintsSeen, 'rail') : []}
         board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
@@ -5865,6 +5876,10 @@ export function Canvas({
         {panels.length === 0 && !merged && (
           <Launcher
             presets={presetRows}
+            recents={launcherRecents}
+            onOpenRecent={(dir) => paletteActions.beginSpawnSheet(undefined, undefined, { cwd: dir })}
+            tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
+            onDismissTmux={() => markHint('tmux')}
             report={envReport}
             onCheckAgain={() => { void window.canvas.env.report(true).then(setEnvReport) }}
             onSpawnPreset={paletteActions.spawnPreset}
@@ -5888,16 +5903,9 @@ export function Canvas({
             through your shell's rc files may not be found. Environment… in ⌘K says what was.
           </div>
         )}
-        {!merged && <HintStrip seen={hintsSeen} />}
         <CanvasHud
           updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}
-          cursor={cursor}
-          selectedId={selectedId}
-          selectedEdge={selectedEdge === null ? null : { source: selectedEdge.source, target: selectedEdge.target }}
-          selected={inspectorModel === null ? null : { id: inspectorModel.id, label: inspectorModel.heading, state: inspectorModel.state }}
-          backend={backendInfo}
-          machineCost={machineCostTotal}
           onZoomBy={zoomBy}
           onFit={fitAll}
         />
