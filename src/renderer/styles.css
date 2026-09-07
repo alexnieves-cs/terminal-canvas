@@ -1956,9 +1956,15 @@ body {
    element rather than the page. */
 .pf__body--text {
   overflow: auto;
-  padding: var(--sp-4) var(--sp-4);
-  font: var(--t-sm) / var(--lh-body) var(--font-mono);
-  color: var(--muted);
+  /* M164. THE BODY'S MATERIAL (the brief): a reading body is PROSE — the UI
+     face at --t-base/--lh-body, the --inset, --fg-2 ink — and the leaves that
+     hold code opt into mono by name (.file-node__pre, .review-node__line, the
+     directory lines, .skill-node__verbatim, the ids and facts). Until this
+     milestone this rule set mono once and every sentence in a review, a
+     toolbox, a work card and a GitHub item inherited it (face.1's ancestor arm). */
+  padding: var(--inset);
+  font: var(--t-base) / var(--lh-body) var(--font-ui);
+  color: var(--fg-2);
   background: var(--panel-bg);
   user-select: text;
 }
@@ -2702,7 +2708,7 @@ body {
 
 /* --fg-3, not --fg-4: --fg-4 is the DISABLED step and this is ordinary
    running text. */
-.review-node__root { margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
+.review-node__root { font-family: var(--font-mono); font-size: var(--t-sm); margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
 .review-node__files { list-style: none; margin: 0; padding: 0; }
 
 .review-node__file-button {
@@ -2829,7 +2835,7 @@ body {
   word-break: break-word;
 }
 
-.file-node__directory {
+.file-node__directory { font-family: var(--font-mono); font-size: var(--t-sm);
   margin: 0 0 var(--sp-4);
   color: var(--fg-3);
   word-break: break-all;
@@ -2837,7 +2843,7 @@ body {
 
 .file-node__pre {
   margin: 0;
-  font: inherit;
+  font: var(--t-md) / var(--lh-body) var(--font-mono); /* M164. Source is code: the terminal's 13px */
 }
 
 .file-node__line {
@@ -3537,7 +3543,7 @@ body {
    any notation outside a theme block, and 4-6 refuse literal type, radius and
    spacing values. */
 
-.toolbox-node__directory {
+.toolbox-node__directory { font-family: var(--font-mono); font-size: var(--t-sm);
   margin: 0 0 var(--sp-4);
   color: var(--fg-3);
   word-break: break-all;
@@ -4280,9 +4286,12 @@ body {
    name, so a cut one names nothing the user can act on. It wraps to two
    lines; the DESCRIPTION, which is prose and repeats what the shelf already
    says, takes the single clamped line instead. */
-.trail-card__name { color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.trail-card__name { color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .trail-card__note { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
 @keyframes trail-card-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 /* The capsule in the chrome. A word control like `fill`, never a glyph. */
 .pf__trail { flex: 0 0 auto; }
+
+/* M164. The measure: prose wraps at --measure, never at the panel's width. */
+.file-node__prose, .pf__note, .skill-node__line, .github-item__body, .work-node__title, .toolbox-node__detail { max-width: var(--measure); }

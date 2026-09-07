@@ -4,6 +4,7 @@ import { shellControl } from './shell-control'
 import { ChevronLeft, Plus } from '@renderer/icons'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { everyWord, ROUTINE_LIMIT_WORD, type PersistedRoutine } from '@shared/routines'
+import { displayPath } from '@shared/display-path'
 
 /**
  * M100. THE TEAMMATES PANE — the navigator's sixth pane: the roster, and one
@@ -108,7 +109,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
             <ul className="teammates-pane__list">
               {selected.places.map((p) => (
                 <li key={p} className="teammates-pane__item" data-teammate-place={p}>
-                  <span className="teammates-pane__path" title={p}>{p}</span>
+                  <span className="teammates-pane__path" title={p}>{displayPath(p).short}</span>
                   <button type="button" className="pf__verb pf__verb--word" title={`Remove ${p} from this teammate's places`} {...shellControl(() => props.onSave({ ...selected, places: selected.places.filter((x) => x !== p) }))}>remove</button>
                 </li>
               ))}

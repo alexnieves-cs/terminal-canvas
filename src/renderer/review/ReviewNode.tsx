@@ -9,6 +9,7 @@ import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-inde
 import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
+import { displayPath } from '@shared/display-path'
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -545,7 +546,8 @@ function ReviewNodeImpl({
         )}
         {subject.across === true ? renderAcross(across, sectionLabel) : (<>
         <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
-        <p className="review-node__root">{model.root}</p>
+        {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}
+        <p className="review-node__root" title={model.root}>{displayPath(model.root, model.root).short}</p>
         </>)}
         {model.note !== undefined && (
           <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>

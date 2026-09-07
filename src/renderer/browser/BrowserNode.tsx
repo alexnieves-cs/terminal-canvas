@@ -5,6 +5,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { shellControl } from '@renderer/shell/shell-control'
 import { browserHost, normaliseTypedUrl } from '@shared/browser-panel'
 import { clearBrowser, registerBrowser } from './browser-store'
+import { ChevronLeft, ChevronRight, RotateCw } from '@renderer/icons'
 
 /**
  * M103. THE BROWSER PANE — the eleventh kind: a live page in its own guest
@@ -184,17 +185,18 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
     >
       <div className="pf__body browser-node__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
         <div className="browser-node__bar">
-          {/* Every verb is a WORD and every verb is always here, disabled
-              with its reason rather than removed (this repo's rule). */}
-          <button type="button" className="pf__verb pf__verb--word" data-browser-back disabled={readOnly || !canBack}
+          {/* M164 (finding 19): three icon controls, each NAMED (aria-label and
+              title); every one always here, disabled with its reason rather than
+              removed (this repo's rule). */}
+          <button type="button" className="pf__verb icon-button" data-browser-back disabled={readOnly || !canBack}
             title={canBack ? 'Back' : 'nothing to go back to'} aria-label="Back"
-            {...shellControl(() => { try { guestRef.current?.goBack() } catch { /* not attached */ } })}>Back</button>
-          <button type="button" className="pf__verb pf__verb--word" data-browser-forward disabled={readOnly || !canForward}
+            {...shellControl(() => { try { guestRef.current?.goBack() } catch { /* not attached */ } })}><ChevronLeft /></button>
+          <button type="button" className="pf__verb icon-button" data-browser-forward disabled={readOnly || !canForward}
             title={canForward ? 'Forward' : 'nothing to go forward to'} aria-label="Forward"
-            {...shellControl(() => { try { guestRef.current?.goForward() } catch { /* not attached */ } })}>Forward</button>
-          <button type="button" className="pf__verb pf__verb--word" data-browser-reload disabled={readOnly || guestId === null}
+            {...shellControl(() => { try { guestRef.current?.goForward() } catch { /* not attached */ } })}><ChevronRight /></button>
+          <button type="button" className="pf__verb icon-button" data-browser-reload disabled={readOnly || guestId === null}
             title={guestId === null ? 'the page has not opened yet' : 'Reload'} aria-label="Reload"
-            {...shellControl(() => { try { guestRef.current?.reload() } catch { /* not attached */ } })}>Reload</button>
+            {...shellControl(() => { try { guestRef.current?.reload() } catch { /* not attached */ } })}><RotateCw /></button>
           {/* The DRAFT — what the person is typing — never the readout. Enter
               navigates through normaliseTypedUrl (a bare host gets http://),
               Escape puts the live address back. Mousedown and keydown stop
