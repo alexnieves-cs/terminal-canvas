@@ -1416,6 +1416,25 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const card = document.querySelector('.panel[data-panel-id="hdB"] .panel__card'); if (!card) return false
           const r = card.getBoundingClientRect(); card.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); return true })()`)
         const liveB = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] .panel__slot') !== null`), 10000)
+        // M149 — menu.paint.1 (audit F.12). The menu must be ON TOP of a LIVE
+        // terminal's body, not merely in the DOM: M144's transform made the
+        // chrome a stacking context that painted under the positioned slot
+        // after it, so the open menu was invisible — menu.1 above, reading
+        // the DOM, stayed green through it. elementFromPoint at the menu
+        // title's centre is the pixel-level question.
+        const menuPaint = liveB !== false ? await (async () => {
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-more]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+          const open = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') !== null`), 3000)
+          const onTop = await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu-title]'); if (!t) return 'no title'
+            const r = t.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+            return top ? (top.closest('[data-panel-menu]') !== null ? true : (top.className || top.tagName)) : 'nothing' })()`)
+          await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); if (!c) return false
+            c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 }))
+            c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdB"] [data-panel-menu]') === null`), 3000)
+          return { open, onTop }
+        })() : { open: false, onTop: 'hdB never woke' }
+        ok('menu.paint.1 the ⋯ menu opened on a LIVE terminal is the element under its own title\'s centre — painted above the body, not merely present in the DOM', menuPaint.open === true && menuPaint.onTop === true, JSON.stringify(menuPaint))
         win.webContents.send(IPC_EVENTS.CANVAS_FLIP)
         const flipped = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id="hdA"] [data-card-summary], .panel[data-panel-id="hdB"] [data-card-summary]').length === 2`), 3000)
         const summaryTitle = await wc.executeJavaScript(`(() => { const s = document.querySelector('.panel[data-panel-id="hdB"] .panel__card-summary-title'); return s ? s.textContent : null })()`)

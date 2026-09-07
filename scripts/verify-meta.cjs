@@ -887,7 +887,10 @@ console.log('\n' + '='.repeat(60))
   const { readdirSync } = require('node:fs')
   const script = read('scripts/verify-visual.cjs')
   const shot = read('scripts/shot.cjs') || ''
-  const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)'/g)].map((m) => m[1])
+  // A SCENE is `{ name: '…', intent:` — the bare `{ name: '…'` form also
+  // matched a DevTools media feature (`{ name: 'prefers-reduced-motion', value:`)
+  // inside the reduced-motion scene and counted it as a scene with no golden.
+  const declared = [...shot.matchAll(/\{ name: '([a-z0-9-]+)', intent:/g)].map((m) => m[1])
   const goldensDir = join(ROOT, 'verify', 'visual', 'goldens')
   const goldens = existsSync(goldensDir) ? readdirSync(goldensDir).filter((f) => f.endsWith('.png')).map((f) => f.replace(/\.png$/, '')) : []
   const missing = declared.filter((n) => !goldens.includes(n))

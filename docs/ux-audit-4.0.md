@@ -102,6 +102,38 @@ DECLINED (and why), or OWED (the scene it needs).
     sentence (`verify:rail summary.history.2`, `verify:panels kinds cost.history.1`).
   The goldens from `runs` on were regenerated after both fixes and walked again below.
 
+- **composer.** The first fresh capture after F.8's fix still showed the wrong panel: the
+  scene's palette jump `api (chat)` now also matches the review node `review: claude — api
+  (chat)` a later scene mints, so the drop landed on the canvas and minted a file panel.
+  Scene fixed (the rail row, not a search); walked again below.
+- **reduced-motion** (added). The jump to `worker b` under the real media feature lands
+  in one frame: the target framed, selected and inspected a beat after Enter. As intended.
+- **file-missing** (added). `not found` in the chrome, `This file no longer exists. It will
+  reappear here if it is recreated.` in the body, the title and the reload kept. As intended.
+- **runs.** `run 1 · 3 panels · 2m 0s · $0.21 · idle · Run again` in the Workspaces pane and
+  the Work tab's RUN section for the target. As intended, now that the workspace is the right
+  one.
+- **graph.** Two ruled edges, the selected one's inspector (`after a turn`, `never fired`,
+  Label / Remove). As intended.
+- **tool-objects / approval.** The review node with the tool calls above the diff (`Read ·
+  Edit · 07:48`), `4 panels share this repository — git changes are unattributed; tool calls
+  are this chat's own`; the approval's `Allow Bash` / `Deny` leading the action bar, the dock
+  badge, `1 waiting` on the workspace row. As intended.
+- **verbs / auto / subagents / lineup / flip.** As intended (the verb line's refusal in the
+  palette's own words; the auto chip `auto · complete · 0/8` beside its one-panel run; the
+  SUBAGENTS note; the lineup preview's three seats with their lanes; both cards turned over).
+- **palette / palette-query.** **F.11** The query `group` lists `Open review of chat: /private/
+  var/…` and `Open toolbox for chat: …` ABOVE the canvas verbs `Card group` / `Remove group`:
+  the fuzzy subsequence lit scattered letters across a sixty-character directory in the row's
+  TITLE. DECLINED by two rules already made: M62's section-first order (the PANELS section
+  leads whatever the score) and M73/M77's full directory in a chat's label (two chats in two
+  repositories must be told apart). The highlight shows why the row matched, which is the
+  M61 remedy for a match that surprises.
+- **header.** **F.12** The fresh capture shows the narrow panel's `⋯` control but NO open
+  menu, where the intent is the menu with the full title. OWED: a probe was added to the
+  scene (`[shot] header menu open:`) and the next capture decides whether the scene or the
+  control is at fault.
+
 (The remaining scenes are walked below as the audit proceeds; each is listed with its verdict.)
 
 ## 2. Empty, loading and error states
@@ -116,7 +148,7 @@ answer — and where a read can fail, the failure is a fourth, worded. What the 
 | The Board's columns | `drop a card here` / `set when a lane starts` (F.7) | — | cards | — | `board` |
 | Integrations | `not connected` with the fix | `not verified` (`token added, not verified yet`) | `connected as octocat` | `token rejected — add a new github token` (durable `rejectedAt`, M89) | `integrations` |
 | The summary's `this week` | `nothing closed this week` | `reading the ledger…` | `$0.14 across 2 sessions` / `unpriced` | `the ledger could not be read` (F.8) | `runs`, `inspector-work` |
-| A file panel | — | — | the text | `This file was deleted from disk.` (+ binary, too-large, unreadable arms) | `file-missing` (added) |
+| A file panel | — | — | the text | `This file no longer exists. It will reappear here if it is recreated.` with `not found` in the chrome (+ binary, too-large, unreadable arms; a draft open at the time gets `This file was deleted from disk.`) | `file-missing` (added) |
 | The Work tab's Changes | `no changes` / `no session yet` | `reading…` | rows | `unavailable` (no git binary; not a repository) / `unattributable` — the engine's arms | `inspector-work` |
 | The Panels pane | `no panels — ⌘N to start one` | — | rows | — | `launcher` |
 | The Workspaces pane's runs | `no runs yet — a handoff that fires records one` | — | run rows | — | `runs` |
@@ -161,9 +193,11 @@ summary's week line, F.8) was a missing read, not a missing arm, and it has four
   intended.
 - **200 % scale is every scene on this machine** — the harness captures at the display's
   device scale factor of 2, and the goldens are those captures at half size. The density this
-  walk had NOT seen was the other one: `scale-100` (added) sets a device scale factor of 1
-  through the DevTools protocol, where hairlines are one coarse pixel and the blur grid is
-  twice as visible. Walked below with its golden.
+  walk had NOT seen was the other one. A `scale-100` scene was TRIED (a device scale factor
+  of 1 through `Emulation.setDeviceMetricsOverride`) and dropped by measurement: `capturePage`
+  renders at the display's own scale whatever the override says — the capture came back
+  2880 × 1800 — so the scene could not prove its intent. The 100 % density is DECLINED as a
+  scene and stays on the manual-only list: a hand look on a non-retina display.
 
 ## 6. Act IV and Act V scenes
 

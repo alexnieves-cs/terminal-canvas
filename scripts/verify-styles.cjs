@@ -359,6 +359,18 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     row !== null && /display:\s*flex/.test(row) && /flex-wrap:\s*wrap/.test(row) && badge !== null && /white-space:\s*nowrap/.test(badge), JSON.stringify({ row, badge }))
 }
 
+// M149 — menu.stack.1 (audit F.12). The chrome bar is LIFTED above the body:
+// M144's counter-scale transform made `.pf__chrome` a stacking context, and
+// with no z-index of its own it painted UNDER the positioned body that
+// follows it in the DOM — the `⋯` menu (absolute, inside the chrome) was open
+// in the DOM and invisible under a live terminal. The `header` golden showed it.
+{
+  const rules = bare.match(/\.pf__chrome\s*\{[^}]*\}/g) || []
+  const lifted = rules.some((r) => /z-index:\s*[1-9]/.test(r))
+  ok('menu.stack.1', '.pf__chrome carries a positive z-index so the chrome and its ⋯ menu paint above the body that follows it',
+    lifted, JSON.stringify(rules.map((r) => r.replace(/\s+/g, ' ').slice(0, 80))))
+}
+
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
 // render a <section hidden={tab !== id}>, and `.context__panel { display:
 // block }` — a selector with higher specificity than the UA's `[hidden]`

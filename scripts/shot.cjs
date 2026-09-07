@@ -385,7 +385,16 @@ const SCENES = [
     } },
   { name: 'composer', intent: 'The chat panel\'s composer at work: a dropped image as a dim mono line above the textarea (its name and a labelled `remove`), and the `@` file list open under a half-typed reference — rows in mono, directories first, the same hairline family as the frame; nothing floats over the canvas.',
     run: async (kit) => {
-      await kit.goTo('api (chat)')
+      // By the rail row, not a palette search: `api (chat)` also matches the
+      // review node `review: claude — api (chat)` a later scene minted, and
+      // the drop then landed on the canvas and opened a file panel instead.
+      await kit.selectRail('chat'); await sleep(700)
+      // Raise the chat first: the tool-objects scene opened its review node
+      // OVER it, and a drop at the chat's centre hit the node on top (the
+      // hit test is topmost-first), which opened a file panel instead.
+      await kit.js(`(() => { const c = document.querySelector('.panel[data-panel-id="chat"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`)
+      await sleep(300)
+      console.log('[shot] composer chat on top:', await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); if (!p) return 'no chat'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); const tp = top && top.closest('.panel'); return tp ? tp.getAttribute('data-panel-id') : String(top && top.className) })()`))
       await kit.js(`(() => { const p = document.querySelector('.panel[data-panel-id="chat"]'); const host = document.querySelector('.canvas').getBoundingClientRect(); const r = p.getBoundingClientRect(); return window.__m59Drop(${JSON.stringify(join(FIX, 'shot.png'))}, r.left + r.width / 2 - host.left, r.top + r.height / 2 - host.top) })()`)
       await sleep(300)
       await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
@@ -447,7 +456,7 @@ const SCENES = [
   { name: 'lineup', intent: 'M104. The spawn sheet opened on `lineup: Workbench` with worktrees asked (the `lanes` checkbox): under the ordinary preview line, the LINEUP PREVIEW — `3 sessions will open · 1 agent`, then every seat with its role, kind and place (`worker · agent`, `dev server · shell`, `preview · browser · http://localhost:3000/`) — shown BEFORE Enter mints anything; with worktrees asked, only the agent seat says `in a worktree` and the others `in the checkout`. A ceiling line appears only when agents would queue.',
     run: async (k) => { await k.click('.shell__spawn'); await sleep(700); await k.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; s.value = '__lineup__:workbench'; s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`); await sleep(400); await k.click('[data-sheet-worktree]'); await sleep(300); await k.shot('lineup'); await k.closePalette() } },
   { name: 'header', intent: 'M106. Header discipline on a 320px frame with a long title (`review: the health check wiring for the api repository`): the title is ellipsised whole-words-first while the kind mark, the state pill and every chrome control (`fill`, `⋯`, `×`) stay whole inside the frame; the full title lives in the title attribute and at the top of the ⋯ menu, which is open.',
-    run: async (k) => { await k.goTo('health check wiring'); await sleep(500); await k.js(`(() => { const c = document.querySelector('.panel[data-panel-id="narrow"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`); await sleep(300); console.log('[shot] header landed:', await k.js(`(() => { const p = document.querySelector('.panel[data-panel-id="narrow"]'); if (!p) return 'no narrow panel'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + 12); const tp = top && top.closest('.panel'); return JSON.stringify({ x: r.left, y: r.top, w: r.width, z: getComputedStyle(p).zIndex, over: tp ? tp.getAttribute('data-panel-id') : (top ? top.className : null), palette: document.querySelector('.palette') !== null }) })()`)); await k.click('.panel[data-panel-id="narrow"] [data-panel-more]'); await sleep(300); await k.shot('header'); await k.click('.panel[data-panel-id="narrow"] [data-panel-menu-close]'); await sleep(200) } },
+    run: async (k) => { await k.goTo('health check wiring'); await sleep(500); await k.js(`(() => { const c = document.querySelector('.panel[data-panel-id="narrow"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect(); const at = { bubbles: true, button: 0, clientX: r.left + 40, clientY: r.top + r.height / 2 }; c.dispatchEvent(new MouseEvent('mousedown', at)); document.dispatchEvent(new MouseEvent('mouseup', at)); return true })()`); await sleep(300); console.log('[shot] header landed:', await k.js(`(() => { const p = document.querySelector('.panel[data-panel-id="narrow"]'); if (!p) return 'no narrow panel'; const r = p.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + 12); const tp = top && top.closest('.panel'); return JSON.stringify({ x: r.left, y: r.top, w: r.width, z: getComputedStyle(p).zIndex, over: tp ? tp.getAttribute('data-panel-id') : (top ? top.className : null), palette: document.querySelector('.palette') !== null }) })()`)); await k.click('.panel[data-panel-id="narrow"] [data-panel-more]'); await sleep(300); console.log('[shot] header menu open:', await k.js(`document.querySelector('.panel[data-panel-id="narrow"] [data-panel-menu]') !== null`)); await k.shot('header'); await k.click('.panel[data-panel-id="narrow"] [data-panel-menu-close]'); await sleep(200) } },
   { name: 'flip', intent: 'M106. Flip Terminals: every terminal turned over to its far-view summary — the work title large with the state word beneath — while chats, files and the review node stay as they were; M57\'s far view invoked deliberately by the Workspace menu (or the palette row), not by camera distance. A second flip turns them back.',
     run: async (k) => { await k.flip(); await sleep(400); await k.shot('flip'); await k.flip() } },
   { name: 'spawn-sheet', intent: 'The spawn sheet (New panel…): what, where with its suggestions, title, and for an agent preset its mode, effort and model; a preview line and the keys in the foot.',
@@ -471,7 +480,7 @@ const SCENES = [
   { name: 'navigator-files', intent: 'The dock\'s Files pane: a file tree rooted on the selected panel\'s directory.',
     run: async (k) => { await k.dock('files'); await sleep(500); await k.shot('navigator-files'); await k.dock('panels') } },
   { name: 'attention', intent: 'A panel rang its bell: the dock badge counts one, and the popover lists the waiting panel with a way to jump to it.',
-    run: async (k) => { await k.focus('live'); await k.ring(); await k.click('[data-dock="attention"]'); await sleep(400); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
+    run: async (k) => { await k.focus('live'); await k.ring(); /* dock(): the approval scene left the popover OPEN and a bare click toggled it shut — the golden had no popover. */ await k.dock('attention'); await sleep(400); await k.shot('attention'); await k.press('Escape'); await sleep(200) } },
   { name: 'overview', intent: 'The minimap in the top-right corner at 100%: one block per panel in its state colour — the waiting panel amber — and the camera as an iris rectangle; the status board while working.',
     run: async (k) => { await k.shot('overview') } },
   { name: 'group', intent: 'A named, coloured group frame around two panels, with its label, member count, and its card and remove controls in the header.',
@@ -510,16 +519,11 @@ const SCENES = [
       await k.shot('reduced-motion')
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
     } },
-  { name: 'scale-100', intent: 'M149. The same shell at a device scale factor of 1 (a 100% display; every other scene on this machine is captured at 2, a 200% display): hairlines stay one device pixel, the glass blur and the state edge\'s glow survive the coarser grid, the WebGL terminal\'s glyphs are still legible.', size: [1440, 900],
-    run: async (k) => {
-      try { k.wc.debugger.attach('1.3') } catch { /* attached */ }
-      await k.wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
-      await sleep(600)
-      await k.goTo('claude — api (2)'); await sleep(300)
-      await k.shot('scale-100')
-      await k.wc.debugger.sendCommand('Emulation.clearDeviceMetricsOverride')
-      await sleep(400)
-    } },
+  // A `scale-100` scene (a device scale factor of 1 through
+  // Emulation.setDeviceMetricsOverride) was tried and DROPPED by measurement:
+  // capturePage renders at the display's own scale whatever the override
+  // says — the capture came back 2880x1800 — so the scene could not prove
+  // what its intent claimed. The 100% density stays a hand check.
   { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
     run: async (k) => {
       // Last, on purpose: the file stays gone for every scene after it.

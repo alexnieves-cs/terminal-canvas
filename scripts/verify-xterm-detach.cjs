@@ -8,7 +8,7 @@
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
 const { writeFileSync, mkdirSync } = require('node:fs')
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, nativeImage } = require('electron')
 
 const results = []
 const ok = (n, pass, detail) => {
@@ -165,6 +165,38 @@ app.whenReady().then(async () => {
     JSON.stringify({ error: sw.error, containsWholeRun: sw.containsWholeRun, cols: sw.cols, len: sw.len }))
 
   console.log('\n' + '='.repeat(60))
+  // repaint.1 (M149). The pixels after a re-attach. Counts the pixels in the
+  // fixed host rectangle that are not the host's white ground — glyph ink —
+  // attached and healthy, then after a detach and a re-attach through the
+  // real attachTerminal/detachTerminal. A canvas that exists at the right
+  // size (check 6) and a buffer that is whole (checks 1–3) said nothing
+  // about this; the audit's goldens did.
+  {
+    const ink = async (name) => {
+      const img = await win.webContents.capturePage({ x: 0, y: 0, width: 480, height: 240 })
+      // The two captures are kept beside the bundle so a red can be LOOKED at.
+      writeFileSync(join(OUT_DIR, `repaint-${name}.png`), img.toPNG())
+      const { width, height } = img.getSize()
+      const bytes = img.toBitmap()
+      let dark = 0
+      for (let i = 0; i < width * height; i++) {
+        const o = i * 4
+        if (bytes[o] < 200 || bytes[o + 1] < 200 || bytes[o + 2] < 200) dark += 1
+      }
+      return { dark, total: width * height }
+    }
+    const before = await ink('before')
+    const detached = await win.webContents.executeJavaScript(`window.__repaintStep('detach')`)
+    const renderer = await win.webContents.executeJavaScript(`window.__repaintStep('reattach')`)
+    const after = await ink('after')
+    ok('repaint.1 a live terminal re-attached through the real attach path PAINTS its buffer again — at least half the ink it had while attached and healthy',
+      // Eight rows of forty-odd glyphs at 2x is thousands of ink pixels; a few
+      // hundred is the cursor block alone, which is what the first cut of this
+      // check accepted as "painted".
+      before.dark > 4000 && detached === 'detached' && after.dark >= before.dark * 0.5,
+      JSON.stringify({ before, after, detached, renderer, rendererAtStart: probe.repaintRenderer }))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

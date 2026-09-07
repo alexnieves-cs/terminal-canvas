@@ -1,11 +1,17 @@
 /* Probe: does an xterm Terminal survive having its host detached?
    Bundled by verify-xterm-detach.cjs and loaded in a hidden window. */
 import { Terminal } from '@xterm/xterm'
+// repaint.1 (M149). xterm's own stylesheet, injected: without it a Terminal
+// lays out no rows and paints nothing, attached or not — the first pixel
+// capture of this page was a bare cursor box, which is no evidence about
+// repainting either way. The bundle's loader hands the file over as text.
+import xtermCss from '@xterm/xterm/css/xterm.css'
+{ const style = document.createElement('style'); style.textContent = xtermCss; document.head.appendChild(style) }
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 // The REAL factory, not a hand-built Terminal: unicode.1 asserts a property
 // of what createTerminal returns, which is the one place a Terminal is built.
-import { createTerminal, attachTerminal } from '../src/renderer/terminal/create-terminal'
+import { createTerminal, attachTerminal, detachTerminal } from '../src/renderer/terminal/create-terminal'
 // serialize.1/.2 (M112). The REAL SessionHandle, not a hand-built Terminal
 // plus a raw addon: this is what usePaletteActions.ts actually calls, so a
 // pass here is a pass on the production path, not a spike alongside it.
@@ -242,6 +248,38 @@ window.__probe = (async () => {
     handle2.dispose()
   } catch (error) {
     out.serializeWrap.error = String(error)
+  }
+
+  // repaint.1 (M149). The PIXELS, through the REAL attach/detach path: the
+  // 4.0 audit's goldens showed a live terminal painting BLANK from the scene
+  // that carded and re-promoted it onward, while its buffer (checks 1–3) was
+  // whole. Checks 4–6 say so themselves: none of them proves the WebGL canvas
+  // paints after a re-attach. This host sits at a fixed screen rectangle the
+  // suite captures with capturePage, before the detach and after the
+  // re-attach; `window.__repaintStep` sequences the two captures.
+  const rh = document.createElement('div')
+  rh.id = 'repaint-host'
+  rh.style.cssText = 'position: fixed; left: 0; top: 0; width: 480px; height: 240px; background: #ffffff;'
+  document.body.appendChild(rh)
+  const rHandles = createTerminal()
+  attachTerminal(rHandles, rh)
+  for (let i = 0; i < 8; i++) rHandles.term.write('REPAINT-ME ################################\r\n')
+  await new Promise((r) => setTimeout(r, 300))
+  out.repaintRenderer = rHandles.rendererKind
+  window.__repaintStep = async (step) => {
+    if (step === 'detach') {
+      detachTerminal(rHandles)
+      rh.remove()
+      await new Promise((r) => setTimeout(r, 150))
+      return 'detached'
+    }
+    if (step === 'reattach') {
+      document.body.appendChild(rh)
+      attachTerminal(rHandles, rh)
+      await new Promise((r) => setTimeout(r, 400))
+      return rHandles.rendererKind
+    }
+    return 'unknown step'
   }
 
   return out
