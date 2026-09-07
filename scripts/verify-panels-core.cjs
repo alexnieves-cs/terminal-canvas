@@ -3863,5 +3863,43 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ pbId, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
       if (typeof pbId === 'string') await clickPanelClose(wc, pbId)
     }
+
+    // M145 — paste.image.1 (backlog #13's bytes case). With an IMAGE on the
+    // clipboard and no text, a menu paste into a spawned terminal hands the
+    // agent a PATH: main writes the image under attachments/ and the renderer
+    // pastes the shell-quoted path (bracketed, check 40's rule); a text paste
+    // is unchanged. The terminal is `/bin/cat -v`, which echoes what it gets.
+    {
+      const { clipboard, nativeImage } = require('electron')
+      const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const piId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !panelsBefore.includes(id)) ?? false
+      }, 8000)
+      if (typeof piId === 'string') {
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(piId)}] .xterm') !== null`), 8000)
+        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(piId)}] .panel__slot`)
+        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === piId, 5000)
+        await sleep(300)
+      }
+      // A 2x2 red PNG on the clipboard, and NO text (a text paste wins when both are there).
+      const png = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2P8z8DwnwEIGGEMAD3JBP0e4nFXAAAAAElFTkSuQmCC')
+      clipboard.clear()
+      clipboard.writeImage(png)
+      const textOnClipboard = clipboard.readText()
+      wc.send(IPC_EVENTS.EDIT_PASTE, textOnClipboard)
+      const echoedPath = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('.png') !== null && window.__m4aCellToScreen('attachments') !== null`), 6000)
+      const bracketed = await wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`)
+      const written = readdirSync(join(app.getPath('userData'), 'attachments')).filter((f) => f.endsWith('.png'))
+      clipboard.clear()
+      clipboard.writeText('PLAIN-TEXT-PASTE-4471')
+      wc.send(IPC_EVENTS.EDIT_PASTE, clipboard.readText())
+      const echoedText = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PLAIN-TEXT-PASTE-4471') !== null`), 4000)
+      ok('paste.image.1 a clipboard image pasted into a spawned terminal lands as a bracketed shell-quoted path to a .png main wrote under attachments/, and a text paste is unchanged',
+        typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length >= 1 && echoedText !== false,
+        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText }))
+      if (typeof piId === 'string') await clickPanelClose(wc, piId)
+    }
   }
 })

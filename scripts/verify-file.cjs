@@ -1525,6 +1525,37 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ newer, same, ahead, bare, forbidden, threw, notJson, notList, onlyPre, cmp, cmpEq, repo, repoStr, noRepo, url: urls[0] }))
   } catch (e) { ok('update.1 (threw)', false, String(e)) }
 
+// M145 — clipboard.1–.3 (backlog #13's bytes case). An image on the
+// clipboard pasted into a TERMINAL becomes a file main writes under the
+// attachments directory, and its PATH is what the terminal receives (a PTY
+// cannot take bytes; the agent CLIs read a path). The directory is pruned to
+// the newest ATTACHMENTS_KEEP files — a cap, not an age, because a cap cannot
+// grow without bound and needs no clock to be right. No image on the
+// clipboard is the `empty` arm, never a zero-byte file.
+;(async () => {
+  const { mkdtempSync, readdirSync, readFileSync, existsSync } = require('node:fs')
+  const { join } = require('node:path')
+  const { tmpdir } = require('node:os')
+  const has = typeof F.writeClipboardImage === 'function' && typeof F.ATTACHMENTS_KEEP === 'number'
+  const dir = mkdtempSync(join(tmpdir(), 'tc file clipboard '))
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+  let now = 1000
+  const write = (bytes) => F.writeClipboardImage({ dir, now: () => (now += 1), image: () => bytes })
+  const first = has ? write(png) : null
+  ok('clipboard.1 an image on the clipboard is written as a .png under the directory and the result names its path',
+    has && first !== null && first.kind === 'ok' && /\.png$/.test(first.path) && first.path.startsWith(dir) && existsSync(first.path) && readFileSync(first.path).equals(png),
+    JSON.stringify({ has, first }))
+  const empty = has ? write(null) : null
+  ok('clipboard.2 no image on the clipboard is the `empty` arm — no file is written',
+    has && empty !== null && empty.kind === 'empty' && readdirSync(dir).length === 1,
+    JSON.stringify({ empty, files: has ? readdirSync(dir).length : null }))
+  if (has) for (let i = 0; i < F.ATTACHMENTS_KEEP + 5; i++) write(png)
+  const files = has ? readdirSync(dir).filter((f) => f.endsWith('.png')) : []
+  ok('clipboard.3 the directory is pruned to the newest ATTACHMENTS_KEEP files after each write, and the newest survives',
+    has && files.length === F.ATTACHMENTS_KEEP && F.ATTACHMENTS_KEEP >= 10 && files.some((f) => f.includes(String(now))),
+    JSON.stringify({ keep: has ? F.ATTACHMENTS_KEEP : null, files: files.length, now }))
+})()
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

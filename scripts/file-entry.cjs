@@ -58,5 +58,8 @@ module.exports = {
   ...require('../src/main/agent-transcript-log.ts'),
   /* M123. The update check, pure over an injected fetcher — no https here;
      the real fetcher lives in main/index.ts, which no suite bundles. */
-  ...require('../src/main/update-check.ts')
+  ...require('../src/main/update-check.ts'),
+  /* M145. The clipboard-image file: pure over an injected directory and clock; the real
+     clipboard read lives in main/index.ts, which no suite bundles. Absent until it lands. */
+  ...((() => { try { return require('../src/main/clipboard-file.ts') } catch { return {} } })())
 }
