@@ -2466,6 +2466,20 @@ const session = (id, over = {}) => ({
     JSON.stringify({ ids }))
 }
 
+// M173 — hints.1. THE HINTS AS DATA: the four gesture hints (pan, zoom,
+//     palette, new-panel) and the tmux notice are one list with ids, each a
+//     SENTENCE; `hintsLeft(seen)` is what the empty state and the launcher
+//     render — a seen id never comes back, an unknown id in `seen` is ignored.
+{
+  const hints = Array.isArray(R.HINTS) ? R.HINTS : null
+  const left = typeof R.hintsLeft === 'function' ? R.hintsLeft : () => null
+  const ids = hints ? hints.map((h) => h.id).join(',') : null
+  ok('hints.1 the hints are data — four gestures and the tmux notice, each a sentence — and hintsLeft filters the seen ones',
+    ids === 'pan,zoom,palette,new-panel,tmux' && hints.every((h) => typeof h.text === 'string' && h.text.length > 8) &&
+      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5,
+    JSON.stringify({ ids }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

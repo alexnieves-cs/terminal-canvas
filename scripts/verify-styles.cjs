@@ -469,13 +469,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const drawer = /\.shell--nav-drawer \.shell__rail,\s*\.shell--ctx-drawer \.shell__inspector\s*\{([^}]*)\}/.exec(bare)
   const drawerZ = drawer ? Number((/z-index:\s*(\d+)/.exec(drawer[1]) || [])[1]) : NaN
   const hudZ = Number((/\.canvas-hud\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
-  const hintZ = Number((/\.hint-strip\s*\{[^}]*z-index:\s*(\d+)/.exec(bare) || [])[1])
+  // M173: the hint strip is gone (its hints are the empty state's); only the HUD pill is probed.
   const hudOpaque = /\.canvas-hud\s*\{[^}]*background:\s*var\(--s-[0-9]\)/.test(bare)
   const drawerTop = drawer ? /top:\s*var\(--shell-top-h\)/.test(drawer[1]) : false
   const drawerBottom = drawer ? /bottom:\s*0\b/.test(drawer[1]) : false
   ok('compact.1', 'the compact drawers run from the top bar to the bottom, under the status strip and the hint strip, which sit on an opaque ground',
-    Number.isFinite(drawerZ) && hudZ > drawerZ && hintZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
-    JSON.stringify({ drawerZ, hudZ, hintZ, hudOpaque, drawerTop, drawerBottom }))
+    Number.isFinite(drawerZ) && hudZ > drawerZ && hudOpaque && drawerTop && drawerBottom,
+    JSON.stringify({ drawerZ, hudZ, hudOpaque, drawerTop, drawerBottom }))
 }
 
 // M67 — ground.1 / shadow.1 / hairline.1. THE FRAME, SECOND PASS. The brief
@@ -917,6 +917,22 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const search = all.some((r) => /(^|,)\s*\.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body))
   ok('dock.1', 'the dock buttons carry a hidden label revealed on hover/focus-visible, the current place is a filled pill, the capsules are gone from the dock and its CSS, and the top bar\'s search is a field-shaped button',
     label && reveal && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, on, noCapsule, noCapsuleDom, search }))
+}
+
+// M173 — hud.2. THE STATUS BAR AT REST SAYS NOTHING: `.canvas-hud` is a
+// floating pill (--r-full) holding the zoom controls and the update notice
+// alone — no coordinates, no selected name, no CPU · RAM total, no tmux
+// sentence — so no `__cost`, `__warn`, `__focus` or `__word` rule remains,
+// and no `.hint-strip` rule (the strip is gone; its hints are the empty
+// state's sentences, `hints.1`).
+{
+  // `some`: a breakpoint block declares `.canvas-hud` before the main rule does.
+  const pill = all.some((r) => /(^|,)\s*\.canvas-hud\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body))
+  const gone = ['.canvas-hud__cost', '.canvas-hud__warn', '.canvas-hud__focus', '.canvas-hud__word', '.hint-strip'].filter((c) => all.some((r) => r.sel.includes(c)))
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'CanvasHud.tsx'), 'utf8')
+  const noFigures = !/data-machine-cost-total|canvas-hud__warn|canvas-hud__focus/.test(src)
+  ok('hud.2', 'the HUD is a pill with the zoom controls and the update notice alone — no cost, tmux, coordinates or selected-name rule, no hint strip',
+    pill && gone.length === 0 && noFigures, JSON.stringify({ pill, gone, noFigures }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)
