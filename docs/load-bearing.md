@@ -4019,38 +4019,45 @@ check. Treat green as green, not as proof of these.
 - **The unsigned `.dmg` on another Mac (M125).** Gatekeeper's behaviour on a build with no identity — right-click → Open, or `xattr -d com.apple.quarantine` — was not watched on a second machine.
 
 
-**The manual-only list, re-read entire at 3.1's Act III (M126–M133).** Nothing above was
-struck: this act added surfaces beside the entries and checks beneath none of them, and every
-owed hand check from 3.0 is still owed. Added, each confirmed once by hand or not at all, as
-stated:
-- **The trail against a real agent (M130).** Every check drives a recorded fixture JSONL. The
-  `Skill` tool_use record shape was measured once, on one version, and is versioned by nothing:
-  a change to how the CLI writes it reads as an EMPTY TRAIL, not an error. Owed: run a real
-  `claude` in a terminal panel, invoke two skills, confirm the lane shows both in order.
-- **`claude plugin list --json` on another machine and another version (M128).** Measured once.
-  The `unknown` arm is what protects the pane; the shape is pinned by nothing but the fixture.
-- **A pool of N against a real budget (M132).** `pool.1` drives a fake runner and a fake limits
-  dep, and the module has no production caller at all yet. Owed with `agents.budgetUsd` set
-  deliberately low, and against a real `AgentSessionManager` rather than the fake.
-- **A saved `SKILL.md` still loading in the CLI (M129).** `edit.1` proves the bytes round-trip;
-  no suite in this repository RUNS a skill, so that the CLI accepts the spliced result is
-  unproven. Owed: edit a real skill's description and body, save, invoke it from a real session.
-- **`shell.trashItem` on this machine (M129).** Electron's, unreachable from plain node;
-  `verify:toolbox` drives an injected `trash` dep.
-- **The >40-skill truncation notice (M130).** `more` was structurally unreachable until the
-  gate's fix wave (the scanner pre-sliced at the cap), so NO run before it ever produced one.
-  Owed on a real session that used more than `TRAIL_MAX` skills.
-- **A first-ever skill on a machine with no `~/.claude/skills` (M129).** The `mkdir` arm was
-  added after a review upgraded it from Minor; the fixture is not a genuinely fresh home.
-- **A rename into an OCCUPIED shelf slot (M129).** `editor.2b` proves the slot is carried; what
-  the column looks like when the destination key already sits in it was not watched.
-- **`--append-system-prompt` surviving an orchestrator RESUME (M132).** M81's supervisor rule —
-  the CLI keeps no record of it, so a resumed orchestrator without it stops being one — is
-  unverified for this block kind.
-- **A `collect` join against real workers (M132).** Driven only over the recorded shape.
-- **A workflow watcher ARMED for real (M133).** That an interval in a running app fires the
-  trigger on its own schedule, and what the ledger row naming `/usr/bin/true` looks like beside
-  it, was not watched.
+**The manual-only list, re-read entire at 3.1's Act III (M126–M133), and again at the v7
+run's Act I (M136).** Nothing above was struck: the M126–M133 act added surfaces beside the
+entries and checks beneath none of them, and every owed hand check from 3.0 is still owed.
+The act left ELEVEN owed checks; M136 made them one source — `scripts/handcheck-steps.cjs`,
+walked by `npm run handcheck` (not in the verify chain: it reaches the real machine) — and
+`verify:meta handcheck.1` pins that every title below is the script's own. FOUR are now
+automated by that script and no longer owed to a person: **2** (`claude plugin list --json`
+through the shipped parser against the real CLI, reporting the version and the arm it took),
+**5** (`shell.trashItem` from a node-mode Electron over a temp file), **7** (the real
+`createSkill` under a fresh temp HOME, the `mkdir` arm), and **8** (`renameInShelf` over an
+occupied destination). The SEVEN below are still a person's; the script prints these same
+steps, and a HAND line is not a pass:
+
+- **The trail against a real agent (M130).** Spawn a Claude-preset terminal in a repository
+  with two skills; invoke both by name in two prompts; select the panel; the Skills pane's
+  trail lane lists BOTH in order with their times. An empty lane means the CLI changed how it
+  writes the `Skill` tool_use record — read as an empty trail, never an error.
+- **A pool of N against a real budget, and a real AgentSessionManager (M132).** Set
+  `agents.budgetUsd` to 0.05 and `agents.maxConcurrent` to 2; Run a template with a `pool` of
+  width 4 over six short items; two start, four read `queued (concurrency)`; at the crossing
+  every worker in flight is INTERRUPTED (never killed) and the run reads `stopped — budget`;
+  raising the budget clears the latch. Spends real money by design.
+- **A saved SKILL.md still loading in the CLI (M129).** Edit a user skill's description and
+  one body line in the skill panel, Save; in a claude terminal `/` lists it with the NEW
+  description and invoking it follows the new line. `edit.1` proves the bytes; only the CLI
+  can prove it loads them.
+- **The >40-skill truncation notice (M130).** Invoke more than 40 skills in one session (41
+  stub skills and a loop prompt); the lane shows the newest 40 and a `… and N more` capsule
+  naming the true excess. No run before the M130 fix wave ever produced one.
+- **`--append-system-prompt` surviving an orchestrator RESUME (M132).** One turn in an
+  orchestrator block's chat asking for its instructions; quit; relaunch; ask again. The
+  resumed chat still answers with the block's prompt — the CLI keeps no record of the flag
+  (M81's supervisor rule for this block kind).
+- **A `collect` join against real workers (M132).** A `pool` of 3 feeding a `collect` with a
+  file target: the collect chat starts ONCE after the last worker, three payloads in panel
+  order in its first message, the file holding the joined text.
+- **A workflow watcher ARMED for real (M133).** Triggers → every 1 minute; three minutes
+  later three new runs in the Runs tab and a ledger row per fire naming `/usr/bin/true` with
+  exit 0 beside it.
 
 **`serialiseLayout` is the one place "an empty record is absent on disk" is decided
 (`shared/layout-schema.ts`, `main/layout-store.ts`).** It did not exist before M126: the
@@ -4132,3 +4139,48 @@ is 600 s, not the 1.25× of a measured green run (390 s against runs of 311 s an
 contention, so the formula's figure sits UNDER an observed flake. The cost is that a genuine
 hang is noticed about three and a half minutes later than the formula would notice it.
 **Splitting the suite is owed** and is the real fix; raising the number again is not.
+**`verify:panels` is five parts, each booting its own renderer, and three things the old
+file's early checks did for every later one are now each part's PREAMBLE (M135;
+`scripts/panels-harness.cjs`, `scripts/verify-panels-*.cjs`).** The split moved 357 checks by
+line number with their ids intact (`verify:meta panels-split.2`), and nearly every red it
+produced was one of three absences: check 26 had installed
+`attachPtyLifecycle(win, () => ptyManager.detachAll())`, so every later reload DETACHED every
+session — without it a reload reattaches the PTYs, a panel expected dormant is live, and a
+renderer that re-mints `n1` after a reload attaches it to the OLD `n1`'s surviving shell,
+which is how `sheet.3`, `front.1/2` and `editor.1d` all read as product defects at once;
+check 26 had also created the tmux backend on `PANELS_SOCKET`, and every `state.tmuxBackend`
+read (91, 107, the link block, `scrollback.1`) took its tmux arm because it existed; and the
+core checks had woken every seed panel and left dormant fixtures on the canvas that 87, 93
+and 106 found by search. Each later part now installs the lifecycle, creates the backend
+(current or not, as the old file had it at that line), and a check that needs a dormant panel
+seeds one the way 84 does. **The rule for a red in a part: mint the prerequisite in that
+check, never touch the assertion**, and say which old check used to provide it.
+
+**A hidden window's page is unfocused until told, and a click into it raises NO focus event
+(`scripts/verify-panels-product.cjs`, `editor.1d`, `reach.3`).** `sendInputEvent` moves
+`document.activeElement`; React's `onFocus` — and so the skill editor's keyboard flag — never
+fires, and the check read a guard that had never armed as a guard that failed. The un-split
+file had focused the page thousands of gestures earlier. `wc.focus()` before the first real
+gesture that must raise a focus event; `document.hasFocus()` in the detail says which case a
+future red is.
+
+**The harness's mutable names live on `ctx.state`, never destructured (M135,
+`scripts/panels-harness.cjs`).** `backend`, `tmuxBackend`, `exportTarget` and the fixture
+flags are assigned by checks and read by handlers the harness built at boot. A destructured
+`let` is a copy: the assignment lands, the handler keeps reading the original, and the
+fixture "never turns on" with the check beneath it green against the wrong state. The parts
+were rewritten by a string-aware pass (a name inside a check's own label or a template of
+renderer JS is not the variable — the first pass changed a printed sentence).
+
+**The pool's production caller finishes a worker on the manager's OWN `ready`/`exited`, never
+on a timer, and a mint the renderer refuses ends the pool rather than waiting (M138,
+`src/main/pool-caller.ts`).** `startPool` pulls the next item on `finished(id)`; a caller
+that guessed at completion would either double-pull (a timer shorter than a turn) or stall
+(longer). The manager emits `ready` after every turn and `exited` on a death, and the caller
+routes both by worker id — a session no pool minted moves nothing (`pool.2b`). A refused
+mint returns an EMPTY id to the engine and mutes every later event: throwing would reject
+the engine's own pump, an unhandled rejection with the pool left "live" and the Stop verb
+armed over nothing. One live pool per (template, block) is refused by name on a second Run,
+because two pools over one list each pull every item.
+
+
