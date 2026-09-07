@@ -3,6 +3,7 @@ import { shellControl } from './shell-control'
 import { ChevronLeft, Plus } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
+import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import {
   SKILL_CARD_MIME,
   SKILL_PANE_KINDS,
@@ -57,6 +58,12 @@ export interface SkillsPaneProps {
   onPlace: (key: SkillKey, columnId: string) => void
   onNewColumn: () => void
   onDeleteColumn: (id: string) => void
+  /** M130. The roster the assign door offers — choosing among it, never typing a name. */
+  teammates: readonly PersistedTeammate[]
+  /** Assign every card in a column to a teammate, in one write. */
+  onAssignColumn: (columnId: string, teammateId: string) => void
+  /** Assign one card to a teammate. */
+  onAssignCard: (key: SkillKey, teammateId: string) => void
 }
 
 const SCOPES: readonly ToolScope[] = ['user', 'project', 'local']
@@ -148,6 +155,14 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                 <h3 className="skills-pane__heading">
                   <span className="skills-pane__column-title">{col.title}</span>
                   <span className="skills-pane__count">{col.cards.length}</span>
+                  <select className="skills-pane__assign" data-skills-assign-column={col.id}
+                    aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
+                    disabled={col.cards.length === 0 || props.teammates.length === 0}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onChange={(e) => { const id = e.target.value; if (id !== '') props.onAssignColumn(col.id, id) }}>
+                    <option value="">Assign to teammate…</option>
+                    {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                  </select>
                   <button type="button" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
                     disabled={undeletable}
                     title={undeletable ? 'Ungrouped is where an unplaced card sits — it cannot be deleted' : `Delete ${col.title}; its cards go back to where they derive`}
@@ -168,6 +183,14 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       {!card.installed && (
                         <span className="skill-card__note" data-skill-gone>not installed — the shelf kept its slot</span>
                       )}
+                      <select className="skills-pane__assign" data-skills-assign-card={card.key}
+                        aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
+                        disabled={props.teammates.length === 0}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) => { const id = e.target.value; if (id !== '') props.onAssignCard(card.key, id) }}>
+                        <option value="">Assign to teammate…</option>
+                        {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                      </select>
                     </li>
                   ))}
                 </ul>

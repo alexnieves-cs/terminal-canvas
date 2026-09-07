@@ -12,6 +12,7 @@ import { resolveToolboxHome } from './toolbox-read'
 import { buildPushArgs } from './git-args'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
+import { skillsForBrief, skillsBriefLine } from './skill-assign'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
 import { parseTeammates, parseRoutines } from '@shared/layout-schema'
@@ -1368,7 +1369,15 @@ app.whenReady().then(async () => {
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
       const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
-      const brief = mate !== undefined && mate.brief.trim() !== '' ? { appendSystemPrompt: [spec.appendSystemPrompt, `You are ${mate.name}. ${mate.brief.trim()}`].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
+      // M130. THE ONE APPEND SITE (M100's rule: never a second path, never a
+      // renderer-side copy). A project-scoped skill outside this teammate's
+      // places is dropped here — never named to the agent — because "You
+      // can use X" for a skill it cannot read would be worse than silence.
+      const skillsLine = mate === undefined ? '' : skillsBriefLine(skillsForBrief(mate, cwd, fsRealpath).named)
+      const mateText = mate !== undefined && (mate.brief.trim() !== '' || skillsLine !== '')
+        ? `You are ${mate.name}.${mate.brief.trim() !== '' ? ` ${mate.brief.trim()}` : ''}${skillsLine}`
+        : undefined
+      const brief = mateText !== undefined ? { appendSystemPrompt: [spec.appendSystemPrompt, mateText].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }

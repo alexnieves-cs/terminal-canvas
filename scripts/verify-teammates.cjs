@@ -143,7 +143,7 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
     const ada = { id: 't1', name: 'ada', brief: '', places: ['/home/u/notes'], services: [], memory: 'ada', chats: [], messaging: false, scheduling: false, skills: [key] }
 
     const brief = A.skillsForBrief(ada, repoRoot, realpath)
-    ok('assign.1 a project-scoped skill outside the teammate\'s places is dropped from the brief, never named to the agent',
+    ok('assign.1f a project-scoped skill outside the teammate\'s places is dropped from the brief, never named to the agent',
       brief.named.length === 0 && brief.refused.length === 1 && brief.refused[0].name === 'plan' && brief.refused[0].repoRoot === repoRoot,
       JSON.stringify(brief))
 
@@ -156,22 +156,22 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
     // Inside the teammate's places: named, not refused.
     const bo = { ...ada, id: 't2', name: 'bo', places: [repoRoot] }
     const briefBo = A.skillsForBrief(bo, repoRoot, realpath)
-    ok('assign.1 a project-scoped skill INSIDE the teammate\'s places is named to the agent',
+    ok('assign.1g a project-scoped skill INSIDE the teammate\'s places is named to the agent',
       briefBo.named.length === 1 && briefBo.named[0] === 'plan' && briefBo.refused.length === 0, JSON.stringify(briefBo))
-    ok('assign.1 no refusal when the repository is inside the teammate\'s places',
+    ok('assign.1h no refusal when the repository is inside the teammate\'s places',
       A.assignRefusal('project', repoRoot, bo, realpath) === null, '')
 
     const assignTo = (id) => A.assignSkillsToTeammate([ada, bo], id, [key])
     ok('assign.1d an unknown teammate is refused', assignTo('ghost').ok === false, '')
     const assigned = assignTo('t2')
-    ok('assign.1d assigning to a known teammate returns the whole next record with the key present',
+    ok('assign.1i assigning to a known teammate returns the whole next record with the key present',
       assigned.ok === true && assigned.teammate.skills.includes(key), JSON.stringify(assigned))
 
     const carried = T.carryTeammate({ id: 'a', name: 'ada', brief: '', places: [], services: [], memory: 'a', chats: [], messaging: false, scheduling: false })
     ok('assign.1e carryTeammate writes no undefined skills key',
       !('skills' in carried), 'an absent optional field stays absent through every copy site')
     const carriedWith = T.carryTeammate({ ...carried, skills: [key] })
-    ok('assign.1e a PRESENT skills list is carried by value', Array.isArray(carriedWith.skills) && carriedWith.skills[0] === key, JSON.stringify(carriedWith))
+    ok('assign.1j a PRESENT skills list is carried by value', Array.isArray(carriedWith.skills) && carriedWith.skills[0] === key, JSON.stringify(carriedWith))
   }
 
   const failed = results.filter((r) => !r.pass)

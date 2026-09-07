@@ -1446,9 +1446,19 @@ export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeamm
   raw.forEach((entry, i) => {
     if (!isRecord(entry) || !isStr(entry.id) || entry.id.trim() === '' || seen.has(entry.id)) { warnings.push(`dropped teammate ${i}: not an object or an unusable id`); return }
     if (!isStr(entry.name) || entry.name.trim() === '') { warnings.push(`dropped teammate ${entry.id}: name was unusable`); return }
-    const places = strList(entry.places), services = strList(entry.services), skills = strList(entry.skills), chats = strList(entry.chats)
-    if (places === null || services === null || skills === null || chats === null) { warnings.push(`dropped teammate ${entry.id}: a list field was not a list of strings`); return }
+    const places = strList(entry.places), services = strList(entry.services), chats = strList(entry.chats)
+    if (places === null || services === null || chats === null) { warnings.push(`dropped teammate ${entry.id}: a list field was not a list of strings`); return }
     const absolute = places.filter((p) => { const keep = p.startsWith('/'); if (!keep) warnings.push(`teammate ${entry.id}: dropped place ${p} — a place must be an absolute folder`); return keep })
+    // M130. `skills` is OPTIONAL — absent is every pre-M130 record and every
+    // teammate nobody has assigned a skill to. Present-but-malformed drops
+    // just this field with a warning; the teammate is kept (the record
+    // rule: a per-field failure never costs the whole entry).
+    let skills: string[] | undefined
+    if (entry.skills !== undefined) {
+      const parsed = strList(entry.skills)
+      if (parsed === null) { warnings.push(`teammate ${entry.id}: dropped skills — not a list of strings`); skills = undefined }
+      else skills = parsed
+    }
     seen.add(entry.id)
     out.push({
       id: entry.id,
@@ -1456,7 +1466,7 @@ export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeamm
       brief: isStr(entry.brief) ? entry.brief : '',
       places: absolute,
       services,
-      skills,
+      ...(skills !== undefined ? { skills } : {}),
       memory: isStr(entry.memory) && entry.memory.trim() !== '' ? entry.memory : entry.id,
       chats,
       messaging: entry.messaging === true,

@@ -136,7 +136,7 @@ import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { parseSkillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
-import type { ToolInventoryResult, ToolScope } from '@shared/toolbox'
+import type { NamedToolEntry, ToolInventoryResult, ToolScope } from '@shared/toolbox'
 import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@renderer/shell/skills-pane-model'
 import type { SkillsInventoryState } from '@renderer/shell/SkillsPane'
 import { SkillNode } from '@renderer/skills/SkillNode'
@@ -4612,10 +4612,52 @@ export function Canvas({
         : skillsInventory === undefined ? { kind: 'pending' }
           : skillsInventory.kind === 'no-cwd' ? { kind: 'no-cwd' }
             : { kind: 'inventory', readAt: skillsInventory.inventory.readAt }
+    const paneColumns = buildSkillColumns(entries, shelf, { kind: skillKindTab, query: skillQuery, scopes: skillScopes, placedOnly: skillPlacedOnly })
+    // M130. A project-scoped key's repository, read back out of the
+    // inventory's own `sourcePath` (`<root>/.claude/skills/<name>/SKILL.md`)
+    // — the assign door's own check, so a bad assignment is refused before
+    // it ever reaches `teammate:save`. `insidePlace` runs with an identity
+    // realpath: the renderer has no filesystem, and the real, symlink-
+    // resolved check is main's own at the one brief-append site, which never
+    // trusts this one.
+    const repoRootOfKey = (key: SkillKey): string | null => {
+      const parsed = parseSkillKey(key)
+      if (parsed === null || parsed.scope !== 'project') return null
+      const entry = entries.find((e): e is NamedToolEntry => 'name' in e && e.scope === parsed.scope && e.name === parsed.name)
+      if (entry === undefined) return null
+      const suffix = `/.claude/skills/${parsed.name}/SKILL.md`
+      return entry.sourcePath.endsWith(suffix) ? entry.sourcePath.slice(0, -suffix.length) : null
+    }
+    // A light, renderer-side prefix check — never the authority: `@shared/places`
+    // pulls in `node:path`, which the renderer cannot bundle (it has no
+    // filesystem to realpath against anyway). The REAL, symlink-resolved
+    // check is main's own at the one brief-append site (`skillsForBrief`),
+    // which never trusts this one — this is only what stops a doomed
+    // assignment from ever reaching `teammate:save`.
+    const roughlyInside = (repoRoot: string, places: readonly string[]): boolean =>
+      places.some((p) => { const norm = p.replace(/\/+$/, ''); return repoRoot === norm || repoRoot.startsWith(norm + '/') })
+    const assignOne = (key: SkillKey, teammateId: string): void => {
+      const t = (teammates ?? []).find((x) => x.id === teammateId)
+      if (t === undefined) return
+      const repoRoot = repoRootOfKey(key)
+      if (repoRoot !== null && !roughlyInside(repoRoot, t.places)) {
+        window.alert(`${repoRoot} is outside every place of ${t.name} — add ${repoRoot} to this teammate's places in the Teammates pane`)
+        return
+      }
+      const merged = Array.from(new Set([...(t.skills ?? []), key]))
+      void window.canvas.teammate.save({ ...t, skills: merged }).then(reloadTeammates)
+    }
     return {
       onToggle: chrome.toggleNavigator,
       state,
-      columns: buildSkillColumns(entries, shelf, { kind: skillKindTab, query: skillQuery, scopes: skillScopes, placedOnly: skillPlacedOnly }),
+      columns: paneColumns,
+      teammates: teammates ?? [],
+      onAssignColumn: (columnId: string, teammateId: string) => {
+        const col = paneColumns.find((c) => c.id === columnId)
+        if (col === undefined) return
+        for (const card of col.cards) assignOne(card.key, teammateId)
+      },
+      onAssignCard: (key: SkillKey, teammateId: string) => assignOne(key, teammateId),
       kind: skillKindTab,
       onChooseKind: setSkillKindTab,
       query: skillQuery,
@@ -4654,7 +4696,7 @@ export function Canvas({
         writeShelf({ columns: shelf.columns.filter((c) => c.id !== id).map(carryOneColumn) })
       }
     }
-  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf])
+  }, [chrome.toggleNavigator, shelf, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
