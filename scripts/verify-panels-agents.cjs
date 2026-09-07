@@ -1490,8 +1490,19 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const verbs = await wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-row="tool"]')]; return Object.fromEntries(rows.map((r) => [r.getAttribute('data-chat-tool'), !!r.querySelector('[data-chat-tool-diff]')])) })()`)
         // Declared before the assertion that reads it; measured after the close below.
         let baselineGone = false
+        // M168 — tools.3. A GROUP: the chat's two consecutive tool rows sit
+        //     under one header, collapsed by default (the rows are in the DOM,
+        //     display none); a dispatched click on the hidden Edit row's diff
+        //     verb REVEALS the group before the diff opens — a script and a
+        //     person land on the same state.
+        const groupBefore = await wc.executeJavaScript(`(() => { const g = ${sel('[data-chat-tools]')}; if (!g) return null; const row = g.querySelector('[data-chat-tool="Edit"]'); return { tools: g.getAttribute('data-chat-tools'), open: g.getAttribute('data-chat-tools-open'), head: (g.querySelector('[data-chat-tools-toggle]')?.textContent ?? '').trim(), rowDisplay: row ? getComputedStyle(row).display : null } })()`)
         const clickedEdit = await clickDiff('Edit')
         const editDiff = await stateOf('Edit', 'diff')
+        const groupAfter = await wc.executeJavaScript(`(() => { const g = ${sel('[data-chat-tools]')}; if (!g) return null; const row = g.querySelector('[data-chat-tool="Edit"]'); return { open: g.getAttribute('data-chat-tools-open'), rowDisplay: row ? getComputedStyle(row).display : null } })()`)
+        ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
+          groupBefore !== null && groupBefore.tools === '2' && groupBefore.open === 'false' && /2 tools/.test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
+            groupAfter !== null && groupAfter.open === 'true' && groupAfter.rowDisplay !== 'none',
+          JSON.stringify({ groupBefore, groupAfter }))
         const clickedRead = await clickDiff('Read')
         const readDiff = await stateOf('Read', 'unchanged')
         await clickPanelClose(wc, chatId)

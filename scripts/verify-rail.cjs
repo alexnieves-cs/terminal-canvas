@@ -2380,6 +2380,40 @@ const session = (id, over = {}) => ({
     JSON.stringify({ kinds, runs }))
 }
 
+// M168 — chat-model.7. TOOL GROUPS. Consecutive tool rows fold under one
+//     header (`worked for 2m · 6 tools`) collapsed by default; a single tool
+//     row stays a row (no header for one); the elapsed span is the first and
+//     last tool's record times when both exist and absent otherwise (absent
+//     stays absent — a header never says `NaN`); every other row passes
+//     through in order. `toolVerb` names the family (Read / Edit / Run /
+//     Search / the tool's own name) and `toolState` the pill.
+{
+  const groups = typeof R.toolGroups === 'function' ? R.toolGroups : () => null
+  const verb = typeof R.toolVerb === 'function' ? R.toolVerb : () => null
+  const state = typeof R.toolState === 'function' ? R.toolState : () => null
+  const tool = (id, name, at) => ({ kind: 'tool', id, name, input: {}, live: false, ...(at === undefined ? {} : { at }) })
+  const rows = [{ kind: 'user', id: 'u', text: 'x' }, tool('t1', 'Read', 1000), tool('t2', 'Edit', 61000), tool('t3', 'Bash'), { kind: 'text', id: 'a', text: 'done', live: false }, tool('t4', 'Grep')]
+  const g = groups(rows)
+  const kinds = g ? g.map((x) => x.kind).join(',') : null
+  const first = g && g[1]
+  ok('chat-model.7 consecutive tool rows fold into one group with the elapsed span when the times exist, a lone tool row stays a row, the rest pass through; toolVerb and toolState name the family and the pill',
+    kinds === 'user,tools,text,tool' && first && first.rows.length === 3 && first.elapsedMs === 60000 &&
+      groups([tool('x', 'Read')])[0].kind === 'tool' && groups([tool('x', 'Read', 5), tool('y', 'Read')])[0].elapsedMs === undefined &&
+      verb('Read') === 'Read' && verb('Bash') === 'Run' && verb('Grep') === 'Search' && verb('WebFetch') === 'WebFetch' && verb('Write') === 'Edit' &&
+      state(tool('a', 'Read')) === 'done' && state({ ...tool('a', 'Read'), live: true }) === 'running' && state({ ...tool('a', 'Read'), result: { content: 'x', isError: true } }) === 'error',
+    JSON.stringify({ kinds, first: first && { n: first.rows.length, elapsedMs: first.elapsedMs }, verbs: [verb('Bash'), verb('Grep'), verb('Write')] }))
+}
+
+// M169 — composer-rows.1. THE GROWING WELL: the textarea's rows follow the
+//     draft's lines — two at rest, one per line, six at most — pure, so the
+//     count is checked here and the node only renders it.
+{
+  const rows = typeof R.composerRows === 'function' ? R.composerRows : () => null
+  ok('composer-rows.1 the composer shows two rows at rest, one per line of the draft, and never more than six',
+    rows('') === 2 && rows('one') === 2 && rows('a\nb\nc') === 3 && rows('1\n2\n3\n4\n5\n6\n7\n8') === 6,
+    JSON.stringify([rows(''), rows('a\nb\nc'), rows('1\n2\n3\n4\n5\n6\n7\n8')]))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

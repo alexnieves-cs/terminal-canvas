@@ -224,7 +224,7 @@ const SCENES = [
       await sleep(400)
       await k.shot('skills'); await k.dock('panels')
     } },
-  { name: 'chat', intent: 'A chat panel beside the live terminal: a restored transcript with the user\'s turn as a soft bubble on the right, the assistant\'s answer as unboxed prose in the UI face at the measure, a collapsed tool row, the state pill reading asleep, a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled (M167).'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
+  { name: 'chat', intent: 'A chat panel beside the live terminal: a restored transcript with the user\'s turn as a soft bubble on the right, the assistant\'s answer as unboxed prose in the UI face at the measure, a collapsed tool row, the state pill reading asleep, a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled (M167).',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'integrations', intent: 'The Integrations page: the navigator\'s fifth pane, every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
     run: async (kit) => {
