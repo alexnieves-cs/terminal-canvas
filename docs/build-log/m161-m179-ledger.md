@@ -493,3 +493,28 @@ M167's markdown; from Act I: nothing (backlog #86 is its own).
     `edit:copy`, which is main→renderer and cannot carry a fence's text — the spec is
     corrected).
 
+- After the reviews' wave a plain `verify:visual` read **57/57** (exit 0): the wave's one
+  visible change — the `auto` scene's well shows Send again (its turn is `starting` with a
+  message queued, which `composerLive` reads as not in flight, so Interrupt yields), under
+  the tile budget as a one-word swap — is forced on purpose by deleting `auto.png` and
+  updating. Sentence: auto · the well shows a disabled Send and no Interrupt while the
+  queued message waits (the Act II critic's own reading of the model), the group expanded
+  above it as before.
+
+Act II closed 2026-09-07. **Evidence:** `UPDATE_GOLDENS=1 npm run verify:visual` after the
+critic's dispositions — 56/56, exit 0 (32 goldens, sentenced above); after the reviews' wave
+the forced `auto` golden (56/56, exit 0) and a plain `npm run verify:visual` **57/57, exit
+0**; `npm run verify` — **exit 0**; tallies in chain order: meta 38, styles 48, viewport
+137, groups 6, merged 12, registry 38, layout 234, credentials 18, jira 15, github 7,
+palette 143, rail 190, review 98, subagent 27, file 83, toolbox 103, usage 26, machine-cost
+7, tmux 35, agent-state 27, agent-session 141, verbs 14, teammates 25, electron 4, control
+15, package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels core 78 /
+shell 95 / kinds 49 / agents 79 / product 59. Build log
+`docs/build-log/m167-m170-act2-conversation.md`. Merged to `main`.
+
+## Act III — M171–M175 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act3-shell-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act3-shell.md`, branch `m171-shell`. Owed into this
+act: the palette's raw path rows and the sheet's WHERE field (M175, by the map); the
+markdown parse bound (recorded, not owed).

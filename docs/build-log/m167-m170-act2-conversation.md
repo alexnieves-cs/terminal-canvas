@@ -52,4 +52,22 @@ an opened diff sat beside its row instead of beneath it.
 
 ## Reviews
 
-(filled once the fresh-context critic and verifier have run over the act)
+Both ran over the act's diff, the brief, the spec, the ledger and the logs; the findings and
+the evidence are in the ledger.
+
+**Critic — FIX-FIRST, 2 Critical, 5 Major, 8 Minor.** The Criticals: the README rows the
+chain needs; Send hidden while ENABLED (the well's `--live` keyed on `status` alone while
+`composerState` counts `starting` as in flight only for a first spawn) — `composerLive` is
+the one predicate both read now, `composer-live.1`. The Majors: a stored tool call with no
+result read `done` (a fourth word, `no result`); emphasis crossed a code span (the span is
+found first); `plainText`'s claim (the comment says what it is; the fence's Copy is an icon
+with a name, so no verb text sits inside the answer's element); the evidence lines; the
+tools.3 story. Minors, each landed or recorded: a reachable link; the memoised reveal and a
+lone row through the group; the sentence's label and column; the grid leftovers; the reach
+note on folded rows; the parse bound recorded; five spec deviations written down.
+
+**Verifier — 20 claims: 15 SUPPORTED, 3 OVERCLAIMED, 1 UNSUPPORTED, 1 side finding.** The
+overclaims were counts (32 scenes, not 33), M168's red tallies (single-red only on the
+working tree), and the chain slip understated (M169's checks rode in `check(m168)` and were
+green inside `feat(m168)`); the unsupported claim was M169's red tallies, which no log
+holds. Each is corrected in the ledger.
