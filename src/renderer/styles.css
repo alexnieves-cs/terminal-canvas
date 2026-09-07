@@ -65,6 +65,8 @@
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
   --dur-1: 90ms; --dur-2: 160ms;
+  /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
+  --dur-breath: 1.2s;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -1994,9 +1996,11 @@ body {
   min-height: 0;
   flex-direction: column;
 }
+/* M176. A panel ARRIVES: scale from .98 with its opacity over --dur-2 on the
+   brief's ease — the one arrival the brief names (no slide, no overshoot). */
 @keyframes panel-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: scale(.98); }
+  to   { opacity: 1; transform: scale(1); }
 }
 .panel__motion--entering {
   animation: panel-enter var(--dur-2) var(--ease) both;
@@ -2055,7 +2059,7 @@ body {
   /* M109. ONE BREATH, not a heartbeat: two cycles over 1.2s, then the static
      ring above. A pulse that never ends on a panel that waits an hour is a
      signal the eye learns to skip (brief, Motion: three moments). */
-  animation: wants-you-pulse 1.2s ease-in-out 2;
+  animation: wants-you-pulse var(--dur-breath) ease-in-out 2;
 }
 .panel--agent-exited { border-color: var(--frame-line); }
 
@@ -3783,7 +3787,7 @@ body {
 .chat__when { position: absolute; right: var(--sp-2); top: var(--sp-1); font-size: var(--t-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none; }
 .chat__row:hover .chat__when { opacity: 1; }
 .chat__row--user .chat__text { color: var(--fg-2); }
-.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret 1s steps(2, start) infinite; }
+.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret var(--dur-breath) steps(2, start) infinite; }
 @keyframes chat-caret { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .chat__row--live .chat__text::after { animation: none; } }
 .chat__row--thinking { }
@@ -4000,8 +4004,7 @@ body {
 /* M121. The chip GIVES before the chrome verbs clip: .pf__title's own rule (min-width 0, an ellipsis) and it may shrink — the verbs are flex 0 0 auto and never do (header.1). */
 .chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); white-space: nowrap; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chat__auto-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.chat__auto-ring { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; animation: chat-auto-spin 900ms linear infinite; }
-@keyframes chat-auto-spin { to { transform: rotate(360deg); } }
+.chat__auto-ring { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; /* M176: no spinner — the ring's colour is the state (the brief: a soft cursor, never a spinner) */ }
 @media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
 .chat__auto-dismiss { margin-left: var(--sp-1); }
 
@@ -4312,7 +4315,7 @@ body {
 .trail-lane__note { padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line); border-radius: var(--r-sm); background: var(--s-2); color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 /* The cards take pointer events back one by one, the way LinkLayer opts each
    hit stroke in: the LANE must never swallow a click meant for the ground. */
-.trail-card { pointer-events: auto; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); box-shadow: none; animation: trail-card-in 160ms ease-out 1 both; }
+.trail-card { pointer-events: auto; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); box-shadow: none; animation: trail-card-in var(--dur-2) var(--ease) 1 both; }
 .trail-card--openable { cursor: pointer; }
 .trail-card--openable:hover { border-color: var(--line-strong); background: var(--s-3); }
 /* The NAME is the identity — and `not installed here` is a claim about a
