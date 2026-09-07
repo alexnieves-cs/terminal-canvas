@@ -177,3 +177,62 @@ The method lesson from this act: **the red check is its own commit** — `git lo
 
 `verify:file update.1` is `checkForUpdate` over a fake fetcher with a hand-written feed: the newest NON-prerelease wins over a newer prerelease sitting above it (the list, not `/latest`), equal versions are `current`, a bare tag and a `v` tag both parse, a 403 names the status, a thrown fetch carries its own message, `not json` and a non-list body are each `the releases feed could not be read`, a feed of only prereleases is `current`, `compareVersions('3.10.0', '3.9.1') > 0`, and `repoOf` reads both `repository` shapes; the check also asserts every url the fetcher saw is the releases LIST. `verify:meta update.1` pins three facts as text: the setting boolean / default false / not `planWritable` (comments stripped FIRST — the entry's own comment says "never planWritable", and the first version of the check failed on the sentence explaining it), no `https` import in `update-check.ts`, and no script under `scripts/` holding `https.get(`, an `https` import or a templated `api.github.com/repos/${…}` url — a recorded fixture body carrying the literal host (verify-panels and shot both do) is not a call and is not flagged. `verify:palette update.1` is the two rows: `Check for updates…` a canvas row never disabled running `checkForUpdates`, and `env.update`'s four sentences. `verify:ipc` expects 112 channels. No suite calls the real fetcher; see the manual-only item beside the M123 entry in `docs/load-bearing.md`.
 
+
+## The v7 run, Act I (M135–M139)
+
+**`verify:panels` is five parts over one harness (M135).** `scripts/panels-harness.cjs` is
+everything the un-split file did before its first check — the esbuild, the fixtures, the fake
+`ipcMain`, the window, the seed PTY, the socket, the watchdog and the tally — exported as
+`runPanelsSuite(name, watchdogMs, body)`; `body(ctx)` receives every value the old file held at
+its top level, and the mutable harness names a check assigns (`backend`, `tmuxBackend`,
+`exportTarget`, the fixture flags) live on `ctx.state`, getters and setters over the closure
+variables, because a destructured `let` is a copy and an assignment to it reaches nothing.
+Each part boots its own renderer. Three things the un-split file's early checks had done for
+every later one are now done at each later part's start, with a comment naming the check that
+used to do it: check 26 installed `attachPtyLifecycle(win, () => ptyManager.detachAll())`
+(without it a reload REATTACHES every PTY, and a fixture expecting a dormant panel after a
+reload finds it live — `scrollback.1` said so first, and the whole `front`/`sheet`/`editor`
+cascade in the agents and product parts was one cause: a post-reload renderer re-minting `n1`
+onto the old `n1`'s surviving shell); check 26 created the tmux backend on `PANELS_SOCKET`
+(every `state.tmuxBackend` read took its tmux arm because it existed); and the harness's
+`whichHere` and fake `claude` presets. `verify:meta panels-split.1` pins that every part
+requires the harness, carries a MEASURED numeric watchdog with its two figures and date, and is
+in the chain; `panels-split.2` compares the parts' check-id set against the old file at
+`pre-v7-run` (read from git) so nothing can fall out in a move. **A part that goes red for a
+prerequisite is fixed by minting the prerequisite in that check, never by touching an
+assertion**; the M135 build log lists every such mint.
+
+Two harness facts the split surfaced, recorded here because they read as product bugs:
+**a hidden window's page is unfocused until told**, so a `sendInputEvent` click moves
+`activeElement` but raises no focus event and React's `onFocus` never fires — `editor.1d`'s
+guard read as broken until the check called `wc.focus()` first (the un-split file's thousands
+of earlier gestures had focused the page long before); and **a coordinate click lands on
+whatever is on top** — in the shell part, 104/105's review node sat over `first`, so 106
+selects through the rail row, the production gesture immune to z-order.
+
+**`npm run handcheck` (M136)** is `scripts/handcheck.cjs` over `scripts/handcheck-steps.cjs`,
+NOT in the chain: the four automated arms reach the real machine (a real `claude plugin list
+--json`, `shell.trashItem` from a real Electron process — `shell` is undefined under
+`ELECTRON_RUN_AS_NODE` — the real `createSkill` under a temp HOME, `renameInShelf` over an
+occupied slot), the seven HAND arms print their steps. `verify:meta handcheck.1` pins that the
+eleven are there, every HAND title is in `docs/load-bearing.md`'s manual-only block verbatim,
+and the script stays out of the chain.
+
+**M137's checks**: `verify:rail workflow.trigger.1` / `workflow.fire.1` (Triggers disabled with
+Run's reason; a fired trigger returns `templateRefusal`'s sentence instead of minting
+nothing), `verify:layout runs.templateId.1` (a malformed mark warns, the run kept),
+`verify:toolbox skill.sibling.1` (a loose file beside `SKILL.md` counts through the `ENOTDIR`
+arm), `verify:file trail.stamp.1–.2` (a stampless record keeps its place with the previous
+`at`, 0 when first).
+
+**M138's checks**: `verify:agent-session pool.2a–d` (the caller over a fake agents seam and a
+fake mint: the mint per item bounded by the live ceiling, the send with the item, `finished`
+from a worker's `ready`/exit and nothing from a stranger's, stop interrupts and never kills, a
+second start refused, an unreadable list refused before any mint, a refused mint ending the
+pool), `verify:layout chat.orchestrator.1`, `verify:rail pool.model.1`, `verify:palette
+workflow.2a` (rewritten: the blocks run; a pool with no list refuses), `verify:ipc` at 122,
+and `verify:panels` product `workflow.run.1` end to end.
+
+**M139's checks**: `verify:pty` 8/9 are machine facts — the SKIP shape when a binary is
+absent (the CI runner has neither `claude` nor `codex`; 9 had been green there because
+`/codex/` matches `codex not found`), a real path-and-version assertion when present.

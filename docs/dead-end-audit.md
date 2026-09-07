@@ -236,6 +236,57 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
   it; auto-swap is declined in the sentence the launcher shows (an unsigned build cannot
   replace itself).
 
+### The surfaces since M124 (M126–M138), walked in the v7 run's M139
+
+Walked by source and by the suites (the panels harness drives the real pane, panel and
+workflow node; `verify:rail skills.1a–g` the pane's model over its six contexts). Every
+control is one of: runs; disabled with a reason in its `title`; or a sentence in the empty
+arm. The rule holds; two things it found are recorded at the end.
+
+- **The Skills pane (M127).** Three kind tabs over one inventory; a search whose no-match
+  arm is a sentence (`noMatchSentence`), never a rack of empty columns; `no directory —
+  select a panel with one to read what it can do` when the selected panel has none;
+  `reading…` while the shelf loads. New column, always. A column's menu: `Assign to
+  teammate…` (a `<select>`, disabled when the column is empty or no teammate exists, titled)
+  and Delete — `Ungrouped`'s Delete PRESENT and disabled with `UNGROUPED_DELETE_REASON`. A
+  card's menu: Assign (disabled with no teammate, titled), Open. New skill: the scope buttons,
+  `project` disabled with the pane's own reason when the selected panel has no repository;
+  Create disabled with `a skill needs a name` until one is typed. A shelf key with no file
+  behind it keeps its slot and reads `not installed — the shelf kept its slot`.
+- **The skill panel (M128).** Sections over one read; `Open folder` and `Help me write`
+  disabled with `REASON_NO_SOURCE` until an inventory has named a file; the plugin's
+  `details` arm is `unknown — the CLI did not answer` rather than blank; the merged view
+  freezes every door with `REASON_MERGED_VIEW`.
+- **The editor (M129).** Save disabled with four named reasons — no stamp yet, over the
+  read cap (edit it in a terminal), nothing changed, the frontmatter is not grammatical —
+  and the write's three results (`written`, `refused — <why>`, `failed — <why>`) are one
+  line each; the metadata fields freeze with the same sentence in the merged view. Delete
+  confirms with the resource count. Rename refuses an occupied name by name.
+- **The trail lane (M130).** Cards `asking` → `one` / `none` / `several` / `unknown — <why>`,
+  and (M137) a panel with no directory resolves at once to `this panel has no directory`
+  rather than asking forever; the `… and N more` capsule at the cap.
+- **Assignments (M131).** The card reads `not visible to <teammate>` from main's own
+  verdict; a project-scoped skill is refused naming its repository.
+- **The workflow panel (M133, M137, M138).** Run disabled with `templateRefusal`'s
+  sentence (M138: a pool that names no list — the blocks themselves run now); Triggers
+  disabled with the SAME sentence (M137: a watcher armed on a blocked shape fired into a
+  silent refusal every tick); Stop PRESENT always and disabled with `no pool is running`
+  (M138); Save disabled with `the live canvas is the editor — …`; Delete disabled for a
+  built-in; Build with AI always. Every disabled verb also prints its sentence under the row.
+  The Runs tab: `no runs recorded since this app started …` (three states, never an empty
+  box) and, per pool block, `not run yet — Run starts the workers`, the items with
+  `queued / started / finished`, and a closing row — `done — every item finished`,
+  `stopped — by hand`, `stopped — the budget ceiling was crossed; raise agents.budgetUsd to
+  continue`, or `refused — <main's reason>`.
+- **The pool's workers (M138).** Ordinary chats titled `<block> · <item>`; a worker the
+  renderer could not mint ends the pool with the reason in the block's rows; a second Run
+  while one is live is refused `… is already running — stop it before running it again`.
+
+**Found and fixed in this walk:** Triggers enabled on a blocked shape (M137), and the fire
+path minting nothing without a word (M137). **Not fixed, recorded:** a `collect` joined
+by workers minted after its first arrival — the join's expected set grows under it (hand
+check 10; `CLAUDE.md`'s M138 entry).
+
 ## Keyboard reach
 
 `verify:panels reach.1` presses a REAL Tab (`sendInputEvent`, not a dispatched event) from
@@ -246,6 +297,13 @@ right: it is present, titled, and not a stop. What this does NOT cover: the fram
 controls (`fill`, the marks, close) and the rail rows, whose tab order the M44 keyboard
 work set and no check re-walks; and the note editor, which takes focus on placement and
 returns it on Enter/Escape (a click check drives that in `annot.1`).
+
+`verify:panels reach.3` (M139, the product part) presses a REAL Tab from the workflow
+panel's Run and asserts every enabled verb is visited in the row's order and every disabled
+one (Stop with no pool, Save with no editor) is skipped, present and titled; then from the
+Skills pane's first control it asserts the named top controls are reached and every disabled
+control is titled. The page is FOCUSED first (`wc.focus()`): a hidden window's page raises
+no focus events until told, and a walk from an unfocused page visits nothing.
 
 ## Not walked
 

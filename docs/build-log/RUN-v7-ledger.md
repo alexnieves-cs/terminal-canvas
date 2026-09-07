@@ -78,3 +78,34 @@ Out by the brief: #4, #28, #40, #20, signing.
 Act 0 closed at `8d7b8d3` (spec, plan and the red `panels-split.1/.2`).
 
 ## Act I — M135 (in progress)
+
+## Act I — M135–M139, closed 2026-09-07
+
+Build log: `docs/build-log/m134-m139-act1-harness-and-debt.md`. Commits: `8d7b8d3` (red
+`panels-split.1/.2`), `43bbd2b`, `7938f6a` (red `handcheck.1` + the `verify:pty` fix), the
+`check(m137)` / `ee6ab75` pair, `d92422a` / `a7940b9` (M138 red), then the four `feat`/`docs`
+commits that close the act (see `git log`).
+
+- **M135**: `verify:panels` → `core` 71 / `shell` 92 / `kinds` 47 / `agents` 76 / `product` 54
+  (340), watchdogs 40 / 95 / 60 / 110 / 95 s from two green runs each (the figures beside
+  each constant). Nothing lost: `panels-split.2` reads the old file from `pre-v7-run`.
+- **M136**: `npm run handcheck` → `4 automated passed, 0 failed, 0 skipped, 7 for a person`,
+  exit 0 (second run; the first found the Electron arm run in node mode and the `created`
+  result word). The seven HAND checks, verbatim from `scripts/handcheck-steps.cjs`, are the
+  last block of `docs/load-bearing.md`'s manual-only list:
+  1. The trail against a real agent (M130). 3. A pool of N against a real budget, and a real
+  AgentSessionManager (M132). 4. A saved SKILL.md still loading in the CLI (M129). 6. The
+  >40-skill truncation notice (M130). 9. `--append-system-prompt` surviving an orchestrator
+  RESUME (M132). 10. A `collect` join against real workers (M132). 11. A workflow watcher
+  ARMED for real (M133).
+- **M137**: 32 items — 9 fixed, 3 pinned, 6 already fixed, 14 declined by name (the
+  "Deferred from M126–M133" section of `docs/ideas-backlog.md`).
+- **M138**: `pool-caller.ts` + `pool:mint`/`pool:event` + `agent:pool-start`/`agent:pool-stop`;
+  `verify:ipc` 1/1 at 122; `verify:agent-session` 138/138; product `workflow.run.1` green
+  (three workers minted, each sent `work an item\n\nItem: <x>`, rows finished, `done — every
+  item finished`).
+- **M139**: `verify:pty` 8/9 fixed at the cause. **CI green is NOT achieved and cannot be by
+  this run**: the brief forbids a push, and `workflow_dispatch` runs the remote's `main`. The
+  next command is `git push origin main && gh run watch`. The fourth audit and `reach.3`
+  landed. Declined in this act: none by backlog number (the sweep's declines are M137's, by
+  item, above).

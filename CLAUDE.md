@@ -125,7 +125,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 120 channels as of M133 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 9 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | 338 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | M135: FIVE parts over one harness (`scripts/panels-harness.cjs`), each `verify:panels:<part>` its own script with a watchdog pinned at 1.25× its own measured green run — `core` (tiering, input, undo, presets, palette, settings, attention), `shell` (workspaces, merged, rail, inspector, dock, groups, links), `kinds` (usage, file, review, toolbox, jira, link drawing, worktrees, scrollback, broadcast), `agents` (handoff, search, keyboard, theme, the M46–M52 shell, composer, templates, runs, graph, tools, approvals, budget, memory, the M61–M74 surfaces), `product` (chat, watchers, vault, github, integrations, verbs, browser, header, board, engines, sandbox, skills, workflow). Every check id the un-split file held is still here (`verify:meta panels-split.2` compares the set against `pre-v7-run`); `npm run verify:panels` is the chain of the five |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -197,6 +197,7 @@ renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import
 renderer --invoke--> agent:clipboard-image                                       --> main
 renderer --invoke--> agent:auto-start / agent:auto-stop                          --> main
 renderer --invoke--> agent:grants / agent:revoke-grants                          --> main
+renderer --invoke--> agent:pool-start / agent:pool-stop                          --> main
 renderer --invoke--> teammate:list / teammate:save / teammate:delete             --> main
 renderer --invoke--> teammate:choose-place                                       --> main
 renderer --invoke--> routine:list / routine:save / routine:delete / routine:run   --> main
@@ -224,6 +225,7 @@ main     --send-->   watcher:state / vault:changed                              
 main     --send-->   routine:fire                                                 --> renderer
 main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
 main     --send-->   board:add                                                    --> renderer
+main     --send-->   pool:mint (ephemeral reply) / pool:event                     --> renderer
 ```
 
 **This diagram is a COPY, and `verify:meta` 19 pins the one in `README.md`, not this
@@ -797,6 +799,31 @@ check does not, and should not, cover it.
   `sandbox` input; a row without them refuses the SEND by name (`refused-sandbox` →
   `reasons.noSandbox`). Deleted on dispose with `drop`, never on exit. `ChatSource.sandbox`
   is carried by `carryChatMarks` beside `dispatch`; the header reads `sandboxed · no folder`.
+
+- `src/main/pool-caller.ts` / `src/renderer/workflow/pool-model.ts` / `pool-store.ts` — M138.
+  The pool's PRODUCTION CALLER: M132's `startPool` had no caller (its "known gap"). Main's
+  half reads the list file (one item per non-empty, non-`#` line; a relative path refused),
+  asks the RENDERER to mint each worker over `pool:mint` (an ephemeral reply, `board:add`'s
+  shape, with a 20 s wait because a chat is created over IPC before it has an id — the
+  renderer owns the workspace it renders, so main writes no panel), sends the block's prompt
+  with the item through the ordinary `AgentSessionManager.send` (M82's queue and budget
+  unchanged), drives `finished` from the manager's OWN events (a worker's `ready` after its
+  turn, or its exit — never a timer) and `tick` from every budget event, and emits every
+  engine event addressed by template and block on `pool:event`. ONE live pool per
+  (template, block): a second Run is refused by name; `stop` interrupts and kills none. The
+  renderer's mint is an ordinary chat through `agent:create` (the M100/M120 gates
+  unchanged), placed beside the template's workflow panel, titled `<block> · <item>`, and
+  wired by an `idle`-triggered handoff edge to every target the template's edges name from
+  the pool block, so a `collect` joins the workers M78's way (a worker minted after the
+  first finish joins an expected set that grew under it — hand check 10 owns that). An
+  `orchestrator` is a chat whose prompt rides every spawn through `--append-system-prompt`,
+  carried on its record as `orchestrator: string` (M81's rule; `chat.orchestrator.1`). The
+  Runs tab's pool rows are `reducePool`'s projection of main's events and nothing else
+  (`verify:rail pool.model.1`); `Stop` is present always and disabled with
+  `REASON_NO_POOL_LIVE`. `workflowBlockRefusal` now refuses only a pool that names no list.
+  `verify:agent-session pool.2a–d` drives the caller over a fake agents seam and a fake mint;
+  `verify:panels` product `workflow.run.1` drives Run on a pool template through the real
+  panel and the harness's real manager over its fake runner.
 
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through

@@ -2311,3 +2311,42 @@ every place refused with M100's sentence; the write through M22's mtime rule); t
 registry does not own (the two-lifetimes rule from the other side) and needs its own design
 before the flag flips. Record a stream from that agent first.
 
+
+## Deferred from M126–M133, declined by name in the v7 run's M137
+
+The M126–M133 log's "Deferred minors, by file" list had 32 items. M137 fixed nine (a fired
+trigger on a blocked template, Triggers' disabled reason, `parseRuns`' silent `templateId`,
+the skill panel's two warning sentences, `NOT_A_SKILL`'s false sentence, `saveShelf`'s
+swallowed warnings, `splitDraft`'s third `KEY_LINE`, the trail lane's `cwd === null` arm,
+`Canvas.tsx`'s mid-import constants), pinned three that were already true (`trail.stamp.1–2`,
+`skill.sibling.1`), found six already fixed by the act's own final review wave
+(`workflow-nodes.ts`'s `String()` coercion; `deleteSkill`/`renameSkill` accepting a root;
+`parseTeammates` warning on a bad `skills` list; the Skills pane's `pending` arm having its
+own sentence; `openWorkflowPanel`'s palette row carrying the merged-view reason; the panels
+harness setting `TC_TOOLBOX_HOME` at entry load), and declines the rest here, each with why:
+
+- **`parseTeammates` drops the whole `skills` array when one entry is not a string.** It
+  matches `services`/`chats`' whole-field rule and warns; making it per-entry (as `places` is)
+  is a record-rule change worth its own check, not a sweep line.
+- **`file-read.ts`'s `ReadStamp` pairs a pre-read size with a post-read mtime, and
+  `mtimeMs === 0` on a vanished file reads as stale.** Stale is the honest arm — the content
+  in hand is not what is on disk — and the shape predates M126. Changing the stamp's type
+  reaches every editor's save gate.
+- **`SkillTrailLane`'s idle subscription fires for chat panels too, `trailAskedRef` is never
+  pruned after `restartWithSpec`, the 44px card height is assumed rather than measured, and
+  `aria-hidden` covers the note lane only.** Each is a wasted read or a fixed number, not a
+  wrong answer; measuring the card wants the ResizeObserver shape the shell breakpoint uses,
+  and that is a small milestone of its own.
+- **`skillSources` omits a watcher's cwd from "Available in".** Deliberate, and now said in
+  the comment: a watcher runs a command and reads no skill.
+- **`Start a chat` seeds only the bare skill name; one `toolbox.read` per distinct cwd per
+  skill panel on every panel-array change.** The first is a product choice (the composer's
+  `/` completion finishes the name); the second is unmeasured, and a cache keyed by cwd
+  already sits under it in main.
+- **`WorkflowNode`'s `originRef` cleared only in `forgetOpen`; `instantiateCountRef` counting
+  entries and `__m133Instantiations` counting attempts.** Names, not behaviour: the counts
+  are read by one check each and mean what that check asserts.
+- **`verify-file`'s `TrailUnreadable` is an open string.** The spec allows it.
+- **`verify-panels` asserting `TC_TOOLBOX_HOME` at suite start.** `panels-entry.cjs` SETS it
+  at module load when it is unset, before any module that reads it is required; a guard after
+  that point would be asserting the line above it.
