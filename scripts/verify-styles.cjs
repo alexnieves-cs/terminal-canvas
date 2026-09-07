@@ -935,5 +935,21 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     pill && gone.length === 0 && noFigures, JSON.stringify({ pill, gone, noFigures }))
 }
 
+// M174 — launcher.1. THE LAUNCHER AS A WELCOME: the wordmark in the UI face
+// (the last mono prose), the three doors as soft cards (--r-lg, --s-1, a
+// hairline, the name at --t-lg), the verb list in the UI face with mono ONLY
+// on the command itself (`.launcher__verb-command`), a recents row, and the
+// environment line as one sentence — no `>` prompt glyph before a verb.
+{
+  const wordmark = all.some((r) => /(^|,)\s*\.launcher__wordmark\s*(,|$)/.test(r.sel) && /font-family:\s*var\(--font-ui\)/.test(r.body))
+  const doorOk = all.some((r) => /(^|,)\s*\.launcher__verb--door\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-lg\)/.test(r.body) && /background:\s*var\(--s-1\)/.test(r.body))
+  const doorName = all.some((r) => /\.launcher__verb--door \.launcher__verb-name/.test(r.sel) && /font-size:\s*var\(--t-lg\)/.test(r.body))
+  const noPrompt = !all.some((r) => /\.launcher__verb-name::before/.test(r.sel) && /content:/.test(r.body))
+  const command = all.some((r) => /(^|,)\s*\.launcher__verb-command\s*(,|$)/.test(r.sel) && /font-family:\s*var\(--font-mono\)/.test(r.body))
+  const recents = all.some((r) => /(^|,)\s*\.launcher__recents\s*(,|$)/.test(r.sel))
+  ok('launcher.1', 'the wordmark in the UI face, the doors as soft cards with the name at --t-lg, no > prompt glyph, mono only on .launcher__verb-command, a recents row',
+    wordmark && doorOk && doorName && noPrompt && command && recents, JSON.stringify({ wordmark, doorOk, doorName, noPrompt, command, recents }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
