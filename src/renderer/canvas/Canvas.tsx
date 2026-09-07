@@ -4884,9 +4884,17 @@ export function Canvas({
    * while a vault was set — the invisible churn the rail's signature freeze
    * exists to prevent (M85's verifier).
    */
+  // M150. A note's chip asks the pane to filter: the request rides to the
+  // pane as data (tag + nonce, so the same tag asked twice lands twice) and
+  // the pane is opened on the way — one door from either side.
+  const [vaultFilterRequest, setVaultFilterRequest] = useState<{ tag: string; nonce: number } | null>(null)
+  const filterVaultTag = useCallback((tag: string) => {
+    setVaultFilterRequest({ tag, nonce: Date.now() })
+    chrome.chooseNavigator('vault')
+  }, [chrome])
   const noteVault = useMemo(() => (
-    vault.root === '' ? null : { root: vault.root.replace(/\/+$/, ''), index: vault.index, onOpenNote: openVaultNote, onCreateNote: beginCreateVaultNote }
-  ), [vault.root, vault.index, openVaultNote, beginCreateVaultNote])
+    vault.root === '' ? null : { root: vault.root.replace(/\/+$/, ''), index: vault.index, onOpenNote: openVaultNote, onCreateNote: beginCreateVaultNote, onFilterTag: filterVaultTag }
+  ), [vault.root, vault.index, openVaultNote, beginCreateVaultNote, filterVaultTag])
   const vaultSelectedPath = ((): string | null => {
     const p = selectedPanel
     if (!p || !isFilePanel(p) || noteVault === null) return null
@@ -5218,8 +5226,11 @@ export function Canvas({
     selectedPath: vaultSelectedPath,
     onOpenNote: openVaultNote,
     onChooseRoot: paletteActions.beginChooseVault,
-    onRefresh: vault.refresh
-  }), [chrome.toggleNavigator, vault.root, vault.notes, vault.pending, vault.reason, vault.skipped, vaultSelectedPath, openVaultNote, paletteActions.beginChooseVault, vault.refresh])
+    onRefresh: vault.refresh,
+    // M150. The index's tags and the note's request, as data.
+    tags: vault.index.tags,
+    filterRequest: vaultFilterRequest
+  }), [chrome.toggleNavigator, vault.root, vault.notes, vault.pending, vault.reason, vault.skipped, vaultSelectedPath, openVaultNote, paletteActions.beginChooseVault, vault.refresh, vault.index.tags, vaultFilterRequest])
 
 
   // The inspector's async detail sections, lifted into useInspectorDetail.ts.

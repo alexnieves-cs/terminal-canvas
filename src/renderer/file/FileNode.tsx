@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { FilePanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
-import { parseWikiLinks, resolveWikiName, type VaultIndex } from '@shared/vault'
+import { parseTags, parseWikiLinks, resolveWikiName, type VaultIndex } from '@shared/vault'
 import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { buildFileNodeModel } from './file-node-model'
@@ -71,13 +71,36 @@ const CONFIRM_DISCARD_MS = 3000
  */
 function renderProseWithLinks(
   body: string,
-  vault: { root: string; index: VaultIndex; onOpenNote: (path: string) => void; onCreateNote: (name: string) => void }
+  vault: { root: string; index: VaultIndex; onOpenNote: (path: string) => void; onCreateNote: (name: string) => void; onFilterTag: (tag: string) => void }
 ): JSX.Element[] {
   const out: JSX.Element[] = []
   let at = 0
   let key = 0
-  for (const link of parseWikiLinks(body)) {
-    if (link.start > at) out.push(<span key={`t${key++}`}>{body.slice(at, link.start)}</span>)
+  // M150. Links and tags in ONE walk, by offset: both parsers exclude the
+  // same code spans, and neither can start inside the other's span.
+  const marks = [
+    ...parseWikiLinks(body).map((l) => ({ kind: 'link' as const, start: l.start, end: l.end, link: l })),
+    ...parseTags(body).map((t) => ({ kind: 'tag' as const, start: t.start, end: t.end, tag: t }))
+  ].sort((a, b) => a.start - b.start)
+  for (const mark of marks) {
+    if (mark.start < at) continue
+    if (mark.start > at) out.push(<span key={`t${key++}`}>{body.slice(at, mark.start)}</span>)
+    if (mark.kind === 'tag') {
+      out.push(
+        <button
+          key={`g${key++}`}
+          type="button"
+          className="file-node__tag"
+          data-file-tag={mark.tag.name.toLowerCase()}
+          title={`notes tagged #${mark.tag.name}`}
+          onMouseDown={(event) => { event.stopPropagation() }}
+          onClick={(event) => { event.stopPropagation(); vault.onFilterTag(mark.tag.name.toLowerCase()) }}
+        >#{mark.tag.name}</button>
+      )
+      at = mark.end
+      continue
+    }
+    const link = mark.link
     const target = resolveWikiName(link.name, vault.index)
     out.push(
       <button
@@ -125,6 +148,8 @@ export interface FileNodeProps {
     onOpenNote: (path: string) => void
     /** Offer to create a note a link points at but nothing answers. */
     onCreateNote: (name: string) => void
+    /** M150. Filter the Vault pane to a tag — the chip's one door, the pane's own rows' door. */
+    onFilterTag: (tag: string) => void
   }
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void

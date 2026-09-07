@@ -875,6 +875,15 @@ check does not, and should not, cover it.
   (the real media feature through the DevTools protocol), `file-missing`; `scale-100` tried and
   dropped because `capturePage` ignores the device-scale override.
 
+- `src/shared/vault.ts`'s `parseTags` and `VaultIndex.tags` — M150 (Act IV.1). `#tag` at a
+  token start, Unicode-aware, NOT a heading or a bare number, excluded inside the SAME code
+  spans the wikilink parser excludes (one exclusion for both syntaxes — a second would drift
+  in the arm nobody tests); the index's tag map is filled in the backlinks' pass, once per
+  note with the first line. The Vault pane's TAGS section filters through its own search
+  field (`#name` filters by tag through the index; any other text by title or path); a
+  note's chip asks through `onFilterTag`, which lands in that same field as data (tag +
+  nonce) and opens the pane. Nothing is written: tags are read from bodies, never stored.
+
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through
   `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap

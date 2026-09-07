@@ -268,6 +268,15 @@ image and the diff and deciding the change is the intended one; a golden updated
 red green is the suite turned off. A milestone that changes a scene commits its golden in the
 same commit, so `git log -- verify/visual/goldens` is the visual changelog.
 
+**What the suite cannot see, stated.** Antialiasing jitter on a WebGL terminal reaches a
+worst tile of about 23 % in the two measured runs, so `TILE_BUDGET` sits at 35 %; a single
+new line of small text is about 15 % of a tile, UNDER it. A milestone that adds one row of
+text to a scene will not move that scene's golden, and `UPDATE_GOLDENS=1` keeps a golden
+that still passes byte for byte (a PNG re-encode of the same pixels is a different file,
+and an update that rewrote all fifty-four for one changed scene made every update a 14 MB
+commit). The person LOOKS at the fresh capture in that case — the suite's job is the change
+it can see, and the audit's is the rest.
+
 **M149's checks came from the walk, and each names its golden.** `verify:panels shell
 workspace.template.2` (a template with a hole asks its sheet before any workspace is minted —
 the `runs` golden showed the empty workspace the old order stranded the harness in);
@@ -290,3 +299,11 @@ taught: a palette jump matches every title containing the words (the `composer` 
 selects by rail row and raises the chat by its chrome), a dock toggle must read
 `aria-pressed` first (`attention` — the approval scene had left the popover open), and a
 DevTools device-scale override does not reach `capturePage` (`scale-100`, dropped).
+
+## The v7 run, Act IV (M150)
+
+`verify:file tags.1–.2` pin the tag parser's arms and the index's tag map; `verify:styles
+tags.1` pins the chip to the link family's token; `verify:panels product vault.tags.1`
+drives the pane and the chip end to end. The one lesson: a rail row's verb is a
+`shellControl` on `.rail-row__main`, so a dispatched click on the row's `<li>` reaches
+nothing — dispatch on the button.

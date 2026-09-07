@@ -1,7 +1,8 @@
-import { memo, useMemo, useState, type JSX } from 'react'
+import { memo, useEffect, useMemo, useState, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Refresh } from '@renderer/icons'
 import type { VaultNoteRow } from '@shared/ipc-contract'
+import type { TagEntry } from '@shared/vault'
 
 /**
  * M85. THE VAULT PANE — the navigator's fourth, and the whole of the vault's
@@ -33,13 +34,30 @@ export interface VaultPaneProps {
   selectedPath?: string | null
   onChooseRoot: () => void
   onRefresh: () => void
+  /** M150. The index's tags: a lower-cased name → the notes carrying it. Absent before the first read. */
+  tags?: Readonly<Record<string, TagEntry[]>>
+  /** M150. A filter asked for from OUTSIDE the pane (a note's chip): the tag, and a nonce so the same tag asked twice lands twice. */
+  filterRequest?: { tag: string; nonce: number } | null
+}
+
+/** M150. The pane's tag rows: by count, then name; the cap is the pane's own row cap. */
+const TAG_ROWS_MAX = 40
+export function tagRows(tags: Readonly<Record<string, TagEntry[]>> | undefined): Array<{ tag: string; count: number }> {
+  if (tags === undefined) return []
+  return Object.entries(tags).map(([tag, notes]) => ({ tag, count: notes.length })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
 }
 
 function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
   const [query, setQuery] = useState('')
+  // M150. A chip in a note asks for a tag: the request lands in the same
+  // field a person types into, so the filter is visible and clearable.
+  useEffect(() => { if (props.filterRequest) setQuery(`#${props.filterRequest.tag}`) }, [props.filterRequest])
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const matching = q === '' ? [...props.notes] : props.notes.filter((n) => n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q))
+    // `#name` filters BY TAG through the index — the notes carrying it — and
+    // any other text by title or path, as before.
+    const byTag = q.startsWith('#') ? new Set((props.tags?.[q.slice(1)] ?? []).map((t) => t.path)) : null
+    const matching = q === '' ? [...props.notes] : byTag !== null ? props.notes.filter((n) => byTag.has(n.path)) : props.notes.filter((n) => n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q))
     // Newest first: a vault is a stream of writing, and the note somebody (or
     // some agent) just wrote is the one they are looking for.
     return matching.sort((a, b) => b.at - a.at)
@@ -121,6 +139,28 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
           </ul>
           {props.skipped > 0 && (
             <p className="pf__more" data-vault-skipped>{props.skipped} note{props.skipped === 1 ? '' : 's'} were not read — the vault is over the cap</p>
+          )}
+          {/* M150. TAGS, under the notes: one row per tag with its count. No
+              section at all when the vault has none — absence, never a
+              heading over nothing. A row is the filter's door; the field
+              above shows what it did. */}
+          {tagRows(props.tags).length > 0 && (
+            <>
+              <div className="shell__region-title vault-pane__tags-title">Tags</div>
+              <ul className="rail-list vault-pane__tags" aria-label="Tags" data-vault-tags>
+                {tagRows(props.tags).slice(0, TAG_ROWS_MAX).map((row) => (
+                  <li key={row.tag} className={`rail-row vault-pane__tag${query.trim().toLowerCase() === `#${row.tag}` ? ' rail-row--selected' : ''}`} data-vault-tag={row.tag}>
+                    <button type="button" className="rail-row__main" title={`notes tagged #${row.tag}`} {...shellControl(() => setQuery(query.trim().toLowerCase() === `#${row.tag}` ? '' : `#${row.tag}`))}>
+                      <span className="rail-row__label">#{row.tag}</span>
+                      <span className="rail-row__state" data-vault-tag-count>{row.count}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {tagRows(props.tags).length > TAG_ROWS_MAX && (
+                <p className="pf__more" data-vault-tags-more>{tagRows(props.tags).length - TAG_ROWS_MAX} more tags — the pane lists the {TAG_ROWS_MAX} most used</p>
+              )}
+            </>
           )}
         </>
       )}

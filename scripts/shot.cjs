@@ -131,8 +131,8 @@ writeFileSync(TRAIL_LOG, [
 // of which does not exist yet, and one note links back.
 writeFileSync(NOTE, '# Plan\n\nSplit the flush gate out of onExit; the timer is the second door — see [[flush gate]] and [[decisions/tmux]].\n\nOpen question: [[what the watchdog should do]].\n\n- [ ] write the check first\n- [ ] watch it fail\n')
 mkdirSync(join(FIX, 'notes', 'decisions'), { recursive: true })
-writeFileSync(join(FIX, 'notes', 'flush gate.md'), '# Flush gate\n\nThe gate that keeps a kill from racing the last flush. Referenced from [[plan]].\n')
-writeFileSync(join(FIX, 'notes', 'decisions', 'tmux.md'), '# tmux\n\nSessions live in tmux so agents outlive the app. See [[plan]] for the timer.\n')
+writeFileSync(join(FIX, 'notes', 'flush gate.md'), '# Flush gate\n\nThe gate that keeps a kill from racing the last flush. Referenced from [[plan]].\n\n#decision #tmux\n')
+writeFileSync(join(FIX, 'notes', 'decisions', 'tmux.md'), '# tmux\n\nSessions live in tmux so agents outlive the app. See [[plan]] for the timer.\n\n#decision\n')
 
 let scrollbackDir = join(mkdtempSync(join(tmpdir(), 'tc shot scrollback ')), 'scrollback')
 mkdirSync(scrollbackDir, { recursive: true })

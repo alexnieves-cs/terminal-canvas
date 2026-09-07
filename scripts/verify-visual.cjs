@@ -17,7 +17,8 @@
    this suite's sight, and the audit says so.
 
    UPDATING GOLDENS. `UPDATE_GOLDENS=1 npm run verify:visual` writes every
-   fresh capture over its golden and exits 0. Do it only after LOOKING at the
+   fresh capture that CHANGED (past either budget) over its golden — one that
+   still passes is kept byte for byte — and exits 0. Do it only after LOOKING at the
    fresh image and the diff and deciding the change is the intended one; an
    update made to turn a red green is this suite switched off. A milestone
    that changes a scene commits its golden in the same commit as the change,
@@ -167,6 +168,18 @@ app.whenReady().then(async () => {
       if (UPDATE) {
         const small = halved(capture)
         if (small === null) { ok(`${name} FAIL — the capture could not be decoded`, false, capture); continue }
+        // A golden that still PASSES is kept byte for byte: a PNG re-encode
+        // of the same pixels is a different file, and an update that
+        // rewrote all fifty-four goldens for one changed scene made every
+        // update a 14 MB commit and `git log -- goldens` say nothing.
+        if (existsSync(golden)) {
+          const g = decode(nativeImage.createFromPath(golden))
+          const f = decode(small)
+          if (g !== null && f !== null && g.width === f.width && g.height === f.height) {
+            const { ratio, worstTile } = compare(g, f)
+            if (ratio <= PIXEL_BUDGET && worstTile <= TILE_BUDGET) { ok(`${name} golden kept`, true, `unchanged within both budgets (${(ratio * 100).toFixed(3)}%)`); continue }
+          }
+        }
         writeFileSync(golden, small.toPNG())
         ok(`${name} golden written`, true, `${golden} at ${GOLDEN_SCALE}x`)
         continue

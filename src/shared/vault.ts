@@ -65,6 +65,47 @@ export function parseWikiLinks(body: string): WikiLink[] {
   return out
 }
 
+/** M150. A `#tag` in a note's body, with its span so the painter needs no second parse. */
+export interface Tag {
+  /** As written, without the `#`: `Review/Api`. Matching is case-insensitive; painting keeps the case. */
+  name: string
+  start: number
+  end: number
+}
+
+/**
+ * `#name` at a TOKEN START — start of text, whitespace or `(` before it —
+ * where the name is letters, digits, `_`, `-` or `/` (Obsidian's nested
+ * `#area/sub`). Not a heading (`# Title`: a `#` followed by a space is
+ * markdown's mark), not a bare number (`#1` is an issue reference), and not
+ * inside a code span or a fence — the SAME exclusion `parseWikiLinks` uses,
+ * one for both syntaxes. Trailing punctuation is not part of the tag
+ * (`#done.` is `done`). Front matter is not read: a second syntax and a
+ * second parser (backlog #85).
+ */
+const TAG = /(^|[\s(])#([\p{L}\p{N}_][\p{L}\p{N}_\-/]*)/gu
+
+export function parseTags(body: string): Tag[] {
+  const out: Tag[] = []
+  const code = codeSpans(body)
+  for (const m of body.matchAll(TAG)) {
+    const lead = m[1] ?? ''
+    const name = m[2] ?? ''
+    const start = (m.index ?? 0) + lead.length
+    if (code.some(([a, b]) => start >= a && start < b)) continue
+    if (/^\d+$/.test(name)) continue
+    out.push({ name, start, end: start + 1 + name.length })
+  }
+  return out
+}
+
+export interface TagEntry {
+  path: string
+  title: string
+  /** The first line the note names the tag on — the note's own numbering. */
+  line: number
+}
+
 export interface VaultNoteInput {
   /** Relative to the vault root, with its extension: `meetings/2026-09-04.md`. */
   path: string
@@ -89,6 +130,8 @@ export interface VaultIndex {
   byName: Record<string, string>
   /** A note's path → the notes pointing at it. */
   backlinks: Record<string, Backlink[]>
+  /** M150. A lower-cased tag → the notes carrying it, once each, in the files' order. */
+  tags: Record<string, TagEntry[]>
 }
 
 /** `meetings/2026-09-04.md` → `meetings/2026-09-04` and `2026-09-04`. */
@@ -115,8 +158,19 @@ export function buildVaultIndex(files: readonly VaultNoteInput[]): VaultIndex {
     if (base !== undefined && byName[base] === undefined) byName[base] = file.path
   }
   const backlinks: Record<string, Backlink[]> = {}
+  const tags: Record<string, TagEntry[]> = {}
   for (const file of files) backlinks[file.path] = []
   for (const file of files) {
+    // M150. The tags, from the same pass: once per note (the FIRST line it
+    // names the tag on), case-folded for the key, the note's title beside it.
+    const seen = new Set<string>()
+    for (const tag of parseTags(file.body)) {
+      const key = tag.name.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      const line = file.body.slice(0, tag.start).split('\n').length
+      ;(tags[key] ??= []).push({ path: file.path, title: file.title ?? file.path.replace(/\.md$/i, ''), line })
+    }
     // The line is counted from the link's OFFSET rather than by splitting and
     // re-searching: a note that names the same target twice on two lines must
     // produce two rows with two different numbers.
@@ -127,7 +181,7 @@ export function buildVaultIndex(files: readonly VaultNoteInput[]): VaultIndex {
       backlinks[target]?.push({ path: file.path, title: file.title ?? file.path.replace(/\.md$/i, ''), line, text: link.text })
     }
   }
-  return { byName, backlinks }
+  return { byName, backlinks, tags }
 }
 
 /**
