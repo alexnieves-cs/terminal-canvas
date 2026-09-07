@@ -287,6 +287,32 @@ path minting nothing without a word (M137). **Not fixed, recorded:** a `collect`
 by workers minted after its first arrival — the join's expected set grows under it (hand
 check 10; `CLAUDE.md`'s M138 entry).
 
+### The surfaces since M139 (M140–M155), walked in the v7 run's M160
+
+- **The toolbox row's Open door (M140).** Present on every row that has a file; a row whose
+  file is unreadable keeps the door and the file panel says the arm (`not found`, binary,
+  too large). Never removed.
+- **The spawn sheet's Env field (M147).** Present for a preset or a command, absent for a
+  chat row by the row's own rule (a chat's environment is the CLI's); a line it cannot read
+  is named beneath (`not KEY=value: …`), never dropped silently.
+- **`Zoom to fit` / `Reset zoom` (M146).** Two rows, always present; on an empty canvas the
+  fit RESETS rather than doing nothing (a verb that did nothing reads as broken).
+- **The Vault pane's TAGS section (M150).** No section when the vault has no tags (absence,
+  not a heading over nothing); a tag row filters, a second press clears; `#nothing` says
+  `no note matches #nothing`; the forty-row cap is counted beneath. The note's chip SHOWS
+  the pane (the toggle is never called on a pane already showing — M150's critic).
+- **The annotate strip's tools (M155).** `label` / `draw`, pressed state as data, never
+  disabled: a stroke needs no process and no permission. A press that did not move is a
+  label; a moved drag is a stroke; Escape leaves the mode; the merged view ends it (M93's
+  rule, inherited).
+- **The attention popover and the `⋯` menu (M149).** Walked as PAINTED, not as present:
+  both had been open in the DOM and invisible — `popover.paint.1` and `menu.paint.1` ask
+  `elementFromPoint`, which is the rule this audit adds: a surface that opens is proven by
+  a pixel question.
+- **The palette's `say` line (M149).** A refusal that arrives on a keystroke (a paste into a
+  card, a write that failed) is said on the feedback line, then Enter or Escape closes it;
+  no verb, no plan may name it (`EXCLUDED_ACTIONS`).
+
 ## Keyboard reach
 
 `verify:panels reach.1` presses a REAL Tab (`sendInputEvent`, not a dispatched event) from

@@ -20,6 +20,8 @@ export interface AnnotationLayerProps {
   annotations: readonly Annotation[]
   /** M155. The stroke in progress, world coordinates; painted live, never stored. */
   draft?: Array<[number, number]> | null
+  /** M155. In the merged view a stroke is not selectable: its hit path takes no pointer, so a click there reaches the ground. */
+  merged?: boolean
   panels: readonly Panel[]
   selectedId: string | null
   /** The note whose editor is open; the canvas sets it on placement and on double-click. */
@@ -33,7 +35,7 @@ export interface AnnotationLayerProps {
 const LEADER = 12
 
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null {
-  const { annotations, panels, selectedId, editingId, onSelect, onBeginEdit, onCommitEdit, onCancelEdit, draft } = props
+  const { annotations, panels, selectedId, editingId, onSelect, onBeginEdit, onCommitEdit, onCancelEdit, draft, merged } = props
   if (annotations.length === 0 && !draft) return null
   return (
     <>
@@ -51,7 +53,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null
             const d = pathOf(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
             return (
               <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind} data-annotation-ink="true">
-                <path className="annotation__hit" data-annotation-hit d={d}
+                <path className={`annotation__hit${merged ? ' annotation__hit--inert' : ''}`} data-annotation-hit d={d}
                   onMouseDown={(e) => { e.stopPropagation() }}
                   onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }} />
                 <path className="annotation__ink" d={d} style={{ strokeWidth: a.ink.width }} />

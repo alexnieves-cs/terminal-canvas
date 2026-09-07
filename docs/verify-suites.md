@@ -275,7 +275,8 @@ text to a scene will not move that scene's golden, and `UPDATE_GOLDENS=1` keeps 
 that still passes byte for byte (a PNG re-encode of the same pixels is a different file,
 and an update that rewrote all fifty-four for one changed scene made every update a 14 MB
 commit). The person LOOKS at the fresh capture in that case — the suite's job is the change
-it can see, and the audit's is the rest.
+it can see, and the audit's is the rest. To force one golden the budgets cannot see, delete
+the file and update: a missing golden is always written (M155's ink golden was refreshed so).
 
 **M149's checks came from the walk, and each names its golden.** `verify:panels shell
 workspace.template.2` (a template with a hole asks its sheet before any workspace is minted —

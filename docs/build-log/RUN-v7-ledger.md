@@ -32,15 +32,15 @@ assigned in order and never reused; a milestone that is declined keeps its numbe
 | M148 | III | The visual-regression suite over the shot harness (goldens, tolerant diff, gated like `verify:packaged`) |
 | M149 | III | `docs/ux-audit-4.0.md`: every scene viewed, findings fixed; empty/loading/error states; motion, reduced motion, focus order; chrome a11y; density |
 | M150 | IV.1 | Tags on the vault's file lineage (wikilinks and backlinks were M85's): `#tag` parsed beside the links, a TAGS section that filters, a chip in the note — spec `2026-09-07-v7-act4-tags-design.md` |
-| M151 | IV.2 | A conditional / loop workflow block on the live Run caller |
-| M152 | IV.3 | #55 — ad-hoc task panels |
-| M153 | IV.4 | #73 + #72 — the flag registry and one versioned automation surface |
-| M154 | IV.5 | #64 — rationing terminal memory |
+| M151 | IV.2 | A conditional / loop workflow block on the live Run caller — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M152 | IV.3 | #55 — ad-hoc task panels — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M153 | IV.4 | #73 + #72 — the flag registry and one versioned automation surface — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M154 | IV.5 | #64 — rationing terminal memory — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
 | M155 | V.1 | #15 — ink on M93's annotation layer: a draw tool, strokes as world- or panel-anchored annotations — spec `2026-09-07-v7-act5-ink-design.md` |
-| M156 | V.2 | #66 — images in the terminal |
-| M157 | V.3 | The vibe-coding starter as a #34 template set (chat + dev shell + browser, #13 briefing) |
-| M158 | V.4 | #14 — xlsx, read-only |
-| M159 | V.5 | #33 — the minimap, against what M70 already shipped |
+| M156 | V.2 | #66 — images in the terminal — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M157 | V.3 | The vibe-coding starter as a #34 template set (chat + dev shell + browser, #13 briefing) — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M158 | V.4 | #14 — xlsx, read-only — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
+| M159 | V.5 | #33 — the minimap, against what M70 already shipped — **not started: the ranking was truncated from the bottom after IV.1 / V.1 (the brief's rule)** |
 | M160 | VI | 4.0.0: the version, the tag, README / CLAUDE.md / manual-only list / dead-end audit current, the release body as a repo file |
 
 Out by the brief: #4, #28, #40, #20, signing.
@@ -189,3 +189,10 @@ Build log `docs/build-log/m155-ink.md`. Ink on M93's annotation layer by the rep
 colour, an eraser, behind-the-panels. **Where the ranking stopped:** V.2 (#66), V.3 (the
 vibe-coding starter template set), V.4 (#14 xlsx), V.5 (#33 minimap yields — now #83), and the
 stretch #14 iframe were not started.
+
+## Act VI — M160, closed 2026-09-07
+
+`package.json` 4.0.0; README status and rows M148–M160; `CLAUDE.md`'s preamble; the
+manual-only list (the 100 % density, the blank terminal observation) and the dead-end audit's
+fifth walk (M140–M155) current; `docs/release-notes/4.0.0.md` is the release body as a repo
+file. The evidence lines (the chain, `verify:packaged`, the tag) follow.

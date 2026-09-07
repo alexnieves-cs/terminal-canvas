@@ -15,8 +15,7 @@ declined by name into #15's note, so the next slice is small.
 absent is every M93 label (the absent-vs-malformed rule — a pre-M155 file warns nothing); a
 present-but-malformed `ink` (a non-array, a point that is not two finite numbers, a width
 that is not a positive number) drops THAT annotation with a warning, never the list. Points
-are RELATIVE to the anchor point (world coordinates for a world anchor, the panel's
-top-left for a panel anchor), so a panel-anchored stroke moves with its panel through
+are RELATIVE to the anchor POINT — what `annotationPoint` answers, for both kinds, so a panel-anchored stroke moves with its panel through
 `annotationPoint` unchanged, and `pruneAnnotations` drops it with the panel exactly as it
 drops a label. `text` stays required on the record and is `''` for ink (one shape, one
 parser); the Delete key, selection and the count under `ANNOTATIONS_MAX` are M93's.
@@ -29,12 +28,12 @@ palette of widths is #15's next slice.
 ## The gesture
 
 Annotate mode (M93's `annotating` sheet) gains a DRAW tool beside the label tool: in
-annotate mode a pointer DRAG on the sheet draws (mousedown, ≥ 3 moved points, mouseup
+annotate mode a pointer DRAG on the sheet draws (mousedown, moves, mouseup —
 commits — a click without movement is M93's label placement, unchanged), the stroke
 previewed live as a polyline on the annotation layer and committed as one annotation with
 one history entry. Points are `screenToWorld` of each move (the drift rule: never a delta of
 deltas) and simplified by a pure `simplifyStroke(points, tolerance)` (Ramer–Douglas–Peucker,
-tolerance 0.75 world px) so a slow hand does not store a thousand points. The anchor is
+tolerance 0.75 SCREEN px through the scale) so a slow hand does not store a thousand points. The anchor is
 `resolveAnchor` of the FIRST point — a stroke that starts on a panel belongs to it, one that
 starts on the ground is the world's — the same rule a label uses. Escape cancels a stroke in
 progress; the tool is chosen from the annotate bar (`draw` / `label`), remembered for the

@@ -7,6 +7,7 @@ import { EMPTY_SELECTION } from './canvas-constants'
 import type { MarqueeScreenRect } from './MarqueeLayer'
 import type { LinkMode } from './useLinkMode'
 import { hitTest, screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect } from './viewport'
+import { INK_POINTS_MAX } from '@shared/annotations'
 
 export interface CanvasPointerDeps {
   hostRef: RefObject<HTMLDivElement | null>
@@ -33,8 +34,8 @@ export interface CanvasPointerDeps {
   inkTool?: () => boolean
   /** M155. The stroke's points so far, for the live preview (null when the gesture ends). */
   inkPreview?: (points: Array<[number, number]> | null) => void
-  /** M155. A finished stroke of at least three points, in world coordinates. */
-  ink?: (points: Array<[number, number]>) => void
+  /** M155. A finished stroke — a drag that MOVED (end ≥ 4 SCREEN px from start) — in world coordinates, with the scale it was drawn at. */
+  ink?: (points: Array<[number, number]>, scale: number) => void
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
   setFocusedId: Dispatch<SetStateAction<string | null>>
@@ -266,8 +267,20 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
       // `buttons` 0 while the press is genuinely down, and ending on the
       // first such move turned every drawn stroke into a label. A lost
       // mouseup still ends the stroke on the next mouseup anywhere.
-      let sawButton = false
+      // Seeded from the press itself: a press whose cursor leaves the window
+      // before any move fires inside would otherwise never see the button,
+      // and every later idle move would append to a stroke (the critic).
+      let sawButton = event.buttons !== 0
+      const scaleAtStart = viewportRef.current.scale
+      const cleanup = (): void => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', end)
+        deps.inkPreview?.(null)
+      }
       const onMove = (e: globalThis.MouseEvent): void => {
+        // The mode ended under the hand (Escape, the merged view): the stroke
+        // is CANCELLED — no commit, no label, no ghost preview.
+        if (deps.inkTool?.() !== true) { cleanup(); return }
         if (e.buttons !== 0) sawButton = true
         else if (sawButton) { end(e); return }
         if (!host) return
@@ -275,17 +288,20 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
         const w = screenToWorld({ x: e.clientX - b.left, y: e.clientY - b.top }, viewportRef.current)
         points.push([w.x, w.y])
         deps.inkPreview?.(points.slice())
+        // At the cap the stroke ends where the hand is; the next press starts another.
+        if (points.length >= INK_POINTS_MAX) end(e)
       }
       function end(_e: globalThis.MouseEvent): void {
-        document.removeEventListener('mousemove', onMove)
-        document.removeEventListener('mouseup', end)
-        deps.inkPreview?.(null)
-        // A stroke is a drag that MOVED — the end at least four world pixels
-        // from the start — never a point count: moves coalesce (a fast flick,
-        // a synthetic drag) into two points that are still a line a person
-        // drew. A press that did not move is the label.
+        cleanup()
+        if (deps.inkTool?.() !== true) return
+        // A stroke is a drag that MOVED — the end at least four SCREEN pixels
+        // from the start, measured in world units through the scale — never
+        // a point count: moves coalesce (a fast flick, a synthetic drag) into
+        // two points that are still a line a person drew. A press that did
+        // not move is the label. (World units would make a one-pixel jitter
+        // a stroke at a far zoom and a real dash a label at a near one.)
         const [sx, sy] = points[0]!, [ex, ey] = points[points.length - 1]!
-        if (points.length >= 2 && Math.hypot(ex - sx, ey - sy) >= 4) deps.ink?.(points)
+        if (points.length >= 2 && Math.hypot(ex - sx, ey - sy) * scaleAtStart >= 4) deps.ink?.(points, scaleAtStart)
         else deps.annotate?.({ x: sx, y: sy })
       }
       document.addEventListener('mousemove', onMove)

@@ -3574,15 +3574,16 @@ console.log('\n' + '='.repeat(60))
         { id: 'k2', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: 'no', width: 3 } },
         { id: 'k3', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: [[0, 0], [1, 'x']], width: 3 } },
         { id: 'k4', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: [[0, 0], [1, 1]], width: 0 } },
+        { id: 'k5', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: Array.from({ length: 2001 }, (_, i) => [i, 0]), width: 1 } },
         { id: 'l2', text: 'after', anchor: { kind: 'world', x: 3, y: 4 } }
       ] } ] }))
   const a = out.snapshot.workspaces[0].annotations ?? []
   const ids = a.map((x) => x.id).join(',')
   const k1 = a.find((x) => x.id === 'k1')
   const again = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [{ id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] }], annotations: a }] })).snapshot.workspaces[0].annotations
-  ok('ink.1 an ink annotation keeps its points and width, a label keeps NO ink key, and a malformed ink drops that annotation by name with the rest kept',
+  ok('ink.1 an ink annotation keeps its points and width, a label keeps NO ink key, and a malformed or over-cap ink drops that annotation by name with the rest kept',
     ids === 'l1,k1,l2' && k1 !== undefined && k1.ink.width === 3 && k1.ink.points.length === 3 && k1.ink.points[1][0] === 10 &&
-      !('ink' in a[0]) && !('ink' in a[2]) && out.warnings.filter((w) => /dropped annotation k[234]/.test(w)).length === 3 &&
+      !('ink' in a[0]) && !('ink' in a[2]) && out.warnings.filter((w) => /dropped annotation k[2345]/.test(w)).length === 4 &&
       JSON.stringify(again) === JSON.stringify(a),
     JSON.stringify({ ids, k1, warnings: out.warnings }))
 }

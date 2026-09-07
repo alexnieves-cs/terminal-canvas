@@ -3941,6 +3941,13 @@ body {
 .annotation__ink--draft { stroke: var(--fg-3); } /* dimmer by TOKEN, never by opacity (styles check 3) */
 .annotation--selected .annotation__ink { stroke: var(--fg); }
 .annotation__hit { fill: none; stroke: transparent; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: pointer; }
+.annotation__hit--inert { pointer-events: none; cursor: default; }
+/* M155. Far tiers: ink scales in world units like the label (M93's rule), so
+   a stroke stays a mark at a far zoom and not a hairline. */
+.world[data-detail="summary"] .annotation__ink { stroke-width: 10 !important; }
+.world[data-detail="block"] .annotation__ink { stroke-width: 24 !important; }
+.world[data-detail="summary"] .annotation__hit { stroke-width: 30; }
+.world[data-detail="block"] .annotation__hit { stroke-width: 60; }
 .link-banner__tools { display: inline-flex; gap: var(--sp-1); margin: 0 var(--sp-3); }
 .link-banner__tool { min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font: inherit; font-size: var(--t-xs); cursor: pointer; }
 .link-banner__tool--on { background: var(--iris); color: var(--on-iris); border-color: var(--iris); }

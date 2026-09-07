@@ -18,7 +18,9 @@
 
    UPDATING GOLDENS. `UPDATE_GOLDENS=1 npm run verify:visual` writes every
    fresh capture that CHANGED (past either budget) over its golden — one that
-   still passes is kept byte for byte — and exits 0. Do it only after LOOKING at the
+   still passes is kept byte for byte — and exits 0. To force ONE golden that
+   the budgets cannot see (a thin line moved), delete the file and update:
+   a missing golden is always written. Do it only after LOOKING at the
    fresh image and the diff and deciding the change is the intended one; an
    update made to turn a red green is this suite switched off. A milestone
    that changes a scene commits its golden in the same commit as the change,
@@ -59,10 +61,10 @@ const TILE_BUDGET = 0.35 // of one tile's pixels: a changed word fills a tile pa
 // under the tolerance shrinks with it. The fresh capture is resized the same
 // way before the comparison, so the two sides see one scale.
 const GOLDEN_SCALE = 0.5
-// The whole run: the harness paints 54 scenes in about two and a half minutes.
-// Measured (M149): two runs of 159.2 s and 159.2 s, alone in the Electron
+// The whole run: the harness paints 55 scenes in under three minutes.
+// Measured (M160): two runs of 166.5 s and 166.2 s, alone in the Electron
 // tier, times 1.25 — the M135 rule; re-measure when a milestone adds scenes.
-const WATCHDOG_MS = 200000
+const WATCHDOG_MS = 209000
 
 const results = []
 const ok = (n, pass, detail) => {

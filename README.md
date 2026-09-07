@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v3.1.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v4.0.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and
@@ -949,6 +949,7 @@ price of not killing something.
 | M149 | The 4.0 UX audit (`docs/ux-audit-4.0.md`): every golden walked against its intent through six lenses; found and fixed M142's unwired ledger read (four arms now) and M147's workspace minted before its sheet (the sheet asks first), the toolbox Open door's placement, the board's empty-column sentences, the routine line's wrap; declined F.1, F.3–F.6, F.9, F.11 by name; two scenes added — `reduced-motion` and `file-missing`; a `scale-100` scene tried and dropped by measurement (`capturePage` ignores the device-scale override); `workspace.template.2`, `summary.history.2`, `toolbox.open.1`, `board.empty.1`, `routine.last.1` | ✅ done |
 | M150 | Act IV.1 — tags on the vault's file lineage (wikilinks and backlinks were M85's): `#tag` parsed beside the links with one code-span exclusion, the index's tag map from the same pass, a TAGS section in the Vault pane that filters through the search field, a chip in the note that filters from the other side; nothing written; `tags.1–.2`, `tags.1` (styles), `vault.tags.1` | ✅ done |
 | M155 | Act V.1 — ink on M93's annotation layer (#15's first slice past labels): a draw tool on the annotate strip, a drag becomes one stroke anchored by its first point (world, or a panel it then follows), points relative to the anchor and RDP-simplified, one world width that thins with the camera, an SVG path with a hit twin, selected and deleted like a label, persisted with the absent-vs-malformed rule; `ink.1–.3`; the `ink` scene | ✅ done |
+| M160 | Act VI — 4.0.0: the version, the local tag `v4.0.0`, README / `CLAUDE.md` / the manual-only list / the dead-end audit current, `npm run verify` and `npm run verify:packaged` green and pasted in the run's ledger, the release body as `docs/release-notes/4.0.0.md`; nothing pushed, no GitHub release | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

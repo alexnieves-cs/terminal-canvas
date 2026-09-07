@@ -19,7 +19,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 3.1 (M134 — the version the M126–M133 act shipped under no number, paid in the v7 run's Act 0).** The seventh run, M126 to M133, made the
+running a coding-agent CLI. **This is 4.0 (M160).** The eighth run, M134 to M160 (v7), was
+unattended and reviewed at every act by a fresh-context critic and verifier: Act 0 the
+baseline (and 3.1.0 for the M126–M133 act, which had shipped under no number); Act I split
+`verify:panels` into five parts with measured watchdogs, built `npm run handcheck`, swept the
+deferred minors, gave the pool blocks a production Run caller, fixed CI at its cause and
+walked the fourth dead-end audit (M134–M139); Act II shipped eight backlog entries — the
+toolbox's write half, prompt placeholders, cost history, the live tier's card pinned,
+zoom-independent chrome, the image handoff, zoom to fit, per-preset environment and template
+sets (M140–M147); Act III gave the shot harness teeth (`verify:visual`, goldens at half
+scale, two budgets) and walked every golden in `docs/ux-audit-4.0.md`, which found and fixed
+defects as old as 2.3.0 (M148–M149); Act IV built tags on the vault (M150) and Act V ink on
+the annotation layer (M155), the rankings truncated below those by name; Act VI is this
+reconcile (M160). Before it, **3.1 (M134)**: the seventh run, M126 to M133, made the
 canvas a place a skill LIVES: a skill's identity is `scope:name` and the shelf is the user's
 own arrangement of them, a top-level record whose placement carries its why (M126); the Skills
 pane racks those columns over the selected panel's inventory with `Ungrouped` last and always

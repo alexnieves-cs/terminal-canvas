@@ -323,7 +323,7 @@ export function Canvas({
   const [annotateTool, setAnnotateTool] = useState<'label' | 'draw'>('label')
   const [inkDraft, setInkDraft] = useState<Array<[number, number]> | null>(null)
   const inkToolRef = useRef<() => boolean>(() => false)
-  const commitInkRef = useRef<(points: Array<[number, number]>) => void>(() => {})
+  const commitInkRef = useRef<(points: Array<[number, number]>, scale: number) => void>(() => {})
   const runsRef = useRef(runs)
   runsRef.current = runs
   // M79. useRuns is created far below (it needs restartWithSpec); the workspace
@@ -2503,7 +2503,7 @@ export function Canvas({
     // M155. The draw tool, through refs: the hook is installed once.
     inkTool: () => inkToolRef.current(),
     inkPreview: (points) => setInkDraft(points),
-    ink: (points) => commitInkRef.current(points)
+    ink: (points, scale) => commitInkRef.current(points, scale)
   })
 
   // Loaded on mount AND whenever the palette opens — but never on a
@@ -4044,13 +4044,20 @@ export function Canvas({
   // on a panel belongs to it — the label's own rule), its points stored
   // RELATIVE to that anchor point and simplified so a slow hand does not keep
   // a thousand of them; selected on commit so Delete is one keystroke away.
-  const commitInk = useCallback((points: Array<[number, number]>) => {
+  // Like a label (M93), a stroke is OUTSIDE history: Delete is not undoable,
+  // said here and in the build log rather than pretended.
+  const commitInk = useCallback((points: Array<[number, number]>, scale: number) => {
     if (!annotating || mergedRef.current || points.length < 2) return
+    if (!points.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y))) return
     const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
     const first = { x: points[0]![0], y: points[0]![1] }
     const anchor = resolveAnchor(first, ordered)
-    const origin = anchor.kind === 'world' ? { x: anchor.x, y: anchor.y } : (() => { const p = ordered.find((x) => x.rect.id === anchor.panelId)!; return { x: p.rect.x, y: p.rect.y } })()
-    const rel = simplifyStroke(points, 0.75).map(([x, y]) => [x - origin.x, y - origin.y] as [number, number])
+    // Relative to the ANCHOR POINT for both kinds — the point the painter adds.
+    // The first cut measured a panel stroke from the panel's top-left, and the
+    // painter (through annotationPoint) added dx,dy a second time: every
+    // stroke drawn on a panel sat offset by its own start (the M155 critic).
+    // The tolerance is 0.75 SCREEN px, through the scale the stroke was drawn at.
+    const rel = simplifyStroke(points, 0.75 / Math.max(scale, 0.01)).map(([x, y]) => [x - first.x, y - first.y] as [number, number])
     const id = `k${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
     setAnnotations((current) => [...current, { id, text: '', anchor, ink: { points: rel, width: INK_WIDTH } }].slice(-ANNOTATIONS_MAX))
     setSelectedAnnotation(id)
@@ -5471,7 +5478,7 @@ export function Canvas({
           {annotating && <div className="annotate-sheet" data-annotate-sheet />}
           <SnapGuides guides={snapGuides} />
           {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
-          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft}
+          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft} merged={merged}
             onSelect={merged ? undefined : setSelectedAnnotation} onBeginEdit={merged ? undefined : setEditingAnnotation} onCommitEdit={commitAnnotation} onCancelEdit={(id) => { const a = annotationsRef.current.find((x) => x.id === id); commitAnnotation(id, a?.text ?? '') }} />
           <LinkLayer
             panels={displayPanels}
@@ -5821,6 +5828,8 @@ export function Canvas({
         {annotating && (
           <div className="link-banner link-banner--annotate" role="status" data-annotate-strip>
             <strong>Annotating</strong> — {annotateTool === 'draw' ? 'drag to draw, on a panel or the canvas' : 'click to place a note, on a panel or the canvas'}; Escape to stop
+            {/* M155. The cap, said before it bites: ink reaches it in ordinary use where labels never did. */}
+            {annotations.length >= ANNOTATIONS_MAX && <span className="link-banner__note" data-annotate-cap> · at the cap of {ANNOTATIONS_MAX} — the oldest goes next</span>}
             {/* M155. The two tools, pressed state as data: `draw` inks a drag, `label` is M93's note. */}
             <span className="link-banner__tools" role="group" aria-label="Annotate tool">
               <button type="button" className={`link-banner__tool${annotateTool === 'label' ? ' link-banner__tool--on' : ''}`} data-annotate-tool="label" aria-pressed={annotateTool === 'label'} {...shellControl(() => setAnnotateTool('label'))}>label</button>

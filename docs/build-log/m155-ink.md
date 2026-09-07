@@ -32,7 +32,16 @@ check below it never running, and it was fixed before the red was watched.
   selects the stroke so Delete is one keystroke away. `AnnotationLayer.tsx`: an SVG path in
   the label's colour with a wider transparent HIT path beneath (a 3 px line is not a
   target), the draft dimmer BY TOKEN (styles check 3 forbids a fractional opacity).
-- `ink` scene in `scripts/shot.cjs` with its golden.
+- `ink` scene in `scripts/shot.cjs` with its golden. The scene runs before `file-missing`
+  and leaves its two strokes and its camera behind, so `file-missing`'s golden was
+  rewritten in the same commit (its frame now carries the strokes' neighbourhood) — a scene
+  change the update rule is MEANT to write, stated here because the verifier found it
+  unstated.
+
+## Not undoable, said
+
+Like a label (M93), a stroke is outside history: Delete removes it for good, Cmd+Z does not
+bring it back. The strip says so at the cap (`at the cap of 200 — the oldest goes next`).
 
 ## Declined by name
 
@@ -41,5 +50,30 @@ check below it never running, and it was fixed before the red was watched.
 
 ## Green
 
-layout 234/234, viewport 137/137, styles 39/39, product 59/59 (78.0 s). The critic and verifier
-over the diff, spec and checks are recorded below.
+layout 234/234, viewport 137/137, styles 39/39, product 59/59 (78.0 s).
+
+## Reviews
+
+- **Critic — FIX-FIRST, 1 Critical, 3 Major, 8 Minor.** The Critical: a panel-anchored
+  stroke was painted OFFSET by its own start — `commitInk` measured points from the panel's
+  top-left while the painter adds `annotationPoint` (rect + dx,dy), so dx,dy was added twice;
+  `ink.3` checked presence and the follow delta, never the position, and the first ink golden
+  was a picture of the defect. Fixed: points are relative to the anchor POINT for both kinds
+  (the record's comment corrected), `ink.3` asserts the stroke's box starts within a hit
+  half-width of the drag, and the golden was refreshed by deleting it (the update rule keeps a
+  golden the budgets cannot see moving — a thin line — so a forced refresh is a deletion,
+  recorded in `docs/verify-suites.md`). Majors: the drag threshold and the simplification
+  tolerance are SCREEN quantities now (4 px and 0.75 px through the scale the stroke was drawn
+  at — world units made a one-pixel jitter a stroke at a far zoom); Escape or the merged view
+  mid-stroke CANCELS it (no commit, no label, no ghost preview); `INK_POINTS_MAX` 2000, the
+  parser drops an over-cap record by name (`ink.1`) and the gesture ends a stroke at the cap.
+  Minors landed: `sawButton` seeded from the press; the strip says the 200-annotation cap
+  before it bites; far tiers scale ink like the label; the merged view's hit path takes no
+  pointer; NaN points refused at commit; the scene throws on a missing panel; the interface
+  comment and the spec say "a drag that moved"; the not-undoable sentence above.
+- **Verifier — 22 SUPPORTED, 1 OVERCLAIMED, 2 UNSUPPORTED.** The stale "three points" comment
+  corrected; the `file-missing` golden rewrite stated above; this section replaces the
+  dangling sentence.
+
+Watchdogs after the wave: product 98 s (77.9 s, 77.7 s); `verify:visual` 209 s (166.5 s,
+166.2 s), 55 scenes.
