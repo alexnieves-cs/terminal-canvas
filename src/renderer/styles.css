@@ -4396,3 +4396,9 @@ body {
 .launcher__recents-label { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); margin-right: var(--sp-2); }
 .launcher__recent { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); padding: var(--sp-1) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); cursor: pointer; }
 .launcher__recent:hover { color: var(--fg); background: var(--s-3); }
+
+/* M175. PALETTE AND SHEETS: one material. The palette's state is a dot in its
+   tone; the word is clipped beside it (data-state-word and the title keep it). */
+.palette__state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: var(--sp-3); }
+.palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"], .palette__state-dot[data-tone="starting"] { background: var(--fg-4); }
+.palette__state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
