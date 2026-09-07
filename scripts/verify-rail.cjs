@@ -2943,6 +2943,30 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ mid, ended, refused }))
 }
 
+// M141 — holes.builtin.1–.3. BACKLOG #27's four placeholders as BUILT-IN
+// holes: {{cwd}}, {{branch}}, {{selection}}, {{panel}} are filled from the
+// TARGET panel before any question is asked and are never among the holes
+// the palette asks for; a built-in with no value stays AS TYPED (M75's rule —
+// a {{branch}} outside a repository stays visible rather than vanishing); an
+// ordinary hole is untouched by the built-in fill and still asked.
+{
+  const R2 = R
+  const has = typeof R2.fillBuiltIns === 'function' && Array.isArray(R2.BUILT_IN_HOLES) && typeof R2.askableHoles === 'function'
+  const body = 'review {{selection}} in {{cwd}} on {{branch}} for {{panel}} — then {{ticket}}'
+  const filled = has ? R2.fillBuiltIns(body, { cwd: '/w/repo', branch: 'main', selection: 'foo()', panel: 'api' }) : ''
+  ok('holes.builtin.1 fillBuiltIns fills the four built-in holes from the target and leaves an ordinary hole for the question',
+    has && filled === 'review foo() in /w/repo on main for api — then {{ticket}}',
+    JSON.stringify({ has, filled }))
+  const partial = has ? R2.fillBuiltIns(body, { cwd: '/w/repo', panel: 'api', selection: '' }) : ''
+  ok('holes.builtin.2 a built-in with no value (absent, or an empty selection) stays as typed, never blanked',
+    has && partial === 'review {{selection}} in /w/repo on {{branch}} for api — then {{ticket}}',
+    JSON.stringify({ partial }))
+  const asked = has ? R2.askableHoles(body) : null
+  ok('holes.builtin.3 askableHoles lists only the holes a person is asked for — the four built-ins are never questions — and BUILT_IN_HOLES names exactly cwd, branch, selection, panel',
+    has && Array.isArray(asked) && asked.join(',') === 'ticket' && [...R2.BUILT_IN_HOLES].sort().join(',') === 'branch,cwd,panel,selection',
+    JSON.stringify({ asked, builtIns: R2.BUILT_IN_HOLES }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

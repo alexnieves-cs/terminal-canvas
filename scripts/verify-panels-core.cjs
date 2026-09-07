@@ -3813,5 +3813,55 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
           Math.abs(slotRatio - expectedSlot) <= 0.05 && atOut.bodyTransform === 'none' && atOne.scaleVar === '1' && Number(atOut.scaleVar) > 1.5,
         JSON.stringify({ atOne, atOut, scaleOne, scaleOut, chromeRatio, slotRatio, expectedSlot }))
     }
+
+    // M141 — prompt.builtin.1. A SAVED prompt's {{cwd}} and {{panel}} are
+    // filled from the target's LIVE cwd (the same read PRESET_CAPTURE makes,
+    // never spec.cwd) and its title before the paste, with no question asked
+    // for either; the paste is bracketed (check 40's rule). Read off the
+    // terminal's own screen: the default panel is `/bin/cat -v`, which echoes
+    // what it receives.
+    {
+      await wc.executeJavaScript(`window.canvas.prompt.save('where am i', 'PBI-cwd={{cwd}} PBI-panel={{panel}}')`)
+      await settle()
+      const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      const pbId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+        return now.find((id) => !panelsBefore.includes(id)) ?? false
+      }, 8000)
+      if (typeof pbId === 'string') {
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .xterm') !== null`), 8000)
+        await clickPanelBody(`.panel[data-panel-id=${JSON.stringify(pbId)}] .panel__slot`)
+        await waitUntil(async () => (await wc.executeJavaScript(`window.__m4aFocusedId()`)) === pbId, 5000)
+        await sleep(400)
+      }
+      const liveCwd = typeof pbId === 'string' ? (ptyManager.list().find((s) => s.panelId === pbId) || { cwd: null }).cwd : null
+      const title = typeof pbId === 'string' ? await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id=${JSON.stringify(pbId)}] .pf__title') || {}).textContent ?? null`) : null
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const inserted = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'insert prompt where am i')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        const selected = document.querySelector('.palette__row--selected')
+        if (!selected || !selected.textContent.includes('where am i')) return selected ? selected.textContent : 'no row'
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+        return true
+      })()`)
+      // No question may open: the input mode would keep the palette open with a `cwd (1 of 2)` label.
+      await sleep(400)
+      const asked = await wc.executeJavaScript(`(document.querySelector('.palette__mode-label, .palette__label') || {}).textContent ?? (document.querySelector('.palette') ? 'palette open' : null)`)
+      const cwdTail = typeof liveCwd === 'string' ? liveCwd.split('/').filter(Boolean).slice(-1)[0] : null
+      const echoedCwd = cwdTail ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-cwd=') !== null && window.__m4aCellToScreen(${JSON.stringify(cwdTail)}) !== null`), 5000) : false
+      const echoedPanel = typeof title === 'string' && title !== '' ? await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PBI-panel=' + ${JSON.stringify(title.split(' ')[0])}) !== null`), 3000) : false
+      const literal = await wc.executeJavaScript(`window.__m4aCellToScreen('{{cwd}}') !== null || window.__m4aCellToScreen('{{panel}}') !== null`)
+      ok('prompt.builtin.1 a saved prompt\'s {{cwd}} and {{panel}} paste the target\'s live cwd and title into the terminal with no question asked, and the literal holes never reach the agent',
+        typeof pbId === 'string' && inserted === true && (asked === null || asked === 'palette open' && false || !/1 of/.test(String(asked))) &&
+          echoedCwd !== false && echoedPanel !== false && literal === false,
+        JSON.stringify({ pbId, liveCwd, title, inserted, asked, cwdTail, echoedCwd, echoedPanel, literal }))
+      if (typeof pbId === 'string') await clickPanelClose(wc, pbId)
+    }
   }
 })
