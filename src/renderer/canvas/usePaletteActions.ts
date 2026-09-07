@@ -30,6 +30,9 @@ import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
 import { clearSubagents } from '@renderer/session/subagent-store'
+// M129. Beside the four clears above: a recycled id must not inherit a dead
+// panel's skill trail.
+import { clearTrail } from '@renderer/skills/skill-trail-store'
 import { clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { clearUsage } from '@renderer/session/usage-store'
@@ -990,6 +993,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     clearLastLine(panelId)
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
+                    clearTrail(panelId)
                     clearUsage(panelId)
                     clearMachineCost(panelId)
                     clearScrollbackTail(panelId)

@@ -53,6 +53,11 @@ export interface PanelBase {
   /** M92. Filling the viewport, with the rect to go back to. Cleared by the first move or resize. */
   maximised?: { restore: WorldRect }
   /**
+   * M129. The skill trail's lane, folded away — the ONE stored fact about
+   * the trail (see layout-schema.ts). Absent means expanded.
+   */
+  skillTrail?: 'collapsed'
+  /**
    * Paint order, rendered as style.zIndex. Stacking is NOT the array's order:
    * React reconciles a reordered keyed list by MOVING DOM nodes, and a move is
    * remove-then-insert, which would momentarily detach the subtree holding a
@@ -950,10 +955,14 @@ export function maximiseRect(viewport: { x: number; y: number; scale: number }, 
  * `title` is: present only when set. Every site that rebuilds a Panel by
  * name spreads this, or a rename silently unlocks (the verifier's find).
  */
-export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?: { restore: WorldRect } } {
+export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?: { restore: WorldRect }; skillTrail?: 'collapsed' } {
   return {
     ...(p.locked === true ? { locked: true as const } : {}),
     ...(p.pinned === true ? { pinned: true as const } : {}),
-    ...(p.maximised === undefined ? {} : { maximised: { restore: { ...p.maximised.restore } } })
+    ...(p.maximised === undefined ? {} : { maximised: { restore: { ...p.maximised.restore } } }),
+    // M129. The fourth mark, here for the same reason as the other three: a
+    // rename that rebuilt the panel by name would silently re-expand a lane
+    // the user folded away.
+    ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {})
   }
 }

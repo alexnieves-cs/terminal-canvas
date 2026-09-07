@@ -85,6 +85,19 @@ export interface PersistedPanelBase {
   /** M92. Filling the viewport, with the rect to restore. */
   maximised?: { restore: { x: number; y: number; w: number; h: number } }
   /**
+   * M129. The skill trail's lane, folded away. The ONE stored fact about the
+   * trail — the entries themselves are re-derived from the transcript on
+   * every read and never persisted — and a LAYOUT mark like `pinned` rather
+   * than a view state like M106's flip, because "collapse it back so it is
+   * no longer visible" is a thing the user did to this panel and must
+   * survive a relaunch. Absent means expanded, which is every pre-M129 file.
+   *
+   * The value is CLOSED: `collapsed` is the only word that means anything,
+   * so a second state added later is a new word here rather than a `true`
+   * whose meaning drifted.
+   */
+  skillTrail?: 'collapsed'
+  /**
    * User-set panel name, set from the command palette's rename row and
    * persisted here since M6a (`layout-adapt.ts`'s `fromPanels`/`toPanels`).
    * Reserved back in M4b — ideas-backlog item 6 put titles on Panel before any
@@ -817,6 +830,13 @@ function parsePanel(
     ...(parseFlag(raw.locked, 'locked', id, warnings) ? { locked: true as const } : {}),
     ...(parseFlag(raw.pinned, 'pinned', id, warnings) ? { pinned: true as const } : {}),
     ...(parseMaximised(raw.maximised, id, warnings)),
+    // M129. Absent stays absent; the one word round-trips; anything else
+    // warns by id and costs the FIELD, never the panel.
+    ...(raw.skillTrail === undefined
+      ? {}
+      : raw.skillTrail === 'collapsed'
+        ? { skillTrail: 'collapsed' as const }
+        : (warnings.push(`dropped panel ${id}'s skillTrail: ${JSON.stringify(raw.skillTrail)} is not "collapsed"`), {})),
     // M49. Absent stays absent; present-but-unusable costs the FIELD, never
     // the panel — a per-entry failure at one level down.
     ...(fontSize === undefined ? {} : (typeof fontSize === 'number' && Number.isFinite(fontSize) && fontSize >= 9 && fontSize <= 24

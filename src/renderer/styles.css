@@ -4092,3 +4092,26 @@ body {
 .pf__chrome { position: relative; }
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }
+
+/* ------------------------------------------------------------------ M129 --
+   THE SKILL TRAIL'S LANE. A single column in the WORLD layer, positioned by
+   the host's own rect (Canvas re-derives left/top every render), so it pans
+   and zooms with the panel it belongs to and stores nothing.
+
+   No blur and no resting shadow: the lane exists at the near tier only, so
+   `blur.1`'s budget is untouched, and `--lift` stays the frame's one shadow
+   (M111's shadow.1). The expand is a FINITE transition — M111's pulse rule:
+   nothing on this canvas animates forever. */
+.trail-lane { position: absolute; display: flex; flex-direction: column; gap: var(--sp-2); pointer-events: none; }
+.trail-lane__note { padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line); border-radius: var(--r-sm); background: var(--s-2); color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
+/* The cards take pointer events back one by one, the way LinkLayer opts each
+   hit stroke in: the LANE must never swallow a click meant for the ground. */
+.trail-card { pointer-events: auto; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); animation: trail-card-in 160ms ease-out 1 both; }
+.trail-card--openable { cursor: pointer; }
+.trail-card--openable:hover { border-color: var(--line-strong); background: var(--s-3); }
+.trail-card__name { color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trail-card__note { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+@keyframes trail-card-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+/* The capsule in the chrome. A word control like `fill`, never a glyph. */
+.pf__trail { flex: 0 0 auto; }

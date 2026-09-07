@@ -9,6 +9,7 @@ import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
 import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
+import { useTrailFor } from '@renderer/skills/skill-trail-store'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -59,9 +60,11 @@ export interface PanelFrameClose {
  * view, where the control is disabled by name.
  */
 export interface PanelMarks {
-  marks: ReadonlyMap<string, { locked: boolean; pinned: boolean; maximised: boolean }>
+  marks: ReadonlyMap<string, { locked: boolean; pinned: boolean; maximised: boolean; trailCollapsed: boolean }>
   maximise: (id: string) => void
   restore: (id: string) => void
+  /** M129. Fold this panel's skill trail away, or bring it back. Absent in a fixture. */
+  toggleTrail?: (id: string) => void
   readOnly: boolean
   /** M106. The ⋯ menu's door: focus this panel and open the palette captured on it. Absent in a fixture. */
   more?: (id: string) => void
@@ -122,6 +125,21 @@ export function PanelFrame({
   // M106. The canvas provides the door once; a kind may still hand its own.
   const more = onMore ?? marks.more
   const mark = marks.marks.get(id)
+  /**
+   * M129. THE TRAIL'S CAPSULE — how many skills this panel's agent used, and
+   * the control that folds the lane away.
+   *
+   * It is painted from the TRAIL and not from the kind, so a chat and a
+   * terminal grow it on the same rule and nothing else has to know the trail
+   * exists. It stays on screen in BOTH states, because a control that
+   * disappears when its thing is off is indistinguishable from a feature that
+   * was never built — this repo's standing rule for every administrative
+   * affordance — and it says WORDS (`7 skills` / `hide 7 skills`), never a
+   * chevron or an entity glyph (verify:styles icons.1).
+   */
+  const trail = useTrailFor(id, kind)
+  const trailCount = trail.kind === 'entries' ? trail.entries.length : 0
+  const trailCollapsed = mark?.trailCollapsed === true
   const tone = state?.tone ?? rootAttrs?.['data-tone'] ?? 'kind'
   // M69. Below SUMMARY_ENTER every kind — not only a terminal — renders its
   // summary in place of its body; below BLOCK_ENTER, a block in its tone. The
@@ -187,6 +205,17 @@ export function PanelFrame({
         {/* M92. Lock and pin are STATE MARKS with the fix in their title; maximise is a control. */}
         {mark?.locked && <span className="pf__mark pf__mark--lock" data-panel-locked title="locked — drag and resize refuse; Unlock panel in the palette or the pane">{Lock}</span>}
         {mark?.pinned && <span className="pf__mark pf__mark--pin" data-panel-pinned title="pinned — kept live wherever the camera is; Unpin panel in the palette or the pane">{Pin}</span>}
+        {trailCount > 0 && marks.toggleTrail !== undefined && (
+          <button
+            type="button"
+            className="pf__verb pf__verb--word pf__trail"
+            data-skill-trail-toggle={trailCollapsed ? 'collapsed' : 'expanded'}
+            title={trailCollapsed ? 'Show the skills this agent used, in the lane beside this panel' : 'Fold the skill lane away; the count stays here'}
+            {...shellControl(() => marks.toggleTrail?.(id))}
+          >{trailCollapsed
+            ? `${trailCount} ${trailCount === 1 ? 'skill' : 'skills'}`
+            : `hide ${trailCount} ${trailCount === 1 ? 'skill' : 'skills'}`}</button>
+        )}
         {chrome}
         {close !== null && (
           <button type="button" className="pf__verb pf__verb--word pf__maximise" data-panel-maximise={mark?.maximised ? 'restore' : 'maximise'}

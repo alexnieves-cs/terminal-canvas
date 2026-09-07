@@ -19145,7 +19145,16 @@ app.whenReady().then(async () => {
           const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]'); if (!b) return false
           return { expandedText: b.textContent, expandedState: b.getAttribute('data-skill-trail-toggle') }
         })()`), 8000)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        // mousedown THEN click: `shellControl` takes DOM focus away from
+        // xterm on the mousedown and runs the verb on the click, so a
+        // mousedown alone toggles nothing (measured — the first cut of this
+        // check read `expanded` back after pressing a working capsule).
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]'); if (!b) return false
+          const opts = { bubbles: true, cancelable: true, button: 0, buttons: 1 }
+          b.dispatchEvent(new MouseEvent('mousedown', opts))
+          b.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }))
+          b.dispatchEvent(new MouseEvent('click', { ...opts, buttons: 0 }))
+          return true })()`)
         await settle()
         const collapsed = await wc.executeJavaScript(`(() => {
           const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]')

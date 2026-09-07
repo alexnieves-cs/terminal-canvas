@@ -64,7 +64,7 @@ import { useNavGrid } from '@renderer/navgrid/useNavGrid'
 import { createRegistry } from '@renderer/session/session-registry'
 import { useRegistryVersion } from '@renderer/session/useRegistry'
 import {
-  applyAgentState, attentionIds, clearAgentState, useAttentionIds, getAgentState
+  applyAgentState, attentionIds, clearAgentState, useAttentionIds, getAgentState, onAgentTransition
 } from '@renderer/session/agent-state-store'
 import {
   applyLiveSession, clearLiveSession, getLiveSession
@@ -152,6 +152,8 @@ import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
+import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
+import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
@@ -856,6 +858,7 @@ export function Canvas({
         clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
+        clearTrail(panel.rect.id)
         clearUsage(panel.rect.id)
         clearMachineCost(panel.rect.id)
         clearScrollbackTail(panel.rect.id)
@@ -1360,6 +1363,38 @@ export function Canvas({
     applyAgentState(update.panelId, update.state)
   }), [])
 
+  /**
+   * M129. THE TRAIL, refreshed on the two moments it can have changed — and
+   * on no timer of its own.
+   *
+   * A terminal's trail is a tail of the CLI's transcript in MAIN, so asking
+   * costs an invoke and a read; a hot poll would spend one per panel per tick
+   * for a canvas nobody is looking at, which is the same arithmetic
+   * `machine:sample` is scheduled by the renderer to avoid. The two moments
+   * are: once when this renderer first sees the panel (a relaunch must show
+   * what the last session did), and every time its agent goes IDLE — the
+   * transition that means a turn just ended, the same one M41's handoff and
+   * M105's last line already ride, taken from `onAgentTransition` so this
+   * adds no second `agent.onState`.
+   *
+   * A CHAT is deliberately absent from both: its trail is derived from turns
+   * already in this renderer's memory (`trailFromTurns`) and there is nothing
+   * to ask anyone for.
+   */
+  const trailAskedRef = useRef<Set<string>>(new Set())
+  useEffect(() => onAgentTransition((panelId, state) => {
+    if (state !== 'idle') return
+    void window.canvas.skill.trail(panelId).then((trail) => applyTrail(panelId, trail)).catch(() => {})
+  }), [])
+  useEffect(() => {
+    for (const panel of terminalPanels) {
+      if (trailAskedRef.current.has(panel.rect.id)) continue
+      trailAskedRef.current.add(panel.rect.id)
+      const id = panel.rect.id
+      void window.canvas.skill.trail(id).then((trail) => applyTrail(id, trail)).catch(() => {})
+    }
+  }, [terminalPanels])
+
   // M43. A clicked OS notification frames its panel — the Cmd+J path, which
   // never wakes. Read through the ref so this subscribes once and never goes
   // stale as paletteActions is rebuilt.
@@ -1601,6 +1636,7 @@ export function Canvas({
       clearLastLine(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
+      clearTrail(panel.rect.id)
       clearUsage(panel.rect.id)
       clearMachineCost(panel.rect.id)
       clearScrollbackTail(panel.rect.id)
@@ -2058,6 +2094,7 @@ export function Canvas({
     clearLastLine(id)
     clearLiveSession(id)
     clearSubagents(id)
+    clearTrail(id)
     clearUsage(id)
     clearMachineCost(id)
     clearScrollbackTail(id)
@@ -3320,6 +3357,7 @@ export function Canvas({
       clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
+      clearTrail(id)
       clearUsage(id)
       clearMachineCost(id)
       clearScrollbackTail(id)
@@ -3721,7 +3759,7 @@ export function Canvas({
       return out
     })
   }, [commitHistory])
-  const strip = (panel: Panel, key: 'locked' | 'pinned' | 'maximised'): Panel => {
+  const strip = (panel: Panel, key: 'locked' | 'pinned' | 'maximised' | 'skillTrail'): Panel => {
     const { [key]: _gone, ...rest } = panel
     return rest as Panel
   }
@@ -3738,24 +3776,34 @@ export function Canvas({
     setPanelFlag(id, (p) => (p.maximised !== undefined ? null : { ...p, maximised: { restore: p.rect }, rect: { ...rect, id }, z: nextZ(panelsRef.current) }))
   }, [setPanelFlag])
   const restorePanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.maximised === undefined ? null : { ...strip(p, 'maximised'), rect: p.maximised.restore })), [setPanelFlag])
+  // M129. The fourth layout mark, through the same one-history-entry door the
+  // other three take. Absent stays absent: expanding DELETES the key rather
+  // than writing `skillTrail: undefined`, which survives IPC and reads as
+  // present on the next parse.
+  const toggleSkillTrail = useCallback((id: string) => setPanelFlag(id, (p) => (
+    p.skillTrail === 'collapsed' ? strip(p, 'skillTrail') : { ...p, skillTrail: 'collapsed' as const }
+  )), [setPanelFlag])
 
   // Frozen on a SIGNATURE of the marks, not on `panels`: a drag rebuilds the
   // array at 60Hz, and a context value that changed with it would re-render
   // every frame consuming it (the rail's own freeze, applied here).
-  const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}` : '')).filter((s) => s !== '').join(',')
+  const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
   const panelMarks = useMemo<PanelMarks>(() => ({
     marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
       const [id, flags] = entry.split(':') as [string, string]
-      return [id, { locked: flags.includes('L'), pinned: flags.includes('P'), maximised: flags.includes('M') }] as const
+      return [id, { locked: flags.includes('L'), pinned: flags.includes('P'), maximised: flags.includes('M'), trailCollapsed: flags.includes('T') }] as const
     })),
     maximise: maximisePanel,
     restore: restorePanel,
+    // M129. The capsule's verb. Present for every kind, because the frame
+    // decides whether to paint a capsule from the TRAIL, not from the kind.
+    toggleTrail: toggleSkillTrail,
     readOnly: merged,
     // M106. The ⋯ menu's door: the ref is set HERE as well as by the render,
     // because openPalette captures the ref synchronously and the focus it just
     // asked for lands a render later.
     more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() }
-  }), [marksSignature, maximisePanel, restorePanel, merged, onFocusPanel, palette])
+  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -4909,6 +4957,28 @@ export function Canvas({
             selectedKey={selectedLink === null ? null : `${selectedLink.from}:${selectedLink.to}`}
             onSelect={merged ? undefined : selectLink}
           />
+          {/* M129. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
+              written back: one column per host at a fixed offset to its
+              right, re-derived from the host's rect on every render. Not
+              panels — plain elements in the world layer, so forty skill uses
+              cost zero LOD budget and zero records (M79's run frames, M114's
+              anchored card).
+
+              Suppressed while MERGED, where every geometry the view paints is
+              a lane offset that exists only in that render; at the far tiers,
+              where the host itself is drawn as a card and its trail would be
+              a column of unreadable slivers; and for a host whose lane the
+              user folded away. */}
+          {!merged && cardDetail === 'tail' && displayPanels.filter((p) => p.skillTrail !== 'collapsed').map((panel) => (
+            <SkillTrailLane
+              key={`trail:${panel.rect.id}`}
+              panel={panel}
+              selected={selectedIds.has(panel.rect.id)}
+              cwd={isTerminalPanel(panel) ? panel.spec.cwd : isChatPanel(panel) ? panel.chat.cwd : null}
+              shelf={shelf}
+              onOpenSkill={openSkillPanel}
+            />
+          ))}
           {displayPanels.map((panel) => {
             // The partition, at the last hop. onSelect is selectAndRaise and
             // NOT onSelectPanel: the latter clears the dormant id and calls

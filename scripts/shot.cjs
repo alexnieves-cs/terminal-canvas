@@ -21,7 +21,7 @@
    backend (reattach is not a visual property), and never the production
    tmux sockets. It spawns real shells. */
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync, statSync, openSync, readSync, closeSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { buildSync } = require('esbuild')
@@ -51,7 +51,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers, trailFor
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -76,6 +76,29 @@ writeFileSync(join(REPO, 'README.md'), '# fixture\n\nA repository the screenshot
 writeFileSync(join(REPO, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm run *)', 'Read', 'Edit'], deny: ['Bash(rm -rf *)'] } }, null, 2))
 writeFileSync(join(REPO, '.claude', 'commands', 'review.md'), 'Review the diff for correctness and name every silent failure.\n')
 writeFileSync(join(REPO, '.claude', 'commands', 'deploy.md'), 'Run the deploy checklist and stop at the first red step.\n')
+// M129. Three project skills, so the trail's cards resolve BY NAME against a
+// real inventory: two the agent used and one it did not. The fourth name in
+// the transcript below is installed nowhere, which is the `not installed
+// here` card — the useful answer after a session used a plugin skill this
+// project cannot see.
+for (const [name, description] of [
+  ['brainstorming', 'Explore intent and requirements before any implementation.'],
+  ['test-driven-development', 'Write the failing check first and watch it fail.'],
+  ['writing-plans', 'Turn a spec into an ordered implementation plan.']
+]) {
+  mkdirSync(join(REPO, '.claude', 'skills', name), { recursive: true })
+  writeFileSync(join(REPO, '.claude', 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`)
+}
+// The CLI's own transcript, in the shape skill-trail-read.ts tails: the
+// harness points `skill:trail` at this file, so the scene's lane comes
+// through the REAL byte-offset read rather than a hand-built Trail.
+const TRAIL_LOG = join(FIX, 'trail.jsonl')
+writeFileSync(TRAIL_LOG, [
+  ['2026-09-06T09:58:00.000Z', 'brainstorming'],
+  ['2026-09-06T10:02:00.000Z', 'writing-plans'],
+  ['2026-09-06T10:19:00.000Z', 'test-driven-development'],
+  ['2026-09-06T10:41:00.000Z', 'superpowers:verification-before-completion']
+].map(([timestamp, skill]) => JSON.stringify({ type: 'assistant', timestamp, message: { content: [{ type: 'tool_use', id: `tu-${skill}`, name: 'Skill', input: { skill } }] } })).join('\n') + '\n')
 // M85. The notes folder IS the vault: the plan links to two other notes, one
 // of which does not exist yet, and one note links back.
 writeFileSync(NOTE, '# Plan\n\nSplit the flush gate out of onExit; the timer is the second door — see [[flush gate]] and [[decisions/tmux]].\n\nOpen question: [[what the watchdog should do]].\n\n- [ ] write the check first\n- [ ] watch it fail\n')
@@ -127,6 +150,8 @@ const SCENES = [
     run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
+  { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of the terminal whose agent used them, in the order it used them, each naming the skill and either its own description and shelf column, or `not installed here` for a name this project cannot see (the fourth card). The cards are not panels — they are derived from the transcript and stored nowhere — and the panel\'s chrome carries one capsule reading `hide 4 skills` that folds the lane away. Judge the GEOMETRY: does a column of four cards sit beside its host without crowding it?',
+    run: async (kit) => { await kit.goTo('claude — plan the milestone'); await sleep(1200); await kit.shot('trail') } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'integrations', intent: 'The Integrations page: the navigator\'s fifth pane, every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
@@ -478,6 +503,11 @@ app.whenReady().then(async () => {
         { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         // M116. A work card beside the chat it was dispatched to, with the edge.
         { id: 'card12', kind: 'work', x: 300, y: 570, w: 420, h: 200, z: 18, title: 'Watchdog fires under load', work: { itemId: 'wi-12' }, links: [{ to: 'chat', label: 'dispatched' }] },
+        // M129. The trail's host: a terminal whose session used four skills.
+        // Clear of the workers group and the wide review: the scene's whole
+        // question is whether the lane crowds its HOST, and a host sitting on
+        // another panel's frame would answer a different one.
+        term('trail', 1800, 1800, 420, 260, 19, { title: 'claude — plan the milestone' }),
         // M106. A narrow frame with a long title: the frame rule's subject.
         term('narrow', 1400, 1360, 320, 220, 30, { title: 'review: the health check wiring for the api repository' }),
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
@@ -716,7 +746,39 @@ app.whenReady().then(async () => {
     // M103. The real read over the real guest.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
-    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) }
+    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) },
+    // M125/M127. No scene spawns the real CLI, so the plugin list and the
+    // details text are the same `unknown` an uninstalled `claude` produces.
+    async () => ({ kind: 'unknown', why: 'no plugin list in the shot harness' }),
+    async (id) => ({ kind: 'unknown', why: `no plugin details for ${id} in the shot harness` }),
+    // M128. Inert writers: a screenshot harness must never edit a skill file.
+    {
+      write: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
+      create: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
+      rename: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
+      remove: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' })
+    },
+    // M129. The REAL trail read over the fixture transcript above, so the
+    // `trail` scene paints what the app paints.
+    async (panelId) => (panelId === 'trail'
+      ? trailFor({
+        backend: 'claude',
+        panelId,
+        pinnedSession: () => 'shot-trail-session',
+        resolveTranscript: () => TRAIL_LOG,
+        readDelta: (path, from) => {
+          let size
+          try { size = statSync(path).size } catch { return undefined }
+          const len = Math.max(0, size - from)
+          const bytes = Buffer.alloc(len)
+          if (len > 0) {
+            const fd = openSync(path, 'r')
+            try { readSync(fd, bytes, 0, len, from) } finally { closeSync(fd) }
+          }
+          return { bytes, size }
+        }
+      })
+      : { kind: 'unreadable', why: 'only the trail scene has a transcript here' })
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })
