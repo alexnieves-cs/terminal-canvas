@@ -644,3 +644,29 @@ markdown parse bound (recorded, not owed).
   - The verifier's corrections landed above (the tallies at the commits, the 55 scenes, the
     uncommitted stub, the WHERE decline, the `.rail-row__dot` alias in M173's commit).
 
+- After the reviews' wave: agents 79/80 once (`handoff.1`, `delivered: false` — the source's
+  tail had not echoed in the live target when the check read it; the same paste-echo timing
+  the memory notes record), **80/80, exit 0** on the immediate re-run (act3-agents2.log);
+  product 59/59, shell 95/95, exit 0 (act3-wave.log); a plain `verify:visual` **57/57** —
+  the wave's one visible change (the launcher's `login` chip gone from the shell preset's
+  row, its cwd hint through the path rule) sat under the budget, so the `launcher` golden is
+  forced by deletion. Sentence: launcher · the shell preset's row reads `Start Login shell…
+  in ~` with no mono chip (a chip only for a real command); the other rows keep their
+  command chip; nothing else moved.
+
+Act III closed 2026-09-07. **Evidence:** `UPDATE_GOLDENS=1 npm run verify:visual` after the
+critic's dispositions — 56/56, exit 0 (55 goldens, sentenced above); after the reviews'
+wave the forced `launcher` golden (56/56, exit 0) and a plain `npm run verify:visual` **57/57,
+exit 0**; `npm run verify` — **exit 0**; tallies in chain order: meta 38, styles 53, viewport
+137, groups 6, merged 12, registry 38, layout 234, credentials 18, jira 15, github 7, palette
+143, rail 192, review 98, subagent 27, file 83, toolbox 103, usage 26, machine-cost 7, tmux
+35, agent-state 27, agent-session 141, verbs 14, teammates 25, electron 4, control 15,
+package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels core 78 /
+shell 95 / kinds 49 / agents 80 / product 59. Build log
+`docs/build-log/m171-m175-act3-shell.md`. Merged to `main`.
+
+## Act IV — M176–M179 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act4-finish-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act4-finish.md`, branch `m176-finish`. Owed into this
+act: `notice.1` (the update link's click, M178); the audit's own findings.

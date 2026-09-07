@@ -38,8 +38,30 @@ face, mono only on paths and `--mono` inputs, caps headings).
 
 ## Goldens
 
-(the critic's walk and the sentences are in the ledger)
+55 scenes changed after M171–M173; a fresh-context critic walked every diff. Its one
+defect: the tail clip had hidden a workspace's counts, a teammate's facts and the dock
+badge's word — scoped to the Panels list. Nine goldens that predate Act I carried Acts I–II's
+sub-budget drift and are sentenced with it named. The sentences are in the ledger.
 
 ## Reviews
 
-(filled once the fresh-context critic and verifier have run over the act)
+Both ran over the act's diff, the brief, the spec, the ledger and the logs; the findings and
+the evidence are in the ledger.
+
+**Critic — FIX-FIRST, 0 Critical, 5 Major, 12 Minor.** The Majors: `Canvas` still
+subscribed to the machine-cost total for a readout M173 had deleted — a 2 s re-render of the
+whole component feeding nothing (gone, with six dead HUD props; the mousemove `cursor` state
+of the same shape is backlog #87); the launcher's mono chip read `login` for the shell
+preset (the row carries `command?` now); the verb list printed an absolute cwd (the path
+rule); the evidence lines; a recents chip that opened the sheet on another folder (the door
+takes `seed.cwd`). The Minors, each landed or recorded: a comment that contradicted the
+M171 rule; `data-agent-state` on terminal rows alone; real list semantics for the headings;
+a `hintsLoaded` state; one hint list for both surfaces; an unrecorded pointer-events fix on
+the update notice (its check owed to M178); the fallback group by id; the palette's path
+column through the one helper.
+
+**Verifier — 25 claims: 19 SUPPORTED, 4 OVERCLAIMED, 1 UNSUPPORTED, 1 in progress.** The
+overclaims were tallies quoted from the working tree rather than the commits, a scene count
+off by one, and the WHERE field owed with no disposition (declined now, with its reason);
+the unsupported claim was `hints.1`'s red on a stub that was never committed. Each is
+corrected in the ledger.
