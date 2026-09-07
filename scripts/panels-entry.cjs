@@ -183,6 +183,11 @@ module.exports = {
   /* M103. The browser pane's read over a real guest, and the parser so a
      check can assert a file: record was dropped by name at parse. */
   createBrowserHandlers: require('../src/main/browser-read').createBrowserHandlers,
+  // M129. The REAL trail read, so the lane checks and the shot scene drive
+  // the same tail production drives — a fixture function written in the
+  // harness would leave the whole byte-offset path proven only by
+  // verify:file's unit checks and could drift from what the app answers.
+  trailFor: require('../src/main/skill-trail-read').trailFor,
   parseLayout: require('../src/shared/layout-schema').parseLayout,
   /* M85. The vault's reader — node:fs, the tier file-read.ts sits in. */
   readVault: require('../src/main/vault-read').readVault,

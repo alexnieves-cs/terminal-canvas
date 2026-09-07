@@ -3446,6 +3446,31 @@ console.log('\n' + '='.repeat(60))
 }
 
 {
+  // M129. `skillTrail` is the ONE stored fact about the trail — a layout mark
+  // like `pinned`, not a view state like M106's flip, so "collapse it back so
+  // it is no longer visible" survives a relaunch. The value is CLOSED: only
+  // the word `collapsed` means anything, so anything else is a malformed
+  // value, warned by id and dropped with the panel kept.
+  const out = L.parseLayout(JSON.stringify({
+    version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+      { id: 't1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [], skillTrail: 'collapsed' },
+      { id: 't2', x: 0, y: 0, w: 520, h: 340, z: 2, cwd: '~', command: 'sh', args: [] },
+      { id: 't3', x: 0, y: 0, w: 520, h: 340, z: 3, cwd: '~', command: 'sh', args: [], skillTrail: 'banana' }
+    ] }]
+  }))
+  const ws = out.snapshot.workspaces[0]
+  const by = (id) => (ws && ws.panels.find((p) => p.id === id)) || {}
+  const t1 = by('t1'), t2 = by('t2'), t3 = by('t3')
+  ok('trail.mark.1 skillTrail: collapsed round-trips, absent stays absent, and any other value warns by panel id and is dropped with the panel kept',
+    ws !== undefined && ws.panels.length === 3 &&
+      t1.skillTrail === 'collapsed' &&
+      !('skillTrail' in t2) &&
+      !('skillTrail' in t3) && out.warnings.filter((w) => /t3/.test(w)).length >= 1 &&
+      !out.warnings.some((w) => /t1|t2/.test(w)),
+    JSON.stringify({ warnings: out.warnings, t1, t2, t3 }))
+}
+
+{
   // M93. SNAPSHOTS are a side effect of a SAVE: the ring keeps the newest
   // SNAPSHOT_MAX, trims oldest-first, coalesces within SNAPSHOT_MIN_MS (the
   // first record always lands), writes temp-and-rename, and a list reads

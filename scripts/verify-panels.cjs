@@ -6,7 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync, openSync, readSync, closeSync } = require('node:fs')
 const { execFileSync } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain, webContents } = require('electron')
@@ -43,6 +43,7 @@ buildSync({
 })
 const {
   registerIpcHandlers,
+  trailFor,
   credentialStore,
   credentialDir,
   PtyManager,
@@ -382,7 +383,16 @@ app.on('window-all-closed', () => {})
 // line, M98's grants) the suite reached check 246 at 300s under the chain
 // while passing alone — the ceiling had become a race against the machine,
 // which is the load-flake rule, not a hang. A real hang still lands here.
-const WATCHDOG_MS = 480000
+// Raised 480s → 900s at M129, the third time and for the third time for the
+// same reason: Act III added the skills pane, the skill panel, the editor and
+// the trail's lane to the tail of this file, and a run that PASSES every
+// check now reaches the frame.2 block at 480s and is killed with ~4500 lines
+// of checks still ahead. That is the load-flake rule again, not a hang — a
+// real hang still lands here, ten minutes later than it used to. The note
+// above says whoever raises it a third time should split the suite instead;
+// splitting it is a milestone of its own and is recorded as owed rather than
+// smuggled into this task.
+const WATCHDOG_MS = 900000
 
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
@@ -886,6 +896,10 @@ app.whenReady().then(async () => {
   // the string the panel must show, byte for byte — newlines included.
   const PLUGIN_DETAILS_TEXT = 'fixture-plugin@1.0.0\n  Skills (1)  plugged-skill\n  Always-on: ~688 tok\n  plugged-skill   on-invoke   ~120 tok\n'
   let pluginFixtureOn = false
+  // M129. The skill trail's fixture: a panel id and a real JSONL file on
+  // disk. `null` until trail.lane.1 arms it, so every read before that block
+  // gets the same named `unreadable` an unwired harness has always got.
+  let trailFixture = null
   const linkOpens = []
   let harnessEnvReport = {
     probedAt: Date.now(),
@@ -1305,7 +1319,40 @@ app.whenReady().then(async () => {
     : { kind: 'unknown', why: 'plugin list is not wired' }),
   async (id) => (pluginFixtureOn && id === PLUGIN_ID
     ? { kind: 'ok', text: PLUGIN_DETAILS_TEXT }
-    : { kind: 'unknown', why: `claude plugin details ${id} did not answer` }))
+    : { kind: 'unknown', why: `claude plugin details ${id} did not answer` }),
+  // M128. The four writers stay INERT here: no check in this suite saves a
+  // skill, and a harness that could write would be one relaunch away from
+  // editing the running developer's real ~/.claude.
+  {
+    write: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
+    create: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
+    rename: async () => ({ kind: 'refused', reason: 'writing is not wired here' }),
+    remove: async () => ({ kind: 'refused', reason: 'writing is not wired here' })
+  },
+  // M129. The REAL trailFor over the harness's own fixture transcript — the
+  // same byte-offset tail main wires, with the projects lookup replaced by
+  // this suite's file so nothing reads the developer's ~/.claude/projects.
+  async (panelId) => (trailFixture !== null && trailFixture.panelId === panelId
+    ? trailFor({
+      backend: 'claude',
+      panelId,
+      pinnedSession: () => 'trail-fixture-session',
+      resolveTranscript: () => trailFixture.path,
+      // transcript-reader.ts's readFrom shape: RAW bytes from `from` to EOF
+      // plus the size now. Never decoded here — trailFor owns the decoder.
+      readDelta: (path, from) => {
+        let size
+        try { size = statSync(path).size } catch { return undefined }
+        const len = Math.max(0, size - from)
+        const bytes = Buffer.alloc(len)
+        if (len > 0) {
+          const fd = openSync(path, 'r')
+          try { readSync(fd, bytes, 0, len, from) } finally { closeSync(fd) }
+        }
+        return { bytes, size }
+      }
+    })
+    : { kind: 'unreadable', why: 'the skill trail is not wired' }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production
@@ -18952,6 +18999,192 @@ app.whenReady().then(async () => {
         try { rmSync(ED_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
       } catch (edErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(edErr && edErr.message || edErr))
+      }
+    }
+
+
+    /* ========== M129: the trail's anchored lane ========================= */
+    //
+    // The lane is DERIVED — beside M114's anchored work card and M79's run
+    // frames — so its cards are not panels, cost no LOD budget and no
+    // records, and vanish with their host. The read is the REAL trailFor
+    // over a fixture JSONL wired above, so what these checks see is the same
+    // byte-offset tail production runs.
+    {
+      const IDS = [
+        'trail.lane.1a NO trail entry is in the panel array — the cards are derived, cost no LOD budget and write no record',
+        'trail.lane.1b the lane re-derives from its host on a move',
+        'trail.lane.1c the collapse mark SURVIVES a reload — a layout mark like pinned, not a view state like flipped',
+        'trail.lane.1d collapsed shows one capsule that never disappears, and its words are words',
+        'trail.lane.1e a host drawn as a card (the far tiers) paints no trail',
+        'trail.lane.1f order on screen matches transcript order',
+        'trail.lane.1g a name defined in two scopes picks NO winner',
+        'trail.lane.1h a name the inventory does not know says `not installed here`'
+      ]
+      try {
+        // A path with a SPACE in it, this suite's standing fixture rule.
+        const TR_DIR = mkdtempSync(join(tmpdir(), 'tc skill trail '))
+        for (const [name, desc] of [['deploy', 'Ship the build to staging.'], ['shared-trail', 'The project copy of a contested name.']]) {
+          mkdirSync(join(TR_DIR, '.claude', 'skills', name), { recursive: true })
+          writeFileSync(join(TR_DIR, '.claude', 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${desc}\n---\n`)
+        }
+        // The USER copy of ONE of the two names, in the fenced temp home: 1g
+        // needs `defined in 2 scopes` to be a real inventory fact.
+        const TR_HOME = process.env.TC_TOOLBOX_HOME
+        mkdirSync(join(TR_HOME, '.claude', 'skills', 'shared-trail'), { recursive: true })
+        writeFileSync(join(TR_HOME, '.claude', 'skills', 'shared-trail', 'SKILL.md'),
+          '---\nname: shared-trail\ndescription: The user copy of a contested name.\n---\n')
+
+        // The transcript, in the CLI's own shape. `ghost-skill` is installed
+        // nowhere: 1h's answer is the useful one after a session used a
+        // plugin skill this project cannot see.
+        const TR_LOG = join(TR_DIR, 'transcript.jsonl')
+        const rec = (at, skill) => JSON.stringify({ type: 'assistant', timestamp: at, message: { content: [{ type: 'tool_use', id: `tu-${skill}`, name: 'Skill', input: { skill } }] } })
+        writeFileSync(TR_LOG, [
+          rec('2026-09-06T10:00:00.000Z', 'deploy'),
+          rec('2026-09-06T10:01:00.000Z', 'shared-trail'),
+          rec('2026-09-06T10:02:00.000Z', 'ghost-skill')
+        ].join('\n') + '\n')
+        trailFixture = { panelId: 'trT', path: TR_LOG }
+
+        layoutStore.save({
+          panels: [{ id: 'trT', x: 160, y: 140, w: 420, h: 260, z: 1, cwd: TR_DIR, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'trail host' }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: 'trT', focusedId: 'trT'
+        })
+        flushLayoutStore()
+        const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reT
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="trT"]') !== null`), 8000)
+
+        const lane = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const l = document.querySelector('[data-skill-trail-lane="trT"]'); if (!l) return false
+          const cards = [...l.querySelectorAll('[data-skill-trail-card]')]
+          if (cards.length < 3) return false
+          return {
+            names: cards.map((c) => c.getAttribute('data-skill-trail-name')),
+            texts: cards.map((c) => c.textContent),
+            inPanel: cards.some((c) => c.closest('.panel') !== null),
+            isPanel: cards.some((c) => c.hasAttribute('data-panel-id')),
+            panels: [...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id')),
+            left: parseFloat(l.style.left), top: parseFloat(l.style.top),
+            host: (() => { const p = document.querySelector('.panel[data-panel-id="trT"]'); return { x: parseFloat(p.style.left), y: parseFloat(p.style.top), w: p.getBoundingClientRect().width } })()
+          }
+        })()`), 12000)
+
+        // One id must report ONCE: a partial run that then throws would push
+        // a second ok() under an id already recorded (verify:meta 22's rule).
+        if (lane === false) throw new Error('no trail lane painted for trT')
+
+        // 1a — the record too, not only the DOM: a lane that painted right
+        // while persisting a panel would pass a DOM-only assertion.
+        await settle()
+        flushLayoutStore()
+        const onDiskTr = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const wsTr = onDiskTr.workspaces.find((w) => w.id === onDiskTr.activeWorkspaceId) || onDiskTr.workspaces[0]
+        ok(IDS[0],
+          lane !== false && lane.panels.length === 1 && lane.panels[0] === 'trT' &&
+            lane.inPanel === false && lane.isPanel === false &&
+            wsTr !== undefined && wsTr.panels.length === 1 && wsTr.panels[0].id === 'trT',
+          JSON.stringify({ lane: lane && { names: lane.names, panels: lane.panels, inPanel: lane.inPanel, isPanel: lane.isPanel }, onDisk: wsTr && wsTr.panels.map((p) => p.id) }))
+
+        // 1f — transcript order, top to bottom.
+        ok(IDS[5], lane !== false && lane.names.join(',') === 'deploy,shared-trail,ghost-skill',
+          JSON.stringify(lane && lane.names))
+
+        // 1g/1h — the two refusals, by name against the inventory.
+        const textOf = (name) => (lane === false ? '' : String(lane.texts[lane.names.indexOf(name)] ?? ''))
+        ok(IDS[6], /defined in 2 scopes/.test(textOf('shared-trail')) && !/wins|shadows|overrides/.test(textOf('shared-trail')),
+          JSON.stringify(textOf('shared-trail')))
+        ok(IDS[7], /not installed here/.test(textOf('ghost-skill')), JSON.stringify(textOf('ghost-skill')))
+
+        // 1b — a move of the host moves the lane by the same world delta,
+        // re-derived rather than stored: the record must not gain a rect.
+        const moved = await wc.executeJavaScript(`(async () => {
+          const chrome = document.querySelector('.panel[data-panel-id="trT"] .panel__chrome')
+          if (!chrome) return { error: 'no host' }
+          const l0 = document.querySelector('[data-skill-trail-lane="trT"]')
+          const before = { lane: parseFloat(l0.style.left), host: parseFloat(document.querySelector('.panel[data-panel-id="trT"]').style.left) }
+          const r = chrome.getBoundingClientRect()
+          const start = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+          const DX = 120, DY = 30
+          const opts = (x, y, buttons) => ({ bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, buttons, detail: 1 })
+          chrome.dispatchEvent(new MouseEvent('mousedown', opts(start.x, start.y, 1)))
+          document.dispatchEvent(new MouseEvent('mousemove', opts(start.x + DX, start.y + DY, 1)))
+          await new Promise((res) => setTimeout(res, 20))
+          document.dispatchEvent(new MouseEvent('mouseup', opts(start.x + DX, start.y + DY, 0)))
+          await new Promise((res) => setTimeout(res, 200))
+          const l1 = document.querySelector('[data-skill-trail-lane="trT"]')
+          const after = { lane: l1 ? parseFloat(l1.style.left) : null, host: parseFloat(document.querySelector('.panel[data-panel-id="trT"]').style.left) }
+          return { before, after, scale: window.__m4aViewport().scale }
+        })()`)
+        ok(IDS[1],
+          moved && !moved.error && moved.after.lane !== null &&
+            Math.abs((moved.after.host - moved.before.host)) > 1 &&
+            Math.abs((moved.after.lane - moved.before.lane) - (moved.after.host - moved.before.host)) < 0.5,
+          JSON.stringify(moved))
+
+        // 1e — zoomed out to the far tiers the host is a card, and a card
+        // paints no trail. The panel itself must still be on screen, or the
+        // assertion would be about culling rather than about the tier.
+        for (let i = 0; i < 12; i++) await zoomTo(wc, '-')
+        await settle()
+        const far = await wc.executeJavaScript(`(() => ({
+          scale: window.__m4aViewport().scale,
+          detail: (document.querySelector('.world') || {}).getAttribute ? document.querySelector('.world').getAttribute('data-detail') : null,
+          host: document.querySelector('.panel[data-panel-id="trT"]') !== null,
+          cards: document.querySelectorAll('[data-skill-trail-card]').length
+        }))()`)
+        ok(IDS[4], far.scale < 0.26 && far.host === true && far.cards === 0, JSON.stringify(far))
+        await zoomTo(wc, '0')
+        await settle()
+
+        // 1d — the capsule, in BOTH states: a control that disappears when
+        // its thing is off reads as a feature that was never built.
+        const capsule = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]'); if (!b) return false
+          return { expandedText: b.textContent, expandedState: b.getAttribute('data-skill-trail-toggle') }
+        })()`), 8000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await settle()
+        const collapsed = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]')
+          return { present: b !== null, text: b ? b.textContent : null, state: b ? b.getAttribute('data-skill-trail-toggle') : null,
+                   cards: document.querySelectorAll('[data-skill-trail-card]').length,
+                   glyphs: b ? /[‹›»«▶◀]/.test(b.textContent) : true }
+        })()`)
+        ok(IDS[3],
+          capsule !== false && collapsed.present === true && collapsed.cards === 0 &&
+            /\d+ skills?/.test(String(capsule.expandedText)) && /\d+ skills?/.test(String(collapsed.text)) &&
+            capsule.expandedState !== collapsed.state && collapsed.glyphs === false,
+          JSON.stringify({ capsule, collapsed }))
+
+        // 1c — the ONE stored fact, read off disk and then off a reload.
+        await settle()
+        flushLayoutStore()
+        const onDiskMark = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const wsMark = onDiskMark.workspaces.find((w) => w.id === onDiskMark.activeWorkspaceId) || onDiskMark.workspaces[0]
+        const recMark = wsMark && wsMark.panels.find((p) => p.id === 'trT')
+        const reT2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reT2
+        await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="trT"]') !== null`), 8000)
+        const afterReload = await wc.executeJavaScript(`(() => ({
+          cards: document.querySelectorAll('[data-skill-trail-card]').length,
+          toggle: (document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]') || {}).getAttribute ? document.querySelector('.panel[data-panel-id="trT"] [data-skill-trail-toggle]').getAttribute('data-skill-trail-toggle') : null
+        }))()`)
+        ok(IDS[2],
+          recMark !== undefined && recMark.skillTrail === 'collapsed' &&
+            afterReload.cards === 0 && afterReload.toggle === 'collapsed',
+          JSON.stringify({ recMark, afterReload }))
+
+        await clickPanelClose(wc, 'trT')
+        await settle()
+        try { rmSync(TR_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (trErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(trErr && trErr.message || trErr))
+      } finally {
+        trailFixture = null
       }
     }
 
