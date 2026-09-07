@@ -42,5 +42,9 @@ module.exports = {
   cost: require('../src/shared/cost'),
   /* M132. The pool: N workers over a shared list, pure over injected deps —
      no AgentSessionManager import, no fs. */
-  pool: require('../src/main/pool-runner')
+  pool: require('../src/main/pool-runner'),
+  /* M138. The pool's production caller: main's half between a workflow's Run
+     and startPool — the mint asked of the renderer, the send, the finished
+     and tick driven from the manager's own events. Absent until it lands. */
+  poolCaller: (() => { try { return require('../src/main/pool-caller') } catch { return undefined } })()
 }

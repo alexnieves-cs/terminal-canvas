@@ -234,7 +234,10 @@ app.whenReady().then(() => {
   // the only channels in the contract that put bytes into ~/.claude.
   // M130 skill:trail (120) — a terminal panel's live skill trail, tailed
   // from the CLI's own transcript at a byte offset.
-  const EXPECTED_CHANNELS = 120
+  // M138 agent:pool-start / agent:pool-stop (122) — the pool's production
+  // caller: main reads the list and drives the engine, the renderer mints
+  // each worker on request (`pool:mint`, an ephemeral reply like board:add).
+  const EXPECTED_CHANNELS = 122
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

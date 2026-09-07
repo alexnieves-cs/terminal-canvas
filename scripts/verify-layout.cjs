@@ -3834,6 +3834,28 @@ try {
     JSON.stringify({ threw, stored, carried, bare }))
 }
 
+// M138 — chat.orchestrator.1. An orchestrator block's chat keeps its PROMPT
+// across a relaunch on its record (`orchestrator: string`), the way a
+// supervisor keeps its flag: the CLI keeps no record of --append-system-prompt,
+// so a resumed spawn without it stops being an orchestrator. A present
+// non-string warns and is dropped (the chat kept); absent stays absent;
+// `carryChatMarks` carries it beside dispatch/sandbox/routine.
+{
+  let stored, warnings, carried, bare, threw = null
+  try {
+    const panel = (id, extra) => ({ id, kind: 'chat', x: 0, y: 0, w: 560, h: 360, z: 1, chat: { cwd: '/w', sessionId: 's-' + id, ...extra } })
+    const out = L.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [panel('c1', { orchestrator: 'You run the workers.' }), panel('c2', {}), panel('c3', { orchestrator: 7 })], camera: { x: 0, y: 0, scale: 1 } }] }))
+    stored = out.snapshot.workspaces[0].panels.map((p) => p.chat)
+    warnings = out.warnings
+    carried = L.carryChatMarks({ orchestrator: 'You run the workers.', dispatch: true })
+    bare = L.carryChatMarks({})
+  } catch (e) { threw = String(e) }
+  ok('chat.orchestrator.1 a chat record\'s orchestrator prompt round-trips, a non-string warns and is dropped with the chat kept, absent stays absent, and carryChatMarks carries it',
+    threw === null && stored && stored.length === 3 && stored[0].orchestrator === 'You run the workers.' && !('orchestrator' in stored[1]) && !('orchestrator' in stored[2]) &&
+      warnings.some((w) => /c3.*orchestrator/.test(w)) && carried && carried.orchestrator === 'You run the workers.' && carried.dispatch === true && Object.keys(bare).length === 0,
+    JSON.stringify({ threw, stored, warnings, carried, bare }))
+}
+
 // M122 — search.active.1. THE HANDLER'S SOURCE OF PANELS. `initial()` applies
 // `restore.layout` and answers no panels with it off; a search built over it
 // went quiet with nothing to say why. The active row of `mergedWorkspaces()`

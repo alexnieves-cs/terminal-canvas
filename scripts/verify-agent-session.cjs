@@ -2213,6 +2213,99 @@ const isResult = (l) => l.includes('"type":"result"')
     }
   }
 
+  // M138 — pool.2a–d. THE POOL'S PRODUCTION CALLER. `startPool` (pool.1) is
+  // pure over injected deps and had no caller; `createPoolCaller` is main's
+  // half between a workflow's Run and that engine: it reads the list, asks
+  // the RENDERER to mint each worker (the renderer owns the workspace it
+  // renders — M80's rule, board:add's precedent), sends the block's prompt
+  // with the item as the worker's first message through the ordinary send,
+  // drives `finished` from the manager's OWN events (a worker's `ready` after
+  // its turn, or its exit) and `tick` from every budget event, and forwards
+  // every pool event with the template and block it belongs to. Driven with
+  // a FAKE agents seam and a fake mint: pool.1 already proves the engine.
+  {
+    const PC = M.poolCaller
+    const poolNode = (width) => ({ kind: 'pool', width, list: '/fake/list.txt', prompt: 'do it', cwd: '/repo', dx: 0, dy: 0 })
+    const fakeAgents = () => {
+      const subs = []
+      const a = {
+        sends: [], interrupts: [],
+        send: (id, text) => { a.sends.push([id, text]); return { kind: 'sent' } },
+        interrupt: (id) => { a.interrupts.push(id); return true },
+        subscribe: (cb) => { subs.push(cb); return () => { subs.splice(subs.indexOf(cb), 1) } },
+        emit: (e) => { for (const cb of [...subs]) cb(e) }
+      }
+      return a
+    }
+    if (PC === undefined || typeof PC.createPoolCaller !== 'function') {
+      for (const id of ['pool.2a', 'pool.2b', 'pool.2c', 'pool.2d']) ok(`${id} main/pool-caller.ts exports createPoolCaller`, false, 'module absent')
+    } else {
+      try {
+        {
+          const agents = fakeAgents(); const events = []; const mints = []; let n = 0
+          const caller = PC.createPoolCaller({
+            agents, mint: async (req) => { mints.push(req); return { kind: 'ok', id: `w${++n}` } },
+            readList: () => ({ kind: 'ok', items: ['a', 'b', 'c', 'd', 'e'] }),
+            limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }), spend: () => 0,
+            emit: (e) => events.push(e)
+          })
+          const started = caller.start({ templateId: 't1', key: 'p', node: poolNode(3) })
+          await tick(20)
+          const startedEvents = events.filter((e) => e.event.kind === 'started')
+          ok('pool.2a start mints the workers through the renderer (bounded by the live ceiling), sends each the prompt with its item, and every event carries its template and block',
+            started.kind === 'started' && mints.length === 2 && mints[0].templateId === 't1' && mints[0].key === 'p' && mints[0].cwd === '/repo' && mints[0].item === 'a' && mints[1].item === 'b' &&
+              agents.sends.length === 2 && agents.sends[0][0] === 'w1' && /do it/.test(agents.sends[0][1]) && /\ba\b/.test(agents.sends[0][1]) &&
+              startedEvents.length === 2 && events.every((e) => e.templateId === 't1' && e.key === 'p') &&
+              events.some((e) => e.event.kind === 'queued' && e.event.reason === 'concurrency'),
+            JSON.stringify({ started, mints: mints.map((m) => m.item), sends: agents.sends, kinds: events.map((e) => e.event.kind) }))
+          agents.emit({ id: 'w1', type: 'turn', turn: { role: 'assistant', blocks: [] } })
+          agents.emit({ id: 'w1', type: 'status', status: 'ready' })
+          await tick(20)
+          const afterReady = mints.map((m) => m.item)
+          agents.emit({ id: 'w2', type: 'status', status: 'exited', exitCode: 0 })
+          await tick(20)
+          const afterExit = mints.map((m) => m.item)
+          agents.emit({ id: 'zzz-not-ours', type: 'status', status: 'ready' })
+          await tick(20)
+          ok('pool.2b a worker\'s ready after its turn pulls the next item, an exit does too, and a session that is not a worker moves nothing',
+            afterReady.join(',') === 'a,b,c' && afterExit.join(',') === 'a,b,c,d' && mints.length === 4 &&
+              events.filter((e) => e.event.kind === 'finished').length === 2,
+            JSON.stringify({ afterReady, afterExit, finished: events.filter((e) => e.event.kind === 'finished').map((e) => e.event.id) }))
+          const again = caller.start({ templateId: 't1', key: 'p', node: poolNode(3) })
+          const stopped = caller.stop('t1', 'p')
+          await tick(10)
+          const stoppedEvent = events.find((e) => e.event.kind === 'stopped')
+          ok('pool.2c stop interrupts every live worker (never kills) and says by-hand; a start on a block already running is refused by name; a stop of nothing is false',
+            again.kind === 'refused' && /already running/.test(again.reason) && stopped === true &&
+              agents.interrupts.sort().join(',') === 'w3,w4' && stoppedEvent !== undefined && stoppedEvent.event.why === 'by-hand' &&
+              caller.stop('t1', 'p') === false && caller.list().length === 0,
+            JSON.stringify({ again, stopped, interrupts: agents.interrupts, stoppedEvent }))
+        }
+        {
+          const agents = fakeAgents(); const events = []; let mints = 0
+          const caller = PC.createPoolCaller({
+            agents, mint: async () => { mints += 1; return { kind: 'refused', reason: 'the canvas is still starting' } },
+            readList: (path) => (path === '/missing' ? { kind: 'error', why: 'ENOENT' } : { kind: 'ok', items: ['x'] }),
+            limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }), spend: () => 0,
+            emit: (e) => events.push(e)
+          })
+          const missing = caller.start({ templateId: 't2', key: 'p', node: { ...poolNode(2), list: '/missing' } })
+          const mintsAfterMissing = mints
+          const refusedMint = caller.start({ templateId: 't3', key: 'p', node: poolNode(2) })
+          await tick(20)
+          const refusedEvent = events.find((e) => e.templateId === 't3' && e.event.kind === 'refused')
+          ok('pool.2d an unreadable list refuses by name before any mint; a mint the renderer refuses becomes a `refused` event naming the reason, and that pool is not left running',
+            missing.kind === 'refused' && /could not read the work list/.test(missing.reason) && mintsAfterMissing === 0 &&
+              refusedMint.kind === 'started' && mints === 1 && refusedEvent !== undefined && /still starting/.test(refusedEvent.event.why) &&
+              agents.sends.length === 0 && caller.list().length === 0,
+            JSON.stringify({ missing, refusedMint, mints, refusedEvent, live: caller.list() }))
+        }
+      } catch (e) {
+        ok('pool.2 the caller runs without throwing', false, String((e && e.stack) || e).slice(0, 400))
+      }
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   if (failed.length) {
