@@ -367,8 +367,25 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const rules = bare.match(/\.pf__chrome\s*\{[^}]*\}/g) || []
   const lifted = rules.some((r) => /z-index:\s*[1-9]/.test(r))
-  ok('menu.stack.1', '.pf__chrome carries a positive z-index so the chrome and its ⋯ menu paint above the body that follows it',
-    lifted, JSON.stringify(rules.map((r) => r.replace(/\s+/g, ' ').slice(0, 80))))
+  // xterm's own layers carry z-indexes up to 10; the body isolates them so the
+  // chrome's z-index competes with the body alone, never with a layer inside it.
+  const body = (bare.match(/\.pf__body\s*\{[^}]*\}/g) || [])[0] || ''
+  ok('menu.stack.1', '.pf__chrome carries a positive z-index and .pf__body isolates its own stacking, so the chrome and its ⋯ menu paint above the body that follows it',
+    lifted && /isolation:\s*isolate/.test(body), JSON.stringify({ chrome: rules.map((r) => r.replace(/\s+/g, ' ').slice(0, 80)), body: body.replace(/\s+/g, ' ').slice(0, 80) }))
+}
+
+// M149 — popover.stack.1 (audit F.14). The dock is LIFTED above the navigator
+// column: M109's glass blur (`backdrop-filter`) made `.shell__dock` a stacking
+// context, and with no z-index of its own the whole column — the attention
+// popover inside it, `z-index: 950` — painted under the rail's `z-index: 900`.
+// The popover had been open in the DOM and invisible since 2.3.0; the
+// `attention` golden showed a badge and no popover.
+{
+  const dock = (bare.match(/\.shell__dock\s*\{[^}]*backdrop-filter[^}]*\}/g) || [])[0] || ''
+  const railZ = (bare.match(/\.shell__rail\s*\{[^}]*z-index:\s*(\d+)/) || [])[1]
+  const dockZ = (dock.match(/z-index:\s*(\d+)/) || [])[1]
+  ok('popover.stack.1', '.shell__dock (a glass stacking context) carries a z-index above .shell__rail\'s, so the attention popover paints over the navigator',
+    dockZ !== undefined && railZ !== undefined && Number(dockZ) > Number(railZ), JSON.stringify({ dockZ, railZ }))
 }
 
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each

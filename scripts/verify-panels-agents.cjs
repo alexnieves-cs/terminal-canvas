@@ -1562,6 +1562,15 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const vpBefore = await wc.executeJavaScript(`window.__m4aViewport()`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         const popRow = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-attention="${chatId}"]'); if (!r) return false; const a = r.querySelector('[data-rail-allow]'); return a ? { allow: a.textContent, title: a.title, arg: r.querySelector('.rail-attention__argument')?.textContent ?? null, deny: !!r.querySelector('[data-rail-deny]') } : false })()`), 4000)
+        // M149 — popover.paint.1 (audit F.14). The popover must be the element
+        // under its own title's centre — PAINTED over the navigator, not merely
+        // in the DOM: M109's glass blur made the dock a stacking context that the
+        // rail's z-index 900 covered, and every DOM read here stayed green while
+        // a person saw a badge and nothing else.
+        const popPaint = await wc.executeJavaScript(`(() => { const t = document.querySelector('.dock__popover .shell__region-title'); if (!t) return 'no popover title'
+          const r = t.getBoundingClientRect(); const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+          return top ? (top.closest('.dock__popover') !== null ? true : (top.className || top.tagName)) : 'nothing' })()`)
+        ok('popover.paint.1 the attention popover, open, is the element under its own title\'s centre — painted above the navigator column, not merely present in the DOM', popPaint === true, JSON.stringify({ popPaint }))
         await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]'); if (a) a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!a })()`)
         const cleared = await pendingIs(0)
         const rowGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"]') === null`), 4000)
