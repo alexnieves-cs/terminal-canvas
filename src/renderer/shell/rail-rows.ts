@@ -294,3 +294,36 @@ export function chatHeaderLine(input: { cwd: string; branch?: string; backend: s
   const folder = input.sandbox === true ? SANDBOX_HEADER : (input.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/')
   return [folder, input.branch, input.backend, input.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')
 }
+
+/**
+ * M171. THE RAIL AS PLACES (the brief, BridgeMind One's posture): the Panels
+ * list groups its rows by what they ARE, under quiet headings with counts —
+ * a chat and a terminal are both agents, a note and a source file are both
+ * files. Pure: every row lands in exactly ONE group, in array order within it;
+ * an empty group is omitted (a heading over nothing is a promise the list
+ * cannot keep); the group order is fixed here and nowhere else.
+ */
+export type RailGroupId = 'agents' | 'files' | 'reviews' | 'boards' | 'integrations' | 'workflows'
+export interface RailGroup<R extends { state: { kind: string } }> { id: RailGroupId; label: string; rows: R[] }
+
+const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[] = [
+  { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat'] },
+  { id: 'files', label: 'Files', kinds: ['file', 'note'] },
+  { id: 'reviews', label: 'Reviews', kinds: ['review'] },
+  { id: 'boards', label: 'Boards', kinds: ['work', 'jira', 'github'] },
+  { id: 'integrations', label: 'Integrations', kinds: ['browser', 'watcher', 'memory', 'toolbox', 'skill'] },
+  { id: 'workflows', label: 'Workflows', kinds: ['workflow'] }
+]
+
+export function railGroups<R extends { state: { kind: string } }>(rows: readonly R[], kindOf: (row: R) => string = (r) => r.state.kind): RailGroup<R>[] {
+  const out: RailGroup<R>[] = GROUP_ORDER.map((g) => ({ id: g.id, label: g.label, rows: [] }))
+  for (const row of rows) {
+    const kind = kindOf(row)
+    const i = GROUP_ORDER.findIndex((g) => g.kinds.includes(kind))
+    // A kind this table does not name lands with the integrations rather than
+    // vanishing: a row that disappears is indistinguishable from a feature
+    // that was never built (CLAUDE.md).
+    out[i === -1 ? 4 : i].rows.push(row)
+  }
+  return out.filter((g) => g.rows.length > 0)
+}

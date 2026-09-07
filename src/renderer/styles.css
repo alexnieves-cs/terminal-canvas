@@ -4391,3 +4391,19 @@ body {
 .md__fence:hover .md__copy, .md__fence:focus-within .md__copy { opacity: 1; }
 .md__code-inline { font-family: var(--font-mono); font-size: var(--t-sm); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--s-2); }
 .md__link { color: var(--iris); text-decoration: underline; text-decoration-color: var(--iris-dim); }
+
+/* M171. THE RAIL AS PLACES. A quiet caps heading with its count (never a
+   `.rail-row`); the kind glyph in a soft tint on every row; the state a DOT
+   after the label with the word on the row's title — the tail keeps the word
+   for the checks, clipped; `start` rests at 0 and reveals with the row's hover
+   or focus-within (the rest rule — reveal.1 pinned it at 1 from M66 to M170);
+   the selected row a soft filled pill. */
+.rail-heading { display: flex; align-items: center; min-height: 24px; margin: var(--sp-3) 0 var(--sp-1); padding: 0 var(--sp-4); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.rail-row__kind { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; }
+.rail-row__kind svg { width: 12px; height: 12px; }
+.rail-row__state-dot { flex: 0 0 auto; margin-left: auto; }
+.rail-row__tail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rail-row__start { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.rail-row:hover .rail-row__start, .rail-row:focus-within .rail-row__start { opacity: 1; }
+.rail-row--selected { background: var(--iris-dim); border-radius: var(--r-md); }
+@media (prefers-reduced-motion: reduce) { .rail-row__start { transition: none; } }

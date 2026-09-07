@@ -14,6 +14,7 @@ import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { SkillsPane, type SkillsPaneProps } from './SkillsPane'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
+import { railGroups } from './rail-rows'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
@@ -229,17 +230,23 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                 // state, and this one names the way out.
                 <li className="rail-empty">no panels — ⌘N to start one</li>
               ) : (
-                props.rows.map((row) => (
-                  <RailPanelRow
-                    key={row.id}
-                    row={row}
-                    selected={row.id === props.selectedId}
-                    onGoTo={props.onGoToPanel}
-                    onStart={props.onStartPanel}
-                    merged={props.merged}
-                    onClose={props.onClosePanel}
-                  />
-                ))
+                /* M171. THE RAIL AS PLACES: rows under quiet headings by what they
+                   are, with counts. A heading is never a `.rail-row` (empty.1
+                   counts rows) and never renders over nothing (railGroups). */
+                railGroups(props.rows).flatMap((group) => [
+                  <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id} aria-hidden="true">{group.label} · {group.rows.length}</li>,
+                  ...group.rows.map((row) => (
+                    <RailPanelRow
+                      key={row.id}
+                      row={row}
+                      selected={row.id === props.selectedId}
+                      onGoTo={props.onGoToPanel}
+                      onStart={props.onStartPanel}
+                      merged={props.merged}
+                      onClose={props.onClosePanel}
+                    />
+                  ))
+                ])
               )}
             </ul>
           )}
