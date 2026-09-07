@@ -383,7 +383,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
-                       env:report / link:open / ledger:list
+                       env:report / link:open / ledger:list / ledger:usage
                        spawn:sheet / spawn:recent
                        agent:create / agent:send / agent:interrupt / agent:dispose
                        agent:answer / agent:list / agent:transcript / agent:import

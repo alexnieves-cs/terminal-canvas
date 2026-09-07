@@ -1656,6 +1656,8 @@ app.whenReady().then(async () => {
       // walked the user's entire home directory and listed it as the vault
       // (M85's verifier). A missing root is the reader's own "no vault" arm.
       snapshotList: () => layoutSnapshots.list(),
+      // M142. History on #46's ledger; the renderer prices it.
+      ledgerUsage: (since) => runLedger.usage(since),
       snapshotRestore: (at, afterId) => {
         const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
         let bytes: string

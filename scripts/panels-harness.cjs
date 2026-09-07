@@ -1220,6 +1220,8 @@ app.whenReady().then(async () => {
     vaultRead: (root) => readVault(root),
     // M93. The same two fences main wires, over the harness's ring.
     snapshotList: () => layoutSnapshots.list(),
+    // M142. The renderer asks at boot (the M135 rule: every handler it calls at boot, or the pane paints its failed arm).
+    ledgerUsage: (since) => runLedger.usage(since),
     snapshotRestore: (at, afterId) => {
       let bytes
       try { bytes = readFileSync(join(snapshotDir, `${at}.json`), 'utf8') } catch { return { kind: 'refused', reason: 'that snapshot is gone' } }

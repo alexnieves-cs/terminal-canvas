@@ -1564,7 +1564,7 @@ const p = (name) => join(DIR, name)
 // section) still answers command rows only; `usage(since)` answers the
 // usage rows at or after `since`, newest first. A malformed usage row costs
 // that row.
-;(async () => {
+await (async () => {
   const { mkdtempSync } = require('node:fs')
   const { join } = require('node:path')
   const { tmpdir } = require('node:os')

@@ -8,6 +8,8 @@ import { undoHistory, type History } from '@renderer/panels/history'
 import type { PresetTemplate } from '@shared/ipc-contract'
 import type { Viewport, WorldRect } from './viewport'
 import { skillEditorFocused } from '../skills/editor-focus'
+import { getUsage } from '../session/usage-store'
+import type { PanelUsage } from '@shared/cost'
 
 export interface CanvasTestHooksDeps {
   /** M133. The instantiation counter — see `__m132Instantiations` below. */
@@ -103,6 +105,8 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
     w.__m4aFocusedId = (): string | null => focusedIdRef.current
     /** M135. The skill editor's keyboard flag, so a check can tell a guard that never armed from a paste that reached two places. */
     w.__m129EditorFocused = (): boolean => skillEditorFocused()
+    /** M142. A panel's live usage from the store, so a check can wait for the fixture's figures before closing the panel. */
+    w.__m17Usage = (id: string): PanelUsage | undefined => getUsage(id)
     /** Screen-space centre of the first cell of `word` in the focused panel. */
     w.__m4aCellToScreen = (word: string): { x: number; y: number } | null => {
       const id = focusedIdRef.current

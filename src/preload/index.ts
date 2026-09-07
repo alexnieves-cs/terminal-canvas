@@ -211,7 +211,8 @@ const bridge: CanvasBridge = {
     report: (again?: boolean) => ipcRenderer.invoke(IPC.ENV_REPORT, again === true)
   },
   ledger: {
-    list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit)
+    list: (panelId: string, limit: number) => ipcRenderer.invoke(IPC.LEDGER_LIST, panelId, limit),
+    usage: (since: number) => ipcRenderer.invoke(IPC.LEDGER_USAGE, since)
   },
   agentSession: {
     create: (spec) => ipcRenderer.invoke(IPC.AGENT_CREATE, spec),

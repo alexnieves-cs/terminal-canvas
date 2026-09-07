@@ -1,5 +1,5 @@
 import type { WatchTrigger } from './watch-trigger'
-import type { RunRow } from './run-ledger'
+import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
@@ -529,6 +529,8 @@ export const IPC = {
   LINK_OPEN: 'link:open',
   /** M52. A panel's recent runs from the ledger, newest first. */
   LEDGER_LIST: 'ledger:list',
+  /** M142. This week's usage rows from the run ledger, priced in the renderer. */
+  LEDGER_USAGE: 'ledger:usage',
   /**
    * M65. The spawn sheet: main resolves a preset (absent command included)
    * or a typed command into a template, refuses a directory that does not
@@ -1443,6 +1445,8 @@ export interface CanvasBridge {
   ledger: {
     /** M52. The run ledger's rows for a panel, newest first: what it ran and how each ended. No output bytes. */
     list(panelId: string, limit: number): Promise<RunRow[]>
+    /** M142. Every usage row at or after `since` (epoch ms), newest first — the history half of backlog #19. */
+    usage(since: number): Promise<UsageRow[]>
   }
   /** M73. The agent-session runtime. `agent` below is the older agent-STATE surface (M6c/M6d); the two are different facts. */
   agentSession: {

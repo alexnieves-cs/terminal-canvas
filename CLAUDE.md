@@ -187,7 +187,7 @@ renderer --invoke--> diagnostics:sample / diagnostics:export                  --
 renderer --invoke--> export:panel-text / export:canvas-png                    --> main
 renderer --invoke--> env:report                                                   --> main
 renderer --invoke--> link:open                                                    --> main
-renderer --invoke--> ledger:list                                                  --> main
+renderer --invoke--> ledger:list / ledger:usage                                   --> main
 renderer --invoke--> memory:list / memory:add / vault:read                        --> main
 renderer --invoke--> watcher:create / watcher:run / watcher:stop                   --> main
 renderer --invoke--> watcher:dispose / watcher:list                               --> main

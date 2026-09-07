@@ -9,6 +9,7 @@ import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotal
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
+import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
 import { isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
@@ -166,6 +167,39 @@ export interface InspectorSummary {
   tokens: number
   /** M46. Every panel's list price, summed per model; undefined if any panel's model is unpriced. */
   cost: number | undefined
+  /** M142. This week's closed sessions from the run ledger; absent until the ledger has answered. */
+  history?: UsageHistory
+}
+
+/** M142. The fold over this week's usage rows: sessions, tokens, and a price by the summary's own rule. */
+export interface UsageHistory {
+  sessions: number
+  tokens: number
+  /** Undefined when any row's model is unpriced — never a smaller figure that looks complete. */
+  costUsd: number | undefined
+}
+
+export function foldUsageHistory(rows: readonly LedgerUsageRow[]): UsageHistory {
+  let tokens = 0
+  let costUsd: number | undefined = 0
+  for (const row of rows) {
+    for (const [model, totals] of Object.entries(row.byModel)) {
+      tokens += totals.input + totals.output + totals.cacheWrite + totals.cacheRead
+      const c = costOf(totals, model)
+      if (c === undefined) costUsd = undefined
+      else if (costUsd !== undefined) costUsd += c
+    }
+  }
+  return { sessions: rows.length, tokens, costUsd }
+}
+
+/** The `this week` line's three states, never two: nothing ran, ran but unpriced, a figure with its count. */
+export function historyWord(h: UsageHistory | undefined): string {
+  if (h === undefined) return 'reading the ledger…'
+  if (h.sessions === 0) return 'nothing closed this week'
+  const sessions = `${h.sessions} session${h.sessions === 1 ? '' : 's'}`
+  if (h.costUsd === undefined) return `${sessions}, ${h.tokens.toLocaleString()} tokens — unpriced (a model without a list price)`
+  return `$${h.costUsd.toFixed(2)} across ${sessions}`
 }
 
 /** Rendered when the spec asked for nothing and main has not answered yet. */
@@ -865,7 +899,9 @@ export function buildInspectorSummary(
   statusOf: (id: string) => PanelStatus | undefined,
   waitingIds: readonly string[],
   /** M46. Per-panel usage for the canvas-wide totals; absent means none. */
-  usageOf: (id: string) => PanelUsage | undefined = () => undefined
+  usageOf: (id: string) => PanelUsage | undefined = () => undefined,
+  /** M142. This week's fold, when the ledger has answered. */
+  history?: UsageHistory
 ): InspectorSummary {
   const ids = new Set(panels.map((p) => p.rect.id))
   // The totals are priced PER MODEL, exactly as one panel's Cost section is
@@ -890,7 +926,8 @@ export function buildInspectorSummary(
     running: panels.filter((p) => isRunning(statusOf(p.rect.id))).length,
     waiting: waitingIds.filter((id) => ids.has(id)).length,
     tokens,
-    cost
+    cost,
+    ...(history === undefined ? {} : { history })
   }
 }
 

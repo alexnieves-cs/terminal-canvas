@@ -1,4 +1,5 @@
-import type { SnapshotMeta , ClipboardFile } from '@shared/ipc-contract'
+import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
+import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
@@ -111,6 +112,8 @@ export interface PaletteHandlers {
   vaultRead(root: string): { root: string; notes: unknown[]; skipped: number; reason?: string }
   /** M93. */
   snapshotList(): SnapshotMeta[]
+  /** M142. The run ledger's usage rows at or after `since`. */
+  ledgerUsage(since: number): Promise<UsageRow[]>
   snapshotRestore(at: number, afterId?: number): { kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
   memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
@@ -438,6 +441,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))
   ipcMain.handle(IPC.SNAPSHOT_LIST, () => palette.snapshotList())
+  ipcMain.handle(IPC.LEDGER_USAGE, (_event, since: number) => palette.ledgerUsage(typeof since === 'number' && Number.isFinite(since) ? since : 0))
   ipcMain.handle(IPC.SNAPSHOT_RESTORE, (_event, at: number, afterId?: number) => palette.snapshotRestore(at, afterId))
   ipcMain.handle(IPC.WATCHER_CREATE, (_event, req: WatcherCreateRequest) => watchers.create(req))
   ipcMain.handle(IPC.WATCHER_RUN, (_event, id: string) => watchers.run(id))
