@@ -879,5 +879,45 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rounded && ring && interruptRest && interruptLive && sendLive && chips && approval, JSON.stringify({ rounded, ring, interruptRest, interruptLive, sendLive, chips, approval }))
 }
 
+// M171 — rail.1. THE RAIL AS PLACES: a quiet heading rule (`.rail-heading`,
+// the caps tracking, never `.rail-row` — empty.1 counts rows); the kind glyph
+// in a soft tint; a state DOT slot on every stateful row with the word kept
+// in the tail but clipped (the checks read its text; a person reads the dot
+// and the title); `start` at opacity 0 revealed on the row's hover /
+// focus-within (the rest rule); the selected row a soft filled pill.
+{
+  const heading = all.find((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel))
+  const headingOk = heading ? /letter-spacing:\s*var\(--track-caps\)/.test(heading.body) && /text-transform:\s*uppercase/.test(heading.body) : false
+  const tint = all.some((r) => /(^|,)\s*\.rail-row__kind\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
+  // `some`, not `find`: these subjects have an M46/M66 rule earlier in the file and the M171 rule later.
+  const clipped = all.some((r) => /(^|,)\s*\.rail-row__tail\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body))
+  const dot = all.some((r) => /\.rail-row__state-dot\b/.test(r.sel))
+  const startHidden = all.some((r) => /(^|,)\s*\.rail-row__start\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const startReveal = all.some((r) => /\.rail-row:hover \.rail-row__start/.test(r.sel) && /\.rail-row:focus-within \.rail-row__start/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const pill = all.some((r) => /(^|,)\s*\.rail-row--selected\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body) && /border-radius:\s*var\(--r-md\)/.test(r.body))
+  ok('rail.1', 'a caps heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
+    headingOk && tint && clipped && dot && startHidden && startReveal && pill, JSON.stringify({ headingOk, tint, clipped, dot, startHidden, startReveal, pill }))
+}
+
+// M172 — dock.1. THE DOCK AS NAMED PLACES: each button carries a `.dock__label`
+// at opacity 0 that reveals on the button's :hover / :focus-visible (a tag
+// beside the icon, never a wider dock); the current place is a filled pill
+// (--iris-dim); the `N live / N quiet` capsules are gone from the dock (the
+// metrics rule — the count lives in the rail's `Agents · N` heading), so no
+// `.dock__capsule` rule remains and `Dock.tsx` renders no `data-dock-capsules`;
+// the top bar's search is a FIELD-shaped button (`.shell__search` stays a
+// button for shell 78) with a hairline and --r-full.
+{
+  const label = all.some((r) => /(^|,)\s*\.dock__label\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
+  const reveal = all.some((r) => /\.dock__button:hover \.dock__label/.test(r.sel) && /\.dock__button:focus-visible \.dock__label/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const on = all.some((r) => /(^|,)\s*\.dock__button--on\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
+  const noCapsule = !all.some((r) => /\.dock__capsule/.test(r.sel))
+  const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
+  const noCapsuleDom = !/data-dock-capsules/.test(dockSrc)
+  const search = all.some((r) => /(^|,)\s*\.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body))
+  ok('dock.1', 'the dock buttons carry a hidden label revealed on hover/focus-visible, the current place is a filled pill, the capsules are gone from the dock and its CSS, and the top bar\'s search is a field-shaped button',
+    label && reveal && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, on, noCapsule, noCapsuleDom, search }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

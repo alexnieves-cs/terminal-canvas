@@ -2450,6 +2450,22 @@ const session = (id, over = {}) => ({
     JSON.stringify({ restored: live(restored), queued: live(queued), fresh: live(fresh), sendRestored: cs(restored, true).send.enabled }))
 }
 
+// M171 — groups.1. THE RAIL AS PLACES: every row lands in exactly one group
+//     (agents · files · reviews · boards · integrations · workflows), in array
+//     order within it; an empty group is omitted; the group order is fixed;
+//     a kind the table does not name lands with the integrations rather than
+//     vanishing (a row that disappears is indistinguishable from a feature
+//     that was never built).
+{
+  const groups = typeof R.railGroups === 'function' ? R.railGroups : () => null
+  const row = (id, kind) => ({ id, state: { kind } })
+  const g = groups([row('a', 'chat'), row('b', 'file'), row('c', 'terminal'), row('d', 'work'), row('e', 'note'), row('f', 'workflow'), row('g', 'mystery'), row('h', 'review')])
+  const ids = g ? g.map((x) => `${x.id}:${x.rows.map((r) => r.id).join('')}`).join(' ') : null
+  ok('groups.1 railGroups: one group per row in a fixed order, array order within, empty groups omitted, an unknown kind with the integrations',
+    ids === 'agents:ac files:be reviews:h boards:d integrations:g workflows:f' && groups([]).length === 0 && g.every((x) => typeof x.label === 'string' && x.label !== ''),
+    JSON.stringify({ ids }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

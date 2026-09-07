@@ -426,7 +426,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const IDS = [
         'theme.1 switching to dark stamps data-theme, retunes the xterm theme on a live AND a detached session, and the card slot follows',
         'targets.1 every icon control measures at least 24x24',
-        'reveal.1 a rail row\'s close control is hidden at rest and revealed on :focus-within, and the dormant start control is always visible'
+        'reveal.1 a rail row\'s close and start controls are hidden at rest and revealed on :focus-within (the rest rule, M171)'
       ]
       try {
         state.backend = createDirectBackend('verify: direct (m45 visual)')
@@ -542,8 +542,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           const closeA = document.querySelector('.rail-row[data-rail-row="vA"] .rail-row__close')
           return closeA ? getComputedStyle(closeA).opacity : null })()`)
         reveal.focused = { close: revealed, active: reveal.active }
+        // M171. The rest rule reached the rail: `start` rests at 0 like the close
+        //     and reveals with it on :focus-within (it was pinned at 1 at rest
+        //     from M66 to M170 — a dormant row's only stated verb).
+        const startB = await wc.executeJavaScript(`(() => { const s = document.querySelector('.rail-row[data-rail-row="vB"] .rail-row__start'); if (!s) return null; s.focus(); return true })()`)
+        await settle()
+        reveal.startFocused = startB ? await wc.executeJavaScript(`(() => { const s = document.querySelector('.rail-row[data-rail-row="vB"] .rail-row__start'); return s ? getComputedStyle(s).opacity : null })()`) : null
         ok(IDS[2],
-          reveal.rest.close === '0' && reveal.rest.start === '1' && reveal.focused.active && reveal.focused.close === '1',
+          reveal.rest.close === '0' && reveal.rest.start === '0' && reveal.focused.active && reveal.focused.close === '1' && reveal.startFocused === '1',
           JSON.stringify(reveal))
         // Restore the setting so later checks (and the next run) start light.
         await wc.executeJavaScript(`window.canvas.settings.set('appearance.theme', 'system')`)
