@@ -796,6 +796,8 @@ app.whenReady().then(async () => {
       list: () => [{ id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~', cwd: '~' }, { id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', cwd: '~', agent: 'claude-code' }],
       rename: () => false, remove: () => false, setDefault: () => {},
       spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
+      // M142/M149. The ledger's week rows: nothing closed in a fixture canvas — the answered arm, never the reading one.
+      ledgerUsage: () => Promise.resolve([]),
       // M80. Templates: the built-ins plus the store's own.
       presetTemplate: (id) => { const found = allPresets(layoutStore.presets()).find((p) => p.id === id); return found === undefined ? null : templateOf(found) },
       // M88. GitHub through a recorded broker: the scene shows the list with

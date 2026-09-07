@@ -329,7 +329,8 @@ export interface PaletteActions {
   beginCreateGroup(panelIds: string[]): void
   /** M65. Open the spawn sheet: where, what, how. */
   /** M80. `templateId` opens the sheet on that template. */
-  beginSpawnSheet(templateId?: string): void
+  /** M149. `into` threads the three `New workspace from` doors to the sheet's Enter, so a template with holes asks before any workspace exists. */
+  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }): void
   /** M83. Open the project memory for the captured panel's repository. */
   openMemory(): void
   /** M88. Open the GitHub work panel. */

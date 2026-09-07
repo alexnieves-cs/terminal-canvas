@@ -211,6 +211,16 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   // M147. `self` names the object being built, for the one verb that opens
   // another verb's door (workspaceFromTemplate → beginSpawnSheet); the shape
   // of the memo is otherwise unchanged (ONE useMemo, CLAUDE.md's rule).
+  // M147/M149. The three doors behind `New workspace from <template>`: a
+  // workspace named after the template, the switch, then M80's instantiation
+  // there — run only once the shape is fully answered, never before.
+  const intoNewWorkspace = async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
+    const id = await window.canvas.workspace.create(template.name)
+    const switched = await switchWorkspace(id)
+    reloadWorkspaces()
+    if (!switched) return { kind: 'refused', reason: 'the new workspace could not be opened' }
+    return instantiateTemplate(template, values)
+  }
   return useMemo<PaletteActions>(() => { const self: PaletteActions = ({
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
@@ -784,19 +794,19 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     switchWorkspace,
     // M147. Three existing doors in order — workspace:create (named after the
-    // template), the switch, then M80's instantiation in the new workspace —
-    // and a template with parameters opens the sheet there instead (M80's
-    // rule: a hole is asked, never guessed).
+    // template), the switch, then M80's instantiation in the new workspace.
+    // A template with parameters asks its sheet FIRST (M80's rule: a hole is
+    // asked, never guessed) and the three doors run on the sheet's Enter,
+    // through the `into` seam beginSpawnSheet threads to the sheet's own
+    // instantiate: the first cut minted and switched BEFORE the sheet, so an
+    // Escape stranded the user in an empty workspace named after the template
+    // (the 4.0 audit's `runs` scene; shell `workspace.template.2`).
     workspaceFromTemplate: (templateId) => {
       void window.canvas.template.list().then(async (templates) => {
         const template = allTemplates(templates).find((t) => t.id === templateId)
         if (template === undefined) return
-        const id = await window.canvas.workspace.create(template.name)
-        const switched = await switchWorkspace(id)
-        reloadWorkspaces()
-        if (!switched) return
-        if (templateHoles(template).length > 0) { self.beginSpawnSheet(templateId); return }
-        await instantiateTemplate(template, {})
+        if (templateHoles(template).length > 0) { self.beginSpawnSheet(templateId, { intoNewWorkspace: true }); return }
+        await intoNewWorkspace(template, {})
       })
     },
     beginCreateWorkspace: () => {
@@ -1313,7 +1323,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       })
       palette.openPalette()
     },
-    beginSpawnSheet: (templateId?: string) => {
+    beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
       // the spawn cwd), then main's recent list, then every panel's directory.
       // The captured id while the palette is open; from the menu (palette
@@ -1350,7 +1360,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             hasSupervisor: panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true),
             templates,
             ...(templateId === undefined ? {} : { templateId }),
-            instantiate: instantiateTemplate,
+            instantiate: into === undefined ? instantiateTemplate : intoNewWorkspace,
             teammates: teammatesRef.current,
             // M104. The ceiling as read live: the preview says who queues before Enter.
             ceiling: { maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0), liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,

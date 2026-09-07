@@ -168,7 +168,7 @@ export interface InspectorSummary {
   /** M46. Every panel's list price, summed per model; undefined if any panel's model is unpriced. */
   cost: number | undefined
   /** M142. This week's closed sessions from the run ledger; absent until the ledger has answered. */
-  history?: UsageHistory
+  history?: UsageHistory | null
 }
 
 /** M142. The fold over this week's usage rows: sessions, tokens, and a price by the summary's own rule. */
@@ -194,8 +194,14 @@ export function foldUsageHistory(rows: readonly LedgerUsageRow[]): UsageHistory 
 }
 
 /** The `this week` line's three states, never two: nothing ran, ran but unpriced, a figure with its count. */
-export function historyWord(h: UsageHistory | undefined): string {
+export function historyWord(h: UsageHistory | undefined | null): string {
+  // Four arms, never three: `undefined` is asked-but-unanswered, `null` is a
+  // read that REJECTED. The `runs` golden of the 4.0 audit showed the first
+  // sentence standing in for an answer for the whole of a scene — the
+  // renderer's read had never been wired — and a rejection painting the same
+  // words would hide the next such hole the same way.
   if (h === undefined) return 'reading the ledger…'
+  if (h === null) return 'the ledger could not be read'
   if (h.sessions === 0) return 'nothing closed this week'
   const sessions = `${h.sessions} session${h.sessions === 1 ? '' : 's'}`
   if (h.costUsd === undefined) return `${sessions}, ${h.tokens.toLocaleString()} tokens — unpriced (a model without a list price)`
@@ -900,8 +906,8 @@ export function buildInspectorSummary(
   waitingIds: readonly string[],
   /** M46. Per-panel usage for the canvas-wide totals; absent means none. */
   usageOf: (id: string) => PanelUsage | undefined = () => undefined,
-  /** M142. This week's fold, when the ledger has answered. */
-  history?: UsageHistory
+  /** M142. This week's fold when the ledger has answered; `null` when the read rejected. */
+  history?: UsageHistory | null
 ): InspectorSummary {
   const ids = new Set(panels.map((p) => p.rect.id))
   // The totals are priced PER MODEL, exactly as one panel's Cost section is

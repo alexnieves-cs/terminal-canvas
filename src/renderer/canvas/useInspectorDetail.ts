@@ -7,8 +7,8 @@ import { isTerminalPanel, isToolboxPanel, type Panel } from '@renderer/panels/pa
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { ToolInventoryResult } from '@shared/toolbox'
 import {
-  buildInspectorSummary, buildReviewFields, buildToolboxFields,
-  reviewSignature, toolboxSignature, type ReviewFieldModel
+  buildInspectorSummary, buildReviewFields, buildToolboxFields, foldUsageHistory,
+  reviewSignature, toolboxSignature, type ReviewFieldModel, type UsageHistory
 } from '../shell/inspector-fields'
 
 export interface InspectorDetailDeps {
@@ -213,11 +213,31 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
 
   // Frozen on its three numbers for the same reason: a fresh object every
   // render defeats Inspector's memo on its own, whatever the model does.
+  // M142. This week's usage rows from main's run ledger, folded and priced
+  // here by the summary's own rule. Read once on mount, again whenever the
+  // registry's version moves (a close is what appends a row — main records
+  // usage before it drops it), and on a slow clock for the week's edge. The
+  // read's three fates are three values: unanswered (undefined), rejected
+  // (null — the sentence names it), answered (the fold). Never a two-state.
+  const [history, setHistory] = useState<UsageHistory | null | undefined>(undefined)
+  const registryVersion = registry.version()
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      window.canvas.ledger.usage(Date.now() - 7 * 24 * 60 * 60 * 1000).then(
+        (rows) => { if (live) setHistory(foldUsageHistory(rows)) },
+        () => { if (live) setHistory(null) })
+    }
+    read()
+    const timer = setInterval(read, 60_000)
+    return () => { live = false; clearInterval(timer) }
+  }, [registryVersion])
   const summaryBuilt = buildInspectorSummary(
-    panels, (id) => registry.get(id)?.status, waitingIds, getUsage)
+    panels, (id) => registry.get(id)?.status, waitingIds, getUsage, history)
   // M46: the canvas-wide totals join the signature, so a usage tick moves
-  // the summary the way it moves a selected panel's Cost section.
-  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}`
+  // the summary the way it moves a selected panel's Cost section. M142: the
+  // history's word joins it, so the ledger's answer moves it too.
+  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}/${history === undefined ? 'reading' : history === null ? 'failed' : `${history.sessions}/${history.tokens}/${history.costUsd}`}`
   const inspectorSummary = useMemo(() => summaryBuilt, [summarySig])
 
   // Cheap, and read once per render of the palette: getSelection() is a string

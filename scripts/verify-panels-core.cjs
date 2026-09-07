@@ -3758,7 +3758,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       // The additive select reads `event.shiftKey` on the frame's mousedown
       // (PanelFrame's beginMove): a dispatched event carries the flag where a
       // real one through sendInputEvent did not add to the selection.
-      if (b) await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=${JSON.stringify(JSON.stringify(ids[1]))}] .panel__chrome'); if (!c) return false
+      // The id is quoted ONCE into the selector: a JSON string inside a
+      // single-quoted JS string unescapes its own quotes, and the first cut
+      // (`data-panel-id=""n19""`) was an invalid selector — querySelector
+      // THROWS on it, which aborted the whole part as `infrastructure`.
+      if (b) await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(ids[1]))} + '] .panel__chrome'); if (!c) return false
         const r = c.getBoundingClientRect(); const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 20, clientY: r.top + r.height / 2, shiftKey: true }
         c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return true })()`)
       await sleep(150)

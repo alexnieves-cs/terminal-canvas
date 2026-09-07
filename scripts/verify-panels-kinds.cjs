@@ -3531,7 +3531,11 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // so the panel's Cost is the fixture's figure and never a number typed here.
       writeFileSync(usageFixtureFile, JSON.stringify({ type: 'assistant', cwd: '/tmp/x', sessionId: 's1', timestamp: '2026-08-30T00:00:00.000Z', isSidechain: false,
         message: { model: 'claude-opus-5', usage: { input_tokens: 2, output_tokens: 1095, cache_creation_input_tokens: 1491, cache_read_input_tokens: 120118 } } }) + '\n')
-      const spec = { cwd: '/tmp', command: '/bin/cat', args: ['-v'], agent: 'claude-code', w: 400, h: 300 }
+      // `sh -c 'sleep 120'`, never `cat`: pty-manager appends `--session-id
+      // <uuid>` to an agent panel's args, and cat reads that as a file name,
+      // exits 1 at once, and takes the pin — and every usage this check
+      // exists to observe — with it (the shell part's M17 helper's reason).
+      const spec = { cwd: '/tmp', command: '/bin/sh', args: ['-c', 'sleep 120'], agent: 'claude-code', w: 400, h: 300 }
       const idsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
       wc.send(IPC_EVENTS.PRESET_SPAWN, spec)
       const chId = await waitUntil(async () => {
