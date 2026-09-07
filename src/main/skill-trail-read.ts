@@ -9,8 +9,9 @@
  * plain node with no real `~/.claude/projects` in earshot, the same trade
  * `pty-manager.ts` already makes for `resolveTranscript`/`readFrom`.
  */
+import { StringDecoder } from 'node:string_decoder'
 import type { PanelId } from '../shared/types'
-import { capTrail, scanTrailChunk, type Trail, type TrailEntry } from '../shared/skill-trail'
+import { capTrail, scanTrailChunk, type ScanResult, type Trail, type TrailEntry } from '../shared/skill-trail'
 
 export interface TrailDeps {
   /**
@@ -24,7 +25,14 @@ export interface TrailDeps {
   panelId: PanelId
   pinnedSession: (panelId: PanelId) => string | undefined
   resolveTranscript: (sessionId: string) => string | undefined
-  readDelta: (path: string, from: number) => { text: string; offset: number }
+  /**
+   * RAW bytes from `from` to EOF, plus the file's size NOW — mirroring
+   * `transcript-reader.ts`'s own `readFrom` shape exactly (never decoded
+   * here: a read can land mid-write, splitting a multibyte codepoint, and
+   * only a decoder that carries state between calls reassembles it — see
+   * `scanTrailBytes` below). `undefined` on a read error.
+   */
+  readDelta: (path: string, from: number) => { bytes: Buffer; size: number } | undefined
 }
 
 /** Only a claude terminal has a transcript this trail can read today. */
@@ -34,18 +42,42 @@ interface PanelTrailState {
   offset: number
   carry: string
   entries: TrailEntry[]
+  /**
+   * One decoder per panel, carrying whatever incomplete trailing UTF-8
+   * sequence its last read ended on — `pty-manager.ts`'s own
+   * `transcriptDecoders` map, for the identical reason: a read can land at
+   * any byte offset, and decoding an arbitrary byte range directly turns a
+   * split codepoint into a replacement character on BOTH sides of the split.
+   */
+  decoder: StringDecoder
+}
+
+function freshPanelState(): PanelTrailState {
+  return { offset: 0, carry: '', entries: [], decoder: new StringDecoder('utf8') }
 }
 
 /**
- * Per-panel offset + carry + accumulated entries, module-level like
- * `scrollback-log.ts`'s own per-panel state. A panel never observed before
- * reads from byte 0 — the ordinary state for the first call on any panel.
+ * Per-panel offset + carry + accumulated entries + decoder, module-level
+ * like `scrollback-log.ts`'s own per-panel state. A panel never observed
+ * before reads from byte 0 — the ordinary state for the first call on any
+ * panel.
  */
 const state = new Map<PanelId, PanelTrailState>()
 
 /** Forgets a panel's trail state. Call at every panel-removing site. */
 export function forgetTrail(panelId: PanelId): void {
   state.delete(panelId)
+}
+
+/**
+ * Decodes `bytes` through `decoder` (which carries any incomplete trailing
+ * codepoint from the PREVIOUS call) and scans the result for `Skill`
+ * records. Exported so a check can drive the exact decode+scan path
+ * `trailFor` uses, with a real `StringDecoder`, without going through the
+ * module's own panel-keyed state map.
+ */
+export function scanTrailBytes(decoder: StringDecoder, bytes: Buffer, carry: string): ScanResult {
+  return scanTrailChunk(decoder.write(bytes), carry)
 }
 
 /**
@@ -64,6 +96,12 @@ export function forgetTrail(panelId: PanelId): void {
  * 3. The pinned session's transcript cannot be resolved — claude has not
  *    written it yet, or it was resumed from a machine whose projects
  *    directory this one does not have.
+ *
+ * A file that SHRANK since the stored offset — truncated or replaced,
+ * `pty-manager.ts`'s `resetIfShrunk` situation exactly — resets this
+ * panel's offset, carry, entries AND decoder to fresh and re-reads from 0,
+ * rather than reporting an empty read forever from a stale offset past the
+ * new file's end.
  */
 export async function trailFor(deps: Partial<TrailDeps> & Pick<TrailDeps, 'backend'>): Promise<Trail> {
   if (deps.backend !== CLAUDE_BACKEND) {
@@ -83,22 +121,44 @@ export async function trailFor(deps: Partial<TrailDeps> & Pick<TrailDeps, 'backe
   if (deps.readDelta === undefined || deps.panelId === undefined) {
     return { kind: 'unreadable', why: 'the transcript could not be read' }
   }
+  const readDelta = deps.readDelta
 
   const panelId = deps.panelId
-  const prior = state.get(panelId) ?? { offset: 0, carry: '', entries: [] }
+  let prior = state.get(panelId) ?? freshPanelState()
 
-  let read: { text: string; offset: number }
+  let read: { bytes: Buffer; size: number } | undefined
   try {
-    read = deps.readDelta(path, prior.offset)
+    read = readDelta(path, prior.offset)
   } catch {
     return { kind: 'unreadable', why: 'the transcript could not be read' }
   }
+  if (read === undefined) {
+    return { kind: 'unreadable', why: 'the transcript could not be read' }
+  }
 
-  const scan = scanTrailChunk(read.text, prior.carry)
+  if (read.size < prior.offset) {
+    // The file was truncated or replaced: the stored offset now points PAST
+    // its end, and re-reading from there forever reports empty. The
+    // decoder's buffered partial bytes belonged to the file that is gone —
+    // carrying them into a re-read from 0 would prepend a stray tail from a
+    // stream this panel no longer has any relationship to, so the whole
+    // panel state resets, not just the offset.
+    prior = freshPanelState()
+    try {
+      read = readDelta(path, 0)
+    } catch {
+      return { kind: 'unreadable', why: 'the transcript could not be read' }
+    }
+    if (read === undefined) {
+      return { kind: 'unreadable', why: 'the transcript could not be read' }
+    }
+  }
+
+  const scan = scanTrailBytes(prior.decoder, read.bytes, prior.carry)
   const entries = [...prior.entries, ...scan.entries]
   const capped = capTrail(entries)
 
-  state.set(panelId, { offset: read.offset, carry: scan.carry, entries: capped.entries })
+  state.set(panelId, { offset: read.size, carry: scan.carry, entries: capped.entries, decoder: prior.decoder })
 
   if (capped.entries.length === 0) return { kind: 'none' }
   return { kind: 'entries', entries: capped.entries, more: capped.more }

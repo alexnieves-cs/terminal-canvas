@@ -1274,9 +1274,10 @@ const p = (name) => join(DIR, name)
     const all = readFileSync(FIXTURE, 'utf8')
     const one = F.scanTrailChunk(all, '')
     ok('trail.1a only Skill tool_use records become entries',
-       one.entries.length === 2, JSON.stringify(one.entries))
+       one.entries.length === 3, JSON.stringify(one.entries))
     ok('trail.1b order is the transcript order',
-       one.entries[0].name === 'superpowers:brainstorming' && one.entries[1].name === 'claude-api',
+       one.entries[0].name === 'superpowers:brainstorming' && one.entries[1].name === 'claude-api' &&
+       one.entries[2].name === 'multibyte-test',
        'what order they were used in is the whole point')
     ok('trail.1c args ride when present and are ABSENT when not',
        one.entries[1].args === 'model ids' && !('args' in one.entries[0]),
@@ -1290,15 +1291,56 @@ const p = (name) => join(DIR, name)
        first.entries.length + second.entries.length === one.entries.length,
        'the tail resumes at a byte offset; a half-written line is not a dropped record')
 
-    const capped = F.scanTrailChunk(all.repeat(200), '')
-    ok('trail.1e TRAIL_MAX newest, with `more` counting what was dropped',
-       capped.entries.length <= F.TRAIL_MAX, String(capped.entries.length))
+    const many = []
+    for (let i = 0; i < F.TRAIL_MAX + 7; i++) many.push({ at: i, name: `s${i}` })
+    const capped = F.capTrail(many)
+    ok('trail.1e capTrail keeps the newest TRAIL_MAX entries and counts the rest as `more`',
+       capped.entries.length === F.TRAIL_MAX && capped.more === 7 &&
+       capped.entries[0].name === 's7' && capped.entries[capped.entries.length - 1].name === `s${F.TRAIL_MAX + 6}`,
+       JSON.stringify({ len: capped.entries.length, more: capped.more, first: capped.entries[0], last: capped.entries[capped.entries.length - 1] }))
 
     ok('trail.1f a codex panel refuses BY NAME, never an empty list',
        (await F.trailFor({ backend: 'codex' })).kind === 'unreadable',
        '"no skills used" and "we cannot see this session" are different sentences')
     ok('trail.1g an unresolvable transcript refuses by name',
        (await F.trailFor({ backend: 'claude', resolveTranscript: () => undefined })).kind === 'unreadable', '')
+
+    // trail.1h: a file that SHRANK since the stored offset (truncated or
+    // replaced) resets this panel's state and rebuilds from the smaller
+    // file, rather than reading forever from a stale offset past its end.
+    const SMALL = '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"s1","name":"Skill","input":{"skill":"only-one"}}]},"timestamp":"2026-09-06T13:00:00.000Z"}\n'
+    const fullBuf = Buffer.from(all, 'utf8')
+    const smallBuf = Buffer.from(SMALL, 'utf8')
+    let shrunk = false
+    const shrinkReadDelta = (_path, from) => {
+      if (!shrunk) { shrunk = true; return { bytes: fullBuf, size: fullBuf.length } }
+      if (from === 0) return { bytes: smallBuf, size: smallBuf.length }
+      return { bytes: Buffer.alloc(0), size: smallBuf.length }
+    }
+    const shrinkDeps = { backend: 'claude', panelId: 'trail-shrink-h', pinnedSession: () => 's-h', resolveTranscript: () => 'p-h', readDelta: shrinkReadDelta }
+    const beforeShrink = await F.trailFor(shrinkDeps)
+    const afterShrink = await F.trailFor(shrinkDeps)
+    ok('trail.1h a shrunk transcript resets offset/carry/decoder/entries and rebuilds from the smaller file',
+       beforeShrink.kind === 'entries' && beforeShrink.entries.length === 3 &&
+       afterShrink.kind === 'entries' && afterShrink.entries.length === 1 && afterShrink.entries[0].name === 'only-one',
+       JSON.stringify({ beforeShrink, afterShrink }))
+
+    // trail.1i: the same decode+scan path main uses, fed a multibyte
+    // character split across two byte chunks (never a plain string split,
+    // which the ASCII-only 1d fixture cannot distinguish from a byte split).
+    const { StringDecoder } = require('node:string_decoder')
+    const multibyteRecord = all.split('\n').filter(Boolean).pop()
+    const recBuf = Buffer.from(multibyteRecord + '\n', 'utf8')
+    // "résumé" starts with r(1 byte) + é(2 bytes: 0xC3 0xA9) — split inside the é.
+    const splitAt = recBuf.indexOf(Buffer.from('résumé', 'utf8')) + 2
+    const chunk1 = recBuf.subarray(0, splitAt)
+    const chunk2 = recBuf.subarray(splitAt)
+    const decoder = new StringDecoder('utf8')
+    const scan1 = F.scanTrailBytes(decoder, chunk1, '')
+    const scan2 = F.scanTrailBytes(decoder, chunk2, scan1.carry)
+    ok('trail.1i a multibyte character split across two byte chunks reassembles through the shared decoder',
+       scan1.entries.length === 0 && scan2.entries.length === 1 && scan2.entries[0].args === 'résumé — ✓',
+       JSON.stringify({ scan1, scan2 }))
   } catch (e) { ok('trail.1 (threw)', false, String(e)) }
 
 const failed = results.filter((r) => !r.pass)
