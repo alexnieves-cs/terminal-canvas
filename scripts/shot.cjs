@@ -35,6 +35,16 @@ mkdirSync(OUT, { recursive: true })
 // (verify-pty-manager.cjs's fence, same reason). A spaced path, this repo's rule.
 process.env.TC_CLAUDE_PROJECTS = mkdtempSync(join(tmpdir(), 'tc shot projects '))
 
+// M127. The toolbox's home fence, set BEFORE the entry bundle is required —
+// `panels-entry.cjs` only mints one if this is unset, and `resolveToolboxHome`
+// falls back to the real `homedir()` in production. Unfenced, the `skills`
+// scene would paint the RUNNING DEVELOPER'S own ~/.claude: a different set of
+// columns on every machine, and somebody's private skill names in a PNG that
+// gets handed to a critic. Ours rather than the entry's throwaway because the
+// scene plants user skills and a plugin under it. A spaced path, this repo's rule.
+const SHOT_HOME = mkdtempSync(join(tmpdir(), 'tc shot home '))
+process.env.TC_TOOLBOX_HOME = SHOT_HOME
+
 const ENTRY_OUT = join(__dirname, '..', 'out', 'verify', 'shot-entry.cjs')
 buildSync({
   entryPoints: [join(__dirname, 'panels-entry.cjs')],
@@ -51,7 +61,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers, trailFor
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -88,6 +98,24 @@ for (const [name, description] of [
 ]) {
   mkdirSync(join(REPO, '.claude', 'skills', name), { recursive: true })
   writeFileSync(join(REPO, '.claude', 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`)
+}
+// M127. The `skills` scene's second source: one enabled PLUGIN, whose skills
+// are named `<plugin>:<skill>` the way the CLI names them — which is the only
+// thing that makes `placement` derive a `plugin:` column, since the derivation
+// reads the NAME, never the `pluginId` stamp. A pane showing only project
+// skills would prove nothing about the column order the scene is there to
+// judge. Deliberately the ONLY extra source: the navigator is a fixed 300px
+// and a column is 14rem, so a fourth column would push `Ungrouped` out of
+// every frame that also holds a placed column, and the ordering rule would
+// become unphotographable.
+const PLUGIN_ID = 'documents'
+const PLUGIN_ROOT = join(SHOT_HOME, 'plugins', PLUGIN_ID)
+for (const [name, description] of [
+  ['documents:docx', 'Create, read and edit Word documents.'],
+  ['documents:pdf', 'Read, merge, split and fill PDF files.']
+]) {
+  mkdirSync(join(PLUGIN_ROOT, 'skills', name), { recursive: true })
+  writeFileSync(join(PLUGIN_ROOT, 'skills', name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`)
 }
 // The CLI's own transcript, in the shape skill-trail-read.ts tails: the
 // harness points `skill:trail` at this file, so the scene's lane comes
@@ -152,6 +180,27 @@ const SCENES = [
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
   { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of the terminal whose agent used them, in the order it used them, each naming the skill and either its own description and shelf column, or `not installed here` for a name this project cannot see (the fourth card). The cards are not panels — they are derived from the transcript and stored nowhere — and the panel\'s chrome carries one capsule reading `hide 4 skills` that folds the lane away. Judge the GEOMETRY: does a column of four cards sit beside its host without crowding it?',
     run: async (kit) => { await kit.goTo('claude — plan the milestone'); await sleep(1200); await kit.shot('trail') } },
+  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the SELECTED panel\'s own inventory, as a horizontal RACK of columns — the user\'s own placed columns first, then the derived ones, then `Ungrouped` last and always, a real column that can be dropped into and cannot be deleted. Each card carries its name, its own sentence, and a word saying WHICH authority put it there (`placed` · `by plugin` · `by scope`). Above them: three tabs (Skills · Agents · Commands) over the one inventory, a search box, and the scope filters. The picture is the rack scrolled 210px in, so two of the three placements are in frame at once: the tail of the placed column `starting a milestone` (three project skills the user dragged together) on the left, and the derived `DOCUMENTS 2` column beside it, both of its cards reading `by plugin`. `Ungrouped` is the third and is off the right edge. That it CANNOT be in frame is the finding this scene is really for: the navigator is a fixed 300px and `.skills-pane__column` asks for 14rem (224px), but the heading\'s `Assign to teammate…` select and `Delete` do not shrink, so a column renders ~326px — wider than the pane it scrolls inside. Judge whether a reader can tell a column they arranged from a column the app derived, and whether a rack no frame can hold two columns of is a readable way to arrange a shelf.',
+    run: async (k) => {
+      await k.selectRail('live'); await k.dock('skills'); await sleep(1200)
+      // The rack scrolls horizontally and the navigator is a fixed 300px, so
+      // one 14rem column and a sliver is all a frame holds. This scene is
+      // therefore the one place the harness moves a scroller directly: a
+      // SYNTHESISED wheel is untrusted and Chromium does not scroll on it, so
+      // the gesture the rest of this file insists on is not available here.
+      // 210px in: far enough that the DERIVED plugin column (`documents`,
+      // whose cards read `by plugin`) and `Ungrouped` — last and always, and
+      // the one column that cannot be deleted — are both in frame, close
+      // enough that the placed column `starting a milestone` is still the
+      // thing on the left. All three placements in one picture is only
+      // possible at three columns; see the fixture's own note. The offset is
+      // logged so a critic knows the picture is not the pane at rest.
+      const at = await k.js(`(() => { const r = document.querySelector('.skills-pane__columns'); if (!r) return -1
+        r.scrollLeft = 210; return Math.round(r.scrollLeft) + ' of ' + Math.round(r.scrollWidth - r.clientWidth) })()`)
+      console.log(`[shot] skills rack scrolled to ${at}`)
+      await sleep(400)
+      await k.shot('skills'); await k.dock('panels')
+    } },
   { name: 'chat', intent: 'A chat panel beside the live terminal: a restored conversation with a user turn, a collapsed tool call, the agent\'s answer in mono with no bubbles, the state pill reading asleep (a restored conversation with no process), a labelled `to terminal` verb after the pill, the composer pinned below with Send and Interrupt labelled — the same frame family as the terminal, not a chat app.',
     run: async (kit) => { await kit.goTo('api (chat)'); await kit.shot('chat') } },
   { name: 'integrations', intent: 'The Integrations page: the navigator\'s fifth pane, every service this app can reach on one page — each with its label, one of three sentences in its tone (connected as <label>, not connected — add a token, token rejected), one verb, and the broker\'s audit rows beneath it (method and path in mono, status, which panel asked, when; a refused call in red). What the agents did with a credential, and what to do when a service is not connected, in one place.',
@@ -585,6 +634,12 @@ app.whenReady().then(async () => {
       { id: 'wt-a', root: REPO_ROOT, path: WT_A, branch: 'tc/api-20260904-1100', createdAt: Date.now() - 3600000, panelId: 'live' },
       { id: 'wt-b', root: REPO_ROOT, path: WT_B, branch: 'tc/tests-20260904-1102', createdAt: Date.now() - 3000000, panelId: 'dormant' }
     ],
+    // M127. One PLACED column, so the pane shows all three placements at
+    // once: the user's own arrangement first, then the derived `documents`
+    // plugin and `user`/`project` scope columns, then Ungrouped last and
+    // always. A shelf seeded with nothing would paint only derived columns,
+    // and the ordering rule the scene exists to judge would be invisible.
+    shelf: { columns: [{ id: 'col-milestone', title: 'starting a milestone', keys: [skillKey('project', 'brainstorming'), skillKey('project', 'writing-plans'), skillKey('project', 'test-driven-development')] }] },
     preferences: { 'appearance.theme': 'light', 'scrollback.persist': true, 'agent.bell': true, 'placement.snap': false, 'vault.root': join(FIX, 'notes') },
     // M77. The chat's baseline too: the fixture's edit to server.ts predates
     // boot, so it is seeded rather than captured (as the terminal's is).
@@ -752,7 +807,14 @@ app.whenReady().then(async () => {
       runRoutine: () => false,
       saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
-      spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories()
+      spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories(),
+      // M127. The shelf, through the store and main's OWN parser. Without
+      // these two the renderer's boot-time `shelf.list()` rejects, the pane
+      // paints its `unavailable` sentence, and every scene under it is a
+      // picture of a shelf that failed to load rather than one that is empty
+      // — the harness-fake lesson `verify:panels` paid a fix round for.
+      shelf: () => layoutStore.shelf(),
+      saveShelf: (shelf) => layoutStore.saveShelf(parseShelf(shelf, []))
     },
     () => {},
     reviewEngine,
@@ -781,9 +843,13 @@ app.whenReady().then(async () => {
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
     { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) },
-    // M126/M128. No scene spawns the real CLI, so the plugin list and the
-    // details text are the same `unknown` an uninstalled `claude` produces.
-    async () => ({ kind: 'unknown', why: 'no plugin list in the shot harness' }),
+    // M127. No scene spawns the real CLI, so this is the ANSWER that CLI
+    // would have given for the fixture plugin planted under the fenced home —
+    // the shape `listPlugins` returns, never the walk itself, which is still
+    // `toolbox-read.ts`'s over the real `installPath`.
+    async () => ({ kind: 'ok', plugins: [{ id: PLUGIN_ID, installPath: PLUGIN_ROOT, enabled: true }] }),
+    // M129. The details TEXT is a second call the skill panel makes and no
+    // scene opens, so it stays the `unknown` an uninstalled `claude` produces.
     async (id) => ({ kind: 'unknown', why: `no plugin details for ${id} in the shot harness` }),
     // M129. Inert writers: a screenshot harness must never edit a skill file.
     {
@@ -941,6 +1007,6 @@ app.whenReady().then(async () => {
   console.log(`wrote ${join(OUT, 'manifest.json')} (${manifest.length} scenes)`)
 
   ptyManager.killAll()
-  for (const p of [FIX, scrollbackDir]) { try { if (existsSync(p)) rmSync(p, { recursive: true, force: true }) } catch { /* best effort */ } }
+  for (const p of [FIX, scrollbackDir, SHOT_HOME]) { try { if (existsSync(p)) rmSync(p, { recursive: true, force: true }) } catch { /* best effort */ } }
   app.quit()
 })

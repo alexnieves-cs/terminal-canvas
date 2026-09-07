@@ -195,6 +195,11 @@ module.exports = {
   // `shelf`/`saveShelf` on the harness palette both invokes REJECTED, which
   // the renderer swallowed as an unhandled rejection with an empty pane.
   parseShelf: require('../src/shared/skills').parseShelf,
+  // M127. The key's own encoder, for the same reason `parseShelf` is here: a
+  // harness that spelled `JSON.stringify([scope, name])` by hand would be a
+  // SECOND author of the shelf's key format, and a change to the real one
+  // would leave the seeded columns silently unplaced rather than red.
+  skillKey: require('../src/shared/skills').skillKey,
   // M129 fix. The REAL writers, wired against the harness's own fenced home
   // and fixture roots (never the developer's ~/.claude) so editor.2 drives
   // the same create/rename/delete path production does.
