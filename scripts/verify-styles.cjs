@@ -686,5 +686,67 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     colFixed && titleGives && rackScrolls, JSON.stringify({ colFixed, titleGives, rackScrolls }))
 }
 
+// M162 — face.1. THE FACE RULE. `--font-mono` is for code, commands, paths
+// and terminal cells; everything a person reads as a sentence or a name is
+// set in `--font-ui`. `body` already defaults to the UI face, so mono is an
+// explicit opt-in, and this check is the closed list of surfaces that may
+// NOT opt in: a rule whose selector names one of them and whose body sets
+// the mono face fails. The failure this exists for is the mono ANCESTOR —
+// `.chat__transcript` set mono once in M73 and every sentence the agent wrote
+// inherited it for eleven milestones, with nothing on screen to say so. The
+// list is prose SURFACES, not prose words: a leaf inside one of them that
+// holds code (`.chat__tool-result`, a path beside a note) opts in by its own
+// name, which this check does not list.
+//
+// What it cannot see: a face set from a component's inline style, or a prose
+// class this list does not name. The goldens are the check for those.
+{
+  const PROSE = [
+    '.pf__title', '.launcher__title', '.launcher__verb-name', '.launcher__env',
+    '.chat__transcript', '.chat__input', '.chat__text', '.chat__role', '.chat__popup-row', '.chat__empty',
+    '.rail-row__start', '.rail-row__rename', '.rail-row__close', '.rail-row__label', '.rail-empty',
+    '.memory-node__text', '.memory-node__select', '.subagent-node__desc', '.subagent-ambiguous', '.subagent-more',
+    '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
+    '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
+    '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__hint', '.palette__state', '.diagnostics-overlay',
+    '.panel__card'
+  ]
+  const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
+  const hits = []
+  for (const r of all) {
+    if (!sets(r.body)) continue
+    const parts = r.sel.split(',').map((x) => x.trim())
+    for (const p of PROSE) {
+      if (parts.some((part) => new RegExp(`(^|[\\s>+~])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(part))) hits.push(`${p} ← ${r.sel.slice(0, 60)}`)
+    }
+  }
+  ok('face.1', 'no prose surface sets the mono face (the face rule: mono is for code, commands, paths and cells)',
+    hits.length === 0, `${hits.length} mono on prose: ${[...new Set(hits)].slice(0, 12).join(' | ')}`)
+}
+
+// M162 — polish.1. The brief's four tokens: `--bubble` (the user turn's
+// ground) in BOTH theme blocks as six-digit hex so check 11 measures text on
+// it, and the three structural values — the prose measure, the body size, the
+// reading inset — on bare `:root` where check 8 keeps them out of the themes.
+// A token declared in one block only falls through silently (theme.1's
+// lesson); a measure written as a literal `72ch` at each site drifts at the
+// third site.
+{
+  const rootMap = perBlock.root || {}
+  const light = perBlock.light || {}
+  const dark = perBlock.dark || {}
+  const hex = (v) => /^#[0-9a-f]{6}$/i.test(v || '')
+  const facts = {
+    bubble: hex(light['--bubble']) && hex(dark['--bubble']) && light['--bubble'] !== dark['--bubble'],
+    measure: /^\d+ch$/.test(rootMap['--measure'] || ''),
+    base: rootMap['--t-base'] === '14px',
+    inset: rootMap['--inset'] === '20px',
+    ground: grounds.includes('--bubble')
+  }
+  ok('polish.1', 'the brief\'s tokens: --bubble hex in both blocks (and a measured ground), --measure / --t-base / --inset on :root',
+    Object.values(facts).every(Boolean), JSON.stringify(facts))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
