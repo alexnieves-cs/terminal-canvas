@@ -394,6 +394,15 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     dockZ !== undefined && Number(dockZ) > railZ && unclipped, JSON.stringify({ dockZ, railZ, unclipped }))
 }
 
+// M150 — tags.1. The tag chip is the LINK family's — its rule exists, reads
+// a token the wikilink already reads (`--iris`), and declares no hex of
+// its own (the M109 rule: a new colour is a new name in both theme blocks).
+{
+  const rule = (bare.match(/\.file-node__tag\s*\{[^}]*\}/g) || [])[0] || null
+  ok('tags.1', '.file-node__tag exists, reads var(--iris) and declares no colour literal of its own',
+    rule !== null && /var\(--iris\)/.test(rule) && !/#[0-9a-f]{3,8}\b/i.test(rule), rule || 'no rule')
+}
+
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
 // render a <section hidden={tab !== id}>, and `.context__panel { display:
 // block }` — a selector with higher specificity than the UA's `[hidden]`

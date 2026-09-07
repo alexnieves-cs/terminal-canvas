@@ -980,6 +980,37 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ links, byName: index && index.byName, backlinks: index && index.backlinks }))
 }
 
+// M150 — tags.1 / tags.2. TAGS on the vault's lineage. `#name` at a token
+// start (start of text, whitespace, `(`), a word of letters, digits, `_`, `-`
+// or `/`; NOT a heading (`# Title`), NOT a bare number (`#1` is an issue),
+// NOT inside a code span or a fence (the wikilink parser's own exclusion —
+// one for both syntaxes); trailing punctuation is not part of the tag.
+// Positions exact, so the painter needs no second parse. The index carries
+// the tag → notes map from the same pass as the links, case-folded, with
+// the first line each note names it on.
+{
+  const V = F
+  const has = typeof V.parseTags === 'function'
+  const body = '# Not a tag\n#todo at a line start, then a #Review/Api one and (#paren) and #done. and #1 and `#code` and\n```\n#fenced\n```\nend'
+  const tags = has ? V.parseTags(body) : null
+  const names = tags ? tags.map((t) => t.name) : null
+  const spans = tags ? tags.map((t) => body.slice(t.start, t.end)) : null
+  ok('tags.1 parseTags finds a tag at a line start, after a space, in parentheses and a nested one, and skips a heading, a bare number, a code span and a fence; positions are exact and trailing punctuation is not part of the tag',
+    has && names !== null && names.join(',') === 'todo,Review/Api,paren,done' && spans.join(',') === '#todo,#Review/Api,#paren,#done',
+    JSON.stringify({ names, spans }))
+  const files = [
+    { path: 'a.md', body: '# A\n#todo and [[b]]\nlater #TODO again\n', title: 'A' },
+    { path: 'b.md', body: '# B\nnothing tagged\n', title: 'B' },
+    { path: 'c.md', body: '# C\n\n#todo #review\n', title: 'C' }
+  ]
+  const index = typeof V.buildVaultIndex === 'function' ? V.buildVaultIndex(files) : null
+  const tagIndex = index && index.tags ? index.tags : null
+  ok('tags.2 buildVaultIndex.tags maps a case-folded tag to the notes carrying it (path, title, first line), once per note; a note with no tags contributes nothing',
+    tagIndex !== null && Array.isArray(tagIndex.todo) && tagIndex.todo.length === 2 && tagIndex.todo[0].path === 'a.md' && tagIndex.todo[0].line === 2 && tagIndex.todo[0].title === 'A' &&
+      tagIndex.todo[1].path === 'c.md' && tagIndex.todo[1].line === 3 && Array.isArray(tagIndex.review) && tagIndex.review.length === 1 && Object.keys(tagIndex).length === 2,
+    JSON.stringify({ tagIndex }))
+}
+
 // M85 — vault.2. THE READ, against a real fixture tree whose directory has a
 //      SPACE in it (this repo's rule). Every `.md` under the root, recursive,
 //      its title the first heading or its basename; a non-markdown file is

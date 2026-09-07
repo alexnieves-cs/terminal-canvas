@@ -31,12 +31,12 @@ assigned in order and never reused; a milestone that is declined keeps its numbe
 | M147 | II | #34 — per-preset environment overrides and template sets (needed by Act V) |
 | M148 | III | The visual-regression suite over the shot harness (goldens, tolerant diff, gated like `verify:packaged`) |
 | M149 | III | `docs/ux-audit-4.0.md`: every scene viewed, findings fixed; empty/loading/error states; motion, reduced motion, focus order; chrome a11y; density |
-| M150 | IV.1 | The Obsidian panel on the M16/M22/M27 file lineage: wikilinks, tags, backlinks |
+| M150 | IV.1 | Tags on the vault's file lineage (wikilinks and backlinks were M85's): `#tag` parsed beside the links, a TAGS section that filters, a chip in the note — spec `2026-09-07-v7-act4-tags-design.md` |
 | M151 | IV.2 | A conditional / loop workflow block on the live Run caller |
 | M152 | IV.3 | #55 — ad-hoc task panels |
 | M153 | IV.4 | #73 + #72 — the flag registry and one versioned automation surface |
 | M154 | IV.5 | #64 — rationing terminal memory |
-| M155 | V.1 | #15 — the annotation layer per its entry (ink, highlights, draw mode over M93's notes) |
+| M155 | V.1 | #15 — ink on M93's annotation layer: a draw tool, strokes as world- or panel-anchored annotations — spec `2026-09-07-v7-act5-ink-design.md` |
 | M156 | V.2 | #66 — images in the terminal |
 | M157 | V.3 | The vibe-coding starter as a #34 template set (chat + dev shell + browser, #13 briefing) |
 | M158 | V.4 | #14 — xlsx, read-only |
@@ -163,5 +163,14 @@ Build log: `docs/build-log/m148-m149-act3-visual.md`. Spec and plan:
 - The two pixel checks the act adds — `menu.paint.1`, `popover.paint.1` — and the rule they
   teach: a surface that opens is proven by `elementFromPoint`, never by a DOM read.
 - Reviews: the fresh-context critic and verifier over Acts II and III ran after the goldens
-  landed; their findings and what was done are in the build log.
+  landed (`64ff1a1`); their findings and the fix wave (`8ce16b1`) are in the Act III build
+  log under *Reviews*. The wave's Critical was Act II's: a preset's env never reached the
+  process (two copy sites; `env.spawn.1`, registry `env.1`, watched red without the copy).
+- **Evidence:** `npm run verify` over `8ce16b1` — every suite green, exit 0 (the tallies:
+  meta 38, styles 38, viewport 136, groups 6, merged 12, registry 38, layout 233,
+  credentials 18, jira 15, github 7, palette 143, rail 183, review 98, subagent 27, file 81,
+  toolbox 103, usage 26, machine-cost 7, tmux 35, agent-state 27, agent-session 141, verbs
+  14, teammates 25, electron 4, control 15, package 13, pty 10, pty-manager 63, window 4,
+  ipc 1, canvas 6, xterm 11, panels core 76 / shell 94 / kinds 48 / agents 77 / product
+  57). `npm run verify:visual` 56/56 twice (160.0 s, 160.0 s).
 
