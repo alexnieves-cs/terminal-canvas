@@ -216,3 +216,113 @@ Build log `docs/build-log/m161-m162-act0-brief.md`. Merged to `main`.
 Spec `docs/superpowers/specs/2026-09-07-v8-act1-frame-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act1-frame.md`, branch `m163-frame`. Owed into this
 act from Act 0: the prose under `.pf__body--text` (M164).
+- **M163 — the quiet header.** Red: `check(m163)` — styles `rest.1`, `metrics.1` (41/43),
+  core `rest.1` (76/77), shell `machine.1` (94/95). Feature: every chrome BUTTON and mark
+  at opacity 0, revealed on `.pf:hover` / `:focus-within` / `.panel--selected` in `--dur-1`
+  (the first cut listed `.pf__verb` and `.icon-button`; the review's `commit` and the file's
+  pencil were neither and stayed on the first goldens — the rule is `.pf__chrome button`
+  now); the CPU · RAM readout gone from the header and both card tiers, the inspector's
+  `Machine` section with three arms (`reading` · `none` "no reading yet" · `not-running`);
+  dark `--glass-1` .74 → .88, `--edge-light` .06 → .11, `--lift` wider (finding 8, a
+  re-valuation, one theme's). **Decided against the spec:** the 3px tone edge stays 3px
+  and its own colour — `verify:panels agents state-word.1` pins `borderLeftWidth === '3px'`
+  and the tone's colour, and the glow already softens it; a 2px mixed edge would be a
+  re-pin for no reading gain. Two harness lessons: the ⋯ is a `shellControl` that acts on
+  CLICK with React's next render (menu.1's `waitUntil`), and a check appended at a part's
+  END may find no valid rows or frames — `machine.1` moved to where the shell part already
+  reads the inspector, `rest.1` takes any unselected frame. Green: core 77/77, shell 95/95,
+  kinds 48/48, agents 77/77, product 59/59 (every existing header check held).
+- **M164 — the body's material.** Red: rail `path.1` on a stub module (184/185); kinds
+  `path.1` written beside the wiring (not watched red — the bodies had already changed;
+  said so). Feature: `shared/display-path.ts` (`displayPath(path, root?, home?)`, four
+  arms, `full` beside `short`); the review's root reads `repo`, the file/toolbox directory
+  lines and the memory root read their last two segments (the file and toolbox panels know
+  no repository root — only the review engine resolves one; **owed to a later milestone
+  by name:** a `repoRoot` on the file and toolbox models so the line reads `repo/src`), the
+  teammates' places likewise; `.pf__body--text` in the UI face at `--t-base` / `--lh-body`,
+  `--inset`, `--fg-2`, the measure on the note-shaped leaves, `.file-node__pre` at the
+  terminal's 13px mono, the directory lines mono; `face.1`'s ancestor arm gains the body;
+  the trail card's name in the UI face (finding 14); the browser's Back/Forward/Reload as
+  named icon controls (finding 19). **Declined:** finding 15's caps `SUBAGENTS` heading —
+  small caps headings are the app's section idiom (`.inspector__section-heading`, the
+  toolbox's groups), and the note's sentence is already the UI face; finding 18's verbs
+  are already `.pf__verb--word` chips (nothing to restyle); finding 20's add line is the UI
+  face since M162 and its empty state is M177's. Green: kinds 49/49, rail 185/185.
+- **M165 — diffs as cards.** Red: styles `diff.1` (43/45). Feature: `.review-node__file` a
+  card (`--r-md`, a hairline, `--s-1`), the header basename bold in the UI face with the
+  directory quiet in mono, `+n −n` as two washed pills (`--green-dim`, `--red-dim`; `new`
+  and `bin` on `--blue-dim`), `discard` at opacity 0 revealed on the card's hover/focus and
+  held while armed (`review-node__discard--armed`). Every hook a check reads is kept.
+- **M166 — the far view as a status wall.** Red: styles `far.2` (43/45); core `far.1`
+  (written with the feature — it needs the glyph to exist to be anything but red on a
+  selector). Feature: `.panel__card-summary[data-tone]` fills with the block tier's own
+  `color-mix` (far.1 ties the minimap), a 32px kind glyph (the terminal's `KindTerminal`,
+  every other kind's `KIND_GLYPH`), the title, the state — the last line of scrollback
+  gone from the summary tier (the rail carries it, M105).
+- **The critic's walk of Act I's 44 changed scenes** (a fresh-context critic over the diffs
+  after M163–M166). Verdict: in every scene the selected panel alone shows its chrome; no
+  unselected, unhovered frame showed a button. Its questions and the dispositions:
+  (1) the trail cards' phase line was still caps — fixed (`.trail-card__column` is a
+  sentence, finding 14); (2) the `SUBAGENTS` heading is caps — declined again by name:
+  small caps headings are the app's section idiom (the inspector's, the toolbox groups');
+  (3) the GitHub panel's `assigned to you · reviews requested of you` was mono — fixed (the
+  UI face); the `issue · open` meta line is a caps state chip and stays; (4) the
+  across-review's file rows had plain counts — fixed (the same card header and pills);
+  (5) the review body's second card is clipped at the fixture's panel height — the body
+  scrolls (`overflow: auto`), accepted; (6) the `↻ auto` chip at rest at 22 % — a STATE
+  projection (M97's chip), which the rest rule keeps; (7) the palette's raw path rows —
+  M175's, by the map. The core suite's check 8 had read the keystroke echo from a summary
+  card that no longer carries a line: it reads the tail tier now (`zoomToScale(wc, 0.4)`),
+  and the core watchdog is 63 s from two green runs (49.98 s, 49.83 s).
+- **Golden sentences, Act I** (the critic's, one per scene; the three scenes the fix wave
+  touched again — trail, github, across — are re-sentenced beneath):
+  - kinds · every unselected header shows glyph, title and one state and no ⋯/lock/pin/pencil/fill/×; the CPU · RAM readout is gone; the review reads `repo` with `+2`/`−2` washed pills; server.ts reads `…/repo/src`; plan.md's prose is in the UI face; the review's second card is clipped by the frame and scrolls.
+  - kinds-dark · the same on the dark theme; the panels lifted one clear step from the field.
+  - trail · the selected panel shows its chrome; the trail cards' names are in the UI face.
+  - skills · the selected `claude — api` shows its full chrome, the unselected review and server.ts none; `…/repo/src`; the review's cards.
+  - chat · the selected chat shows ⋯ / auto / to terminal / fill / ×; the work card, watcher and plan.md behind lost their rest chrome; plan.md's path is its last two segments.
+  - integrations · the pane unchanged; the canvas behind as `chat`.
+  - github · the selected GitHub panel shows its chrome; its rows are in the UI face at 14px.
+  - across · the selected across-review shows ⋯ / refresh / Commit / fill / ×; its rows are cards.
+  - vault · the selected plan.md shows pencil / refresh / fill / ×; the note and its Backlinks are in the UI face; the unselected panels show no chrome.
+  - board · the selected work card shows ⋯ / fill / ×; review, server.ts, toolbox and watcher at rest show glyph, title, summary and state only.
+  - chat-copilot · the sheet unchanged but for the fixed fixture name in WHERE (the sheet is M175's); the canvas as `board`.
+  - memory · the selected memory panel shows ⋯ / refresh / fill / ×; the root reads `…/tc shot fixtures golden/repo`; the notes in the UI face.
+  - supervisor · the sheet unchanged; the memory panel behind is selected in the fixture.
+  - templates · the sheet unchanged; the background as `supervisor`.
+  - runs · the selected `claude — api (2)` shows ⋯ / idle / fill / ×; the across-review beneath shows glyph and title only; the GitHub header lost refresh / fill / ×.
+  - graph · the unselected `claude — api (2)` shows only its idle pill; the GitHub header quiet; the edge inspector unchanged.
+  - composer · the selected chat with chrome; plan.md's prose in the UI face and its short path; the unselected work and watcher headers quiet.
+  - tool-objects · the unselected review-of-chat lost ⋯ / commit / fill / ×; the root reads `repo`; the rows are cards with `+2`/`−2` pills; `discard` hidden; the hunk mono.
+  - approval · the same review restyle as `tool-objects`; the attention popover unchanged.
+  - verbs · the same, under the verb line.
+  - subagents · the selected `claude — api (2)` shows its chrome; the SUBAGENTS heading stays a caps section heading (declined, above).
+  - palette · the rows show the fixed fixture name; the palette's own path rule is M175's.
+  - palette-query · the two `Open review/toolbox of chat` rows still carry the raw path — M175's; nothing of Act I's.
+  - lineup · the sheet unchanged; the background as `runs`.
+  - header · the selected small review shows ⋯ / working / fill / × with its menu open; the unselected `claude — api (2)` shows the idle pill and no CPU figure; the across-review lost its verbs.
+  - flip · the flipped `claude — api (2)` is a large `>_` glyph, the title and `idle` on a green wash — no `Waiting for input` line, no CPU · RAM; the small flipped review likewise.
+  - spawn-sheet · the sheet unchanged (suggestions read the fixed name); the background as `runs`.
+  - palette-dark · as `palette` on the dark theme.
+  - search · the overlay unchanged; the background as `runs`.
+  - search-empty · the overlay unchanged; the background as `runs`.
+  - inspector-detail · the new MACHINE section reads `CPU 0% · RAM 2 MB` beside the other sections; CWD reads the fixed name.
+  - inspector-work · the pane unchanged; the background as `runs`.
+  - inspector-tools · the pane unchanged; the background as `runs`.
+  - navigator-panels · the rail unchanged; the canvas as `runs`.
+  - navigator-workspaces · the rail unchanged; the canvas as `runs`.
+  - navigator-files · the rail unchanged; the canvas as `runs`.
+  - attention · `claude — api (2)` shows the amber `needs you` pill alone; the popover unchanged.
+  - overview · the same quiet headers; the blank bodies on the two live panels are the scene's state in the golden too.
+  - merged · at 22 % every card is a glyph, a name and a state on a wash; the merged frame and lane labels unchanged.
+  - zoomed-out · at 22 % the cards show glyph, name and state on a tone wash with no scrollback line and no CPU; the chat's header keeps its state and the auto chip.
+  - zoomed-out-dark · as `zoomed-out` on the dark theme; the panels read opaque with a visible top edge.
+  - compact · at 1000 px the same quiet headers, `…/repo/src`, the review's cards.
+  - workflow · the unselected workflow panel lost ⋯ / fill / ×; its Run / Triggers toolbar is body and stays; the two hint lines in the UI face.
+  - file-missing · the selected server.ts shows ⋯ / not found / pencil / refresh / fill / ×; the missing-file sentence is UI prose with `…/repo/src`; Jira's and the toolbox's lines in the UI face; the unselected headers quiet.
+  - After the fix wave (the same 44 scenes rewritten, `UPDATE_GOLDENS=1` 56/56 exit 0; a
+    plain `verify:visual` after it **57/57, exit 0**), the three scenes it changed again:
+    trail · the four trail cards read the skill's name and its phase `starting a milestone`
+    as a sentence, no caps; github · the panel's `assigned to you · reviews requested of
+    you` line is in the UI face; across · the two worktree sections' file rows are cards
+    with `+2` `−2` and `new` pills, like the single-repository review's.

@@ -152,8 +152,9 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
               <ul className="review-node__files">
                 {files.slice(0, NODE_FILE_CAP).map((f) => (
                   <li key={f.path} className="review-node__file" data-review-node-file={`${section.branch}:${f.path}`}>
-                    <span className="review-node__path">{f.path}</span>
-                    <span className="review-node__counts">{f.untracked ? 'new' : f.binary ? 'binary' : `+${f.added} −${f.removed}`}</span>
+                    {/* M165. The same card header the single-repository rows wear (the Act I critic). */}
+                    <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
+                    <span className="review-node__counts">{f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">binary</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}</span>
                   </li>
                 ))}
               </ul>

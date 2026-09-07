@@ -872,7 +872,7 @@ body {
 .github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
 .github-item__title { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg); }
 .github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.github-node__scope { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.github-node__scope { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); } /* M164 (the Act I critic): a sentence */
 .github-item__verbs { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .github-item__link { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; text-underline-offset: 2px; }
 .github-node__note { margin: 0; }
@@ -4311,7 +4311,7 @@ body {
    says, takes the single clamped line instead. */
 .trail-card__name { color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .trail-card__note { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+.trail-card__column { color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); } /* M164 (finding 14): the phase is a sentence, not a caps label */
 @keyframes trail-card-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 /* The capsule in the chrome. A word control like `fill`, never a glyph. */
 .pf__trail { flex: 0 0 auto; }
