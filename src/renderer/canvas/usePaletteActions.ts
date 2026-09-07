@@ -14,7 +14,8 @@ import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
-import { placeholders, fillPlaceholders } from '@renderer/chat/composer-model'
+import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/composer-model'
+import { panelLabel } from './canvas-constants'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { Registry } from '@renderer/session/session-registry'
@@ -339,12 +340,28 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // question per hole through the palette's own text line; a project
       // prompt is never expanded (M5b's decision — the same file must behave
       // the same inside and outside this app), so its holes stay as typed.
-      const holes = id.startsWith('proj:') ? [] : placeholders(body)
-      if (holes.length === 0) { deliver(body); return }
+      // M141. A SAVED prompt's four built-in holes are filled from the target
+      // first — live cwd, branch (main's), selection, title — and never
+      // asked; only the ordinary holes become questions. A project prompt is
+      // untouched by both (`proj:` ids skip every expansion).
+      const isProject = id.startsWith('proj:')
+      const holes = isProject ? [] : askableHoles(body)
+      const withBuiltIns = async (text: string): Promise<string> => {
+        if (isProject) return text
+        const panel = panelsRef.current.find((p) => p.rect.id === target)
+        const session = registry.get(target)
+        const cwd = panel !== undefined && isChatPanel(panel) ? panel.chat.cwd : (getLiveSession(target)?.cwd ?? (panel !== undefined && isTerminalPanel(panel) ? panel.spec.cwd : ''))
+        let branch = ''
+        if (cwd !== '' && /\{\{branch\}\}/.test(text)) {
+          try { const status = await window.canvas.git.status(cwd); if (status.kind === 'status') branch = status.branch } catch { branch = '' }
+        }
+        return fillBuiltIns(text, { cwd, branch, selection: session?.handle.getSelection() ?? '', panel: panel === undefined ? '' : panelLabel(panel) })
+      }
+      if (holes.length === 0) { void withBuiltIns(body).then(deliver); return }
       const values: Record<string, string> = {}
       const ask = (i: number): void => {
         const name = holes[i]
-        if (name === undefined) { setInputMode(null); deliver(fillPlaceholders(body, values)); return }
+        if (name === undefined) { setInputMode(null); void withBuiltIns(fillPlaceholders(body, values)).then(deliver); return }
         setInputMode({
           kind: 'text',
           label: `${name} (${i + 1} of ${holes.length}) — the value for {{${name}}}`,
