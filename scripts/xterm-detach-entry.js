@@ -189,6 +189,31 @@ window.__probe = (async () => {
     out.serialize.error = String(error)
   }
 
+  // card.rows.1 (M143, backlog #53's live-tier half, built in M63 and pinned
+  // here at last). The card's `tail(n)` reads the buffer ROWS AS ROWS: the
+  // last rows of the viewport with an INTERIOR blank row kept and only the
+  // trailing blanks trimmed — a full-screen TUI's card shows the bottom of
+  // its real screen with its layout, not six non-empty fragments gathered
+  // from wherever they were. And the buffer survives detach, so a carded
+  // panel's card reads the same rows it would attached.
+  out.cardRows = {}
+  try {
+    const factory = createSessionFactory()
+    const handle = factory.create('probe-card-rows-1')
+    handle.host.style.cssText = 'width: 640px; height: 400px;'
+    document.body.appendChild(handle.host)
+    handle.attach()
+    handle.write('+----+\r\n|  A |\r\n\r\n|  B |\r\n+----+\r\n')
+    await new Promise((r) => setTimeout(r, 200))
+    out.cardRows.attached = handle.tail(6)
+    handle.detach()
+    await new Promise((r) => setTimeout(r, 100))
+    out.cardRows.detached = handle.tail(6)
+    handle.dispose()
+  } catch (error) {
+    out.cardRows.error = String(error)
+  }
+
   // serialize.2 (M112, review round 2, CRITICAL 1 — the actual `isWrapped`
   // proof). A single line written with NO `\r\n` of its own, long enough
   // that the terminal MUST auto-wrap it across several rows — the exact
