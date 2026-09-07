@@ -583,6 +583,14 @@ app.whenReady().then(async () => {
       webviewTag: true
     }
   })
+  // M162. The goldens are 1440x865 CONTENT captures. A 900px-tall window is
+  // clamped to the display's work area at creation (a 1512x982 laptop panel
+  // leaves 896 under the menu bar and the Dock), so the content came out 864
+  // or 865 tall depending on whether the Dock was showing — every scene then
+  // fails as `the size changed` for one reason that has nothing to do with the
+  // app. setContentSize AFTER creation is honoured past the work area, so the
+  // content is pinned to the goldens' own size whatever the Dock is doing.
+  win.setContentSize(1440, 865)
   const wc = win.webContents
   const loginEnv = await resolveShellEnv()
 

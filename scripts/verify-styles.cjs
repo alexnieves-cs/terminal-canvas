@@ -216,7 +216,7 @@ const lum = (h) => {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 }
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
-const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4']
+const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4', '--bubble'] // --bubble: M162, the user turn's ground, so text on it is measured
 const texts = { '--fg': 4.5, '--fg-2': 4.5, '--fg-3': 4.5, '--fg-4': 3.0 }
 const accents = ['--blue', '--green', '--amber', '--red', '--iris']
 const accentGrounds = ['--s-1', '--s-4']
@@ -709,7 +709,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
     '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
     '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
-    '.review-node__section-count', '.skills-pane__filter', '.palette__hint', '.palette__state', '.diagnostics-overlay',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay',
     '.panel__card'
   ]
   const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
