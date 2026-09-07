@@ -11,7 +11,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { BrowserReadRequest } from '../shared/browser-panel'
-import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult } from '../shared/ipc-contract'
+import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
 import type { RunRow } from '../shared/run-ledger'
 import type {
@@ -181,6 +181,10 @@ export interface AgentHandlers {
   grants(id: string): string[]
   /** M98. Drop every grant for a session; it asks again. */
   revokeGrants(id: string): void
+  /** M138. See AGENT_POOL_START. */
+  poolStart(req: PoolStartRequest): PoolStartResult
+  /** M138. See AGENT_POOL_STOP. */
+  poolStop(req: { templateId: string; key: string }): boolean
 }
 
 const INERT_AGENTS: AgentHandlers = {
@@ -196,7 +200,9 @@ const INERT_AGENTS: AgentHandlers = {
   autoStart: () => ({ kind: 'refused', reason: 'the agent runtime is not available' }),
   autoStop: () => false,
   grants: () => [],
-  revokeGrants: () => {}
+  revokeGrants: () => {},
+  poolStart: () => ({ kind: 'refused', reason: 'the agent runtime has not started yet' }),
+  poolStop: () => false
 }
 
 /**
@@ -422,6 +428,8 @@ export function registerIpcHandlers(
   // M98. Grants are main's (the tracker's), read and dropped by panel id.
   ipcMain.handle(IPC.AGENT_GRANTS, (_event, id: string) => agents.grants(id))
   ipcMain.handle(IPC.AGENT_REVOKE_GRANTS, (_event, id: string) => agents.revokeGrants(id))
+  ipcMain.handle(IPC.AGENT_POOL_START, (_event, req: PoolStartRequest) => agents.poolStart(req))
+  ipcMain.handle(IPC.AGENT_POOL_STOP, (_event, req: { templateId: string; key: string }) => agents.poolStop(req))
   ipcMain.handle(IPC.GIT_STATUS, (_event, root: string) => reviewEngine.status(root))
   ipcMain.handle(IPC.REVIEW_ACROSS, (_event, root: string) => reviewEngine.reviewAcross(root))
   ipcMain.handle(IPC.VAULT_READ, (_event, root: string) => palette.vaultRead(root))

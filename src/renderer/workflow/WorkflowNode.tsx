@@ -1,4 +1,6 @@
 import { useMemo, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { usePool, usePoolsLive } from './pool-store'
+import { poolStoppedWord, REASON_NO_POOL_LIVE } from './pool-model'
 import type { WorkflowPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
@@ -50,6 +52,8 @@ export interface WorkflowNodeProps {
   onDelete: (templateId: string) => void
   /** Why Delete cannot act, or null. */
   deleteReason: string | null
+  /** M138. Stop a live pool block; main interrupts its workers and kills none. */
+  onStop: (templateId: string, key: string) => void
   /**
    * Fix round 2. Why this shape cannot be run — `templateRefusal`'s sentence,
    * which since M132's blocks includes "<key> is a pool block, which cannot
@@ -99,6 +103,10 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const state = panelState({ kind: 'workflow', status: undefined, dormant: false }, undefined)
   const diagram = useMemo(() => (template === undefined ? null : buildDiagram(template)), [template])
   const mine = useMemo(() => (template === undefined ? [] : runsForTemplate(props.runs, template.id)), [props.runs, template])
+  // M138. The pool blocks of this template, and which are live — Stop is
+  // PRESENT always and disabled by name while none runs, never absent.
+  const poolKeys = useMemo(() => (template === undefined ? [] : template.nodes.filter((n) => n.kind === 'pool').map((n) => n.key)), [template])
+  const livePools = usePoolsLive(panel.workflow.templateId, poolKeys)
 
   /**
    * M133 critic wave. A disabled verb's reason is ON SCREEN, not in `title`
@@ -154,6 +162,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               {verb('run', 'Run', props.runReason, () => props.onRun(id))}
               {/* M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence. */}
               {verb('triggers', 'Triggers', props.runReason, () => props.onTrigger(id))}
+              {verb('stop', 'Stop', livePools.length === 0 ? REASON_NO_POOL_LIVE : null, () => { for (const k of livePools) props.onStop(id, k) })}
               {verb('save', 'Save', REASON_NO_EDITOR, () => {})}
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
               {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
@@ -227,6 +236,8 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
             <section className="workflow-node__pane" data-workflow-panel="runs" role="tabpanel" hidden={tab !== 'runs'}>
               {/* Three states, never two: nothing recorded yet is a SENTENCE,
                   not an empty box — an empty box reads as a tab that broke. */}
+              {/* M138. The pool blocks first: per item, what main said. */}
+              {poolKeys.map((k) => <PoolRows key={k} templateId={id} blockKey={k} />)}
               {mine.length === 0 ? (
                 <p className="pf__note workflow-node__empty" data-workflow-runs-empty>{RUNS_UNATTRIBUTED}</p>
               ) : (
@@ -244,5 +255,34 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
         )}
       </div>
     </PanelFrame>
+  )
+}
+
+/**
+ * M138. One pool block's rows in the Runs tab — a projection of main's
+ * events (`pool-model.ts`), never a count the renderer made up. Three arms:
+ * nothing yet (one sentence, not an empty list), the items with their states,
+ * and the closing row (done / stopped / refused) with main's reason.
+ */
+function PoolRows({ templateId, blockKey }: { templateId: string; blockKey: string }): JSX.Element {
+  const pool = usePool(templateId, blockKey)
+  return (
+    <section className="workflow-node__pool" data-workflow-pool={blockKey}>
+      <h4 className="workflow-node__pool-title">{blockKey} · pool</h4>
+      {pool.items.length === 0 && pool.refused === undefined ? (
+        <p className="pf__note workflow-node__empty" data-workflow-pool-empty>not run yet — Run starts the workers</p>
+      ) : (
+        <ul className="workflow-node__runs" data-workflow-pool-items>
+          {pool.items.map((row) => (
+            <li key={row.item} className="workflow-node__run" data-workflow-pool-item={row.item} data-workflow-pool-state={row.state}>
+              <span className="workflow-node__run-name">{row.item}</span>
+              <span className="workflow-node__run-facts">{row.state}{row.id === undefined ? '' : ` · ${row.id}`}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {pool.refused !== undefined && <p className="pf__note workflow-node__pool-refused" data-workflow-pool-refused>{`refused — ${pool.refused}`}</p>}
+      {pool.stopped !== undefined && <p className="pf__note workflow-node__pool-stopped" data-workflow-pool-stopped>{poolStoppedWord(pool.stopped)}</p>}
+    </section>
   )
 }

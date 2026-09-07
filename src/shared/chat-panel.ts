@@ -37,6 +37,13 @@ export interface ChatSource {
   sandbox?: true
   /** M121. This chat is a ROUTINE's: its next spawn carries ROUTINE_PROMPT again (the same rule). Absent for every other chat. */
   routine?: true
+  /**
+   * M138. An orchestrator block's PROMPT, appended to the CLI's own system
+   * prompt on EVERY spawn (M81's supervisor rule: the CLI keeps no record of
+   * it, so a resumed chat without it stops being an orchestrator). A string,
+   * not a flag, because the prompt is the block's own.
+   */
+  orchestrator?: string
 }
 
 /**
@@ -44,6 +51,11 @@ export interface ChatSource {
  * carry: absent stays absent, and only `true` is ever written. Spread beside
  * `carryBackend` at every site that rebuilds a ChatSource field by field.
  */
-export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true }): { dispatch?: true; sandbox?: true; routine?: true } {
-  return { ...(chat.dispatch === true ? { dispatch: true as const } : {}), ...(chat.sandbox === true ? { sandbox: true as const } : {}), ...(chat.routine === true ? { routine: true as const } : {}) }
+export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string }): { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string } {
+  return {
+    ...(chat.dispatch === true ? { dispatch: true as const } : {}),
+    ...(chat.sandbox === true ? { sandbox: true as const } : {}),
+    ...(chat.routine === true ? { routine: true as const } : {}),
+    ...(typeof chat.orchestrator === 'string' ? { orchestrator: chat.orchestrator } : {})
+  }
 }

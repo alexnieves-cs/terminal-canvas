@@ -79,8 +79,13 @@ export function templatePanels(template: PersistedTemplate, centre: Point): Temp
  * named and every Run door is disabled with the sentence rather than removed.
  */
 export function workflowBlockRefusal(template: PersistedTemplate): string | undefined {
-  const block = template.nodes.find((n) => n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect')
-  return block === undefined ? undefined : `${block.key} is a ${block.kind} block, which cannot run yet`
+  // M138. The blocks RUN now — the pool through main's caller, the
+  // orchestrator through its appended prompt, the collect through M78's
+  // join. What is still refused by name is a pool that names no work list:
+  // main cannot read a file nobody named, and a pool with nothing to pull
+  // would mint workers for no items.
+  const bare = template.nodes.find((n) => n.kind === 'pool' && n.list.trim() === '')
+  return bare === undefined ? undefined : `${bare.key} is a pool block that names no work list — save the template with a list file`
 }
 
 export function templateRefusal(

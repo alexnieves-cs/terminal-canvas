@@ -110,6 +110,7 @@ import type { ReadStamp, SkillWriteResult } from './skill-edit'
 import type { AgentKind, AgentOptions, PanelUsage } from './cost'
 import type { DirResult } from './fs-tree'
 import type { MachineCostSnapshot, MachineCostTarget } from './machine-cost'
+import type { PoolNode } from './workflow-nodes'
 
 /** M93. A snapshot's metadata: the stamp is the file's name and the restore's key. */
 export interface SnapshotMeta { at: number; bytes: number; workspaces: number; panels: number }
@@ -569,6 +570,16 @@ export const IPC = {
    */
   AGENT_GRANTS: 'agent:grants',
   AGENT_REVOKE_GRANTS: 'agent:revoke-grants',
+  /**
+   * M138. The pool's production caller. `agent:pool-start` hands main a
+   * template's `pool` block; main reads the list (under the Places gate),
+   * drives M132's engine, and asks the RENDERER to mint each worker over
+   * `pool:mint` (an ephemeral reply, board:add's shape) — the renderer owns
+   * the workspace it renders. `agent:pool-stop` interrupts every live worker
+   * and kills none. Events ride `pool:event`, addressed by template and block.
+   */
+  AGENT_POOL_START: 'agent:pool-start',
+  AGENT_POOL_STOP: 'agent:pool-stop',
   /** M100. The roster: list, save (upsert), delete. Places are checked in main, never here. */
   TEAMMATE_LIST: 'teammate:list',
   TEAMMATE_SAVE: 'teammate:save',
@@ -681,6 +692,19 @@ export type BoardCommentResult =
 /** M113. What `tc board` asks the renderer, and what it answers. */
 export type BoardControlRequest = { op: 'add'; title: string } | { op: 'done'; id: string }
 export type BoardControlReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
+
+/** M138. See AGENT_POOL_START. */
+export interface PoolStartRequest { templateId: string; key: string; node: PoolNode }
+export type PoolStartResult = { kind: 'started' } | { kind: 'refused'; reason: string }
+export interface PoolMintRequest { templateId: string; key: string; cwd: string; prompt: string; item: string; index: number }
+export type PoolMintReply = { kind: 'ok'; id: string } | { kind: 'refused'; reason: string }
+export type PoolEvent =
+  | { kind: 'started'; id: string; item: string }
+  | { kind: 'queued'; item: string; reason: 'concurrency' }
+  | { kind: 'finished'; id: string }
+  | { kind: 'refused'; why: string }
+  | { kind: 'stopped'; why: 'empty' | 'budget' | 'by-hand' }
+export interface PoolCallerEvent { templateId: string; key: string; event: PoolEvent }
 
 export const IPC_EVENTS = {
   PTY_DATA: 'pty:data',
@@ -852,7 +876,11 @@ export const IPC_EVENTS = {
   CANVAS_TIDY: 'canvas:tidy',
   CANVAS_FLIP: 'canvas:flip',
   /** M113. `tc board` asks the RENDERER over an ephemeral reply channel (canvas:model's shape) — main writes no record itself. */
-  BOARD_ADD: 'board:add'
+  BOARD_ADD: 'board:add',
+  /** M138. Main asks the renderer to mint one pool worker; the reply channel rides in the envelope. */
+  POOL_MINT: 'pool:mint',
+  /** M138. A pool event, addressed by template and block. */
+  POOL_EVENT: 'pool:event'
 } as const
 
 export interface FileReadRequest {
@@ -1289,6 +1317,8 @@ export interface CanvasBridge {
     onModel(provide: () => ControlCanvasModel): () => void
     /** M113. `tc board add/done`: main sends the request and a reply channel; the renderer answers with the surviving id or a refusal. */
     onBoard(handle: (req: BoardControlRequest) => BoardControlReply): () => void
+    /** M138. Main asks for one pool worker; the renderer mints a chat panel and answers with its id, or refuses by name. */
+    onPoolMint(handle: (req: PoolMintRequest) => Promise<PoolMintReply>): () => void
     onReset(listener: () => void): () => void
     /** M106. The menu's Tidy Panes and Flip Terminals. */
     onTidy(listener: () => void): () => void
@@ -1428,6 +1458,12 @@ export interface CanvasBridge {
     grants(id: string): Promise<string[]>
     /** M98. See AGENT_REVOKE_GRANTS. */
     revokeGrants(id: string): Promise<void>
+    /** M138. See AGENT_POOL_START. */
+    poolStart(req: PoolStartRequest): Promise<PoolStartResult>
+    /** M138. See AGENT_POOL_STOP: true when a live pool was stopped. */
+    poolStop(req: { templateId: string; key: string }): Promise<boolean>
+    /** M138. Pool events, addressed by template and block. Returns its own unsubscribe. */
+    onPoolEvent(listener: (event: PoolCallerEvent) => void): () => void
   }
   /** M85. The vault: a folder of markdown notes, read in main. */
   snapshot: {

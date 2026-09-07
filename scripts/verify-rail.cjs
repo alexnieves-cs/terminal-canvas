@@ -2915,6 +2915,30 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ found: start !== -1, consults: body.includes('templateRefusal(') }))
 }
 
+
+// M138 — pool.model.1. The Runs tab's pool rows are a PROJECTION of main's
+// events and nothing else: queued keeps its slot when it starts, finished
+// is found by worker id, a stop or a refusal ends `live` and carries main's
+// reason, and the closing sentence names the three ways a pool ends.
+{
+  let st = R.EMPTY_POOL
+  const step = (e) => { st = R.reducePool(st, e) }
+  step({ kind: 'started', id: 'w1', item: 'a' })
+  step({ kind: 'queued', item: 'b', reason: 'concurrency' })
+  step({ kind: 'started', id: 'w2', item: 'b' })
+  step({ kind: 'finished', id: 'w1' })
+  const mid = st
+  step({ kind: 'stopped', why: 'budget' })
+  const ended = st
+  const refused = R.reducePool(R.EMPTY_POOL, { kind: 'refused', why: 'could not read the work list: ENOENT' })
+  ok('pool.model.1 reducePool keeps a queued item in its slot when it starts, marks finished by worker id, ends live on stop/refusal with the reason, and the closing words name the three ends',
+    mid.live === true && mid.items.map((i) => i.item + ':' + i.state).join(',') === 'a:finished,b:started' && mid.items[1].id === 'w2' &&
+      ended.live === false && ended.stopped === 'budget' && refused.live === false && /ENOENT/.test(refused.refused) &&
+      /by hand/.test(R.poolStoppedWord('by-hand')) && /every item/.test(R.poolStoppedWord('empty')) && /budget/.test(R.poolStoppedWord('budget')) &&
+      typeof R.REASON_NO_POOL_LIVE === 'string',
+    JSON.stringify({ mid, ended, refused }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

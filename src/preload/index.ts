@@ -111,6 +111,19 @@ const bridge: CanvasBridge = {
     },
     // M113. The request rides WITH the reply channel: a board op has a payload
     // where counts and model have none.
+    // M138. The mint is ASYNC (a chat is created over IPC before it has an
+    // id), so the reply is sent when the handler's promise settles — a
+    // rejection answers as a refusal naming the error, never silence.
+    onPoolMint: (handle) => {
+      const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
+        Promise.resolve()
+          .then(() => handle(envelope.req))
+          .then((reply) => ipcRenderer.send(envelope.replyChannel, reply),
+            (error: unknown) => ipcRenderer.send(envelope.replyChannel, { kind: 'refused', reason: error instanceof Error ? error.message : String(error) }))
+      }
+      ipcRenderer.on(IPC_EVENTS.POOL_MINT, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.POOL_MINT, wrapped)
+    },
     onBoard: (handle) => {
       const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
         ipcRenderer.send(envelope.replyChannel, handle(envelope.req))
@@ -214,7 +227,14 @@ const bridge: CanvasBridge = {
     autoStart: (req) => ipcRenderer.invoke(IPC.AGENT_AUTO_START, req),
     autoStop: (id) => ipcRenderer.invoke(IPC.AGENT_AUTO_STOP, id),
     grants: (id) => ipcRenderer.invoke(IPC.AGENT_GRANTS, id),
-    revokeGrants: (id) => ipcRenderer.invoke(IPC.AGENT_REVOKE_GRANTS, id)
+    revokeGrants: (id) => ipcRenderer.invoke(IPC.AGENT_REVOKE_GRANTS, id),
+    poolStart: (req) => ipcRenderer.invoke(IPC.AGENT_POOL_START, req),
+    poolStop: (req) => ipcRenderer.invoke(IPC.AGENT_POOL_STOP, req),
+    onPoolEvent: (listener) => {
+      const wrapped = (_event: IpcRendererEvent, e: Parameters<typeof listener>[0]): void => listener(e)
+      ipcRenderer.on(IPC_EVENTS.POOL_EVENT, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.POOL_EVENT, wrapped)
+    }
   },
   snapshot: {
     list: () => ipcRenderer.invoke(IPC.SNAPSHOT_LIST),

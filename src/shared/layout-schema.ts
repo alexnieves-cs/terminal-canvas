@@ -777,6 +777,13 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (raw.sandbox === true) chat.sandbox = true
   // M121. A routine's chat keeps its rule prompt across a relaunch, the same way.
   if (raw.routine === true) chat.routine = true
+  // M138. An orchestrator keeps its prompt across a relaunch, the same way,
+  // as a string because the prompt is the block's. Present and not a string
+  // warns; the chat is kept.
+  if (raw.orchestrator !== undefined) {
+    if (isStr(raw.orchestrator) && raw.orchestrator.trim() !== '') chat.orchestrator = raw.orchestrator
+    else warnings.push(`chat panel ${id}: orchestrator was not a string - the chat is kept, its prompt dropped`)
+  }
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).
   if (raw.backend !== undefined) {

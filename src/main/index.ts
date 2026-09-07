@@ -54,6 +54,7 @@ import { createWorktreeManager } from './worktree-manager'
 import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
+import { createPoolCaller, type PoolCaller } from './pool-caller'
 import { claudeCliRunner } from './claude-cli-runner'
 import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
 import { describePlugin } from './plugin-details'
@@ -79,7 +80,7 @@ import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './wa
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
 import type { WatcherHandlers } from './ipc'
 import { ToolboxCache } from './toolbox-cache'
-import { IPC_EVENTS } from '../shared/ipc-contract'
+import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../shared/ipc-contract'
 import {
   allPresets,
   mintPromptId,
@@ -185,6 +186,8 @@ let gitPath: string | null = null
 // it yet — M72's chat panel is its first caller — but it is wired into the
 // quit sequence now so a process it owns can never outlive the app.
 let agentSessions: AgentSessionManager | null = null
+/** M138. The pool's production caller, made beside the manager it drives. */
+let poolCaller: PoolCaller | null = null
 // M76. Assigned beside it once the runtime exists; create() re-syncs through it.
 let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
@@ -974,6 +977,37 @@ app.whenReady().then(async () => {
       PATH: env['PATH'] === undefined || env['PATH'] === '' ? launcherDir : `${launcherDir}:${env['PATH']}`
     })
   })
+  // M138. The pool's production caller. The list is read HERE (main's, like
+  // every file the app reads for an agent), the mint is the RENDERER's over an
+  // ephemeral reply (board:add's shape, with a longer wait: a chat is created
+  // over IPC before it has an id), the ceilings are M82's read live, and the
+  // spend is the manager's own cumulative figure — never a second sum.
+  const poolAgents = agentSessions
+  poolCaller = createPoolCaller({
+    agents: poolAgents,
+    mint: (req) => {
+      const wc = mainWindow?.webContents
+      if (!wc) return Promise.resolve({ kind: 'refused' as const, reason: 'no window to mint the worker in' })
+      return requestFromRendererWith<PoolMintReply, PoolMintRequest>(wc, IPC_EVENTS.POOL_MINT, req, { kind: 'refused', reason: 'the canvas did not answer in time' }, 20000)
+    },
+    readList: (listPath) => {
+      const expanded = expandTilde(listPath)
+      if (!expanded.startsWith('/')) return { kind: 'error', why: `${listPath} is not an absolute path` }
+      try {
+        // One item per non-empty line; a `#` line is a comment, so a list can say what it is.
+        const items = readFileSync(expanded, 'utf8').split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'))
+        return items.length === 0 ? { kind: 'error', why: `${listPath} holds no items` } : { kind: 'ok', items }
+      } catch (error) {
+        return { kind: 'error', why: error instanceof Error ? error.message : String(error) }
+      }
+    },
+    limits: () => ({
+      maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
+      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+    }),
+    spend: () => poolAgents.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
+    emit: (event) => { mainWindow?.webContents.send(IPC_EVENTS.POOL_EVENT, event) }
+  })
   // M73. The durable transcript, written from the manager's own events so
   // the renderer never has to echo a turn back; and every event forwarded
   // to the renderer on ONE channel, already batched at the manager.
@@ -1477,6 +1511,9 @@ app.whenReady().then(async () => {
     },
     grants: (id) => approvals?.grantsOf(id) ?? [],
     revokeGrants: (id) => { approvals?.revoke(id) },
+    // M138. The pool: refused by the runtime's own sentence before it exists.
+    poolStart: (req) => poolCaller?.start(req) ?? { kind: 'refused', reason: 'the agent runtime has not started yet' },
+    poolStop: (req) => poolCaller?.stop(req.templateId, req.key) ?? false,
     list: () => agentSessions?.list() ?? [],
     transcript: (id) => {
       const read = agentTranscripts.read(id)

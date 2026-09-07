@@ -130,7 +130,9 @@ import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
-import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '@shared/templates'
+import { allTemplates, isBuiltInTemplate, type PersistedTemplate, type TemplateEdge } from '@shared/templates'
+import { applyPoolEvent } from '@renderer/workflow/pool-store'
+import type { PoolMintReply, PoolMintRequest } from '@shared/ipc-contract'
 import { fillTemplate, templateHoles, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
@@ -1231,6 +1233,45 @@ export function Canvas({
     actions.markDone(req.id)
     return { kind: 'ok', id: req.id }
   }), [])
+  // M138. The pool's two doors. Events feed the per-block store (ONE
+  // subscription for the canvas; the store fans out by address). A mint
+  // request makes a WORKER: a chat panel minted here — the renderer owns the
+  // workspace it renders — created through the ordinary `agent:create` (the
+  // M100/M120 gates unchanged), placed beside the template's workflow panel,
+  // titled by its block and item, and wired by handoff edge (a chat's `idle`
+  // is its result) to every target the template's edges name from the pool
+  // block, so a `collect` joins the workers M78's way. Main sends the item;
+  // nothing is typed here.
+  useEffect(() => window.canvas.agentSession.onPoolEvent(applyPoolEvent), [])
+  useEffect(() => window.canvas.canvas.onPoolMint(async (req: PoolMintRequest): Promise<PoolMintReply> => {
+    const id = `c${nextIdRef.current++}`
+    const sessionId = crypto.randomUUID()
+    const result = await window.canvas.agentSession.create({ id, cwd: req.cwd, sessionId })
+    if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
+    const targets = poolTargetsRef.current.get(req.templateId)
+    setPanels((current) => {
+      const host = current.find((p) => isWorkflowPanel(p) && p.workflow.templateId === req.templateId)
+      const centre = host === undefined
+        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
+        : { x: host.rect.x + host.rect.w + 40 + 280, y: host.rect.y + 180 + req.index * 400 }
+      const panel = makeChatPanel(id, centre, nextZ(current), { cwd: req.cwd, sessionId })
+      let next: Panel[] = [...current, { ...panel, title: `${req.key} · ${req.item}` }]
+      for (const edge of targets?.edges ?? []) {
+        if (edge.from !== req.key) continue
+        const to = targets?.minted.get(edge.to)
+        if (to === undefined) continue
+        next = addLink(next, id, to)
+        next = setLinkAutomation(next, id, to, { kind: 'handoff', enabled: true, trigger: 'idle' })
+      }
+      commitHistory(next)
+      return next
+    })
+    return { kind: 'ok', id }
+  }), [commitHistory])
+  /** M138. Stop a live pool: main's, through the one invoke. */
+  const stopPool = useCallback((templateId: string, key: string) => { void window.canvas.agentSession.poolStop({ templateId, key }) }, [])
+  /** M138. Per template, the edges out of its pool blocks and the ids the last Run minted for their targets. */
+  const poolTargetsRef = useRef(new Map<string, { edges: TemplateEdge[]; minted: Map<string, string> }>())
   useEffect(() => {
     setCardDetail((current) => nextCardDetail(current, viewport.scale))
   }, [viewport.scale])
@@ -3741,6 +3782,7 @@ export function Canvas({
     // (M80's verifier).
     const createdChats: string[] = []
     const undoCreated = (): void => { for (const id of createdChats) void window.canvas.agentSession.dispose({ id, drop: true }) }
+    const poolNodes: Array<Extract<typeof filled.nodes[number], { kind: 'pool' }>> = []
     for (const place of places) {
       const node = place.node
       if (node.kind === 'chat') {
@@ -3761,7 +3803,29 @@ export function Canvas({
       // M132: the three workflow kinds land in TemplateNode's union but have
       // no runtime here yet — this task lands the schema, not the runtime,
       // so they are skipped BY NAME rather than instantiated as panels.
-      if (node.kind === 'pool' || node.kind === 'orchestrator' || node.kind === 'collect') continue
+      // M138. The three block kinds have a runtime. A POOL starts AFTER the
+      // shape is committed (its workers are minted on main's request, one per
+      // item, beside this template's workflow panel). An ORCHESTRATOR is a
+      // chat whose prompt rides every spawn through --append-system-prompt,
+      // carried on its record (M81's rule). A COLLECT is a chat the pool's
+      // workers hand off into through M78's join, its first message naming
+      // the target.
+      if (node.kind === 'pool') { poolNodes.push(node); continue }
+      if (node.kind === 'orchestrator' || node.kind === 'collect') {
+        const id = `c${nextIdRef.current++}`
+        const sessionId = crypto.randomUUID()
+        const create = node.kind === 'orchestrator'
+          ? { id, cwd: node.cwd, sessionId, appendSystemPrompt: node.prompt }
+          : { id, cwd: node.cwd, sessionId }
+        const result = await window.canvas.agentSession.create(create)
+        if (result.kind === 'refused') { undoCreated(); return { kind: 'refused', reason: result.reason } }
+        createdChats.push(id)
+        const chat = node.kind === 'orchestrator' ? { cwd: node.cwd, sessionId, orchestrator: node.prompt } : { cwd: node.cwd, sessionId }
+        madePanels.push({ ...makeChatPanel(id, place.centre, 1, chat), title: `${node.key} · ${node.kind}` })
+        minted.set(node.key, id)
+        if (node.kind === 'collect') messages.push({ id, text: `Results are handed off into this chat as the workers finish. Join them in the order they arrive and write the joined text to ${node.target}.` })
+        continue
+      }
       // A preset node is RESOLVED by main (only main turns an absent command
       // into the login shell, M5b) and minted here — never spawned through the
       // event path, which would place it itself and commit its own history
@@ -3806,6 +3870,15 @@ export function Canvas({
     // (`noteTemplate` is a stable useCallback, so the captured `runsApi` object being
     // one render old cannot matter — the member is the same function.)
     runsApi.noteTemplate(madePanels.map((p) => p.rect.id), template.id)
+    // M138. The pools start last, once every target they could hand off into
+    // exists; a refusal (no list, a list main cannot read, a block already
+    // running) lands in the block's own rows through the same reducer main's
+    // events use, so the Runs tab says why in main's words.
+    poolTargetsRef.current.set(template.id, { edges: filled.edges.map((e) => ({ ...e })), minted })
+    for (const node of poolNodes) {
+      const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node })
+      if (started.kind === 'refused') applyPoolEvent({ templateId: template.id, key: node.key, event: { kind: 'refused', why: started.reason } })
+    }
     for (const { id, text } of messages) void deliverToComposer(id, text)
     // The whole shape is the selection: a template is one thing.
     const ids = madePanels.map((p) => p.rect.id)
@@ -5554,7 +5627,7 @@ export function Canvas({
               const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
               return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
+                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate} onStop={stopPool}
                 deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
                 runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
             }
