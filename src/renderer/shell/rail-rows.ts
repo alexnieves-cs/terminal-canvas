@@ -277,6 +277,19 @@ export function railCapsules(rows: readonly { id: string; kind: string; state: S
 /** M120. The folder piece of a sandboxed chat: the app's directory name would read as a project the user never chose. */
 export const SANDBOX_HEADER = 'sandboxed · no folder'
 
+/**
+ * M170. THE AGENT CARD WHEN IT IS A TERMINAL: a terminal started as an agent
+ * wears the chat's own header line — the same builder, so the two frames
+ * cannot drift — and a plain shell wears none (null, never an empty string
+ * the frame would render as a blank summary). The engine word is the
+ * backend's, never the spec's agent id (`claude-code` is a preset name).
+ */
+export function agentHeader(spec: { cwd: string; agent?: string }, branch?: string): string | null {
+  if (spec.agent === undefined) return null
+  const backend = spec.agent === 'claude-code' ? 'claude' : spec.agent
+  return chatHeaderLine({ cwd: spec.cwd, ...(branch === undefined ? {} : { branch }), backend })
+}
+
 export function chatHeaderLine(input: { cwd: string; branch?: string; backend: string; model?: string; sandbox?: boolean }): string {
   const folder = input.sandbox === true ? SANDBOX_HEADER : (input.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/')
   return [folder, input.branch, input.backend, input.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')

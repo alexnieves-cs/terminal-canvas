@@ -825,5 +825,59 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     sameWash && glyph && noLine, JSON.stringify({ mix, sameWash, glyph, noLine }))
 }
 
+// M167 — turns.1. THE TURNS: the user's turn is a bubble on --bubble at --r-lg,
+// at most 75% wide and aligned right; the assistant's is unboxed prose at
+// --measure; .chat__role is CLIPPED (the accessible name stays, the caps
+// column goes); .chat__when rests at 0 and reveals on the row's hover (the
+// rest rule).
+{
+  const user = all.find((r) => /(^|,)\s*\.chat__row--user\s*(,|$)/.test(r.sel))
+  const bubble = user ? /var\(--bubble\)/.test(user.body) && /max-width:\s*75%/.test(user.body) && /var\(--r-lg\)/.test(user.body) && /margin-left:\s*auto|align-self:\s*flex-end/.test(user.body) : false
+  const assistant = all.find((r) => /(^|,)\s*\.chat__row--assistant\s*(,|$)/.test(r.sel))
+  const measured = assistant ? /max-width:\s*var\(--measure\)/.test(assistant.body) : false
+  const role = all.find((r) => /(^|,)\s*\.chat__role\s*(,|$)/.test(r.sel))
+  const clipped = role ? /position:\s*absolute/.test(role.body) && /clip/.test(role.body) : false
+  const when = all.find((r) => /(^|,)\s*\.chat__when\s*(,|$)/.test(r.sel))
+  const hidden = when ? /(^|;|\s)opacity:\s*0\s*(;|$)/.test(when.body) : false
+  const reveal = all.some((r) => /\.chat__row:hover \.chat__when/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  ok('turns.1', 'the user turn is a --bubble at --r-lg, at most 75% wide and aligned right; the assistant turn is unboxed at --measure; the role label is clipped; the timestamp rests hidden and reveals on hover',
+    bubble && measured && clipped && hidden && reveal, JSON.stringify({ bubble, measured, clipped, hidden, reveal }))
+}
+
+// M168 — tools.1. TOOL ROWS: one collapsed row per call — a glyph slot, the
+// verb, the target, a state pill — and the expanded result in a scrolling
+// well capped at twelve lines; the `TOOL` ::before label is gone; a group's
+// header row exists and its rows are hidden while collapsed.
+{
+  const label = all.some((r) => /\.chat__row--tool::before/.test(r.sel) && /content:\s*'tool'/.test(r.body))
+  const glyph = all.some((r) => /\.chat__tool-glyph\b/.test(r.sel))
+  const pill = all.some((r) => /\.chat__tool-state\b/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body))
+  // `some`, not `find`: a second rule names the same subject for its flex line (the opened body takes the whole row).
+  const capped = all.some((r) => /(^|,)\s*\.chat__tool-result\s*(,|$)/.test(r.sel) && /max-height:\s*calc\(12 \*/.test(r.body))
+  const group = all.some((r) => /\.chat__tools-head\b/.test(r.sel)) && all.some((r) => /\.chat__tools--collapsed \.chat__row--tool/.test(r.sel) && /display:\s*none/.test(r.body))
+  ok('tools.1', 'a tool row has a glyph slot, a state pill and no TOOL label; the result well is capped at twelve lines; a group has a header and hides its rows while collapsed',
+    !label && glyph && pill && capped && group, JSON.stringify({ label, glyph, pill, capped, group }))
+}
+
+// M169 — composer.1. THE COMPOSER: a rounded well (--r-lg, a hairline, an
+// inset shadow on --bezel, the iris ring on focus-within); Send is the one
+// filled control (.chat__verb--send stays in primary.1's list); Interrupt is
+// PRESENT always (codex.1 reads its attributes) and takes Send's place only
+// while a turn runs — at rest it is out of the flow by class, never by a
+// fraction of opacity; the chips row above the text; the approval sentence
+// and its two buttons in the same well.
+{
+  const well = all.find((r) => /(^|,)\s*\.chat__composer\s*(,|$)/.test(r.sel))
+  const rounded = well ? /border-radius:\s*var\(--r-lg\)/.test(well.body) && /border:\s*1px solid var\(--line\)/.test(well.body) && /inset 0 1px 2px var\(--bezel\)/.test(well.body) : false
+  const ring = all.some((r) => /\.chat__composer:focus-within/.test(r.sel) && /--iris/.test(r.body))
+  const interruptRest = all.some((r) => /\.chat__verb--interrupt\b/.test(r.sel) && !/--live/.test(r.sel) && /display:\s*none/.test(r.body))
+  const interruptLive = all.some((r) => /\.chat__composer--live \.chat__verb--interrupt/.test(r.sel) && /display:\s*(inline-flex|inline-block|flex|block)/.test(r.body))
+  const sendLive = all.some((r) => /\.chat__composer--live \.chat__verb--send/.test(r.sel) && /display:\s*none/.test(r.body))
+  const chips = all.some((r) => /\.chat__chips\b/.test(r.sel)) && all.some((r) => /\.chat__chip--quiet\b/.test(r.sel))
+  const approval = all.some((r) => /\.chat__permission-sentence\b/.test(r.sel))
+  ok('composer.1', 'the composer is a rounded well with an inset shadow and an iris ring on focus; Interrupt is out of the flow at rest and replaces Send while a turn runs; the chips row and the approval sentence live in the well',
+    rounded && ring && interruptRest && interruptLive && sendLive && chips && approval, JSON.stringify({ rounded, ring, interruptRest, interruptLive, sendLive, chips, approval }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

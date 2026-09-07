@@ -16,8 +16,9 @@ import { shortPath } from '@renderer/palette/panel-name'
  */
 
 export type ChatRow =
-  | { kind: 'user'; id: string; text: string }
-  | { kind: 'text'; id: string; text: string; live: boolean }
+  /** M167. `at` is the turn's record time when it has one; a live row has none — absent stays absent. */
+  | { kind: 'user'; id: string; text: string; at?: number }
+  | { kind: 'text'; id: string; text: string; live: boolean; at?: number }
   | { kind: 'thinking'; id: string; text: string; live: boolean }
   | {
       kind: 'tool'
@@ -29,6 +30,8 @@ export type ChatRow =
       live: boolean
       /** M77. The file this call names, when it names one — the `diff` verb's subject. */
       file?: string
+      /** M168. The turn's record time, for a group's elapsed span; absent on a live row. */
+      at?: number
     }
   | { kind: 'unknown'; id: string; kindName: string }
   /** M75. An attached image: its type and size, never the picture. */
@@ -46,19 +49,19 @@ export interface LiveMessage {
   blocks: LiveBlock[]
 }
 
-function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolean, texts?: readonly string[]): ChatRow[] {
+function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolean, texts?: readonly string[], at?: number): ChatRow[] {
   const rows: ChatRow[] = []
   blocks.forEach((block, i) => {
     const id = `${turnId}:${i}`
     switch (block.type) {
       case 'text':
-        rows.push({ kind: 'text', id, text: texts?.[i] ?? block.text, live })
+        rows.push({ kind: 'text', id, text: texts?.[i] ?? block.text, live, ...(at === undefined ? {} : { at }) })
         return
       case 'thinking':
         rows.push({ kind: 'thinking', id, text: texts?.[i] ?? block.text, live })
         return
       case 'tool_use':
-        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live, ...((): { file?: string } => { const f = toolFilePath(block.input); return f === null ? {} : { file: f } })() })
+        rows.push({ kind: 'tool', id: block.id || id, name: block.name, input: block.input, live, ...(at === undefined ? {} : { at }), ...((): { file?: string } => { const f = toolFilePath(block.input); return f === null ? {} : { file: f } })() })
         return
       case 'tool_result':
         // Folded below, never a row of its own.
@@ -96,7 +99,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
   for (const turn of turns) {
     if (turn.role === 'user') {
       const text = turn.blocks.filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text').map((b) => b.text).join('\n')
-      if (text !== '') rows.push({ kind: 'user', id: turn.id, text })
+      if (text !== '') rows.push({ kind: 'user', id: turn.id, text, ...(typeof turn.at === 'number' ? { at: turn.at } : {}) })
       turn.blocks.forEach((b, i) => { if (b.type === 'image') rows.push({ kind: 'image', id: `${turn.id}:${i}`, mediaType: b.mediaType, size: b.size }) })
       for (const block of turn.blocks) {
         if (block.type !== 'tool_result') continue
@@ -106,7 +109,7 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
       continue
     }
     if (live !== null && turn.id === live.messageId) storedForLive = turn.blocks.length
-    for (const row of blockRows(turn.id, turn.blocks, false)) {
+    for (const row of blockRows(turn.id, turn.blocks, false, undefined, typeof turn.at === 'number' ? turn.at : undefined)) {
       rows.push(row)
       if (row.kind === 'tool') toolRows.set(row.id, row)
     }
@@ -162,6 +165,17 @@ export interface ComposerArm {
  * the first send is what starts the process, and a send after an exit is
  * what resumes it.
  */
+/**
+ * M169 (the Act II critic). ONE predicate for "a turn is in flight": the
+ * composer's Send/Interrupt arms and the well's `--live` class both read it,
+ * so Send can never be hidden while it is enabled. `starting` counts only as
+ * the first turn's spawn with nothing queued (M90's reading); a restored
+ * chat's `starting` with turns behind it is a send the person may still make.
+ */
+export function composerLive(snapshot: AgentSessionSnapshot | null): boolean {
+  return snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
+}
+
 export function composerState(
   snapshot: AgentSessionSnapshot | null,
   claudeAvailable: boolean,
@@ -176,7 +190,7 @@ export function composerState(
   // M90. A backend with no interrupt door: mid-turn the verb stays, disabled
   // with the fix (closing the panel kills the process), never enabled to a no-op.
   const noInterrupt: ComposerArm = row.interrupts ? { enabled: true } : { enabled: false, reason: row.reasons.noInterrupt }
-  const streaming = snapshot !== null && (snapshot.status === 'streaming' || (snapshot.status === 'starting' && snapshot.queued === 0 && snapshot.turns === 0 && snapshot.pid !== undefined))
+  const streaming = composerLive(snapshot)
   if (snapshot !== null && snapshot.pending.length > 0) return { send: { enabled: false, reason: reasonChatPending(row.label) }, interrupt: noInterrupt }
   // M119. A handshake in flight is its own state: Send waits, Interrupt cannot reach a session that has not opened (the manager refuses it), so both say so.
   if (snapshot !== null && snapshot.awaitingHandshake === true) return { send: { enabled: false, reason: reasonChatHandshake(row.label) }, interrupt: { enabled: false, reason: REASON_CHAT_HANDSHAKE_INTERRUPT } }
@@ -225,4 +239,75 @@ export function toolArgument(input: Record<string, unknown>, keep = 2): string {
   if (typeof first === 'string') return first.length > 96 ? first.slice(0, 93) + '…' : first
   const keys = Object.keys(input)
   return keys.length === 0 ? '' : keys.join(', ')
+}
+
+/**
+ * M168. TOOL ROWS AS ONE ROW EACH, AND CONSECUTIVE ROWS AS ONE GROUP (the
+ * brief: "worked for 2m · 6 tools", collapsed by default). Pure over the rows
+ * `chatRows` built: a run of two or more `tool` rows folds into a `tools`
+ * group; a lone tool row stays a row (no header for one); every other row
+ * passes through in order. The elapsed span is the first and last tool's
+ * record times among the STAMPED rows (a live row has none yet); a group with
+ * fewer than two stamps says how many tools, never a number it made up.
+ */
+export type ToolRowOf = Extract<ChatRow, { kind: 'tool' }>
+export type ChatGroup = ChatRow | { kind: 'tools'; id: string; rows: ToolRowOf[]; elapsedMs?: number }
+
+export function toolGroups(rows: readonly ChatRow[]): ChatGroup[] {
+  const out: ChatGroup[] = []
+  let run: ToolRowOf[] = []
+  const flush = (): void => {
+    if (run.length === 0) return
+    if (run.length === 1) { out.push(run[0]); run = []; return }
+    // The first and the last STAMPED rows: a live last row has no stamp yet,
+    // and the span to the last one that does is still a true span.
+    const stamped = run.filter((r) => r.at !== undefined)
+    const first = stamped[0]?.at
+    const last = stamped[stamped.length - 1]?.at
+    // Under a second is the same turn's stamp on every row: no span, the count alone.
+    const elapsed = stamped.length >= 2 && first !== undefined && last !== undefined && last - first >= 1000 ? { elapsedMs: last - first } : {}
+    out.push({ kind: 'tools', id: `tools:${run[0].id}`, rows: run, ...elapsed })
+    run = []
+  }
+  for (const row of rows) {
+    if (row.kind === 'tool') { run.push(row); continue }
+    flush()
+    out.push(row)
+  }
+  flush()
+  return out
+}
+
+/** M168. The VERB a tool row leads with: a family word for the CLI's own tool names, else the name as given. */
+export function toolVerb(name: string): string {
+  switch (name) {
+    case 'Read': case 'NotebookRead': return 'Read'
+    case 'Edit': case 'Write': case 'MultiEdit': case 'NotebookEdit': return 'Edit'
+    case 'Bash': case 'Shell': case 'Run': return 'Run'
+    case 'Grep': case 'Glob': case 'WebSearch': case 'Search': return 'Search'
+    default: return name
+  }
+}
+
+/** M168. The state pill's word: three states, never a blank. */
+export function toolState(row: ToolRowOf): 'running' | 'done' | 'error' | 'no result' {
+  if (row.result !== undefined) return row.result.isError ? 'error' : 'done'
+  // A stored call with no result — an interrupted turn, a budget stop, an
+  // exit, a truncated transcript — never READ `done` (the Act II critic).
+  return row.live ? 'running' : 'no result'
+}
+
+/** M168. `worked for 2m · 6 tools` — the header's words; without a span, the count alone. */
+export function toolGroupLabel(group: Extract<ChatGroup, { kind: 'tools' }>): string {
+  const n = `${group.rows.length} tools`
+  if (group.elapsedMs === undefined) return n
+  const s = Math.round(group.elapsedMs / 1000)
+  const span = s < 60 ? `${s}s` : `${Math.round(s / 60)}m`
+  return `worked for ${span} · ${n}`
+}
+
+/** M169. The composer's rows: two at rest, one per line of the draft, six at most — pure, so the node only renders it. */
+export function composerRows(text: string): number {
+  const lines = text === '' ? 1 : text.split('\n').length
+  return Math.min(6, Math.max(2, lines))
 }

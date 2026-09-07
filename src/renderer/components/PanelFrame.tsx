@@ -89,6 +89,8 @@ export interface PanelFrameProps {
   title: ReactNode
   /** The kind's own chrome controls, between the title and close. */
   chrome?: ReactNode
+  /** M170. A terminal started as an agent wears the chat's glyph beside its state dot, so a conversation and an agent terminal share one frame. */
+  agentGlyph?: boolean
   /** Terminal panels have an agent; the frame paints its state dot. */
   agentState?: AgentState
   /** M69. The word the summary tier shows for a sessionless kind, when the kind's own name is not it (a prose file is a `note`). */
@@ -115,7 +117,7 @@ export interface PanelFrameProps {
 const KIND_WORD: Record<Exclude<Panel['kind'], 'terminal'>, string> = { review: 'review', file: 'file', toolbox: 'toolbox', jira: 'Jira', github: 'GitHub', chat: 'chat', memory: 'memory', watcher: 'watcher', browser: 'browser', work: 'work', skill: 'skill', workflow: 'workflow' }
 
 export function PanelFrame({
-  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentState,
+  id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState,
   close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore
 }: PanelFrameProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -197,7 +199,10 @@ export function PanelFrame({
             keyed on data-agent-state, shared with the rail and the context
             pane (`.status-dot`). */}
         {kind === 'terminal' ? (
-          <span className="pf__state status-dot" data-agent-state={agentState ?? 'none'} data-tone={rootAttrs?.['data-tone'] ?? 'kind'} aria-hidden="true" />
+          <>
+            {agentGlyph === true && <span className="pf__state pf__state--kind" data-tone="kind" data-agent-glyph aria-hidden="true"><KIND_GLYPH.chat /></span>}
+            <span className="pf__state status-dot" data-agent-state={agentState ?? 'none'} data-tone={rootAttrs?.['data-tone'] ?? 'kind'} aria-hidden="true" />
+          </>
         ) : (
           /* M66. A grey dot on a kind that has no state read as a state
              nobody could name (M66's critic); the kind's own glyph, the one

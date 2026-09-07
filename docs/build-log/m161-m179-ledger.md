@@ -379,3 +379,142 @@ Spec `docs/superpowers/specs/2026-09-07-v8-act2-conversation-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act2-conversation.md`, branch `m167-conversation`.
 Owed into this act from Act 0: a code fence in an assistant turn renders proportional until
 M167's markdown; from Act I: nothing (backlog #86 is its own).
+- **M167 — turns.** Red: `check(m167)` — rail `md.1` on a stub module (185/186), styles
+  `turns.1` (45/46). Feature: `shared/markdown.ts` (the closed grammar, a tree, `plainText`),
+  `chat/Markdown.tsx` (React from the tree; a `Copy` verb per fence; a link as text with its
+  URL on the title), the user's turn a bubble on `--bubble` at `--r-lg` ≤ 75% aligned right,
+  the assistant's unboxed at the measure at `--t-base`, `.chat__role` clipped to the
+  accessible name, `.chat__when` on hover from the turn's `at`, the caret a soft blink
+  (`prefers-reduced-motion` stops it). Green: rail 186/186, styles 46/46, product 59/59,
+  agents 77/77 (exit 0 each, m167-run.log). A harness slip: the rewritten `chat` scene intent
+  broke `shot.cjs`'s syntax and the first visual run hit its watchdog with no scene painted —
+  repaired, recorded.
+- **M168 — tool rows.** Red: rail `chat-model.7` and styles `tools.1` (read 186/187 and
+  46/47 on the working tree before M169's checks joined; at the commit `check(m168)` they
+  read 186/188 and 46/48 because M169's `composer-rows.1` / `composer.1` were in the same
+  files by then — the verifier reproduced both), agents `tools.3` (77/78 against the M167
+  build). Feature: `toolGroups` / `toolVerb` / `toolState`
+  / `toolGroupLabel` (the span is between the first and last STAMPED rows), five tool glyphs,
+  one row per call (glyph · verb · target · pill), the well capped at twelve lines with `show
+  all`, consecutive rows under one header collapsed by default with the rows in the DOM and
+  any verb on them revealing the group. **A chain-ordering mistake, recorded:** the background
+  job that committed `feat(m168)` ran `git add -A` after M169's node and stylesheet edits had
+  reached the working tree, so those rode in `feat(m168)`'s commit; its `npm run build` then
+  failed on a type error in that half-finished M169 code (the trail's union), and the job's
+  agents / product / visual runs used the M167 build (so `tools.3` read red there a second
+  time, not green). M169's two plain-node checks HAD been watched red before those edits.
+  The split is recorded here rather than rewritten; M169's remainder and M170 follow as
+  their own commits. **The verifier's corrections:** M169's two checks rode in `check(m168)`
+  (not `check(m169,m170)`, whose message claims them) and were already green inside
+  `feat(m168)`; `tools.3` was first watched GREEN in the wave's run (agents 79/79, exit 0,
+  act2-run2.log — it read 77/79 once against the stale build in act2-run.log); M168's green
+  in plain node: rail 187/187, styles 47/47 (reproduced at the commit).
+- **M169 — the composer.** Red: styles `composer.1` (47/48), rail `composer-rows.1`
+  (187/188), both before the code (read on the working tree; no log holds them — the
+  verifier could not reproduce the single-red tallies from a commit, since the checks were
+  committed with M168's). Feature: `.chat__composer` a rounded well (`--r-lg`, a
+  hairline, `inset 0 1px 2px var(--bezel)`, the iris ring on `:focus-within`), the chips
+  row (`model` · `N skills` from the trail's one door · `@ attach`, which drops an `@` into
+  the draft and opens M75's file completions — the honest attach door this app has), the
+  textarea's rows from `composerRows(draft)` (two to six), Send the one filled control and
+  Interrupt shown in its place only while a turn runs (`.chat__composer--live`; the button
+  stays in the DOM for `codex.1`), the approval moved into the well as a sentence (`claude
+  wants to run Bash npm test — allow it?`) with its three verbs, the placeholder `Message
+  claude…` and the chord on Send's title.
+- **M170 — the agent card when it is a terminal.** Red: rail `header.3` (188/189) before
+  `agentHeader`; agents `agent-card.1` written beside the code (said so in the check).
+  Feature: `agentHeader(spec, branch?)` over `chatHeaderLine` (one builder; the engine word
+  is the backend's, `claude-code` → `claude`; a plain shell → `null`), `PanelFrame`'s
+  `agentGlyph` (the chat's glyph beside the state dot), the terminal's `.pf__summary
+  [data-agent-header]`.
+- **The critic's walk of Act II's 32 changed scenes** (the first draft of this line said 33 — the verifier counted) (a fresh-context critic over the
+  diffs). Accepted the shape in every scene; its questions and the dispositions, each landed
+  before any golden was written: (1) the `auto` scene showed Send while a turn was in flight
+  — `--live` keyed on the Interrupt arm's enabled bit, which `starting` with a queue behind
+  it does not set; it keys on the turn (`streaming` or `starting`) now, so Interrupt shows
+  (disabled with its reason on a backend that cannot) whenever a turn runs; (2) the Edit
+  row's glyph floated to the middle of its opened diff — the glyph is `align-self:
+  flex-start` and the opened bodies take the whole line; (3) the `thought` toggle was centred
+  as an orphan word — it is left-aligned like a row; (4) M170 was unwitnessed by a golden —
+  the `.pf--kind-terminal .pf__state { display: none }` rule (M66's) had hidden the agent
+  glyph too; the `tests` card in `kinds` now shows the chat's glyph beside `repo · claude`;
+  the running-agent case is `agent-card.1`'s (79/79). Its minor: the placeholder reads
+  `Message claude…` lower-case — the spec's line said `Claude`; the spec is corrected (the
+  backend's word is lower-case everywhere in the app). The walk's own two: the chips had
+  inherited M75's mono chip rule by source order (`.chat__chips .chat__chip--quiet`); the
+  fixed chain-ordering slip above.
+- **Golden sentences, Act II** (32 scenes; the critic's, amended for the four scenes the wave
+  changed again):
+  - chat · the caps labels are gone; the user's question is a right-aligned bubble; the two tool rows fold under `› 2 tools`; the reply is UI-face prose with `start` / `health` as mono chips; the composer is a well with `claude` / `@ attach` chips in the UI face, `Message claude…` and one Send (outlined while the draft is empty); `thought` is a left-aligned quiet toggle.
+  - composer · the same restyle behind the file popover; the draft sits under the chips row and Send is the filled primary.
+  - auto · the group expanded (Read `done`, Edit with its diff open BENEATH the row, each glyph on its row), the auto continuation a bubble, `Interrupt` in Send's place while the turn is in flight.
+  - tool-objects · only the clock stamps beside the Read/Edit rows in the Tools detail (jitter).
+  - supervisor · the chat behind the sheet lost its caps labels; the codex chat at the top shows Send alone.
+  - chat-copilot · the chat at the right edge shows the bubble, prose, chips and well; the sheet unchanged.
+  - attention · the auto chat's bubble, prose and well behind the `needs you` terminal.
+  - subagents · the chat restyle behind `claude — api (2)`; pid jitter.
+  - header · the chat behind the narrow frame restyled; the scene's own subject unchanged.
+  - flip · the flipped cards unchanged; the chat behind and RAM jitter.
+  - kinds · the dormant `tests` card's header reads the chat's glyph and `repo · claude` (M170); the chat at the bottom right shows the bubble and `› 2 tools`.
+  - kinds-dark · the same on the dark theme.
+  - integrations, vault, watcher, board, memory, templates, palette, palette-query, palette-dark, lineup, spawn-sheet, search, search-empty, inspector-detail, inspector-work, inspector-tools, navigator-panels, navigator-workspaces, navigator-files, overview · the chat restyle behind each pane or sheet, the pane or sheet itself unchanged; pid / RAM / port / clock jitter where the critic named it.
+- **Reviews (Act II).** A fresh-context critic (FIX-FIRST: 2 Critical, 5 Major, 8 Minor) and a
+  fresh-context verifier (20 claims: 15 SUPPORTED, 3 OVERCLAIMED, 1 UNSUPPORTED, 1 side
+  finding — the README rows). The wave, every item landed (`fix(m167–m170)`, the second):
+  - *Critical 1* — README rows M167–M170 (meta 38/38); the closing chain below.
+  - *Critical 2* — Send was hidden while ENABLED: `--live` had keyed on `status` alone, and
+    `composerState` counts `starting` as in flight only for a first spawn with nothing
+    queued. `composerLive(snapshot)` is now the ONE predicate both read; `composer-live.1`
+    pins a restored or queued `starting` as not live with Send enabled.
+  - *Major 3* — `toolState` read `done` for a stored call with no result: a fourth word,
+    `no result` (grey), `chat-model.7` extended.
+  - *Major 4* — emphasis crossed a code span: the code span is found first and emphasis is
+    searched only before it; the critic's two strings are in `md.1`; a link URL takes one
+    level of balanced parentheses; a heading drops its trailing `#`; `***x***` recorded as
+    a bound.
+  - *Major 5* — `plainText`'s comment claimed the DOM's textContent; it says what it is (the
+    tree's text for a plain-node check) and `md.1` pins the fence round-trip; the fence's
+    `Copy` is an ICON with a name (`CopyIcon`), so no verb text sits inside
+    `[data-chat-assistant-text]`.
+  - *Major 6 / 7* — the evidence lines and the tools.3 story (corrected above).
+  - *Minors:* the link is reachable (`tabIndex`, `aria-label` with the URL); `ToolGroup`'s
+    `reveal` is `useCallback`'d and a LONE tool row renders through the group (no header),
+    so a second tool's arrival no longer remounts the first row and loses its open diff; the
+    approval sentence uses the backend's label; `.chat__permission` is a column (no 52px
+    gutter) and `.chat__questions` no longer paints a box inside the well; the grid
+    leftovers (`.chat__row:last-child`, `.chat__tool-running`, `grid-column`) and the
+    input's own ring inside the well are gone; `tools.1`'s comment says why folded rows
+    leave the tab order (the header reveals them, M44); the parse bound (152 ms on a 48 KB
+    hostile paragraph, 30 ms on 55 KB of prose — re-run per delta on the live row) is
+    recorded here, not fixed. **Spec deviations recorded:** Interrupt at rest is `display:
+    none` (the attributes `codex.1` reads are unchanged); `field-sizing: content` is not
+    used (rows only); `@ attach` is a text chip; `agentHeader`'s `branch` has no caller (the
+    line is `folder · engine`); Copy goes through `navigator.clipboard` (the spec said
+    `edit:copy`, which is main→renderer and cannot carry a fence's text — the spec is
+    corrected).
+
+- After the reviews' wave a plain `verify:visual` read **57/57** (exit 0): the wave's one
+  visible change — the `auto` scene's well shows Send again (its turn is `starting` with a
+  message queued, which `composerLive` reads as not in flight, so Interrupt yields), under
+  the tile budget as a one-word swap — is forced on purpose by deleting `auto.png` and
+  updating. Sentence: auto · the well shows a disabled Send and no Interrupt while the
+  queued message waits (the Act II critic's own reading of the model), the group expanded
+  above it as before.
+
+Act II closed 2026-09-07. **Evidence:** `UPDATE_GOLDENS=1 npm run verify:visual` after the
+critic's dispositions — 56/56, exit 0 (32 goldens, sentenced above); after the reviews' wave
+the forced `auto` golden (56/56, exit 0) and a plain `npm run verify:visual` **57/57, exit
+0**; `npm run verify` — **exit 0**; tallies in chain order: meta 38, styles 48, viewport
+137, groups 6, merged 12, registry 38, layout 234, credentials 18, jira 15, github 7,
+palette 143, rail 190, review 98, subagent 27, file 83, toolbox 103, usage 26, machine-cost
+7, tmux 35, agent-state 27, agent-session 141, verbs 14, teammates 25, electron 4, control
+15, package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels core 78 /
+shell 95 / kinds 49 / agents 79 / product 59. Build log
+`docs/build-log/m167-m170-act2-conversation.md`. Merged to `main`.
+
+## Act III — M171–M175 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act3-shell-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act3-shell.md`, branch `m171-shell`. Owed into this
+act: the palette's raw path rows and the sheet's WHERE field (M175, by the map); the
+markdown parse bound (recorded, not owed).

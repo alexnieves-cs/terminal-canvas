@@ -10,6 +10,7 @@ import type { CardDetail } from '@renderer/canvas/card-detail'
 import type { AgentState } from '@shared/types'
 import { PanelFrame } from './PanelFrame'
 import { KindTerminal } from '@renderer/icons'
+import { agentHeader } from '@renderer/shell/rail-rows'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -210,6 +211,8 @@ function TerminalPanelImpl({
     (session.status.kind === 'running' ? session.status.command : undefined) ??
     session.spec.command ??
     'login shell'
+  // M170. The chat's header line for an agent terminal; null for a plain shell.
+  const agentLine = agentHeader(session.spec)
 
   return (
     <PanelFrame
@@ -225,6 +228,7 @@ function TerminalPanelImpl({
       // "claude — terminal" reads as one thing rather than an anonymous div.
       rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone }}
       title={panelLabel}
+      agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
       motion={{ entering, onEntryEnd }}
       onSelect={onSelect}
@@ -234,6 +238,10 @@ function TerminalPanelImpl({
       // every other panel interaction and beats the chrome's own drag start.
       close={readOnly ? null : { armed: arming, onMouseDown: handleClose, title: arming ? 'Click again to kill this process' : 'Close panel', armedText: 'kill?' }}
       chrome={<>
+        {/* M170. An agent terminal wears the chat's header line (the same builder,
+            rail-rows.ts's chatHeaderLine through agentHeader): a person cannot tell
+            a conversation from an agent terminal by its frame, only by its body. */}
+        {agentLine !== null && <span className="pf__summary" data-agent-header title={agentLine}>{agentLine}</span>}
         {/*
           M20. The permission mode the panel was STARTED in, and only ever
           that: read off the session's own spec, which is the spec that

@@ -63,6 +63,9 @@ export const RotateCw = (p: IconProps): JSX.Element => (
 export const ChevronLeft = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M10 3.5L5.5 8 10 12.5" /></Svg>
 )
+export const ChevronDown = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M4 6l4 4 4-4" /></Svg>
+)
 export const ChevronRight = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M6 3.5L10.5 8 6 12.5" /></Svg>
 )
@@ -177,6 +180,27 @@ export const KindSkill = (p: IconProps): JSX.Element => (
 export const KindWorkflow = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="1.5" y="5" width="5" height="6" rx="1" /><rect x="9.5" y="5" width="5" height="6" rx="1" /><path d="M6.5 8h3" /></Svg>
 )
+
+/* M168. Tool glyphs for the chat's tool rows, by the verb family. */
+export const ToolRead = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 4h10M3 8h10M3 12h6" /></Svg>
+)
+export const ToolEdit = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M11 2l3 3-8 8H3v-3z" /></Svg>
+)
+export const ToolRun = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 4l4 4-4 4M8 12h5" /></Svg>
+)
+export const ToolSearch = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="7" cy="7" r="4" /><path d="M10 10l4 4" /></Svg>
+)
+export const ToolOther = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M8 2l1.5 3 3.5.5-2.5 2.5.5 3.5L8 10l-3 1.5.5-3.5L3 5.5 6.5 5z" /></Svg>
+)
+export const CopyIcon = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10V3h7" /></Svg>
+)
+export const TOOL_GLYPH: Record<string, (p: IconProps) => JSX.Element> = { Read: ToolRead, Edit: ToolEdit, Run: ToolRun, Search: ToolSearch }
 
 export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow } as const
 

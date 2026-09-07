@@ -984,7 +984,7 @@ body {
 .review-node__touches { flex: none; font-size: var(--t-xs); color: var(--fg-3); }
 .review-node__touch-list { flex: 1 1 100%; margin: 0 0 var(--sp-2); padding: 0 0 0 var(--sp-3); list-style: none; font-size: var(--t-xs); color: var(--fg-2); }
 /* M76. The questions, pinned between the well and the composer. */
-.chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
+
 .chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
 
@@ -1945,6 +1945,8 @@ body {
    the same state said twice on one frame. The element stays (checks read its
    attributes); it is not painted. */
 .pf--kind-terminal .pf__state { display: none; }
+/* M170. An agent terminal's chat glyph is a `.pf__state--kind` too — shown, beside the (hidden) dot. */
+.pf--kind-terminal .pf__state--kind[data-agent-glyph] { display: inline-flex; }
 .pf__body { flex: 1; min-height: 0; isolation: isolate; }
 /* M149 (audit F.12). `isolation: isolate` keeps every z-index INSIDE the body
    (xterm's layers run to 10) in the body's own stacking context, so the
@@ -3808,23 +3810,52 @@ body {
    marks through [data-tone], never here. */
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
 .chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
-.chat__row { display: grid; grid-template-columns: 52px 1fr; column-gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
-.chat__row:last-child { border-bottom: 0; }
-.chat__role { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); padding-top: var(--sp-1); }
+/* M167. TURNS (the brief: the Claude desktop app's register). One column, no
+   caps label, no rule between rows: the user's turn is a bubble on --bubble
+   aligned right at ≤ 75%, the assistant's is unboxed prose at the measure. The
+   role stays in the DOM as the row's accessible name — clipped, never a column.
+   A timestamp rests at 0 and reveals on the row's hover (the rest rule). */
+.chat__row { display: flex; flex-direction: column; position: relative; padding: var(--sp-2) 0; }
+.chat__role { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; font-family: var(--font-ui); }
 .chat__text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 /* M111. A user turn is a BAND — a tinted, rounded row rather than a labelled
    column — so the eye finds the turns at a glance; the agent's answer stays
    on the ground, the loudest thing in the panel. */
-.chat__row--user { background: var(--s-2); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: var(--sp-2) 0; border-bottom: 0; }
+.chat__row--user { background: var(--bubble); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-5); margin: var(--sp-2) 0; max-width: 75%; align-self: flex-end; margin-left: auto; font-size: var(--t-base); line-height: var(--lh-body); }
+.chat__row--assistant { max-width: var(--measure); font-size: var(--t-base); line-height: var(--lh-body); }
+.chat__when { position: absolute; right: var(--sp-2); top: var(--sp-1); font-size: var(--t-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none; }
+.chat__row:hover .chat__when { opacity: 1; }
 .chat__row--user .chat__text { color: var(--fg-2); }
-.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-3); }
-.chat__row--thinking, .chat__row--tool { grid-template-columns: 52px 1fr; }
-.chat__thinking-toggle { grid-column: 2; justify-self: start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
+.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret 1s steps(2, start) infinite; }
+@keyframes chat-caret { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .chat__row--live .chat__text::after { animation: none; } }
+.chat__row--thinking { }
+.chat__thinking-toggle { align-self: flex-start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__thinking-toggle:disabled { cursor: default; }
 .chat__thinking-toggle:hover:not(:disabled), .chat__tool-toggle:hover { color: var(--fg-2); }
-.chat__thinking-text { grid-column: 2; margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
-.chat__row--tool { grid-template-columns: 52px auto minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--sp-2); }
-.chat__row--tool::before { content: 'tool'; font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+.chat__thinking-text { margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
+
+/* M168. TOOL ROWS: one collapsed row per call — the family's glyph in a soft
+   tint, the verb, the target, a state pill — and no `TOOL` label. A GROUP of
+   consecutive rows folds under one header collapsed by default; its rows stay
+   in the DOM (the checks count and click them) and are hidden by the class —
+   display: none, so a folded row's verbs leave the tab order; the group's
+   header button is what a keyboard reaches, and it reveals them (M44). */
+.chat__row--tool { flex-direction: row; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; padding: var(--sp-1) 0; font-size: var(--t-md); }
+.chat__tool-glyph { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; align-self: flex-start; margin-top: 1px; } /* flex-start: an opened diff wraps beneath the row, and a centred glyph floated to the well's middle (the critic's auto scene) */
+.chat__tool-glyph svg { width: 12px; height: 12px; }
+.chat__tool-state { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); flex: 0 0 auto; color: var(--green); background: var(--green-dim); }
+.chat__tool-state[data-chat-tool-state="running"] { color: var(--blue); background: var(--blue-dim); }
+.chat__tool-state[data-chat-tool-state="error"] { color: var(--red); background: var(--red-dim); }
+.chat__tool-state[data-chat-tool-state="no result"] { color: var(--fg-3); background: var(--s-4); }
+.chat__tools { display: flex; flex-direction: column; }
+.chat__tools-head { display: flex; align-items: center; gap: var(--sp-2); min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; text-align: left; }
+.chat__tools-head:hover { color: var(--fg-2); }
+.chat__tools-chevron { display: inline-flex; width: 12px; height: 12px; }
+.chat__tools-chevron svg { width: 12px; height: 12px; }
+.chat__tools--collapsed .chat__row--tool { display: none; }
+/* The bodies a row opens — the diff and the result — take the whole line beneath the row (the auto scene had the diff beside the verb). */
+.chat__tool-diff, .chat__tool-result, .chat__tool-result + .chat__tool-toggle { flex: 1 0 100%; }
 /* M111. The tool's name is a CHIP: an object you could pick up, which M77 says it is. */
 .chat__tool-name { font-weight: 600; }
 .chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
@@ -3832,25 +3863,43 @@ body {
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 /* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
 .chat__tool-input--code, .chat__far-question--code { font-family: var(--font-mono); font-size: var(--t-sm); }
-.chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .chat__row--tool-error .chat__tool-name { color: var(--red); }
 .chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
 .chat__tool-toggle:hover { color: var(--fg-2); }
-.chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); font-size: var(--t-sm); max-height: 240px; overflow: auto; } /* M162. The family AFTER `font: inherit`: the shorthand resets it to the transcript's UI face, and the M162 critic saw a diff hunk in SF */
+.chat__tool-result { margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); font-size: var(--t-sm); max-height: calc(12 * var(--lh-body) * var(--t-sm)); overflow: auto; }
+.chat__tool-result--all { max-height: none; } /* M168. `show all` lifts the twelve-line cap */ /* M162. The family AFTER `font: inherit`: the shorthand resets it to the transcript's UI face, and the M162 critic saw a diff hunk in SF */
 .chat__empty, .chat__queued, .chat__exited { margin: var(--sp-2) 0; }
-.chat__permission { padding: var(--sp-2) 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: var(--sp-2); row-gap: var(--sp-2); align-items: baseline; }
+.chat__permission { padding: var(--sp-2) 0; display: flex; flex-direction: column; gap: var(--sp-2); }
 .chat__permission-line { min-width: 0; overflow-wrap: anywhere; font-size: var(--t-sm); color: var(--fg); }
 .chat__permission-verbs { grid-column: 2; }
 .chat__permission-verbs, .chat__verbs { display: flex; gap: var(--sp-2); }
 .chat__verb { min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__verb:hover:not(:disabled) { background: var(--s-4); }
 .chat__verb:disabled { color: var(--fg-3); border-color: var(--line); background: transparent; cursor: default; }
-.chat__composer { flex: none; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--line); background: transparent; }
+/* M169. THE COMPOSER: a rounded well anchored to the panel's bottom — --r-lg,
+   a hairline, an inset shadow on --bezel, the iris ring on focus. One filled
+   control: Send. Interrupt is PRESENT always (codex.1 reads its attributes)
+   and is shown only while a turn runs, where it takes Send's place — by class
+   and display, never by a fraction of opacity (check 3). The chips above the
+   text are quiet; an approval is a sentence and two buttons in the well. */
+.chat__composer { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); box-shadow: inset 0 1px 2px var(--bezel); }
+.chat__composer:focus-within { border-color: var(--iris); box-shadow: inset 0 1px 2px var(--bezel), 0 0 0 2px var(--iris-dim); }
+.chat__verb--interrupt { display: none; }
+.chat__composer--live .chat__verb--interrupt { display: inline-flex; }
+.chat__composer--live .chat__verb--send { display: none; }
+.chat__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+/* `.chat__chips .chat__chip--quiet`: two classes, so the M75 attachment chip's mono rule later in the file does not win by source order (the first golden had the chips in mono). */
+.chat__chips .chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
+.chat__chip--verb { cursor: pointer; }
+.chat__chip--verb:hover { color: var(--fg); background: var(--s-3); }
+.chat__permission-sentence { margin: 0; font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
+.chat__questions { display: flex; flex-direction: column; gap: var(--sp-2); }
+
 /* M111. A RAISED FIELD: the one place in the panel that asks to be typed
    into looks like it — a hairline box on the raised surface, an iris ring
    on focus (the focus outline is relocated, not removed). */
-.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
-.chat__input:focus { outline: none; border-color: var(--iris); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
+.chat__input:focus { outline: none; } /* M169. The WELL wears the ring (:focus-within); the field inside it draws none */
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
 /* M110. ONE FILLED CONTROL PER SURFACE. The interface accent as a fill and
@@ -4324,3 +4373,21 @@ body {
 
 /* M164. The measure: prose wraps at --measure, never at the panel's width. */
 .file-node__prose, .pf__note, .skill-node__line, .github-item__body, .work-node__title, .toolbox-node__detail { max-width: var(--measure); }
+
+/* M167. The markdown tree's material: prose at the measure, headings one
+   step up, lists indented, a fence in mono with its Copy verb, inline code as a
+   quiet chip, a link as text with its URL on the title (never navigable). */
+.chat__prose { white-space: normal; }
+.md__p { margin: 0 0 var(--sp-4); }
+.md__p:last-child { margin-bottom: 0; }
+.md__h { margin: var(--sp-5) 0 var(--sp-3); font-weight: 600; color: var(--fg); }
+.md__h--1 { font-size: var(--t-lg); }
+.md__h--2, .md__h--3 { font-size: var(--t-base); }
+.md__list { margin: 0 0 var(--sp-4); padding-left: var(--sp-7); }
+.md__list li { margin: 0 0 var(--sp-1); }
+.md__fence { position: relative; margin: 0 0 var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.md__code { margin: 0; padding: var(--sp-4) var(--sp-5); font-family: var(--font-mono); font-size: var(--t-sm); line-height: var(--lh-body); white-space: pre; overflow-x: auto; color: var(--fg); }
+.md__copy { position: absolute; top: var(--sp-2); right: var(--sp-2); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.md__fence:hover .md__copy, .md__fence:focus-within .md__copy { opacity: 1; }
+.md__code-inline { font-family: var(--font-mono); font-size: var(--t-sm); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--s-2); }
+.md__link { color: var(--iris); text-decoration: underline; text-decoration-color: var(--iris-dim); }

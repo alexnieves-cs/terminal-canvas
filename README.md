@@ -956,6 +956,10 @@ price of not killing something.
 | M164 | v8 Act I — the body's material: the reading kinds in the UI face at 14px/1.5 with a 20px inset and a 72ch measure, the code leaves opting into mono by name; `shared/display-path.ts` and the path rule in the review, file, toolbox, memory and teammates bodies (`verify:rail path.1`, kinds `path.1`); the browser's icon controls | ✅ done |
 | M165 | v8 Act I — diffs as cards: a review file row is a card with the basename bold, the directory quiet, `+n −n` as washed pills and `discard` revealed on hover — `verify:styles diff.1` | ✅ done |
 | M166 | v8 Act I — the far view as a status wall: the summary tier is the kind's glyph, the name and the state on the block tier's own tone wash, the last scrollback line gone — `verify:styles far.2`, core `far.1`; check 8 reads the tail tier, the core watchdog 63 s | ✅ done |
+| M167 | v8 Act II — turns: `shared/markdown.ts` (a closed grammar, a tree, never innerHTML), the user's turn a bubble on `--bubble`, the assistant's unboxed prose at the measure, the caps role labels clipped, the time on hover, a soft caret — `verify:rail md.1`, `verify:styles turns.1` | ✅ done |
+| M168 | v8 Act II — tool rows: one row per call (glyph · verb · target · state pill), the result well capped at twelve lines, consecutive rows under one header collapsed by default with the rows kept in the DOM — `chat-model.7`, `tools.1`, agents `tools.3` | ✅ done |
+| M169 | v8 Act II — the composer: a rounded well, the chips row, the textarea growing two to six rows, Send the one filled control with Interrupt in its place while a turn runs, the approval as a sentence — `composer.1`, `composer-rows.1` | ✅ done |
+| M170 | v8 Act II — the agent card when it is a terminal: `agentHeader` over `chatHeaderLine`, the chat's glyph beside the state dot — `header.3`, agents `agent-card.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one
