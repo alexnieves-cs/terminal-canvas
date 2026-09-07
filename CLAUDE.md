@@ -826,6 +826,33 @@ check does not, and should not, cover it.
   `verify:panels` product `workflow.run.1` drives Run on a pool template through the real
   panel and the harness's real manager over its fake runner.
 
+- Act II of the v7 run (M140–M147), eight backlog entries: `src/main/clipboard-file.ts` — M145,
+  a clipboard image as a `.png` under `userData/attachments` for a TERMINAL (a PTY cannot take
+  bytes; the agent CLIs read a path), pruned to `ATTACHMENTS_KEEP` by the file's own stamp
+  (two files in one millisecond share an mtime), the `empty` arm when the clipboard holds no
+  image; the renderer's ONE `edit:paste` subscription pastes the shell-quoted path into a
+  spawned terminal when the clipboard has no text, and a chat attaches it instead.
+  `composer-model.ts`'s `BUILT_IN_HOLES` / `fillBuiltIns` / `askableHoles` — M141, the four
+  placeholders filled from the target before any question (the live cwd through the
+  live-session store, never `spec.cwd`; `git:status`'s branch; the selection; the title),
+  a project prompt never expanded. `layout-schema.ts`'s `parseEnvMap`, `Preset.env` and a
+  terminal panel's `env` — M147, a malformed map dropped WHOLE (one bad value beside good ones
+  is an environment nobody wrote); `spawn-sheet.ts`'s `parseEnvLines`; `spawn-request.ts`
+  merging the sheet's overrides over the preset's; `presetFromCapture` never saving a running
+  panel's environment (#31). `usePaletteActions`' `workspaceFromTemplate` — M147, three
+  existing doors in order (`workspace:create` named after the template, the switch, M80's
+  instantiation; the sheet first when the template has holes), `self` naming the actions
+  object for the one verb that opens another verb's door. `useViewport`'s `fitSelection` and
+  the `resetZoom`/`zoomToFit` pair — M146, two verbs and two rows (backlog #23's rule).
+  `styles.css`'s `--chrome-scale` — M144, a TRANSFORM on `.pf__chrome` and `.panel__resize`
+  only (no layout box moves, so no refit and no SIGWINCH on a zoom), `.pf__body` never
+  transformed (`frame.2`/`frame.3`). `shared/run-ledger.ts`'s `UsageRow` and `parseUsageRow`,
+  `PtyManager.recordUsage` at every site that calls `dropUsage`, `RunLedger.usage(since)`,
+  `inspector-fields.ts`'s `foldUsageHistory`/`historyWord` — M142, history on #46's ledger
+  with the price computed in the RENDERER by the summary's own rule (main holds no price
+  table). `toolbox-node-model.ts`'s `sourcePath` on every row and `ToolboxNode`'s Open door
+  — M140, the file panel (M22's editor) as the write half beyond skills.
+
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through
   `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap

@@ -4183,4 +4183,13 @@ the engine's own pump, an unhandled rejection with the pool left "live" and the 
 armed over nothing. One live pool per (template, block) is refused by name on a second Run,
 because two pools over one list each pull every item.
 
+**A symlinked `node_modules` in a worktree is COMMITTED by `git add -A`, and merging it
+replaces the real directory (`.gitignore`, the worktree rule).** `node_modules/` in
+`.gitignore` matches a directory and nothing else; the v7 Act II worktree symlinked its
+`node_modules` to `main`'s, `git add -A` there committed the link, and the merge into `main`
+checked the link out OVER the real directory (an ignored directory is expendable to a
+checkout), leaving a link to `../../../node_modules` that resolved to nothing. The only
+symptom was `sh: tsc: command not found` at the head of a build. The pattern is `node_modules`
+now — a name, matching a directory or a link — and a worktree that needs the dependencies
+should point its link at an absolute path and never `git add -A` without `git status` first.
 

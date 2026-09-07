@@ -306,6 +306,8 @@ What's still open:
 
 ## 13. Drag and drop images into a session — the guard and the path both landed; the handoff did not
 
+> **v7 Act II (M145) closed the bytes case.** An image on the clipboard pasted into a spawned TERMINAL becomes a `.png` main writes under `userData/attachments` (pruned to the newest 20 by the file's own stamp — a cap, not an age) and the terminal is handed its shell-quoted path, bracketed; a chat keeps its base64 door. The path case and the drop guard had landed earlier (the drop's target decides: on a terminal, the path; on the background, a file panel). Every backend row now says whether its CLI reads an image path (`pastesImagePath`; copilot and acp say `unmeasured`). What is left: nothing this entry asked for.
+
 Drop an image onto a panel and have the AI in it receive the image — whether that panel
 is a terminal running an agent CLI or a native chat box (#8).
 
@@ -575,6 +577,8 @@ surface that works when this app is not the thing you are looking at.
 
 ## 19. Token and dollar accounting — landed in M17; aggregate totals landed in M46 (the context pane's no-selection summary); the open half is history, a second adapter and the un-pinned panel
 
+> **v7 Act II (M142) built the history half on #46's ledger, as this entry asked.** At every site that drops a panel's usage (kill, exit, a detach that forgets it) main appends ONE usage row — per-model token totals, the turn count, when it ended, never a price — and `ledger:usage` reads this week's rows back for the no-selection summary's `this week` line, priced in the renderer by the summary's own rule (three states: reading, nothing closed, a figure or `unpriced` with its count). Declined again by name: a second adapter (codex reports no cost, M90; copilot is unmeasured) and the un-pinned panel (a guess is worse than nothing). Per-workspace totals: not built — the accumulator is per panel and one workspace is on screen at a time; the canvas-wide figure is the one that changes what a person does.
+
 M17 shipped the live-readout half: a pinned `--session-id`, a poller reading the pinned
 transcript on its own tick, deduped, and an inspector Cost section rendering three states
 — nothing, a note, or four token figures and a labelled dollar total. See `CLAUDE.md`'s
@@ -680,6 +684,8 @@ title and status, then a coloured block.
   destroyed, but still visibly bad.
 
 ## 23. Focus mode — and the surprise underneath it
+
+> **v7 Act II (M146) built the first of the two features this entry says look identical:** `Zoom to fit` (⌘1's fitAll, reached as a named verb at last, and the SELECTION when there is one, as a flight) beside `Reset zoom` (⌘0's initial camera), two rows and two verbs. M92 had built the second (maximise). The open question — does focus mode pin the budget to one panel — is answered by not building it: a camera move demotes nobody.
 
 A `Cmd`-gated key that makes one panel fill the screen, and the same key to come back.
 The universal "maximise this" gesture.
@@ -850,6 +856,8 @@ dragging, snapping, and a "tidy" command.
 
 ## 26. The agent's toolbox — the READ half shipped as M21; what is left
 
+> **v7 Act II (M140) opened the write half beyond skills through the door that already existed.** Every toolbox row carries the file it came from and an Open control opens it in the file panel — M22's editor, the one write door every `.claude` file already had: a command, a subagent, a hook's settings file, an MCP server's config. A deliberate edit of the file, never a one-click toggle — this entry's own argument for hooks, permissions and MCP, kept. Skills keep M129's own editor beside it. Still open: the cross-panel palette scope; the three resolution unknowns; managed settings; a second vendor.
+
 **M21 shipped the read-only inventory** — `docs/superpowers/specs/2026-08-30-m21-agent-toolbox-design.md`
 — which is exactly what item 31 of the sequencing list below said to do first,
 and it landed after M16 for that item's stated reason: it is the same
@@ -943,6 +951,8 @@ ALLOWLIST of four paths: a denylist is silently wrong on one of those two
 machines and the failure is invisible, because the payload merely gets bigger.
 
 ## 27. Prompt placeholders — the half of the prompt library that did not ship
+
+> **v7 Act II (M141) shipped the four.** `{{cwd}}`, `{{branch}}`, `{{selection}}` and `{{panel}}` are BUILT-IN holes filled from the target before any question is asked and never asked: the live cwd (the read PRESET_CAPTURE makes, never `spec.cwd`), main's `git:status` branch, the terminal's own selection, the panel's title. An unfilled one stays as typed (M75's rule); a project prompt is never expanded (the read-only decision, kept). Automatic capture: still resisted.
 
 M5b shipped the library itself: a saved-prompt store, project `.claude/commands/*.md` read
 per panel cwd and merged with it (never deduped, each row labelled with its source, capped
@@ -1183,6 +1193,8 @@ everything else the user can turn on.
   the wrong thing.
 
 ## 34. What a preset still cannot carry — environment, and template sets
+
+> **v7 Act II (M147) built both halves.** `Preset.env` and a persisted terminal panel's `env` (absent stays absent; a malformed map dropped whole with a warning), the sheet's `KEY=value` field, and main merging the sheet's overrides over the preset's own over the login environment at spawn (`buildPtyEnv`, which had waited for the field) — the renderer ships only the overrides. The open question is answered: a captured running panel's environment is NEVER saved (it holds the login shell's secrets, #31). Template sets: `New workspace from <template>` — a fresh workspace named after the shape, switched to, the shape minted there; the template is the record, no fourth store.
 
 M5a shipped presets: a named `cwd`/`command`/`args`/default box, persisted beside the layout,
 spawnable from the Presets menu, from the palette, and as `Cmd+N`'s default; M8c added "save
@@ -1555,6 +1567,8 @@ app would have that destroys work.
 
 ## 53. Cards that show the last real screen — the dormant half landed in M39; the live-tier half is what is left
 
+> **v7 Act II (M143): the live-tier half was already built (M63 reads the card's rows AS ROWS, an interior blank kept, trailing blanks trimmed) and M112 had tried and dropped the serialize addon by measurement; what it lacked was a check.** `verify:xterm card.rows.1` pins the rows attached and detached. `capture-pane`: not planned, as this entry itself says.
+
 > **M39 made the DORMANT card honest**: a restored panel's card shows the
 > tail of its durable log above "click to start", which is the half of this
 > entry the log makes free. What is left is the other half — a spawned
@@ -1675,6 +1689,8 @@ answer to "is this agent waiting for me": the shell said so.
   status, not just a state colour.
 
 ## 60. Zoom-independent chrome — panel headers that stay operable
+
+> **v7 Act II (M144) shipped it inside the boundary this entry drew.** `.pf__chrome` and the resize handles counter-scale by `--chrome-scale` (1/scale, clamped to [1, 2.5], one variable Canvas stamps on `.world`) through a CSS transform — no layout box moves, so no refit, no SIGWINCH and no reflow of a running agent on a zoom; `.pf__body` is never transformed (`chrome.scale.1`, `frame.3` measure both sides). The chrome grows down over the body's top rows at those scales, stated rather than hidden.
 
 At `scale = 0.3` a panel's chrome bar, close button and resize handle are 30% size, so the hit
 targets that let you *manage* the canvas vanish exactly when you are looking at the whole
