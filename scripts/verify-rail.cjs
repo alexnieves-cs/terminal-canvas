@@ -2361,6 +2361,25 @@ const session = (id, over = {}) => ({
     JSON.stringify({ a, b, c, d, e, f, empty: dp('', root) }))
 }
 
+// M167 — md.1. THE MARKDOWN GRAMMAR, closed: headings 1–3, paragraphs, lists,
+//     fences (an unclosed fence is still code), inline code/bold/italic/link;
+//     a table renders as its source in a code block, an image as its alt text;
+//     and plainText() of the tree is the text a check reads off the DOM
+//     (`data-chat-assistant-text`'s textContent, chat.2 / chat.3).
+{
+  const md = typeof R.parseMarkdown === 'function' ? R.parseMarkdown : () => null
+  const plain = typeof R.plainText === 'function' ? R.plainText : () => null
+  const t = md('# Title\n\nA **bold** and *it* with `code` and [a link](https://x.y).\n\n- one\n- two\n\n1. first\n2. second\n\n```ts\nconst a = 1\n```\n\n| a | b |\n|---|---|\n\n![alt text](img.png) tail\n\n```\nunclosed')
+  const kinds = t ? t.map((b) => b.kind).join(',') : null
+  const para = t && t[1]
+  const runs = para && para.children ? para.children.map((r) => r.kind).join(',') : null
+  ok('md.1 the markdown grammar: heading, a paragraph with bold/italic/code/link runs, two lists, a fence with its language, a table as code, an image as its alt text, an unclosed fence as code; plainText round-trips',
+    kinds === 'heading,paragraph,list,list,code,code,paragraph,code' && runs === 'text,bold,text,italic,text,code,text,link,text' &&
+      t[4].lang === 'ts' && t[4].text === 'const a = 1' && t[5].text.startsWith('| a | b |') && t[6].children[0].text === 'alt text' && t[7].text === 'unclosed' &&
+      plain(md('hi **there**')) === 'hi there',
+    JSON.stringify({ kinds, runs }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

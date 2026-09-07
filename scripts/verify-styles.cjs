@@ -825,5 +825,24 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     sameWash && glyph && noLine, JSON.stringify({ mix, sameWash, glyph, noLine }))
 }
 
+// M167 — turns.1. THE TURNS: the user's turn is a bubble on --bubble at --r-lg,
+// at most 75% wide and aligned right; the assistant's is unboxed prose at
+// --measure; .chat__role is CLIPPED (the accessible name stays, the caps
+// column goes); .chat__when rests at 0 and reveals on the row's hover (the
+// rest rule).
+{
+  const user = all.find((r) => /(^|,)\s*\.chat__row--user\s*(,|$)/.test(r.sel))
+  const bubble = user ? /var\(--bubble\)/.test(user.body) && /max-width:\s*75%/.test(user.body) && /var\(--r-lg\)/.test(user.body) && /margin-left:\s*auto|align-self:\s*flex-end/.test(user.body) : false
+  const assistant = all.find((r) => /(^|,)\s*\.chat__row--assistant\s*(,|$)/.test(r.sel))
+  const measured = assistant ? /max-width:\s*var\(--measure\)/.test(assistant.body) : false
+  const role = all.find((r) => /(^|,)\s*\.chat__role\s*(,|$)/.test(r.sel))
+  const clipped = role ? /position:\s*absolute/.test(role.body) && /clip/.test(role.body) : false
+  const when = all.find((r) => /(^|,)\s*\.chat__when\s*(,|$)/.test(r.sel))
+  const hidden = when ? /(^|;|\s)opacity:\s*0\s*(;|$)/.test(when.body) : false
+  const reveal = all.some((r) => /\.chat__row:hover \.chat__when/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  ok('turns.1', 'the user turn is a --bubble at --r-lg, at most 75% wide and aligned right; the assistant turn is unboxed at --measure; the role label is clipped; the timestamp rests hidden and reveals on hover',
+    bubble && measured && clipped && hidden && reveal, JSON.stringify({ bubble, measured, clipped, hidden, reveal }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
