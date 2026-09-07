@@ -326,3 +326,56 @@ act from Act 0: the prose under `.pf__body--text` (M164).
     as a sentence, no caps; github · the panel's `assigned to you · reviews requested of
     you` line is in the UI face; across · the two worktree sections' file rows are cards
     with `+2` `−2` and `new` pills, like the single-repository review's.
+- **Reviews (Act I).** A fresh-context critic (FIX-FIRST: 0 Critical, 5 Major, 8 Minor) and
+  a fresh-context verifier (27 claims: 25 SUPPORTED, 1 OVERCLAIMED, 1 UNSUPPORTED). The
+  wave, every item landed (`fix(m163–m166)`): the Machine section kind-gated with a fourth
+  arm (`not-measured` — a chat's process is main's; the sampler walks terminal pids) and
+  `running: boolean` on the model; `.pf__trail` and `.chat__auto-dismiss` exempt from the
+  rest rule (a count and a pill's own control); the memory root `displayPath(root, root)`;
+  `shortPath` moved into `shared/display-path.ts` (one shortening; `panel-name.ts`
+  re-exports); `.review-node__base` at `--t-md`; `.work-node__facts` in the UI face with
+  the key and remote mono; `.file-node__prose` at `--t-base`; the brief's row 15 struck;
+  backlog #86 is the `repoRoot` item's home. The verifier's corrections: the rail red
+  (184/185) was read off the terminal and no log holds it — recorded as such; M163's core
+  green took four runs (rest.1 retargeted three times: the frame filter, the click, the
+  wait). **Evidence per milestone (exit codes):** styles 45/45 exit 0 after M165/M166;
+  core 78/78 exit 0 twice after M166 (m166-core.log); kinds 49/49 exit 0 after M164;
+  shell 95/95, agents 77/77, product 59/59 exit 0 (act1-run.log); rail 185/185, palette
+  143/143 exit 0 after the wave.
+- **Golden sentences, the Act I wave** (33 scenes rewritten again after the reviews'
+  wave; each looked at, the diffs of kinds, memory and board read line by line and the
+  rest sharing one of four causes):
+  - The note's prose at 14px (`.file-node__prose` from `--t-md` to `--t-base`): plan.md
+    reflows in kinds, kinds-dark, chat, integrations, vault, board, chat-copilot, memory,
+    supervisor, templates, graph, composer, subagents, palette, palette-query, lineup,
+    header, flip, spawn-sheet, search, search-empty, inspector-detail, inspector-work,
+    inspector-tools, navigator-panels, navigator-workspaces, navigator-files, attention,
+    overview — the plan's heading, its two paragraphs and the `Open question` line wrap one
+    line later each.
+  - The review card's basename at 13px bold beside 14px prose: kinds, kinds-dark, across,
+    tool-objects, approval, verbs (the `src/server.ts` and `src/health.ts` cards grow a
+    few pixels and the pills move right with them).
+  - The work card's `teammate: ada · lane: claude — api (chat)` facts in the UI face:
+    kinds, kinds-dark, board, chat, composer.
+  - The memory panel's root line reads `repo` (was `…/tc shot fixtures golden/repo`):
+    memory, kinds, kinds-dark.
+  - The trail scene did not change: its capsule `hide 4 skills` was already visible on the
+    selected panel; the exemption shows on an unselected agent panel, which no scene
+    frames at rest (recorded, not pinned).
+
+Act I closed 2026-09-07. **Evidence:** after the wave, `UPDATE_GOLDENS=1 npm run
+verify:visual` 56/56 exit 0 (33 goldens rewritten, sentenced above); a plain `npm run
+verify:visual` **57/57, exit 0**; `npm run verify` — **exit 0**; tallies in chain order: meta
+38, styles 45, viewport 137, groups 6, merged 12, registry 38, layout 234, credentials 18,
+jira 15, github 7, palette 143, rail 185, review 98, subagent 27, file 83, toolbox 103,
+usage 26, machine-cost 7, tmux 35, agent-state 27, agent-session 141, verbs 14, teammates
+25, electron 4, control 15, package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6,
+xterm 11, panels core 78 / shell 95 / kinds 49 / agents 77 / product 59. Build log
+`docs/build-log/m163-m166-act1-frame.md`. Merged to `main`.
+
+## Act II — M167–M170 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act2-conversation-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act2-conversation.md`, branch `m167-conversation`.
+Owed into this act from Act 0: a code fence in an assistant turn renders proportional until
+M167's markdown; from Act I: nothing (backlog #86 is its own).

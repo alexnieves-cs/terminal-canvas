@@ -46,4 +46,25 @@ heading — the section idiom; the auto chip at rest — a state projection).
 
 ## Reviews
 
-(filled once the fresh-context critic and verifier have run over the act)
+Both ran over the act's diff, the brief, the spec, the ledger and the logs, after the goldens
+landed; the findings and evidence are in the ledger.
+
+**Critic — FIX-FIRST, 0 Critical, 5 Major, 8 Minor.** The Majors: the inspector's Machine
+section read `not running` for a CHAT (its process is main's and the sampler walks
+terminal pids only) — now kind-gated with a fourth arm, `not measured`, and the model
+carries `running: boolean` instead of a display dash compared across two files; the
+skill-trail capsule (`3 skills`, a count M130 says never disappears) had been swept under
+`.pf__chrome button` — exempt, with the auto chip's dismiss; the memory root broke the
+path rule where the root was known (M83 resolves it) — reads `repo`; M165 and M166 lacked
+their own evidence lines (below); the `pid === '—'` coupling (above). Minors, each landed:
+ONE `shortPath` (moved into `shared/display-path.ts`, re-exported by `panel-name.ts`); the
+card's basename at 13px beside 14px prose; the work card's facts in the UI face (the key
+and remote stay mono); a note's prose at `--t-base`; the brief's row 15 struck with its
+reason; backlog #86 as the `repoRoot` item's home; the `rest.1` / `far.1` comments agree
+with what they read; the `.pf__menu` exemption's source-order dependence stated.
+
+**Verifier — 27 claims: 25 SUPPORTED, 1 OVERCLAIMED (the owed `repoRoot` named no home —
+#86 now), 1 UNSUPPORTED (rail's 184/185 red was seen on the terminal and captured in no
+log; the green 185/185 is logged).** Two notes taken: M163's core green took four runs
+(three harness retargetings, recorded in the ledger), and the watchdog was pinned against
+`time`'s wall (49.98 s) rather than the harness's own 48.9 s — the conservative figure.
