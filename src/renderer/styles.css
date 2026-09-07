@@ -3933,6 +3933,17 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; text-align: left;
 }
 .annotation--selected .annotation__label { outline: 2px solid var(--iris); outline-offset: 1px; }
+/* M155. Ink: a world-width stroke in the label's own colour (it thins as the
+   camera pulls back — #15's choice, made); the hit path is a wide transparent
+   twin that takes the pointer, because a 3px line is not a target. The draft
+   is the same stroke, dimmer, while the hand is still down. */
+.annotation__ink { fill: none; stroke: var(--iris); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.annotation__ink--draft { stroke: var(--fg-3); } /* dimmer by TOKEN, never by opacity (styles check 3) */
+.annotation--selected .annotation__ink { stroke: var(--fg); }
+.annotation__hit { fill: none; stroke: transparent; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; cursor: pointer; }
+.link-banner__tools { display: inline-flex; gap: var(--sp-1); margin: 0 var(--sp-3); }
+.link-banner__tool { min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.link-banner__tool--on { background: var(--iris); color: var(--on-iris); border-color: var(--iris); }
 .annotation__editor { min-width: 160px; outline: 2px solid var(--iris); }
 .canvas--annotating { cursor: crosshair; }
 .canvas--annotating .panel { cursor: crosshair; }

@@ -50,3 +50,22 @@ at instead: the TAGS rows sit under the three notes with `2` and `1`, and the ch
 the link family. `UPDATE_GOLDENS=1` now keeps a golden that still passes byte for byte —
 the first update of this milestone rewrote all fifty-four for nothing, 14 MB of PNG. The critic and verifier over the diff, spec and checks
 are recorded below.
+
+## Reviews
+
+- **Critic — FIX-FIRST, 1 Critical, 3 Major, 8 Minor.** The Critical: the chip called
+  `chooseNavigator('vault')`, the dock's TOGGLE, which closed the pane the user had just read
+  the note from; `vault.tags.1` could not see it because the navigator is always mounted and
+  the rows read fine from a collapsed rail. Fixed (`7210ad6`): the call is guarded on the pane
+  not already showing, and the check reads the rail's collapsed class and the tag row's mark.
+  Majors: a `[see](#section)` link target read as a tag (the `(` lead now refuses a `]`
+  before it); the pane's rows did not depend on the tag index; `filterVaultTag` depended on
+  the whole chrome object and re-minted `noteVault` every render. Minors landed: no trailing
+  `/` or empty segment, a `#x` inside a wikilink alias is the alias's text (index and painter
+  agree), a counter nonce, one `tagRows` per render, the M85 doc comment back on `noteVault`,
+  `tags.1`'s refused forms (`](#x)`, `\#`, a URL fragment, `#_`, `#a/`, the alias) and a
+  last-token tag; the golden policy recorded in `docs/verify-suites.md`.
+- **Verifier — 28 SUPPORTED, 1 OVERCLAIMED, 4 UNSUPPORTED.** The Unicode arm gained a check
+  (`#café`); the suite counts in `CLAUDE.md` and `docs/verify-suites.md` were brought current;
+  this section replaces the dangling sentence. The run-time tallies it could not reproduce
+  stand as recorded above.

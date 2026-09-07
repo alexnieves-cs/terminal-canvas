@@ -227,3 +227,39 @@ export function zoomTarget(selectedIds: ReadonlySet<string>, all: readonly World
   if (all.length > 0) return { kind: 'all' }
   return { kind: 'reset' }
 }
+
+/**
+ * M155. Ramer–Douglas–Peucker over a stroke's points: a point whose distance
+ * from the chord between its neighbours' survivors is under `tolerance`
+ * (world units) is dropped, so a slow hand does not store a thousand points
+ * and a straight run keeps its two ends. Tolerance 0 keeps every point;
+ * fewer than three points pass through untouched. Iterative, not recursive:
+ * a long stroke is exactly the input that would blow a recursive stack.
+ */
+export function simplifyStroke(points: ReadonlyArray<readonly [number, number]>, tolerance: number): Array<[number, number]> {
+  if (points.length < 3) return points.map((p) => [p[0], p[1]])
+  const keep = new Uint8Array(points.length)
+  keep[0] = 1; keep[points.length - 1] = 1
+  const stack: Array<[number, number]> = [[0, points.length - 1]]
+  while (stack.length > 0) {
+    const [a, b] = stack.pop()!
+    const ax = points[a]![0], ay = points[a]![1], bx = points[b]![0], by = points[b]![1]
+    const dx = bx - ax, dy = by - ay
+    const len2 = dx * dx + dy * dy
+    let far = -1, farDist = tolerance
+    for (let i = a + 1; i < b; i++) {
+      const px = points[i]![0] - ax, py = points[i]![1] - ay
+      // Distance from the CHORD (the segment, not the infinite line): a hook
+      // that doubles back past an end is kept, not measured against a line
+      // it never crossed.
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, (px * dx + py * dy) / len2))
+      const ex = px - t * dx, ey = py - t * dy
+      const d = Math.sqrt(ex * ex + ey * ey)
+      if (d > farDist || (tolerance === 0 && d >= 0 && far === -1)) { far = i; farDist = d }
+    }
+    if (far !== -1 && (farDist > tolerance || tolerance === 0)) { keep[far] = 1; stack.push([a, far], [far, b]) }
+  }
+  const out: Array<[number, number]> = []
+  for (let i = 0; i < points.length; i++) if (keep[i]) out.push([points[i]![0], points[i]![1]])
+  return out
+}

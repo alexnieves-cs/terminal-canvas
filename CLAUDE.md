@@ -884,6 +884,16 @@ check does not, and should not, cover it.
   note's chip asks through `onFilterTag`, which lands in that same field as data (tag +
   nonce) and opens the pane. Nothing is written: tags are read from bodies, never stored.
 
+- `shared/annotations.ts`'s `ink`, `viewport.ts`'s `simplifyStroke`, `useCanvasPointer.ts`'s
+  draw gesture — M155 (Act V.1). A stroke is an annotation with `ink` (points RELATIVE to the
+  anchor point, so a panel-anchored stroke follows its panel through `annotationPoint`
+  unchanged; a world width, never `non-scaling-stroke`); absent is every M93 label, malformed
+  drops that record by name. The gesture commits a drag that MOVED (end ≥ 4 world px from
+  start) — never a point count: moves coalesce into two points that are still a line a
+  person drew — and ends on a buttons-up move only after a move that HAD the button (a
+  synthetic move reports 0 while the press is down). The layer paints a path plus a wide
+  transparent hit twin; the draft is dimmer by token (styles check 3 forbids opacity).
+
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through
   `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap

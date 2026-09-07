@@ -43,7 +43,7 @@ import {
 import { useViewport } from './useViewport'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -153,7 +153,7 @@ import { SkillNode } from '@renderer/skills/SkillNode'
    that takes the shelf as a dependency. */
 import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
-import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation } from '@shared/annotations'
+import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
@@ -317,6 +317,13 @@ export function Canvas({
   // The pointer hook is called above the verb's declaration (the M28 ordering
   // rule): it reads the verb through a ref, as beginNewChatRef does.
   const placeAnnotationRef = useRef<(world: { x: number; y: number }) => boolean>(() => false)
+  // M155. The annotate mode's TOOL (`label` places M93's note, `draw` inks a
+  // stroke) — a view state, remembered for the session, never persisted —
+  // and the stroke in progress, painted live by the layer.
+  const [annotateTool, setAnnotateTool] = useState<'label' | 'draw'>('label')
+  const [inkDraft, setInkDraft] = useState<Array<[number, number]> | null>(null)
+  const inkToolRef = useRef<() => boolean>(() => false)
+  const commitInkRef = useRef<(points: Array<[number, number]>) => void>(() => {})
   const runsRef = useRef(runs)
   runsRef.current = runs
   // M79. useRuns is created far below (it needs restartWithSpec); the workspace
@@ -2492,7 +2499,11 @@ export function Canvas({
     navGridIsOpenRef, hitOrder, palette, linkMode, merged, spaceHeld,
     beginPanDrag, commitHistory, selectAndRaise, selectOnly, onSelectPanel,
     setPanels, setSelectedIds, setFocusedId, setMarquee, setCursor,
-    annotate: (world) => placeAnnotationRef.current(world)
+    annotate: (world) => placeAnnotationRef.current(world),
+    // M155. The draw tool, through refs: the hook is installed once.
+    inkTool: () => inkToolRef.current(),
+    inkPreview: (points) => setInkDraft(points),
+    ink: (points) => commitInkRef.current(points)
   })
 
   // Loaded on mount AND whenever the palette opens — but never on a
@@ -4027,8 +4038,25 @@ export function Canvas({
     setAnnotating(true)
     return { kind: 'entered' }
   }, [])
-  const endAnnotate = useCallback(() => { setAnnotating(false) }, [])
+  const endAnnotate = useCallback(() => { setAnnotating(false); setInkDraft(null) }, [])
   placeAnnotationRef.current = placeAnnotation
+  // M155. A finished stroke: anchored by its FIRST point (a stroke that starts
+  // on a panel belongs to it — the label's own rule), its points stored
+  // RELATIVE to that anchor point and simplified so a slow hand does not keep
+  // a thousand of them; selected on commit so Delete is one keystroke away.
+  const commitInk = useCallback((points: Array<[number, number]>) => {
+    if (!annotating || mergedRef.current || points.length < 2) return
+    const ordered = [...panelsRef.current].sort((a, b) => a.z - b.z)
+    const first = { x: points[0]![0], y: points[0]![1] }
+    const anchor = resolveAnchor(first, ordered)
+    const origin = anchor.kind === 'world' ? { x: anchor.x, y: anchor.y } : (() => { const p = ordered.find((x) => x.rect.id === anchor.panelId)!; return { x: p.rect.x, y: p.rect.y } })()
+    const rel = simplifyStroke(points, 0.75).map(([x, y]) => [x - origin.x, y - origin.y] as [number, number])
+    const id = `k${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`
+    setAnnotations((current) => [...current, { id, text: '', anchor, ink: { points: rel, width: INK_WIDTH } }].slice(-ANNOTATIONS_MAX))
+    setSelectedAnnotation(id)
+  }, [annotating])
+  inkToolRef.current = () => annotating && annotateTool === 'draw'
+  commitInkRef.current = commitInk
   // Delete removes the selected note; Escape clears the selection or leaves the mode.
   useEffect(() => {
     if (selectedAnnotation === null && !annotating) return
@@ -5443,7 +5471,7 @@ export function Canvas({
           {annotating && <div className="annotate-sheet" data-annotate-sheet />}
           <SnapGuides guides={snapGuides} />
           {/* M93. Notes in the margins, a sibling of the links so they pan and zoom with the world. */}
-          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation}
+          <AnnotationLayer annotations={annotations} panels={displayPanels} selectedId={selectedAnnotation} editingId={editingAnnotation} draft={inkDraft}
             onSelect={merged ? undefined : setSelectedAnnotation} onBeginEdit={merged ? undefined : setEditingAnnotation} onCommitEdit={commitAnnotation} onCancelEdit={(id) => { const a = annotationsRef.current.find((x) => x.id === id); commitAnnotation(id, a?.text ?? '') }} />
           <LinkLayer
             panels={displayPanels}
@@ -5792,7 +5820,12 @@ export function Canvas({
         {/* M93. The annotate strip: LOUD, with its exit on it (M40's rule). */}
         {annotating && (
           <div className="link-banner link-banner--annotate" role="status" data-annotate-strip>
-            <strong>Annotating</strong> — click to place a note, on a panel or the canvas; Escape to stop
+            <strong>Annotating</strong> — {annotateTool === 'draw' ? 'drag to draw, on a panel or the canvas' : 'click to place a note, on a panel or the canvas'}; Escape to stop
+            {/* M155. The two tools, pressed state as data: `draw` inks a drag, `label` is M93's note. */}
+            <span className="link-banner__tools" role="group" aria-label="Annotate tool">
+              <button type="button" className={`link-banner__tool${annotateTool === 'label' ? ' link-banner__tool--on' : ''}`} data-annotate-tool="label" aria-pressed={annotateTool === 'label'} {...shellControl(() => setAnnotateTool('label'))}>label</button>
+              <button type="button" className={`link-banner__tool${annotateTool === 'draw' ? ' link-banner__tool--on' : ''}`} data-annotate-tool="draw" aria-pressed={annotateTool === 'draw'} {...shellControl(() => setAnnotateTool('draw'))}>draw</button>
+            </span>
             <button type="button" className="link-banner__stop" aria-label="Stop annotating" data-annotate-done {...shellControl(endAnnotate)}>Done</button>
           </div>
         )}

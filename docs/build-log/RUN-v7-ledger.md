@@ -174,3 +174,18 @@ Build log: `docs/build-log/m148-m149-act3-visual.md`. Spec and plan:
   ipc 1, canvas 6, xterm 11, panels core 76 / shell 94 / kinds 48 / agents 77 / product
   57). `npm run verify:visual` 56/56 twice (160.0 s, 160.0 s).
 
+## Act IV — M150, closed 2026-09-07
+
+Build log `docs/build-log/m150-tags.md`. Tags on the vault's lineage by the repo method: red
+(`d7d72c4`), feat (`285c4ea`), the critic's wave (`7210ad6`). Declined by name into #85: a
+note outside a vault, front-matter tags, tag rename, a tag graph. **Where the ranking
+stopped:** IV.2 (a conditional / loop workflow block), IV.3 (#55), IV.4 (#73 + #72), IV.5
+(#64) were not started — the brief's "truncate from the bottom".
+
+## Act V — M155, closed 2026-09-07
+
+Build log `docs/build-log/m155-ink.md`. Ink on M93's annotation layer by the repo method: red
+(`4c2f5b3`), then the feature. Declined by name into #15's note: highlights, arrows, widths, a
+colour, an eraser, behind-the-panels. **Where the ranking stopped:** V.2 (#66), V.3 (the
+vibe-coding starter template set), V.4 (#14 xlsx), V.5 (#33 minimap yields — now #83), and the
+stretch #14 iframe were not started.

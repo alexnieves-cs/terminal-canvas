@@ -1239,23 +1239,39 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const armed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotate-tool="draw"]')?.getAttribute('aria-pressed') === 'true'`), 2000)
         const host = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left, y: r.top } })()`)
         if (host === null) throw new Error('stage host: no .canvas')
-        const drag = (from, to, steps) => {
+        // Paced: moves sent back to back COALESCE into one (the gesture saw a
+        // single move at the end point), so each waits a frame.
+        const drag = async (from, to, steps) => {
           wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
-          for (let i = 1; i <= steps; i++) wc.sendInputEvent({ type: 'mouseMove', x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps, button: 'left', buttons: 1 })
-          wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+          // `leftButtonDown` on every move: without the modifier the DOM event's
+          // `buttons` is 0 and the gesture ends on its first move as a released
+          // press (the M4a harness lesson, reached again).
+          for (let i = 1; i <= steps; i++) { wc.sendInputEvent({ type: 'mouseMove', x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(20) }
+          wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1, modifiers: ['leftButtonDown'] })
         }
         // A stroke on the ground: a bent path, so simplification keeps a corner.
-        drag({ x: host.x + 80, y: host.y + 80 }, { x: host.x + 260, y: host.y + 90 }, 12)
+        await drag({ x: host.x + 80, y: host.y + 80 }, { x: host.x + 260, y: host.y + 90 }, 12)
         const ground = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"] path'); return g ? g.getAttribute('d') : false })()`), 3000)
+        const afterGround = await wc.executeJavaScript(`(() => ({ annotations: [...document.querySelectorAll('[data-annotation]')].map((g) => ({ id: g.getAttribute('data-annotation'), kind: g.getAttribute('data-annotation-kind'), ink: g.getAttribute('data-annotation-ink') })), editor: !!(document.activeElement && document.activeElement.hasAttribute('data-annotation-editor')), sheet: document.querySelector('[data-annotate-sheet]') !== null, strip: (document.querySelector('[data-annotate-strip]') || {}).textContent }))()`)
         // A stroke that STARTS on the panel: panel-anchored.
         const pr = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="inkA"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: r.left + 60, y: r.top + 120 } })()`)
         if (pr === null) throw new Error('stage: panel inkA gone')
-        drag(pr, { x: pr.x + 120, y: pr.y + 40 }, 10)
+        await drag(pr, { x: pr.x + 120, y: pr.y + 40 }, 10)
         const onPanel = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="panel"] path'); if (!g) return false; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, d: g.getAttribute('d') } })()`), 3000)
-        // Move the panel through its chrome (a dispatched drag on the frame): the stroke follows.
-        await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="inkA"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect()
-          const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 30, clientY: r.top + r.height / 2 }
-          c.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mousemove', { ...o, clientX: o.clientX + 90, clientY: o.clientY + 50 })); document.dispatchEvent(new MouseEvent('mouseup', { ...o, clientX: o.clientX + 90, clientY: o.clientY + 50 })); return true })()`)
+        // Leave the mode first (Done), as a person would before moving a
+        // panel: the sheet owns every drag while annotating. Then move the
+        // panel through its chrome (a dispatched drag on the frame): the
+        // stroke follows.
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        // A REAL drag on the chrome (annot.1's own method): the frame's move
+        // reads the pointer's buttons, which a dispatched event does not carry.
+        const chromeAt = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="inkA"] .pf__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 } })()`)
+        if (chromeAt === null) throw new Error('stage chrome: panel inkA gone')
+        wc.sendInputEvent({ type: 'mouseDown', x: chromeAt.x, y: chromeAt.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: chromeAt.x + i * 18, y: chromeAt.y + i * 10, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(40) }
+        wc.sendInputEvent({ type: 'mouseUp', x: chromeAt.x + 90, y: chromeAt.y + 50, button: 'left', clickCount: 1 })
+        await settle()
         const moved = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="panel"] path'); if (!g) return false; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top } })()`), 3000)
         const followed = onPanel && moved && Math.abs(moved.x - onPanel.x - 90) < 6 && Math.abs(moved.y - onPanel.y - 50) < 6
         // Select the ground stroke by a click on it, Delete removes it.
@@ -1264,18 +1280,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const selected = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"].annotation--selected') !== null`), 2000)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))`)
         const removed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"]') === null`), 2000)
-        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         await settle(); flushLayoutStore()
         const onDisk = ((JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces || []).find((w) => (w.panels || []).some((p) => p.id === 'inkA')) || { annotations: [] }).annotations || []
         const inkRows = onDisk.filter((a) => a.ink !== undefined)
         const reI2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reI2
         await settle()
-        const repainted = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-annotation][data-annotation-ink="true"] path').length`), 6000)
+        const repainted = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-annotation][data-annotation-ink="true"]').length`), 6000)
         ok('ink.3 in annotate mode the draw tool turns a real drag into one stroke on the layer (world-anchored on the ground, panel-anchored from a panel, which follows the panel), a click on a stroke selects it and Delete removes it, the file carries ink and a reload paints it',
           entered === true && tool === true && armed === true && typeof ground === 'string' && /^M/.test(ground) && onPanel !== false && followed === true && selected === true && removed === true &&
             inkRows.length === 1 && inkRows[0].anchor.kind === 'panel' && Array.isArray(inkRows[0].ink.points) && inkRows[0].ink.points.length >= 2 && repainted === 1,
-          JSON.stringify({ entered, tool, armed, ground: ground && ground.slice(0, 40), onPanel, moved, followed, gp, selected, removed, inkRows: inkRows.length, repainted, log: iLog.slice(-3) }))
+          JSON.stringify({ entered, tool, armed, ground: ground && ground.slice(0, 40), afterGround, onPanel, moved, followed, gp, selected, removed, inkRows: inkRows.length, repainted, log: iLog.slice(-3) }))
       } finally {
         wc.removeListener('console-message', onI)
       }

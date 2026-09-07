@@ -18,6 +18,8 @@ import type { Panel } from '@renderer/panels/panels'
 
 export interface AnnotationLayerProps {
   annotations: readonly Annotation[]
+  /** M155. The stroke in progress, world coordinates; painted live, never stored. */
+  draft?: Array<[number, number]> | null
   panels: readonly Panel[]
   selectedId: string | null
   /** The note whose editor is open; the canvas sets it on placement and on double-click. */
@@ -31,15 +33,31 @@ export interface AnnotationLayerProps {
 const LEADER = 12
 
 export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element | null {
-  const { annotations, panels, selectedId, editingId, onSelect, onBeginEdit, onCommitEdit, onCancelEdit } = props
-  if (annotations.length === 0) return null
+  const { annotations, panels, selectedId, editingId, onSelect, onBeginEdit, onCommitEdit, onCancelEdit, draft } = props
+  if (annotations.length === 0 && !draft) return null
   return (
     <>
       <svg className="annotation-layer" aria-hidden="true">
+        {draft && draft.length > 1 && <path className="annotation__ink annotation__ink--draft" d={pathOf(draft)} />}
         {annotations.map((a) => {
           const p = annotationPoint(a, panels)
           if (p === null) return null
           const anchor = a.anchor
+          // M155. INK: the stroke's points are relative to the anchor point;
+          // an SVG path with round caps and joins in the label's own colour, a
+          // wider transparent HIT path beneath for selection (a 3px line is
+          // not a target), the label's leader and editor never.
+          if (a.ink !== undefined) {
+            const d = pathOf(a.ink.points.map(([x, y]) => [p.x + x, p.y + y] as [number, number]))
+            return (
+              <g key={a.id} className={`annotation${selectedId === a.id ? ' annotation--selected' : ''}`} data-annotation={a.id} data-annotation-kind={a.anchor.kind} data-annotation-ink="true">
+                <path className="annotation__hit" data-annotation-hit d={d}
+                  onMouseDown={(e) => { e.stopPropagation() }}
+                  onClick={(e) => { e.stopPropagation(); onSelect?.(a.id) }} />
+                <path className="annotation__ink" d={d} style={{ strokeWidth: a.ink.width }} />
+              </g>
+            )
+          }
           const panel = anchor.kind === 'panel' ? panels.find((x) => x.rect.id === anchor.panelId) : undefined
           // The leader runs from the label's own near edge (its vertical middle,
           // at the anchor's x) to the nearest point on the panel's edge, so a
@@ -98,4 +116,9 @@ function NoteEditor({ initial, onCommit, onCancel }: { initial: string; onCommit
       onMouseDown={(e) => e.stopPropagation()}
     />
   )
+}
+
+/** M155. M–L segments; two decimals keep the attribute short without moving a point a person could see. */
+function pathOf(points: ReadonlyArray<readonly [number, number]>): string {
+  return points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
 }

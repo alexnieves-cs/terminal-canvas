@@ -17,7 +17,19 @@ export interface Annotation {
   id: string
   text: string
   anchor: AnnotationAnchor
+  /**
+   * M155. INK: a freehand stroke. Points are RELATIVE to the anchor point
+   * (world coordinates for a world anchor, the panel's top-left for a panel
+   * anchor), so a panel-anchored stroke follows its panel through
+   * `annotationPoint` unchanged. `width` is a WORLD width — ink thins as the
+   * camera pulls back (#15's own recommendation, chosen). Absent on every
+   * M93 label; `text` is '' for ink (one record shape, one parser).
+   */
+  ink?: { points: Array<[number, number]>; width: number }
 }
+
+/** M155. One world width for this milestone; a palette of widths is #15's next slice. */
+export const INK_WIDTH = 3
 
 /** Newest kept. Two hundred is more than a canvas can read and fewer than a runaway loop writes. */
 export const ANNOTATIONS_MAX = 200
@@ -83,8 +95,18 @@ export function parseAnnotations(raw: unknown, surviving: ReadonlySet<string>, w
       parsed = { kind: 'panel', panelId: anchor.panelId, dx: anchor.dx, dy: anchor.dy }
     }
     if (parsed === null) { warnings.push(`${scope}: dropped annotation ${id}: anchor is not a world point or a panel offset`); return }
+    // M155. `ink` absent is a label; present-but-malformed drops THIS
+    // annotation by name (its neighbours stay), never coerced.
+    let ink: Annotation['ink'] | undefined
+    if (entry.ink !== undefined) {
+      const raw = entry.ink
+      const okPoints = isRecord(raw) && Array.isArray(raw.points) && raw.points.every((pt) => Array.isArray(pt) && pt.length === 2 && num(pt[0]) && num(pt[1]))
+      const okWidth = isRecord(raw) && num(raw.width) && raw.width > 0
+      if (!okPoints || !okWidth) { warnings.push(`${scope}: dropped annotation ${id}: ink is not a list of points with a positive width`); return }
+      ink = { points: (raw.points as Array<[number, number]>).map((pt) => [pt[0], pt[1]]), width: raw.width as number }
+    }
     seen.add(id)
-    out.push({ id, text: entry.text, anchor: parsed })
+    out.push({ id, text: entry.text, anchor: parsed, ...(ink === undefined ? {} : { ink }) })
   })
   return out.length > ANNOTATIONS_MAX ? out.slice(out.length - ANNOTATIONS_MAX) : out
 }

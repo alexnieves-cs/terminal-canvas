@@ -534,6 +534,29 @@ const SCENES = [
   // capturePage renders at the display's own scale whatever the override
   // says — the capture came back 2880x1800 — so the scene could not prove
   // what its intent claimed. The 100% density stays a hand check.
+  { name: 'ink', intent: 'M155. Ink on the annotation layer: annotate mode with the DRAW tool pressed on the strip, one stroke drawn across the ground and one drawn from a panel (it belongs to the panel and moves with it), the strokes in the label\'s own colour at a world width, the last one selected; the strip names the gesture (`drag to draw`).', size: [1440, 900],
+    run: async (k) => {
+      await k.goTo('worker a'); await sleep(300)
+      await k.press('k', { metaKey: true }); await sleep(300)
+      await k.type('annotate'); await sleep(300)
+      await k.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+      await sleep(500)
+      await k.click('[data-annotate-tool="draw"]'); await sleep(200)
+      const host = await k.js(`(() => { const c = document.querySelector('.canvas'); const r = c.getBoundingClientRect(); return { x: r.left, y: r.top } })()`)
+      const drag = async (from, to, steps) => {
+        k.wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+        for (let i = 1; i <= steps; i++) { k.wc.sendInputEvent({ type: 'mouseMove', x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps + Math.sin(i) * 12, button: 'left', modifiers: ['leftButtonDown'] }); await sleep(20) }
+        k.wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+      }
+      await drag({ x: host.x + 120, y: host.y + 520 }, { x: host.x + 520, y: host.y + 560 }, 24)
+      await sleep(200)
+      const pr = await k.js(`(() => { const p = document.querySelector('.panel[data-panel-id="groupA"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: r.left + 60, y: r.top + 140 } })()`)
+      if (pr) await drag(pr, { x: pr.x + 220, y: pr.y + 60 }, 20)
+      await sleep(400)
+      await k.shot('ink')
+      await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      await sleep(200)
+    } },
   { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
     run: async (k) => {
       // Last, on purpose: the file stays gone for every scene after it.

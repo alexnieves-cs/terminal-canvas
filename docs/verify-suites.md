@@ -307,3 +307,13 @@ tags.1` pins the chip to the link family's token; `verify:panels product vault.t
 drives the pane and the chip end to end. The one lesson: a rail row's verb is a
 `shellControl` on `.rail-row__main`, so a dispatched click on the row's `<li>` reaches
 nothing — dispatch on the button.
+
+## The v7 run, Act V (M155)
+
+`verify:layout ink.1` (the record's arms), `verify:viewport ink.2` (`simplifyStroke`: a
+straight run to its ends, a corner kept, tolerance 0 keeps all, under three pass through),
+`verify:panels product ink.3` (a real drag on the ground and from a panel, the panel moved by
+a REAL drag afterwards — a dispatched mousedown on the chrome moves nothing, the frame reads
+the pointer's buttons — Delete, the file, the reload). Two harness facts the check taught:
+`sendInputEvent` mouseMoves sent back to back COALESCE into one (pace them with a frame's
+sleep), and every move needs `modifiers: ['leftButtonDown']` or the DOM sees `buttons` 0.

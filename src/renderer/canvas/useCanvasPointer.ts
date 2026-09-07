@@ -29,6 +29,12 @@ export interface CanvasPointerDeps {
   onSelectPanel: (id: string, additive?: boolean) => void
   /** M93. Annotate mode: a click PLACES a note and does nothing else. True when consumed. */
   annotate?: (world: { x: number; y: number }) => boolean
+  /** M155. Whether annotate mode's DRAW tool is on: a drag then draws instead of placing a label. */
+  inkTool?: () => boolean
+  /** M155. The stroke's points so far, for the live preview (null when the gesture ends). */
+  inkPreview?: (points: Array<[number, number]> | null) => void
+  /** M155. A finished stroke of at least three points, in world coordinates. */
+  ink?: (points: Array<[number, number]>) => void
   setPanels: Dispatch<SetStateAction<Panel[]>>
   setSelectedIds: Dispatch<SetStateAction<ReadonlySet<string>>>
   setFocusedId: Dispatch<SetStateAction<string | null>>
@@ -246,6 +252,46 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
     const world = toWorld(event)
     // M93. In annotate mode the click is the note's position, over a panel or
     // the ground alike: it neither selects nor starts a marquee.
+    // M155. With the DRAW tool on, a drag on the sheet is a stroke: every move
+    // is screenToWorld of the pointer (never a delta of deltas — the drift
+    // rule), the preview follows, and mouseup commits a drag that moved; a
+    // press without movement is still the label above.
+    if (world && event.button === 0 && deps.inkTool?.() === true) {
+      event.preventDefault()
+      const host = hostRef.current
+      const points: Array<[number, number]> = [[world.x, world.y]]
+      // The marquee ends on a move with no button held (a press released
+      // over another application). Here that arm waits for a move that HAD
+      // the button: a synthetic move (the harness's, a tablet's) can report
+      // `buttons` 0 while the press is genuinely down, and ending on the
+      // first such move turned every drawn stroke into a label. A lost
+      // mouseup still ends the stroke on the next mouseup anywhere.
+      let sawButton = false
+      const onMove = (e: globalThis.MouseEvent): void => {
+        if (e.buttons !== 0) sawButton = true
+        else if (sawButton) { end(e); return }
+        if (!host) return
+        const b = host.getBoundingClientRect()
+        const w = screenToWorld({ x: e.clientX - b.left, y: e.clientY - b.top }, viewportRef.current)
+        points.push([w.x, w.y])
+        deps.inkPreview?.(points.slice())
+      }
+      function end(_e: globalThis.MouseEvent): void {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', end)
+        deps.inkPreview?.(null)
+        // A stroke is a drag that MOVED — the end at least four world pixels
+        // from the start — never a point count: moves coalesce (a fast flick,
+        // a synthetic drag) into two points that are still a line a person
+        // drew. A press that did not move is the label.
+        const [sx, sy] = points[0]!, [ex, ey] = points[points.length - 1]!
+        if (points.length >= 2 && Math.hypot(ex - sx, ey - sy) >= 4) deps.ink?.(points)
+        else deps.annotate?.({ x: sx, y: sy })
+      }
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', end)
+      return
+    }
     if (world && event.button === 0 && deps.annotate?.(world) === true) { event.preventDefault(); return }
     const hit = world ? hitTest(hitOrder, world) : null
     // Through onSelectPanel, not selectOnly: selecting raises. A live
