@@ -2556,5 +2556,40 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+
+    // M140 — editor.cmd.1 (backlog #26's write half beyond skills). A toolbox
+    // node's COMMAND row has an Open door that opens the command's own file in
+    // the file panel — M22's editor, the one write door every `.claude` file
+    // already had — and a save there lands on disk. A project command is a
+    // file someone will commit: the editor is where that deliberate edit
+    // happens, never a one-click toggle (hooks, permissions and MCP servers
+    // get the same door and no toggle, by the entry's own argument).
+    {
+      const CMD_DIR = mkdtempSync(join(tmpdir(), 'tc panels cmd-editor '))
+      mkdirSync(join(CMD_DIR, '.claude', 'commands'), { recursive: true })
+      const cmdFile = join(CMD_DIR, '.claude', 'commands', 'greet.md')
+      writeFileSync(cmdFile, 'Say hello to the user.\n')
+      await wc.executeJavaScript(`window.__m20Toolbox(${JSON.stringify(CMD_DIR)}, ${JSON.stringify('cmd fixture')})`)
+      const opened = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-toolbox-open="greet"]'); return b ? true : false })()`), 8000)
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-toolbox-open="greet"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      const fileId = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="file"]')].find((el) => (el.getAttribute('data-file-path') || el.textContent || '').includes('greet.md')); return p ? p.getAttribute('data-panel-id') : false })()`), 8000)
+      const editOpened = fileId ? await (async () => {
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-edit]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]') !== null`), 6000)
+      })() : false
+      const saved = editOpened ? await (async () => {
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]'); if (!t) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+          setter.call(t, 'Say hello to the user, warmly.\n'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-save]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        return waitUntil(() => readFileSync(cmdFile, 'utf8').includes('warmly'), 6000)
+      })() : false
+      ok('editor.cmd.1 a toolbox node\'s command row opens its own file in the file panel through the Open door, and a save in that editor lands on disk',
+        opened === true && typeof fileId === 'string' && editOpened === true && saved === true,
+        JSON.stringify({ opened, fileId, editOpened, saved, onDisk: readFileSync(cmdFile, 'utf8') }))
+      if (typeof fileId === 'string') await clickPanelClose(wc, fileId)
+      try { rmSync(CMD_DIR, { recursive: true, force: true }) } catch { /* best effort */ }
+    }
   }
 })

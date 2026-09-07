@@ -2990,6 +2990,33 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ has, priced, unpriced, none, words: has ? [R.historyWord(none), R.historyWord(unpriced), R.historyWord(priced)] : null }))
 }
 
+// M140 — toolbox.open.1 (backlog #26's write half beyond skills). Every
+// toolbox row carries the FILE it came from (`sourcePath`, the same field the
+// inventory already holds), so the node can open it in the file panel — M22's
+// editor, the one write door every markdown and JSON file under `.claude`
+// already had. A command, a subagent, a hook's settings file and an MCP
+// server's config all open there; a skill keeps its own editor beside it. The
+// path rides the row rather than being looked up again at click time, so the
+// door and the row cannot name different files.
+{
+  const node = R.buildToolboxNodeModel({
+    source: { cwd: '/repo', label: 'repo' },
+    title: undefined,
+    result: inventory({ entries: [
+      { id: 'c1', kind: 'command', scope: 'project', sourcePath: '/repo/.claude/commands/greet.md', active: { kind: 'active' }, alsoDefinedIn: [], name: 'greet', description: 'says hi' },
+      { id: 'm1', kind: 'mcp', scope: 'user', sourcePath: '/h/.claude.json', active: { kind: 'active' }, alsoDefinedIn: [], name: 'railway', transport: 'stdio', command: 'npx', argCount: 3, envKeys: [], envKeysOverflow: 0 },
+      { id: 'h1', kind: 'hook', scope: 'user', sourcePath: '/h/.claude/settings.json', active: { kind: 'active' }, alsoDefinedIn: [], event: 'PreToolUse', matcher: 'Bash', matcherTruncated: false, index: 0, hookType: 'command', program: 'node guard.js', commandChars: 92 }
+    ] })
+  })
+  const rows = node.groups.flatMap((g) => g.rows)
+  const byName = (name) => rows.find((r) => r.name.includes(name))
+  ok('toolbox.open.1 every toolbox row carries the sourcePath its entry came from — a command, an MCP server and a hook alike — so the node\'s Open door names the same file the inventory read',
+    rows.length === 3 && byName('greet') && byName('greet').sourcePath === '/repo/.claude/commands/greet.md' &&
+      byName('railway') && byName('railway').sourcePath === '/h/.claude.json' &&
+      byName('PreToolUse') && byName('PreToolUse').sourcePath === '/h/.claude/settings.json',
+    JSON.stringify(rows.map((r) => [r.name, r.sourcePath])))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
