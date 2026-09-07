@@ -299,10 +299,23 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
 // modules, reaches electron-builder's cache and needs a network, so it is a
 // hand-run pre-release gate rather than part of the chain.
 {
-  const chain = pkg.scripts.verify ?? ''
+  // M135: "wired into the chain" is TRANSITIVE. `verify:panels` is itself a
+  // chain of `npm run verify:panels:<part>` since the split, so a part is
+  // wired when some script the chain reaches names it — the same rule,
+  // followed one hop further. A part named by no reachable script is still
+  // unwired, and reads as such.
+  const reachable = new Set()
+  const walk = (text) => {
+    for (const m of String(text || '').matchAll(/npm run (verify:[\w:-]+)/g)) {
+      if (reachable.has(m[1])) continue
+      reachable.add(m[1])
+      walk(pkg.scripts[m[1]])
+    }
+  }
+  walk(pkg.scripts.verify ?? '')
   const suites = Object.keys(pkg.scripts)
     .filter((k) => k.startsWith('verify:') && k !== 'verify:packaged')
-  const unwired = suites.filter((k) => !chain.includes(`npm run ${k}`))
+  const unwired = suites.filter((k) => !reachable.has(k))
   ok('19 every verify suite is wired into the chain',
     suites.length > 10 && unwired.length === 0,
     unwired.length ? `unwired: ${unwired.join(', ')}` : `${suites.length} suites`)
@@ -824,8 +837,12 @@ console.log('\n' + '='.repeat(60))
   const newIds = new Set()
   for (const f of parts) for (const id of idsOf(read(join('scripts', f)) || '')) newIds.add(id)
   const lost = [...oldIds].filter((id) => !newIds.has(id))
+  // The parser sees a literal first argument only (222 of the 357 `ok(` calls
+  // at pre-v7-run; the rest take a variable, `IDS[0]` and its siblings, whose
+  // ids are pinned by those blocks' own `IDS` arrays moving with them). The
+  // same parser reads both sides, so the comparison is exact for what it sees.
   ok('panels-split.2 the parts hold every check id the old file held at pre-v7-run — nothing lost in the move',
-    gitErr === null && oldIds.size > 300 && lost.length === 0,
+    gitErr === null && oldIds.size > 200 && lost.length === 0,
     JSON.stringify({ gitErr, old: oldIds.size, now: newIds.size, lost: lost.slice(0, 20) }))
 }
 

@@ -55,3 +55,26 @@ Out by the brief: #4, #28, #40, #20, signing.
   `claude` binary, and the check asserts a fact about the machine rather than the code. The two
   runs before it (34060199326, 34048553964) failed the same way. Fixed at its cause in M139;
   a green run id needs a push, which this run is forbidden to make — see M139.
+- Baseline `npm run verify` at `pre-v7-run` (2026-09-07, this machine, the user's own app also
+  running): exit 0, 7:30 wall. Tallies, in chain order: meta 34/34 · styles 33/33 · viewport
+  134/134 · groups 6/6 · merged 12/12 · registry 37/37 · layout 228/228 · credentials 18/18 ·
+  jira 15/15 · github 7/7 · palette 140/140 · rail 173/173 · review 98/98 · subagent 27/27 ·
+  file 75/75 · toolbox 101/101 · usage 26/26 · machine-cost 7/7 · tmux 35/35 · agent-state
+  27/27 · agent-session 134/134 · verbs 13/13 · teammates 25/25 · electron 4/4 · control 15/15 ·
+  package 13/13 · pty 10/10 · pty-manager 63/63 · window 4/4 · ipc 1/1 · canvas 6/6 · xterm 9/9 ·
+  panels 338/338.
+- `npm run verify:panels` alone, three times in isolation at `pre-v7-run`: 338/338 each, wall
+  **321.4 s, 321.9 s, 322.1 s** (`/usr/bin/time -p`, exit 0 each). 1.25× the slowest is 403 s;
+  the 600 s watchdog it ran under is what M135 replaces with per-part figures.
+- 3.1.0: `dff0f96` — `package.json`, the lockfile, the README status line, `verify:meta
+  version.1`'s pin and `CLAUDE.md`'s preamble.
+- Inventory carried into Act I, from `docs/build-log/m126-m133-act3-skills-and-workflows.md`:
+  the ELEVEN owed hand checks (§Owed hand checks; the same eleven are the last block of
+  `docs/load-bearing.md`'s manual-only list) → M136; the 32 deferred minors across 16 files
+  (§Deferred minors, by file) → M137.
+- A peer session (`m125-skills-ae`, given the same goal) asked who owns the run and stood down
+  on "f2 owns v7"; it noted the merged `m130-assign` / `m131-workflow` worktrees are deletable.
+
+Act 0 closed at `8d7b8d3` (spec, plan and the red `panels-split.1/.2`).
+
+## Act I — M135 (in progress)
