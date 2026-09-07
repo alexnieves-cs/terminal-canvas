@@ -1,27 +1,14 @@
-import type { StateInput } from '@renderer/panels/panel-state'
 import type { JSX } from 'react'
-import type { SessionBackendInfo } from '@shared/ipc-contract'
-import type { MachineCostSnapshot } from '@shared/machine-cost'
-import type { Point, Viewport } from './viewport'
+import type { Viewport } from './viewport'
 import { shellControl } from '@renderer/shell/shell-control'
 import { Maximize, Minus, Plus } from '@renderer/icons'
 
 export interface CanvasHudProps {
   viewport: Viewport
-  cursor: Point
-  selectedId: string | null
-  /** M63. The selected panel's title and state word, so the strip says who and what, not an id. */
-  selected?: { id: string; label: string; state: StateInput } | null
-  /** M123. The last update check's answer, when it said newer — the one line a user with panels sees. */
-  updateNewer?: { version: string; url: string } | null
-  /** M78. A selected EDGE, when one is: the strip names it as `source → target`. */
-  selectedEdge?: { source: string; target: string } | null
-  /** null until the one-shot probe answers. */
-  backend: SessionBackendInfo | null
-  machineCost: MachineCostSnapshot['total']
-  /** M46. The zoom cluster's verbs — useViewport's own, never a copy. */
   onZoomBy: (factor: number) => void
   onFit: () => void
+  /** M123. The last update check's `newer` result, or absent. */
+  updateNewer?: { version: string; url: string } | null
 }
 
 /**

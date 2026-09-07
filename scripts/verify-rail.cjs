@@ -2476,7 +2476,8 @@ const session = (id, over = {}) => ({
   const ids = hints ? hints.map((h) => h.id).join(',') : null
   ok('hints.1 the hints are data — four gestures and the tmux notice, each a sentence — and hintsLeft filters the seen ones',
     ids === 'pan,zoom,palette,new-panel,tmux' && hints.every((h) => typeof h.text === 'string' && h.text.length > 8) &&
-      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5,
+      left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5 &&
+      left(new Set(), 'rail').length === 4 && left(new Set(), 'launcher').map((h) => h.id).join(',') === 'tmux' && hints.every((h) => h.where === 'rail' || h.where === 'launcher'),
     JSON.stringify({ ids }))
 }
 

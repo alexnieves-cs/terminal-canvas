@@ -72,7 +72,7 @@ import { applySubagents, clearSubagents } from '@renderer/session/subagent-store
 import { applyFileResult, clearFileResult } from '@renderer/session/file-store'
 import { clearToolbox } from '@renderer/session/toolbox-store'
 import { applyUsage, clearUsage, getUsage } from '@renderer/session/usage-store'
-import { applyMachineCosts, clearMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
+import { applyMachineCosts, clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
@@ -758,7 +758,9 @@ export function Canvas({
     })
   }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
-  const [cursor, setCursor] = useState<Point>({ x: 0, y: 0 })
+  // M173: the HUD no longer prints the cursor; the state stays (the pointer hook
+  // sets it per mousemove — backlog #87 owns removing that re-render) and nothing reads it.
+  const [, setCursor] = useState<Point>({ x: 0, y: 0 })
   /**
    * The rubber band, in SCREEN pixels, or null when no marquee is in
    * progress. Screen rather than world because that is what the band is
@@ -1292,7 +1294,6 @@ export function Canvas({
   // app's own focusedId/palette/draft state.
   const spaceHeld = useSpaceHeld()
   const version = useRegistryVersion(registry)
-  const machineCostTotal = useMachineCostTotal()
 
   // Main reads ONE process table for this whole list, then walks each root's
   // descendants there. The renderer owns this low-frequency schedule because
@@ -2988,11 +2989,14 @@ export function Canvas({
   // carries.
   const [hintsSeen, setHintsSeen] = useState<ReadonlySet<string>>(() => new Set())
   const hintsLoadedRef = useRef(false)
+  // M173 (the Act III critic): a STATE beside the ref, so the banner and the rail's hints render only once `hints.seen` has been read — the banner painted and vanished on every launch when the backend probe answered first.
+  const [hintsLoaded, setHintsLoaded] = useState(false)
   useEffect(() => {
     void window.canvas.settings.list().then((rows) => {
       const row = rows.find((r) => r.id === 'hints.seen')
       if (row && Array.isArray(row.value)) setHintsSeen(new Set(row.value as string[]))
       hintsLoadedRef.current = true
+      setHintsLoaded(true)
     })
   }, [settingRows])
   // M174. The launcher's recents row: asked once whenever the canvas is empty
@@ -5345,7 +5349,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
-        hints={hintsLeft(hintsSeen).filter((h) => h.id !== 'tmux')}
+        hints={hintsLoaded ? hintsLeft(hintsSeen, 'rail') : []}
         board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
@@ -5873,7 +5877,8 @@ export function Canvas({
           <Launcher
             presets={presetRows}
             recents={launcherRecents}
-            tmux={backendInfo?.kind === 'direct' && !hintsSeen.has('tmux') ? backendInfo.reason : null}
+            onOpenRecent={(dir) => paletteActions.beginSpawnSheet(undefined, undefined, { cwd: dir })}
+            tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
             onDismissTmux={() => markHint('tmux')}
             report={envReport}
             onCheckAgain={() => { void window.canvas.env.report(true).then(setEnvReport) }}
@@ -5901,12 +5906,6 @@ export function Canvas({
         <CanvasHud
           updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}
-          cursor={cursor}
-          selectedId={selectedId}
-          selectedEdge={selectedEdge === null ? null : { source: selectedEdge.source, target: selectedEdge.target }}
-          selected={inspectorModel === null ? null : { id: inspectorModel.id, label: inspectorModel.heading, state: inspectorModel.state }}
-          backend={backendInfo}
-          machineCost={machineCostTotal}
           onZoomBy={zoomBy}
           onFit={fitAll}
         />

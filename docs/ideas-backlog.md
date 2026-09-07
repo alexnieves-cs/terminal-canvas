@@ -2444,3 +2444,14 @@ is the rule's fallback and not its intent. What closes it: a `repoRoot` resolved
 and it needs an IPC answer the file kind does not have today — its own milestone or a rider
 on the next one that touches the file model.
 
+## 87. The cursor state that re-renders `Canvas` on every mousemove — what M173 left
+
+The HUD printed the world-space cursor from M2 to M173, and `useCanvasPointer` sets a
+`cursor` state on every mousemove over `.canvas` to feed it; three comments in `Canvas.tsx`
+(M28's hook split) reason about that re-render when they memoise. M173 removed the readout
+and left the state unread (`const [, setCursor]`), so the re-render now feeds nothing. What
+closes it: drop `setCursor` from the pointer hook's `Deps` and the state from `Canvas`, then
+re-read the three memo comments that cite the mousemove churn as their reason — each may be
+simpler once it is gone. A behaviour-preserving change with a measurable payoff (a 5,900-line
+component re-rendering at pointer speed), its own milestone.
+

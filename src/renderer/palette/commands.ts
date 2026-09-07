@@ -16,7 +16,6 @@ import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@sh
 import type { EnvReport } from '@shared/env-report'
 import { updateSentence, type UpdateState } from '@renderer/session/update-store'
 import type { CanvasGroup } from '@renderer/groups/groups'
-import { shortPath } from './panel-name'
 import { statePriority, type StateInput } from '@renderer/panels/panel-state'
 import { waitingCount } from '@renderer/shell/rail-sections'
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
@@ -58,6 +57,8 @@ export interface PresetRow {
   /** M65. The preset's agent kind and directory — see PresetListRow. */
   agent?: AgentKind
   cwd?: string
+  /** M174. The preset's command word, when it has one — see PresetListRow. */
+  command?: string
   agentOptions?: AgentOptions
 }
 
@@ -330,7 +331,8 @@ export interface PaletteActions {
   /** M65. Open the spawn sheet: where, what, how. */
   /** M80. `templateId` opens the sheet on that template. */
   /** M149. `into` threads the three `New workspace from` doors to the sheet's Enter, so a template with holes asks before any workspace exists. */
-  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }): void
+  /** M174. `seed.cwd` opens the sheet ON a folder (the launcher's recents chip). */
+  beginSpawnSheet(templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }): void
   /** M149. A sentence on the palette's feedback line — the one place a refusal from a keystroke (a paste) can be said; nothing runs. */
   say(sentence: string): void
   /** M83. Open the project memory for the captured panel's repository. */
@@ -698,6 +700,7 @@ export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
 import type { AgentBackend } from '@shared/agent-session'
 import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
+import { displayPath } from '@shared/display-path'
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
 export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
@@ -867,7 +870,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       id: `panel.goto.${panel.id}`,
       title: name,
       mono: true,
-      ...(panel.path === undefined ? {} : { subtitle: shortPath(panel.path), pathText: panel.path }),
+      // M175. The path rule's one helper (a panel row knows no repository root, so this is its last-two-segments arm — backlog #86 is the root).
+      ...(panel.path === undefined ? {} : { subtitle: displayPath(panel.path).short, pathText: panel.path }),
       ...(panel.state === undefined ? {} : { state: { id: panel.id, input: panel.state } }),
       ...(panel.stateWord === undefined ? {} : { stateWord: panel.stateWord, statePriority: statePriority(panel.stateWord) }),
       searchText: `go to ${panel.title !== undefined ? `${panel.title} ${panel.name ?? ''}` : (panel.name ?? '')}`,

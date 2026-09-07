@@ -243,7 +243,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                    are, with counts. A heading is never a `.rail-row` (empty.1
                    counts rows) and never renders over nothing (railGroups). */
                 railGroups(props.rows).flatMap((group) => [
-                  <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id} aria-hidden="true">{group.label} · {group.rows.length}</li>,
+                  <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id}>{group.label} · {group.rows.length}</li>,
                   ...group.rows.map((row) => (
                     <RailPanelRow
                       key={row.id}

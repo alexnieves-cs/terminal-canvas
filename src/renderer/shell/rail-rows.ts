@@ -315,6 +315,9 @@ const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[
   { id: 'workflows', label: 'Workflows', kinds: ['workflow'] }
 ]
 
+/** The `other` group by policy: a kind the table does not name sits with the integrations — a named `Other` heading would be more honest and costs a golden; declined in the ledger by name. */
+const FALLBACK = GROUP_ORDER.findIndex((g) => g.id === 'integrations')
+
 export function railGroups<R extends { state: { kind: string } }>(rows: readonly R[], kindOf: (row: R) => string = (r) => r.state.kind): RailGroup<R>[] {
   const out: RailGroup<R>[] = GROUP_ORDER.map((g) => ({ id: g.id, label: g.label, rows: [] }))
   for (const row of rows) {
@@ -323,7 +326,7 @@ export function railGroups<R extends { state: { kind: string } }>(rows: readonly
     // A kind this table does not name lands with the integrations rather than
     // vanishing: a row that disappears is indistinguishable from a feature
     // that was never built (CLAUDE.md).
-    out[i === -1 ? 4 : i].rows.push(row)
+    out[i === -1 ? FALLBACK : i].rows.push(row)
   }
   return out.filter((g) => g.rows.length > 0)
 }

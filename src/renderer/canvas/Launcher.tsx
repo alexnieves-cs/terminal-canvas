@@ -6,6 +6,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { probeOutcome } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { displayPath } from '@shared/display-path'
+import { TMUX_HINT } from './hints'
 
 export interface LauncherProps {
   presets: PresetRow[]
@@ -17,6 +18,8 @@ export interface LauncherProps {
   onDismissTmux?: () => void
   /** M174. The last folders panels were started in (`spawn:recent`), newest first; a chip opens the sheet, which lists them. Absent or empty: no row. */
   recents?: string[]
+  /** M174. A recents chip opens the sheet SEEDED with its folder (the Act III critic: a chip that names a folder and opens a sheet on another lies). */
+  onOpenRecent?: (dir: string) => void
   onSpawnPreset: (id: string) => void
   /** M65. The fifth line: choose where and what. */
   onOpenSheet: () => void
@@ -63,7 +66,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, tmux, onDismissTmux, recents, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -73,7 +76,7 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onSpaw
       <div className="launcher__well">
         {tmux !== undefined && tmux !== null && (
           <p className="launcher__banner" data-launcher-tmux role="status" title={tmux}>
-            No tmux was found, so sessions end when the app reloads — install tmux to keep agents running across a relaunch.
+            {TMUX_HINT.text}
             <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Dismiss this notice" {...shellControl(() => onDismissTmux?.())}>Got it</button>
           </p>
         )}
@@ -108,7 +111,7 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onSpaw
         <div className="launcher__recents" data-launcher-recents>
           <span className="launcher__recents-label">Recent</span>
           {recents.slice(0, 5).map((dir) => (
-            <button key={dir} type="button" className="launcher__recent" data-launcher-recent={dir} title={`New panel in ${dir}`} {...shellControl(onOpenSheet)}>{displayPath(dir).short}</button>
+            <button key={dir} type="button" className="launcher__recent" data-launcher-recent={dir} title={`New panel in ${dir}`} {...shellControl(() => (onOpenRecent ?? onOpenSheet)(dir))}>{displayPath(dir).short}</button>
           ))}
         </div>
       )}
@@ -123,15 +126,16 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onSpaw
               className="launcher__verb"
               data-launcher-preset={p.id}
               disabled={!p.available}
-              title={p.available ? `Start ${p.name} ${p.subtitle.replace(/^.*— /, 'in ')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
+              title={p.available ? `Start ${p.name} in ${p.cwd ?? p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}
               {...shellControl(() => { if (p.available) onSpawnPreset(p.id) })}
             >
               {/* M91. A verb reads as an invitation, not a preset's name: `Start Claude…`
                   says what the click does where `Claude` only says what it is. */}
               <span className="launcher__verb-name">Start {p.name}…</span>
               {/* M174. The face rule: the COMMAND alone is mono; the name and the hint are sentences. */}
-              <span className="launcher__verb-command">{cli}</span>
-              <span className="launcher__verb-hint">{p.available ? `in ${p.subtitle.replace(/^.*— /, '')}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
+              {p.command !== undefined && <span className="launcher__verb-command">{p.command}</span>}
+              {/* The path rule: the directory's short form at rest, the full path on the button's title (above). */}
+              <span className="launcher__verb-hint">{p.available ? `in ${p.cwd === undefined ? p.subtitle.replace(/^.*— /, '') : displayPath(p.cwd).short}` : `${REASON_NOT_ON_PATH}${install ? ` — ${install}` : ''}`}</span>
             </button>
           )
         })}

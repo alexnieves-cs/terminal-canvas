@@ -518,25 +518,32 @@ Spec `docs/superpowers/specs/2026-09-07-v8-act3-shell-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act3-shell.md`, branch `m171-shell`. Owed into this
 act: the palette's raw path rows and the sheet's WHERE field (M175, by the map); the
 markdown parse bound (recorded, not owed).
-- **M171 — the rail as places.** Red: rail `groups.1` (190/191), styles `rail.1` (48/49),
+- **M171 — the rail as places.** Red: rail `groups.1` (190/191), styles `rail.1` (48/49 on the
+  working tree; at the commit `check(m171,m172)` styles read 48/50 because `dock.1` rode in
+  the same commit — the verifier reproduced it),
   agents `reveal.1` rewritten to the rest rule and watched red (78/79). Feature:
   `railGroups` (agents · files · reviews · boards · integrations · workflows; a kind the
   table does not name lands with the integrations rather than vanishing), headings as
   `.rail-heading` `<li>`s with counts (never `.rail-row`, so `empty.1` holds), every row's
   kind glyph in a soft tint (`KindTerminal` for a terminal), the state a dot after the
   label (`.rail-row__state-dot`, keeping the `.rail-row__dot` alias shell 83 reads — the
-  first run threw on that rename: "restyle, never rename") with the word on the row's title,
+  first run threw on that rename: "restyle, never rename" — the alias fix rode in M173's
+  feature commit `d5bac5c`, not an M171 fix) with the word on the row's title,
   the tail clipped but present (84, state-word.1), `start` at 0 revealed on hover /
   focus-within, the selected row a filled pill. Green: agents 79/79, shell 95/95, kinds
   49/49, product 59/59, core 78/78 (exit 0 each, m172-run.log / m173-run.log).
-- **M172 — the dock and top bar.** Red: styles `dock.1` (49/50). Feature: each dock button's
+- **M172 — the dock and top bar.** Red: styles `dock.1` (49/50 on the working tree; 48/50 at
+  the commit, beside `rail.1`). Feature: each dock button's
   name as a `.dock__label` tag revealed on hover / focus-visible, the current place a filled
   pill, the `N live / N quiet` capsules gone from the dock and Canvas (`railCapsules` stays a
   pure export for `lastline.1`), the search a field-shaped button (`.shell__search` stays a
   button, shell 78). **Declined:** a separate appearance control in the bar — the settings
   door already opens M45's three-way chooser, and a second control for one setting is a
   control with no distinct name (`targets.1` pins `.shell__settings`).
-- **M173 — the status bar at rest says nothing.** Red: rail `hints.1` on a stub (191/192),
+- **M173 — the status bar at rest says nothing.** Red: rail `hints.1` on a stub (191/192 on
+  the working tree; the stub was never committed, so the check commit does not bundle —
+  `rail-entry` cannot resolve `canvas/hints` there — and no log holds the red; the verifier
+  could not reproduce it, recorded as such),
   styles `hud.2` (50/51), `compact.1` rewritten without the strip's probe. Feature:
   `canvas/hints.ts` (four gestures and the tmux notice as one list of sentences;
   `hintsLeft`), the HUD a floating pill with the zoom controls and the update notice alone
@@ -576,7 +583,8 @@ markdown parse bound (recorded, not owed).
   figures gone from unfocused panels in five scenes are Act I's rest rule reaching goldens
   that had not moved since — Q2's sentences. Its minor: a terminal-kind review sits under
   AGENTS by kind (correct; the heading says what a row is, not what it is about).
-- **Golden sentences, Act III** (56 scenes after the wave; the critic's, amended):
+- **Golden sentences, Act III** (55 scenes after the wave — the first draft said 56, the
+  `FAILED:` summary line counted; the critic's, amended):
   - navigator-panels · the Panels list grouped under `AGENTS · 10 / FILES · 2 / REVIEWS · 3 / BOARDS · 3 / INTEGRATIONS · 4`, tinted glyphs, a dot per stateful row in one column, `start` hidden, the selected row a pill; the HUD a pill; the capsules gone; the search a field.
   - navigator-workspaces · the rail, dock and HUD as above; the Workspaces pane keeps `23 panels` / `2 panels` and `all workspaces` (Q1's fix).
   - navigator-files · the dock capsules, the hint strip and the HUD changed; the tree column identical.
@@ -592,3 +600,47 @@ markdown parse bound (recorded, not owed).
   - teammate, routine · the rail and HUD; the teammate rows keep `1 place · 1 svc · scheduled` and the routines their `every 10m` (Q1's fix); since Act I the place path reads its short form and the browser's nav is icons.
   - palette, palette-query, palette-dark · the rail, dock and HUD; the palette's state column a dot with the word clipped (M175).
   - chat, integrations, github, across, vault, watcher, memory, supervisor, templates, subagents, chat-copilot, board, trail, skills, workflow, overview, lineup, flip, spawn-sheet, search, search-empty, inspector-detail, inspector-work, inspector-tools, header, runs, graph, composer, tool-objects, approval, verbs, auto, file-missing · the rail grouped with dots and hidden `start`, the dock without capsules with the current place filled, the HUD a pill, the hint strip gone, the search a field; pid / port / clock jitter where the critic named it.
+- **The sheet's WHERE field (owed into this act by the map): DECLINED with its reason.** The
+  field is an editable INPUT whose value must be the real path the panel will start in — a
+  shortened value would be a lie the next keystroke edits; the path rule's tooltip form has
+  no home in an input. The sheet's suggestion rows beneath it already read `…/repo` through
+  `shortPath` (M64). Recorded here rather than left silent (the verifier).
+- The dead `machineCost` prop on `CanvasHud` (declared and passed, read by nothing since
+  M173) is removed in the reviews' wave below.
+- **Reviews (Act III).** A fresh-context critic (FIX-FIRST: 0 Critical, 5 Major, 12 Minor) and
+  a fresh-context verifier (25 claims: 19 SUPPORTED, 4 OVERCLAIMED, 1 UNSUPPORTED, 1 in
+  progress). The wave, every item landed or recorded (`fix(m171–m175)`):
+  - *Major 1* — `Canvas` still subscribed to `useMachineCostTotal()` for the HUD readout M173
+    deleted: every 2 s sample re-rendered the whole component to feed a prop nothing read.
+    The subscription and the six dead HUD props are gone (`CanvasHudProps` is `viewport`,
+    `onZoomBy`, `onFit`, `updateNewer`). The same shape one level down — the `cursor` state
+    set on every mousemove for the readout M173 removed — is backlog #87 (a hook `Deps`
+    change with three memo comments to re-read; its own milestone).
+  - *Major 2* — the launcher's mono chip read `login` for the shell preset (a `split` that
+    had only keyed an install hint): `PresetListRow` / `PresetRow` carry `command?` and the
+    chip renders only a real command.
+  - *Major 3* — the verb list printed the preset's absolute cwd at rest: `displayPath` at
+    rest with the full path on the button's title (its last-two-segments arm — the launcher
+    knows no home; the env report carries none).
+  - *Major 4* — evidence per milestone: below, with the chain.
+  - *Major 5* — a recents chip opened the sheet on whatever folder it would have chosen: the
+    door takes `seed.cwd` (`beginSpawnSheet(templateId?, into?, seed?)`, the `focusedCwd`
+    the sheet already ranks first) and each chip passes its own folder.
+  - *Minors:* the M45 comment that still called `start` the one always-visible exception
+    now points at the M171 rule; `data-agent-state` only on a TERMINAL row's dot (a chat's
+    state is its tone — the store is the terminal's); the rail headings are real list items
+    (no `aria-hidden` — a screen reader hears the places); `hintsLoaded` is a STATE gating
+    the banner and the rail's hints, so a dismissed banner no longer paints and vanishes on
+    launch; `Hint` carries `where` and both surfaces read `hintsLeft` (the banner's text is
+    `TMUX_HINT.text`, the sentence `hints.1` pins); a dismissal outliving an install is
+    right and the doc comment says why; `.canvas-hud__notice { pointer-events: auto }` is
+    a fix this act made without saying so — the M123 update link had sat under the HUD's
+    `pointer-events: none` since 3.0, unclickable; a `notice.1` that clicks it is OWED to
+    M178's audit (the harness fakes the link door; the check is a paint-and-click);
+    `railGroups`' fallback is looked up by id with its policy stated (a named `Other`
+    heading declined: a heading for a kind that cannot occur today costs a golden); the
+    palette's path column reads `displayPath` (one helper; the root is #86's). Recorded, not
+    changed: a recents chip's `displayPath(dir)` has no home to shorten against.
+  - The verifier's corrections landed above (the tallies at the commits, the 55 scenes, the
+    uncommitted stub, the WHERE decline, the `.rail-row__dot` alias in M173's commit).
+

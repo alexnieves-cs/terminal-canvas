@@ -1052,10 +1052,12 @@ body {
    opacity: 0 alone would not. On a twelve-panel canvas that is twelve close
    buttons that stop competing with the twelve names they sit beside.
 
-   THE ONE EXCEPTION: .rail-row__start, a dormant panel's ▶, is ALWAYS
-   visible. It is the only affordance a dormant panel has, and a control that
-   disappears is indistinguishable from a feature that is missing — the rule
-   verify:palette 31 states. verify:panels reveal.1 pins both halves. */
+   M171 reached .rail-row__start too: it rests at 0 like the close and reveals
+   with the row's :hover / :focus-within (the M171 rule near the end of this
+   file; verify:panels reveal.1 pins both at 0 and revealed). From M66 to M170
+   it was the one exception — always visible as a dormant panel's only
+   affordance; the rest rule moved that affordance to the row's hover, and the
+   row itself (its glyph, name and dot) is what a person reads at rest. */
 .rail-row__rename,
 .rail-row__close {
   opacity: 0;
