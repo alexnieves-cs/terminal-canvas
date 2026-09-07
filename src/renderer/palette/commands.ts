@@ -182,6 +182,8 @@ export interface PaletteActions {
   beginChooseVault(): void
   switchWorkspace(id: string): void
   beginCreateWorkspace(): void
+  /** M147. A fresh workspace named after the template, switched to, the shape minted there. */
+  workspaceFromTemplate(templateId: string): void
   beginRenameWorkspace(id: string, currentName: string): void
   /**
    * `liveCount` is passed in rather than looked up because the confirm names
@@ -1397,6 +1399,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'workspace',
     run: () => actions.beginCreateWorkspace()
   })
+  // M147 (backlog #34's "new workspace from a template set"): one row per
+  // template — a fresh workspace named after the shape, switched to, holding
+  // the shape. A template that cannot run carries its refusal, never absent.
+  for (const t of ctx.templates ?? []) {
+    out.push(withReason({
+      id: `workspace.from-template.${t.id}`,
+      title: `New workspace from ${t.name}`,
+      subtitle: `${t.nodes} panel${t.nodes === 1 ? '' : 's'} in a workspace of their own`,
+      searchText: 'new workspace from template set shape',
+      group: 'workspace',
+      run: () => actions.workspaceFromTemplate(t.id)
+    }, t.refusal))
+  }
 
   // --- Canvas --------------------------------------------------------------
 

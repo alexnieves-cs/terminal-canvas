@@ -3,7 +3,7 @@ import { LINEUPS, LINEUP_IDS, lineupPlan } from '@shared/lineups'
 import { useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { EFFORTS, PERMISSION_MODES, type AgentOptions, type Effort, type PermissionMode, AGENT_CAPABILITIES, AGENT_KINDS, type AgentKind } from '@shared/cost'
 import type { SpawnResult } from '@shared/ipc-contract'
-import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices, rowCapabilitySentence, PRESET_KIND_BY_BACKEND } from './spawn-sheet'
+import { lineupWhatId, parseLineupWhatId, teammateOptions, teammateWhatId, parseTeammateWhatId, buildSpawnRequest, directorySuggestions, backendOptions, SUPERVISOR_WHAT_ID, WHAT_ID_BY_BACKEND, type SheetPreset, type SheetValues, type SheetWhat, backendOfWhatId, modelChoices, rowCapabilitySentence, PRESET_KIND_BY_BACKEND, parseEnvLines, CHAT_WHAT_ID } from './spawn-sheet'
 import { type AgentBackend, BACKENDS } from '@shared/agent-backends'
 import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
@@ -85,6 +85,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const [modelName, setModelName] = useState('')
   // M104. Worktrees ASKED for a lineup: only agent seats get a lane (lineupPlan's rule).
   const [worktree, setWorktree] = useState(false)
+  /** M147. `KEY=value` lines; parsed on submit, shown while typing. */
+  const [envText, setEnvText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
   // M80. The chosen template and its parameters — ONE FIELD PER PARAMETER,
   // the composer's fill step (the sheet is a form; a form asks its fields
@@ -123,7 +125,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
     if (mode !== '') agentOptions.permissionMode = mode
     if (effort !== '') agentOptions.effort = effort
     if (modelName.trim() !== '') agentOptions.model = modelName.trim()
-    return { what, cwd, title, agentOptions, ...(lineupId !== null && worktree ? { worktree: true } : {}) }
+    const parsedEnv = parseEnvLines(envText)
+    return { what, cwd, title, agentOptions, ...(lineupId !== null && worktree ? { worktree: true } : {}), ...(parsedEnv.env === undefined ? {} : { env: parsedEnv.env }) }
   }
 
   const submit = (): void => {
@@ -284,6 +287,16 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       </label>
       )}
 
+      {(whatId === COMMAND || (parseLineupWhatId(whatId) === null && parseTeammateWhatId(whatId) === null && whatId !== CHAT_WHAT_ID && whatId !== SUPERVISOR_WHAT_ID && !isChat)) && (
+        // M147. Environment overrides for a preset or a command panel: one
+        // KEY=value per line, merged over the preset's own and the login env in
+        // MAIN. A line it cannot read is named beneath, never guessed at.
+        <label className="sheet__field sheet__field--env">
+          <span className="sheet__label">env</span>
+          <textarea className="sheet__input sheet__input--mono" data-sheet-env rows={2} value={envText} placeholder="KEY=value, one per line (optional)" onChange={(e) => setEnvText(e.target.value)} />
+          {parseEnvLines(envText).bad.length > 0 && <span className="sheet__hint" data-sheet-env-bad>{`not KEY=value: ${parseEnvLines(envText).bad.join(', ')}`}</span>}
+        </label>
+      )}
       {parseLineupWhatId(whatId) !== null && (
         <label className="sheet__field sheet__field--how">
           <span className="sheet__label">lanes</span>

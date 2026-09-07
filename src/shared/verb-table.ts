@@ -73,6 +73,7 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'restore', label: 'Restore', args: [panel()], destructive: false, actions: ['restorePanel'], target: 'panel', hint: 'put a maximised panel back' },
   { id: 'tidy', label: 'Tidy', args: [], destructive: false, actions: ['tidyPanels'], target: 'canvas', hint: 'compact without reordering — one undo' },
   { id: 'zoom-fit', label: 'Zoom to fit', args: [], destructive: false, actions: ['zoomToFit'], target: 'canvas', hint: 'the selected panels, or every panel, in view' },
+  { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
   { id: 'workspace', label: 'Switch workspace', args: [{ name: 'workspace', kind: 'key' }], destructive: false, actions: ['switchWorkspace'], target: 'canvas', hint: 'switch to a workspace by id' },
   { id: 'review', label: 'Review', args: [panel()], destructive: false, actions: ['openReview'], target: 'panel', hint: 'open a review node for the panel' },

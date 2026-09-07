@@ -103,6 +103,7 @@ export function templateOf(preset: {
   agent?: AgentKind
   agentOptions?: AgentOptions
   worktree?: boolean
+  env?: Record<string, string>
 }): PresetTemplate {
   const template: PresetTemplate = { cwd: preset.cwd, args: [...preset.args] }
   if (preset.command !== undefined) template.command = preset.command
@@ -112,6 +113,8 @@ export function templateOf(preset: {
   if (preset.agentOptions !== undefined) template.agentOptions = preset.agentOptions
   // M37. Same absent-stays-absent rule as every field above it.
   if (preset.worktree !== undefined) template.worktree = preset.worktree
+  // M147. Same rule.
+  if (preset.env !== undefined) template.env = { ...preset.env }
   return template
 }
 
@@ -200,6 +203,8 @@ export function presetFromCapture(user: Preset[], captured: CapturedPanel): Pres
     h: captured.h,
     ...(captured.agent !== undefined ? { agent: captured.agent } : {}),
     ...(captured.agentOptions !== undefined ? { agentOptions: captured.agentOptions } : {}),
+    // M147. A captured panel's ENVIRONMENT is never saved: it holds the
+    // secrets the login shell exported (#31), and a preset is a file.
     // M37. A panel that asked for a worktree saves as a preset that asks for
     // one — its cwd is the repository cwd, never the worktree path (see
     // PersistedTerminalPanel.worktree), so the preset spawns a NEW worktree.

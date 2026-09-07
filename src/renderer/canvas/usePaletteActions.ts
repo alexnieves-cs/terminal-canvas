@@ -15,6 +15,7 @@ import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/composer-model'
+import { allTemplates } from '@shared/templates'
 import { panelLabel } from './canvas-constants'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
@@ -28,7 +29,7 @@ import { clearLiveSession, getLiveSession } from '@renderer/session/live-session
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
 import { getChat } from '@renderer/chat/chat-store'
-import { templateRefusal } from '@renderer/palette/template-model'
+import { templateRefusal, templateHoles } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
@@ -207,7 +208,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
 
-  return useMemo<PaletteActions>(() => ({
+  // M147. `self` names the object being built, for the one verb that opens
+  // another verb's door (workspaceFromTemplate → beginSpawnSheet); the shape
+  // of the memo is otherwise unchanged (ONE useMemo, CLAUDE.md's rule).
+  return useMemo<PaletteActions>(() => { const self: PaletteActions = ({
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -779,6 +783,22 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       palette.openPalette()
     },
     switchWorkspace,
+    // M147. Three existing doors in order — workspace:create (named after the
+    // template), the switch, then M80's instantiation in the new workspace —
+    // and a template with parameters opens the sheet there instead (M80's
+    // rule: a hole is asked, never guessed).
+    workspaceFromTemplate: (templateId) => {
+      void window.canvas.template.list().then(async (templates) => {
+        const template = allTemplates(templates).find((t) => t.id === templateId)
+        if (template === undefined) return
+        const id = await window.canvas.workspace.create(template.name)
+        const switched = await switchWorkspace(id)
+        reloadWorkspaces()
+        if (!switched) return
+        if (templateHoles(template).length > 0) { self.beginSpawnSheet(templateId); return }
+        await instantiateTemplate(template, {})
+      })
+    },
     beginCreateWorkspace: () => {
       setInputMode({
         kind: 'text',
@@ -1943,7 +1963,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }), [resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

@@ -1050,6 +1050,8 @@ export interface PresetTemplate {
   title?: string
   /** M65. Focus the new panel: a sheet spawn is a user-initiated one, and focus is what promotes it live. */
   focus?: true
+  /** M147. Environment overrides (a preset's, then the sheet's over them); main merges them over the login env at spawn. */
+  env?: Record<string, string>
 }
 
 /** M65. What the spawn sheet submits. Exactly one of presetId / command. */
@@ -1064,6 +1066,8 @@ export interface SpawnRequest {
   worktree?: boolean
   /** M100. The teammate the panel speaks as; main checks its places before resolving the cwd. */
   teammateId?: string
+  /** M147. Environment overrides typed into the sheet, merged over the preset's own, then the login env — in main. */
+  env?: Record<string, string>
 }
 /** `id` is present when the caller minted the panel itself (a chat); main's spawn answers without one. */
 export type SpawnResult = { kind: 'spawned'; id?: string } | { kind: 'refused'; reason: string }

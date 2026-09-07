@@ -149,11 +149,13 @@ export interface PersistedTerminalPanel extends PersistedPanelBase {
    * the panel survives without it.
    */
   fontSize?: number
-  // PanelSpec.env has NO counterpart here — deliberate, not an oversight.
-  // Nothing sets spec.env today, so nothing is lost by the omission yet; but
-  // it is a SILENT exclusion, and a later feature that starts setting env
-  // (per-panel environment overrides, say) would have those values vanish on
-  // every restore with no warning anywhere in this file.
+  /**
+   * M147. The counterpart of `PanelSpec.env` this comment once said was
+   * deliberately absent: a panel spawned with overrides keeps them across a
+   * restore. Absent stays absent; a malformed map is dropped WHOLE with a
+   * warning (one bad value beside good ones is an environment nobody wrote).
+   */
+  env?: Record<string, string>
   args: string[]
   /**
    * Which agent CLI this panel is pinned to, mirroring Preset.agent. OPTIONAL,
@@ -430,6 +432,12 @@ export interface Preset {
   agentOptions?: AgentOptions
   /** M37. See PersistedTerminalPanel.worktree; the same field, the same rule. */
   worktree?: boolean
+  /**
+   * M147 (backlog #34). Environment OVERRIDES merged over the login
+   * environment at spawn (`buildPtyEnv`). Only the overrides live here; the
+   * base environment stays main's (#31's boundary). Absent stays absent.
+   */
+  env?: Record<string, string>
 }
 
 /**
@@ -833,7 +841,7 @@ function parsePanel(
     warnings.push('dropped a panel that was not an object')
     return null
   }
-  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions, worktree, fontSize } = raw
+  const { id, x, y, w, h, z, cwd, command, args, title, agent, agentOptions, worktree, fontSize, env } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a panel with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -1024,6 +1032,8 @@ function parsePanel(
   const panelOptions = parseAgentOptions(agentOptions, `panel ${id}`, warnings)
   if (panelOptions !== undefined) panel.agentOptions = panelOptions
   if (parseWorktreeFlag(worktree, `panel ${id}`, warnings)) panel.worktree = true
+  const panelEnv = parseEnvMap(env, `panel ${id}`, warnings)
+  if (panelEnv !== undefined) panel.env = panelEnv
   return panel
 }
 
@@ -1037,6 +1047,20 @@ function parsePanel(
  * shouted at. Anything else drops the FIELD with a warning naming the record,
  * never the record — parseLayout's individual-drop rule one level down.
  */
+/**
+ * M147. An environment override map: a record of string values, or nothing.
+ * Present-but-malformed drops the WHOLE map with a warning — never a partial
+ * one — and the record it sits on survives.
+ */
+export function parseEnvMap(raw: unknown, label: string, warnings: string[]): Record<string, string> | undefined {
+  if (raw === undefined) return undefined
+  if (!isRecord(raw) || Object.values(raw).some((v) => typeof v !== 'string') || Object.keys(raw).some((k) => k.trim() === '')) {
+    warnings.push(`${label} had a malformed env map; dropped it whole`)
+    return undefined
+  }
+  return { ...(raw as Record<string, string>) }
+}
+
 export function parseWorktreeFlag(raw: unknown, label: string, warnings: string[]): boolean {
   if (raw === undefined || raw === false) return false
   if (raw === true) return true
@@ -1137,7 +1161,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h, agent, agentOptions, worktree } = raw
+  const { id, name, cwd, command, args, w, h, agent, agentOptions, worktree, env } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -1178,6 +1202,8 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   const presetOptions = parseAgentOptions(agentOptions, `preset ${id}`, warnings)
   if (presetOptions !== undefined) preset.agentOptions = presetOptions
   if (parseWorktreeFlag(worktree, `preset ${id}`, warnings)) preset.worktree = true
+  const presetEnv = parseEnvMap(env, `preset ${id}`, warnings)
+  if (presetEnv !== undefined) preset.env = presetEnv
   return preset
 }
 

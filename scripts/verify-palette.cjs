@@ -2590,10 +2590,10 @@ const WS = [
   c.actions.calls.length = 0
   if (row1) row1.run()
   ok('workspace.template.1 the palette offers `New workspace from <template>` per template under the workspace group, running workspaceFromTemplate with its id, disabled with the template\'s own refusal when it cannot run',
-    row1 !== undefined && /New workspace from two shells/.test(row1.title) && row1.group === 'workspace' && row1.disabled === undefined &&
+    row1 !== undefined && /New workspace from two shells/.test(row1.title) && row1.group === 'workspace' && row1.disabledReason === undefined &&
       c.actions.calls.map((x) => x.join(':')).join(',') === 'workspaceFromTemplate:t1' &&
-      row2 !== undefined && typeof row2.disabled === 'string' && /neither a preset/.test(row2.disabled),
-    JSON.stringify({ row1: row1 && [row1.title, row1.group], row2: row2 && row2.disabled, calls: c.actions.calls }))
+      row2 !== undefined && typeof row2.disabledReason === 'string' && /neither a preset/.test(row2.disabledReason),
+    JSON.stringify({ row1: row1 && [row1.title, row1.group], row2: row2 && row2.disabledReason, calls: c.actions.calls }))
 }
 
 const failed = results.filter((r) => !r.pass)

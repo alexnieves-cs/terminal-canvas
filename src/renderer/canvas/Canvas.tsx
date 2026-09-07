@@ -3837,7 +3837,8 @@ export function Canvas({
           panelId: '', cwd: node.cwd, args: [...resolved.args],
           ...(resolved.command === undefined ? {} : { command: resolved.command }),
           ...(resolved.agent === undefined ? {} : { agent: resolved.agent }),
-          ...(resolved.agentOptions === undefined ? {} : { agentOptions: resolved.agentOptions })
+          ...(resolved.agentOptions === undefined ? {} : { agentOptions: resolved.agentOptions }),
+          ...(resolved.env === undefined ? {} : { env: { ...resolved.env } })
         }
       } else if ((node.command ?? '') !== '') {
         spec = { panelId: '', cwd: node.cwd, command: node.command as string, args: [...(node.args ?? [])] }
