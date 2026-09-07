@@ -10,6 +10,8 @@
      (the rail, the inspector) cannot afford 32px of padding. */
   --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
   --sp-5: 12px; --sp-6: 16px; --sp-7: 24px; --sp-8: 32px;
+  /* M162. The reading inset: a reading body's padding, one value at every kind. */
+  --inset: 20px;
 
   /* One-off structural constants, tokenised so the spacing audit can hold at
      zero literals. --titlebar-h is the hiddenInset traffic-light clearance and
@@ -38,6 +40,12 @@
      must not compete with the terminal, and the hierarchy is carried by
      weight and the value ramp rather than by size. */
   --t-xs: 11px; --t-sm: 12px; --t-md: 13px; --t-lg: 15px; --t-xl: 18px; --t-2xl: 24px;
+  /* M162. The body size for PROSE a person reads inside a panel (the brief's
+     14px/1.5); --t-md stays the size of rows, controls and cells. */
+  --t-base: 14px;
+  /* M162. The prose measure: the assistant's turn and every reading body
+     wrap at this width, never at the panel's. */
+  --measure: 72ch;
   --lh-tight: 1.25; --lh-body: 1.5;
 
   /* Tracking. Caps micro-labels need positive tracking or they read as a
@@ -158,6 +166,7 @@
   --aura-1:     rgba(14, 116, 144, .14);
   --aura-2:     rgba(99, 102, 241, .10);
   --on-iris:    #ffffff;
+  --bubble:     #e6ecf7;   /* M162. The user turn's ground: a soft tint one step from the panel */
   --blur:       blur(12px) saturate(120%);
 
   /* Back-compat aliases. Recorded as debt in M45's build log: they let the
@@ -221,6 +230,7 @@
   --aura-1:     rgba(99, 102, 241, .22);
   --aura-2:     rgba(45, 212, 191, .12);
   --on-iris:    #06111a;
+  --bubble:     #1a2130;
   --blur:       blur(14px) saturate(140%);
 
   --text:      var(--fg);
@@ -848,7 +858,7 @@ body {
 /* A path WRAPS rather than truncates: the last segment is what the agent did
    with the token, and a right-hand cut removes exactly that (M89's critic). */
 .integration__row-call { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow-wrap: anywhere; }
-.integration__row-meta { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
+.integration__row-meta { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); }
 .integration__row--refused .integration__row-meta { color: var(--red); }
 .integration__note { margin: 0; font-size: var(--t-xs); color: var(--fg-4); }
 /* M88. The GitHub work node: one card per item, identity first (owner/repo#N
@@ -861,7 +871,7 @@ body {
 .github-item__id { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
 .github-item__title { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg); }
-.github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .github-node__scope { margin: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .github-item__verbs { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); }
 .github-item__link { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; text-underline-offset: 2px; }
@@ -873,7 +883,7 @@ body {
 .review-node__section-head { display: flex; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-1); font-weight: 400; }
 .review-node__section-label { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
 .review-node__section-branch { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
-.review-node__section-count { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.review-node__section-count { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
 .review-node__path { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-node__counts { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
 .inspector__branch-line { margin: 0 0 var(--sp-1); font-size: var(--t-xs); color: var(--fg-3); }
@@ -886,7 +896,7 @@ body {
    family (iris, no underline: a tag is a filter, a link is a door), never a
    colour of its own (`verify:styles tags.1`). */
 .vault-pane__tags-title { padding: var(--sp-3) var(--sp-3) var(--sp-1); }
-.vault-pane__tag .rail-row__label { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); }
+.vault-pane__tag .rail-row__label { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); }
 .file-node__tag { padding: 0 var(--sp-1); border: 0; border-radius: var(--r-sm); background: none; font: inherit; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); cursor: pointer; }
 .file-node__tag:hover { background: var(--s-3); }
 .file-node__wikilink-verb { color: var(--fg-4); text-decoration: none; font-size: var(--t-xs); }
@@ -900,7 +910,7 @@ body {
 .file-node__backlinks-head { margin: 0 0 var(--sp-1); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
 .file-node__backlinks-list { margin: 0; padding: 0; list-style: none; }
 .file-node__backlink { display: flex; align-items: baseline; gap: var(--sp-2); }
-.file-node__backlink-verb { padding: 0; border: 0; background: none; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); cursor: pointer; }
+.file-node__backlink-verb { padding: 0; border: 0; background: none; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--iris); cursor: pointer; }
 .file-node__backlink-line { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
 /* M84. The watcher node: a command line, a capped output tail in the mono
    well every body on this canvas uses, and one line saying how the last run
@@ -913,7 +923,7 @@ body {
 /* Plain lower case: this line is a sentence about the last run, not a state
    label, and shouting it made it compete with the pill (M84's critic). */
 .watcher-node__last { margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
-.watcher-node__when { font-family: var(--font-mono); }
+.watcher-node__when { font-family: var(--font-ui); }
 /* M84. The one kind glyph that carries a state tone — see RailPanelRow. */
 .rail-row__kind--stateful { color: var(--tone); }
 .memory-node__body { display: flex; flex-direction: column; min-height: 0; gap: var(--sp-2); padding: var(--sp-3); }
@@ -927,11 +937,11 @@ body {
 /* M83 (critic). The entries are a WELL, like every other body on this canvas
    (terminal output, the chat transcript, a file's text) — the UI face made
    the list read as a settings pane beside its peers. */
-.memory-node__text { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.memory-node__text { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
 .memory-node__at { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .memory-node__redacted { grid-column: 2; font-size: var(--t-xs); color: var(--amber); }
 .memory-node__add { display: flex; align-items: center; gap: var(--sp-2); }
-.memory-node__select { min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-xs); }
+.memory-node__select { min-height: 24px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); }
 .memory-node__input { flex: 1 1 auto; min-width: 0; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font: inherit; font-size: var(--t-sm); }
 .memory-node__verb { flex: none; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
 /* M80. A template's parameter: its name above its field, never truncated into
@@ -955,7 +965,7 @@ body {
 .rail-run__word { flex: none; font-size: var(--t-xs); color: var(--tone); }
 .rail-run .rail-row__verb { flex: none; white-space: nowrap; }
 .inspector__run { display: flex; flex-direction: column; gap: var(--sp-1); }
-.inspector__run-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
+.inspector__run-name { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); }
 .inspector__run-facts { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .inspector__run-facts [data-tone] { color: var(--tone); }
 .inspector__run .inspector__action { align-self: flex-start; }
@@ -976,7 +986,7 @@ body {
 /* M76. The questions, pinned between the well and the composer. */
 .chat__questions { flex: none; padding: 0 var(--sp-3); border-top: 1px solid var(--line); background: var(--s-1); }
 .chat__far-approval { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
-.chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.chat__far-question { flex: 1 1 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
 
 /* M47. ONE status dot. The rail's dot, the context pane's dot and the
    frame's `.pf__state` all carry `.status-dot`, and this is the only rule
@@ -1115,7 +1125,7 @@ body {
   height: 24px;
   padding: 0 var(--sp-2);
   font: inherit;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--t-xs);
   color: var(--iris);
   background: transparent;
@@ -1466,7 +1476,7 @@ body {
   color: var(--muted);
 }
 .file-row .rail-row__label {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--t-xs);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1607,7 +1617,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--t-xs);
   padding: 0 var(--sp-2);
   border: 1px solid var(--line);
@@ -1736,7 +1746,7 @@ body {
 .link-layer__head--selected { fill: var(--iris); }
 /* M78. The edge view: the ends in mono (two names the machine knows), a hairline select. */
 .inspector__edge-ends { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); }
-.inspector__select { width: 100%; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); }
+.inspector__select { width: 100%; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
 
 .link-layer__badge circle {
   fill: var(--s-3);
@@ -1766,7 +1776,7 @@ body {
    would have to be measured. */
 .link-layer__label {
   fill: var(--fg-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--t-sm);
   paint-order: stroke;
   stroke: var(--bg);
@@ -2255,7 +2265,7 @@ body {
   min-height: 0;
   padding: var(--sp-6);
   overflow: hidden;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui); /* M162. The face rule: the card is a surface; its TAIL lines opt into mono below */
   font-size: var(--t-md);
   line-height: var(--lh-tight);
   color: var(--muted);
@@ -2298,6 +2308,7 @@ body {
 .panel__card-block[data-tone="asleep"], .panel__card-block[data-tone="none"], .panel__card-block[data-tone="starting"] { background: var(--s-4); color: var(--fg); }
 
 .panel__card-line {
+  font-family: var(--font-mono); /* M162. Terminal bytes: the one leaf of the card that is cells */
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2489,7 +2500,7 @@ body {
 .launcher__chrome { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--line); background: var(--s-2); }
 .launcher__well { padding: var(--sp-6); background: var(--well); }
 .launcher__title {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--t-md);
   font-weight: 600;
   color: var(--fg);
@@ -2513,7 +2524,7 @@ body {
 .launcher__verb-name::before { content: "> "; color: var(--fg-4); }
 .launcher__verb:hover:not(:disabled) { background: var(--s-4); border-color: var(--line-strong); }
 .launcher__verb:disabled { color: var(--fg-4); cursor: default; }
-.launcher__verb-name { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 500; flex: none; }
+.launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 500; flex: none; }
 .launcher__verb-hint { font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* M91. A disabled verb's hint IS the fix: it wraps rather than ending in an
    ellipsis mid-sentence (the critic saw `check the en…`). */
@@ -2534,7 +2545,7 @@ body {
 .launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
 .launcher__verb--door:hover:not(:disabled) { border-color: var(--iris); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
 .launcher__verb--door:disabled { background: var(--s-2); border-style: dashed; }
-.launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-mono); }
+.launcher__env { margin: var(--sp-5) 0 0; padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); font-family: var(--font-ui); }
 .launcher__env-hint { color: var(--iris); }
 .launcher__check { margin-left: var(--sp-3); }
 
@@ -2607,7 +2618,7 @@ body {
   box-shadow: var(--e-3);
   padding: var(--sp-5);
   font-size: var(--t-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   color: var(--fg);
 }
 
@@ -2665,6 +2676,7 @@ body {
 }
 
 .diagnostics-overlay__export-result {
+  font-family: var(--font-mono); /* M162. The export's result is a file path (the path rule) */
   color: var(--fg-3);
   word-break: break-all;
 }
@@ -2745,7 +2757,7 @@ body {
   border-left: 2px solid var(--border);
 }
 
-.review-node__line { padding: 0 var(--sp-3); white-space: pre; }
+.review-node__line { padding: 0 var(--sp-3); white-space: pre; font-family: var(--font-mono); font-size: var(--t-sm); } /* M162. A diff line is code wherever it is drawn — the chat's tool diff reuses these rules inside a UI-face transcript */
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own. */
@@ -3094,7 +3106,7 @@ body {
 
 .subagent-node__desc {
   margin: 0;
-  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  font: var(--t-sm) / var(--lh-tight) var(--font-ui);
   color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3125,7 +3137,7 @@ body {
   border: 1px dashed var(--frame-line);
   border-radius: var(--r-md);
   background: var(--s-1);
-  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  font: var(--t-sm) / var(--lh-tight) var(--font-ui);
   color: var(--fg-3);
   white-space: normal;
   pointer-events: none;
@@ -3143,7 +3155,7 @@ body {
 .subagent-more {
   position: absolute;
   padding: var(--sp-1) var(--sp-3);
-  font: var(--t-sm) / var(--lh-tight) var(--font-mono);
+  font: var(--t-sm) / var(--lh-tight) var(--font-ui);
   color: var(--fg-4);
   pointer-events: none;
 }
@@ -3359,13 +3371,13 @@ body {
    the path or the matching line, anchored LEFT in its column so ten paths
    line up as a column rather than ragging on their state word's width. */
 .palette__row--mono .palette__title { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 600; }
-.palette__row--mono .palette__hint { font-family: var(--font-mono); font-size: var(--t-sm); text-align: left; width: 42%; max-width: 42%; }
+.palette__row--mono .palette__hint { font-family: var(--font-mono) /* M162. A mono row's hint is its cwd: a path, by the face rule */; font-size: var(--t-sm); text-align: left; width: 42%; max-width: 42%; }
 /* The state word: its own column, fixed width, in its tone. */
 .palette__state {
   flex: none;
   width: 7em;
   font-size: var(--t-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   color: var(--tone);
 }
 .palette__state[data-tone="asleep"], .palette__state[data-tone="none"], .palette__state[data-tone="starting"], .palette__state[data-tone="kind"] { color: var(--fg-3); }
@@ -3725,7 +3737,7 @@ body {
 /* M81. Its OWN row, and it WRAPS: this is the only text that says what a
    supervisor is, and it shared a line with the key hints until it was cut off
    mid-sentence (the critic). */
-.sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-mono); white-space: normal; }
+.sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-ui); white-space: normal; }
 .sheet__refusal { color: var(--red); }
 .sheet__keys { flex: 1 1 100%; }
 
@@ -3752,7 +3764,7 @@ body {
   z-index: 5;
   transform: translate(0, -100%);
 }
-.lane-header__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.lane-header__name { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
 .lane-header__note { color: var(--iris); }
 /* The attention pip's chip: the panel's name and the word, inward of the wedge. */
 .edge-indicator__label {
@@ -3770,7 +3782,7 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
-.edge-indicator__name { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.edge-indicator__name { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
 .edge-indicator__word[data-tone] { color: var(--tone); }
 /* A settings row's hint is a sentence: it wraps, it is not cut mid-word. */
 .palette__row[data-group="setting"] { align-items: flex-start; }
@@ -3791,7 +3803,7 @@ body {
    hairline. Every colour is a token; the state hues appear only on the frame's
    marks through [data-tone], never here. */
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
-.chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg); }
+.chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
 .chat__row { display: grid; grid-template-columns: 52px 1fr; column-gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
 .chat__row:last-child { border-bottom: 0; }
 .chat__role { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); padding-top: var(--sp-1); }
@@ -3814,11 +3826,13 @@ body {
 .chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
 /* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
+/* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
+.chat__tool-input--code, .chat__far-question--code { font-family: var(--font-mono); font-size: var(--t-sm); }
 .chat__tool-running { color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .chat__row--tool-error .chat__tool-name { color: var(--red); }
 .chat__tool-toggle { min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; white-space: nowrap; }
 .chat__tool-toggle:hover { color: var(--fg-2); }
-.chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: var(--t-sm); max-height: 240px; overflow: auto; }
+.chat__tool-result { grid-column: 2 / -1; margin: var(--sp-2) 0 0; padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-family: var(--font-mono); font-size: var(--t-sm); max-height: 240px; overflow: auto; } /* M162. The family AFTER `font: inherit`: the shorthand resets it to the transcript's UI face, and the M162 critic saw a diff hunk in SF */
 .chat__empty, .chat__queued, .chat__exited { margin: var(--sp-2) 0; }
 .chat__permission { padding: var(--sp-2) 0; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: var(--sp-2); row-gap: var(--sp-2); align-items: baseline; }
 .chat__permission-line { min-width: 0; overflow-wrap: anywhere; font-size: var(--t-sm); color: var(--fg); }
@@ -3831,7 +3845,7 @@ body {
 /* M111. A RAISED FIELD: the one place in the panel that asks to be typed
    into looks like it — a hairline box on the raised surface, an iris ring
    on focus (the focus outline is relocated, not removed). */
-.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
 .chat__input:focus { outline: none; border-color: var(--iris); box-shadow: inset 0 1px 0 var(--edge-light), 0 0 0 3px var(--iris-dim); }
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
@@ -3893,7 +3907,7 @@ body {
 /* M75. The composer's popup (files or prompts), its fill step and the attachment chips. */
 /* Inside the panel, not over the canvas: a hairline, no shadow (principle 4). */
 .chat__popup { display: flex; flex-direction: column; max-height: 220px; overflow: auto; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-2); }
-.chat__popup-row { display: flex; justify-content: space-between; gap: var(--sp-3); min-height: 24px; padding: 0 var(--sp-3); border: 0; background: transparent; color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); text-align: left; cursor: pointer; }
+.chat__popup-row { display: flex; justify-content: space-between; gap: var(--sp-3); min-height: 24px; padding: 0 var(--sp-3); border: 0; background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); text-align: left; cursor: pointer; }
 .chat__popup-row { border-top: 1px solid var(--line); }
 .chat__popup-row--on, .chat__popup-row:hover { background: var(--iris-dim); }
 .chat__popup-head { padding: var(--sp-1) var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
@@ -3929,7 +3943,7 @@ body {
 .annotation__host { pointer-events: none; }
 .annotation__label, .annotation__editor {
   pointer-events: auto; display: inline-block; max-width: 320px; padding: var(--sp-1) var(--sp-2);
-  font: var(--t-xs) var(--font-mono); color: var(--fg-2); background: var(--well); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  font: var(--t-xs) var(--font-ui); color: var(--fg-2); background: var(--well); border: 1px solid var(--line-strong); border-radius: var(--r-sm);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; text-align: left;
 }
 .annotation--selected .annotation__label { outline: 2px solid var(--iris); outline-offset: 1px; }
@@ -4013,7 +4027,7 @@ body {
 .board-pane__empty { margin: var(--sp-3); }
 .board-row { flex-wrap: wrap; }
 .board-row__pr { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; padding: 0 var(--sp-2); }
-.board-row__note { flex: 1 0 100%; padding: 0 var(--sp-3) var(--sp-1); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.board-row__note { flex: 1 0 100%; padding: 0 var(--sp-3) var(--sp-1); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
 .board-row__facts { flex: 1 0 100%; padding: 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-row__show { margin-left: var(--sp-3); }
 
@@ -4026,7 +4040,7 @@ body {
 .skills-pane__tab[aria-selected="true"] { color: var(--fg); background: var(--glass-2); }
 .skills-pane__filters { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; padding: var(--sp-2) var(--sp-3); }
 .skills-pane__search { flex: 1 1 8rem; min-width: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-2); }
-.skills-pane__filter { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 var(--sp-2); }
+.skills-pane__filter { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 0 var(--sp-2); }
 .skills-pane__filter[aria-pressed="true"] { color: var(--fg); border-color: var(--line-strong); }
 .skills-pane__columns { display: flex; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); min-height: 0; overflow-x: auto; overflow-y: hidden; }
 /* M127 fix. A FIXED width, not a flex basis, and min-width: 0 with it. The
@@ -4058,7 +4072,8 @@ body {
 /* Two lines, then an ellipsis. A description is a sentence, and a card that
    let it run set the column's width — which is the defect this round fixes. */
 .skill-card__description { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.skill-card__facts, .skill-card__note { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-card__facts, .skill-card__note { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-card__facts { font-family: var(--font-mono); } /* M162. Paths and counts stay mono; the note above is a sentence */
 /* M127 critic wave. The resource SENTENCE, on its own line under the
    provenance word. It wraps and clamps at two lines rather than ellipsising
    on one: `no bundled fi…` cut a three-word fact mid-word, which teaches the
@@ -4142,7 +4157,7 @@ body {
 .workflow-node__diagram { display: block; max-width: none; }
 .workflow-node__block { fill: var(--s-2); stroke: var(--line-strong); stroke-width: 1; }
 .workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
-.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-mono); font-size: var(--t-xs); letter-spacing: 0.04em; }
+.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: 0.04em; }
 .workflow-node__line { stroke: var(--line-strong); stroke-width: 1.5; }
 /* The arrowhead is the LINE's own colour: an edge that pointed in a
    different tone would read as a second kind of edge. */
@@ -4150,7 +4165,7 @@ body {
 /* The ground under an edge's word: the pane's own surface, so the word sits
    ON the diagram rather than floating between two diagonals. */
 .workflow-node__edge-ground { fill: var(--s-1); }
-.workflow-node__edge-word { fill: var(--fg-3); font-family: var(--font-mono); font-size: var(--t-xs); }
+.workflow-node__edge-word { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 /* A disabled verb's reason, on screen and dim: the row is absent when every
    verb can act, never an empty box. */
 .workflow-node__why { display: flex; flex-direction: column; gap: var(--sp-1); }

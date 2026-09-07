@@ -216,7 +216,7 @@ const lum = (h) => {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 }
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
-const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4']
+const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4', '--bubble'] // --bubble: M162, the user turn's ground, so text on it is measured
 const texts = { '--fg': 4.5, '--fg-2': 4.5, '--fg-3': 4.5, '--fg-4': 3.0 }
 const accents = ['--blue', '--green', '--amber', '--red', '--iris']
 const accentGrounds = ['--s-1', '--s-4']
@@ -684,6 +684,78 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const rackScrolls = rack ? /overflow-x:\s*auto/.test(rack.body) : false
   ok('skills.1', 'a Skills column has a fixed width and min-width: 0, its heading title ellipsises, and the rack scrolls sideways',
     colFixed && titleGives && rackScrolls, JSON.stringify({ colFixed, titleGives, rackScrolls }))
+}
+
+// M162 — face.1. THE FACE RULE. `--font-mono` is for code, commands, paths
+// and terminal cells; everything a person reads as a sentence or a name is
+// set in `--font-ui`. `body` already defaults to the UI face, so mono is an
+// explicit opt-in, and this check is the closed list of surfaces that may
+// NOT opt in. Two arms, because the failure has two shapes:
+//   - the SUBJECT arm: a rule whose subject (the last compound of a selector)
+//     is a listed prose surface and whose body sets the mono face fails.
+//     Only the subject is read, so `.chat__text code { mono }` — a code leaf
+//     under a prose surface, the very shape the brief prescribes — passes
+//     (the Act 0 critic: the first cut matched any compound and forbade it).
+//   - the ANCESTOR arm: the four containers that once set mono for everything
+//     beneath them (`.chat__transcript` did, from M73 until this milestone,
+//     and every sentence the agent wrote inherited it with nothing on screen
+//     to say so) may not set it again under any selector shape.
+// What it cannot see: a face set from a component's inline style, a family
+// aliased through a second token, or a prose class this list does not name.
+// The goldens are the check for those. `.pf__body--text`, the reading
+// bodies' ancestor, is still mono at 4.0 and is M164's red, not this one's.
+{
+  const PROSE = [
+    '.pf__title', '.launcher__title', '.launcher__verb-name', '.launcher__env',
+    '.chat__transcript', '.chat__input', '.chat__text', '.chat__role', '.chat__popup-row', '.chat__empty',
+    '.rail-row__start', '.rail-row__rename', '.rail-row__close', '.rail-row__label', '.rail-empty',
+    '.memory-node__text', '.memory-node__select', '.subagent-node__desc', '.subagent-ambiguous', '.subagent-more',
+    '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
+    '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
+    '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay',
+    '.panel__card', '.sheet__preview', '.lane-header__name', '.edge-indicator__name', '.inspector__run-name'
+  ]
+  const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous']
+  const sets = (body) => /font(?:-family)?\s*:[^;}]*(?:var\(\s*--font-mono\s*\)|\bmonospace\b|ui-monospace)/.test(body)
+  const esc = (p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // The subject of one selector: its last compound, combinators and
+  // pseudo-elements stripped, `:is(...)`/`:where(...)` unwrapped.
+  const subject = (sel) => sel.replace(/:(?:is|where)\(([^)]*)\)/g, '$1').trim().split(/\s*[\s>+~]\s*/).pop().replace(/::?[\w-]+(?:\([^)]*\))?/g, '')
+  const hits = []
+  for (const r of all) {
+    if (!sets(r.body)) continue
+    for (const part of r.sel.split(',')) {
+      const subj = subject(part)
+      for (const p of PROSE) if (new RegExp(`(^|[^\\w-])${esc(p)}(?![\\w-])`).test(subj)) hits.push(`${p} ← ${part.trim().slice(0, 60)}`)
+      for (const a of ANCESTORS) if (new RegExp(`(^|[^\\w-])${esc(a)}(?![\\w-])`).test(part) && !hits.includes(`${a} ← ${part.trim().slice(0, 60)}`)) hits.push(`${a} ← ${part.trim().slice(0, 60)}`)
+    }
+  }
+  ok('face.1', 'no prose surface sets the mono face, and no former mono ancestor does under any selector (the face rule)',
+    hits.length === 0, `${hits.length} mono on prose: ${[...new Set(hits)].slice(0, 12).join(' | ')}`)
+}
+
+// M162 — polish.1. The brief's four tokens: `--bubble` (the user turn's
+// ground) in BOTH theme blocks as six-digit hex so check 11 measures text on
+// it, and the three structural values — the prose measure, the body size, the
+// reading inset — on bare `:root` where check 8 keeps them out of the themes.
+// A token declared in one block only falls through silently (theme.1's
+// lesson); a measure written as a literal `72ch` at each site drifts at the
+// third site.
+{
+  const rootMap = perBlock.root || {}
+  const light = perBlock.light || {}
+  const dark = perBlock.dark || {}
+  const hex = (v) => /^#[0-9a-f]{6}$/i.test(v || '')
+  const facts = {
+    bubble: hex(light['--bubble']) && hex(dark['--bubble']) && light['--bubble'] !== dark['--bubble'],
+    measure: /^\d+ch$/.test(rootMap['--measure'] || ''),
+    base: rootMap['--t-base'] === '14px',
+    inset: rootMap['--inset'] === '20px',
+    ground: grounds.includes('--bubble')
+  }
+  ok('polish.1', 'the brief\'s tokens: --bubble hex in both blocks (and a measured ground), --measure / --t-base / --inset on :root',
+    Object.values(facts).every(Boolean), JSON.stringify(facts))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

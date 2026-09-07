@@ -14,7 +14,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
-import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow } from './chat-model'
+import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, toolArgumentIsCode } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -126,7 +126,7 @@ const ToolRow = memo(function ToolRow({ row, panelId }: { row: Extract<ChatRow, 
   return (
     <div className={`chat__row chat__row--tool${row.result?.isError ? ' chat__row--tool-error' : ''}`} data-chat-row="tool" data-chat-tool={row.name}>
       <span className="chat__tool-name">{row.name}</span>
-      <span className="chat__tool-input">{shortInput(row.input)}</span>
+      <span className={`chat__tool-input${toolArgumentIsCode(row.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(row.input)}</span>
       {row.live && !hasResult && <span className="chat__tool-running">running</span>}
       {row.file !== undefined && (
         <button type="button" className="chat__tool-toggle" data-chat-tool-diff
@@ -482,7 +482,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
       // control smaller than a word is not a control.
       far={snapshot !== null && snapshot.pending.length > 0 ? (() => { const p = snapshot.pending[0]!; return (
         <div className="chat__far-approval" data-chat-far-approval={p.requestId} onMouseDown={(e) => e.stopPropagation()}>
-          <span className="chat__far-question"><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
+          <span className={`chat__far-question${toolArgumentIsCode(p.input) ? ' chat__far-question--code' : ''}`}><span className="chat__tool-name">{p.toolName}</span> {toolArgument(p.input)}</span>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title={`Allow ${p.toolName}`} {...shellControl(() => answer(p.requestId, true))}>Allow</button>
           <button type="button" className="chat__verb chat__verb--allow" data-chat-allow-session title={`Allow ${p.toolName} for the rest of this session`} {...shellControl(() => answer(p.requestId, true, 'session'))}>Allow for session</button>
           <button type="button" className="chat__verb chat__verb--deny" data-chat-deny title={`Deny ${p.toolName}`} {...shellControl(() => answer(p.requestId, false))}>Deny</button>
@@ -587,7 +587,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                   margin label, the tool and its argument in mono — the same
                   line the popover and the pane show — then the two verbs. */}
               <span className="chat__role">asks</span>
-              <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · {shortInput(p.input)}</span>
+              <span className="chat__permission-line"><span className="chat__tool-name">{p.toolName}</span> · <span className={`chat__tool-input${toolArgumentIsCode(p.input) ? ' chat__tool-input--code' : ''}`}>{shortInput(p.input)}</span></span>
               <div className="chat__permission-verbs">
                 <button type="button" className="chat__verb chat__verb--allow" data-chat-allow title="Allow this tool call" {...shellControl(() => answer(p.requestId, true))}>Allow</button>
                 {/* M98. The third verb, between the two: allow, and stop asking for this tool until the panel closes. */}
