@@ -11,6 +11,9 @@ export interface LauncherProps {
   report: EnvReport | null
   /** M107. Ask the login shell again; absent hides the control (a fixture). */
   onCheckAgain?: () => void
+  /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
+  tmux?: string | null
+  onDismissTmux?: () => void
   onSpawnPreset: (id: string) => void
   /** M65. The fifth line: choose where and what. */
   onOpenSheet: () => void
@@ -57,7 +60,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -65,6 +68,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
       {/* M111. No chrome row: the wordmark in the hero below is the name, and a
           second "terminal canvas" above it read as a caption to itself. */}
       <div className="launcher__well">
+        {tmux !== undefined && tmux !== null && (
+          <p className="launcher__banner" data-launcher-tmux role="status" title={tmux}>
+            No tmux was found, so sessions end when the app reloads — install tmux to keep agents running across a relaunch.
+            <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Dismiss this notice" {...shellControl(() => onDismissTmux?.())}>Got it</button>
+          </p>
+        )}
       {/* M111. The one place the app is allowed a moment: the wordmark over a
           light drawn from the aura tokens, and THREE DOORS as cards — the
           considered door first (`claude` at `~` is almost never the right

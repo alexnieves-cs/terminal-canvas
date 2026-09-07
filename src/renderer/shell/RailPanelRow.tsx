@@ -102,8 +102,8 @@ function RailPanelRowImpl({
         {/* M63. The kind already sits in the glyph column; the state column
             is for state, so a sessionless row leaves it empty rather than
             saying its kind a second time. */}
-        {/* The dot a person reads (data-agent-state keeps the terminal's attribute for check 54's split); the tail keeps the WORD for state-word.1 / 84, clipped. */}
-        {stateful && <span className="rail-row__state-dot status-dot" data-agent-state={state ?? 'none'} data-tone={shown.tone} aria-hidden="true" />}
+        {/* The dot a person reads — `.rail-row__dot` stays as its alias (shell 83 and the harness read it; restyle, never rename); the tail keeps the WORD for state-word.1 / 84, clipped. */}
+        {stateful && <span className="rail-row__state-dot rail-row__dot status-dot" data-agent-state={state ?? 'none'} data-tone={shown.tone} aria-hidden="true" />}
         <span className="rail-row__tail" data-tone={shown.tone}>{shown.tone === 'kind' ? '' : shown.word}</span>
       </button>
       {/* M105. The agent's last line said — a second line on a chat's row, from

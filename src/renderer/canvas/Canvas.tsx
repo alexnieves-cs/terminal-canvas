@@ -19,7 +19,7 @@ import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
 import { snapRect, SNAP_PX, type SnapGuide } from './placement'
-import { HintStrip } from './HintStrip'
+import { hintsLeft } from './hints'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
@@ -5336,6 +5336,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
+        hints={hintsLeft(hintsSeen).filter((h) => h.id !== 'tmux')}
         board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
@@ -5862,6 +5863,8 @@ export function Canvas({
         {panels.length === 0 && !merged && (
           <Launcher
             presets={presetRows}
+            tmux={backendInfo?.kind === 'direct' && !hintsSeen.has('tmux') ? backendInfo.reason : null}
+            onDismissTmux={() => markHint('tmux')}
             report={envReport}
             onCheckAgain={() => { void window.canvas.env.report(true).then(setEnvReport) }}
             onSpawnPreset={paletteActions.spawnPreset}
@@ -5885,7 +5888,6 @@ export function Canvas({
             through your shell's rc files may not be found. Environment… in ⌘K says what was.
           </div>
         )}
-        {!merged && <HintStrip seen={hintsSeen} />}
         <CanvasHud
           updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}

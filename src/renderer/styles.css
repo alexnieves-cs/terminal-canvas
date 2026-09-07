@@ -2427,6 +2427,7 @@ body {
 .shell[data-bp="compact"] .minimap { display: none; }
 
 .canvas-hud {
+  border-radius: var(--r-full); /* M173. A floating PILL: the zoom controls and the update notice, nothing else */
   position: absolute;
   right: var(--sp-5);
   bottom: var(--sp-5);
@@ -2462,9 +2463,6 @@ body {
   color: var(--fg-2);
 }
 
-.canvas-hud__cost {
-  color: var(--fg);
-}
 
 /* M48. The launcher: a raised card, centred over an EMPTY canvas — a
    sibling of .world so the camera never scales it, and a card rather than a
@@ -2543,39 +2541,6 @@ body {
 .launcher__env-hint { color: var(--iris); }
 .launcher__check { margin-left: var(--sp-3); }
 
-/* M48. The gesture hints: bottom-centre, quiet, each gone for good once its
-   gesture has been used. Never a click target. */
-.hint-strip {
-  z-index: 950;
-  position: absolute;
-  left: var(--sp-5);
-  bottom: var(--sp-5);
-  display: flex;
-  gap: var(--sp-5);
-  padding: var(--sp-2) var(--sp-5);
-  border: 1px solid var(--line);
-  border-radius: var(--r-full);
-  background: var(--s-3);
-  color: var(--fg-3);
-  font-size: var(--t-xs);
-  white-space: nowrap;
-  pointer-events: none;
-  /* M67. One line, and it yields to the HUD: whole hints drop from the
-     OLDEST end when the strip does not fit (they wrap onto rows the strip
-     is too short to show; the last row, with the newest hints and the rule
-     line, is the one kept), so the strips never collide at 1440 (M66's
-     critic, finding 12) and no hint is ever cut mid-word. */
-  max-width: 40%;
-}
-.hint-strip__row {
-  display: flex;
-  gap: var(--sp-5);
-  row-gap: 0;
-  flex-wrap: wrap;
-  align-content: flex-end;
-  max-height: 1lh;
-  overflow: hidden;
-}
 
 /* M48. The probe banner: shown only when the login shell could not be read,
    because that is the case where every panel says "command not found" with
@@ -2986,13 +2951,7 @@ body {
 /* M63: NOT amber. Amber is "needs you" and nothing else (brief §6); a
    standing warning in the strip in the same hue was the critic's finding 4.
    It stays a sentence, in the strip's second ink. */
-.canvas-hud__warn {
-  color: var(--fg-2);
-}
 /* Capped: a long title would push the strip under the hint pill on its left. */
-.canvas-hud__focus { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.canvas-hud__word[data-tone] { color: var(--tone); font-weight: 600; }
-.canvas-hud__word[data-tone="none"], .canvas-hud__word[data-tone="starting"], .canvas-hud__word[data-tone="asleep"], .canvas-hud__word[data-tone="kind"] { color: var(--fg-3); }
 
 /* M6d. A sibling of .world, never a child: these are chrome whose POSITIONS
    are world-space facts. Inside the transform they would zoom and pan away
@@ -3793,8 +3752,6 @@ body {
 /* A settings row's hint is a sentence: it wraps, it is not cut mid-word. */
 .palette__row[data-group="setting"] { align-items: flex-start; }
 .palette__row[data-group="setting"] .palette__hint { white-space: normal; max-width: 55%; text-align: right; }
-/* The strip's rule line. */
-.hint-strip__rule { color: var(--fg-4); }
 /* The fit control names itself where there is room. */
 .canvas-hud__fit-label { font-size: var(--t-xs); }
 /* The word sits beside the glyph, on the strip's one line — stacked under
@@ -4419,3 +4376,11 @@ body {
 .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
 .shell__search:hover { color: var(--fg); background: var(--s-3); }
 @media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
+
+/* M173. The empty state's hints and the launcher's tmux banner: sentences in
+   the UI face where a person needs them; the strip that carried them is gone. */
+.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.rail-hint { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
+.launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
+.canvas-hud__notice { color: var(--amber); font-family: var(--font-ui); font-size: var(--t-xs); pointer-events: auto; }
