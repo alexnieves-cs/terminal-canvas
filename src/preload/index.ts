@@ -165,12 +165,12 @@ const bridge: CanvasBridge = {
     remove: (id: string) => ipcRenderer.invoke(IPC.TEAMMATE_DELETE, id),
     choosePlace: () => ipcRenderer.invoke(IPC.TEAMMATE_CHOOSE_PLACE)
   },
-  // M126. The shelf, read and written whole.
+  // M127. The shelf, read and written whole.
   shelf: {
     list: () => ipcRenderer.invoke(IPC.SHELF_LIST),
     save: (shelf) => ipcRenderer.invoke(IPC.SHELF_SAVE, shelf)
   },
-  // M127. One plugin's details text, verbatim.
+  // M128. One plugin's details text, verbatim.
   plugin: {
     details: (id) => ipcRenderer.invoke(IPC.PLUGIN_DETAILS, id)
   },
@@ -331,7 +331,7 @@ const bridge: CanvasBridge = {
     read: (req: ToolboxReadRequest) => ipcRenderer.invoke(IPC.TOOLBOX_READ, req),
     permissions: (req: ToolboxPermissionsRequest) => ipcRenderer.invoke(IPC.TOOLBOX_PERMISSIONS, req)
   },
-  // M128. The four writers. Main derives the writable roots itself — the
+  // M129. The four writers. Main derives the writable roots itself — the
   // renderer names a path, never a root.
   skill: {
     write: (req) => ipcRenderer.invoke(IPC.SKILL_WRITE, req),

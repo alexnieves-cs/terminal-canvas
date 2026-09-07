@@ -1,4 +1,6 @@
-# Act III — the shelf and the shape that runs: implementation plan (M125–M132)
+# Act III — the shelf and the shape that runs: implementation plan (M126–M133)
+
+> Renumbered M126–M133 on 2026-09-07: Act II's ship took M125 (README's row) after this document was written.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
@@ -18,7 +20,7 @@ asking M82's `agents.maxConcurrent` live.
 **Tech Stack:** TypeScript, Electron, React, esbuild-bundled plain-node check suites. **No new
 runtime dependency** — the only outside adoption is `claude plugin list --json`, a subprocess.
 
-**Spec:** [`docs/superpowers/specs/2026-09-06-m125-m132-skills-and-workflows-design.md`](../specs/2026-09-06-m125-m132-skills-and-workflows-design.md)
+**Spec:** [`docs/superpowers/specs/2026-09-06-m126-m132-skills-and-workflows-design.md`](../specs/2026-09-06-m126-m132-skills-and-workflows-design.md)
 — read it alongside this plan; every task cites the section it implements.
 
 ## Global Constraints
@@ -50,7 +52,7 @@ include this section.**
 - **Caps are applied at the READ boundary**, never at render time.
 - **`npm run verify` must be green before any task is claimed done.** No test-name filter
   exists in any suite; each runs everything.
-- Commits: `feat(m125): …` / `check(m125): … — red` / `fix(m125): …`.
+- Commits: `feat(m126): …` / `check(m126): … — red` / `fix(m126): …`.
 - `verify:styles icons.1` bans `›` and entity glyphs in renderer text. Use words.
 
 ## File structure
@@ -103,7 +105,7 @@ which `skills.ts` imports `ToolScope` from. Same checks, right bundle.
 
 ## Track A
 
-### Task 1: The skill key and the shelf record (M125, spec §2.1, §2.4, §2.5)
+### Task 1: The skill key and the shelf record (M126, spec §2.1, §2.4, §2.5)
 
 **Files:**
 - Create: `src/shared/skills.ts`
@@ -122,7 +124,7 @@ which `skills.ts` imports `ToolScope` from. Same checks, right bundle.
 Append to `scripts/verify-toolbox.cjs`, inside the IIFE, after the existing checks:
 
 ```js
-/* ---- M125: the shelf ---- */
+/* ---- M126: the shelf ---- */
 const { skillKey, parseSkillKey, placement, pluginPrefixOf, parseShelf, carryShelf,
         renameInShelf, UNGROUPED_COLUMN_ID } = mod
 
@@ -160,7 +162,7 @@ const { skillKey, parseSkillKey, placement, pluginPrefixOf, parseShelf, carryShe
 // shelf.3 — the record rules: absent, malformed, per-entry drop, and carry.
 {
   const w1 = []
-  ok('shelf.3a absent is every pre-M125 file, silently',
+  ok('shelf.3a absent is every pre-M126 file, silently',
      parseShelf(undefined, w1).columns.length === 0 && w1.length === 0, w1.join('|'))
   const w2 = []
   ok('shelf.3b a malformed shelf warns and yields empty',
@@ -197,11 +199,11 @@ const { skillKey, parseSkillKey, placement, pluginPrefixOf, parseShelf, carryShe
 Append to `scripts/verify-layout.cjs`:
 
 ```js
-/* ---- M125: the shelf on disk ---- */
+/* ---- M126: the shelf on disk ---- */
 {
   const w = []
   const bare = parseLayout(JSON.stringify({ version: 1, workspaces: [] }), w)
-  ok('shelf.disk.1 a pre-M125 file parses with an empty shelf and no warning',
+  ok('shelf.disk.1 a pre-M126 file parses with an empty shelf and no warning',
      bare.shelf.columns.length === 0 && !w.some((x) => /shelf/i.test(x)), w.join('|'))
   const round = JSON.parse(serialiseLayout({
     ...bare, shelf: { columns: [{ id: 'c', title: 'mobile', keys: ['["user","swiftui"]'] }] }
@@ -233,7 +235,7 @@ correct; a red for "suite threw before reaching my check" is not.
 
 ```bash
 git add scripts/verify-toolbox.cjs scripts/verify-layout.cjs
-git commit -m "check(m125): shelf.1-.4 and shelf.disk.1-.3 — the key, placement, the record rules — red"
+git commit -m "check(m126): shelf.1-.4 and shelf.disk.1-.3 — the key, placement, the record rules — red"
 ```
 
 - [ ] **Step 4: Create `src/shared/skills.ts`**
@@ -242,7 +244,7 @@ git commit -m "check(m125): shelf.1-.4 and shelf.disk.1-.3 — the key, placemen
 import type { ToolScope } from './toolbox'
 
 /**
- * M125. A skill's identity is `scope` AND `name`, never the name alone.
+ * M126. A skill's identity is `scope` AND `name`, never the name alone.
  *
  * M21 measured that two scopes can define one name and REFUSED to name a
  * winner, recording the link in `alsoDefinedIn`. A shelf keyed by bare name
@@ -331,7 +333,7 @@ export function placement(
   return { columnId: `scope:${scope}`, why: 'by-scope' }
 }
 
-/** ABSENT is every pre-M125 file and warns nothing; MALFORMED warns and is dropped. */
+/** ABSENT is every pre-M126 file and warns nothing; MALFORMED warns and is dropped. */
 export function parseShelf(raw: unknown, warnings: string[]): Shelf {
   if (raw === undefined || raw === null) return { columns: [] }
   if (typeof raw !== 'object' || Array.isArray(raw)) {
@@ -396,7 +398,7 @@ Three edits, mirroring `templates` exactly:
 
 ```ts
 // Absent on disk when empty. A written `"shelf":{"columns":[]}` is a record
-// claiming to exist; the store deletes the key instead, so a pre-M125 file and
+// claiming to exist; the store deletes the key instead, so a pre-M126 file and
 // a file whose shelf was emptied are byte-identical.
 if (out.shelf.columns.length === 0) delete (out as { shelf?: unknown }).shelf
 ```
@@ -426,12 +428,12 @@ Expected: all `shelf.*` PASS; `npm run verify` exit 0.
 
 ```bash
 git add src/shared/skills.ts src/shared/layout-schema.ts scripts/toolbox-entry.cjs
-git commit -m "feat(m125): the skill key as scope:name and the shelf record — placement carries its why, empty absent on disk"
+git commit -m "feat(m126): the skill key as scope:name and the shelf record — placement carries its why, empty absent on disk"
 ```
 
 ---
 
-### Task 2: Resources at the read boundary (M125, spec §2.2)
+### Task 2: Resources at the read boundary (M126, spec §2.2)
 
 **Files:**
 - Modify: `src/shared/toolbox.ts` (add `SkillResources`, `RESOURCES_MAX`)
@@ -448,7 +450,7 @@ The suite already builds a fixture tree with a SPACE in its path. Extend it — 
 two sibling files, a skill with none, and a skill whose directory is chmod `0o000`:
 
 ```js
-/* ---- M125: resources, counted at the boundary ---- */
+/* ---- M126: resources, counted at the boundary ---- */
 {
   const skills = inv.entries.filter((e) => e.kind === 'skill')
   const withRes = skills.find((e) => e.name === 'has-resources')
@@ -481,7 +483,7 @@ Expected: `skill.1a` FAILS reading `.kind` of undefined — `resources` is not o
 
 ```bash
 git add scripts/verify-toolbox.cjs
-git commit -m "check(m125): skill.1 — resources three-state at the read boundary — red"
+git commit -m "check(m126): skill.1 — resources three-state at the read boundary — red"
 ```
 
 - [ ] **Step 4: Add the type**
@@ -566,12 +568,12 @@ npm run verify:toolbox && npm run verify
 
 ```bash
 git add src/shared/toolbox.ts src/main/toolbox-read.ts
-git commit -m "feat(m125): resources counted at the read boundary — none, some, and unknown for a directory that would not list"
+git commit -m "feat(m126): resources counted at the read boundary — none, some, and unknown for a directory that would not list"
 ```
 
 ---
 
-### Task 3: Plugin skills, through the CLI's own answer (M125, spec §2.3)
+### Task 3: Plugin skills, through the CLI's own answer (M126, spec §2.3)
 
 **Files:**
 - Create: `src/main/plugin-list.ts`
@@ -592,7 +594,7 @@ git commit -m "feat(m125): resources counted at the read boundary — none, some
 Append to `scripts/verify-file.cjs`. Drive a FAKE runner — the real CLI is never spawned:
 
 ```js
-/* ---- M125: plugin-list, over a fake runner ---- */
+/* ---- M126: plugin-list, over a fake runner ---- */
 {
   const RECORDED = JSON.stringify([
     { id: 'superpowers@claude-plugins-official', version: '6.3.0', scope: 'user',
@@ -633,14 +635,14 @@ Expected: FAIL — `listPlugins is not a function`.
 
 ```bash
 git add scripts/verify-file.cjs
-git commit -m "check(m125): plugins.1 — the CLI's plugin list over a fake runner, unknown never empty — red"
+git commit -m "check(m126): plugins.1 — the CLI's plugin list over a fake runner, unknown never empty — red"
 ```
 
 - [ ] **Step 4: Implement `src/main/plugin-list.ts`**
 
 ```ts
 /**
- * M125. The enabled plugins, from the CLI's own answer.
+ * M126. The enabled plugins, from the CLI's own answer.
  *
  * `docs/ideas-backlog.md` #26 declined plugin skills because
  * `~/.claude/plugins` is 663 MB containing 700 SKILL.md files. This is the
@@ -726,12 +728,12 @@ npm run verify:file && npm run verify
 
 ```bash
 git add src/main/plugin-list.ts src/main/toolbox-read.ts src/shared/toolbox.ts scripts/file-entry.cjs
-git commit -m "feat(m125): plugin skills through claude plugin list --json — installPath bounds the walk, enabled is the CLI's answer, unknown never empty"
+git commit -m "feat(m126): plugin skills through claude plugin list --json — installPath bounds the walk, enabled is the CLI's answer, unknown never empty"
 ```
 
 ---
 
-### Task 4: The Skills pane (M126, spec §3)
+### Task 4: The Skills pane (M127, spec §3)
 
 **Files:**
 - Create: `src/renderer/shell/skills-pane-model.ts`, `src/renderer/shell/SkillsPane.tsx`
@@ -751,7 +753,7 @@ git commit -m "feat(m125): plugin skills through claude plugin list --json — i
 - [ ] **Step 1: Write the failing checks**
 
 ```js
-/* ---- M126: the Skills pane ---- */
+/* ---- M127: the Skills pane ---- */
 {
   const entries = [
     { kind: 'skill', scope: 'user', name: 'superpowers:brainstorming', description: 'd1',
@@ -795,7 +797,7 @@ git commit -m "feat(m125): plugin skills through claude plugin list --json — i
 ```bash
 npm run verify:rail
 git add scripts/verify-rail.cjs
-git commit -m "check(m126): skills.1 — the pane's columns, Ungrouped always present, no-match says so — red"
+git commit -m "check(m127): skills.1 — the pane's columns, Ungrouped always present, no-match says so — red"
 ```
 
 - [ ] **Step 3: Implement `skills-pane-model.ts`, then `SkillsPane.tsx`**
@@ -814,12 +816,12 @@ board). A drag onto the canvas opens the Task 5 panel at the drop point.
 ```bash
 npm run verify:rail && npm run verify
 git add src/renderer/shell/ src/shared/settings-schema.ts
-git commit -m "feat(m126): the Skills pane — columns over the inventory, three kind tabs, fuzzy.ts reused, Ungrouped undeletable"
+git commit -m "feat(m127): the Skills pane — columns over the inventory, three kind tabs, fuzzy.ts reused, Ungrouped undeletable"
 ```
 
 ---
 
-### Task 5: The `skill` panel kind, the thirteenth (M127, spec §4)
+### Task 5: The `skill` panel kind, the thirteenth (M128, spec §4)
 
 **Files:**
 - Create: `src/renderer/skills/SkillNode.tsx`, `src/renderer/skills/skill-node-model.ts`
@@ -841,7 +843,7 @@ git commit -m "feat(m126): the Skills pane — columns over the inventory, three
 - [ ] **Step 1: Write the failing checks**
 
 ```js
-/* ---- M127: the thirteenth kind ---- */
+/* ---- M128: the thirteenth kind ---- */
 ok('skill.panel.1a the record holds exactly two fields and no copied data',
    Object.keys(rec.skill).sort().join(',') === 'name,scope',
    'a copied description is a second author that goes stale silently')
@@ -855,14 +857,14 @@ ok('skill.panel.1e a plugin skill renders `claude plugin details` VERBATIM',
    'parsed nowhere — there is no --json, and a parser here is a differential')
 ```
 
-Plus a layout check that a `skill` panel round-trips and a pre-M127 file is untouched.
+Plus a layout check that a `skill` panel round-trips and a pre-M128 file is untouched.
 
 - [ ] **Step 2: Run red, commit the red check**
 
 ```bash
 npm run verify:panels
 git add scripts/verify-panels.cjs scripts/verify-layout.cjs
-git commit -m "check(m127): skill.panel.1 — two fields and no copy, the cross-panel answer, no shadow winner — red"
+git commit -m "check(m128): skill.panel.1 — two fields and no copy, the cross-panel answer, no shadow winner — red"
 ```
 
 - [ ] **Step 3: Add the kind at all thirteen sites**
@@ -884,12 +886,12 @@ rule for a template's chat message, not M114's for a dispatch), `Open folder`
 
 ```bash
 npm run verify:panels && npm run verify
-git commit -am "feat(m127): the skill panel — the thirteenth kind, two fields and no copy, the cross-panel answer, plugin details verbatim"
+git commit -am "feat(m128): the skill panel — the thirteenth kind, two fields and no copy, the cross-panel answer, plugin details verbatim"
 ```
 
 ---
 
-### Task 6: The editor (M128, spec §5)
+### Task 6: The editor (M129, spec §5)
 
 **Files:**
 - Create: `src/shared/skill-edit.ts`, `src/main/skill-write.ts`,
@@ -912,7 +914,7 @@ git commit -am "feat(m127): the skill panel — the thirteenth kind, two fields 
 - [ ] **Step 1: Write the failing checks — `edit.1` is the one that matters**
 
 ```js
-/* ---- M128: the frontmatter round-trip. THE check of this milestone. ---- */
+/* ---- M129: the frontmatter round-trip. THE check of this milestone. ---- */
 {
   const HOSTILE = [
     '---',
@@ -958,14 +960,14 @@ fake `realpath`: `..` out, a symlink out, a relative path, and a plugin `install
 ```bash
 npm run verify:toolbox
 git add scripts/verify-toolbox.cjs
-git commit -m "check(m128): edit.1-.5 — the frontmatter round-trip, containment, the stale write — red"
+git commit -m "check(m129): edit.1-.5 — the frontmatter round-trip, containment, the stale write — red"
 ```
 
 - [ ] **Step 3: Implement `src/shared/skill-edit.ts`**
 
 ```ts
 /**
- * M128. Editing a SKILL.md without destroying what we could not read.
+ * M129. Editing a SKILL.md without destroying what we could not read.
  *
  * `parseFrontmatter` is DELIBERATELY a small grammar — a `key: value` line,
  * optionally quoted, and `null` for block scalars, anchors and multi-line
@@ -1109,12 +1111,12 @@ open and why.
 ```bash
 npm run verify:toolbox && npm run verify:ipc && npm run verify
 git add -A
-git commit -m "feat(m128): the editor — Save never re-serialises frontmatter, the stale write refuses and keeps your text, containment is insidePlace reused"
+git commit -m "feat(m129): the editor — Save never re-serialises frontmatter, the stale write refuses and keeps your text, containment is insidePlace reused"
 ```
 
 ---
 
-### Task 7: The trail — main's half (M129, spec §6.1–6.3)
+### Task 7: The trail — main's half (M130, spec §6.1–6.3)
 
 **Files:**
 - Create: `src/shared/skill-trail.ts`, `src/main/skill-trail-read.ts`
@@ -1149,7 +1151,7 @@ Build `scripts/fixtures/skill-trail/session.jsonl` from the measured shape (spec
 ```
 
 ```js
-/* ---- M129: the trail ---- */
+/* ---- M130: the trail ---- */
 {
   const all = readFileSync(FIXTURE, 'utf8')
   const one = scanTrailChunk(all, '')
@@ -1187,7 +1189,7 @@ Build `scripts/fixtures/skill-trail/session.jsonl` from the measured shape (spec
 ```bash
 npm run verify:file
 git add scripts/verify-file.cjs scripts/fixtures/skill-trail/
-git commit -m "check(m129): trail.1 — the recorded fixture, the byte-offset resume, codex refused by name — red"
+git commit -m "check(m130): trail.1 — the recorded fixture, the byte-offset resume, codex refused by name — red"
 ```
 
 - [ ] **Step 3: Implement the scan and the tail**
@@ -1200,12 +1202,12 @@ byte offset and reads only the delta — `scrollback-log.ts`'s append discipline
 
 ```bash
 npm run verify:file && npm run verify
-git commit -am "feat(m129): the trail read — the CLI's own transcript tailed from a byte offset, codex and an unresolvable session refused by name"
+git commit -am "feat(m130): the trail read — the CLI's own transcript tailed from a byte offset, codex and an unresolvable session refused by name"
 ```
 
 ---
 
-### Task 8: The trail — the anchored lane (M129, spec §6.2, §6.4)
+### Task 8: The trail — the anchored lane (M130, spec §6.2, §6.4)
 
 **Files:**
 - Create: `src/renderer/skills/skill-trail-store.ts`
@@ -1252,7 +1254,7 @@ trail exists at the near tiers only.
 
 ```bash
 npm run verify:panels && npm run verify && npm run shot
-git commit -am "feat(m129): the trail's lane — derived and anchored, collapse the only stored fact, the capsule never disappears"
+git commit -am "feat(m130): the trail's lane — derived and anchored, collapse the only stored fact, the capsule never disappears"
 ```
 
 **Then read `docs/shots/trail.png`.** Spec §6.4 predicts this is the geometry most likely to
@@ -1260,7 +1262,7 @@ look wrong. If the lane crowds its host, adjust the offset here — not in a lat
 
 ---
 
-### Task 9: Assignments (M130, spec §7)
+### Task 9: Assignments (M131, spec §7)
 
 **Files:**
 - Modify: `src/shared/teammates.ts` (`skills?: SkillKey[]`), `src/main/index.ts` (the brief
@@ -1292,7 +1294,7 @@ ok('assign.1e carryTeammate writes no undefined skills key',
 ```bash
 npm run verify:teammates
 git add scripts/verify-teammates.cjs
-git commit -m "check(m130): assign.1 — the brief append in main, the project-scope refusal naming the repository — red"
+git commit -m "check(m131): assign.1 — the brief append in main, the project-scope refusal naming the repository — red"
 ```
 
 - [ ] **Step 3: Add `skills?: SkillKey[]` to the teammate record**
@@ -1333,7 +1335,7 @@ npm run verify:teammates && npm run verify
 
 ```bash
 npm run verify:teammates && npm run verify
-git commit -am "feat(m130): assignments — a shelf column onto a teammate's brief through M100's one append, the project-scope refusal naming the repository"
+git commit -am "feat(m131): assignments — a shelf column onto a teammate's brief through M100's one append, the project-scope refusal naming the repository"
 ```
 
 ---
@@ -1347,7 +1349,7 @@ schema commit only so the two branches share a base for `layout-schema.ts`.
 git worktree add -b m131-workflow .claude/worktrees/m131-workflow <Task-1-commit-sha>
 ```
 
-### Task 10: The three node kinds (M131, spec §8)
+### Task 10: The three node kinds (M132, spec §8)
 
 **Files:**
 - Create: `src/shared/workflow-nodes.ts`
@@ -1364,7 +1366,7 @@ git worktree add -b m131-workflow .claude/worktrees/m131-workflow <Task-1-commit
 
 ```js
 ok('workflow.1a the three kinds parse', parsed.nodes.length === 3, '')
-ok('workflow.1b a pre-M131 template file loads UNTOUCHED',
+ok('workflow.1b a pre-M132 template file loads UNTOUCHED',
    JSON.stringify(parseTemplates(preM131, w)) === JSON.stringify(expectedPreM131) && w.length === 0,
    'every existing template must survive this change silently')
 ok('workflow.1c an unknown kind drops the node AND its edges, the template kept',
@@ -1379,7 +1381,7 @@ ok('workflow.1e blockCount counts nodes, matching the header readout', blockCoun
 ```bash
 npm run verify:layout
 git add scripts/verify-layout.cjs
-git commit -m "check(m131): workflow.1 — three node kinds, a pre-M131 template untouched, an unknown kind drops its edges — red"
+git commit -m "check(m132): workflow.1 — three node kinds, a pre-M132 template untouched, an unknown kind drops its edges — red"
 ```
 
 - [ ] **Step 3: Create `src/shared/workflow-nodes.ts`**
@@ -1388,7 +1390,7 @@ git commit -m "check(m131): workflow.1 — three node kinds, a pre-M131 template
 import type { TemplateNode } from './templates'
 
 /**
- * M131. Three block types M80's template did not have.
+ * M132. Three block types M80's template did not have.
  *
  * Each is a NEW ARM on an existing union, never a new engine: the pool asks
  * M82's ceiling, the orchestrator is M81's supervisor mechanism, and the
@@ -1499,12 +1501,12 @@ unknown fourth kind drop cleanly rather than crash a user's whole template.
 ```bash
 npm run verify:layout && npm run verify
 git add src/shared/workflow-nodes.ts src/shared/templates.ts src/shared/layout-schema.ts
-git commit -m "feat(m131): three template node kinds — pool, orchestrator and collect, each an arm on an existing union; a pre-M131 template loads untouched"
+git commit -m "feat(m132): three template node kinds — pool, orchestrator and collect, each an arm on an existing union; a pre-M132 template loads untouched"
 ```
 
 ---
 
-### Task 11: The pool (M131, spec §8.1) — the act's one new engine
+### Task 11: The pool (M132, spec §8.1) — the act's one new engine
 
 **Files:**
 - Create: `src/main/pool-runner.ts`
@@ -1537,14 +1539,14 @@ ok('pool.1f a budget crossing INTERRUPTS every worker and never kills one',
 ```bash
 npm run verify:agent-session
 git add scripts/verify-agent-session.cjs
-git commit -m "check(m131): pool.1 — the ceiling read live, the queue's reason, a budget crossing interrupting and never killing — red"
+git commit -m "check(m132): pool.1 — the ceiling read live, the queue's reason, a budget crossing interrupting and never killing — red"
 ```
 
 - [ ] **Step 3: Implement `src/main/pool-runner.ts`**
 
 ```ts
 /**
- * M131. N workers over a shared list, each pulling the next item until the
+ * M132. N workers over a shared list, each pulling the next item until the
  * list is empty. The act's ONE new engine.
  *
  * It takes NO ceiling of its own. M82's agents.maxConcurrent is read LIVE on
@@ -1642,12 +1644,12 @@ npm run verify:agent-session && npm run verify
 
 ```bash
 git add src/main/pool-runner.ts scripts/verify-agent-session.cjs
-git commit -m "feat(m131): the pool — the shared list as a file, the ceiling read live with M82's own queue, a budget crossing interrupting every worker and killing none"
+git commit -m "feat(m132): the pool — the shared list as a file, the ceiling read live with M82's own queue, a budget crossing interrupting every worker and killing none"
 ```
 
 ---
 
-### Task 12: The workflow panel, the fourteenth kind (M132, spec §9)
+### Task 12: The workflow panel, the fourteenth kind (M133, spec §9)
 
 **Files:**
 - Create: `src/renderer/workflow/WorkflowNode.tsx`, `src/renderer/workflow/workflow-diagram.ts`
@@ -1673,7 +1675,7 @@ ok('workflow.panel.1e Run reaches M80 instantiation, not a second copy',
 ```bash
 npm run verify:panels
 git add scripts/verify-panels.cjs
-git commit -m "check(m132): workflow.panel.1 — the diagram as a projection, Runs filtered, Run reaching M80 — red"
+git commit -m "check(m133): workflow.panel.1 — the diagram as a projection, Runs filtered, Run reaching M80 — red"
 ```
 
 - [ ] **Step 3: Add the fourteenth kind at the thirteen fan-out sites**
@@ -1724,7 +1726,7 @@ unchanged; Run calls M80's existing instantiation and never a second copy of it.
 ```bash
 npm run verify:panels && npm run verify && npm run shot
 git add -A
-git commit -m "feat(m132): the workflow panel — the diagram as a projection of the record, Runs from M79, triggers as watchers, Run reaching M80's instantiation"
+git commit -m "feat(m133): the workflow panel — the diagram as a projection of the record, Runs from M79, triggers as watchers, Run reaching M80's instantiation"
 ```
 
 **Then read `docs/shots/workflow.png`** before claiming the task done.
@@ -1750,7 +1752,7 @@ npm run verify:layout && npm run verify:panels && npm run verify
 
 After the merge: `npm run shot`, read all scenes, hand the new ones (`skills`, `trail`,
 `workflow`) plus the spec to a fresh-context critic and a fresh-context verifier. Then write
-`docs/build-log/m125-m132-skills-and-workflows.md`, update `README.md`'s milestone table and
+`docs/build-log/m126-m132-skills-and-workflows.md`, update `README.md`'s milestone table and
 `CLAUDE.md`'s suite rows and channel count, and record the four owed manual-only checks from
 spec §12 at the end of `docs/load-bearing.md`:
 

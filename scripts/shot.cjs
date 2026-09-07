@@ -76,7 +76,7 @@ writeFileSync(join(REPO, 'README.md'), '# fixture\n\nA repository the screenshot
 writeFileSync(join(REPO, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm run *)', 'Read', 'Edit'], deny: ['Bash(rm -rf *)'] } }, null, 2))
 writeFileSync(join(REPO, '.claude', 'commands', 'review.md'), 'Review the diff for correctness and name every silent failure.\n')
 writeFileSync(join(REPO, '.claude', 'commands', 'deploy.md'), 'Run the deploy checklist and stop at the first red step.\n')
-// M129. Three project skills, so the trail's cards resolve BY NAME against a
+// M130. Three project skills, so the trail's cards resolve BY NAME against a
 // real inventory: two the agent used and one it did not. The fourth name in
 // the transcript below is installed nowhere, which is the `not installed
 // here` card — the useful answer after a session used a plugin skill this
@@ -517,7 +517,7 @@ app.whenReady().then(async () => {
         { id: 'codex', kind: 'chat', x: 1130, y: 120, w: 340, h: 300, z: 11, title: 'codex — api thread', chat: { cwd: REPO, sessionId: 'thread-0199a1b2', backend: 'codex' } },
         // M116. A work card beside the chat it was dispatched to, with the edge.
         { id: 'card12', kind: 'work', x: 300, y: 570, w: 420, h: 200, z: 18, title: 'Watchdog fires under load', work: { itemId: 'wi-12' }, links: [{ to: 'chat', label: 'dispatched' }] },
-        // M129. The trail's host: a terminal whose session used four skills.
+        // M130. The trail's host: a terminal whose session used four skills.
         // Clear of the workers group and the wide review: the scene's whole
         // question is whether the lane crowds its HOST, and a host sitting on
         // another panel's frame would answer a different one.
@@ -527,7 +527,7 @@ app.whenReady().then(async () => {
         term('twin', 1400, 1000, 480, 300, 8, { title: 'claude — api (2)', args: ['-c', 'echo "$ claude"; echo "Waiting for input"; read x; printf "\\a? Allow Edit on src/server.ts (y/n)\\n"; sleep 600'] }),
         term('groupA', 60, 1440, 420, 260, 9, { title: 'worker a', cwd: FIX, links: [{ to: 'twin', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
         term('groupB', 520, 1440, 420, 260, 10, { title: 'worker b', cwd: FIX }),
-        // M132. The workflow panel: a VIEW of the `nightly sweep` template
+        // M133. The workflow panel: a VIEW of the `nightly sweep` template
         // below, off in its own space so the diagram is the whole picture.
         { id: 'workflow', kind: 'workflow', x: 2600, y: 900, w: 620, h: 440, z: 19, title: 'nightly sweep', workflow: { templateId: 'tpl-sweep' } }
       ],
@@ -553,8 +553,8 @@ app.whenReady().then(async () => {
       groups: [], bookmarks: []
     }],
     presets: [], defaultPresetId: 'shell', prompts: [],
-    // M132. The template the workflow panel projects: a scan, a pool of six
-    // over a shared list, a judge, and a collect — one of each M131 block
+    // M133. The template the workflow panel projects: a scan, a pool of six
+    // over a shared list, a judge, and a collect — one of each M132 block
     // beside an ordinary terminal, so the diagram shows the vocabulary.
     templates: [{
       id: 'tpl-sweep', name: 'nightly sweep', description: 'scan, work the list six at a time, judge, collect',
@@ -781,18 +781,18 @@ app.whenReady().then(async () => {
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
     { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) },
-    // M125/M127. No scene spawns the real CLI, so the plugin list and the
+    // M126/M128. No scene spawns the real CLI, so the plugin list and the
     // details text are the same `unknown` an uninstalled `claude` produces.
     async () => ({ kind: 'unknown', why: 'no plugin list in the shot harness' }),
     async (id) => ({ kind: 'unknown', why: `no plugin details for ${id} in the shot harness` }),
-    // M128. Inert writers: a screenshot harness must never edit a skill file.
+    // M129. Inert writers: a screenshot harness must never edit a skill file.
     {
       write: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
       create: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
       rename: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' }),
       remove: async () => ({ kind: 'refused', reason: 'the screenshot harness does not write' })
     },
-    // M129. The REAL trail read over the fixture transcript above, so the
+    // M130. The REAL trail read over the fixture transcript above, so the
     // `trail` scene paints what the app paints.
     async (panelId) => (panelId === 'trail'
       ? trailFor({

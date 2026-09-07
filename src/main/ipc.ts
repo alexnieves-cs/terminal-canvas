@@ -118,7 +118,7 @@ export interface PaletteHandlers {
   /** M100. */
   listTeammates(): PersistedTeammate[]
   /**
-   * M130 fix round 2. `cwd`, present only from the assign door, lets main
+   * M131 fix round 2. `cwd`, present only from the assign door, lets main
    * check a project-scoped skill's REAL visibility (symlink-resolved
    * `insidePlace`) for this save and report it back on `notVisible` — never
    * a new channel, and never silent: a skill the pane just "saved" that
@@ -135,7 +135,7 @@ export interface PaletteHandlers {
   saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
   removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
-  /** M126. The skill shelf, whole. */
+  /** M127. The skill shelf, whole. */
   shelf(): Shelf
   saveShelf(shelf: Shelf): Shelf
 }
@@ -226,7 +226,7 @@ const INERT_BROWSER: BrowserHandlers = {
   read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
 }
 
-/** M128. The four writers; see main/skill-write.ts for every rule they enforce. */
+/** M129. The four writers; see main/skill-write.ts for every rule they enforce. */
 export interface SkillWriteHandlers {
   write(req: SkillWriteRequest): Promise<SkillWriteResult>
   create(req: SkillCreateRequest): Promise<SkillWriteResult>
@@ -369,7 +369,7 @@ export function registerIpcHandlers(
   /** M114. Appended last, like every collaborator before it. */
   board: BoardHandlers = INERT_BOARD,
   /**
-   * M125. The enabled plugins, asked fresh on every toolbox read. Inert by
+   * M126. The enabled plugins, asked fresh on every toolbox read. Inert by
    * default (`unknown`, never spawning anything) for the same reason as every
    * collaborator before it: a harness that does not wire it keeps compiling
    * and TOOLBOX_READ still answers, just with no plugin skills.
@@ -379,7 +379,7 @@ export function registerIpcHandlers(
     why: 'plugin list is not wired'
   }),
   /**
-   * M127. One plugin's `claude plugin details` text. Inert by default for
+   * M128. One plugin's `claude plugin details` text. Inert by default for
    * every collaborator's reason: a harness that does not wire it keeps
    * compiling, and the panel's plugin section shows its `unknown` arm rather
    * than nothing at all.
@@ -389,14 +389,14 @@ export function registerIpcHandlers(
     why: `plugin details for ${id} is not wired`
   }),
   /**
-   * M128. The four writers. Inert by default for every collaborator's
+   * M129. The four writers. Inert by default for every collaborator's
    * reason, and here the default matters more than most: a harness that did
    * not wire the writers gets a NAMED REFUSAL rather than a write, so no
    * suite can reach the real `~/.claude` through a channel it forgot about.
    */
   skillWriters: SkillWriteHandlers = INERT_SKILL_WRITERS,
   /**
-   * M129. A terminal panel's live skill trail. Inert by default for every
+   * M130. A terminal panel's live skill trail. Inert by default for every
    * collaborator's reason: a harness that does not wire it gets a named
    * `unreadable` rather than a read against nothing.
    */
@@ -565,11 +565,11 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.ROUTINE_SAVE, (_event, routine: PersistedRoutine) => palette.saveRoutine(routine))
   ipcMain.handle(IPC.ROUTINE_DELETE, (_event, id: string) => palette.removeRoutine(id))
   ipcMain.handle(IPC.ROUTINE_RUN, (_event, id: string) => palette.runRoutine(id))
-  // M126. The shelf is written WHOLE — the columns are one record and a
+  // M127. The shelf is written WHOLE — the columns are one record and a
   // per-column channel would let a half-applied drag persist.
   ipcMain.handle(IPC.SHELF_LIST, () => palette.shelf())
   ipcMain.handle(IPC.SHELF_SAVE, (_event, shelf: Shelf) => palette.saveShelf(shelf))
-  // M127. One plugin's details, verbatim and parsed nowhere. Asked only by a
+  // M128. One plugin's details, verbatim and parsed nowhere. Asked only by a
   // skill panel that names a plugin — never on a toolbox read.
   ipcMain.handle(IPC.PLUGIN_DETAILS, (_event, id: string) => pluginDetails(id))
 
@@ -779,7 +779,7 @@ export function registerIpcHandlers(
     return readPermissionRules(req.path, req.bucket)
   })
 
-  // M128. The four writers — the only handlers in this file that put bytes
+  // M129. The four writers — the only handlers in this file that put bytes
   // into ~/.claude. Every rule they enforce lives in main/skill-write.ts;
   // nothing here decides anything, for credential-store.ts's own division
   // between deciding and writing.

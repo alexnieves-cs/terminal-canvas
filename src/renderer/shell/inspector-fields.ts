@@ -530,7 +530,7 @@ export function buildInspectorModelBare(
   chat?: ChatInspectorInput | undefined,
   workItem?: PersistedWorkItem | undefined,
   /**
-   * M132. A workflow trigger's template name by id. OPTIONAL and defaulted,
+   * M133. A workflow trigger's template name by id. OPTIONAL and defaulted,
    * the trade every parameter above it made; absent means "nobody asked", and
    * `workflowWatchWord` says so rather than claiming the template is gone.
    */
@@ -679,7 +679,7 @@ export function buildInspectorModelBare(
       ...(panel.title === undefined ? {} : { title: panel.title }),
       restartable: false, reattached: false, links, usage: NO_USAGE,
       fields: [
-        // M132. A workflow trigger reads as the workflow it runs. `/usr/bin/true`
+        // M133. A workflow trigger reads as the workflow it runs. `/usr/bin/true`
         // is what main's arming needs, not what this watcher is for.
         panel.watch.templateId === undefined
           ? { key: 'watch-command', label: 'runs', value: [panel.watch.command, ...panel.watch.args].join(' ') }
@@ -709,7 +709,7 @@ export function buildInspectorModelBare(
         ]
     return { kind: 'work', reviewable: false, state: { kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields }
   }
-  // M127. The skill panel: a document kind whose identity is the PAIR. Two
+  // M128. The skill panel: a document kind whose identity is the PAIR. Two
   // fields, and nothing the inventory owns — a description here would be the
   // second author the record itself refuses to be.
   if (isSkillPanel(panel)) {
@@ -718,7 +718,7 @@ export function buildInspectorModelBare(
       { key: 'skill-name', label: 'name', value: panel.skill.name }
     ] }
   }
-  // M132. The workflow panel: a projection of a template, so its identity
+  // M133. The workflow panel: a projection of a template, so its identity
   // IS the template's id — the one field, and the same reason the panel
   // record carries nothing else.
   if (isWorkflowPanel(panel)) {
@@ -1251,7 +1251,7 @@ export function buildInspectorModel(
   /** M116. The work card's record, for its word and its five facts. Optional like every dep before it. */
   workItem?: PersistedWorkItem | undefined,
   /**
-   * M132. A workflow trigger's template name by id. OPTIONAL and defaulted,
+   * M133. A workflow trigger's template name by id. OPTIONAL and defaulted,
    * the trade every parameter above it made; absent means "nobody asked", and
    * `workflowWatchWord` says so rather than claiming the template is gone.
    */

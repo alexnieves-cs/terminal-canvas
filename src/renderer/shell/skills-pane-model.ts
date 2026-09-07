@@ -12,7 +12,7 @@ import {
 import type { NamedToolEntry, SkillResources, ToolEntry, ToolScope } from '@shared/toolbox'
 
 /**
- * M126. The Skills pane's whole model: an inventory plus the shelf plus the
+ * M127. The Skills pane's whole model: an inventory plus the shelf plus the
  * three filters, in; columns of cards, out.
  *
  * Pure by construction, and it joins `rail-entry.cjs` for the reason every

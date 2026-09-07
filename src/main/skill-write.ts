@@ -1,5 +1,5 @@
 /**
- * M128. The only code in this repository that puts bytes into `~/.claude`.
+ * M129. The only code in this repository that puts bytes into `~/.claude`.
  *
  * `docs/ideas-backlog.md` #26 deferred the editing half wholesale; spec §5.1
  * narrows that refusal rather than dropping it. A skill's `SKILL.md` is

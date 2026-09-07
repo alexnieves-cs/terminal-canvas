@@ -8,7 +8,7 @@ import { getChat, subscribeChat } from '@renderer/chat/chat-store'
 import type { Panel } from '@renderer/panels/panels'
 
 /**
- * M129. WHAT SKILLS THIS PANEL'S AGENT USED — per panel, in a module-level
+ * M130. WHAT SKILLS THIS PANEL'S AGENT USED — per panel, in a module-level
  * store subscribed BY ID, the shape every store since M12 takes and never
  * `registry.version()`, which carries tier/status/focus/exit and nothing
  * higher-frequency (a trail arriving through it would re-render the whole

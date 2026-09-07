@@ -385,7 +385,7 @@ app.on('window-all-closed', () => {})
 // line, M98's grants) the suite reached check 246 at 300s under the chain
 // while passing alone — the ceiling had become a race against the machine,
 // which is the load-flake rule, not a hang. A real hang still lands here.
-// Raised 480s → 600s at M129, the third time, and this one is MEASURED
+// Raised 480s → 600s at M130, the third time, and this one is MEASURED
 // rather than positional. Two green runs of `npm run verify:panels` alone on
 // this machine on 2026-09-06: 5:11 and 5:12 wall clock (311s, 312s) for
 // 329 checks — so 1.25x the measured figure is ~390s.
@@ -888,7 +888,7 @@ app.whenReady().then(async () => {
   // honest rather than blanket-true.
   const whichHere = (command) => (command.startsWith('/') && existsSync(command) ? command : null)
   const toolboxCache = new ToolboxCache()
-  // M127. The plugin fixture the skill panel's own block uses, and the
+  // M128. The plugin fixture the skill panel's own block uses, and the
   // RECORDED `claude plugin details` text it renders verbatim. Both are
   // gated on `pluginFixtureOn`, which stays false until skill.panel.1's
   // block turns it on: `listPlugins` has no cwd argument, so an
@@ -907,16 +907,16 @@ app.whenReady().then(async () => {
   // the string the panel must show, byte for byte — newlines included.
   const PLUGIN_DETAILS_TEXT = 'fixture-plugin@1.0.0\n  Skills (1)  plugged-skill\n  Always-on: ~688 tok\n  plugged-skill   on-invoke   ~120 tok\n'
   let pluginFixtureOn = false
-  // M128 fix. Every path `skill:delete` handed to `trash`, in order. The
+  // M129 fix. Every path `skill:delete` handed to `trash`, in order. The
   // harness never trashes anything: what a check needs to see is that main
   // was asked to remove the skill's DIRECTORY, which a recorder answers and
   // a real `shell.trashItem` would answer only by moving a fixture.
   const skillTrashCalls = []
-  // M129. The skill trail's fixture: a panel id and a real JSONL file on
+  // M130. The skill trail's fixture: a panel id and a real JSONL file on
   // disk. `null` until trail.lane.1 arms it, so every read before that block
   // gets the same named `unreadable` an unwired harness has always got.
   let trailFixture = null
-  // M129 fix round. A cwd whose toolbox read main REFUSES, so the lane's
+  // M130 fix round. A cwd whose toolbox read main REFUSES, so the lane's
   // fourth outcome is reachable from a check: a refusal is not an inventory
   // and must never be rendered as `not installed here`, which is a claim
   // about the user's machine.
@@ -1240,7 +1240,7 @@ app.whenReady().then(async () => {
     memoryList: (root, limit) => memoryStore.list(root, limit),
     memoryAdd: (req) => { const r = memoryStore.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
     listTemplates: () => allTemplates(layoutStore.templates()),
-    // M126 fix. The shelf, whole, through the SAME parser main uses. It was
+    // M127 fix. The shelf, whole, through the SAME parser main uses. It was
     // missing entirely: `palette.shelf()` threw, both invokes rejected, and
     // Canvas's un-caught `.then` chains left the pane empty with nothing on
     // screen saying so — in every boot of this harness.
@@ -1347,7 +1347,7 @@ app.whenReady().then(async () => {
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
   }) },
-  // M125/M127. The plugin list and the details text, both fixtures: no suite
+  // M126/M128. The plugin list and the details text, both fixtures: no suite
   // spawns the real CLI. `unknown` while the flag is off is exactly what an
   // uninstalled `claude` produces, so every read before skill.panel.1 sees
   // the same answer it saw before this fixture existed.
@@ -1357,7 +1357,7 @@ app.whenReady().then(async () => {
   async (id) => (pluginFixtureOn && id === PLUGIN_ID
     ? { kind: 'ok', text: PLUGIN_DETAILS_TEXT }
     : { kind: 'unknown', why: `claude plugin details ${id} did not answer` }),
-  // M128 fix. The REAL writers, so editor.2 drives the same create / rename
+  // M129 fix. The REAL writers, so editor.2 drives the same create / rename
   // / delete path production does rather than three inert fakes that could
   // never have caught the three channels having NO renderer caller at all.
   //
@@ -1373,7 +1373,7 @@ app.whenReady().then(async () => {
     plugins: async () => (pluginFixtureOn ? [{ id: PLUGIN_ID, installPath: PLUGIN_DIR }] : []),
     trash: async (path) => { skillTrashCalls.push(path) }
   }),
-  // M129. The REAL trailFor over the harness's own fixture transcript — the
+  // M130. The REAL trailFor over the harness's own fixture transcript — the
   // same byte-offset tail main wires, with the projects lookup replaced by
   // this suite's file so nothing reads the developer's ~/.claude/projects.
   async (panelId) => (trailFixture !== null && trailFixture.panelIds.includes(panelId)
@@ -18870,9 +18870,9 @@ app.whenReady().then(async () => {
       }
     }
 
-    /* ========== M127: the skill panel, the thirteenth kind ============== */
+    /* ========== M128: the skill panel, the thirteenth kind ============== */
     //
-    // Driven through the DROP door the Skills pane already uses (M126's own
+    // Driven through the DROP door the Skills pane already uses (M127's own
     // MIME on a real DragEvent), never through a mint written here: the
     // panel must be reachable by the gesture, not only constructible.
     // Fixtures: a project skill ALSO defined in the fenced user home (so
@@ -18995,7 +18995,7 @@ app.whenReady().then(async () => {
       }
     }
 
-    /* ========== M128: the editor's three-state editability ============== */
+    /* ========== M129: the editor's three-state editability ============== */
     //
     // The frontmatter round-trip is verify:toolbox's (edit.1). What is only
     // observable HERE is the consequence §5.2 draws from it: a block the
@@ -19158,7 +19158,7 @@ app.whenReady().then(async () => {
     }
 
 
-    /* ========== M128 fix: the three write doors, WIRED ================== */
+    /* ========== M129 fix: the three write doors, WIRED ================== */
     //
     // `skill:create`, `skill:rename` and `skill:delete` shipped with NO
     // renderer caller at all — three channels, their refusals and
@@ -19328,7 +19328,7 @@ app.whenReady().then(async () => {
       }
     }
 
-    /* ========== M129: the trail's anchored lane ========================= */
+    /* ========== M130: the trail's anchored lane ========================= */
     //
     // The lane is DERIVED — beside M114's anchored work card and M79's run
     // frames — so its cards are not panels, cost no LOD budget and no
@@ -19556,7 +19556,7 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
-    // M132 — workflow.panel.1e. The workflow panel's Run reaches M80's OWN
+    // M133 — workflow.panel.1e. The workflow panel's Run reaches M80's OWN
     //     instantiation exactly once — never a second copy of it. The pure
     //     half of this milestone (the diagram as a projection, the header
     //     count, the Runs filter, the trigger round trip) is
@@ -19564,7 +19564,7 @@ app.whenReady().then(async () => {
     // -------------------------------------------------------------------
     {
       const IDS = [
-        'workflow.panel.1e a template carrying a workflow BLOCK opens with its diagram but its Run is DISABLED, naming the block, and a press mints nothing — M131 landed the schema, not the runtime, so a run would mint a partial shape silently',
+        'workflow.panel.1e a template carrying a workflow BLOCK opens with its diagram but its Run is DISABLED, naming the block, and a press mints nothing — M132 landed the schema, not the runtime, so a run would mint a partial shape silently',
         'workflow.panel.1g Run reaches M80 instantiation, not a second copy — a blocks-free workflow mints its shape through instantiateTemplate exactly once'
       ]
       const wfLog = []
@@ -19675,7 +19675,7 @@ app.whenReady().then(async () => {
     }
 
     // -------------------------------------------------------------------
-    // M132 — workflow.panel.1f. THE FIRE PATH, driven end to end: a
+    // M133 — workflow.panel.1f. THE FIRE PATH, driven end to end: a
     //     `watcher:state` event for a workflow watcher (which is what main's
     //     runner sends on every run) reaches setWatcherFiredHandler, the
     //     Canvas handler reads the record's templateId, and ONE instantiation

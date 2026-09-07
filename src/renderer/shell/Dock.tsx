@@ -49,7 +49,7 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
     { id: 'teammates', label: 'Teammates', icon: <Grid /> },
     // M116. The board: four columns over the workspace's work items.
     { id: 'board', label: 'Board', icon: <KindWork /> },
-    // M126. The shelf: what this agent can do, in columns.
+    // M127. The shelf: what this agent can do, in columns.
     { id: 'skills', label: 'Skills', icon: <KindToolbox /> }
   ]
   return (

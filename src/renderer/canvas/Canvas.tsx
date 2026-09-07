@@ -147,7 +147,7 @@ import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@rendere
 import type { ShelfState, SkillsInventoryState } from '@renderer/shell/SkillsPane'
 import { SkillNode } from '@renderer/skills/SkillNode'
 
-/* M126. Module scope, never a fresh literal per render: canvas-constants.ts's
+/* M127. Module scope, never a fresh literal per render: canvas-constants.ts's
    own rule — a new object each render is re-render churn through every memo
    that takes the shelf as a dependency. */
 const EMPTY_SHELF: Shelf = { columns: [] }
@@ -179,7 +179,7 @@ import { describeAutomation, isRestartable, isRunning } from '../shell/inspector
 import type { LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from './trigger-words'
 import type { PanelSearchResult } from '@shared/ipc-contract'
-// M128. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
+// M129. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
 
 
@@ -326,7 +326,7 @@ export function Canvas({
   const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
   const instantiateTemplateStable = useCallback((template: PersistedTemplate, values: Record<string, string>) => instantiateTemplateRef.current(template, values), [])
   /**
-   * M132. How many times M80's instantiation has been ENTERED, for
+   * M133. How many times M80's instantiation has been ENTERED, for
    * `workflow.panel.1e`: the whole claim of the workflow panel's Run is that
    * it reaches this one function and never a second copy of it, and only a
    * count can tell those apart. A ref, not state — nothing renders from it.
@@ -1186,7 +1186,7 @@ export function Canvas({
   // tear that listener down and reinstall it on every mousemove over the
   // canvas (Canvas re-renders on setCursor).
   const shouldIgnoreKeys = useCallback(
-    // M128. A skill-editor field having the keyboard is the same situation as
+    // M129. A skill-editor field having the keyboard is the same situation as
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
@@ -1381,7 +1381,7 @@ export function Canvas({
   }), [])
 
   /**
-   * M129. THE TRAIL, refreshed on the two moments it can have changed — and
+   * M130. THE TRAIL, refreshed on the two moments it can have changed — and
    * on no timer of its own.
    *
    * A terminal's trail is a tail of the CLI's transcript in MAIN, so asking
@@ -2479,7 +2479,7 @@ export function Canvas({
   // itself when it opens, so a template saved while the palette is shut is
   // offered the moment the sheet opens either way).
   const [templateRows, setTemplateRows] = useState<PersistedTemplate[]>([])
-  // M132's verbs are read from refs at CALL time, the rule every verb in this
+  // M133's verbs are read from refs at CALL time, the rule every verb in this
   // file obeys: the user can save or delete a template between opening the
   // palette and running the row.
   const templateRowsRef = useRef<PersistedTemplate[]>([])
@@ -3246,10 +3246,10 @@ export function Canvas({
   }, [openFilePanel, palette, registry])
   const onDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    // M126. The Skills pane's OWN MIME, read here and nowhere else — M114's
+    // M127. The Skills pane's OWN MIME, read here and nowhere else — M114's
     // rule for the board's drops. A card dropped on the canvas opens the
     // skill's panel at the drop point, through the ONE door
-    // `openSkillPanel`; the `skill` panel kind is M127's, so today that door
+    // `openSkillPanel`; the `skill` panel kind is M128's, so today that door
     // records the request and opens nothing. Checked BEFORE the file arm,
     // because a drag with no files would otherwise fall out of it silently.
     // M59's guard, hoisted ABOVE the skill arm: a drop while the palette or
@@ -3750,7 +3750,7 @@ export function Canvas({
         if (node.message !== undefined && node.message !== '') messages.push({ id, text: node.message })
         continue
       }
-      // M131: the three workflow kinds land in TemplateNode's union but have
+      // M132: the three workflow kinds land in TemplateNode's union but have
       // no runtime here yet — this task lands the schema, not the runtime,
       // so they are skipped BY NAME rather than instantiated as panels.
       if (node.kind === 'pool' || node.kind === 'orchestrator' || node.kind === 'collect') continue
@@ -3791,7 +3791,7 @@ export function Canvas({
       commitHistory(next)
       return next
     })
-    // M132. THE ONE PLACE a run learns its template. The recorder opens runs
+    // M133. THE ONE PLACE a run learns its template. The recorder opens runs
     // from the handoff hook's events and knows nothing about templates, so
     // the origin is handed to it here, at the only moment anything knows that
     // these panel ids came from this shape of work.
@@ -3843,7 +3843,7 @@ export function Canvas({
     setPanelFlag(id, (p) => (p.maximised !== undefined ? null : { ...p, maximised: { restore: p.rect }, rect: { ...rect, id }, z: nextZ(panelsRef.current) }))
   }, [setPanelFlag])
   const restorePanel = useCallback((id: string) => setPanelFlag(id, (p) => (p.maximised === undefined ? null : { ...strip(p, 'maximised'), rect: p.maximised.restore })), [setPanelFlag])
-  // M129. The fourth layout mark, through the same one-history-entry door the
+  // M130. The fourth layout mark, through the same one-history-entry door the
   // other three take. Absent stays absent: expanding DELETES the key rather
   // than writing `skillTrail: undefined`, which survives IPC and reads as
   // present on the next parse.
@@ -3862,7 +3862,7 @@ export function Canvas({
     })),
     maximise: maximisePanel,
     restore: restorePanel,
-    // M129. The capsule's verb. Present for every kind, because the frame
+    // M130. The capsule's verb. Present for every kind, because the frame
     // decides whether to paint a capsule from the TRAIL, not from the kind.
     toggleTrail: toggleSkillTrail,
     readOnly: merged,
@@ -4324,7 +4324,7 @@ export function Canvas({
   }, [commitHistory, selectOnly])
 
   /**
-   * M132. THE WORKFLOW PANEL'S FOUR VERBS, all of them doors that already
+   * M133. THE WORKFLOW PANEL'S FOUR VERBS, all of them doors that already
    * existed — which is the milestone's claim: no new IPC, no new writer, no
    * new trust boundary.
    *
@@ -4421,7 +4421,7 @@ export function Canvas({
   }, [])
 
   /**
-   * M132. A WORKFLOW TRIGGER firing. Main armed and ran the watcher exactly
+   * M133. A WORKFLOW TRIGGER firing. Main armed and ran the watcher exactly
    * as it does every other one; what a workflow watcher's fire MEANS is the
    * renderer's, because only the renderer can mint panels. This is the whole
    * of the "no second scheduler" claim: one subscription, one arming, one
@@ -4561,7 +4561,7 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
-   * M127. The skill panel's mint — the ONE door, called by the Skills pane's
+   * M128. The skill panel's mint — the ONE door, called by the Skills pane's
    * drop, a click on a card, and (through the palette's action object) by
    * anything later. The world point is the drop's own, so the panel lands
    * under the cursor at every zoom; one history entry, like every other mint.
@@ -4702,7 +4702,7 @@ export function Canvas({
     workspaceRows, waitingIds, selectedId, globalFontSize,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
     ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
-    // M132. A workflow trigger's template name, so a watcher whose command is
+    // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
   })
@@ -4806,7 +4806,7 @@ export function Canvas({
       onToggle: chrome.toggleNavigator
     }
   }, [workItems, teammates, railRows, cardItemIds, goToWorkItem, setWorkItemState, spawnWorkCard, chrome.toggleNavigator])
-  /* ---------------------------------------------------------- M126: skills --
+  /* ---------------------------------------------------------- M127: skills --
    * The Skills pane's state: the shelf (a TOP-LEVEL record, read and written
    * through its own pair of invokes — never through the undo history, which
    * is layout's, and never through `layout:save`, which carries one
@@ -4837,7 +4837,7 @@ export function Canvas({
       .catch((e) => setShelfState({ kind: 'unavailable', why: String(e && (e as Error).message ? (e as Error).message : e) }))
   }, [])
   /**
-   * M128 fix. One rename, two authorities, ONE call.
+   * M129 fix. One rename, two authorities, ONE call.
    *
    * The panel record holds `{scope, name}` and the shelf holds
    * `scope:name` — a rename that moved the folder and updated neither would
@@ -4871,7 +4871,7 @@ export function Canvas({
   const [skillQuery, setSkillQuery] = useState('')
   const [skillScopes, setSkillScopes] = useState<ToolScope[] | null>(null)
   const [skillPlacedOnly, setSkillPlacedOnly] = useState(false)
-  // M130 fix round 2. Main's REAL verdict on the assign door's last save —
+  // M131 fix round 2. Main's REAL verdict on the assign door's last save —
   // never the renderer's own advisory guess. Absent means nothing to say;
   // it is not persisted and clears on the pane's next assignment.
   const [skillAssignNotice, setSkillAssignNotice] = useState<string | null>(null)
@@ -4883,7 +4883,7 @@ export function Canvas({
     return null
   })()
   const [skillsInventory, setSkillsInventory] = useState<ToolInventoryResult | undefined>(undefined)
-  // M128 fix. Main's own answer to the last `skill:create`, as a sentence —
+  // M129 fix. Main's own answer to the last `skill:create`, as a sentence —
   // the refusals (an existing name, a plugin's folder, a path outside every
   // writable root) all arrive here, and a door that swallowed them would
   // leave the user watching a pane that never grew a card.
@@ -4905,7 +4905,7 @@ export function Canvas({
     return () => { live = false }
   }, [selectedId, skillsCwd, skillsReadTick])
   /**
-   * M127. Every OPEN panel that HAS a directory, with the rail's own label.
+   * M128. Every OPEN panel that HAS a directory, with the rail's own label.
    * The skill panel asks each one's inventory — the cache is keyed by
    * resolved cwd, so twelve panels in one repository cost one parse — and
    * that list is also the answer to "which panels can see this skill".
@@ -4925,7 +4925,7 @@ export function Canvas({
           : skillsInventory.kind === 'no-cwd' ? { kind: 'no-cwd' }
             : { kind: 'inventory', readAt: skillsInventory.inventory.readAt }
     const paneColumns = buildSkillColumns(entries, shelf, { kind: skillKindTab, query: skillQuery, scopes: skillScopes, placedOnly: skillPlacedOnly })
-    // M130. A project-scoped key's repository, read back out of the
+    // M131. A project-scoped key's repository, read back out of the
     // inventory's own `sourcePath` (`<root>/.claude/skills/<name>/SKILL.md`)
     // — the assign door's own check, so a bad assignment is refused before
     // it ever reaches `teammate:save`. `insidePlace` runs with an identity
@@ -4940,7 +4940,7 @@ export function Canvas({
       const suffix = `/.claude/skills/${parsed.name}/SKILL.md`
       return entry.sourcePath.endsWith(suffix) ? entry.sourcePath.slice(0, -suffix.length) : null
     }
-    // M130 fix round 2. A light, renderer-side prefix check — kept ONLY as
+    // M131 fix round 2. A light, renderer-side prefix check — kept ONLY as
     // an early sentence, never the authority: `@shared/places` pulls in
     // `node:path`, which the renderer cannot bundle (it has no filesystem to
     // realpath against anyway), so this can be wrong in either direction. It
@@ -4974,7 +4974,7 @@ export function Canvas({
       onToggle: chrome.toggleNavigator,
       state,
       shelfState,
-      // M128 fix. The `skill:create` door. The scope names a ROOT main
+      // M129 fix. The `skill:create` door. The scope names a ROOT main
       // derives itself from the asking cwd — the renderer sends the word,
       // never a path. The project word stays present and disabled with its
       // reason when no selected panel has a directory.
@@ -5303,7 +5303,7 @@ export function Canvas({
             selectedKey={selectedLink === null ? null : `${selectedLink.from}:${selectedLink.to}`}
             onSelect={merged ? undefined : selectLink}
           />
-          {/* M129. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
+          {/* M130. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
               written back: one column per host at a fixed offset to its
               right, re-derived from the host's rect on every render. Not
               panels — plain elements in the world layer, so forty skill uses
@@ -5514,7 +5514,7 @@ export function Canvas({
                 }}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
             }
-            // M127. The skill panel: every OPEN panel that has a directory,
+            // M128. The skill panel: every OPEN panel that has a directory,
             // with the rail's own label, so the body can answer which of them
             // can see this skill. The record carries nothing else.
             if (isSkillPanel(panel)) {
@@ -5523,14 +5523,14 @@ export function Canvas({
                 // INSERTED into the composer, never sent — M80's rule for a
                 // template's first message. `beginNewChat` is the one mint.
                 onChat={(cwd, message) => { void beginNewChatRef.current({ ...(cwd === undefined ? {} : { cwd }), message }) }}
-                // M128 fix. A rename that LANDED: the panel record's name and
+                // M129 fix. A rename that LANDED: the panel record's name and
                 // the shelf's `scope:name` key are both stale the instant the
                 // folder moves, and both are written here — one history entry
                 // for the record, and the shelf through its own invoke (the
                 // shelf is a library, never layout, so it is not in history).
                 onRenamed={(panelId, newName) => { renameSkillEverywhere(panelId, newName) }} />
             }
-            // M132. The workflow panel: the template by id (built-ins
+            // M133. The workflow panel: the template by id (built-ins
             // included — they are code, not rows), the workspace's runs for
             // the Runs tab, and the four verbs, each the door that already
             // existed. Delete refuses a built-in by name.

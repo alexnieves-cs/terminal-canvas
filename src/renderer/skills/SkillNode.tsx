@@ -10,7 +10,7 @@ import { SkillEditor } from './SkillEditor'
 import type { ReadStamp } from '@shared/skill-edit'
 
 /**
- * M127. THE SKILL PANEL — the thirteenth kind, sessionless like the work
+ * M128. THE SKILL PANEL — the thirteenth kind, sessionless like the work
  * card. The record is `{scope, name}` and nothing else, so every word on
  * screen is read LIVE: the inventories of the open panels that have a
  * directory (the cache is keyed by resolved cwd, so twelve panels in one
@@ -48,7 +48,7 @@ export interface SkillNodeProps {
   /** Mint a chat in `cwd` whose composer is seeded with `message` — inserted, never sent. */
   onChat: (cwd: string | undefined, message: string) => void
   /**
-   * M128 fix. A rename LANDED on disk. The panel record's `skill.name` and
+   * M129 fix. A rename LANDED on disk. The panel record's `skill.name` and
    * the shelf's `scope:name` key are both stale the instant the folder moves,
    * and both are the canvas's to write: a shelf slot that could not be
    * carried leaves the old key rendering `not installed here`, which is this
@@ -79,7 +79,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
   const [details, setDetails] = useState<PluginDetailsResult | undefined>(undefined)
   const [detailsAt, setDetailsAt] = useState<number | undefined>(undefined)
   const [refreshTick, setRefreshTick] = useState(0)
-  // M128. The Edit tab. `read` is the default: this panel's first job is
+  // M129. The Edit tab. `read` is the default: this panel's first job is
   // still to answer "what is this skill", and a panel that opened straight
   // into a text area would put a write one stray keystroke away.
   const [tab, setTab] = useState<'read' | 'edit'>('read')
@@ -92,7 +92,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
   // it, so a project skill must be written against the repository that holds
   // it rather than against whichever panel happens to be first in the list.
   const [entryCwd, setEntryCwd] = useState('')
-  // M128 fix. The folder doors' own drafts. Local to the panel: a half-typed
+  // M129 fix. The folder doors' own drafts. Local to the panel: a half-typed
   // rename is not a fact the canvas needs, and the delete is armed in two
   // steps rather than one, PanelFrame's own close rule.
   const [renameTo, setRenameTo] = useState('')
@@ -144,7 +144,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
         if (!live) return
         if (r.kind === 'text') {
           setText({ kind: 'some', text: r.content, truncated: r.truncatedLines > 0 })
-          // M128. Both halves of the stamp come off this one answer — the
+          // M129. Both halves of the stamp come off this one answer — the
           // mtime is taken AFTER the read, so it describes the content in
           // hand rather than whatever was on disk before it started.
           setStamp({ mtimeMs: r.mtimeMs, size: r.bytes })
@@ -230,7 +230,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
           {door('write', 'Help me write', sourcePath === undefined ? REASON_NO_SOURCE : null,
             () => { if (sourcePath !== undefined) props.onChat(dirOf(sourcePath), `Help me write ${sourcePath}`) })}
         </div>
-        {/* M128. The Edit tab. It is PRESENT for every skill and disabled by
+        {/* M129. The Edit tab. It is PRESENT for every skill and disabled by
             NAME when it cannot run — a plugin's folder is owned by `claude
             plugin install` and an edit there vanishes on the next upgrade,
             which is the sentence worth saying. A removed tab would read as a
@@ -249,7 +249,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
           })}
         </div>
         {tab === 'edit' && (
-          /* M128 fix. The rename and delete doors, wired at last: both
+          /* M129 fix. The rename and delete doors, wired at last: both
              channels existed with no renderer caller at all. They live BESIDE
              the editor rather than inside it because both are about the
              skill's FOLDER, which the editor never touches — it writes one

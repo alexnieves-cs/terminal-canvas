@@ -3073,7 +3073,7 @@ const filePanelOnDisk = (id, over = {}) => ({
   const stray = L.parsePreferences({ 'shell.navigator': 'minimap', 'shell.contextTab': 'work' }, w)
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
-  // M116 added `board` as the seventh; M126 `skills` as the eighth.
+  // M116 added `board` as the seventh; M127 `skills` as the eighth.
   ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board|skills, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
     nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board', 'skills']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
@@ -3446,7 +3446,7 @@ console.log('\n' + '='.repeat(60))
 }
 
 {
-  // M129. `skillTrail` is the ONE stored fact about the trail — a layout mark
+  // M130. `skillTrail` is the ONE stored fact about the trail — a layout mark
   // like `pinned`, not a view state like M106's flip, so "collapse it back so
   // it is no longer visible" survives a relaunch. The value is CLOSED: only
   // the word `collapsed` means anything, so anything else is a malformed
@@ -3762,11 +3762,11 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('work.5 (threw)', false, String(e)) }
 }
 
-/* ---- M125: the shelf on disk ---- */
+/* ---- M126: the shelf on disk ---- */
 try {
   const w = []
   const bare = L.parseLayout(JSON.stringify({ version: 1, workspaces: [] }))
-  ok('shelf.disk.1 a pre-M125 file parses with an empty shelf and no warning',
+  ok('shelf.disk.1 a pre-M126 file parses with an empty shelf and no warning',
      bare.snapshot.shelf.columns.length === 0 && !bare.warnings.some((x) => /shelf/i.test(x)),
      bare.warnings.join('|'))
   const round = JSON.parse(L.serialiseLayout({
@@ -3779,14 +3779,14 @@ try {
      !('shelf' in empty), Object.keys(empty).join(','))
 } catch (e) { ok('shelf.disk.1 (threw)', false, String(e)) }
 
-// M127 — skill.panel.disk.1. THE THIRTEENTH KIND ON DISK. A skill panel is
+// M128 — skill.panel.disk.1. THE THIRTEENTH KIND ON DISK. A skill panel is
 // `kind: 'skill'` plus `skill: { scope, name }` and NOTHING else — no
 // description, no body, no resource count, no token figure: a copy is a
 // second author that goes stale silently (M116's rule for the work card,
 // reached again). Sessionless, so no cwd and no args. Both fields are the
 // panel's whole identity, so a bad scope, a bad name or a missing record
 // drops that PANEL by name with its neighbours kept; an absent title stays
-// absent; and a pre-M127 file — one with no skill panel in it at all — parses
+// absent; and a pre-M128 file — one with no skill panel in it at all — parses
 // with no warning naming a skill.
 {
   try {
@@ -3807,7 +3807,7 @@ try {
     // ABSENT, not malformed: a file written before this milestone has no
     // skill panel and must warn nothing at all.
     const pre = L.parseLayout(JSON.stringify({ workspaces: [{ id: 'w1', name: 'Main', panels: [{ id: 'n1', x: 0, y: 0, w: 720, h: 460, z: 1, cwd: '~', args: [] }] }], activeWorkspaceId: 'w1' }))
-    ok('skill.panel.disk.1 a skill panel round-trips as kind + skill.{scope,name} with no cwd/args and an absent title kept absent; a bad scope, an empty name and a missing record each drop their own panel by name; the neighbours survive; a pre-M127 file warns nothing',
+    ok('skill.panel.disk.1 a skill panel round-trips as kind + skill.{scope,name} with no cwd/args and an absent title kept absent; a bad scope, an empty name and a missing record each drop their own panel by name; the neighbours survive; a pre-M128 file warns nothing',
       panels.length === 3 && panels.map((p) => p.id).join(',') === 's1,s3,n1' &&
         s1 && s1.kind === 'skill' && s1.skill && s1.skill.scope === 'user' && s1.skill.name === 'brainstorming' &&
         Object.keys(s1.skill).sort().join(',') === 'name,scope' &&
@@ -3856,7 +3856,7 @@ try {
     JSON.stringify({ threw, listed, viaInitial, sites }))
 }
 
-// M131 — workflow.1. Three new template node kinds: pool, orchestrator,
+// M132 — workflow.1. Three new template node kinds: pool, orchestrator,
 //      collect — each an arm on TemplateNode, parsed by parseWorkflowNode and
 //      routed through layout-schema:1359's existing unknown-kind arm, which
 //      stays exactly as it is for whatever comes after these three.
@@ -3873,9 +3873,9 @@ try {
   ok('workflow.1a the three kinds parse', !!t1 && t1.nodes.length === 3 && parsed.warnings.length === 0,
      JSON.stringify({ t1, warnings: parsed.warnings }))
 
-  // A pre-M131 template file (terminal/chat only) loads byte-identical.
+  // A pre-M132 template file (terminal/chat only) loads byte-identical.
   const preM131 = [{ id: 't0', name: 'old', nodes: [node(), node({ key: 'b', kind: 'chat' })], edges: [{ from: 'a', to: 'b', trigger: 'exit-ok' }] }]
-  // The expectation is written BY HAND from the pre-M131 parser's own output
+  // The expectation is written BY HAND from the pre-M132 parser's own output
   // shape (833cec7^ `parseTemplates`: id, name, [description], nodes, edges;
   // a node as key, kind, cwd, dx, dy and then only the optional fields it
   // carried). Comparing the new parser against itself — which this check did
@@ -3883,7 +3883,7 @@ try {
   const PRE_M131_EXPECTED = '[{"id":"t0","name":"old","nodes":[{"key":"a","kind":"terminal","cwd":"~","dx":0,"dy":0},{"key":"b","kind":"chat","cwd":"~","dx":0,"dy":0}],"edges":[{"from":"a","to":"b","trigger":"exit-ok"}]}]'
   const w = []
   const after0 = L.parseTemplates(preM131, w)
-  ok('workflow.1b a pre-M131 template file loads UNTOUCHED',
+  ok('workflow.1b a pre-M132 template file loads UNTOUCHED',
      JSON.stringify(after0) === PRE_M131_EXPECTED && w.length === 0,
      `every existing template must survive this change silently — ${JSON.stringify(after0)}`)
 
@@ -3921,7 +3921,7 @@ try {
   ok('workflow.1 (threw)', false, String(e && e.stack || e))
 }
 
-// M132 — workflow.panel.1a–d, the PURE half of the workflow panel: the
+// M133 — workflow.panel.1a–d, the PURE half of the workflow panel: the
 //      diagram as a projection of the record, the header's block count, the
 //      Runs filter, and a trigger round-tripping through watch-trigger.ts.
 //      1e (Run reaching M80's instantiation exactly once) needs the real

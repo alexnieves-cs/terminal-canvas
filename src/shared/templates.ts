@@ -35,7 +35,7 @@ export interface TerminalOrChatNode {
 }
 
 /**
- * M131. `TemplateNode` widened to a union: a terminal/chat node (M80) or one
+ * M132. `TemplateNode` widened to a union: a terminal/chat node (M80) or one
  * of the three workflow blocks (`WorkflowNode`), each carrying the same
  * `key` a template's edges name.
  */

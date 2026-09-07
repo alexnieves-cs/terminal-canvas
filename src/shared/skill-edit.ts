@@ -1,11 +1,11 @@
 /**
- * M128. Editing a SKILL.md without destroying what we could not read.
+ * M129. Editing a SKILL.md without destroying what we could not read.
  *
  * `parseFrontmatter` (main/toolbox-scan.ts) is DELIBERATELY a small grammar —
  * a `key: value` line, optionally quoted, and `null` for block scalars,
  * anchors and multi-line folds — because a real YAML parser would be a second
  * runtime dependency and a parser DIFFERENTIAL against the CLI. Its own
- * comment says so, and M128 does not reopen that decision.
+ * comment says so, and M129 does not reopen that decision.
  *
  * That refusal has a consequence the READ half never faced. If Save
  * re-serialised the block from what the grammar parsed, every field the

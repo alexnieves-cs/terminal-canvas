@@ -1239,7 +1239,7 @@ const p = (name) => join(DIR, name)
       JSON.stringify({ found, direct, none, key, badKey, good, noPlace, noRepo, gitRefused, gateRefused, unknownMate, typedNoRoot, calls }))
   } catch (e) { ok('lane.1 (threw)', false, String(e)) }
 
-  /* ---- M125: plugin-list, over a fake runner ---- */
+  /* ---- M126: plugin-list, over a fake runner ---- */
   try {
     const RECORDED = JSON.stringify([
       { id: 'superpowers@claude-plugins-official', version: '6.3.0', scope: 'user',
@@ -1268,7 +1268,7 @@ const p = (name) => join(DIR, name)
        slow.kind === 'unknown' && /timed out/i.test(slow.why), JSON.stringify(slow))
   } catch (e) { ok('plugins.1 (threw)', false, String(e)) }
 
-  /* ---- M129: the trail ---- */
+  /* ---- M130: the trail ---- */
   try {
     const FIXTURE = join(__dirname, 'fixtures', 'skill-trail', 'session.jsonl')
     const all = readFileSync(FIXTURE, 'utf8')
@@ -1371,7 +1371,7 @@ const p = (name) => join(DIR, name)
        JSON.stringify({ more: [j1.more, j2.more, j3.more], len: j3.entries && j3.entries.length }))
   } catch (e) { ok('trail.1 (threw)', false, String(e)) }
 
-  /* ---- M129: a CHAT's trail, derived from turns already in memory ---- */
+  /* ---- M130: a CHAT's trail, derived from turns already in memory ---- */
   //
   // The renderer half of the same idea, and pure over `TranscriptTurn[]` so
   // it is checked HERE rather than through a rendered panel: the terminal
@@ -1387,7 +1387,7 @@ const p = (name) => join(DIR, name)
       // A tool that is NOT Skill, a Skill whose input names no skill, and a
       // Skill whose `skill` is not a string: none of the three is an entry.
       turn(20, [skill('Bash', { command: 'ls' }), skill('Skill', {}), skill('Skill', { skill: 7 })]),
-      turn(30, [skill('Skill', { skill: 'writing-plans', args: 'the M129 spec' })])
+      turn(30, [skill('Skill', { skill: 'writing-plans', args: 'the M130 spec' })])
     ]
     const out = F.trailFromTurns(mixed)
     ok('trail.chat.1a only `Skill` tool_use blocks with a string skill become entries, in turn order',
@@ -1396,7 +1396,7 @@ const p = (name) => join(DIR, name)
        out.entries[0].at === 10 && out.entries[1].at === 30,
        JSON.stringify(out))
     ok('trail.chat.1b args ride when present and are ABSENT when not — never `args: undefined`, which survives a copy and reads as present',
-       out.kind === 'entries' && !('args' in out.entries[0]) && out.entries[1].args === 'the M129 spec',
+       out.kind === 'entries' && !('args' in out.entries[0]) && out.entries[1].args === 'the M130 spec',
        JSON.stringify(out.kind === 'entries' ? out.entries : out))
     // The SAME cap the file side takes: a 200-skill conversation paints
     // TRAIL_MAX and says how many it did not paint.

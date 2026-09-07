@@ -63,7 +63,7 @@ export interface PanelMarks {
   marks: ReadonlyMap<string, { locked: boolean; pinned: boolean; maximised: boolean; trailCollapsed: boolean }>
   maximise: (id: string) => void
   restore: (id: string) => void
-  /** M129. Fold this panel's skill trail away, or bring it back. Absent in a fixture. */
+  /** M130. Fold this panel's skill trail away, or bring it back. Absent in a fixture. */
   toggleTrail?: (id: string) => void
   readOnly: boolean
   /** M106. The ⋯ menu's door: focus this panel and open the palette captured on it. Absent in a fixture. */
@@ -144,7 +144,7 @@ export function PanelFrame({
   const more = onMore ?? marks.more
   const mark = marks.marks.get(id)
   /**
-   * M129. THE TRAIL'S CAPSULE — how many skills this panel's agent used, and
+   * M130. THE TRAIL'S CAPSULE — how many skills this panel's agent used, and
    * the control that folds the lane away.
    *
    * It is painted from the TRAIL and not from the kind, so a chat and a

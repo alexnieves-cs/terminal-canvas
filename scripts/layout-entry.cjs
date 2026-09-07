@@ -10,9 +10,9 @@ module.exports = {
   /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
   ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),
-  /* M131. The three workflow node kinds: pure parse over a raw node object. */
+  /* M132. The three workflow node kinds: pure parse over a raw node object. */
   ...require('../src/shared/workflow-nodes'),
-  /* M132. The workflow panel's DIAGRAM: pure over the template record — no
+  /* M133. The workflow panel's DIAGRAM: pure over the template record — no
      DOM, no React, no node — so the projection, the Runs filter and the
      watcher a trigger becomes are all checked in this cheap tier, beside
      the schema they project. Only "Run reaches M80's instantiation" needs a

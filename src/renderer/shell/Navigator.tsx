@@ -62,7 +62,7 @@ export interface NavigatorProps {
   teammates: TeammatesPaneProps
   /** M116. The board pane's model. */
   board: BoardPaneProps
-  /** M126. The skills pane's model. */
+  /** M127. The skills pane's model. */
   skills: SkillsPaneProps
 }
 

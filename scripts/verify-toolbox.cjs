@@ -414,7 +414,7 @@ const write = (rel, text) => {
   write('proj/.claude/skills/graphify/SKILL.md', '---\nname: graphify\ndescription: Project copy.\n---\n')
   write('proj/.claude/agents/reviewer.md', '---\nname: reviewer\ndescription: Reviews things.\n---\n')
 
-  // M125: resources fixtures — a skill with two sibling files, a skill with
+  // M126: resources fixtures — a skill with two sibling files, a skill with
   // none, and a skill whose OWN directory cannot be listed but whose
   // SKILL.md can still be read (execute-only: traversal survives, readdir
   // does not — chmod 0o000 would also fail the SKILL.md read itself, which
@@ -660,7 +660,7 @@ const write = (rel, text) => {
       `43 — counts ride the inventory, rule STRINGS do not, and a second read returns them`)
   }
 
-  /* ---- M125: the shelf ---- */
+  /* ---- M126: the shelf ---- */
   try {
     const { skillKey, parseSkillKey, placement, pluginPrefixOf, parseShelf, carryShelf,
             renameInShelf, UNGROUPED_COLUMN_ID } = T
@@ -699,7 +699,7 @@ const write = (rel, text) => {
     // shelf.3 — the record rules: absent, malformed, per-entry drop, and carry.
     {
       const w1 = []
-      ok('shelf.3a absent is every pre-M125 file, silently',
+      ok('shelf.3a absent is every pre-M126 file, silently',
          parseShelf(undefined, w1).columns.length === 0 && w1.length === 0, w1.join('|'))
       const w2 = []
       ok('shelf.3b a malformed shelf warns and yields empty',
@@ -735,7 +735,7 @@ const write = (rel, text) => {
     ok('shelf.1 (threw)', false, String(e))
   }
 
-  /* ---- M125: resources, counted at the boundary ---- */
+  /* ---- M126: resources, counted at the boundary ---- */
   try {
     const skills = inv.entries.filter((e) => e.kind === 'skill')
     const withRes = skills.find((e) => e.name === 'has-resources')
@@ -762,7 +762,7 @@ const write = (rel, text) => {
     chmodSync(join(CWD, '.claude', 'skills', 'locked'), 0o755)
   }
 
-  /* ---- M125: a plugin's skills, walked from installPath, total capped ---- */
+  /* ---- M126: a plugin's skills, walked from installPath, total capped ---- */
   try {
     const pluginRoot = p('plugin-demo')
     write(join('plugin-demo', 'skills', '0-from-plugin', 'SKILL.md'),
@@ -793,7 +793,7 @@ const write = (rel, text) => {
   }
 
 
-  /* ================= M128: the editor ================================== */
+  /* ================= M129: the editor ================================== */
   //
   // Every block is wrapped in its own try/catch that records a FAILING ok()
   // rather than letting the throw abort the IIFE. A suite that dies at the
@@ -801,7 +801,7 @@ const write = (rel, text) => {
   // is not evidence about the checks below it — this suite's own
   // `skill.1 (threw)` arm is the standing shape.
 
-  /* ---- M128: the frontmatter round-trip. THE check of this milestone. ---- */
+  /* ---- M129: the frontmatter round-trip. THE check of this milestone. ---- */
   try {
     const { applySkillEdit, frontmatterGrammatical } = T
     const HOSTILE = [
@@ -871,7 +871,7 @@ const write = (rel, text) => {
     ok('edit.1 (threw)', false, String(e && e.stack || e))
   }
 
-  /* ---- M128: atomic — no partial SKILL.md after a failed rename ---- */
+  /* ---- M129: atomic — no partial SKILL.md after a failed rename ---- */
   try {
     const { writeSkill } = T
     const ORIGINAL = '---\nname: atomic\ndescription: before\n---\n\nbefore body\n'
@@ -906,7 +906,7 @@ const write = (rel, text) => {
     ok('edit.2 (threw)', false, String(e && e.stack || e))
   }
 
-  /* ---- M128: containment, over a FAKE realpath ---- */
+  /* ---- M129: containment, over a FAKE realpath ---- */
   try {
     const { writeSkill } = T
     const ROOT = '/roots/user/.claude/skills'
@@ -938,7 +938,7 @@ const write = (rel, text) => {
     ok('edit.3 (threw)', false, String(e && e.stack || e))
   }
 
-  /* ---- M128: the stale write ---- */
+  /* ---- M129: the stale write ---- */
   try {
     const { writeSkill, staleRefusal } = T
     const file = write(join('edit', '.claude', 'skills', 'stale', 'SKILL.md'), '---\nname: stale\n---\n\nas read\n')
@@ -960,7 +960,7 @@ const write = (rel, text) => {
     ok('edit.4 (threw)', false, String(e && e.stack || e))
   }
 
-  /* ---- M128: create, rename, delete ---- */
+  /* ---- M129: create, rename, delete ---- */
   try {
     const { createSkill, renameSkill, deleteSkill, renameInShelf, skillKey } = T
     const root = join(DIR, 'edit', '.claude', 'skills')

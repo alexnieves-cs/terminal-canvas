@@ -27,10 +27,10 @@ export interface PersistedRun {
   /** Priced at sealing; absent when any panel's model was unpriced. */
   costUsd?: number
   /**
-   * M132. The template whose instantiation minted this run's panels, when
+   * M133. The template whose instantiation minted this run's panels, when
    * one did — the ONE mark the workflow panel's Runs tab filters on.
    *
-   * ABSENT is every pre-M132 run and every run of panels the user wired by
+   * ABSENT is every pre-M133 run and every run of panels the user wired by
    * hand, and it stays absent: a run with no mark is not guessed into a
    * template's list, because the alternative is a Runs tab that confidently
    * attributes somebody else's work to this workflow.

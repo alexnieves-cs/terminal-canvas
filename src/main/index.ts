@@ -278,7 +278,7 @@ const captureBaseline = (panelId: string, cwd: string): void => baselineCapture.
 const dropBaseline = (panelId: string): void => {
   baselineCapture.drop(panelId)
   layoutStore.dropBaseline(panelId)
-  // M129. The trail's own per-panel state (offset/carry/entries/decoder,
+  // M130. The trail's own per-panel state (offset/carry/entries/decoder,
   // all owned by skill-trail-read.ts) is forgotten at the same
   // panel-removing site PtyManager already calls this through — a recycled
   // panel id must not inherit a dead panel's trail, the same reason
@@ -453,7 +453,7 @@ async function confirmReset(): Promise<void> {
 const which = (command: string): string | null => whichFromEnv(command, loginEnv)
 
 /**
- * M125. The real `PluginRunner`: `claude plugin list --json` over
+ * M126. The real `PluginRunner`: `claude plugin list --json` over
  * `child_process`, resolved through the SAME `claudePath` the startup probe
  * already found (or the bare name, which `listPlugins` turns into `unknown`
  * on the resulting ENOENT — never a throw). Kept to the shape `listPlugins`
@@ -477,7 +477,7 @@ const runClaudePluginList: PluginRunner = () =>
   })
 
 /**
- * M127. The real details runner, per id. Built the same way as
+ * M128. The real details runner, per id. Built the same way as
  * `runClaudePluginList` and deliberately not folded into it: `describePlugin`
  * takes a zero-argument runner (the id rides in this closure) so the timeout
  * race in `plugin-list.ts` can be shared byte for byte.
@@ -1396,11 +1396,11 @@ app.whenReady().then(async () => {
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
       const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
-      // M130. THE ONE APPEND SITE (M100's rule: never a second path, never a
+      // M131. THE ONE APPEND SITE (M100's rule: never a second path, never a
       // renderer-side copy). A project-scoped skill outside this teammate's
       // places is dropped here — never named to the agent — because "You
       // can use X" for a skill it cannot read would be worse than silence.
-      // M130 fix round 1. A teammate chat's cwd is often a worktree LANE
+      // M131 fix round 1. A teammate chat's cwd is often a worktree LANE
       // (M113's board dispatch), never the repository — the SAME
       // translation `placesGate` already applies via `worktreeRootOf`, so a
       // project skill whose repository IS in this teammate's places is not
@@ -1632,7 +1632,7 @@ app.whenReady().then(async () => {
         return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
-      // M126. The shelf, whole. Parsed on the way in by the SAME rules the
+      // M127. The shelf, whole. Parsed on the way in by the SAME rules the
       // file is, so a malformed column reaching the store from the renderer
       // is dropped by name rather than written back to disk.
       shelf: () => layoutStore.shelf(),
@@ -1651,7 +1651,7 @@ app.whenReady().then(async () => {
         const parsed = parseTeammates([teammate], warnings)[0]
         if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
         layoutStore.saveTeammate(parsed)
-        // M130 fix round 2. `cwd` arrives only from the assign door; its
+        // M131 fix round 2. `cwd` arrives only from the assign door; its
         // REAL (symlink-resolved) verdict on every project-scoped key just
         // saved rides back on THIS response — no new channel, and no
         // silent drop the pane could show as a plain success.
@@ -1815,7 +1815,7 @@ app.whenReady().then(async () => {
       commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
     },
     () => listPlugins(runClaudePluginList),
-    // M127. The same CLI, the same login env and the same timeout as the
+    // M128. The same CLI, the same login env and the same timeout as the
     // list above — two calls onto one binary, kept in step deliberately.
     //
     // The id is CHECKED against the list first, and never passed through
@@ -1832,7 +1832,7 @@ app.whenReady().then(async () => {
       }
       return describePlugin(runClaudePluginDetails(id), id)
     },
-    // M128. The four writers, with every dependency resolved HERE and none
+    // M129. The four writers, with every dependency resolved HERE and none
     // of them nameable by the renderer: the writable roots are derived from
     // the asking panel's own cwd (through `resolveCwd`, the same expansion a
     // spawn gets) and the home the toolbox reads, the plugin paths are the
@@ -1852,7 +1852,7 @@ app.whenReady().then(async () => {
       },
       trash: (path) => shell.trashItem(path)
     }),
-    // M129. A chat panel's trail is derived in the renderer from events
+    // M130. A chat panel's trail is derived in the renderer from events
     // already in memory (Task 8) and never asks main — `agentSessions.get`
     // is keyed by exactly the chat panels this manager tracks, so its
     // presence is the same fact the chat store itself reads. A terminal

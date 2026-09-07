@@ -9,7 +9,7 @@ import {
 import { setSkillEditorFocused } from './editor-focus'
 
 /**
- * M128. THE EDITOR — the first surface in this app that writes into
+ * M129. THE EDITOR — the first surface in this app that writes into
  * `~/.claude`.
  *
  * Two rules from spec §5 shape everything below, and both of them exist

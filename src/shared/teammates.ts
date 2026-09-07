@@ -27,8 +27,8 @@ export interface PersistedTeammate {
   /** Service ids it may spend through the broker (M102). */
   services: string[]
   /**
-   * M130. Skills assigned from the shelf, by key. ABSENT — never an empty
-   * array — is the pre-M130 record and every teammate nobody has assigned a
+   * M131. Skills assigned from the shelf, by key. ABSENT — never an empty
+   * array — is the pre-M131 record and every teammate nobody has assigned a
    * skill to; `carryTeammate` writes the key only when present, the same
    * rule every other optional field in this record follows. A project-scoped
    * key outside the teammate's places is dropped from the brief and refused

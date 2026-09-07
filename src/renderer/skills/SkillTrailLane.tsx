@@ -6,7 +6,7 @@ import type { Panel } from '@renderer/panels/panels'
 import { useTrailFor } from './skill-trail-store'
 
 /**
- * M129. THE TRAIL'S LANE: what an agent actually did, beside the panel that
+ * M130. THE TRAIL'S LANE: what an agent actually did, beside the panel that
  * did it.
  *
  * Every card here is a plain element in the world layer, NOT a panel — the
@@ -39,7 +39,7 @@ export interface SkillTrailLaneProps {
   /** The host's directory, or null for a kind that has none — its inventory cannot be read. */
   cwd: string | null
   shelf: Shelf
-  /** M127's door. The world point is the card's own, so the panel opens beside its card. */
+  /** M128's door. The world point is the card's own, so the panel opens beside its card. */
   onOpenSkill: (scope: ToolScope, name: string, world: { x: number; y: number }) => void
 }
 

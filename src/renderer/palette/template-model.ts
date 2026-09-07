@@ -16,7 +16,7 @@ function fieldsOf(template: PersistedTemplate): string[] {
   const out: string[] = [template.name, ...(template.description === undefined ? [] : [template.description])]
   for (const n of template.nodes) {
     out.push(n.cwd)
-    // M131: the three workflow kinds land here too but carry none of these
+    // M132: the three workflow kinds land here too but carry none of these
     // fields — this task lands the schema, not the runtime, so they are
     // skipped BY NAME rather than given a parameter surface of their own.
     if (n.kind !== 'terminal' && n.kind !== 'chat') continue
@@ -67,10 +67,10 @@ export function templatePanels(template: PersistedTemplate, centre: Point): Temp
  * or undefined. A row is disabled with this, never hidden.
  */
 /**
- * M131/M132, fix round 2. Why a template's WORKFLOW BLOCKS stop it running —
+ * M132/M133, fix round 2. Why a template's WORKFLOW BLOCKS stop it running —
  * or undefined.
  *
- * M131 landed the schema for `pool`, `orchestrator` and `collect`; nothing
+ * M132 landed the schema for `pool`, `orchestrator` and `collect`; nothing
  * instantiates them yet, and `instantiateTemplate` skips them BY NAME. A
  * template that is nothing but blocks therefore minted nothing at all and
  * still reported `spawned`, committing a no-op history entry; a mixed one

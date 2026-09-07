@@ -104,7 +104,7 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',
-  // M126/M127. STAYS excluded now that it mints a real panel, and the
+  // M127/M128. STAYS excluded now that it mints a real panel, and the
   // original reason is why: the verb takes a WORLD POINT, which is the
   // drop's own cursor position, and a plan has no cursor. Giving it a verb
   // would mean inventing a placement rule inside `buildPlan` — a second

@@ -39,7 +39,7 @@ export interface RunsDeps {
 export interface RunsApi {
   onRunEvent: (event: RunEvent) => void
   /**
-   * M132. These panel ids were minted by that template. Called once, by
+   * M133. These panel ids were minted by that template. Called once, by
    * M80's instantiation — the only moment anything knows it. The recorder
    * still DECIDES nothing: it stamps the mark on a run it was already going
    * to open, and a panel with no origin leaves the run unmarked rather than
@@ -64,7 +64,7 @@ interface OpenRun {
 export function useRuns(deps: RunsDeps): RunsApi {
   const { panelsRef, runsRef, setRuns, restartWithSpec } = deps
   const openRef = useRef<Map<string, OpenRun>>(new Map())
-  // M132. panel id -> the template that minted it. A ref, never state and
+  // M133. panel id -> the template that minted it. A ref, never state and
   // never persisted: it is read once, when a run opens, and the RUN is what
   // carries the fact onto disk.
   const originRef = useRef<Map<string, string>>(new Map())
@@ -111,7 +111,7 @@ export function useRuns(deps: RunsDeps): RunsApi {
       if (!component.edges.some((e) => e.from === event.panelId)) return
       baseline = usageOf(component.panelIds)
       let run = beginRun(component, event.panelId, event.at, runName(current))
-      // M132. The mark, if any of this run's panels came from a template.
+      // M133. The mark, if any of this run's panels came from a template.
       // ABSENT stays absent — never written as `templateId: undefined`.
       const templateId = component.panelIds.map((id) => originRef.current.get(id)).find((t) => t !== undefined)
       if (templateId !== undefined) run = { ...run, templateId }

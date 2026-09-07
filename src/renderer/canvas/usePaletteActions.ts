@@ -32,7 +32,7 @@ import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
 import type { HandoffTrigger } from '@shared/handoff'
 import type { PersistedTemplate } from '@shared/templates'
 import { clearSubagents } from '@renderer/session/subagent-store'
-// M129. Beside the four clears above: a recycled id must not inherit a dead
+// M130. Beside the four clears above: a recycled id must not inherit a dead
 // panel's skill trail.
 import { clearTrail } from '@renderer/skills/skill-trail-store'
 import { clearFileResult } from '@renderer/session/file-store'
@@ -95,7 +95,7 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
-  /** M132. Open a template as a workflow panel — a VIEW of the shape. */
+  /** M133. Open a template as a workflow panel — a VIEW of the shape. */
   openWorkflowPanel: (templateId: string) => void
   /** M88. Mint the GitHub work panel. */
   openGithubPanel: () => void
@@ -106,7 +106,7 @@ export interface PaletteActionsDeps {
   beginNewNote: () => void
   /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
   openBrowserPanel: (url: string) => void
-  /** M127. Mint a skill panel at a world point. */
+  /** M128. Mint a skill panel at a world point. */
   openSkillPanel: (scope: ToolScope, name: string, world: { x: number; y: number }) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
   beginNewChat: (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true }) => Promise<SpawnResult>
@@ -439,7 +439,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (isFilePanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
-              // M132. The workflow panel's own arm — its `workflow` record is
+              // M133. The workflow panel's own arm — its `workflow` record is
               // its only identity, and a rename that dropped it would leave a
               // panel naming no template at all on the next parse.
               if (isWorkflowPanel(p)) {
@@ -474,7 +474,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (isWorkPanel(p)) {
                 return { kind: p.kind, rect: p.rect, work: { itemId: p.work.itemId }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
-              // M127. The skill panel's two fields, by name — the thirteenth arm.
+              // M128. The skill panel's two fields, by name — the thirteenth arm.
               if (isSkillPanel(p)) {
                 return { kind: p.kind, rect: p.rect, skill: { scope: p.skill.scope, name: p.skill.name }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
@@ -1866,7 +1866,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     markDone: (itemId) => boardVerbsRef.current?.markDone?.(itemId),
     // M116. A view, like openTeammates.
     openBoard: () => chooseNavigator('board'),
-    // M126/M127. The skill card's door — the drop, and a click on a card.
+    // M127/M128. The skill card's door — the drop, and a click on a card.
     // Canvas owns the mint (it owns the panel array and the id counter); this
     // is the pass-through that gives every caller one name to reach it by.
     openSkillPanel: (scope, name, world) => openSkillPanel(scope, name, world),

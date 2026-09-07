@@ -450,7 +450,7 @@ export interface ReadToolboxInput {
    */
   spawnStamps?: Map<string, string> | undefined
   /**
-   * M125. The enabled plugins, as `listPlugins` (main's own caller) answered
+   * M126. The enabled plugins, as `listPlugins` (main's own caller) answered
    * — this module never spawns the CLI itself. Absent reads exactly as
    * before this milestone: no plugin skills, same as `[]`.
    */
@@ -559,7 +559,7 @@ export function readToolbox(input: ReadToolboxInput): ToolInventoryResult {
   entries.push(...readCommands(paths.projectRoot, 'project', sources, overflow))
   entries.push(...readAgents(paths.projectRoot, 'project', sources, overflow))
 
-  /* ---- M125: each enabled plugin's own skills, bounded to its installPath -- */
+  /* ---- M126: each enabled plugin's own skills, bounded to its installPath -- */
   for (const plugin of input.plugins ?? []) {
     entries.push(
       ...readSkills(

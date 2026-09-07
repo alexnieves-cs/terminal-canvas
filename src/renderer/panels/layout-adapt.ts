@@ -51,7 +51,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       ...(p.locked === true ? { locked: true as const } : {}),
       ...(p.pinned === true ? { pinned: true as const } : {}),
       ...(p.maximised === undefined ? {} : { maximised: { restore: { id: p.id, ...p.maximised.restore } } }),
-      // M129. The fourth mark; absent stays absent like the three above.
+      // M130. The fourth mark; absent stays absent like the three above.
       ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {}),
       // Absent stays absent, the rule `title` above and `command` below obey.
       // Copied element-wise rather than by reference so a parsed record and
@@ -106,10 +106,10 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url }
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
-    // M127. The skill panel: two fields, copied BY NAME. A spread of
+    // M128. The skill panel: two fields, copied BY NAME. A spread of
     // `p.skill` would share the persisted object with the live panel.
     if (p.kind === 'skill') return { ...base, kind: 'skill' as const, skill: { scope: p.skill.scope, name: p.skill.name } }
-    // M132. The template id alone, field by field like every sibling.
+    // M133. The template id alone, field by field like every sibling.
     if (p.kind === 'workflow') return { ...base, kind: 'workflow' as const, workflow: { templateId: p.workflow.templateId } }
     return {
       ...base,
@@ -203,9 +203,9 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url }
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
-    // M127. Same rule; the pair is the record's whole identity.
+    // M128. Same rule; the pair is the record's whole identity.
     if (isSkillPanel(panel)) return { ...base, kind: 'skill' as const, skill: { scope: panel.skill.scope, name: panel.skill.name } }
-    // M132. The template id alone, field by field like every sibling.
+    // M133. The template id alone, field by field like every sibling.
     if (isWorkflowPanel(panel)) return { ...base, kind: 'workflow' as const, workflow: { templateId: panel.workflow.templateId } }
     return {
       ...base,

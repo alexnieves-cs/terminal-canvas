@@ -3957,7 +3957,7 @@ body {
 .board-row__facts { flex: 1 0 100%; padding: 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-row__show { margin-left: var(--sp-3); }
 
-/* M126. The Skills pane: columns of cards over one inventory. The columns
+/* M127. The Skills pane: columns of cards over one inventory. The columns
    scroll HORIZONTALLY — the shelf's whole shape is "several columns side by
    side" — while each column's card list scrolls vertically inside it, so the
    navigator's own column never scrolls sideways. */
@@ -4005,7 +4005,7 @@ body {
 .work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
 
-/* M127. The skill panel: a document body — the three doors, then six
+/* M128. The skill panel: a document body — the three doors, then six
    sections in the order the model builds them. The verbatim blocks
    (`SKILL.md` and `claude plugin details`) are the only pre-wrapped text on
    the panel and scroll INSIDE their own box rather than widening the body,
@@ -4023,7 +4023,7 @@ body {
 .skill-node__verbatim { margin: 0; padding: var(--sp-2); max-height: 240px; overflow: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-sm); white-space: pre; }
 .skill-node__read-at { margin: 0; display: flex; align-items: center; gap: var(--sp-2); font-size: var(--t-xs); color: var(--fg-3); }
 
-/* M128. The editor. The reason sentence beside read-only fields is TEXT and
+/* M129. The editor. The reason sentence beside read-only fields is TEXT and
    not a tooltip: a field the user cannot type into with no visible
    explanation is the dead control this repo refuses everywhere else. */
 .skill-node__tabs { display: flex; align-items: center; gap: var(--sp-2); }
@@ -4039,7 +4039,7 @@ body {
 .skill-editor__result { font-size: var(--t-xs); color: var(--fg-3); }
 .skill-editor__result[data-skill-edit-result="failed"] { color: var(--red); }
 .skill-editor__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
-/* M132. The workflow panel: a verb row, a tab strip, and one of two panes.
+/* M133. The workflow panel: a verb row, a tab strip, and one of two panes.
    The Definition pane holds an <svg> that is a sibling LAYER, not a canvas —
    it has a viewBox and nothing else, so it scrolls inside its own pane the
    way every other wide body in this app does (`overflow: auto`), and the
@@ -4117,7 +4117,7 @@ body {
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }
 
-/* ------------------------------------------------------------------ M129 --
+/* ------------------------------------------------------------------ M130 --
    THE SKILL TRAIL'S LANE. A single column in the WORLD layer, positioned by
    the host's own rect (Canvas re-derives left/top every render), so it pans
    and zooms with the panel it belongs to and stores nothing.

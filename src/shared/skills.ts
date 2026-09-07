@@ -1,7 +1,7 @@
 import type { ToolScope } from './toolbox'
 
 /**
- * M125. A skill's identity is `scope` AND `name`, never the name alone.
+ * M126. A skill's identity is `scope` AND `name`, never the name alone.
  *
  * M21 measured that two scopes can define one name and REFUSED to name a
  * winner, recording the link in `alsoDefinedIn`. A shelf keyed by bare name
@@ -90,7 +90,7 @@ export function placement(
   return { columnId: `scope:${scope}`, why: 'by-scope' }
 }
 
-/** ABSENT is every pre-M125 file and warns nothing; MALFORMED warns and is dropped. */
+/** ABSENT is every pre-M126 file and warns nothing; MALFORMED warns and is dropped. */
 export function parseShelf(raw: unknown, warnings: string[]): Shelf {
   if (raw === undefined || raw === null) return { columns: [] }
   if (typeof raw !== 'object' || Array.isArray(raw)) {
@@ -143,7 +143,7 @@ export function renameInShelf(shelf: Shelf, from: SkillKey, to: SkillKey): Shelf
 }
 
 /**
- * M127. `claude plugin details <id>` output, VERBATIM.
+ * M128. `claude plugin details <id>` output, VERBATIM.
  *
  * Lives here rather than beside its reader in `main/plugin-details.ts`
  * because the ipc contract carries it across the bridge, and `shared/` may

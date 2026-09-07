@@ -2818,7 +2818,7 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('board.1 (threw)', false, String(e)) }
 }
 
-/* ---- M126: the Skills pane. The pane's columns over one inventory.
+/* ---- M127: the Skills pane. The pane's columns over one inventory.
    Every check lands on the PURE model: the component owns only the tabs, the
    search box and the drag handlers. The three facts that fail silently if
    undone are the three the pane's promise rests on — a column that vanishes

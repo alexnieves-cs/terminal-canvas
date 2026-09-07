@@ -183,19 +183,19 @@ module.exports = {
   /* M103. The browser pane's read over a real guest, and the parser so a
      check can assert a file: record was dropped by name at parse. */
   createBrowserHandlers: require('../src/main/browser-read').createBrowserHandlers,
-  // M129. The REAL trail read, so the lane checks and the shot scene drive
+  // M130. The REAL trail read, so the lane checks and the shot scene drive
   // the same tail production drives — a fixture function written in the
   // harness would leave the whole byte-offset path proven only by
   // verify:file's unit checks and could drift from what the app answers.
   trailFor: require('../src/main/skill-trail-read').trailFor,
   parseLayout: require('../src/shared/layout-schema').parseLayout,
-  // M126 fix. The shelf's own parser, so the harness's `saveShelf` applies
+  // M127 fix. The shelf's own parser, so the harness's `saveShelf` applies
   // the SAME rules main's does rather than writing whatever the renderer
   // sent — and so `shelf:list`/`shelf:save` answer at all: without a
   // `shelf`/`saveShelf` on the harness palette both invokes REJECTED, which
   // the renderer swallowed as an unhandled rejection with an empty pane.
   parseShelf: require('../src/shared/skills').parseShelf,
-  // M128 fix. The REAL writers, wired against the harness's own fenced home
+  // M129 fix. The REAL writers, wired against the harness's own fenced home
   // and fixture roots (never the developer's ~/.claude) so editor.2 drives
   // the same create/rename/delete path production does.
   skillWriteHandlers: require('../src/main/skill-write').skillWriteHandlers,

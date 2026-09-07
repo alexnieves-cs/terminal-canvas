@@ -53,7 +53,7 @@ export function railLabel(
   panel: Panel,
   status: PanelStatus | undefined,
   /**
-   * M132. A workflow trigger's template name, by template id — so a watcher
+   * M133. A workflow trigger's template name, by template id — so a watcher
    * whose command is `/usr/bin/true` (main's arming needs one) reads as the
    * WORKFLOW it runs and not as a binary nobody typed. OPTIONAL and
    * defaulted, the trade every parameter added to this family has made:
@@ -67,9 +67,9 @@ export function railLabel(
   // that item carries the same words, so a rail of cards and lanes would be
   // two rows with one label and nothing saying which is the conversation.
   if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
-  // M127. Same rule as panel-name.ts's — one label for one panel.
+  // M128. Same rule as panel-name.ts's — one label for one panel.
   if (isSkillPanel(panel)) return panel.title ?? `skill · ${panel.skill.name}`
-  // M132. The workflow panel names its template, the work card's own shape.
+  // M133. The workflow panel names its template, the work card's own shape.
   if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
   // The user's own title is the first link for BOTH kinds — it is the one
   // link the user chose.
@@ -101,7 +101,7 @@ export function railLabel(
   // it in their head, and the trigger is the row's trailing phrase — a row
   // that led with the trigger would sort every watcher under `on`.
   if (isWatcherPanel(panel)) {
-    // M132. A workflow trigger names its WORKFLOW; the binary main's arming
+    // M133. A workflow trigger names its WORKFLOW; the binary main's arming
     // needs is not what this watcher is for.
     if (panel.watch.templateId !== undefined) {
       return `watcher · ${workflowWatchLabel(templateNameOf === undefined ? null : templateNameOf(panel.watch.templateId))}`
@@ -179,7 +179,7 @@ export function buildRailRows(
    * reads as the kind.
    */
   workStateOf?: (itemId: string) => WorkItemState | undefined,
-  /** M132. Passed through to `railLabel` — see its own parameter. */
+  /** M133. Passed through to `railLabel` — see its own parameter. */
   templateNameOf?: (templateId: string) => string | undefined
 ): RailRow[] {
   return panels.map((panel) => {

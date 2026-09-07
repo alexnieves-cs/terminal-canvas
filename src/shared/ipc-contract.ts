@@ -581,7 +581,7 @@ export const IPC = {
   ROUTINE_DELETE: 'routine:delete',
   ROUTINE_RUN: 'routine:run',
   /**
-   * M126. The skill shelf: the user's arrangement of the Skills pane, TOP
+   * M127. The skill shelf: the user's arrangement of the Skills pane, TOP
    * LEVEL in the layout snapshot beside `templates` and `teammates` rather
    * than on a workspace, and reached through its own pair of invokes for
    * exactly that reason — `layout:save` carries a CanvasState, which is one
@@ -591,7 +591,7 @@ export const IPC = {
   SHELF_LIST: 'shelf:list',
   SHELF_SAVE: 'shelf:save',
   /**
-   * M127. `claude plugin details <id>` for ONE plugin, as TEXT.
+   * M128. `claude plugin details <id>` for ONE plugin, as TEXT.
    *
    * Its own channel rather than a field on TOOLBOX_READ for two reasons: the
    * inventory is asked per cwd and this is asked per plugin, and the details
@@ -602,7 +602,7 @@ export const IPC = {
    */
   PLUGIN_DETAILS: 'plugin:details',
   /**
-   * M128. The four writers — the ONLY channels in this contract that put
+   * M129. The four writers — the ONLY channels in this contract that put
    * bytes into `~/.claude`.
    *
    * The line is spec §5.1's and main enforces it rather than trusting the
@@ -622,7 +622,7 @@ export const IPC = {
   SKILL_RENAME: 'skill:rename',
   SKILL_DELETE: 'skill:delete',
   /**
-   * M129. A TERMINAL panel's live skill trail, main's half: tails the CLI's
+   * M130. A TERMINAL panel's live skill trail, main's half: tails the CLI's
    * own transcript from a byte offset. A chat panel's trail is derived from
    * events already in memory in the renderer (Task 8) and never asks main —
    * this invoke refuses a chat panel id by name, never answering `none`.
@@ -877,7 +877,7 @@ export interface ToolboxReadRequest {
 }
 
 /**
- * M128. What the four writers are asked. `cwd` is the asking panel's,
+ * M129. What the four writers are asked. `cwd` is the asking panel's,
  * UNEXPANDED — main expands it with `resolveCwd` and derives the writable
  * roots itself, so the renderer can neither name a root nor widen one.
  */
@@ -1350,7 +1350,7 @@ export interface CanvasBridge {
   teammate: {
     list(): Promise<PersistedTeammate[]>
     /**
-     * M130 fix round 2. `cwd` — the pane's inventory cwd, present ONLY when
+     * M131 fix round 2. `cwd` — the pane's inventory cwd, present ONLY when
      * the save comes from the assign door — lets main answer with the REAL
      * visibility of every project-scoped key just saved: `notVisible` is
      * absent when nothing is hidden, never an empty array written for its
@@ -1361,12 +1361,12 @@ export interface CanvasBridge {
     /** The folder dialog; null when cancelled. */
     choosePlace(): Promise<string | null>
   }
-  /** M126. The skill shelf, read and written whole: the columns are one record. */
+  /** M127. The skill shelf, read and written whole: the columns are one record. */
   shelf: {
     list(): Promise<Shelf>
     save(shelf: Shelf): Promise<Shelf>
   }
-  /** M127. One plugin's `claude plugin details` output, verbatim. Never rejects. */
+  /** M128. One plugin's `claude plugin details` output, verbatim. Never rejects. */
   plugin: {
     details(id: string): Promise<PluginDetailsResult>
   }
@@ -1618,7 +1618,7 @@ export interface CanvasBridge {
     ): Promise<{ rules: string[]; total: number; status: string }>
   }
   /**
-   * M128. The four writers. Every arm answers a RESULT — `refused` (a rule
+   * M129. The four writers. Every arm answers a RESULT — `refused` (a rule
    * said no, before disk), `failed` (the rules passed, the filesystem did
    * not), or the write's own arm — and none of them rejects.
    */
@@ -1628,7 +1628,7 @@ export interface CanvasBridge {
     rename(req: SkillRenameRequest): Promise<SkillWriteResult>
     remove(req: SkillDeleteRequest): Promise<SkillWriteResult>
     /**
-     * M129. A TERMINAL panel's live skill trail. A chat panel id refuses by
+     * M130. A TERMINAL panel's live skill trail. A chat panel id refuses by
      * name — its trail is derived in the renderer from events already in
      * memory (Task 8) and never asks main.
      */

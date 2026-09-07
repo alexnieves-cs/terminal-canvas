@@ -105,7 +105,7 @@ export interface LayoutStore {
   templates(): PersistedTemplate[]
   saveTemplate(template: PersistedTemplate): void
   /**
-   * M126. The skill shelf, copied out and written whole.
+   * M127. The skill shelf, copied out and written whole.
    *
    * Whole, never per column: the columns are one arrangement, and a
    * per-column write would let a drag that moved a card between two columns

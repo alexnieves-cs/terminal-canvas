@@ -53,7 +53,7 @@ export interface PanelBase {
   /** M92. Filling the viewport, with the rect to go back to. Cleared by the first move or resize. */
   maximised?: { restore: WorldRect }
   /**
-   * M129. The skill trail's lane, folded away — the ONE stored fact about
+   * M130. The skill trail's lane, folded away — the ONE stored fact about
    * the trail (see layout-schema.ts). Absent means expanded.
    */
   skillTrail?: 'collapsed'
@@ -187,7 +187,7 @@ export interface ChatPanel extends PanelBase {
 export interface WatcherPanel extends PanelBase {
   kind: 'watcher'
   /** `armed` ABSENT means armed — the ordinary case and every pre-toggle file. */
-  /** M132. `templateId` ABSENT is an ordinary watcher; present, its fire instantiates that template. */
+  /** M133. `templateId` ABSENT is an ordinary watcher; present, its fire instantiates that template. */
   watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false; templateId?: string }
 }
 
@@ -218,7 +218,7 @@ export interface WorkPanel extends PanelBase {
 }
 
 /**
- * M127. The skill panel — the THIRTEENTH kind, sessionless like the work
+ * M128. The skill panel — the THIRTEENTH kind, sessionless like the work
  * card. `scope` and `name` and nothing else: everything on screen (the
  * frontmatter, the capped SKILL.md text, the resource count, the
  * `alsoDefinedIn` link, which panels can see it, a plugin's details) is read
@@ -232,7 +232,7 @@ export interface SkillPanel extends PanelBase {
   skill: { scope: ToolScope; name: string }
 }
 /**
- * M132. The workflow panel — the FOURTEENTH kind, sessionless like the work
+ * M133. The workflow panel — the FOURTEENTH kind, sessionless like the work
  * card. It carries the TEMPLATE'S ID alone; the template itself lives top
  * level in the layout (M116's reason from the other side: a copied node list
  * would be a second author, stale the moment the template is edited), and
@@ -327,7 +327,7 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
     !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel) && !isWorkflowPanel(panel) &&
-    // M127. The thirteenth kind joins the partition HERE, and forgetting it
+    // M128. The thirteenth kind joins the partition HERE, and forgetting it
     // is the dangerous direction: a skill panel satisfying isTerminalPanel
     // reaches assignTiers and registry.ensure with no spec at all.
     !isSkillPanel(panel)
@@ -820,7 +820,7 @@ export function makeWatcherPanel(
     kind: 'watcher',
     rect: { id, x: centre.x - WATCHER_W / 2, y: centre.y - WATCHER_H / 2, w: WATCHER_W, h: WATCHER_H },
     z,
-    // M132's mark stays ABSENT unless set: spreading it would write
+    // M133's mark stays ABSENT unless set: spreading it would write
     // `templateId: undefined`, which survives IPC and reads as present.
     watch: { cwd: watch.cwd, command: watch.command, args: [...watch.args], trigger: watch.trigger, ...(watch.templateId === undefined ? {} : { templateId: watch.templateId }) }
   }
@@ -947,10 +947,10 @@ export function makeWorkPanel(id: string, centre: Point, z: number, itemId: stri
   return { kind: 'work', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - WORK_H / 2, w: JIRA_W, h: WORK_H }, z, title, work: { itemId } }
 }
 
-/** M127. A skill panel reads like a document: the work panels' width, a file panel's height. */
+/** M128. A skill panel reads like a document: the work panels' width, a file panel's height. */
 export const SKILL_H = 520
 /**
- * M127. A skill panel at a point. The title is stamped at mint for the rail
+ * M128. A skill panel at a point. The title is stamped at mint for the rail
  * — `skill · <name>` — and nothing reads it as the skill's own name; the
  * record's `skill.name` is the identity, and the title is a label.
  */
@@ -958,11 +958,11 @@ export function makeSkillPanel(id: string, centre: Point, z: number, scope: Tool
   return { kind: 'skill', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - SKILL_H / 2, w: JIRA_W, h: SKILL_H }, z, title: `skill · ${name}`, skill: { scope, name } }
 }
 
-/** M132. A workflow panel needs room for a diagram and a tab strip. */
+/** M133. A workflow panel needs room for a diagram and a tab strip. */
 export const WORKFLOW_W = 640
 export const WORKFLOW_H = 460
 /**
- * M132. A workflow panel at the centre. The title is the TEMPLATE'S name at
+ * M133. A workflow panel at the centre. The title is the TEMPLATE'S name at
  * mint, the work card's own rule and for its reason: the body reads the live
  * template by id, so a renamed template re-titles the body while the rail
  * keeps the name the user saw when they opened it.
@@ -992,7 +992,7 @@ export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?
     ...(p.locked === true ? { locked: true as const } : {}),
     ...(p.pinned === true ? { pinned: true as const } : {}),
     ...(p.maximised === undefined ? {} : { maximised: { restore: { ...p.maximised.restore } } }),
-    // M129. The fourth mark, here for the same reason as the other three: a
+    // M130. The fourth mark, here for the same reason as the other three: a
     // rename that rebuilt the panel by name would silently re-expand a lane
     // the user folded away.
     ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {})

@@ -1,5 +1,5 @@
 /**
- * M129. The live skill trail's pure half: the CLI's own JSONL transcript,
+ * M130. The live skill trail's pure half: the CLI's own JSONL transcript,
  * scanned line by line for `Skill` tool_use records.
  *
  * Measurement 1 (spec §0.1): a skill invocation is a structured record —

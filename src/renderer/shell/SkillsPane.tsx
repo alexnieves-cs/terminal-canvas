@@ -13,7 +13,7 @@ import {
 } from './skills-pane-model'
 
 /**
- * M126. THE SKILLS PANE — the navigator's eighth pane: columns of cards over
+ * M127. THE SKILLS PANE — the navigator's eighth pane: columns of cards over
  * one inventory, three kind tabs (Skills / Agents / Commands) filtering it,
  * a search box and two filters.
  *
@@ -75,10 +75,10 @@ export interface SkillsPaneProps {
   onPlace: (key: SkillKey, columnId: string) => void
   onNewColumn: () => void
   onDeleteColumn: (id: string) => void
-  /** M130. The roster the assign door offers — choosing among it, never typing a name. */
+  /** M131. The roster the assign door offers — choosing among it, never typing a name. */
   teammates: readonly PersistedTeammate[]
   /**
-   * M130 fix round 2. Main's real verdict on the last assign-door save —
+   * M131 fix round 2. Main's real verdict on the last assign-door save —
    * `not visible to <teammate>: <repoRoot> is outside their places` — or an
    * early, ADVISORY sentence from the renderer's own rough check while the
    * real answer is in flight. Null when there is nothing to say.
@@ -89,7 +89,7 @@ export interface SkillsPaneProps {
   /** Assign one card to a teammate. */
   onAssignCard: (key: SkillKey, teammateId: string) => void
   /**
-   * M128 fix. The `skill:create` door, wired at last: `skill:create` had no
+   * M129 fix. The `skill:create` door, wired at last: `skill:create` had no
    * renderer caller at all, so the channel and its refusals existed and
    * nothing could reach them.
    *

@@ -108,10 +108,10 @@ export function panelLabel(panel: Panel): string {
   if (isBrowserPanel(panel)) return `browser: ${panel.url} (${panel.rect.id})`
   // M116. The twelfth kind, named by its item (the title stamped at mint).
   if (isWorkPanel(panel)) return `work: ${panel.title ?? panel.work.itemId} (${panel.rect.id})`
-  // M127. The thirteenth kind, named by the PAIR that identifies it — a name
+  // M128. The thirteenth kind, named by the PAIR that identifies it — a name
   // alone would read as one skill when two scopes define it.
   if (isSkillPanel(panel)) return `skill: ${panel.skill.scope} ${panel.skill.name} (${panel.rect.id})`
-  // M132. The fourteenth kind, named by the template it projects.
+  // M133. The fourteenth kind, named by the template it projects.
   if (isWorkflowPanel(panel)) return `workflow: ${panel.title ?? panel.workflow.templateId} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no

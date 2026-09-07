@@ -2014,7 +2014,7 @@ const isResult = (l) => l.includes('"type":"result"')
   }
 }
 
-  // M131 — pool.1. The pool: N workers over a shared list, no ceiling of its
+  // M132 — pool.1. The pool: N workers over a shared list, no ceiling of its
   // own (M82's `agents.maxConcurrent`/`budgetUsd` read LIVE every pump).
   {
     const poolNode = (width) => ({ kind: 'pool', width, list: '/fake/list.txt', prompt: 'do it', cwd: '/repo', dx: 0, dy: 0 })

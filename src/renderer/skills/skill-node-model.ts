@@ -2,7 +2,7 @@ import type { NamedToolEntry, SkillResources, ToolScope } from '@shared/toolbox'
 import type { PluginDetailsResult } from '@shared/skills'
 
 /**
- * M127. The skill panel's whole body, as data.
+ * M128. The skill panel's whole body, as data.
  *
  * Pure, for the reason every view model in this repo since M8c is: the
  * component owns the frame, the doors and the scroll host, and NOTHING that
@@ -160,9 +160,9 @@ export function skillNodeSections(input: SkillNodeInput): SkillSection[] {
   return out
 }
 
-/** M127. The door's refusal when the entry carries no file to reveal. */
+/** M128. The door's refusal when the entry carries no file to reveal. */
 /**
- * M128 fix. The delete confirm, which NAMES WHAT GOES WITH THE SKILL.
+ * M129 fix. The delete confirm, which NAMES WHAT GOES WITH THE SKILL.
  *
  * `deleteSkill` trashes the DIRECTORY, so a skill's bundled `references/`,
  * `scripts/` and `assets/` go with it. A confirm that said "delete this

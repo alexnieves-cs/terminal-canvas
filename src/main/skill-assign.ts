@@ -1,5 +1,5 @@
 /**
- * M130. Assignments: a shelf column, or a single skill, attaches to a
+ * M131. Assignments: a shelf column, or a single skill, attaches to a
  * teammate — never a second brief-append path (M100 already owns the one
  * append; see `main/index.ts`) and never a renderer-side copy of it.
  *
@@ -20,7 +20,7 @@ import { insidePlace, placeRefusal, type Realpath } from '@shared/places'
 import type { PersistedTeammate } from '@shared/teammates'
 
 /**
- * M130 fix round 1. A teammate chat's cwd is often a worktree LANE (M113's
+ * M131 fix round 1. A teammate chat's cwd is often a worktree LANE (M113's
  * board dispatch), living under `userData/worktrees` and outside every
  * place by construction (`main/places.ts`'s own reason for `worktreeRootOf`)
  * — never the repository a project skill belongs to. Translate BEFORE
@@ -86,7 +86,7 @@ export function assignRefusal(
 }
 
 /**
- * M130 fix round 2. Every project-scoped key the teammate's record now
+ * M131 fix round 2. Every project-scoped key the teammate's record now
  * carries that this REPOSITORY makes invisible — the full list, computed
  * with the REAL, symlink-resolved `insidePlace` (never the renderer's rough
  * prefix guess), for `teammate:save`'s own response.

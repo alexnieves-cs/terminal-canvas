@@ -60,10 +60,10 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
   // M116. `work · <title>` — the rail's own label, so the Go-to row agrees.
   if (isWorkPanel(panel)) return panel.title === undefined ? 'work' : `work · ${panel.title}`
-  // M127. The title is already `skill · <name>` at mint; a retitled panel
+  // M128. The title is already `skill · <name>` at mint; a retitled panel
   // keeps the user's words, and a titleless one names its kind.
   if (isSkillPanel(panel)) return panel.title ?? `skill · ${panel.skill.name}`
-  // M132. The workflow panel names its template, the work card's own shape.
+  // M133. The workflow panel names its template, the work card's own shape.
   if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
@@ -81,11 +81,11 @@ export function panelPath(panel: Panel): string | undefined {
   if (isBrowserPanel(panel)) return undefined
   // M116. A card has no directory; its lane's chat has one.
   if (isWorkPanel(panel)) return undefined
-  // M127. A skill panel has no directory of its own: it reads the
+  // M128. A skill panel has no directory of its own: it reads the
   // inventories of the panels that DO, and its file lives wherever the scope
   // puts it. Naming one here would be a claim about a cwd it never resolved.
   if (isSkillPanel(panel)) return undefined
-  // M132. A workflow is a shape of work, not a place: its blocks carry the directories.
+  // M133. A workflow is a shape of work, not a place: its blocks carry the directories.
   if (isWorkflowPanel(panel)) return undefined
   return panel.spec.cwd
 }

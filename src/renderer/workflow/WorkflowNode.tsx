@@ -9,7 +9,7 @@ import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H } from './workflow-diagram'
 
 /**
- * M132. THE WORKFLOW PANEL — the FOURTEENTH kind, sessionless like the work
+ * M133. THE WORKFLOW PANEL — the FOURTEENTH kind, sessionless like the work
  * card, and a VIEW of a template rather than a second editor of one.
  *
  * The Definition tab draws `buildDiagram`'s projection as an SVG sibling
@@ -52,7 +52,7 @@ export interface WorkflowNodeProps {
   deleteReason: string | null
   /**
    * Fix round 2. Why this shape cannot be run — `templateRefusal`'s sentence,
-   * which since M131's blocks includes "<key> is a pool block, which cannot
+   * which since M132's blocks includes "<key> is a pool block, which cannot
    * run yet". Run is DISABLED with it, never removed and never half-run.
    */
   runReason: string | null
@@ -70,7 +70,7 @@ export const TEMPLATE_GONE = 'that template is no longer saved'
  */
 export const REASON_NO_EDITOR = 'the live canvas is the editor — arrange the panels, then Save selection as template'
 /**
- * M132, fix round 1. THREE STATES, NOT TWO, and this sentence is the third.
+ * M133, fix round 1. THREE STATES, NOT TWO, and this sentence is the third.
  *
  * A run learns its template from an origin map held in the renderer's own
  * ref (`useRuns.noteTemplate`), so a run of these panels in an EARLIER

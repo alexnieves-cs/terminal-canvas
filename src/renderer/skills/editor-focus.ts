@@ -1,5 +1,5 @@
 /**
- * M128, fix round 1. "A skill editor field has the keyboard."
+ * M129, fix round 1. "A skill editor field has the keyboard."
  *
  * Module level and outside React, like every other cross-cutting flag this
  * canvas reads from an event handler: `shouldIgnoreKeys` sits in effect

@@ -2152,7 +2152,7 @@ const WS = [
       none !== undefined && none.disabledReason === P.REASON_NO_TEMPLATES,
     JSON.stringify({ ok: P.templateRefusal(okTpl, presets, true), gone: P.templateRefusal(gone, presets, true), chat: P.templateRefusal(chat, presets, false) }))
 
-  // M131/M132, fix round 2 — workflow.2a. A template carrying a workflow
+  // M132/M133, fix round 2 — workflow.2a. A template carrying a workflow
   // block has NO runtime yet: instantiation skips those nodes by name, so
   // running one would mint a PARTIAL shape (the terminals, none of the
   // blocks) and say nothing. The refusal names the first block it finds and

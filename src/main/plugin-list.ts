@@ -1,5 +1,5 @@
 /**
- * M125. The enabled plugins, from the CLI's own answer.
+ * M126. The enabled plugins, from the CLI's own answer.
  *
  * `docs/ideas-backlog.md` #26 declined plugin skills because
  * `~/.claude/plugins` is 663 MB containing 700 SKILL.md files. This is the

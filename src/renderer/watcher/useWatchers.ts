@@ -21,7 +21,7 @@ import { clearWatch, getWatch, setWatch } from './watcher-store'
 let subscribed = false
 
 /**
- * M132. A WORKFLOW trigger is a watcher, so its fire arrives here like every
+ * M133. A WORKFLOW trigger is a watcher, so its fire arrives here like every
  * other. What it must do — mint the template's panels — is the RENDERER's
  * and only Canvas can do it, so Canvas registers one handler and this module
  * calls it on the transition into `running`. No second scheduler, no second

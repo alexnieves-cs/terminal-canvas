@@ -9,7 +9,7 @@ import type { PresetTemplate } from '@shared/ipc-contract'
 import type { Viewport, WorldRect } from './viewport'
 
 export interface CanvasTestHooksDeps {
-  /** M132. The instantiation counter — see `__m132Instantiations` below. */
+  /** M133. The instantiation counter — see `__m132Instantiations` below. */
   instantiateCountRef: RefObject<number>
   registry: Registry
   viewportRef: RefObject<Viewport>
@@ -68,7 +68,7 @@ export function useCanvasTestHooks(deps: CanvasTestHooksDeps): void {
   // count had grown past a dozen).
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
-    // M132. How many times M80's instantiation has been entered. The
+    // M133. How many times M80's instantiation has been entered. The
     // workflow panel's whole claim is that Run reaches THAT function and not
     // a second copy, and only a count separates the two.
     w.__m132Instantiations = (): number => instantiateCountRef.current

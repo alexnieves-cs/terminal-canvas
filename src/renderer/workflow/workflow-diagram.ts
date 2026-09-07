@@ -5,7 +5,7 @@ import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import type { HandoffTrigger } from '@shared/handoff'
 
 /**
- * M132. The block diagram is a PROJECTION of the template record. It computes
+ * M133. The block diagram is a PROJECTION of the template record. It computes
  * geometry and returns it; it stores nothing and owns no camera.
  *
  * This is why `@xyflow/react` is declined in spec §11: a graph library brings
@@ -116,10 +116,10 @@ export function edgeWord(edge: DiagramEdge): string {
 
 /**
  * M79's records, filtered to this template. The data has existed since M79
- * and needs no store of its own; what M132 adds is the `templateId` mark the
+ * and needs no store of its own; what M133 adds is the `templateId` mark the
  * recorder writes when a run's panels were minted by an instantiation.
  *
- * A run with NO mark is not this template's: every pre-M132 run, and every
+ * A run with NO mark is not this template's: every pre-M133 run, and every
  * run of panels the user built by hand, is absent from this list rather than
  * guessed into it.
  */
@@ -139,7 +139,7 @@ export function runsForTemplate(runs: readonly PersistedRun[], templateId: strin
  * produce; the exit is deliberately the trivial success.
  *
  * KNOWN COST, and it is deliberate rather than overlooked. Main is not
- * changed by M132, so main goes on treating this watcher as any other:
+ * changed by M133, so main goes on treating this watcher as any other:
  *
  *  1. every fire SPAWNS `/usr/bin/true` — a real process, doing nothing;
  *  2. every fire appends a run ledger row naming `/usr/bin/true`, so the
@@ -176,7 +176,7 @@ export function workflowWatchLabel(name: string | undefined | null): string {
 }
 
 /**
- * M132, fix round 1. Why a TRIGGER cannot run this template — or undefined.
+ * M133, fix round 1. Why a TRIGGER cannot run this template — or undefined.
  *
  * A parameterised template is refused ON THE FIRE PATH and mints nothing: a
  * timer at 3am has nobody to answer the sheet, and opening one would leave a

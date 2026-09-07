@@ -1,5 +1,5 @@
 /**
- * M127. `claude plugin details <id>`, VERBATIM.
+ * M128. `claude plugin details <id>`, VERBATIM.
  *
  * Measurement 5 of the Act III spec: this command has NO `--json`. It prints
  * a human-formatted table — `Skills (14)  brainstorming, …`, `Always-on: ~688

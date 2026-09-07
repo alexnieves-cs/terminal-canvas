@@ -1,5 +1,5 @@
 /**
- * M129. The live skill trail's tail: `scanTrailChunk` fed from a byte offset
+ * M130. The live skill trail's tail: `scanTrailChunk` fed from a byte offset
  * over the CLI's own transcript file — `scrollback-log.ts`'s append
  * discipline, inverted (that module WRITES a ring; this one only ever READS
  * forward from where it last stopped).

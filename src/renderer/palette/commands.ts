@@ -336,7 +336,7 @@ export interface PaletteActions {
   beginWatcher(): void
   /** M80. Save the selected panels and their edges as a template. */
   beginSaveTemplate(panelIds: readonly string[]): void
-  /** M132. Open a template as a workflow panel — a VIEW of the shape, not a run of it. */
+  /** M133. Open a template as a workflow panel — a VIEW of the shape, not a run of it. */
   openWorkflow(templateId: string): void
   /**
    * M61. Card or expand one group, and remove one. Ids rather than "the
@@ -468,9 +468,9 @@ export interface PaletteActions {
   /** M116. Open the navigator on the Board pane. */
   openBoard(): void
   /**
-   * M126. The ONE door a skill card's drop onto the canvas goes through.
+   * M127. The ONE door a skill card's drop onto the canvas goes through.
    *
-   * A named, typed STUB until M127 mints the `skill` panel kind: it records
+   * A named, typed STUB until M128 mints the `skill` panel kind: it records
    * the request and opens nothing. Named and typed rather than absent so the
    * drop has exactly one caller when the kind lands — a second mint path
    * invented at the drop site is how two doors drift apart.
@@ -1208,7 +1208,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       run: () => actions.beginSpawnSheet(t.id)
     }, t.refusal))
   }
-  // M132. The workflow panel's door: one row per template, beside the row
+  // M133. The workflow panel's door: one row per template, beside the row
   // that RUNS it. Two verbs, never one — opening a shape and starting it are
   // different acts, and the palette says which is which.
   for (const t of templateRows) {

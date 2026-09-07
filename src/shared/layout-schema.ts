@@ -86,12 +86,12 @@ export interface PersistedPanelBase {
   /** M92. Filling the viewport, with the rect to restore. */
   maximised?: { restore: { x: number; y: number; w: number; h: number } }
   /**
-   * M129. The skill trail's lane, folded away. The ONE stored fact about the
+   * M130. The skill trail's lane, folded away. The ONE stored fact about the
    * trail — the entries themselves are re-derived from the transcript on
    * every read and never persisted — and a LAYOUT mark like `pinned` rather
    * than a view state like M106's flip, because "collapse it back so it is
    * no longer visible" is a thing the user did to this panel and must
-   * survive a relaunch. Absent means expanded, which is every pre-M129 file.
+   * survive a relaunch. Absent means expanded, which is every pre-M130 file.
    *
    * The value is CLOSED: `collapsed` is the only word that means anything,
    * so a second state added later is a new word here rather than a `true`
@@ -264,8 +264,8 @@ function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd: string
   // true` written back would make every file differ from the one before it
   // for a field whose absence already means the same thing.
   const armed = raw.armed === false ? { armed: false as const } : {}
-  // M132. A WORKFLOW trigger: the same watcher, carrying the template it
-  // instantiates. ABSENT is every ordinary watcher and every pre-M132 file,
+  // M133. A WORKFLOW trigger: the same watcher, carrying the template it
+  // instantiates. ABSENT is every ordinary watcher and every pre-M133 file,
   // so it must warn nothing; a PRESENT but unusable value is dropped by name
   // and the watcher is KEPT — a watcher that vanished because of a mark
   // would read as a watcher the user never made.
@@ -308,7 +308,7 @@ export interface PersistedMemoryPanel extends PersistedPanelBase {
 export interface PersistedWatcherPanel extends PersistedPanelBase {
   kind: 'watcher'
   /** `armed` ABSENT means armed: every watcher written before the toggle existed, and the ordinary case. */
-  /** M132. `templateId` ABSENT is an ordinary watcher; present, the fire instantiates that template. */
+  /** M133. `templateId` ABSENT is an ordinary watcher; present, the fire instantiates that template. */
   watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false; templateId?: string }
 }
 
@@ -349,7 +349,7 @@ export interface PersistedWorkPanel extends PersistedPanelBase {
 }
 
 /**
- * M127. The skill panel — the thirteenth kind, sessionless like the work
+ * M128. The skill panel — the thirteenth kind, sessionless like the work
  * card. `scope` AND `name`, and NOTHING else: no description, no body, no
  * resource count, no token figure. A copy is a second author that goes stale
  * silently (M116's ruling for the work card, reached again), so everything
@@ -364,7 +364,7 @@ export interface PersistedSkillPanel extends PersistedPanelBase {
 }
 
 /**
- * M132. The workflow panel — the FOURTEENTH kind, sessionless like the work
+ * M133. The workflow panel — the FOURTEENTH kind, sessionless like the work
  * card. It carries the template's id ALONE, for M116's reason from the other
  * side: the template lives top level in this file, and a node list copied
  * onto the panel would be a second author that goes stale the moment the
@@ -540,7 +540,7 @@ export interface LayoutSnapshot {
   prompts: Prompt[]
   /** M80. Saved shapes of work. Optional on disk for every layout written before templates existed. */
   templates: PersistedTemplate[]
-  /** M125. The skill shelf's columns. Absent on disk for every layout written before it existed. */
+  /** M126. The skill shelf's columns. Absent on disk for every layout written before it existed. */
   shelf: Shelf
   /** M100. The roster. Optional on disk for every layout written before teammates existed. */
   teammates: PersistedTeammate[]
@@ -860,7 +860,7 @@ function parsePanel(
     ...(parseFlag(raw.locked, 'locked', id, warnings) ? { locked: true as const } : {}),
     ...(parseFlag(raw.pinned, 'pinned', id, warnings) ? { pinned: true as const } : {}),
     ...(parseMaximised(raw.maximised, id, warnings)),
-    // M129. Absent stays absent; the one word round-trips; anything else
+    // M130. Absent stays absent; the one word round-trips; anything else
     // warns by id and costs the FIELD, never the panel.
     ...(raw.skillTrail === undefined
       ? {}
@@ -947,7 +947,7 @@ function parsePanel(
     return { ...base, kind: 'work', work: { itemId: work.itemId } }
   }
   if (kind === 'skill') {
-    // M127. Both fields are the panel's whole identity, so an unusable one
+    // M128. Both fields are the panel's whole identity, so an unusable one
     // drops the PANEL by name — a skill panel naming no scope could not ask
     // any inventory for an entry and would render six unknown sections
     // about nothing. The scope is checked against the closed set for the
@@ -965,7 +965,7 @@ function parsePanel(
     return { ...base, kind: 'skill', skill: { scope: skill.scope, name: skill.name } }
   }
   if (kind === 'workflow') {
-    // M132. The template id is the panel's only identity, so an unusable one
+    // M133. The template id is the panel's only identity, so an unusable one
     // drops the PANEL by name — the work card's own rule. A panel naming no
     // template would sit on the canvas saying "that template is gone" about
     // one that never existed.
@@ -1456,7 +1456,7 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
     const nodes: TemplateNode[] = []
     if (Array.isArray(entry.nodes)) for (const n of entry.nodes) {
       if (!isRecord(n) || !isStr(n.key) || n.key.trim() === '' || nodes.some((x) => x.key === n.key)) { warnings.push(`dropped a node with an unusable key from template ${entry.id}`); continue }
-      // M131: the three workflow kinds route through their own parser, which
+      // M132: the three workflow kinds route through their own parser, which
       // reports its own reason; the arm below stays exactly as it is for
       // whatever comes after these three.
       if (n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect') {
@@ -1521,7 +1521,7 @@ export function parseTeammates(raw: unknown, warnings: string[]): PersistedTeamm
     const places = strList(entry.places), services = strList(entry.services), chats = strList(entry.chats)
     if (places === null || services === null || chats === null) { warnings.push(`dropped teammate ${entry.id}: a list field was not a list of strings`); return }
     const absolute = places.filter((p) => { const keep = p.startsWith('/'); if (!keep) warnings.push(`teammate ${entry.id}: dropped place ${p} — a place must be an absolute folder`); return keep })
-    // M130. `skills` is OPTIONAL — absent is every pre-M130 record and every
+    // M131. `skills` is OPTIONAL — absent is every pre-M131 record and every
     // teammate nobody has assigned a skill to. Present-but-malformed drops
     // just this field with a warning; the teammate is kept (the record
     // rule: a per-field failure never costs the whole entry).
@@ -1690,7 +1690,7 @@ function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string
     seen.add(entry.id)
     const endedAt = num(entry.endedAt)
     const costUsd = num(entry.costUsd)
-    // M132. ABSENT stays absent — never spread as `templateId: undefined`,
+    // M133. ABSENT stays absent — never spread as `templateId: undefined`,
     // which survives IPC and reads as present.
     const templateId = isStr(entry.templateId) && entry.templateId.trim() !== '' ? entry.templateId : undefined
     runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }) })
@@ -1975,7 +1975,7 @@ export function parseLayout(raw: string): {
 }
 
 /**
- * M125. The write-side companion to `parseShelf`: an empty shelf is deleted
+ * M126. The write-side companion to `parseShelf`: an empty shelf is deleted
  * from the record before it is stringified, the same rule M93's annotations
  * and workItems already obey per-workspace — a written `"shelf":{"columns":[]}`
  * is a record claiming to exist, so a fresh file and a file whose shelf was

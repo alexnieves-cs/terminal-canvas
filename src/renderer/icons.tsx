@@ -167,12 +167,12 @@ export const KindWork = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M2 6h12M5 9h6" /></Svg>
 )
 
-/* M127. A skill: a bookmarked page — the shelf's own card, on a leaf. */
+/* M128. A skill: a bookmarked page — the shelf's own card, on a leaf. */
 export const KindSkill = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M3.5 2h9v12l-4.5-3-4.5 3z" /><path d="M6 5.5h4" /></Svg>
 )
 
-/* M132. The workflow panel: two blocks and the line between them — the
+/* M133. The workflow panel: two blocks and the line between them — the
    diagram it draws, at 16px. */
 export const KindWorkflow = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="1.5" y="5" width="5" height="6" rx="1" /><rect x="9.5" y="5" width="5" height="6" rx="1" /><path d="M6.5 8h3" /></Svg>

@@ -34,7 +34,7 @@ export interface WatcherNodeProps {
   /** The label of a `panel` trigger's source, when the canvas has one. */
   sourceLabel?: string
   /**
-   * M132. What template this watcher instantiates, when it is one of those.
+   * M133. What template this watcher instantiates, when it is one of those.
    *
    * DISCRIMINATED, not `string | null | undefined`, because a JSX prop cannot
    * carry three states through an optional field: `props.workflowName ?? null`
@@ -103,7 +103,7 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
       className="watcher-node"
       state={state}
       rootAttrs={{ 'data-watcher-node': id, 'data-watcher-status': snapshot.status, 'data-tone': state.tone }}
-      // M132. A workflow trigger names the WORKFLOW, never `/usr/bin/true` —
+      // M133. A workflow trigger names the WORKFLOW, never `/usr/bin/true` —
       // the binary is an implementation detail of main's arming and reads as
       // a command the user never typed.
       title={panel.title ?? (panel.watch.templateId === undefined

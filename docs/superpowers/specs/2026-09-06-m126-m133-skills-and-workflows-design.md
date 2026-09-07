@@ -1,12 +1,14 @@
-# Act III — the shelf and the shape that runs (M125–M132)
+# Act III — the shelf and the shape that runs (M126–M133)
+
+> Renumbered M126–M133 on 2026-09-07: Act II's ship took M125 (README's row) after this document was written.
 
 Branch `m125-skills`, base `main@2d088e2` (Act I merged). Two tracks on one branch; checks
 written first and COMMITTED BEFORE their implementation, Act II's rule. Track B is a
-fresh-context subagent in a worktree off M125's schema commit.
+fresh-context subagent in a worktree off M126's schema commit.
 
 **Numbering.** M117–M121 are Act II (engines), in flight on `m117-engines` as this is
 written. M122 is free, M123 is cited by Act I §0 (signing), M124 is Act I's owed outward
-hand check. This act therefore starts at M125 rather than at the next integer, and the gap
+hand check. This act therefore starts at M126 rather than at the next integer, and the gap
 is deliberate: two acts running at once must not collide on a number, which is the same
 reason `## Conventions` made check ids scoped strings.
 
@@ -60,13 +62,13 @@ M82 already enforces a live concurrency ceiling with a queue that names its reas
 already an agent loop whose stop main enforces. The genuinely new engine in this act is the
 POOL (§8.1), and it is the one thing to defer if the act runs long.
 
-**Two milestones carry real risk and neither is the pool.** M128 is the first code in this
+**Two milestones carry real risk and neither is the pool.** M129 is the first code in this
 repository that writes into `~/.claude`, and its two failure modes (§5.2, §5.4) both end
 with a user's own file quietly meaning something else while the panel says the save
-succeeded. M129's trail reads a record shape nothing versions. Both are specced from the
+succeeded. M130's trail reads a record shape nothing versions. Both are specced from the
 failure rather than from the feature.
 
-## 2. M125 — the skill identity, its resources, and the shelf
+## 2. M126 — the skill identity, its resources, and the shelf
 
 ### 2.1 The key
 
@@ -167,7 +169,7 @@ the user's arrangement; it does not get to be edited by a `git pull`.
 
 - `skill.1` — resources counted at the boundary; capped; an unlistable directory yields
   `unknown` and never `0`; `SKILLS_MAX` is the total across scopes AND plugins.
-- `shelf.1` absent key = every pre-M125 file, no warning. `shelf.2` malformed column dropped
+- `shelf.1` absent key = every pre-M126 file, no warning. `shelf.2` malformed column dropped
   by name, the shelf kept. `shelf.3` `carryShelf` writes the required keys and no
   `undefined`. `shelf.4` empty shelf absent on disk.
 - `palette shelf.1` — `by-plugin` derivation from the prefix; `placed` outranks derived;
@@ -175,7 +177,7 @@ the user's arrangement; it does not get to be edited by a `git pull`.
 - `verify:file plugins.1` — `plugin-list.ts` over a FAKE runner: the recorded JSON parsed,
   only `enabled` paths returned, a non-zero exit and a timeout each yielding `unknown`.
 
-## 3. M126 — the Skills pane
+## 3. M127 — the Skills pane
 
 `shell.navigator` gains `skills`. Columns of cards, horizontally scrolling, each card a
 rectangle carrying name, description, the provenance word, the resource count and the
@@ -195,7 +197,7 @@ plugin id when there is one.
 Checks: `verify:rail skills.1` — the three tabs over one inventory, `Ungrouped` present and
 refusing deletion by name, the no-match sentence, the filter's arms.
 
-## 4. M127 — the `skill` panel kind (the thirteenth)
+## 4. M128 — the `skill` panel kind (the thirteenth)
 
 Sessionless like `jira`, `github` and `work`; through `PanelFrame`; one appended arm per
 fan-out file.
@@ -232,16 +234,16 @@ The body carries, each a three-state result:
 - **`Open folder`** — `shell.showItemInFolder` on the `sourcePath` every entry already
   carries, the door already wired for worktrees.
 - **`Help me write`** — mint a chat in the skill's own directory whose first message names
-  the file. This survives M128's editor rather than being replaced by it: an agent drafting
+  the file. This survives M129's editor rather than being replaced by it: an agent drafting
   prose in place is a different act from a person typing it, and the screenshot has both.
 
 Checks: `verify:panels skill.1` — the panel opens from three doors, the record holds two
 fields and no copy, the five body sections' three states, the `alsoDefinedIn` refusal, the
 verbatim block parsed nowhere.
 
-## 5. M128 — the editor
+## 5. M129 — the editor
 
-M127 reads. This writes, and it is the only milestone in this act that puts bytes into
+M128 reads. This writes, and it is the only milestone in this act that puts bytes into
 `~/.claude`. `docs/ideas-backlog.md` #26 deferred the editing half; §5.1 is where that
 refusal is narrowed rather than dropped, and §5.2 and §5.4 are the two ways a naive editor
 destroys a user's file while reporting success.
@@ -349,7 +351,7 @@ collision refused; `renameInShelf` carries the slot; delete trashes the director
 ungrammatical block, the body still editable, Save disabled with a named reason and never
 silently.
 
-## 6. M129 — the live skill trail
+## 6. M130 — the live skill trail
 
 The act's centre. **What skills a session used, in the order it used them, beside the panel
 that used them.**
@@ -406,7 +408,7 @@ inventory, and there are exactly three outcomes:
 
 | outcome | card |
 |---|---|
-| one match | the skill's own name, description and column; clicking opens its M127 panel |
+| one match | the skill's own name, description and column; clicking opens its M128 panel |
 | several scopes define the name | the name, and *defined in N scopes* — **no winner picked**, M21's refusal |
 | no match | the name, and *not installed here* — which is itself the useful answer after a session used a plugin skill this project cannot see |
 
@@ -429,7 +431,7 @@ trail exists at the near tiers only, which `blur.1` already constrains.
   order matching the transcript, the collapse mark surviving a reload, the capsule's words,
   no trail at the card tier, and **no trail entry in the panel array**.
 
-## 7. M130 — assignments
+## 7. M131 — assignments
 
 A shelf column, or a single skill, attaches to a teammate.
 
@@ -450,9 +452,9 @@ Checks: `verify:teammates assign.1` — the brief append happens once and in mai
 project-scope refusal names the repository and not the worktree; an assignment to an unknown
 teammate refused; a column assignment carrying every present key and no `undefined`.
 
-## 8. M131 — the workflow blocks (Track B)
+## 8. M132 — the workflow blocks (Track B)
 
-`TemplateNode.kind` gains three arms. **Every pre-M131 template file must load unchanged**,
+`TemplateNode.kind` gains three arms. **Every pre-M132 template file must load unchanged**,
 and `layout-schema.ts`'s existing arm — an unusable node kind drops the node and takes its
 edges with it, the template kept — stays exactly as it is for whatever comes after these
 three.
@@ -496,13 +498,13 @@ The join. `joinAdvance` already starts a target once, when the last expected sou
 A collect node is a join whose target is a file or a chat. `handoffFires` is unchanged; a
 collect adds no trigger.
 
-Checks: `verify:layout workflow.1–.3` (the three kinds parse; a pre-M131 template loads
+Checks: `verify:layout workflow.1–.3` (the three kinds parse; a pre-M132 template loads
 untouched; an unknown kind drops the node and its edges, the template kept),
 `verify:agent-session pool.1` (width against the ceiling read live, the queue's reason, the
 budget stop interrupting rather than killing, an empty list ending the pool, a list that
 cannot be read refusing by name before a worker is minted).
 
-## 9. M132 — the `workflow` panel (the fourteenth) and triggers
+## 9. M133 — the `workflow` panel (the fourteenth) and triggers
 
 ```ts
 { kind: 'workflow', workflow: { templateId: string } }
@@ -533,8 +535,8 @@ instantiation and not a second copy of it. `shot` scenes `skills`, `trail`, `wor
 
 | Track | Milestones | Where |
 |---|---|---|
-| A | M125 → M126 → M127 → M128 → M129 → M130 | this session; sequential, each on the record before it |
-| B | M131 → M132 | fresh-context subagent, worktree off M125's schema commit |
+| A | M126 → M127 → M128 → M129 → M130 → M131 | this session; sequential, each on the record before it |
+| B | M132 → M133 | fresh-context subagent, worktree off M126's schema commit |
 
 Track B touches `templates.ts`, `layout-schema.ts`'s template parser, `handoff`/`runs` and
 one new panel kind; Track A touches `toolbox-*`, the shelf, two panel kinds and the trail.
@@ -543,12 +545,12 @@ lesson applies: **run every plain-node suite a merge touched**, because a keep-b
 resolution of two blocks appended at one marker dropped a closing brace and read as
 `Unexpected end of input`.
 
-**If the act runs long, M132 is the one to defer.** The blocks are useful without the panel;
+**If the act runs long, M133 is the one to defer.** The blocks are useful without the panel;
 the panel is useless without the blocks.
 
 ## 11. Declared non-goals
 
-- **Writing anything but a skill.** M128 narrows #26's refusal to exactly one file type and
+- **Writing anything but a skill.** M129 narrows #26's refusal to exactly one file type and
   leaves the rest of it standing: no hook, permission, MCP server, settings file, agent or
   command is written by this app. §5.1 is the table and the reason for each.
 - **Import and Sync.** A marketplace fetch is `claude plugin install`'s, and the app does not

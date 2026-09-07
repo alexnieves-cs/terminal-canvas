@@ -44,7 +44,7 @@ export interface RailModelsDeps {
   globalFontSize: number
   /** M116. A work card's item state by item id; absent when the board is empty. See buildRailRows. */
   workStateOf?: (itemId: string) => WorkItemState | undefined
-  /** M132. A workflow trigger's template name by id — the rail row and the pane both read it. */
+  /** M133. A workflow trigger's template name by id — the rail row and the pane both read it. */
   templateNameOf?: (templateId: string) => string | undefined
   /** M116. The record itself, for the inspector's five facts. */
   workItemOf?: (itemId: string) => PersistedWorkItem | undefined
@@ -368,7 +368,7 @@ export function useRailModels(deps: RailModelsDeps) {
         })(),
         // M116. The work card's record, for its word and its five facts.
         isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId) : undefined,
-        // M132. A workflow trigger's template name, so the `runs` field says
+        // M133. A workflow trigger's template name, so the `runs` field says
         // the workflow rather than `/usr/bin/true`.
         deps.templateNameOf
       )

@@ -135,7 +135,7 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
         empty.places.length === 0 && empty.services.length === 0 && empty.scheduling === false && empty.memory === 't2' && T.TEAMMATES_MAX > 0,
       JSON.stringify({ t, empty }))
   }
-  // M130 — assign.1. The brief append happens ONCE and in main; a
+  // M131 — assign.1. The brief append happens ONCE and in main; a
   // project-scoped skill outside the teammate's places is dropped from the
   // brief and refused BY NAME at the assign door, naming the REPOSITORY
   // (the actionable fix) and never a worktree path; an unknown teammate is
