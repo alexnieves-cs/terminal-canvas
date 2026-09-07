@@ -4018,3 +4018,117 @@ check. Treat green as green, not as proof of these.
 - **The update check against the real feed (M123).** `verify:file update.1` drives a fake fetcher; that `api.github.com/repos/<owner>/<repo>/releases` answers the real `https.get` under the app's environment, and that the notice's `Open release` opens the right page, is unproven.
 - **The unsigned `.dmg` on another Mac (M125).** Gatekeeper's behaviour on a build with no identity — right-click → Open, or `xattr -d com.apple.quarantine` — was not watched on a second machine.
 
+
+**The manual-only list, re-read entire at 3.1's Act III (M126–M133).** Nothing above was
+struck: this act added surfaces beside the entries and checks beneath none of them, and every
+owed hand check from 3.0 is still owed. Added, each confirmed once by hand or not at all, as
+stated:
+- **The trail against a real agent (M130).** Every check drives a recorded fixture JSONL. The
+  `Skill` tool_use record shape was measured once, on one version, and is versioned by nothing:
+  a change to how the CLI writes it reads as an EMPTY TRAIL, not an error. Owed: run a real
+  `claude` in a terminal panel, invoke two skills, confirm the lane shows both in order.
+- **`claude plugin list --json` on another machine and another version (M128).** Measured once.
+  The `unknown` arm is what protects the pane; the shape is pinned by nothing but the fixture.
+- **A pool of N against a real budget (M132).** `pool.1` drives a fake runner and a fake limits
+  dep, and the module has no production caller at all yet. Owed with `agents.budgetUsd` set
+  deliberately low, and against a real `AgentSessionManager` rather than the fake.
+- **A saved `SKILL.md` still loading in the CLI (M129).** `edit.1` proves the bytes round-trip;
+  no suite in this repository RUNS a skill, so that the CLI accepts the spliced result is
+  unproven. Owed: edit a real skill's description and body, save, invoke it from a real session.
+- **`shell.trashItem` on this machine (M129).** Electron's, unreachable from plain node;
+  `verify:toolbox` drives an injected `trash` dep.
+- **The >40-skill truncation notice (M130).** `more` was structurally unreachable until the
+  gate's fix wave (the scanner pre-sliced at the cap), so NO run before it ever produced one.
+  Owed on a real session that used more than `TRAIL_MAX` skills.
+- **A first-ever skill on a machine with no `~/.claude/skills` (M129).** The `mkdir` arm was
+  added after a review upgraded it from Minor; the fixture is not a genuinely fresh home.
+- **A rename into an OCCUPIED shelf slot (M129).** `editor.2b` proves the slot is carried; what
+  the column looks like when the destination key already sits in it was not watched.
+- **`--append-system-prompt` surviving an orchestrator RESUME (M132).** M81's supervisor rule —
+  the CLI keeps no record of it, so a resumed orchestrator without it stops being one — is
+  unverified for this block kind.
+- **A `collect` join against real workers (M132).** Driven only over the recorded shape.
+- **A workflow watcher ARMED for real (M133).** That an interval in a running app fires the
+  trigger on its own schedule, and what the ledger row naming `/usr/bin/true` looks like beside
+  it, was not watched.
+
+**`serialiseLayout` is the one place "an empty record is absent on disk" is decided
+(`shared/layout-schema.ts`, `main/layout-store.ts`).** It did not exist before M126: the
+schema had `parseLayout` and nothing going the other way, and `writeNow` stringified the
+snapshot directly — so each new top-level record decided its own absence at its own write site,
+or forgot to. The store's single write now routes through it. The reason this is worth an entry
+is not the function but how it was found: the plan NAMED `serialiseLayout` as the thing to
+modify, and it was a name the plan's author remembered rather than read. A check written
+against it would have been red for the wrong reason — the module missing, not the behaviour
+absent — which is the one failure the red-first discipline cannot see. **Grep for a symbol a
+plan tells you to modify before writing the check that pins it.**
+
+**`verify:canvas` flakes about once in a full chain, and a single red there is not evidence
+(`scripts/verify-canvas.cjs`).** Observed twice in this act, both times passing 6/6 on an
+immediate retry with no file in its path touched. This is the load-flake rule the M113 run
+recorded for `verify:panels`, reaching a second suite: re-run before treating it as a finding.
+
+**`TC_VERIFY_SUFFIX` must differ per CHECKOUT, and an inherited environment silently makes it
+the same (`scripts/verify-socket.cjs`).** A session that exports the variable passes it to every
+subagent it dispatches — including one working in a different worktree — so two chains ran on
+`terminal-canvas-verify-m125`, and one of them killed the other's tmux server mid-suite.
+`verify:pty-manager` went red on checks 14, 24 and 27 against a correct branch and correct code.
+The suffix is per checkout (`m125` here, `m131` for the Track B worktree), and dispatching into
+a second tree means setting it explicitly rather than letting it ride.
+
+**`verify:panels` is LOAD-sensitive as well as socket-sensitive, and only one checkout may run
+the Electron tier at a time.** With three checkouts running Electron suites at once and
+DISTINCT suffixes, the suite still came back 302/311 with nine unrelated reds (review-commit,
+rename, subagent fan-out). Distinct sockets fix the kill-server collision; they do not fix
+timing-based checks starved of CPU. A contended panels red is a re-run — but it must actually
+be re-run in isolation before the work is called green, not waved away.
+
+**Never `unref()` a timer a check is waiting on, and a suite's tally line is evidence only if it
+PRINTED (`main/plugin-list.ts`, `scripts/verify-file.cjs`).** `listPlugins` raced `run()` against
+an unref'd `setTimeout`. In `verify:file` the fake runner for `plugins.1e` never resolves, so
+the moment that timer was the last handle on the loop Node exited **with code 0** — `plugins.1e`,
+the `N/N passed` tally and the `rmSync` cleanup all silently never ran, and the chain read
+green. This is a third kind of red, worse than a throw: a throw at least aborts loudly. The
+timer is no longer unref'd (the 5 s lifetime of a one-shot subprocess is correct), and a suite
+that exits without printing its tally is a failure regardless of its exit code.
+
+**A workflow trigger is a watcher whose command is `/usr/bin/true`, and the ledger row is the
+recorded cost (`main/watch-runner.ts`, `renderer/workflow/`).** Main's watch runner needs a
+command and the instantiation is the RENDERER's (M80's rule), so a trigger fire spawns a no-op
+and appends a ledger row naming the binary with an exit code. Every renderer readout reads the
+`templateId` mark instead and says the workflow's name — a readout that showed `/usr/bin/true`
+would tell the user their workflow runs a program they never chose. If main ever grows a
+fire-only watcher arm, this is the line to remove.
+
+**Two `verify:panels` harness facts that make a check pass against nothing (from `editor.1d`).**
+A layout-RESTORED panel is DORMANT — it has no session — so a check that pastes into "the
+focused terminal" after a reload passes on both halves of a two-sided assertion, because nothing
+receives either paste; spawn the terminal with `Cmd+N` inside the check. And a synthesised
+`MouseEvent` does not move `focusedId` (which `__m4aCellToScreen` reads); a real
+`sendInputEvent` click is needed. A negative assertion here proves nothing without a positive
+control beside it — that the paste DOES reach the terminal when the editor is unfocused.
+
+**A harness fake must carry EVERY handler the renderer calls at boot, or the checks beneath it
+pass against a surface that failed to load (`scripts/verify-panels.cjs`, `scripts/shot.cjs`).**
+The panels harness's fake palette object lacked `shelf`/`saveShelf`, so `shelf:list` REJECTED on
+every boot, the renderer swallowed it as an unhandled rejection, and the pane painted its
+`unavailable` arm. Every check that ran with an "empty" shelf was therefore passing against a
+shelf that had failed to load rather than one that was empty — two different states with the
+same picture. The only symptom was a `palette.shelf is not a function` line in the renderer
+console, which reads as noise. Production wiring was fine throughout. Both harnesses carry the
+two fakes now; the rule generalises to every handler a component asks for during mount.
+
+**A `pgrep -f` wait-guard matches its own shell.** `while pgrep -f "Electron
+scripts/verify-panels" >/dev/null; do sleep 15; done` finds the waiting `sh -c` line itself, so
+two sessions using it deadlock with no Electron running at all — four were stacked across three
+worktrees before anyone noticed. Match the PROCESS, not the command text: `ps -axo command= |
+grep -v grep | grep -q "Electron scripts/verify"`, or check `ps -o comm=` of the pids.
+
+**`verify:panels` outgrew its watchdog while fully green, and a watchdog kill reads as a red at
+whatever check was running.** At M130 the suite was ~330 checks and was being killed at
+`frame.2` with thousands of lines still ahead — a wrong answer about correct code. `WATCHDOG_MS`
+is 600 s, not the 1.25× of a measured green run (390 s against runs of 311 s and 312 s on
+2026-09-06) the review asked for: a same-day green run had already been killed at 480 s under
+contention, so the formula's figure sits UNDER an observed flake. The cost is that a genuine
+hang is noticed about three and a half minutes later than the formula would notice it.
+**Splitting the suite is owed** and is the real fix; raising the number again is not.

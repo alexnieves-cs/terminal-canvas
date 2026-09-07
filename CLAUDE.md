@@ -19,7 +19,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 3.0 (M125).** The sixth run, M113 to M125, made the
+running a coding-agent CLI. **This is 3.0 (M125).** The seventh run, M126 to M133, made the
+canvas a place a skill LIVES: a skill's identity is `scope:name` and the shelf is the user's
+own arrangement of them, a top-level record whose placement carries its why (M126); the Skills
+pane racks those columns over the selected panel's inventory with `Ungrouped` last and always
+(M127); plugin skills arrive bounded by `claude plugin list --json`'s `installPath`, and the
+thirteenth kind holds `{scope, name}` and nothing else — the file is the authority (M128); the
+editor splices frontmatter rather than re-serialising it and refuses a stale write with your
+text intact (M129); the trail is the CLI's own transcript tailed from a byte offset, drawn as a
+derived lane that writes no record (M130); a shelf column reaches a teammate's brief through
+M100's one append, translated through the worktree lane's real root (M131); `pool`,
+`orchestrator` and `collect` join the template-node union with M82's ceilings read live (M132);
+and the workflow panel draws a saved template as a projection, its trigger a watcher (M133).
+The sixth run, M113 to M125, made the
 canvas the surface that DISPATCHES: a work item is a record with four states as data, two of
 them the runtime's (M113); `dispatch` mints a worktree lane and a teammate's chat with an edge
 meaning *dispatched* (M114); the return path pushes the lane and opens the PR through the
@@ -84,23 +96,23 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:groups` | plain node | 5 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 37 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
-| `verify:layout` | plain node | 213 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
+| `verify:layout` | plain node | 228 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |
 | `verify:credentials` | plain node | 17 checks against `shared/credential-schema.ts` and `main/credential-store.ts`, driven with a FAKE crypto and a temp file (the store takes crypto and |
 | `verify:jira` | plain node | 15 checks against `main/jira-client.ts` |
 | `verify:github` | plain node | 7 checks against `main/github-client.ts` over a fake broker with recorded GitHub bodies: the no-credential arm in the credential rows' words, two GET calls through the broker, the `owner/repo#N` mapping with a PR deduped across both lists, the four failure arms, the description cap and the half-answer note |
-| `verify:palette` | plain node | 138 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
-| `verify:rail` | plain node | ~165 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
+| `verify:palette` | plain node | 140 checks (lettered sub-checks) against `fuzzy.ts`'s matching, `palette-model.ts`'s section-first filter/sort/tie-stability, and `commands.ts`'s list |
+| `verify:rail` | plain node | ~172 checks (lettered sub-checks) against `renderer/shell/rail-rows.ts`, `inspector-fields.ts`, `rail-sections.ts`, `review-node-model.ts`, `file-node |
 | `verify:review` | plain node | ~98 checks: `git-args.ts` argv/parsing, `review-engine.ts`'s `resolveRepo`/`captureBaseline` against a fake `GitRunner`, the engine's eight result arm |
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — |
-| `verify:file` | plain node | 56 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
-| `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
+| `verify:file` | plain node | 75 checks (several lettered sub-checks) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory wi |
+| `verify:toolbox` | plain node | 101 checks (many lettered sub-checks) against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synt |
 | `verify:usage` | plain node | ~26 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so n |
 | `verify:tmux` | plain node | 35 checks (one lettered sub-check): `tmux-args.ts` argv/config/version/list parsing, `tmux-probe.ts`'s backend selection, the quoting of the `pane-die |
 | `verify:control` | plain node | 15 checks against M54's control surface: `control-protocol.ts`'s shared parser (both doors, `command` refused), `resolveOpen`, a REAL Unix socket under `control-server.ts` (stale file replaced, 0600, a bad line answered and survived), the CLI's exit codes over an injected connect, the one handler behind both doors, and the launcher script |
 | `verify:agent-state` | plain node | 27 checks (one lettered sub-check): `scanChunk`'s escape-sequence scanner (bells and OSC 133 marks in one pass) and `nextState`'s state machine |
-| `verify:agent-session` | plain node | ~126 checks (M71, M73–M76, M81, M82, M90): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
-| `verify:teammates` | plain node | 8 checks (M100, M114, M120) against `shared/places.ts` and `main/places.ts` over a FAKE realpath: `..` walking out of a typed prefix, a symlink inside a place pointing out, a relative/`~`/`./` path refused outright, no places = nothing, a missing path outside, and the gate's named refusal with the fix (and an unknown teammate refused, a request with no teammate untouched); `carryTeammate`/`emptyTeammate` |
+| `verify:agent-session` | plain node | ~134 checks (M71, M73–M76, M81, M82, M90, M132): `shared/transcript.ts`'s line parser and stdin encoders against four streams recorded from `claude` 2.1.259, `agent-session-args.ts`'s headless argv, and `AgentSessionManager` over a FAKE process runner — spawn on first send, the 16ms delta batch, the queue, a truncated stream, a non-zero exit, `--resume`, an interrupt answered and one that times out, a permission request answered and one dropped by its process's exit, usage summed per turn against cost taken cumulative, and the M61 identity rule on both process doors; plus `quit.ts`'s optional `agents` arm; M90's codex adapter over three recorded codex streams and the manager's one-process-per-turn arm (the lingering-process queue, the adopted thread id, the budget kill, the image refusal) |
+| `verify:teammates` | plain node | 25 checks (M100, M114, M120, M131) against `shared/places.ts` and `main/places.ts` over a FAKE realpath: `..` walking out of a typed prefix, a symlink inside a place pointing out, a relative/`~`/`./` path refused outright, no places = nothing, a missing path outside, and the gate's named refusal with the fix (and an unknown teammate refused, a request with no teammate untouched); `carryTeammate`/`emptyTeammate` |
 | `verify:electron` | plain node | 4 checks (M112): Electronegativity over `src/` with the installed Electron version pinned (`eneg.1` — without `-e` the tool assumes v0.1.0 defaults, silently), a closed `ACCEPTED` list of seven deliberate findings where a NEW finding fails (`eneg.2`) and a row that stopped firing fails too (`eneg.3` — the sentence beside it now describes nothing), and the webview guest's hardening pinned as text because the tool cannot see the tag (`eneg.4`) |
 | `verify:verbs` | plain node | 13 checks (M96–M97, M103): the verb table's closure over `PaletteActions` (read as text), the destructive flag as data with no `kill`, `buildPlan`'s named refusals and the confirmation step, `runPlan` refusing an unacknowledged destructive step, C0 stripped from `type` with `submit` separate, typing gated by panel KIND, the `planWritable` list refusing both ceilings and the vault root, a token planted in a REAL scrollback log never returning through `outward`, and the auto modes validating as plans with the chip's words |
 | `verify:styles` | plain node | 32 checks against `src/renderer/styles.css`, read as TEXT rather than parsed (a CSS library would be the heaviest dependency in the cheapest tier this |
@@ -110,10 +122,10 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:pty` | Electron as node | 10 checks: `node-pty` behaviour end to end |
 | `verify:pty-manager` | Electron as node | 63 checks (several lettered sub-checks) against the real `PtyManager` on both the direct backend and a real `TmuxBackend` on a throwaway socket: sessi |
 | `verify:window` | real Electron | 4 checks: renderer teardown reaches the PTY layer |
-| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 112 channels as of M123 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
+| `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — 120 channels as of M133 — re-derive `EXPECTED_CHANNELS` in the suite when a milestone adds one (the pin is deliberate: a channel added to the contract without a handler reads as a hang, not an error) |
 | `verify:canvas` | real Electron | 6 checks: real input into the built renderer |
 | `verify:xterm` | real Electron | 9 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
-| `verify:panels` | real Electron | 309 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
+| `verify:panels` | real Electron | 338 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand- |
 
 None need a display; the real-Electron ones open a window with `show: false`. There is no
 test-name filter in any of them — each runs everything and exits non-zero on any failure.
@@ -658,6 +670,101 @@ check does not, and should not, cover it.
   world layer re-derives its rect from the chat's every render (`anchoredPanels`) and never
   writes it back; a move of the card drops the anchor. Drop targets exist on the two
   `USER_SET_STATES` columns only.
+
+- `src/shared/skills.ts` — M126. The skill KEY and the shelf. A skill's identity is
+  `skillKey(scope, name)` = `JSON.stringify([scope, name])`, because a bare name is ambiguous
+  the moment two scopes hold it and the pane's job is to show you that they do; `placement`
+  answers with a column AND its `why` (`placed` · `by-plugin` · `by-scope`), so a card the user
+  arranged can be told from one the app derived — without the why, rearranging a derived column
+  is a gesture with no effect and no explanation. `pluginPrefixOf` reads only the FIRST colon.
+  The shelf is a top-level record beside `presets` with the record rules, carried by
+  `carryShelf` at every by-name copy and ABSENT on disk when empty — a decision that now lives
+  in `layout-schema.ts`'s `serialiseLayout`, which did not exist before this milestone (the
+  store stringified its snapshot directly, so there was no one place to put it).
+- `src/main/plugin-list.ts` — M128. The enabled plugins, from the CLI's own answer.
+  `~/.claude/plugins` is 663 MB with ~700 `SKILL.md` files, which is why `docs/ideas-backlog.md`
+  #26 declined plugin skills; `claude plugin list --json` names each plugin's own `installPath`,
+  and that is the whole affordability argument — the walk is bounded to the enabled ones rather
+  than a recursive descent from the cache root. `enabled` is the CLI's answer, never this app's
+  inference from `enabledPlugins`: a disabled plugin's skills are available to no agent, and
+  listing them answers "what can this agent do" with a lie. An absent CLI, a non-zero exit,
+  unparseable output or a timeout is `unknown` with a reason, **never `[]`** — `[]` reads as "no
+  plugins installed", which is a different fact and leads to a different fix. Its timeout timer
+  is deliberately NOT unref'd: an unref'd timer is defeated the instant it is the last handle on
+  the loop, and a suite whose fake never resolves then exits 0 without printing its tally.
+- `src/renderer/shell/SkillsPane.tsx` / `skills-pane-model.ts` — M127. The Skills pane and the
+  whole of its model: an inventory plus the shelf plus three filters in, columns of cards out,
+  pure by construction (the component owns the tabs, the search box and the drag handlers and
+  NOTHING that decides where a card sits). The matcher is `palette/fuzzy.ts`'s, imported — a
+  second matcher would differ from the palette's exactly in the cases nobody tests. Three
+  ordering rules, each silent if undone: the user's placed columns first, then the derived ones,
+  then `Ungrouped` LAST and always (a real column that can be dropped into and cannot be
+  deleted); a derived column with no cards after filtering is OMITTED, because it is a
+  projection and an empty projection describes nothing; a query matching nothing yields `[]` so
+  the component can say so, rather than a rack of empty columns. A shelf key whose file is gone
+  KEEPS its slot and says `not installed` — a `git pull` does not get to edit the user's
+  arrangement, and a slot that silently emptied would read as a column the app rearranged by
+  itself. The shelf's three states are kept apart from the inventory's: an unread shelf and an
+  empty shelf paint the same columns and need different sentences.
+- `src/renderer/skills/` — M128–M130. The thirteenth kind and its lane. `SkillNode.tsx` holds
+  `{scope, name}` and NOTHING else — no copied description, body, resource count or token
+  figure, because the file is the authority and a copy stops being true at the next `git pull`
+  with nothing on screen to say so; it names which OPEN panels can see this skill, states a
+  two-scope collision and picks NO winner (the app does not know which the CLI would choose),
+  and renders `claude plugin details` verbatim, parsed nowhere. `SkillEditor.tsx` is M129's
+  fields, and it subscribes to `edit:copy`/`edit:paste` and serves its own input — the shape
+  `Palette.tsx` established and the fix for the fourth text surface `docs/load-bearing.md`
+  predicted would inherit the Cmd+V-reaches-the-agent failure. `SkillTrailLane.tsx` +
+  `skill-trail-store.ts` are M130's lane: DERIVED and anchored beside its host, so no trail
+  entry enters the panel array, costs LOD budget or writes a record; the collapse is the only
+  stored fact, the `hide N skills` capsule never disappears, and the lane is culled on the
+  scale-derived `cardDetail === 'tail'` rather than `assignTiers`' card tier — a dormant or
+  restored panel is carded at NEAR scale, and its trail is exactly what is left to read there.
+- `src/shared/skill-edit.ts` / `src/main/skill-write.ts` — M129. The write half, narrowed to
+  skills. Save SPLICES the frontmatter block and never re-serialises it, so a key this app's
+  grammar does not know survives a save it had no business touching; a file changed underneath
+  is REFUSED by name with your text kept, never silently overwritten and never discarded; an
+  ungrammatical block makes the metadata fields read-only WITH the reason on screen and leaves
+  the body editable — three-state editability, never all-or-nothing. Containment is M100's
+  `insidePlace` reused on the real, symlink-resolved path, and the write is atomic. Recorded
+  bound: `parseFrontmatter` does not UNESCAPE quoted values, so a description holding a literal
+  `"` reads back with its backslashes intact.
+- `src/shared/skill-trail.ts` / `src/main/skill-trail-read.ts` — M130. The trail is the CLI's
+  OWN transcript, tailed from a byte offset — never a second log this app writes. The offset
+  RESETS when the file shrinks (`pty-manager.ts`'s `resetIfShrunk` is the precedent; without it
+  a rotated transcript is never read again), the decode survives a multibyte split, and the cap
+  COUNTS its overflow rather than pre-slicing it — a pre-slice makes `more` structurally
+  unreachable, which is what it was for two milestones. codex and an unresolvable session are
+  refused BY NAME before any other dependency is touched, which is what lets a check drive a
+  partial fake.
+- `src/main/skill-assign.ts` — M131. A shelf column onto a teammate's brief, through M100's ONE
+  append site. A project-scoped skill is refused by name and the refusal NAMES the repository it
+  belongs to. The load-bearing line is the root: `main/index.ts` translates a chat's cwd through
+  the same `worktreeRootOf` the Places gate uses before asking `skillsForBrief`, because an
+  M113-dispatched chat's cwd is a `userData/worktrees` LANE and not the repository — without the
+  translation every dispatched teammate silently lost its project skills. `teammate:save`
+  returns main's REAL `insidePlace` verdict so the pane renders `not visible to <teammate>`;
+  the renderer's own check is advisory and is never the authority.
+- `src/shared/workflow-nodes.ts` — M132. `pool`, `orchestrator` and `collect` as ARMS on the
+  existing template-node union, never a second graph format: a pre-M132 template loads
+  untouched, and an unknown kind drops its edges with it rather than leaving an edge pointing at
+  nothing.
+- `src/main/pool-runner.ts` — M132. The pool: a shared list as a file, M82's two ceilings read
+  LIVE on every send with M82's own queue and its `reason`, and a budget crossing that
+  INTERRUPTS every worker and kills none — a killed agent loses its turn, and a budget is a
+  stop. A worker minted into a stopped pool is interrupted, and a pump guarded off is DEFERRED
+  rather than dropped (dropping it starves a worker). **No production caller yet**: Run over a
+  template holding a block is refused by name, so nothing in the app spends through this module.
+- `src/renderer/workflow/` — M133. The fourteenth kind: a template drawn as a block diagram,
+  a PROJECTION of the saved record — the live canvas is still the editor, and the diagram draws
+  what is stored and nothing it invented. Runs come from M79 filtered to this template, and the
+  tab is three-state about what it cannot ATTRIBUTE (a run it cannot attribute and no runs at
+  all are different facts). A trigger is a WATCHER whose command is `/usr/bin/true`, because
+  main's watch runner needs a command and the instantiation is the RENDERER's (M80's rule): the
+  no-op spawn and the ledger row naming the binary are the recorded cost, every readout reads
+  the `templateId` mark and says the workflow's name instead, and this is the line to remove if
+  main ever grows a fire-only watcher arm. A fire on a parameterised template is refused by name
+  rather than opening the spawn sheet at 3 a.m.
 
 - `src/shared/copilot-transcript.ts` / `src/main/backend-adapters.ts`'s `ParseContext` — M118.
   The third row. Copilot's JSONL stream states NO session id (`parentId` chains the previous
