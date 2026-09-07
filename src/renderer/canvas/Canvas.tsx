@@ -87,7 +87,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -120,13 +120,18 @@ import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { WorkNode } from '@renderer/work/WorkNode'
+import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
+import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
+import { setDisarmed, clearDisarmed } from '@renderer/watcher/watcher-store'
+import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
+import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
-import type { PersistedTemplate } from '@shared/templates'
-import { fillTemplate, templatePanels, templateRefusal } from '@renderer/palette/template-model'
+import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '@shared/templates'
+import { fillTemplate, templateHoles, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
@@ -320,6 +325,13 @@ export function Canvas({
   // instantiate verb; the ref is the same indirection every late verb uses.
   const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
   const instantiateTemplateStable = useCallback((template: PersistedTemplate, values: Record<string, string>) => instantiateTemplateRef.current(template, values), [])
+  /**
+   * M132. How many times M80's instantiation has been ENTERED, for
+   * `workflow.panel.1e`: the whole claim of the workflow panel's Run is that
+   * it reaches this one function and never a second copy of it, and only a
+   * count can tell those apart. A ref, not state — nothing renders from it.
+   */
+  const instantiateCountRef = useRef(0)
   // The open run's duration ticks once a second, and only while one is open:
   // Date.now() read every render would give the rail's rows a new identity at
   // drag frequency (M79's verifier).
@@ -1839,6 +1851,7 @@ export function Canvas({
   // effect used to occupy: deleteWorkspaceRef is created above and assigned
   // below, and moving this call would break that order silently.
   useCanvasTestHooks({
+    instantiateCountRef,
     setSelectedIds,
     registry,
     viewportRef,
@@ -2466,6 +2479,11 @@ export function Canvas({
   // itself when it opens, so a template saved while the palette is shut is
   // offered the moment the sheet opens either way).
   const [templateRows, setTemplateRows] = useState<PersistedTemplate[]>([])
+  // M132's verbs are read from refs at CALL time, the rule every verb in this
+  // file obeys: the user can save or delete a template between opening the
+  // palette and running the row.
+  const templateRowsRef = useRef<PersistedTemplate[]>([])
+  templateRowsRef.current = templateRows
   useEffect(() => { void window.canvas.template.list().then(setTemplateRows) }, [])
   const reloadPresets = useCallback(() => {
     void window.canvas.preset.list().then(setPresetRows)
@@ -3695,7 +3713,15 @@ export function Canvas({
    * template must not start work the user has not read.
    */
   const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
+    instantiateCountRef.current += 1
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    // Fix round 2. The blocks have no runtime yet and the loop below skips
+    // them by name, so a template carrying one would mint a PARTIAL shape and
+    // commit a history entry for it while still reporting `spawned`. Every
+    // Run door is disabled with this same sentence (`templateRefusal`); this
+    // is the last gate, for a caller that asked anyway.
+    const blocked = workflowBlockRefusal(template)
+    if (blocked !== undefined) return { kind: 'refused', reason: blocked }
     const filled = fillTemplate(template, values)
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const places = templatePanels(filled, centre)
@@ -3724,6 +3750,10 @@ export function Canvas({
         if (node.message !== undefined && node.message !== '') messages.push({ id, text: node.message })
         continue
       }
+      // M131: the three workflow kinds land in TemplateNode's union but have
+      // no runtime here yet — this task lands the schema, not the runtime,
+      // so they are skipped BY NAME rather than instantiated as panels.
+      if (node.kind === 'pool' || node.kind === 'orchestrator' || node.kind === 'collect') continue
       // A preset node is RESOLVED by main (only main turns an absent command
       // into the login shell, M5b) and minted here — never spawned through the
       // event path, which would place it itself and commit its own history
@@ -3761,6 +3791,13 @@ export function Canvas({
       commitHistory(next)
       return next
     })
+    // M132. THE ONE PLACE a run learns its template. The recorder opens runs
+    // from the handoff hook's events and knows nothing about templates, so
+    // the origin is handed to it here, at the only moment anything knows that
+    // these panel ids came from this shape of work.
+    // (`noteTemplate` is a stable useCallback, so the captured `runsApi` object being
+    // one render old cannot matter — the member is the same function.)
+    runsApi.noteTemplate(madePanels.map((p) => p.rect.id), template.id)
     for (const { id, text } of messages) void deliverToComposer(id, text)
     // The whole shape is the selection: a template is one thing.
     const ids = madePanels.map((p) => p.rect.id)
@@ -4286,6 +4323,131 @@ export function Canvas({
     })
   }, [commitHistory, selectOnly])
 
+  /**
+   * M132. THE WORKFLOW PANEL'S FOUR VERBS, all of them doors that already
+   * existed — which is the milestone's claim: no new IPC, no new writer, no
+   * new trust boundary.
+   *
+   *  - open  : a sessionless panel carrying the template's ID alone.
+   *  - run   : M80's OWN `instantiateTemplate`, through the ref every other
+   *            caller uses. Never a second copy (`workflow.panel.1e`).
+   *  - trigger: a WATCHER on this template — `shared/watch-trigger.ts`
+   *            unchanged and main's existing arming, asked with the same
+   *            words `beginWatcher` asks them in.
+   *  - build : §4.1's chat door, pointed at a template file. The message is
+   *            INSERTED into the composer, never sent.
+   */
+  const openWorkflowPanel = useCallback((templateId: string) => {
+    if (mergedRef.current) return
+    const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const id = `wf${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeWorkflowPanel(id, cascadeCentre(centre, current), nextZ(current), templateId, template?.name ?? templateId)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(id)
+  }, [commitHistory, selectOnly])
+
+  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click'): string | undefined => {
+    const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (template === undefined) return 'not run: that template is no longer saved'
+    // A template with parameters cannot run unasked. On the CLICK path the
+    // sheet is where a person answers them. On the FIRE path there is nobody
+    // to answer: a 3am timer would leave a modal over an empty canvas while
+    // the watcher recorded a success, so it is refused BY NAME and mints
+    // nothing (`workflowFireRefusal`).
+    const holes = templateHoles(template)
+    if (holes.length > 0) {
+      if (source === 'fire') return workflowFireRefusal(holes)
+      paletteActionsRef.current?.beginSpawnSheet(templateId)
+      return undefined
+    }
+    void instantiateTemplateRef.current(template, {})
+    return undefined
+  }, [])
+
+  // Read through a ref by the fired handler, which is installed once.
+  const runWorkflowRef = useRef(runWorkflow)
+  runWorkflowRef.current = runWorkflow
+
+  const beginWorkflowTrigger = useCallback((templateId: string) => {
+    const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (template === undefined) return
+    // The watcher's directory is the template's FIRST node's — the one
+    // directory the shape already names. `~` when it has none.
+    const root = template.nodes[0]?.cwd ?? '~'
+    const ask = (initial: string, label: string, feedback?: true): void => {
+      setInputMode({
+        kind: 'text',
+        label,
+        initial,
+        ...(feedback === undefined ? {} : { feedback }),
+        submit: (answer) => {
+          const text = answer.trim()
+          if (text === '') { setInputMode(null); return }
+          const trigger = parseTriggerWords(text, root, undefined)
+          if (trigger === null) { ask(text, 'Try: a path, `every 10m`, or `branch`', true); return }
+          setInputMode(null)
+          const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+          const watcherId = `w${nextIdRef.current++}`
+          setPanels((current) => {
+            const next = [...current, makeWatcherPanel(watcherId, cascadeCentre(centre, current), nextZ(current), {
+              ...workflowWatch(templateId, root, trigger)
+            })]
+            commitHistory(next)
+            return next
+          })
+          selectOnly(watcherId)
+        }
+      })
+    }
+    ask('src', `When should ${template.name} run? a path to watch, \`every 10m\`, or \`branch\``)
+  }, [commitHistory, selectOnly])
+
+  const buildWorkflowWithAi = useCallback((templateId: string) => {
+    const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (template === undefined) return
+    const root = template.nodes[0]?.cwd ?? '~'
+    void beginNewChatRef.current({
+      cwd: root,
+      title: `build ${template.name}`,
+      // Named, not pasted: the chat is told WHERE the template lives and what
+      // shape it has, and reads it with its own tools. This app writes no
+      // template on an agent's behalf.
+      message: `The workflow "${template.name}" (id ${template.id}) is saved in this app's layout file, under the top-level \`templates\` array: each entry is { id, name, description?, nodes[], edges[] }, a node is { key, kind: 'terminal' | 'chat' | 'pool' | 'orchestrator' | 'collect', cwd, dx, dy, ... }, and an edge is { from, to, trigger: 'exit' | 'exit-ok' | 'exit-fail' | 'idle' | 'always' }. It has ${blockCount(template)} blocks today. What should it do differently?`
+    })
+  }, [])
+
+  /**
+   * M132. A WORKFLOW TRIGGER firing. Main armed and ran the watcher exactly
+   * as it does every other one; what a workflow watcher's fire MEANS is the
+   * renderer's, because only the renderer can mint panels. This is the whole
+   * of the "no second scheduler" claim: one subscription, one arming, one
+   * table of triggers.
+   */
+  useEffect(() => {
+    setWatcherFiredHandler((watcherId) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === watcherId)
+      if (panel === undefined || !isWatcherPanel(panel)) return
+      const templateId = panel.watch.templateId
+      if (templateId === undefined) return
+      // A refusal is SAID, on the watcher's own body, rather than swallowed:
+      // a trigger that fired and did nothing with no sentence anywhere is the
+      // silent failure this whole file is written against.
+      const refused = runWorkflowRef.current(templateId, 'fire')
+      if (refused !== undefined) setDisarmed(watcherId, refused)
+      else clearDisarmed(watcherId)
+    })
+    return () => setWatcherFiredHandler(null)
+  }, [panelsRef])
+
+  const deleteWorkflowTemplate = useCallback((templateId: string) => {
+    if (isBuiltInTemplate(templateId)) return
+    void window.canvas.template.remove(templateId).then(() => window.canvas.template.list().then(setTemplateRows))
+  }, [])
+
   const beginNewNote = useCallback(() => {
     const root = noteRootRef.current
     // The row is already disabled without a root; this is the second half of
@@ -4437,7 +4599,7 @@ export function Canvas({
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     instantiateTemplate: instantiateTemplateStable,
     restartWithSpec, commitHistory, switchWorkspace,
@@ -4539,7 +4701,10 @@ export function Canvas({
     registry, palette, panelsRef, viewportRef, panels, displayPanels, dormantIds,
     workspaceRows, waitingIds, selectedId, globalFontSize,
     // M116. A work card's row speaks its item's state; absent when the board is empty.
-    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) })
+    ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
+    // M132. A workflow trigger's template name, so a watcher whose command is
+    // `/usr/bin/true` reads as the workflow it runs — built-ins included.
+    templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
   })
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
@@ -5238,6 +5403,9 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onSetArmed={setWatcherArmed}
                   {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
+                  workflowWord={panel.watch.templateId === undefined
+                    ? { kind: 'none' }
+                    : ((n) => (n === undefined ? { kind: 'gone' } as const : { kind: 'named', name: n } as const))(allTemplates(templateRows).find((t) => t.id === panel.watch.templateId)?.name)}
                 />
               )
             }
@@ -5361,6 +5529,18 @@ export function Canvas({
                 // for the record, and the shelf through its own invoke (the
                 // shelf is a library, never layout, so it is not in history).
                 onRenamed={(panelId, newName) => { renameSkillEverywhere(panelId, newName) }} />
+            }
+            // M132. The workflow panel: the template by id (built-ins
+            // included — they are code, not rows), the workspace's runs for
+            // the Runs tab, and the four verbs, each the door that already
+            // existed. Delete refuses a built-in by name.
+            if (isWorkflowPanel(panel)) {
+              const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
+              return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
+                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
+                deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
+                runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
             }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)

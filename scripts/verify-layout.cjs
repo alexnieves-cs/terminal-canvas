@@ -18,7 +18,7 @@ buildSync({
   platform: 'node',
   format: 'cjs',
   external: ['electron'],
-  alias: { '@shared': join(__dirname, '..', 'src', 'shared') }
+  alias: { '@shared': join(__dirname, '..', 'src', 'shared'), '@renderer': join(__dirname, '..', 'src', 'renderer') }
 })
 const L = require(OUT)
 
@@ -3854,6 +3854,128 @@ try {
   ok('search.active.1 the active merged row lists the panel with restore.layout off (initial() is the restore-gated read, never the search\'s), and both search handler sites read the active row',
     threw === null && Array.isArray(listed) && listed.includes('sa1') && Array.isArray(viaInitial) && sites && sites.every(Boolean),
     JSON.stringify({ threw, listed, viaInitial, sites }))
+}
+
+// M131 — workflow.1. Three new template node kinds: pool, orchestrator,
+//      collect — each an arm on TemplateNode, parsed by parseWorkflowNode and
+//      routed through layout-schema:1359's existing unknown-kind arm, which
+//      stays exactly as it is for whatever comes after these three.
+try {
+  const node = (over = {}) => ({ key: 'a', kind: 'terminal', cwd: '~', dx: 0, dy: 0, ...over })
+  const pool = (over = {}) => ({ key: 'p', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '/tmp/list.txt', prompt: 'do it', ...over })
+  const orch = (over = {}) => ({ key: 'o', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: 'lead', ...over })
+  const coll = (over = {}) => ({ key: 'c', kind: 'collect', cwd: '~', dx: 0, dy: 0, target: '/tmp/out.txt', ...over })
+
+  const parsed = L.parseLayout(file({ templates: [
+    { id: 't1', name: 'workflow', nodes: [pool(), orch(), coll()], edges: [] }
+  ] }))
+  const t1 = (parsed.snapshot.templates ?? [])[0]
+  ok('workflow.1a the three kinds parse', !!t1 && t1.nodes.length === 3 && parsed.warnings.length === 0,
+     JSON.stringify({ t1, warnings: parsed.warnings }))
+
+  // A pre-M131 template file (terminal/chat only) loads byte-identical.
+  const preM131 = [{ id: 't0', name: 'old', nodes: [node(), node({ key: 'b', kind: 'chat' })], edges: [{ from: 'a', to: 'b', trigger: 'exit-ok' }] }]
+  // The expectation is written BY HAND from the pre-M131 parser's own output
+  // shape (833cec7^ `parseTemplates`: id, name, [description], nodes, edges;
+  // a node as key, kind, cwd, dx, dy and then only the optional fields it
+  // carried). Comparing the new parser against itself — which this check did
+  // until the fix wave — proves nothing at all: both sides move together.
+  const PRE_M131_EXPECTED = '[{"id":"t0","name":"old","nodes":[{"key":"a","kind":"terminal","cwd":"~","dx":0,"dy":0},{"key":"b","kind":"chat","cwd":"~","dx":0,"dy":0}],"edges":[{"from":"a","to":"b","trigger":"exit-ok"}]}]'
+  const w = []
+  const after0 = L.parseTemplates(preM131, w)
+  ok('workflow.1b a pre-M131 template file loads UNTOUCHED',
+     JSON.stringify(after0) === PRE_M131_EXPECTED && w.length === 0,
+     `every existing template must survive this change silently — ${JSON.stringify(after0)}`)
+
+  // An unknown kind drops the node AND its edges naming it; the template stays.
+  const w2 = []
+  const after = L.parseTemplates([
+    { id: 't2', name: 'ghost', nodes: [node(), node({ key: 'x', kind: 'nonsense' })], edges: [{ from: 'a', to: 'x', trigger: 'exit' }] }
+  ], w2)
+  ok("workflow.1c an unknown kind drops the node AND its edges, the template kept",
+     after.length === 1 && after[0].nodes.length === 1 && after[0].edges.length === 0 &&
+       w2.some((x) => /x/.test(x) && /kind/.test(x)) && w2.some((x) => /edge/.test(x)),
+     JSON.stringify({ after, w2 }))
+
+  // A pool width below 1 is dropped, never coerced to 1.
+  const w3 = []
+  const droppedWidth = L.parseTemplates([{ id: 't3', name: 'bad width', nodes: [node(), pool({ width: 0 })], edges: [] }], w3)
+  ok('workflow.1d a pool width below 1 is dropped, never coerced to 1',
+     droppedWidth.length === 1 && droppedWidth[0].nodes.length === 1 && droppedWidth[0].nodes[0].kind === 'terminal' &&
+       w3.some((x) => /width/.test(x)),
+     JSON.stringify({ droppedWidth, w3 }))
+
+  ok('workflow.1e blockCount counts nodes, matching the header readout', L.blockCount(t1) === 3, JSON.stringify(t1))
+
+  // Fix wave — workflow.1f. A PRESENT-but-not-a-string cwd is dropped by
+  // name, matching the terminal arm's own `isStr(n.cwd)` rule; it is never
+  // coerced with String(), which turned `{}` into the directory
+  // "[object Object]" and 42 into "42" and said nothing.
+  const w4 = []
+  const badCwd = L.parseTemplates([{ id: 't4', name: 'bad cwd', nodes: [node(), pool({ key: 'p', cwd: 42 })], edges: [] }], w4)
+  ok('workflow.1f a present non-string cwd on a workflow node is dropped by name, never coerced',
+     badCwd.length === 1 && badCwd[0].nodes.length === 1 && badCwd[0].nodes[0].kind === 'terminal' &&
+       w4.some((x) => /cwd/.test(x)),
+     JSON.stringify({ badCwd, w4 }))
+} catch (e) {
+  ok('workflow.1 (threw)', false, String(e && e.stack || e))
+}
+
+// M132 — workflow.panel.1a–d, the PURE half of the workflow panel: the
+//      diagram as a projection of the record, the header's block count, the
+//      Runs filter, and a trigger round-tripping through watch-trigger.ts.
+//      1e (Run reaching M80's instantiation exactly once) needs the real
+//      renderer and lives in verify-panels.cjs.
+//
+//      Every check here is wrapped: a THROWN check aborts the file and every
+//      check below it never runs, so its silence would read as green.
+try {
+  const pool = (over = {}) => ({ key: 'p', kind: 'pool', cwd: '~', dx: -260, dy: 0, width: 4, list: '/tmp/list.txt', prompt: 'do it', ...over })
+  const orch = (over = {}) => ({ key: 'o', kind: 'orchestrator', cwd: '~', dx: 0, dy: -140, prompt: 'lead', ...over })
+  const coll = (over = {}) => ({ key: 'c', kind: 'collect', cwd: '~', dx: 260, dy: 0, target: '/tmp/out.txt', ...over })
+  const chat = { key: 'r', kind: 'chat', cwd: '~', dx: 0, dy: 180, message: 'review' }
+  const t = {
+    id: 'tw', name: 'a workflow', nodes: [pool(), orch(), coll(), chat],
+    edges: [{ from: 'p', to: 'c', trigger: 'exit-ok' }, { from: 'o', to: 'r', trigger: 'idle' }]
+  }
+
+  const d = L.buildDiagram(t)
+  ok('workflow.panel.1a the diagram matches the RECORD, not a second layout',
+     d.blocks.map((b) => b.key).join(',') === t.nodes.map((n) => n.key).join(',') &&
+       d.edges.map((e) => `${e.from}>${e.to}`).join(',') === 'p>c,o>r' &&
+       d.edges.every((e, i) => e.trigger === ['exit-ok', 'idle'][i]) &&
+       d.blocks.every((b) => !/›/.test(b.sublabel)),
+     'a projection — the live canvas is the editor and the template is the truth')
+
+  ok('workflow.panel.1b the header block count equals blockCount()',
+     d.blocks.length === L.blockCount(t) && d.width > 0 && d.height > 0,
+     JSON.stringify({ blocks: d.blocks.length, count: L.blockCount(t) }))
+
+  const runs = [
+    { id: 'r1', name: 'run 1', panelIds: ['n1'], edges: [], startedAt: 1, entries: [], templateId: 'tw' },
+    { id: 'r2', name: 'run 2', panelIds: ['n2'], edges: [], startedAt: 2, entries: [] },
+    { id: 'r3', name: 'run 3', panelIds: ['n3'], edges: [], startedAt: 3, entries: [], templateId: 'other' }
+  ]
+  const mine = L.runsForTemplate(runs, 'tw')
+  ok('workflow.panel.1c Runs shows only THIS template runs',
+     mine.length === 1 && mine.every((r) => r.templateId === 'tw'),
+     JSON.stringify(mine.map((r) => r.id)))
+
+  // A trigger is a WATCHER's, unchanged: the same union, the same words, and
+  // it survives the layout's own round trip. Not a second scheduler.
+  const watch = L.workflowWatch('tw', '~', { kind: 'git-ref', root: '/tmp/repo' })
+  const roundW = []
+  const round = L.parseLayout(L.serialiseLayout(L.parseLayout(file({
+    workspaces: [{ id: 'w1', name: 'Canvas', panels: [{ id: 'p1', x: 0, y: 0, w: 460, h: 220, z: 1, kind: 'watcher', watch }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }]
+  })).snapshot), roundW)
+  const saved = round.snapshot.workspaces[0].panels[0]
+  const savedTrigger = saved && saved.watch && saved.watch.trigger
+  ok('workflow.panel.1d a trigger round-trips through watch-trigger.ts unchanged',
+     !!savedTrigger && savedTrigger.kind === 'git-ref' && savedTrigger.root === '/tmp/repo' &&
+       saved.watch.templateId === 'tw' && L.triggerWord(savedTrigger) === 'when the branch moves',
+     `a workflow trigger is a watcher; not a second scheduler — ${JSON.stringify({ saved, roundW })}`)
+} catch (e) {
+  ok('workflow.panel.1 (threw)', false, String(e && e.stack || e))
 }
 
 const failed = results.filter((r) => !r.pass)

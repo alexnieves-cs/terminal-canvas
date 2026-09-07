@@ -12,6 +12,7 @@ import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
 import { RUNS_MAX, type PersistedRun, type RunEntry } from './runs'
 import { TEMPLATES_MAX, type PersistedTemplate, type TemplateEdge, type TemplateNode } from './templates'
+import { parseWorkflowNode } from './workflow-nodes'
 import { TEAMMATES_MAX, type PersistedTeammate } from './teammates'
 import { ROUTINES_MAX, ROUTINE_MIN_MS, type PersistedRoutine } from './routines'
 import { parseShelf, type Shelf } from './skills'
@@ -228,7 +229,7 @@ export interface PersistedToolboxPanel extends PersistedPanelBase {
  * a real command on a schedule nobody asked for. The timer floor is checked
  * for the same reason — a stored `everyMs: 5` is a busy loop with a UI.
  */
-function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false } | null {
+function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false; templateId?: string } | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped watcher panel ${id}: it had no watch record`)
     return null
@@ -263,21 +264,31 @@ function parseWatch(raw: unknown, id: string, warnings: string[]): { cwd: string
   // true` written back would make every file differ from the one before it
   // for a field whose absence already means the same thing.
   const armed = raw.armed === false ? { armed: false as const } : {}
+  // M132. A WORKFLOW trigger: the same watcher, carrying the template it
+  // instantiates. ABSENT is every ordinary watcher and every pre-M132 file,
+  // so it must warn nothing; a PRESENT but unusable value is dropped by name
+  // and the watcher is KEPT — a watcher that vanished because of a mark
+  // would read as a watcher the user never made.
+  let templateMark: { templateId?: string } = {}
+  if (raw.templateId !== undefined) {
+    if (isStr(raw.templateId) && raw.templateId.trim() !== '') templateMark = { templateId: raw.templateId }
+    else warnings.push(`watcher panel ${id}: templateId was not a string — the watcher is kept, its workflow mark dropped`)
+  }
   if (t.kind === 'path' && isStr(t.path) && t.path.trim() !== '') {
-    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'path', path: t.path } }
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'path', path: t.path } }
   }
   if (t.kind === 'git-ref' && isStr(t.root) && t.root.trim() !== '') {
-    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'git-ref', root: t.root } }
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'git-ref', root: t.root } }
   }
   if (t.kind === 'timer' && typeof t.everyMs === 'number' && Number.isFinite(t.everyMs)) {
     if (t.everyMs < WATCH_TIMER_MIN_MS) {
       warnings.push(`dropped watcher panel ${id}: its timer asked for every ${t.everyMs}ms, below the ${WATCH_TIMER_MIN_MS}ms floor`)
       return null
     }
-    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'timer', everyMs: t.everyMs } }
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'timer', everyMs: t.everyMs } }
   }
   if (t.kind === 'panel' && isStr(t.sourceId) && t.sourceId.trim() !== '' && HANDOFF_TRIGGERS.includes(t.on as HandoffTrigger)) {
-    return { cwd: raw.cwd, command: raw.command, args, ...armed, trigger: { kind: 'panel', sourceId: t.sourceId, on: t.on as HandoffTrigger } }
+    return { cwd: raw.cwd, command: raw.command, args, ...armed, ...templateMark, trigger: { kind: 'panel', sourceId: t.sourceId, on: t.on as HandoffTrigger } }
   }
   warnings.push(`dropped watcher panel ${id}: trigger ${JSON.stringify(t.kind)} was unusable`)
   return null
@@ -297,7 +308,8 @@ export interface PersistedMemoryPanel extends PersistedPanelBase {
 export interface PersistedWatcherPanel extends PersistedPanelBase {
   kind: 'watcher'
   /** `armed` ABSENT means armed: every watcher written before the toggle existed, and the ordinary case. */
-  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
+  /** M132. `templateId` ABSENT is an ordinary watcher; present, the fire instantiates that template. */
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false; templateId?: string }
 }
 
 /**
@@ -351,6 +363,18 @@ export interface PersistedSkillPanel extends PersistedPanelBase {
   skill: { scope: ToolScope; name: string }
 }
 
+/**
+ * M132. The workflow panel — the FOURTEENTH kind, sessionless like the work
+ * card. It carries the template's id ALONE, for M116's reason from the other
+ * side: the template lives top level in this file, and a node list copied
+ * onto the panel would be a second author that goes stale the moment the
+ * template is edited. No cwd, no args.
+ */
+export interface PersistedWorkflowPanel extends PersistedPanelBase {
+  kind: 'workflow'
+  workflow: { templateId: string }
+}
+
 export type PersistedPanel =
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -364,6 +388,7 @@ export type PersistedPanel =
   | PersistedBrowserPanel
   | PersistedWorkPanel
   | PersistedSkillPanel
+  | PersistedWorkflowPanel
 
 /**
  * The id of the built-in login-shell preset, and the fallback whenever a
@@ -939,6 +964,18 @@ function parsePanel(
     }
     return { ...base, kind: 'skill', skill: { scope: skill.scope, name: skill.name } }
   }
+  if (kind === 'workflow') {
+    // M132. The template id is the panel's only identity, so an unusable one
+    // drops the PANEL by name — the work card's own rule. A panel naming no
+    // template would sit on the canvas saying "that template is gone" about
+    // one that never existed.
+    const workflow = (raw as Record<string, unknown>).workflow
+    if (!isRecord(workflow) || !isStr(workflow.templateId) || workflow.templateId.trim() === '') {
+      warnings.push(`dropped workflow panel ${id}: workflow.templateId was not a string`)
+      return null
+    }
+    return { ...base, kind: 'workflow', workflow: { templateId: workflow.templateId } }
+  }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
     return null
@@ -1419,6 +1456,16 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
     const nodes: TemplateNode[] = []
     if (Array.isArray(entry.nodes)) for (const n of entry.nodes) {
       if (!isRecord(n) || !isStr(n.key) || n.key.trim() === '' || nodes.some((x) => x.key === n.key)) { warnings.push(`dropped a node with an unusable key from template ${entry.id}`); continue }
+      // M131: the three workflow kinds route through their own parser, which
+      // reports its own reason; the arm below stays exactly as it is for
+      // whatever comes after these three.
+      if (n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect') {
+        const wfWarnings: string[] = []
+        const wf = parseWorkflowNode(n, wfWarnings)
+        if (!wf) { warnings.push(`dropped node ${n.key} from template ${entry.id}: ${wfWarnings[0] ?? 'unusable'}`); continue }
+        nodes.push({ key: n.key, ...wf })
+        continue
+      }
       if (n.kind !== 'terminal' && n.kind !== 'chat') { warnings.push(`dropped node ${n.key} from template ${entry.id}: kind was unusable`); continue }
       if (!isStr(n.cwd)) { warnings.push(`dropped node ${n.key} from template ${entry.id}: cwd was unusable`); continue }
       nodes.push({
@@ -1643,7 +1690,10 @@ function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string
     seen.add(entry.id)
     const endedAt = num(entry.endedAt)
     const costUsd = num(entry.costUsd)
-    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }) })
+    // M132. ABSENT stays absent — never spread as `templateId: undefined`,
+    // which survives IPC and reads as present.
+    const templateId = isStr(entry.templateId) && entry.templateId.trim() !== '' ? entry.templateId : undefined
+    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }) })
   })
   return runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, RUNS_MAX)
 }

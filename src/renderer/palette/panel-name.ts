@@ -1,4 +1,4 @@
-import { isSkillPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 
 /**
@@ -63,6 +63,8 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   // M127. The title is already `skill · <name>` at mint; a retitled panel
   // keeps the user's words, and a titleless one names its kind.
   if (isSkillPanel(panel)) return panel.title ?? `skill · ${panel.skill.name}`
+  // M132. The workflow panel names its template, the work card's own shape.
+  if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -83,5 +85,7 @@ export function panelPath(panel: Panel): string | undefined {
   // inventories of the panels that DO, and its file lives wherever the scope
   // puts it. Naming one here would be a claim about a cwd it never resolved.
   if (isSkillPanel(panel)) return undefined
+  // M132. A workflow is a shape of work, not a place: its blocks carry the directories.
+  if (isWorkflowPanel(panel)) return undefined
   return panel.spec.cwd
 }

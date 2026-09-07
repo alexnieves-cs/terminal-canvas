@@ -42,7 +42,7 @@ import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
   isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel,
-  isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel,
+  isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
@@ -95,6 +95,8 @@ export interface PaletteActionsDeps {
   openJiraPanel: () => void
   /** M83. Open the memory node for the captured panel's repository. */
   openMemoryPanel: () => Promise<void>
+  /** M132. Open a template as a workflow panel — a VIEW of the shape. */
+  openWorkflowPanel: (templateId: string) => void
   /** M88. Mint the GitHub work panel. */
   openGithubPanel: () => void
   /** M86. A review across every worktree of the subject's repository. */
@@ -191,7 +193,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
-    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
+    openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
     lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
@@ -436,6 +438,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               }
               if (isFilePanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M132. The workflow panel's own arm — its `workflow` record is
+              // its only identity, and a rename that dropped it would leave a
+              // panel naming no template at all on the next parse.
+              if (isWorkflowPanel(p)) {
+                return { kind: p.kind, rect: p.rect, workflow: p.workflow, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               if (isJiraPanel(p)) return { kind: p.kind, rect: p.rect, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               if (isToolboxPanel(p)) {
@@ -1554,6 +1562,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // by MAIN (only it knows what a directory's repository root is), so the
     // node's subject is the same root `tc memory` writes under.
     openMemory: () => { void openMemoryPanel() },
+    openWorkflow: (templateId) => { openWorkflowPanel(templateId) },
     openGithub: () => openGithubPanel(),
     reviewAcross: (id) => openReviewAcross(id),
     beginWatcher,

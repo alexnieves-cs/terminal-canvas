@@ -19555,6 +19555,226 @@ app.whenReady().then(async () => {
       }
     }
 
+    // -------------------------------------------------------------------
+    // M132 — workflow.panel.1e. The workflow panel's Run reaches M80's OWN
+    //     instantiation exactly once — never a second copy of it. The pure
+    //     half of this milestone (the diagram as a projection, the header
+    //     count, the Runs filter, the trigger round trip) is
+    //     `verify:layout workflow.panel.1a-d`; only this needs the renderer.
+    // -------------------------------------------------------------------
+    {
+      const IDS = [
+        'workflow.panel.1e a template carrying a workflow BLOCK opens with its diagram but its Run is DISABLED, naming the block, and a press mints nothing — M131 landed the schema, not the runtime, so a run would mint a partial shape silently',
+        'workflow.panel.1g Run reaches M80 instantiation, not a second copy — a blocks-free workflow mints its shape through instantiateTemplate exactly once'
+      ]
+      const wfLog = []
+      const onWf = (_e, level, m) => { if (level >= 2) wfLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onWf)
+      try {
+        const wfDir = mkdtempSync(join(tmpdir(), 'tc panels workflow-'))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reW0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW0
+        await settle()
+        // A template with NO parameters, so Run mints without a sheet.
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf1', name: 'nightly sweep', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(wfDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: -200, dy: 0 },
+          { key: 'pool', kind: 'pool', cwd: ${JSON.stringify(wfDir)}, width: 6, list: ${JSON.stringify(join(wfDir, 'list.txt'))}, prompt: 'work an item', dx: 200, dy: 0 }
+        ], edges: [{ from: 'sweep', to: 'pool', trigger: 'exit-ok' }] })`)
+        layoutStore.save({
+          panels: [{ id: 'wfA', kind: 'workflow', x: 200, y: 200, w: 640, h: 460, z: 1, title: 'nightly sweep', workflow: { templateId: 'wf1' } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reW = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reW
+        await settle()
+        const opened = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfA"]'); if (!n) return false
+          const blocks = [...n.querySelectorAll('[data-workflow-block]')]
+          if (blocks.length !== 2) return false
+          return {
+            kind: n.getAttribute('data-panel-kind'),
+            template: n.getAttribute('data-workflow-template'),
+            count: n.querySelector('[data-workflow-count]')?.textContent ?? null,
+            blocks: blocks.map((b) => b.getAttribute('data-workflow-block')),
+            sublabels: blocks.map((b) => b.textContent ?? ''),
+            edges: [...n.querySelectorAll('[data-workflow-edge]')].map((e) => e.getAttribute('data-workflow-edge')),
+            tabs: [...n.querySelectorAll('[data-workflow-tab]')].map((t) => t.getAttribute('data-workflow-tab')),
+            verbs: [...n.querySelectorAll('[data-workflow-verb]')].map((v) => [v.getAttribute('data-workflow-verb'), v.disabled, v.getAttribute('title')])
+          }
+        })()`), 8000)
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        // Fix wave: this template carries a `pool` block, so Run must be
+        // DISABLED with the block's own sentence and a press must mint
+        // nothing — never a partial shape (the terminal, none of the blocks)
+        // committed as a history entry with no word said.
+        const runVerb = await wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="run"]'); if (!b) return false
+          return { disabled: b.disabled, title: b.getAttribute('title') ?? '' } })()`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-verb="run"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle()
+        await sleep(600)
+        const afterPress = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        const blockedCalls = await wc.executeJavaScript(`window.__m132Instantiations ? window.__m132Instantiations() : null`)
+        // The Runs tab exists and, with nothing recorded for this template
+        // yet, says so rather than rendering an empty box.
+        await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-tab="runs"]'); if (t) t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!t })()`)
+        const runsTab = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-id="wfA"] [data-workflow-panel="runs"]')
+          return p && !p.hasAttribute('hidden') ? (p.textContent ?? '') : false })()`), 4000)
+        ok(IDS[0],
+          opened && opened.kind === 'workflow' && opened.template === 'wf1' &&
+            /2 blocks/.test(String(opened.count)) &&
+            opened.blocks.join(',') === 'sweep,pool' &&
+            opened.sublabels.every((s) => !/›/.test(s)) && opened.sublabels.some((s) => /6 AT A TIME/i.test(s)) &&
+            opened.edges.join(',') === 'sweep>pool' &&
+            opened.tabs.join(',') === 'definition,runs' &&
+            opened.verbs.length >= 5 && opened.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            runVerb !== false && runVerb.disabled === true && /pool block/.test(String(runVerb.title)) &&
+            afterPress === before && blockedCalls === 0 &&
+            runsTab !== false && String(runsTab).trim() !== '',
+          JSON.stringify({ opened, before, runVerb, afterPress, blockedCalls, runsTab, log: wfLog.slice(-3) }))
+
+        // workflow.panel.1g — the same door on a template with NO blocks:
+        // one press, one instantiateTemplate call, the shape minted. This is
+        // the half of the old 1e the block refusal took away, kept whole.
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf1g', name: 'plain nightly', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(wfDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: -200, dy: 0 },
+          { key: 'tail', kind: 'terminal', cwd: ${JSON.stringify(wfDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'tail', dx: 200, dy: 0 }
+        ], edges: [{ from: 'sweep', to: 'tail', trigger: 'exit-ok' }] })`)
+        layoutStore.save({
+          panels: [{ id: 'wfB', kind: 'workflow', x: 200, y: 200, w: 640, h: 460, z: 1, title: 'plain nightly', workflow: { templateId: 'wf1g' } }],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reG = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reG
+        await settle()
+        const gReady = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const b = document.querySelector('.panel[data-panel-id="wfB"] [data-workflow-verb="run"]'); if (!b) return false
+          return { disabled: b.disabled } })()`), 8000)
+        const gBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="wfB"] [data-workflow-verb="run"]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        const gMinted = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelectorAll('.panel').length
+          return n > ${gBefore} ? { panels: n, calls: window.__m132Instantiations ? window.__m132Instantiations() : null } : false
+        })()`), 10000)
+        await settle()
+        const gCalls = await wc.executeJavaScript(`window.__m132Instantiations ? window.__m132Instantiations() : null`)
+        ok(IDS[1],
+          gReady !== false && gReady.disabled === false && gMinted !== false && gCalls === 1,
+          JSON.stringify({ gReady, gBefore, gMinted, gCalls, log: wfLog.slice(-3) }))
+        try { rmSync(wfDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (wfErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(wfErr && wfErr.message || wfErr) + ' | renderer: ' + (wfLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onWf)
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // M132 — workflow.panel.1f. THE FIRE PATH, driven end to end: a
+    //     `watcher:state` event for a workflow watcher (which is what main's
+    //     runner sends on every run) reaches setWatcherFiredHandler, the
+    //     Canvas handler reads the record's templateId, and ONE instantiation
+    //     happens — a second event that is still `running` (a tail update) is
+    //     the same run and must mint nothing. And a workflow with PARAMETERS
+    //     is refused by name on the fire path and mints nothing at all, where
+    //     a click would have opened the sheet.
+    //
+    //     In verify:panels rather than a plain-node suite because the whole
+    //     claim is a chain across three modules that only exist in a live
+    //     renderer: the IPC subscription, the module-level store's
+    //     transition, and Canvas's own panel lookup.
+    // -------------------------------------------------------------------
+    {
+      const IDS = ['workflow.panel.1f a workflow watcher\'s fire instantiates ONCE — a second running event with a new tail is the same run and mints nothing — and a parameterised workflow is refused by name on the fire path, minting nothing']
+      const wfLog2 = []
+      const onWf2 = (_e, level, m) => { if (level >= 2) wfLog2.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onWf2)
+      try {
+        const fireDir = mkdtempSync(join(tmpdir(), 'tc panels wffire-'))
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reF0 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF0
+        await settle()
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf2', name: 'plain sweep', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: ${JSON.stringify(fireDir)}, command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: 0, dy: 0 }
+        ], edges: [] })`)
+        await wc.executeJavaScript(`window.canvas.template.save({ id: 'wf3', name: 'asks first', nodes: [
+          { key: 'sweep', kind: 'terminal', cwd: '{{repository}}', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'sweep', dx: 0, dy: 0 }
+        ], edges: [] })`)
+        // Two workflow watchers: one on the parameterless template, one on the
+        // template that asks. Both armed=false, so MAIN never runs them — this
+        // check drives the fire path, not the arming.
+        layoutStore.save({
+          panels: [
+            { id: 'wfW', kind: 'watcher', x: 100, y: 100, w: 460, h: 220, z: 1, watch: { cwd: fireDir, command: '/usr/bin/true', args: [], armed: false, templateId: 'wf2', trigger: { kind: 'git-ref', root: fireDir } } },
+            { id: 'wfP', kind: 'watcher', x: 700, y: 100, w: 460, h: 220, z: 2, watch: { cwd: fireDir, command: '/usr/bin/true', args: [], armed: false, templateId: 'wf3', trigger: { kind: 'git-ref', root: fireDir } } },
+            // Fix wave: a watcher whose template was DELETED under it. Three
+            // arms, not two — `undefined` (asked, no such template) must not
+            // be collapsed into `null` (nobody asked) on the way into the
+            // panel, or the sentence becomes unreachable from this surface.
+            { id: 'wfG', kind: 'watcher', x: 100, y: 400, w: 460, h: 220, z: 3, watch: { cwd: fireDir, command: '/usr/bin/true', args: [], armed: false, templateId: 'wf-deleted', trigger: { kind: 'git-ref', root: fireDir } } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null
+        })
+        flushLayoutStore()
+        const reF = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reF
+        await settle()
+        // The readouts read the MARK, never `/usr/bin/true` (fix round 1, #2).
+        const readouts = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfW"]'); if (!n) return false
+          const cmd = n.querySelector('.watcher-node__command'); if (!cmd) return false
+          const title = n.querySelector('.pf__title')?.textContent ?? null
+          if (title === null) return false
+          return { title, command: cmd.textContent ?? '' }
+        })()`), 6000)
+        const goneReadout = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfG"]'); if (!n) return false
+          const cmd = n.querySelector('.watcher-node__command'); if (!cmd) return false
+          return cmd.textContent ?? '' })()`), 6000)
+        const before = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        const panelsBefore = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        // The event main's runner sends on every run, twice: the transition
+        // into running IS the fire; a second running event with a new tail is
+        // the same run still going.
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfW', status: 'running', tail: '', pending: false, startedAt: Date.now() })
+        const once = await waitUntil(() => wc.executeJavaScript(`window.__m132Instantiations() > ${before} ? window.__m132Instantiations() : false`), 8000)
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfW', status: 'running', tail: 'still going\n', pending: false, startedAt: Date.now() })
+        await settle()
+        await sleep(600)
+        const afterTail = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        // The parameterised one: refused BY NAME on the watcher's own body,
+        // and nothing minted.
+        const panelsMid = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        wc.send(IPC_EVENTS.WATCHER_STATE, { id: 'wfP', status: 'running', tail: '', pending: false, startedAt: Date.now() })
+        const refused = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="wfP"]'); if (!n) return false
+          const t = n.textContent ?? ''
+          return /not run: this workflow has parameters/.test(t) ? t.slice(0, 400) : false })()`), 8000)
+        await settle()
+        const finalCalls = await wc.executeJavaScript(`window.__m132Instantiations()`)
+        const panelsAfter = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+        const sheet = await wc.executeJavaScript(`document.querySelector('[data-spawn-sheet]') !== null`)
+        ok(IDS[0],
+          readouts && /plain sweep/.test(String(readouts.title)) && !/true/.test(String(readouts.title)) &&
+            /runs the workflow plain sweep/.test(String(readouts.command)) && !/usr\/bin\/true/.test(String(readouts.command)) &&
+            goneReadout !== false && /no longer exists/.test(String(goneReadout)) &&
+            once !== false && once === before + 1 && afterTail === before + 1 &&
+            refused !== false && finalCalls === before + 1 && panelsAfter === panelsMid && panelsMid > panelsBefore && sheet === false,
+          JSON.stringify({ readouts, goneReadout, before, once, afterTail, panelsBefore, panelsMid, panelsAfter, finalCalls, sheet, refused, log: wfLog2.slice(-3) }))
+        try { rmSync(fireDir, { recursive: true, force: true }) } catch { /* best effort */ }
+      } catch (fErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(fErr && fErr.message || fErr) + ' | renderer: ' + (wfLog2.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onWf2)
+      }
+    }
 
   } catch (error) {
     // An infrastructure failure (e.g. a missing DOM target, a rejected

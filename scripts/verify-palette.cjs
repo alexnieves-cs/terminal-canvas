@@ -2151,6 +2151,36 @@ const WS = [
       /neither/.test(P.templateRefusal(bare, presets, true) ?? '') && /loop/.test(P.templateRefusal(loop, presets, true) ?? '') &&
       none !== undefined && none.disabledReason === P.REASON_NO_TEMPLATES,
     JSON.stringify({ ok: P.templateRefusal(okTpl, presets, true), gone: P.templateRefusal(gone, presets, true), chat: P.templateRefusal(chat, presets, false) }))
+
+  // M131/M132, fix round 2 — workflow.2a. A template carrying a workflow
+  // block has NO runtime yet: instantiation skips those nodes by name, so
+  // running one would mint a PARTIAL shape (the terminals, none of the
+  // blocks) and say nothing. The refusal names the first block it finds and
+  // its kind, so Run is disabled with a sentence rather than half-doing the
+  // work. The merged-view row is the palette's own; this is the shape's.
+  const withPool = { id: 'f', name: 'f', nodes: [
+    { key: 'x', kind: 'terminal', command: 'a', cwd: '~', dx: 0, dy: 0 },
+    { key: 'sweeper', kind: 'pool', cwd: '~', dx: 0, dy: 0, width: 4, list: '/l', prompt: 'p' }
+  ], edges: [] }
+  const withOrch = { id: 'g', name: 'g', nodes: [{ key: 'lead', kind: 'orchestrator', cwd: '~', dx: 0, dy: 0, prompt: 'lead' }], edges: [] }
+  const withColl = { id: 'h', name: 'h', nodes: [{ key: 'gather', kind: 'collect', cwd: '~', dx: 0, dy: 0, target: '/o' }], edges: [] }
+  const poolWord = P.templateRefusal(withPool, presets, true) ?? ''
+  ok('workflow.2a templateRefusal names the FIRST workflow block and its kind, so a blocks-only template is never half-minted',
+    /sweeper/.test(poolWord) && /pool/.test(poolWord) && /cannot run yet/.test(poolWord) &&
+      /orchestrator/.test(P.templateRefusal(withOrch, presets, true) ?? '') &&
+      /collect/.test(P.templateRefusal(withColl, presets, true) ?? '') &&
+      P.templateRefusal(okTpl, presets, true) === undefined,
+    JSON.stringify({ poolWord, orch: P.templateRefusal(withOrch, presets, true), coll: P.templateRefusal(withColl, presets, true) }))
+
+  // workflow.2b — the workflow panel's palette door refuses the merged view
+  // BY NAME like its neighbours, rather than running and returning silently.
+  const tplRows = [{ id: 'f', name: 'f', nodes: 1, edges: 0 }]
+  const openMerged = P.buildCommands(ctx({ merged: true, templates: tplRows })).find((r) => r.id === 'workflow.open.f')
+  const openPlain = P.buildCommands(ctx({ merged: false, templates: tplRows })).find((r) => r.id === 'workflow.open.f')
+  ok('workflow.2b Open as a workflow is DISABLED by name in the merged view, never a silent no-op',
+    openMerged !== undefined && typeof openMerged.disabledReason === 'string' && /merged/.test(openMerged.disabledReason) &&
+      openPlain !== undefined && openPlain.disabledReason === undefined,
+    JSON.stringify({ openMerged, openPlain }))
 }
 
 // M77 — tools.1. `Open review` on a chat gates on `reviewable`, with the chat's

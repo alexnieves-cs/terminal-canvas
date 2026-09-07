@@ -2011,6 +2011,205 @@ const isResult = (l) => l.includes('"type":"result"')
         JSON.stringify({ has: typeof ia }))
     } catch (e) {
       ok('acp.2 the negotiated rule runs without throwing', false, String((e && e.stack) || e).slice(0, 300))
+  }
+}
+
+  // M131 — pool.1. The pool: N workers over a shared list, no ceiling of its
+  // own (M82's `agents.maxConcurrent`/`budgetUsd` read LIVE every pump).
+  {
+    const poolNode = (width) => ({ kind: 'pool', width, list: '/fake/list.txt', prompt: 'do it', cwd: '/repo', dx: 0, dy: 0 })
+    const itemsOf = (n) => Array.from({ length: n }, (_, i) => `item-${i}`)
+
+    // pool.1a/1b — width 12 under a ceiling of 4: 4 start, 8 queue with the
+    // same 'concurrency' reason M82's own queue uses, and no budget applies.
+    {
+      const events = []
+      let nextId = 0
+      M.pool.startPool(poolNode(12), {
+        readList: () => ({ kind: 'ok', items: itemsOf(12) }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(20)
+      const started = events.filter((e) => e.kind === 'started').length
+      const queuedEvents = events.filter((e) => e.kind === 'queued')
+      const queued = queuedEvents.length
+      ok('pool.1a width is bounded by maxConcurrent READ LIVE, not captured',
+        started === 4 && queued === 8,
+        'a pool of 12 under a ceiling of 4 — M82 built this queue; the pool gets no ceiling of its own')
+      ok('pool.1b a queued worker names WHICH queue it is in',
+        queuedEvents.length > 0 && queuedEvents.every((e) => e.reason === 'concurrency'),
+        JSON.stringify(queuedEvents[0]))
+    }
+
+    // pool.1c — a worker finishing pulls the next item, until the list drains.
+    {
+      const events = []
+      let nextId = 0
+      const handle = M.pool.startPool(poolNode(2), {
+        readList: () => ({ kind: 'ok', items: itemsOf(5) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(20)
+      let started = events.filter((e) => e.kind === 'started')
+      // Drain by finishing the oldest live worker each round until the pool
+      // reports empty — this is the loop M97 widened from one agent to N.
+      let guard = 0
+      while (!events.some((e) => e.kind === 'stopped') && guard < 20) {
+        const stillLive = events.filter((e) => e.kind === 'started').map((e) => e.id)
+          .filter((id) => !events.some((e) => e.kind === 'finished' && e.id === id))
+        if (stillLive.length === 0) break
+        handle.finished(stillLive[0])
+        await tick(10)
+        guard += 1
+      }
+      const pulls = events.filter((e) => e.kind === 'started').length
+      const stopped = events.find((e) => e.kind === 'stopped')
+      ok('pool.1c a worker that finishes pulls the next item until the list is empty',
+        pulls === 5 && stopped !== undefined && stopped.why === 'empty',
+        `M97's loop shape widened from one agent to N — pulls=${pulls}`)
+    }
+
+    // pool.1d — an empty list ends the pool without minting a worker.
+    {
+      const events = []
+      M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'ok', items: [] }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: 'never' }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      const minted = events.filter((e) => e.kind === 'started').length
+      ok('pool.1d an empty list ends the pool without minting a worker',
+        minted === 0 && events.some((e) => e.kind === 'stopped' && e.why === 'empty'),
+        JSON.stringify(events))
+    }
+
+    // pool.1e — a list that cannot be read refuses BY NAME before any worker
+    // is minted.
+    {
+      const events = []
+      M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'error', why: 'ENOENT' }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: 'never' }),
+        interrupt: () => {},
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      const minted = events.filter((e) => e.kind === 'started').length
+      const res = events.find((e) => e.kind === 'refused')
+      ok('pool.1e a list that cannot be read refuses BY NAME before any worker is minted',
+        res !== undefined && res.kind === 'refused' && minted === 0,
+        JSON.stringify(events))
+    }
+
+    // pool.1f — a budget crossing interrupts every live worker and kills none.
+    // `spend` crosses AFTER the four started, and the caller re-checks live
+    // ceilings the same way M82 already does elsewhere (here via `tick()`,
+    // driven with none of the four having naturally finished).
+    {
+      const events = []
+      const interrupted = []
+      let nextId = 0
+      let spendValue = 0
+      const deps1f = {
+        readList: () => ({ kind: 'ok', items: itemsOf(4) }),
+        limits: () => ({ maxConcurrent: 4, budgetUsd: 1 }),
+        spend: () => spendValue,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: (id) => interrupted.push(id),
+        onEvent: (e) => events.push(e)
+      }
+      const handle = M.pool.startPool(poolNode(4), deps1f)
+      await tick(10)
+      const startedBefore = events.filter((e) => e.kind === 'started').length
+      spendValue = 5 // crosses budgetUsd: 1
+      handle.tick()
+      await tick(10)
+      // The module has no kill door at all: the deps object we handed it
+      // carries no `kill` field for it to have reached even if it tried,
+      // and the source text never calls one — read as text the way
+      // registry.1/registry.3 pin their own claims.
+      const poolSrc = readFileSync(join(__dirname, '..', 'src', 'main', 'pool-runner.ts'), 'utf8')
+      const depsHaveNoKill = !Object.prototype.hasOwnProperty.call(deps1f, 'kill')
+      ok('pool.1f a budget crossing INTERRUPTS every worker and never kills one',
+        startedBefore === 4 && interrupted.length === 4 && depsHaveNoKill &&
+          !/\.kill\(/.test(poolSrc) &&
+          events.some((e) => e.kind === 'stopped' && e.why === 'budget'),
+        'a killed agent loses its turn, and a budget is a stop — M82, unchanged')
+    }
+
+    // pool.1g — a `finished` reacted to re-entrantly from inside an active
+    // pump()'s own onEvent delivery (here, off a 'queued' event the fill
+    // phase emits — a 'started' event self-heals in this implementation's
+    // while loop, which always rechecks its own condition fresh before
+    // exiting; it is the CODE AFTER that loop, still inside the same
+    // pumping=true call, where a dropped re-pump would otherwise strand
+    // freed capacity) still pulls the next pending item rather than
+    // stalling until an unrelated finished/tick arrives.
+    {
+      const events = []
+      let nextId = 0
+      let reentered = false
+      const handle = M.pool.startPool(poolNode(4), {
+        readList: () => ({ kind: 'ok', items: itemsOf(4) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: async () => ({ id: `w${++nextId}` }),
+        interrupt: () => {},
+        onEvent: (e) => {
+          events.push(e)
+          if (e.kind === 'queued' && !reentered) {
+            reentered = true
+            handle.finished('w1') // re-entrant: pump() is still active here
+          }
+        }
+      })
+      await tick(30)
+      const started = events.filter((e) => e.kind === 'started').map((e) => e.id)
+      ok('pool.1g a finished() reacted to re-entrantly while pump() is still active still pulls the next item, rather than dropping the request and stalling with freed capacity and pending work',
+        started.length === 3 && started.includes('w3'),
+        JSON.stringify(events))
+    }
+
+    // pool.1h — a stop() (or a budget crossing) that lands DURING a pending
+    // createWorker must not orphan the worker that await resolves into. The
+    // process is already minted at that point; returning without interrupting
+    // it leaves an agent running that no pool tracks, no ceiling bounds and
+    // no budget can stop — the silent counterpart of pool.1f's guarantee.
+    {
+      const events = []
+      const interrupted = []
+      let nextId = 0
+      let release = null
+      const handle = M.pool.startPool(poolNode(2), {
+        readList: () => ({ kind: 'ok', items: itemsOf(2) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: () => new Promise((resolve) => { release = () => resolve({ id: `w${++nextId}` }) }),
+        interrupt: (id) => interrupted.push(id),
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      handle.stop() // lands while the first createWorker is still pending
+      release()
+      await tick(20)
+      ok('pool.1h a stop() during a pending createWorker INTERRUPTS the worker it resolves into rather than orphaning it',
+        interrupted.length === 1 && interrupted[0] === 'w1' &&
+          events.filter((e) => e.kind === 'started').length === 0,
+        JSON.stringify({ events, interrupted }))
     }
   }
 

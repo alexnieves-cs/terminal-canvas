@@ -187,7 +187,8 @@ export interface ChatPanel extends PanelBase {
 export interface WatcherPanel extends PanelBase {
   kind: 'watcher'
   /** `armed` ABSENT means armed — the ordinary case and every pre-toggle file. */
-  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false }
+  /** M132. `templateId` ABSENT is an ordinary watcher; present, its fire instantiates that template. */
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; armed?: false; templateId?: string }
 }
 
 /**
@@ -230,8 +231,20 @@ export interface SkillPanel extends PanelBase {
   kind: 'skill'
   skill: { scope: ToolScope; name: string }
 }
+/**
+ * M132. The workflow panel — the FOURTEENTH kind, sessionless like the work
+ * card. It carries the TEMPLATE'S ID alone; the template itself lives top
+ * level in the layout (M116's reason from the other side: a copied node list
+ * would be a second author, stale the moment the template is edited), and
+ * the panel looks it up at render. No spec, so it never reaches assignTiers,
+ * and isTerminalPanel's clause below is what keeps that structural.
+ */
+export interface WorkflowPanel extends PanelBase {
+  kind: 'workflow'
+  workflow: { templateId: string }
+}
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -288,6 +301,10 @@ export function isSkillPanel(panel: Panel): panel is SkillPanel {
   return panel.kind === 'skill'
 }
 
+export function isWorkflowPanel(panel: Panel): panel is WorkflowPanel {
+  return panel.kind === 'workflow'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -309,7 +326,7 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
   return (
     !isReviewPanel(panel) && !isFilePanel(panel) && !isJiraPanel(panel) && !isGithubPanel(panel) && !isToolboxPanel(panel) &&
     !isMemoryPanel(panel) &&
-    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel) &&
+    !isChatPanel(panel) && !isWatcherPanel(panel) && !isBrowserPanel(panel) && !isWorkPanel(panel) && !isWorkflowPanel(panel) &&
     // M127. The thirteenth kind joins the partition HERE, and forgetting it
     // is the dangerous direction: a skill panel satisfying isTerminalPanel
     // reaches assignTiers and registry.ensure with no spec at all.
@@ -797,13 +814,15 @@ export const WATCHER_H = 340
 /** M84. A watcher node, at the cascade centre like every other minted kind. */
 export function makeWatcherPanel(
   id: string, centre: Point, z: number,
-  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger }
+  watch: { cwd: string; command: string; args: string[]; trigger: WatchTrigger; templateId?: string }
 ): WatcherPanel {
   return {
     kind: 'watcher',
     rect: { id, x: centre.x - WATCHER_W / 2, y: centre.y - WATCHER_H / 2, w: WATCHER_W, h: WATCHER_H },
     z,
-    watch: { cwd: watch.cwd, command: watch.command, args: [...watch.args], trigger: watch.trigger }
+    // M132's mark stays ABSENT unless set: spreading it would write
+    // `templateId: undefined`, which survives IPC and reads as present.
+    watch: { cwd: watch.cwd, command: watch.command, args: [...watch.args], trigger: watch.trigger, ...(watch.templateId === undefined ? {} : { templateId: watch.templateId }) }
   }
 }
 
@@ -937,6 +956,19 @@ export const SKILL_H = 520
  */
 export function makeSkillPanel(id: string, centre: Point, z: number, scope: ToolScope, name: string): SkillPanel {
   return { kind: 'skill', rect: { id, x: centre.x - JIRA_W / 2, y: centre.y - SKILL_H / 2, w: JIRA_W, h: SKILL_H }, z, title: `skill · ${name}`, skill: { scope, name } }
+}
+
+/** M132. A workflow panel needs room for a diagram and a tab strip. */
+export const WORKFLOW_W = 640
+export const WORKFLOW_H = 460
+/**
+ * M132. A workflow panel at the centre. The title is the TEMPLATE'S name at
+ * mint, the work card's own rule and for its reason: the body reads the live
+ * template by id, so a renamed template re-titles the body while the rail
+ * keeps the name the user saw when they opened it.
+ */
+export function makeWorkflowPanel(id: string, centre: Point, z: number, templateId: string, title: string): WorkflowPanel {
+  return { kind: 'workflow', rect: { id, x: centre.x - WORKFLOW_W / 2, y: centre.y - WORKFLOW_H / 2, w: WORKFLOW_W, h: WORKFLOW_H }, z, title, workflow: { templateId } }
 }
 
 /**

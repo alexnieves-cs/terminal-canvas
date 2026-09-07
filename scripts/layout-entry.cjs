@@ -10,6 +10,17 @@ module.exports = {
   /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
   ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),
+  /* M131. The three workflow node kinds: pure parse over a raw node object. */
+  ...require('../src/shared/workflow-nodes'),
+  /* M132. The workflow panel's DIAGRAM: pure over the template record — no
+     DOM, no React, no node — so the projection, the Runs filter and the
+     watcher a trigger becomes are all checked in this cheap tier, beside
+     the schema they project. Only "Run reaches M80's instantiation" needs a
+     real renderer, and that lives in verify:panels. */
+  ...require('../src/renderer/workflow/workflow-diagram'),
+  /* M84's trigger words, so workflow.panel.1d can assert the round-tripped
+     trigger still reads in the ONE vocabulary rather than restating it. */
+  ...require('../src/shared/watch-trigger'),
   /* M6b: the settings schema is pure data with no imports at all, so it costs
      this tier nothing and gets covered by the suite that already owns the
      on-disk format it is stored in. */

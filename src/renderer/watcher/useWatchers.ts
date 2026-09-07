@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isWatcherPanel } from '@renderer/panels/panels'
 import { handoffFires, type HandoffEvent } from '@shared/handoff'
-import { clearWatch, setWatch } from './watcher-store'
+import { clearWatch, getWatch, setWatch } from './watcher-store'
 
 /**
  * M84. The renderer's side of a watcher's two lifetimes.
@@ -20,12 +20,26 @@ import { clearWatch, setWatch } from './watcher-store'
 
 let subscribed = false
 
+/**
+ * M132. A WORKFLOW trigger is a watcher, so its fire arrives here like every
+ * other. What it must do — mint the template's panels — is the RENDERER's
+ * and only Canvas can do it, so Canvas registers one handler and this module
+ * calls it on the transition into `running`. No second scheduler, no second
+ * subscription: the same event, handed on.
+ */
+let onFired: ((id: string) => void) | null = null
+export function setWatcherFiredHandler(fn: ((id: string) => void) | null): void { onFired = fn }
+
 function ensureSubscribed(): void {
   if (subscribed) return
   subscribed = true
   window.canvas.watcher.onState((event) => {
     const { id, ...state } = event
+    // The TRANSITION into running is the fire; a second `running` event for
+    // the same run (a tail update) must not mint the shape twice.
+    const wasRunning = getWatch(id).status === 'running'
     setWatch(id, state)
+    if (state.status === 'running' && !wasRunning) onFired?.(id)
   })
   // SEED from main's own list. A renderer reload leaves main's watchers armed
   // and their last runs known, and without this the restored nodes all read
