@@ -3017,6 +3017,29 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify(rows.map((r) => [r.name, r.sourcePath])))
 }
 
+// M149 — summary.history.2 (the audit's `runs` scene). The renderer's read
+// of `ledger:usage` was never wired when M142 landed (a partial patch), so
+// the summary's week line said `reading the ledger…` forever — the
+// asked-but-unanswered rendering standing in for an answer, the very
+// collapse the three-state rule exists to forbid. A read that REJECTS is a
+// fourth arm with its own sentence, never the reading one.
+{
+  const failed = typeof R.historyWord === 'function' ? R.historyWord(null) : ''
+  ok('summary.history.2 historyWord(null) — the ledger could not be read — is its own sentence, distinct from reading and from nothing',
+    /could not be read/.test(failed) && !/reading/.test(failed) && !/nothing/.test(failed), JSON.stringify({ failed }))
+}
+
+// M149 — board.empty.1 (audit F.7). An empty board column is not a bare
+// zero: a user-set column says it is a drop target, a runtime column names
+// what sets it. Read as text (the pane renders the sentence directly).
+{
+  const { readFileSync } = require('node:fs')
+  const src = readFileSync(join(__dirname, '..', 'src', 'renderer', 'shell', 'BoardPane.tsx'), 'utf8')
+  ok('board.empty.1 an empty board column carries a sentence — a drop target for a user-set column, the runtime rule for working and review — under data-board-empty',
+    /data-board-empty=\{state\}/.test(src) && /drop a card/.test(src) && /set when a dispatched lane starts/.test(src) && /set when a lane opens its pull request/.test(src),
+    JSON.stringify({ attr: /data-board-empty/.test(src), words: [/drop a card/.test(src), /dispatched lane/.test(src), /pull request/.test(src)] }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

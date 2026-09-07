@@ -76,6 +76,11 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
             return (
               <section key={state} className="board-pane__column" data-board-column={state} {...(droppable ? { 'data-board-drop': '', ...dropHandlers(state) } : {})}>
                 <h3 className="board-pane__heading"><span className="board-pane__state">{state}</span><span className="board-pane__count">{rows.length}</span></h3>
+                {/* M149 (F.7). An empty column says what it is for — a drop target that
+                    looks like one, or the runtime's own rule — never a bare zero. */}
+                {rows.length === 0 && (
+                  <p className="pf__note board-pane__empty" data-board-empty={state}>{emptyColumnWord(state, droppable)}</p>
+                )}
                 <ul className="rail-list rail-list--board">
                   {rows.map((item) => {
                     const carded = props.hasCard(item.id)
@@ -110,6 +115,17 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
       )}
     </div>
   )
+}
+
+/** M149 (F.7). The empty column's three arms: a user-set column is a drop target; a runtime column names what sets it. */
+export function emptyColumnWord(state: string, droppable: boolean): string {
+  if (droppable) return 'nothing here — drop a card, or add one from the palette'
+  // The two runtime states are read off WORK_ITEM_STATES by index, never
+  // spelled: `verify:rail state.2` forbids the state words as literals outside
+  // panel-state.ts, so a renamed state fails here loudly rather than matching nothing.
+  if (state === WORK_ITEM_STATES[1]) return 'set when a dispatched lane starts its first turn'
+  if (state === WORK_ITEM_STATES[2]) return 'set when a lane opens its pull request'
+  return 'nothing here'
 }
 
 export const BoardPane = memo(BoardPaneImpl)

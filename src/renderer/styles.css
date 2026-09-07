@@ -3563,6 +3563,9 @@ body {
 /* Not `opacity`: verify:styles 3 refuses a fractional opacity. A dimmer
    TOKEN says the same thing and stays auditable. */
 .toolbox-node__row--muted { color: var(--fg-4); }
+/* M149 (F.2). The row's Open door sits at the END of whatever line it lands on
+   rather than opening a line of its own under the description. */
+.toolbox-node__open { margin-left: auto; flex: 0 0 auto; }
 
 .toolbox-node__name { color: var(--fg); }
 .toolbox-node__scope { color: var(--fg-3); }

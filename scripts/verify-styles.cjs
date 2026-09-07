@@ -339,6 +339,16 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ chrome: chromeRule && chromeRule.slice(0, 120), handle: handleRule && handleRule.slice(0, 120), bodyTransformed }))
 }
 
+// M149 — toolbox.open.1 (audit F.2). The toolbox row's Open door sits at the
+// end of its line (`margin-left: auto`, never growing) rather than dropping
+// under the description as a line of its own, the way it painted in the
+// `kinds` scene.
+{
+  const rule = (bare.match(/\.toolbox-node__open\s*\{[^}]*\}/g) || [])[0] || null
+  ok('toolbox.open.1', '.toolbox-node__open sits at the end of its row line (margin-left: auto, flex 0 0 auto)',
+    rule !== null && /margin-left:\s*auto/.test(rule) && /flex:\s*0 0 auto/.test(rule), rule || 'no rule')
+}
+
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
 // render a <section hidden={tab !== id}>, and `.context__panel { display:
 // block }` — a selector with higher specificity than the UA's `[hidden]`

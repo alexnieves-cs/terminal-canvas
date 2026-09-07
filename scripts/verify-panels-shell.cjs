@@ -4,10 +4,10 @@
    checks the old file held at lines 5260–10551, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 95000 // measured 2026-09-07 in the chain's Electron tail (build, canvas, xterm, then the parts), two green runs: 74.7s, 75.0s; 1.25x the slower, to the next 5 s
+const WATCHDOG_MS = 600000 // provisional: re-measured after Act II's checks, see the M140–M147 build log
 
 runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
-  const { AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -5357,6 +5357,12 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         { key: 'a', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'a', dx: -200, dy: 0 },
         { key: 'b', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'b', dx: 200, dy: 0 }
       ], edges: [] })`)
+      // The palette's template rows are read at boot and on the palette's own
+      // saves; a template saved through the bridge from here needs the reload
+      // (the M133 checks' shape), or the row this check types for is absent.
+      flushLayoutStore()
+      const reWT = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reWT
       await settle()
       const before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
       const activeBefore = await activeWorkspaceId()
@@ -5383,6 +5389,49 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       ok('workspace.template.1 `New workspace from <template>` mints a fresh workspace named after the template, switches to it, and the shape is minted there',
         ran === 'ok' && Array.isArray(after) && fresh !== undefined && fresh[1] === 'two shells' && activeAfter === fresh[0] && minted !== false,
         JSON.stringify({ ran, before, after, activeBefore, activeAfter, minted }))
+    }
+
+    // M149 — workspace.template.2 (the audit's `runs` scene, and the reason
+    // the `composer` scene stopped painting). A template WITH a parameter
+    // asks its sheet FIRST; the workspace is minted on the sheet's Enter,
+    // never before it — an Escape on the sheet must leave the workspace
+    // list and the active workspace exactly as they were. The first cut
+    // minted the workspace, switched, then opened the sheet, so an Escape
+    // stranded the user in an empty workspace named after the template.
+    {
+      await wc.executeJavaScript(`window.canvas.template.save({ id: 'wsH', name: 'one shell in', nodes: [
+        { key: 'a', kind: 'terminal', cwd: '{{folder}}', command: '/bin/sh', args: ['-c', 'sleep 300'], title: 'a', dx: 0, dy: 0 }
+      ], edges: [] })`)
+      flushLayoutStore()
+      const reWH = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reWH
+      await settle()
+      const before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
+      const activeBefore = await activeWorkspaceId()
+      await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      const ran = await wc.executeJavaScript(`(async () => {
+        const input = document.querySelector('.palette__input')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(input, 'New workspace from one shell in')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 150))
+        const row = [...document.querySelectorAll('.palette__row')].find((r) => r.textContent.includes('New workspace from one shell in'))
+        if (!row) return 'no row'
+        row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        return 'ok'
+      })()`)
+      const sheet = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-spawn-sheet] [data-sheet-hole="folder"]') !== null`), 4000)
+      await settle()
+      const duringList = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
+      const activeDuring = await activeWorkspaceId()
+      await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await settle()
+      const afterList = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => ws.map((w) => w.id))`)
+      const activeAfter = await activeWorkspaceId()
+      ok('workspace.template.2 a template with a parameter asks its sheet FIRST — no workspace is minted and none is switched to until Enter, and an Escape leaves both the list and the active workspace as they were',
+        ran === 'ok' && sheet === true && duringList.length === before.length && activeDuring === activeBefore && afterList.length === before.length && activeAfter === activeBefore,
+        JSON.stringify({ ran, sheet, before, duringList, afterList, activeBefore, activeDuring, activeAfter }))
     }
   }
 })
