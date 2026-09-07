@@ -967,5 +967,23 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     monoOk && section && state && dot && label, JSON.stringify({ monoRules, section, state, dot, label }))
 }
 
+// M176 — motion.2. MOTION WITH INTENT: every transition and animation in the
+// stylesheet runs on a token — --dur-1 (a reveal), --dur-2 (an arrival),
+// --dur-breath (the needs-you pulse and the caret) — never a literal; the
+// panel's arrival keyframe scales from .98 on --dur-2; only the five moments'
+// keyframes are declared (a spawn, the palette's rise, the pulse, the caret,
+// the trail card's arrival); the reduced-motion block exists (check 9).
+{
+  const literal = [...bare.matchAll(/(?:transition|animation)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
+  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*scale\(\s*\.98\s*\)/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
+  const breath = /--dur-breath:\s*1\.2s/.test(bare)
+  const names = [...bare.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).sort()
+  // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
+  const allowed = ['chat-caret', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  const stray = names.filter((n) => !allowed.includes(n))
+  ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival scales from .98 on --dur-2, and only the five moments are declared',
+    literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
