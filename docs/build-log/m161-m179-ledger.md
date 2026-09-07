@@ -202,3 +202,17 @@ Branches: `m161-polish-brief` (Act 0), `m163-frame` (Act I), `m167-conversation`
 - **Evidence (M162):** `node scripts/verify-styles.cjs` 41/41, exit 0. `npm run verify:meta`
   38/38, exit 0. `npm run verify:rail` 184/184, exit 0. `npm run typecheck` exit 0. `npm run
   build` exit 0. `npm run verify:visual` (plain, after every golden above) **57/57, exit 0**.
+
+Act 0 closed 2026-09-07. **Evidence:** `npm run verify` over the fix-wave commit — exit 0;
+tallies in chain order: meta 38, styles 41, viewport 137, groups 6, merged 12, registry 38,
+layout 234, credentials 18, jira 15, github 7, palette 143, rail 184, review 98, subagent 27,
+file 83, toolbox 103, usage 26, machine-cost 7, tmux 35, agent-state 27, agent-session 141,
+verbs 14, teammates 25, electron 4, control 15, package 13, pty 10, pty-manager 63, window 4,
+ipc 1, canvas 6, xterm 11, panels core 76 / shell 94 / kinds 48 / agents 77 / product 59.
+Build log `docs/build-log/m161-m162-act0-brief.md`. Merged to `main`.
+
+## Act I — M163–M166 (in progress)
+
+Spec `docs/superpowers/specs/2026-09-07-v8-act1-frame-design.md`, plan
+`docs/superpowers/plans/2026-09-07-v8-act1-frame.md`, branch `m163-frame`. Owed into this
+act from Act 0: the prose under `.pf__body--text` (M164).
