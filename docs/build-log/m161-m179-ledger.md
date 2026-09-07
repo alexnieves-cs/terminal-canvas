@@ -670,3 +670,36 @@ shell 95 / kinds 49 / agents 80 / product 59. Build log
 Spec `docs/superpowers/specs/2026-09-07-v8-act4-finish-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act4-finish.md`, branch `m176-finish`. Owed into this
 act: `notice.1` (the update link's click, M178); the audit's own findings.
+- **M176 — motion with intent.** Red: styles `motion.2` (53/54) — it found four literal
+  durations and a sixth keyframe (`navgrid-cell-enter`, M44's ⌘G grid rising: an overlay's
+  arrival, the palette's family, allowed by name). Feature: `--dur-breath: 1.2s` on `:root`
+  (the pulse's breath and the caret's blink), the panel's arrival a scale from `.98` with
+  its opacity on `--dur-2` (the old `translateY(8px)` slide gone), the trail card's arrival
+  on `--dur-2`, the auto chip's 900 ms spinner REMOVED (a state is a colour; the brief: a
+  soft cursor, never a spinner). Green: styles 54/54; a plain `verify:visual` **57/57, exit
+  0** (m176-visual.log) — no golden moved, as the spec predicted (an arrival ends before a
+  capture; the chip's static ring sits under the budget).
+- **M177 — empty states as places.** Red: rail `empty.2` on a committed stub (192/193),
+  styles `empty.1` (54/55). Feature: `shared/empty-states.ts` (fifteen sentences as data,
+  `emptyState(id)` refusing an unknown id), `shell/EmptyState.tsx` (glyph · sentence · one
+  verb, centred, the UI face; `fill` for the chat's engine word; `attrs` for the data
+  attributes the checks read), wired into the Panels list (`no panels — ⌘N to start one`
+  kept for `empty.1`, the hints beneath), Workspaces (with `New workspace…` through the
+  pane's own door), Runs and Snapshots (their attributes kept), the vault's unset and
+  missing arms (`no vault folder yet` and `data-vault-choose` kept for product 472), the
+  palette's no-match row, the chat's first state (`No turns yet. Send a message to start
+  {backend} here.` — the words codex.1 reads), the attention popover. **Kept as they were,
+  by name:** the Integrations audit's per-service sentence (it holds the service's name and
+  a `tc api` code span — listed in the data so the words are pinned, rendered by the pane in
+  its own form); the board's three column states (M149 F.7); the Skills column's `drop a
+  card here`; the work menu's and the workflow's run-tab sentences (each already a sentence
+  with a verb — an inline line in a body, not a place). Green: styles 55/55, rail 193/193.
+- **Golden sentences, M176–M177:** M176 moved none (57/57). M177 moved one — launcher · the
+  rail's empty state is the Panels glyph over `no panels — ⌘N to start one`, centred, with
+  the four hint sentences beneath; the launcher card unchanged from M174. Product 59/59 and
+  shell 95/95 (exit 0) after M177 (m177-run.log); the agents part hit its 109 s watchdog
+  once in that chained run and is re-measured alone below.
+  The agents part alone after M177: **80/80** twice, 90.37 s and 90.15 s (exit 0,
+  m177-agents.log, m177-agents2.log) — the 109 s watchdog had 1.2× of that after the three
+  checks Acts II–III added, and a chained run tripped it; re-pinned at 113 s (1.25× the
+  slower run, the M135 rule).

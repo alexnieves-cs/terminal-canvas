@@ -19,7 +19,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 4.0 (M160).** The eighth run, M134 to M160 (v7), was
+running a coding-agent CLI. **This is 4.1 (M179).** The ninth run, M161 to M179 (v8), was
+unattended in goal mode and made the canvas read as a product rather than an instrument: Act 0
+the baseline and the brief with its five rules and their checks (M161–M162); Act I the frame
+every kind wears — the quiet header, the body's material and the path rule, diffs as cards,
+the far view as a status wall (M163–M166); Act II the conversation — turns, tool rows, the
+composer, the agent card (M167–M170); Act III the shell — the rail as places, the dock and top
+bar, the status bar at rest, the launcher, palette and sheets (M171–M175); Act IV the finish —
+motion with intent, empty states as places, the second audit, this reconcile (M176–M179). Every
+milestone has a spec, a plan, red-first checks, a fresh-context critic and verifier, and a
+ledger line with its evidence; every golden that changed carries the critic's sentence
+(`docs/build-log/m161-m179-ledger.md`). Before it, **4.0 (M160)**: the eighth run, M134 to
+M160 (v7), was
 unattended and reviewed at every act by a fresh-context critic and verifier: Act 0 the
 baseline (and 3.1.0 for the M126–M133 act, which had shipped under no number); Act I split
 `verify:panels` into five parts with measured watchdogs, built `npm run handcheck`, swept the
@@ -83,7 +94,7 @@ The milestone table in `README.md` is the roadmap contract — several modules a
 deliberately shaped for a milestone that has not landed yet, and the code comments say so.
 Don't "simplify" those away.
 
-## What it is supposed to be
+## What it is
 
 The line above says "every node is a live terminal panel". That was 1.0's truth and it is the
 sentence this app has to outgrow. The destination, named in `docs/ideas-backlog.md` #9 and in
@@ -91,28 +102,44 @@ the v7 and v8 run prompts, is an **agent super app**: one calm native window whe
 arranges agents, conversations, files, boards and integrations on a canvas, and a terminal is
 *one* thing a panel can be — content inside a frame, not the material everything is made of.
 The register to hold it to is the Claude desktop app and Codex for the panels, and BridgeMind
-One for the posture (modes, a rail of named places, panes that split and tidy). The 4.0
-goldens under `verify/visual/goldens/` show how far off that register the build still is: six
-controls on every header at rest, raw `/private/var/folders/…` paths at full width, monospace
-wherever a human reads English, a status bar reciting CPU and RAM. Being *correct* is not the
-same as being *finished*, and everything below this section is about correctness.
+One for the posture (a rail of named places, panes that split and tidy). The 4.0 goldens
+showed how far off that register the build was: six controls on every header at rest, raw
+`/private/var/folders/…` paths at full width, monospace wherever a human read English, a
+status bar reciting CPU and RAM. The 4.1 goldens under `verify/visual/goldens/` are the
+register: a header at rest is a glyph, a name and a state; a chat is a conversation; the rail
+is a list of places; the status bar is a zoom pill. Being *correct* is not the same as being
+*finished*, and everything below this section is about correctness.
 
-The run that closes the gap is written down: `docs/superpowers/specs/2026-09-07-v8-product-polish-prompt.md`
-(M161–M179, in `/goal` mode). Until it has run, the following rules are the standard every
-new or touched surface is held to, so the gap stops widening:
+The run that closed the gap is `docs/superpowers/specs/2026-09-07-v8-product-polish-prompt.md`
+(M161–M179, 4.1.0; its brief is `docs/superpowers/specs/2026-09-07-m162-product-polish-brief.md`
+and its ledger `docs/build-log/m161-m179-ledger.md`). The following rules are the standard
+every new or touched surface is held to, each pinned by a `verify:styles` check named beside
+it, so the gap does not reopen:
 
-- **The face rule.** `--font-mono` is for code, commands, paths and terminal cells. Titles,
-  labels, rail rows, chat turns, descriptions, empty states, the launcher and hints are set in
-  `--font-ui`. If a human reads it as a sentence, it is not mono.
-- **The rest rule.** A surface at rest shows what identifies it — glyph, name, one state
-  word or dot. Verbs, marks and metrics appear on hover or focus. A control hidden at rest
-  stays in the tab order with its name (M44's reach rule still applies).
-- **The path rule.** Show the repository's basename and the path relative to it. The full
-  absolute path lives in a tooltip or the inspector, never in a panel body at rest.
-- **The metrics rule.** CPU, RAM, tokens and dollars belong in the inspector and the context
-  pane. No number of that kind appears in a panel header, the rail or the status bar.
-- **Words, not codes.** Every empty state says what the surface is for and offers one verb
-  (M127's critic, M149 F.7). No state is a bare zero or a bare ellipsis.
+- **The face rule** (`face.1`, `material.1`). `--font-mono` is for code, commands, paths and
+  terminal cells. Titles, labels, rail rows, chat turns, descriptions, empty states, the
+  launcher and hints are set in `--font-ui`. If a human reads it as a sentence, it is not
+  mono. A mono ANCESTOR is the failure this rule exists for: a container never sets mono; the
+  leaf that holds code does.
+- **The rest rule** (`rest.1`, `rail.1`, `dock.1`, `diff.1`; `verify:panels` `rest.1`,
+  `reveal.1`). A surface at rest shows what identifies it — glyph, name, one state word or
+  dot. Verbs, marks and metrics appear on hover or focus, at opacity 0 → 1 in `--dur-1`
+  (never display: the box, the name and the tab order stay, and a script's click lands
+  without a hover — M44's reach rule still applies). Opacity is 0 or 1 (check 3).
+- **The path rule** (`verify:rail path.1`, kinds `path.1`). `shared/display-path.ts` is the ONE
+  helper: the repository's basename and the path relative to it where a root is known, the
+  last two segments behind `…/` where none is (backlog #86 is the file and toolbox panels'
+  root); the full path on the element's `title`, never in a body at rest. `shortPath` lives
+  there too and the palette re-exports it.
+- **The metrics rule** (`metrics.1`, `hud.2`; shell `machine.1`). CPU, RAM, tokens and
+  dollars belong in the inspector (the Machine section — three arms, a fourth for a chat,
+  never a confident `0%`) and the context pane. No number of that kind appears in a panel
+  header, a card tier, the rail or the status bar; the HUD is a zoom pill.
+- **Words, not codes** (`empty.1`, `verify:rail empty.2`, `hints.1`). Every empty state says
+  what the surface is for and offers one verb (M127's critic, M149 F.7), through
+  `shell/EmptyState.tsx` over `shared/empty-states.ts`; the gesture hints and the tmux notice
+  are `canvas/hints.ts`'s sentences in the empty state and the launcher. No state is a bare
+  zero or a bare ellipsis.
 - **Conversation panels look like the conversation they are.** The user's turn is a soft
   bubble, the assistant's is unboxed prose at a readable measure, a tool call is one collapsed
   row (verb, target, state) that expands on click. The composer is a rounded well with one
@@ -124,9 +151,14 @@ new or touched surface is held to, so the gap stops widening:
   RE-VALUATION of an existing token is one theme's, recorded in the run's ledger with its
   finding; `--well` stays the xterm background and `--amber` a literal. No styling
   dependency is added — no Tailwind, no component library, no icon font; `icons.tsx` grows.
-- **A golden changes on purpose or not at all.** A restyle regenerates its scenes with
-  `npm run verify:visual`, and each changed scene gets a critic's sentence in the build log
-  before it is accepted. A blind re-baseline is a regression that cannot be seen.
+- **A golden changes on purpose or not at all** (the golden-sentence rule). A restyle
+  regenerates its scenes with `npm run verify:visual`, and each changed scene gets a critic's
+  sentence in the ledger before `UPDATE_GOLDENS=1` writes it; a change UNDER the budgets that
+  matters is forced by deleting the golden, with its sentence. A blind re-baseline is a
+  regression that cannot be seen. Two harness facts the run learned: the shot window's
+  content is pinned to the goldens' 1440x865 (macOS clamps a window to the work area at
+  creation only), and the fixture directory is a FIXED name — a per-run suffix in a printed
+  path moved goldens past the tile budget on some runs and not others.
 - **What a restyle may not touch.** The DOM aliases (`.panel__*`, the `*-node__*` hooks) that
   roughly two hundred checks select on — restyle the classes, never rename them. `.pf__body`,
   which is never transformed (`verify:panels frame.2`). xterm's cell metrics, the pointer
