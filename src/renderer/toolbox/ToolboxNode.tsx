@@ -38,6 +38,8 @@ export interface ToolboxNodeProps {
    * unbuilt, `PanelRow.agent`'s own lesson.
    */
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
+  /** M140. Open a row's own file in the file panel — M22's editor, the one write door. */
+  onOpenFile: (path: string) => void
   /**
    * Whether an in-flight link draw would land on THIS node if released now
    * (M35, Task 7 fix round 1). Required on TerminalPanel's own `linkTarget`
@@ -186,6 +188,12 @@ function ToolboxNodeImpl({
                   <span className="toolbox-node__scope">{row.scope}</span>
                   {row.state !== '' && <span className="toolbox-node__state">{row.state}</span>}
                   {row.detail !== '' && <span className="toolbox-node__detail">{row.detail}</span>}
+                  {/* M140. The Open door: the row's own file in the file panel. A
+                      deliberate edit of the file, never a one-click toggle — the
+                      entry's argument for hooks, permissions and MCP servers. */}
+                  <button type="button" className="rail-row__verb toolbox-node__open" data-toolbox-open={row.name}
+                    title={`Open ${row.sourcePath} in a file panel`}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onOpenFile(row.sourcePath) }}>open</button>
                 </li>
               ))}
             </ul>

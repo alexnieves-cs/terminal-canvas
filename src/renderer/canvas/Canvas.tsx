@@ -5572,6 +5572,7 @@ export function Canvas({
                   readOnly={merged}
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
+                  onOpenFile={(path) => openFilePanel(path, worldCentre())}
                 />
               )
             }
