@@ -1183,14 +1183,17 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // that RUNS it. Two verbs, never one — opening a shape and starting it are
   // different acts, and the palette says which is which.
   for (const t of templateRows) {
-    out.push({
+    // The merged view is read-only, so `openWorkflowPanel` returns without
+    // minting anything. A row that runs and does nothing is the silent
+    // failure this repository disables by name instead.
+    out.push(withReason({
       id: `workflow.open.${t.id}`,
       title: `Open ${t.name} as a workflow`,
       subtitle: `${t.nodes} block${t.nodes === 1 ? '' : 's'} - the diagram, its runs and its triggers`,
       searchText: 'workflow open diagram blocks template runs triggers',
       group: 'panel',
       run: () => actions.openWorkflow(t.id)
-    })
+    }, ctx.merged === true ? REASON_MERGED_READ_ONLY : undefined))
   }
   out.push(withReason({
     id: 'template.save',

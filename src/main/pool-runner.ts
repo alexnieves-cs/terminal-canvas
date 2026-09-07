@@ -106,7 +106,12 @@ export function startPool(node: PoolNode, deps: PoolDeps): PoolHandle {
       while (live.size < ceiling && pending.length > 0) {
         const next = pending.shift() as { idx: number; item: string }
         const { id } = await deps.createWorker(node.prompt, next.item)
-        if (stopped) return
+        // A stop() or a budget crossing that landed WHILE this await was
+        // pending has already interrupted everything it knew about — and this
+        // worker was not in `live` to be known. Returning without interrupting
+        // it orphans a freshly minted agent that no ceiling bounds and no
+        // budget can stop (pool.1h).
+        if (stopped) { deps.interrupt(id); return }
         live.add(id)
         deps.onEvent({ kind: 'started', id, item: next.item })
       }

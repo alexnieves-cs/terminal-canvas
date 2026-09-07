@@ -131,7 +131,7 @@ import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '@shared/templates'
-import { fillTemplate, templateHoles, templatePanels, templateRefusal } from '@renderer/palette/template-model'
+import { fillTemplate, templateHoles, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
 import { sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
@@ -3607,6 +3607,13 @@ export function Canvas({
   const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
     instantiateCountRef.current += 1
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    // Fix round 2. The blocks have no runtime yet and the loop below skips
+    // them by name, so a template carrying one would mint a PARTIAL shape and
+    // commit a history entry for it while still reporting `spawned`. Every
+    // Run door is disabled with this same sentence (`templateRefusal`); this
+    // is the last gate, for a caller that asked anyway.
+    const blocked = workflowBlockRefusal(template)
+    if (blocked !== undefined) return { kind: 'refused', reason: blocked }
     const filled = fillTemplate(template, values)
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const places = templatePanels(filled, centre)
@@ -4985,7 +4992,9 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onSetArmed={setWatcherArmed}
                   {...(source === undefined ? {} : { sourceLabel: railLabel(source, undefined) })}
-                  workflowName={panel.watch.templateId === undefined ? null : allTemplates(templateRows).find((t) => t.id === panel.watch.templateId)?.name}
+                  workflowWord={panel.watch.templateId === undefined
+                    ? { kind: 'none' }
+                    : ((n) => (n === undefined ? { kind: 'gone' } as const : { kind: 'named', name: n } as const))(allTemplates(templateRows).find((t) => t.id === panel.watch.templateId)?.name)}
                 />
               )
             }
@@ -5103,7 +5112,8 @@ export function Canvas({
               return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
-                deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null} />
+                deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
+                runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
             }
             if (isJiraPanel(panel)) return <JiraNode key={panel.rect.id} panel={panel} selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} onSpawn={spawnJiraTicket} onAddToBoard={addJiraToBoard} boardKeys={boardKeys} focusedId={focusedId} restoreFocus={restoreFocus} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onConnect={openCredentials} />
             const session = registry.get(panel.rect.id)

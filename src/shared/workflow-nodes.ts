@@ -64,7 +64,14 @@ export function blockCount(t: { nodes: readonly unknown[] }): number {
  * three.
  */
 export function parseWorkflowNode(raw: Record<string, unknown>, warnings: string[]): WorkflowNode | null {
-  const base = { cwd: String(raw.cwd ?? ''), dx: typeof raw.dx === 'number' ? raw.dx : 0, dy: typeof raw.dy === 'number' ? raw.dy : 0 }
+  // ABSENT is fine and means '' — but a PRESENT non-string is dropped by
+  // name, the terminal arm's own `isStr(n.cwd)` rule. String() coerced `{}`
+  // into the directory "[object Object]" and said nothing.
+  if (raw.cwd !== undefined && typeof raw.cwd !== 'string') {
+    warnings.push(`dropped ${String(raw.kind)} node: cwd was unusable`)
+    return null
+  }
+  const base = { cwd: typeof raw.cwd === 'string' ? raw.cwd : '', dx: typeof raw.dx === 'number' ? raw.dx : 0, dy: typeof raw.dy === 'number' ? raw.dy : 0 }
   if (raw.kind === 'pool') {
     const width = raw.width
     // Never coerced. A width of 0 is not "1 worker" — it is a file the author

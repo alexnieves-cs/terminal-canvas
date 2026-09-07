@@ -50,6 +50,12 @@ export interface WorkflowNodeProps {
   onDelete: (templateId: string) => void
   /** Why Delete cannot act, or null. */
   deleteReason: string | null
+  /**
+   * Fix round 2. Why this shape cannot be run — `templateRefusal`'s sentence,
+   * which since M131's blocks includes "<key> is a pool block, which cannot
+   * run yet". Run is DISABLED with it, never removed and never half-run.
+   */
+  runReason: string | null
   /** Mint a chat pointed at this template's file and schema — §4.1's door, aimed at a template. */
   onBuildWithAi: (templateId: string) => void
 }
@@ -133,7 +139,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
         ) : (
           <>
             <div className="workflow-node__verbs" data-workflow-verbs>
-              {verb('run', 'Run', null, () => props.onRun(id))}
+              {verb('run', 'Run', props.runReason, () => props.onRun(id))}
               {verb('triggers', 'Triggers', null, () => props.onTrigger(id))}
               {verb('save', 'Save', REASON_NO_EDITOR, () => {})}
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}

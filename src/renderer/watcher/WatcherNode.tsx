@@ -34,13 +34,29 @@ export interface WatcherNodeProps {
   /** The label of a `panel` trigger's source, when the canvas has one. */
   sourceLabel?: string
   /**
-   * M132. The name of the template this watcher instantiates, when it is one
-   * of those and the template still exists. Three arms, `workflowWatchWord`'s:
-   * `null` means nobody asked, `undefined` means the template is gone.
+   * M132. What template this watcher instantiates, when it is one of those.
+   *
+   * DISCRIMINATED, not `string | null | undefined`, because a JSX prop cannot
+   * carry three states through an optional field: `props.workflowName ?? null`
+   * — which is what an optional prop forces at the read site — collapsed the
+   * `gone` arm into `none` and made "runs a workflow that no longer exists"
+   * unreachable from this panel. The rail and the inspector pass the resolver
+   * result straight into `workflowWatchWord` and never had the problem.
    */
-  workflowName?: string | null
+  workflowWord?: { kind: 'none' } | { kind: 'gone' } | { kind: 'named'; name: string }
   /** M84. Arm or disarm this watcher — a persisted fact, so it survives a relaunch. */
   onSetArmed: (id: string, armed: boolean) => void
+}
+
+/**
+ * The discriminated prop back into `workflowWatchWord`'s own three arms:
+ * `null` nobody asked, `undefined` asked and the template is gone, a name
+ * otherwise. One conversion, in one place.
+ */
+function workflowNameArg(word: WatcherNodeProps['workflowWord']): string | undefined | null {
+  if (word === undefined || word.kind === 'none') return null
+  if (word.kind === 'gone') return undefined
+  return word.name
 }
 
 function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
@@ -92,7 +108,7 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
       // a command the user never typed.
       title={panel.title ?? (panel.watch.templateId === undefined
         ? `watcher · ${panel.watch.command.split('/').pop() ?? panel.watch.command}`
-        : `watcher · ${workflowWatchLabel(props.workflowName ?? null)}`)}
+        : `watcher · ${workflowWatchLabel(workflowNameArg(props.workflowWord))}`)}
       // The chrome row is the terminal's and the chat's: title, then the
       // PILL carrying the state word in its tone (M84's critic — a process
       // node without one reads as a document), then the trigger phrase, then
@@ -133,8 +149,8 @@ function WatcherNodeImpl(props: WatcherNodeProps): JSX.Element {
       onBeginLink={props.onBeginLink}
     >
       <div className="pf__body watcher-node__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
-        <p className="watcher-node__command" title={panel.watch.templateId === undefined ? `${panel.watch.command} ${panel.watch.args.join(' ')} in ${panel.watch.cwd}` : `${workflowWatchWord(props.workflowName ?? null)} in ${panel.watch.cwd}`}>
-          {panel.watch.templateId === undefined ? [panel.watch.command, ...panel.watch.args].join(' ') : workflowWatchWord(props.workflowName ?? null)}
+        <p className="watcher-node__command" title={panel.watch.templateId === undefined ? `${panel.watch.command} ${panel.watch.args.join(' ')} in ${panel.watch.cwd}` : `${workflowWatchWord(workflowNameArg(props.workflowWord))} in ${panel.watch.cwd}`}>
+          {panel.watch.templateId === undefined ? [panel.watch.command, ...panel.watch.args].join(' ') : workflowWatchWord(workflowNameArg(props.workflowWord))}
         </p>
         {snapshot.disarmed !== undefined && (
           <p className="pf__note watcher-node__refusal" data-watcher-disarmed role="alert">{snapshot.disarmed}</p>

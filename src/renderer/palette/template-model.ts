@@ -66,11 +66,32 @@ export function templatePanels(template: PersistedTemplate, centre: Point): Temp
  * Why this template cannot be instantiated, in a sentence naming the fix —
  * or undefined. A row is disabled with this, never hidden.
  */
+/**
+ * M131/M132, fix round 2. Why a template's WORKFLOW BLOCKS stop it running —
+ * or undefined.
+ *
+ * M131 landed the schema for `pool`, `orchestrator` and `collect`; nothing
+ * instantiates them yet, and `instantiateTemplate` skips them BY NAME. A
+ * template that is nothing but blocks therefore minted nothing at all and
+ * still reported `spawned`, committing a no-op history entry; a mixed one
+ * minted its terminals and quietly dropped the rest. Both are the partial
+ * shape this repository refuses everywhere else, so the FIRST block found is
+ * named and every Run door is disabled with the sentence rather than removed.
+ */
+export function workflowBlockRefusal(template: PersistedTemplate): string | undefined {
+  const block = template.nodes.find((n) => n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect')
+  return block === undefined ? undefined : `${block.key} is a ${block.kind} block, which cannot run yet`
+}
+
 export function templateRefusal(
   template: PersistedTemplate,
   presets: readonly { id: string }[],
   claudeAvailable: boolean
 ): string | undefined {
+  // Tested FIRST and deterministically: a template can carry both a block and
+  // a bad preset, and the block is the one that stops the whole shape.
+  const blocked = workflowBlockRefusal(template)
+  if (blocked !== undefined) return blocked
   const missing = template.nodes.find((n) => n.kind === 'terminal' && n.presetId !== undefined && !presets.some((p) => p.id === n.presetId))
   if (missing !== undefined) return `${missing.key} names a preset that no longer exists — save the template again`
   const bare = template.nodes.find((n) => n.kind === 'terminal' && n.presetId === undefined && (n.command ?? '') === '')

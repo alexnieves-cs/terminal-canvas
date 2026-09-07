@@ -1731,6 +1731,34 @@ const isResult = (l) => l.includes('"type":"result"')
         started.length === 3 && started.includes('w3'),
         JSON.stringify(events))
     }
+
+    // pool.1h — a stop() (or a budget crossing) that lands DURING a pending
+    // createWorker must not orphan the worker that await resolves into. The
+    // process is already minted at that point; returning without interrupting
+    // it leaves an agent running that no pool tracks, no ceiling bounds and
+    // no budget can stop — the silent counterpart of pool.1f's guarantee.
+    {
+      const events = []
+      const interrupted = []
+      let nextId = 0
+      let release = null
+      const handle = M.pool.startPool(poolNode(2), {
+        readList: () => ({ kind: 'ok', items: itemsOf(2) }),
+        limits: () => ({ maxConcurrent: 2, budgetUsd: 0 }),
+        spend: () => 0,
+        createWorker: () => new Promise((resolve) => { release = () => resolve({ id: `w${++nextId}` }) }),
+        interrupt: (id) => interrupted.push(id),
+        onEvent: (e) => events.push(e)
+      })
+      await tick(10)
+      handle.stop() // lands while the first createWorker is still pending
+      release()
+      await tick(20)
+      ok('pool.1h a stop() during a pending createWorker INTERRUPTS the worker it resolves into rather than orphaning it',
+        interrupted.length === 1 && interrupted[0] === 'w1' &&
+          events.filter((e) => e.kind === 'started').length === 0,
+        JSON.stringify({ events, interrupted }))
+    }
   }
 
   const failed = results.filter((r) => !r.pass)

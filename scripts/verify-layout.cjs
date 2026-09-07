@@ -3773,12 +3773,17 @@ try {
 
   // A pre-M131 template file (terminal/chat only) loads byte-identical.
   const preM131 = [{ id: 't0', name: 'old', nodes: [node(), node({ key: 'b', kind: 'chat' })], edges: [{ from: 'a', to: 'b', trigger: 'exit-ok' }] }]
-  const before = L.parseTemplates(preM131, [])
+  // The expectation is written BY HAND from the pre-M131 parser's own output
+  // shape (833cec7^ `parseTemplates`: id, name, [description], nodes, edges;
+  // a node as key, kind, cwd, dx, dy and then only the optional fields it
+  // carried). Comparing the new parser against itself — which this check did
+  // until the fix wave — proves nothing at all: both sides move together.
+  const PRE_M131_EXPECTED = '[{"id":"t0","name":"old","nodes":[{"key":"a","kind":"terminal","cwd":"~","dx":0,"dy":0},{"key":"b","kind":"chat","cwd":"~","dx":0,"dy":0}],"edges":[{"from":"a","to":"b","trigger":"exit-ok"}]}]'
   const w = []
   const after0 = L.parseTemplates(preM131, w)
   ok('workflow.1b a pre-M131 template file loads UNTOUCHED',
-     JSON.stringify(after0) === JSON.stringify(before) && w.length === 0,
-     'every existing template must survive this change silently')
+     JSON.stringify(after0) === PRE_M131_EXPECTED && w.length === 0,
+     `every existing template must survive this change silently — ${JSON.stringify(after0)}`)
 
   // An unknown kind drops the node AND its edges naming it; the template stays.
   const w2 = []
@@ -3799,6 +3804,17 @@ try {
      JSON.stringify({ droppedWidth, w3 }))
 
   ok('workflow.1e blockCount counts nodes, matching the header readout', L.blockCount(t1) === 3, JSON.stringify(t1))
+
+  // Fix wave — workflow.1f. A PRESENT-but-not-a-string cwd is dropped by
+  // name, matching the terminal arm's own `isStr(n.cwd)` rule; it is never
+  // coerced with String(), which turned `{}` into the directory
+  // "[object Object]" and 42 into "42" and said nothing.
+  const w4 = []
+  const badCwd = L.parseTemplates([{ id: 't4', name: 'bad cwd', nodes: [node(), pool({ key: 'p', cwd: 42 })], edges: [] }], w4)
+  ok('workflow.1f a present non-string cwd on a workflow node is dropped by name, never coerced',
+     badCwd.length === 1 && badCwd[0].nodes.length === 1 && badCwd[0].nodes[0].kind === 'terminal' &&
+       w4.some((x) => /cwd/.test(x)),
+     JSON.stringify({ badCwd, w4 }))
 } catch (e) {
   ok('workflow.1 (threw)', false, String(e && e.stack || e))
 }
