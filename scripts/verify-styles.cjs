@@ -985,5 +985,18 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
 }
 
+// M177 — empty.1. EMPTY STATES AS PLACES: one `.empty-state` rule — centred,
+// the UI face, a glyph slot (`.empty-state__glyph`), the sentence and one
+// verb — and no `__empty` or `.rail-empty` rule setting a mono face.
+{
+  const rule = all.find((r) => /(^|,)\s*\.empty-state\s*(,|$)/.test(r.sel))
+  const centred = rule ? /text-align:\s*center/.test(rule.body) && /font-family:\s*var\(--font-ui\)/.test(rule.body) : false
+  const glyph = all.some((r) => /\.empty-state__glyph\b/.test(r.sel))
+  const verb = all.some((r) => /\.empty-state__verb\b/.test(r.sel))
+  const monoEmpty = all.filter((r) => /__empty\b|\.rail-empty\b/.test(r.sel) && /--font-mono/.test(r.body)).map((r) => r.sel.trim())
+  ok('empty.1', 'one centred .empty-state rule in the UI face with a glyph slot and a verb, and no empty-state rule in mono',
+    centred && glyph && verb && monoEmpty.length === 0, JSON.stringify({ centred, glyph, verb, monoEmpty }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

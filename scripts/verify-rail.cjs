@@ -2481,6 +2481,22 @@ const session = (id, over = {}) => ({
     JSON.stringify({ ids }))
 }
 
+// M177 — empty.2. EMPTY STATES AS DATA: one list; every entry names what its
+//     surface is for in a sentence (never a bare zero, an ellipsis or a
+//     dash), a verb where the surface has a door; `emptyState(id)` throws on
+//     an unknown id rather than rendering nothing; the Panels list's sentence
+//     keeps empty.1's words.
+{
+  const list = Array.isArray(R.EMPTY_STATES) ? R.EMPTY_STATES : null
+  const get = typeof R.emptyState === 'function' ? R.emptyState : () => null
+  const bad = list ? list.filter((e) => typeof e.sentence !== 'string' || e.sentence.trim().length < 12 || /^[0—–\-…]+$/.test(e.sentence.trim()) || (e.verb !== undefined && (typeof e.verb !== 'string' || e.verb.trim() === ''))) : null
+  let threw = false
+  try { get('no-such-surface') } catch { threw = true }
+  ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused',
+    list !== null && list.length >= 12 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined),
+    JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id) }))
+}
+
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
 //     arm named: a terminal opens as chat only when it was started as a claude
 //     session AND its process is not live; a chat opens in a terminal only when

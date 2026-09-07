@@ -62,6 +62,7 @@ module.exports = {
   ...require('../src/shared/display-path'),
   ...require('../src/shared/markdown'),
   ...require('../src/renderer/canvas/hints'),
+  ...require('../src/shared/empty-states'),
   ...require('../src/renderer/shell/skills-pane-model'),
   /* M138. The pool block's Runs-tab projection: pure over main's events. */
   ...require('../src/renderer/workflow/pool-model')
