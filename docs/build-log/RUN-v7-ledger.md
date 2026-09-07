@@ -196,3 +196,16 @@ stretch #14 iframe were not started.
 manual-only list (the 100 % density, the blank terminal observation) and the dead-end audit's
 fifth walk (M140–M155) current; `docs/release-notes/4.0.0.md` is the release body as a repo
 file. The evidence lines (the chain, `verify:packaged`, the tag) follow.
+
+**Evidence (M160):**
+- `npm run verify` over `2fdd5b1` — exit 0. Tallies: meta 38, styles 39, viewport 137, groups
+  6, merged 12, registry 38, layout 234, credentials 18, jira 15, github 7, palette 143, rail
+  183, review 98, subagent 27, file 83, toolbox 103, usage 26, machine-cost 7, tmux 35,
+  agent-state 27, agent-session 141, verbs 14, teammates 25, electron 4, control 15, package
+  13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels core 76 / shell 94 /
+  kinds 48 / agents 77 / product 59.
+- `npm run verify:packaged` over the same tree — 12/12, exit 0.
+- `npm run verify:visual` — 57/57 twice (166.5 s, 166.2 s), 55 scenes, watchdog 209 s.
+- Watchdogs as pinned: core 49 s, shell 96 s, kinds 60 s, agents 109 s, product 98 s.
+- The tag `v4.0.0` is on the commit that records this section; the code it tags is
+  `2fdd5b1`'s, unchanged by that commit. Nothing pushed.
