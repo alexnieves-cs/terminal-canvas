@@ -235,6 +235,18 @@ const SCENES = [
       await k.shot('board')
       await k.dock('panels'); await sleep(300)
     } },
+  { name: 'chat-copilot', intent: 'M118/M120. The spawn sheet on the copilot row under the harness\'s stripped PATH: `what` reads `chat with copilot — not on PATH` (the disabled arm, by name, like the codex scene), the how row says `no mode flag` and `no effort flag` because copilot has neither, the model field is a SELECT whose empty choice is `auto (the CLI\'s default)` over the row\'s closed list, and the preview names the engine with its capability sentence (runs every tool on its own policy · no interrupt · no images · a read-only mode). A third engine is a row, not a new surface.',
+    run: async (kit) => {
+      await kit.press('k', { metaKey: true }); await sleep(400)
+      await kit.type('new panel'); await sleep(300)
+      await kit.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return !!i })()`)
+      await sleep(800)
+      await kit.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, '__copilot__'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(500)
+      await kit.shot('chat-copilot')
+      await kit.js(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await sleep(300)
+    } },
   { name: 'memory', intent: 'The project memory as a node: what this repository has decided, tried and failed, newest first, each `kind · text · time`, with the count in the chrome row and one line to add another in the selected kind\'s own words. One list, written by people and agents alike — the same list `tc memory add` writes to from inside a panel. (A chat carries these with its FIRST message and says so above its composer; this scene\'s chat already has a history, so the note is not in frame.)',
     run: async (kit) => {
       await kit.goTo('memory · repo')
@@ -377,7 +389,7 @@ const SCENES = [
     run: async (k) => { await k.click('.shell__spawn'); await sleep(700); await k.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; s.value = 'claude'; s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`); await sleep(200); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) { w.focus(); w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })) } return !!w })()`); await sleep(600); await k.shot('spawn-sheet'); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`); await sleep(300) } },
   { name: 'palette-dark', intent: 'The palette at rest on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.press('k', { metaKey: true }); await sleep(600); await k.shot('palette-dark'); await k.closePalette(); await k.theme('light') } },
-  { name: 'search', intent: 'Search across every panel (Cmd+F) for "FAIL": hits from the durable log, each naming its panel, with the matching line.',
+  { name: 'search', intent: 'Search across every panel (Cmd+F) for "FAIL": hits from the durable log, each naming its panel, with the matching line. M122: the scope now reads BOTH durable logs — the scrollback logs and the chat transcript logs — and what the answer left out comes first (the cap line, the redaction count), each only when non-zero.',
     run: async (k) => { await k.press('f', { metaKey: true, code: 'KeyF' }); await sleep(500); await k.type('FAIL'); await sleep(900); await k.shot('search') } },
   { name: 'search-empty', intent: 'The same search with a term nothing said: an empty state that names the term and says there were no matches, not a blank list.',
     run: async (k) => { await k.type('zzqx'); await sleep(900); await k.shot('search-empty'); await k.closePalette() } },
@@ -730,7 +742,7 @@ app.whenReady().then(async () => {
     {
       tail: (panelId, lines) => scrollbackLog.tail(panelId, lines),
       clear: () => scrollbackLog.clearAll(),
-      search: (panelIds, query) => scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })
+      search: async (panelIds, query) => ({ hits: (await scrollbackLog.search(panelIds, query, { maxHits: 50, maxPerPanel: 5 })).map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 })
     },
     () => ({
       probedAt: Date.now(), shell: { path: '/bin/zsh', ok: true }, pathEntries: ['/usr/bin', '/bin'],
@@ -778,7 +790,9 @@ app.whenReady().then(async () => {
           return { bytes, size }
         }
       })
-      : { kind: 'unreadable', why: 'only the trail scene has a transcript here' })
+      : { kind: 'unreadable', why: 'only the trail scene has a transcript here' }),
+    // M123. No harness reaches the network: the third state, by name.
+    { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) }
   )
   wc.on('did-finish-load', () => { ptyManager.resendStates() })
   wc.on('console-message', (_e, level, message) => { if (level >= 2) console.log('[renderer]', String(message).slice(0, 200)) })

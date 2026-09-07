@@ -11,8 +11,10 @@ import {
 } from '@shared/transcript'
 import { BACKEND_ADAPTERS } from './backend-adapters'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
+import { imagesAllowed } from '@shared/agent-session'
 import type {
   AgentBackend,
+  NegotiatedCapabilities,
   AgentSessionStatus,
   AgentSessionSpec,
   PendingPermission,
@@ -158,12 +160,33 @@ interface Session {
   exitCode?: number | null
   exitSignal?: string
   everSpawned: boolean
+  /** M120. A chat with no place: the row's sandboxArgs ride every spawn; a row without them refuses the send. */
+  sandbox: boolean
   carry: string
+  /**
+   * M119. A backend with a handshake (ACP) opens its session AFTER the
+   * process is up: `initialize`, then `session/new` or `session/load` once
+   * that answers. The first prompt is HELD here until the session event
+   * names an id — a prompt written before that is a prompt with no session,
+   * which the agent errors on or ignores, and the panel reads `working`
+   * forever. Cleared with the process (exit, dispose, an error result).
+   */
+  awaitingHandshake: boolean
+  handshakeTimer: ReturnType<typeof setTimeout> | null
+  /** Whether the pending handshake should load the session it names rather than mint one. */
+  handshakeResume: boolean
+  heldPrompt?: { text: string; images: OutgoingImage[] }
+  /**
+   * M119. What the LAST handshake answered. Kept across an exit (the next
+   * spawn's own answer replaces it), so a snapshot between processes still
+   * states the fact; never persisted — a relaunch asks again.
+   */
+  negotiated?: NegotiatedCapabilities
   turns: TranscriptTurn[]
   inFlight: boolean
   interrupting: boolean
   interruptTimer: ReturnType<typeof setTimeout> | null
-  abortReason: 'interrupt-timeout' | 'budget' | null
+  abortReason: 'interrupt-timeout' | 'handshake-timeout' | 'budget' | null
   /** `auto` marks a continuation the run pushed: dropped with the run, never served after it. */
   queue: { text: string; images: OutgoingImage[]; auto?: true }[]
   pending: Map<string, PendingPermission>
@@ -235,7 +258,13 @@ export class AgentSessionManager {
       // M90/M99. A backend whose thread id is the CLI's own has no pin to
       // create at: a record with turns names a real thread, so it resumes.
       everSpawned: spec.resume !== undefined || (BACKENDS[backend].adoptsThreadId && (this.deps.hasTurns?.(spec.id) ?? false)),
+      sandbox: spec.sandbox === true,
       carry: '',
+      awaitingHandshake: false,
+      handshakeTimer: null,
+      // M120. The chosen model shows in the header before the first turn; the stream's own word replaces it.
+      model: spec.agentOptions?.model,
+      handshakeResume: false,
       turns: [],
       inFlight: false,
       interrupting: false,
@@ -270,9 +299,12 @@ export class AgentSessionManager {
     // M82. The canvas's own ceilings, read LIVE (a setting changed while a
     // panel is open must take effect on the next send, not the next launch).
     if (this.binaryFor(session.backend) === undefined) return 'refused-backend'
+    // M120. A row with no read-only mode cannot run a chat with no folder: refused by name, nothing spawned.
+    if (session.sandbox && BACKENDS[session.backend].sandboxArgs === undefined) return 'refused-sandbox'
     // M90. A prompt that is an argument has no block to carry an image.
-    // Refused whole and stored nowhere, like the budget's refusal.
-    if (!BACKENDS[session.backend].images && images.length > 0) return 'refused-images'
+    // Refused whole and stored nowhere, like the budget's refusal. M119: the
+    // handshake's answer outranks the row when this process gave one.
+    if (images.length > 0 && !imagesAllowed(session, BACKENDS[session.backend])) return 'refused-images'
     // M97. A send by hand after a resolved run supersedes its chip: the next
     // snapshot no longer carries it (the renderer's dismiss is local; this is
     // main's half, so a workspace switch does not resurrect a dismissed chip).
@@ -342,8 +374,11 @@ export class AgentSessionManager {
     // composer names (`close the panel to stop it`) rather than doing here
     // under a verb that means "finish gracefully" on the other backend.
     if (!BACKENDS[session.backend].interrupts) return false
+    // M119. A prompt still held behind the handshake has not reached the
+    // agent: nothing is answering, so there is nothing to cancel.
+    if (session.awaitingHandshake) return false
     const requestId = `tc-int-${++this.requestSeq}`
-    session.proc.write(interruptLine(requestId))
+    session.proc.write(BACKEND_ADAPTERS[session.backend].encodeInterrupt?.(session, requestId) ?? interruptLine(requestId))
     session.interrupting = true
     this.clearInterruptTimer(session)
     const proc = session.proc
@@ -392,7 +427,11 @@ export class AgentSessionManager {
       external(answer.allow)
     } else {
       if (!session.proc) return false
-      session.proc.write(permissionResponseLine(requestId, pending.input, answer))
+      // M119. The grant is read at ANSWER time: main grants first and then
+      // answers through this door (index.ts's order), so a vendor with a
+      // word for the grant (ACP's allow_always) hears it on this very answer.
+      const grant = answer.allow && this.deps.preAnswer?.(id, pending.toolName) === true
+      session.proc.write(this.encodePermission(session, requestId, pending.input, answer, grant))
     }
     session.pending.delete(requestId)
     if (session.auto !== undefined && session.pending.size === 0 && session.auto.permissionTimer !== null) { clearTimeout(session.auto.permissionTimer); session.auto.permissionTimer = null }
@@ -418,7 +457,7 @@ export class AgentSessionManager {
     session.auto.sending = true
     const sent = this.send(id, prompts.opening)
     if (session.auto) session.auto.sending = false
-    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'no-session') {
+    if (sent === 'refused-budget' || sent === 'refused-backend' || sent === 'refused-sandbox' || sent === 'no-session') {
       this.resolveAuto(session, 'stuck', sent === 'refused-budget' ? 'budget' : 'error')
       return { kind: 'refused', reason: sent === 'refused-budget' ? 'the budget refused the opening send' : 'the send was refused' }
     }
@@ -500,6 +539,8 @@ export class AgentSessionManager {
     session.autoLast = undefined
     this.dropBatch(session)
     session.queue.length = 0
+    session.heldPrompt = undefined
+    session.awaitingHandshake = false
     for (const resolve of session.external.values()) resolve(false)
     session.external.clear()
     session.pending.clear()
@@ -551,6 +592,26 @@ export class AgentSessionManager {
     const proc = this.spawn(session, { text: '', resume })
     if (proc === undefined) return
     session.everSpawned = true
+    // M119. A wire with a handshake: the opening line goes first, and the
+    // session opens when it answers (the `session` arm below). Sequential,
+    // as measured — a session/new pipelined behind initialize was never
+    // recorded, and an agent that refused it would fail silently.
+    const opening = BACKEND_ADAPTERS[session.backend].handshake?.(session)
+    if (opening !== undefined) {
+      session.awaitingHandshake = true
+      session.handshakeResume = resume
+      proc.write(opening)
+      // A handshake nobody answers — a logged-out CLI, an older binary printing
+      // help and idling — must not leave the panel at `starting` forever with
+      // both verbs dead: the interrupt grace applies, and the kill names it.
+      this.clearHandshakeTimer(session)
+      session.handshakeTimer = setTimeout(() => {
+        session.handshakeTimer = null
+        if (this.sessions.get(session.id) !== session || session.proc !== proc || !session.awaitingHandshake) return
+        session.abortReason = 'handshake-timeout'
+        proc.kill()
+      }, this.interruptGraceMs)
+    }
     this.setStatus(session, 'starting')
   }
 
@@ -587,7 +648,8 @@ export class AgentSessionManager {
       resume: turn.resume,
       sessionId: session.sessionId,
       agentOptions: session.agentOptions,
-      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt })
+      ...(session.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: session.appendSystemPrompt }),
+      ...(session.sandbox ? { sandbox: true as const } : {})
     })
     // `closeStdin` is written only when true: the fake runner records the
     // spawn as handed, and M71's checks compare the claude spawn by shape.
@@ -599,7 +661,7 @@ export class AgentSessionManager {
     session.abortReason = null
     proc.onData((chunk) => {
       if (this.sessions.get(session.id) !== session || session.proc !== proc) return
-      const { events, carry } = adapter.parseChunk(chunk, session.carry)
+      const { events, carry } = adapter.parseChunk(chunk, session.carry, { sessionId: session.sessionId })
       session.carry = carry
       for (const event of events) this.handle(session, event)
     })
@@ -624,10 +686,21 @@ export class AgentSessionManager {
 
   private writeUser(session: Session, text: string, images: readonly OutgoingImage[] = []): void {
     if (!session.proc) return
-    session.proc.write(userMessageLine(text, images))
     session.inFlight = true
     session.interrupting = false
+    // M119. Held, not written, until the session opens; a second send in the
+    // meantime queues behind `inFlight` like any turn.
+    if (session.awaitingHandshake) {
+      session.heldPrompt = { text, images: [...images] }
+      return
+    }
+    session.proc.write(BACKEND_ADAPTERS[session.backend].encodeUser?.(session, text, images) ?? userMessageLine(text, images))
     if (session.status === 'ready') this.setStatus(session, 'streaming')
+  }
+
+  /** M119. The adapter's answer line when it has one; claude's control_response otherwise. */
+  private encodePermission(session: Session, requestId: string, input: Record<string, unknown>, answer: PermissionAnswer, grant: boolean): string {
+    return BACKEND_ADAPTERS[session.backend].encodePermission?.(session, requestId, input, answer, grant) ?? permissionResponseLine(requestId, input, answer)
   }
 
   private handle(session: Session, event: TranscriptEvent): void {
@@ -635,10 +708,40 @@ export class AgentSessionManager {
     switch (event.type) {
       case 'session':
         session.model = event.model ?? session.model
+        if (event.negotiated !== undefined) session.negotiated = { ...event.negotiated }
+        if (event.sessionId === '') {
+          // M119. The handshake's first answer (ACP's initialize): no session
+          // yet. Open one now — the adapter decides whether that is a new
+          // session or a load of the one this session names.
+          if (session.awaitingHandshake && session.proc) {
+            // M119. The row promised a resume; the agent's own answer decides.
+            // A load on an agent that said loadSession: false errors — or
+            // silently starts fresh under the old id, which is worse.
+            const resume = session.handshakeResume && (session.negotiated?.loadSession ?? true)
+            const open = BACKEND_ADAPTERS[session.backend].openSession?.(session, resume)
+            if (open !== undefined) session.proc.write(open)
+          }
+          this.emit({ id, ...event })
+          return
+        }
         // M90. codex mints the thread id; the first stream is where the
         // session learns what `exec resume` must name. claude's id is ours
         // (pinned with --session-id), and the event only ever repeats it.
         if (BACKENDS[session.backend].adoptsThreadId) { session.sessionId = event.sessionId; session.everSpawned = true }
+        // M118. A per-turn row whose id is the HOST's (copilot): the first
+        // stream is still where the session learns the CLI now holds it, so
+        // the next process must name `--resume=` rather than pin again — a
+        // second pin of the same id is a fresh conversation with no memory.
+        else if (BACKENDS[session.backend].oneProcessPerTurn) session.everSpawned = true
+        this.clearHandshakeTimer(session)
+        if (session.awaitingHandshake) {
+          // M119. The session is open: the held prompt goes now, through the
+          // ordinary writer (the hold is off, so it writes).
+          session.awaitingHandshake = false
+          const held = session.heldPrompt
+          session.heldPrompt = undefined
+          if (held !== undefined) this.writeUser(session, held.text, held.images)
+        }
         if (session.status === 'starting') this.setStatus(session, session.inFlight ? 'streaming' : 'ready')
         this.emit({ id, ...event })
         return
@@ -657,6 +760,9 @@ export class AgentSessionManager {
         this.enqueueDelta(session, { id, ...event })
         return
       case 'assistant': {
+        // M119. History an ACP session/load replays: stored already (the
+        // transcript file), so storing it again doubles every turn on relaunch.
+        if (event.replay === true) return
         const last = session.turns[session.turns.length - 1]
         if (last && last.role === 'assistant' && last.id === event.messageId) {
           last.blocks.push(...event.blocks)
@@ -690,6 +796,11 @@ export class AgentSessionManager {
         const interrupted = session.interrupting
         session.inFlight = false
         session.interrupting = false
+        // M119. An error answer to the handshake itself (a load the agent
+        // refused): the held prompt never went, and this result is its end.
+        session.awaitingHandshake = false
+        session.heldPrompt = undefined
+        this.clearHandshakeTimer(session)
         this.clearInterruptTimer(session)
         session.turnCount += 1
         if (event.usage) session.usage = addTotals(session.usage, event.usage)
@@ -731,7 +842,7 @@ export class AgentSessionManager {
         // naming the tool. The answer is written to THIS process (the
         // identity gate above already held when the chunk arrived).
         if (this.deps.preAnswer?.(id, event.toolName) === true && session.proc) {
-          session.proc.write(permissionResponseLine(event.requestId, event.input, { allow: true }))
+          session.proc.write(this.encodePermission(session, event.requestId, event.input, { allow: true }, true))
           this.emit({ id, type: 'permission-auto-allowed', requestId: event.requestId, toolName: event.toolName })
           return
         }
@@ -783,6 +894,9 @@ export class AgentSessionManager {
     session.exitCode = info.code
     session.exitSignal = info.signal ?? undefined
     session.carry = ''
+    session.awaitingHandshake = false
+    session.heldPrompt = undefined
+    this.clearHandshakeTimer(session)
     this.clearInterruptTimer(session)
     // M97. A run whose process exited is stuck: exit — a real verdict with a
     // reason, never a chip that keeps spinning over a dead process.
@@ -863,6 +977,10 @@ export class AgentSessionManager {
     session.batch = []
   }
 
+  private clearHandshakeTimer(session: Session): void {
+    if (session.handshakeTimer !== null) { clearTimeout(session.handshakeTimer); session.handshakeTimer = null }
+  }
+
   private clearInterruptTimer(session: Session): void {
     if (session.interruptTimer !== null) {
       clearTimeout(session.interruptTimer)
@@ -930,6 +1048,8 @@ export class AgentSessionManager {
       pending: [...session.pending.values()],
       queued: session.queue.length,
       counters: { ...session.counters },
+      ...(session.negotiated === undefined ? {} : { negotiated: { ...session.negotiated } }),
+      ...(session.awaitingHandshake ? { awaitingHandshake: true as const } : {}),
       ...(session.auto !== undefined ? { auto: { mode: session.auto.mode, turn: session.auto.turn, limit: session.auto.limit, state: 'running' as const } } : session.autoLast !== undefined ? { auto: session.autoLast } : {})
     }
   }

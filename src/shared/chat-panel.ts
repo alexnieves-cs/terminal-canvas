@@ -33,6 +33,10 @@ export interface ChatSource {
   teammateId?: string
   /** M114. This chat is a dispatched LANE: its next spawn carries DISPATCH_PROMPT again. Absent for every other chat. */
   dispatch?: true
+  /** M120. A chat with NO place: main resolves its cwd to the app's own sandbox folder and spawns on the row's read-only mode, on every create. */
+  sandbox?: true
+  /** M121. This chat is a ROUTINE's: its next spawn carries ROUTINE_PROMPT again (the same rule). Absent for every other chat. */
+  routine?: true
 }
 
 /**
@@ -40,6 +44,6 @@ export interface ChatSource {
  * carry: absent stays absent, and only `true` is ever written. Spread beside
  * `carryBackend` at every site that rebuilds a ChatSource field by field.
  */
-export function carryChatMarks(chat: { dispatch?: true }): { dispatch?: true } {
-  return chat.dispatch === true ? { dispatch: true } : {}
+export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true }): { dispatch?: true; sandbox?: true; routine?: true } {
+  return { ...(chat.dispatch === true ? { dispatch: true as const } : {}), ...(chat.sandbox === true ? { sandbox: true as const } : {}), ...(chat.routine === true ? { routine: true as const } : {}) }
 }

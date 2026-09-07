@@ -4,6 +4,7 @@ import { REASON_NOT_ON_PATH } from '@renderer/palette/commands'
 import type { EnvReport } from '@shared/env-report'
 import { shellControl } from '@renderer/shell/shell-control'
 import { probeOutcome } from '@shared/env-report'
+import type { UpdateState } from '@renderer/session/update-store'
 
 export interface LauncherProps {
   presets: PresetRow[]
@@ -24,6 +25,13 @@ export interface LauncherProps {
   /** M91. The codex door: its reason when the CLI is absent. */
   onNewCodexChat: () => void
   codexReason: string | null
+  /** M120. The third door: a chat with no folder, in the app's own sandbox on the row's read-only mode. */
+  onNewSandboxChat: () => void
+  sandboxReason: string | null
+  /** M123. The last update check (update-store.ts); the footer gains a line only on `newer`. Absent in a fixture. */
+  update?: UpdateState | null
+  /** M123. Open the release page through main's link door; absent hides the verb. */
+  onOpenRelease?: (url: string) => void
 }
 
 /**
@@ -49,7 +57,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -109,6 +117,12 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
           <span className="launcher__verb-name">Chat with Codex…</span>
           <span className="launcher__verb-hint">{codexReason === null ? 'a conversation panel — codex, one process per turn' : codexReason}</span>
         </button>
+        {/* M120. The third conversation door: no folder at all — the app's own sandbox, read-only tools. */}
+        <button type="button" className="launcher__verb" data-launcher-new-sandbox disabled={sandboxReason !== null}
+          title={sandboxReason === null ? 'A chat with claude in a folder of the app\'s own, on plan mode — no repository, no edits' : sandboxReason} {...shellControl(() => { if (sandboxReason === null) onNewSandboxChat() })}>
+          <span className="launcher__verb-name">New chat (no folder)…</span>
+          <span className="launcher__verb-hint">{sandboxReason === null ? 'a conversation not about a repository — read-only, nowhere to write' : sandboxReason}</span>
+        </button>
         {/* On an empty canvas "select a panel first" names an impossible fix;
             the launcher's own reason says what to do here. */}
         <button type="button" className="launcher__verb" data-launcher-new-note disabled={noteReason !== null}
@@ -127,6 +141,25 @@ export function Launcher({ presets, report, onSpawnPreset, onOpenSheet, onOpenFi
             {' — '}<span className="launcher__env-hint">Environment… in ⌘K</span>
             {onCheckAgain !== undefined && (
               <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>
+            )}
+          </p>
+        )
+      })()}
+      {/* M123. A second footer line ONLY when the last check said `newer`:
+          `current` and `could-not-check` say nothing here (the environment
+          rows carry them), because a launcher that reported "up to date" on
+          every fresh install would be a line nobody reads. A NOTICE — the
+          verb opens the release page through main's link door; nothing is
+          downloaded or installed (auto-swap is declined by name for an
+          unsigned build). */}
+      {update !== undefined && update !== null && update.result !== null && update.result.kind === 'newer' && (() => {
+        const url = update.result.url
+        return (
+          <p className="launcher__env" data-launcher-update data-launcher-update-version={update.result.version}>
+            <span data-tone="needs-you">{update.result.version} is out</span>
+            {' — '}<span className="launcher__env-hint">the app does not install it — download from the release page</span>
+            {onOpenRelease !== undefined && (
+              <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-open-release title={url} {...shellControl(() => onOpenRelease(url))}>Open release</button>
             )}
           </p>
         )

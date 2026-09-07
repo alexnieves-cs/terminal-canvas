@@ -108,12 +108,25 @@ export function finishRun(run: PersistedRun, at: number, costUsd: number | undef
  * A run still open in a SAVED layout was abandoned by a relaunch: the
  * recorder's component is gone with the renderer, so nothing could ever seal
  * it. Sealed on load with the relaunch named on every open entry.
+ *
+ * M121. With an `idle` predicate the seal is narrower and can run at any
+ * time: only a run whose EVERY panel answers idle (or is absent — the
+ * predicate is asked about every id, and a panel that is gone is idle by
+ * construction for the caller that knows the roster) is sealed, with the
+ * idle panels named on its open entries. Nothing will ever fire such a
+ * run's remaining edges, and left open it reads `working` for ever beside
+ * panels that are not. A run with one busy panel stays open.
  */
-export function sealAbandoned(runs: readonly PersistedRun[], at: number): PersistedRun[] {
-  return runs.map((run) => run.endedAt !== undefined ? run : {
-    ...run,
-    endedAt: at,
-    entries: run.entries.map((e) => (e.outcome === undefined ? { ...e, endedAt: at, outcome: 'abandoned — the app relaunched' } : e))
+export function sealAbandoned(runs: readonly PersistedRun[], at: number, idle?: (panelId: string) => boolean): PersistedRun[] {
+  const reason = idle === undefined ? 'abandoned — the app relaunched' : 'abandoned — its panels were idle'
+  return runs.map((run) => {
+    if (run.endedAt !== undefined) return run
+    if (idle !== undefined && !run.panelIds.every((id) => idle(id))) return run
+    return {
+      ...run,
+      endedAt: at,
+      entries: run.entries.map((e) => (e.outcome === undefined ? { ...e, endedAt: at, outcome: reason } : e))
+    }
   })
 }
 

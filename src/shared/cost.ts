@@ -58,9 +58,10 @@ export function addTotals(a: TokenTotals, b: TokenTotals): TokenTotals {
  * Absent means an ordinary terminal/login shell or a user command whose
  * vendor contract this app does not know.
  */
-export type AgentKind = 'claude-code' | 'codex'
+export type AgentKind = 'claude-code' | 'codex' | 'copilot'
 
-export const AGENT_KINDS: readonly AgentKind[] = ['claude-code', 'codex']
+/** M118. `copilot` is a preset kind too: the CLI has an interactive mode, and the built-in preset's probe is how the chat doors learn it is on the PATH (codex's rule). */
+export const AGENT_KINDS: readonly AgentKind[] = ['claude-code', 'codex', 'copilot']
 
 /**
  * The knobs an agent CLI exposes at spawn, carried as ONE optional record
@@ -208,5 +209,13 @@ export const AGENT_CAPABILITIES: Readonly<Record<AgentKind, AgentCapability>> = 
     },
     transcriptAccounting: false,
     headless: headlessOf(BACKENDS.codex)
+  },
+  // M118. The headless facts are the copilot row's; the acp row shares the binary and has no preset kind of its own.
+  copilot: {
+    flags: {
+      model: '--model'
+    },
+    transcriptAccounting: false,
+    headless: headlessOf(BACKENDS.copilot)
   }
 }

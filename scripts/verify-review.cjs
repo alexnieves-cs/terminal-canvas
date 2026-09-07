@@ -1807,6 +1807,12 @@ if (GIT) {
   const clone = join(base, 'clone here')
   const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
   execFileSync('git', ['init', '-q', '--bare', bare])
+  // M124. The bare origin's HEAD must NAME main: on a runner whose init.defaultBranch
+  // is master, HEAD points at a branch that never exists, the second clone checks
+  // out an unborn branch, its commit starts a second root, and `push HEAD:main`
+  // is non-fast-forward — the CI red of Act 0, locally green because the
+  // author's default branch is main. symbolic-ref works on every git.
+  execFileSync('git', ['-C', bare, 'symbolic-ref', 'HEAD', 'refs/heads/main'])
   execFileSync('git', ['clone', '-q', bare, clone])
   g(clone, 'config', 'user.email', 'v@e.com'); g(clone, 'config', 'user.name', 'v')
   g(clone, 'checkout', '-q', '-b', 'main')
@@ -1817,6 +1823,7 @@ if (GIT) {
   const other = join(base, 'other')
   execFileSync('git', ['clone', '-q', bare, other])
   g(other, 'config', 'user.email', 'v@e.com'); g(other, 'config', 'user.name', 'v')
+  g(other, 'checkout', '-q', 'main')
   fs.writeFileSync(join(other, 'c.txt'), 'remote\n'); g(other, 'add', '-A'); g(other, 'commit', '-qm', 'remote'); g(other, 'push', '-q', 'origin', 'HEAD:main')
   g(clone, 'fetch', '-q')
   const runner = R.createGitRunner({ gitPath: () => 'git', env: () => process.env, timeoutMs: () => 20000 })

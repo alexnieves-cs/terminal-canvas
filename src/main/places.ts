@@ -46,5 +46,10 @@ export function createPlacesGate(deps: PlacesGateDeps): PlacesGate {
   }
 }
 
+/** M120. A teammate has places; a chat with no folder has none — the ONE sentence agent:create asks before anything is made. */
+export function sandboxTeammateRefusal(spec: { sandbox?: true; teammateId?: string }): string | null {
+  return spec.sandbox === true && spec.teammateId !== undefined ? 'a teammate has places; a chat with no folder has none — pick one or the other' : null
+}
+
 /** The real filesystem's realpath — the only non-pure line in this module. */
 export const fsRealpath: Realpath = (p) => realpathSync(p)

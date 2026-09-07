@@ -10,8 +10,10 @@ import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
 import { resolveToolboxHome } from './toolbox-read'
 import { buildPushArgs } from './git-args'
+import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
+import { searchPanels } from './panel-search'
 import { createBoardLane } from './board-lane'
-import { createPlacesGate, fsRealpath } from './places'
+import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { skillsForBrief, skillsBriefLine, repoRootForBrief, notVisibleFor } from './skill-assign'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
@@ -59,13 +61,15 @@ import { createAgentTranscriptLog } from './agent-transcript-log'
 import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
+import { checkForUpdate, repoOf } from './update-check'
+import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript, readFrom as readTranscriptFrom } from './transcript-reader'
 import { trailFor, forgetTrail } from './skill-trail-read'
 import type { AgentHandlers } from './ipc'
-import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
+import { type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
 import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
 import { FileWatchers } from './file-watch'
@@ -186,6 +190,7 @@ let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
 /** M90. The second headless CLI, from the same probe. Null means the codex chat row is disabled by name. */
 let codexPath: string | null = null
+let copilotPath: string | null = null
 
 // Getters for the reason PtyManager's getBackend is one: this runner is
 // constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
@@ -916,7 +921,7 @@ app.whenReady().then(async () => {
   const env = await resolveShellEnv()
   loginEnv = env
   probedAt = Date.now()
-  for (const binary of ['claude', 'codex', 'git']) {
+  for (const binary of ['claude', 'codex', 'copilot', 'git']) {
     const found = whichFromEnv(binary, env)
     // The diagnostic and the review engine's git are ONE resolution, not two.
     // This loop already computed the right answer before M9a's fix round and
@@ -925,6 +930,7 @@ app.whenReady().then(async () => {
     if (binary === 'git') gitPath = found
     if (binary === 'claude') claudePath = found
     if (binary === 'codex') codexPath = found
+    if (binary === 'copilot') copilotPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
   // The bare name is kept when the probe found nothing: the spawn then fails
@@ -937,6 +943,8 @@ app.whenReady().then(async () => {
     // M90. Present only when found: an absent codex makes a codex send
     // `refused-backend`, never a spawn of a bare name that ENOENTs.
     ...(codexPath === null ? {} : { codex: { command: codexPath } }),
+    // M118/M119. Present only when found, like codex: the copilot binary serves both its JSONL row and its ACP row.
+    ...(copilotPath === null ? {} : { binaries: { copilot: { command: copilotPath }, acp: { command: copilotPath } } }),
     hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
     env,
     newSessionId: () => randomUUID(),
@@ -1365,13 +1373,25 @@ app.whenReady().then(async () => {
       // M99. Refused by the backend's ROW: the probe's path for that binary,
       // and the row's own `noCli` sentence. A lookup, never a switch.
       const backend = backendOf(spec)
-      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath }
+      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath, copilot: copilotPath, acp: copilotPath }
       if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
-      // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
-      // to home could turn a refused folder into an allowed one silently.
-      const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
-      if (!place.ok) return { kind: 'refused', reason: place.reason }
-      const cwd = resolveCwd(spec.cwd)
+      // M120. A chat with NO place: the app's own folder, made here; the Places
+      // gate is bypassed BY CONSTRUCTION (the folder is the app's), and a
+      // teammate beside it is refused first — a teammate has places.
+      const sandboxRefusal = sandboxTeammateRefusal(spec)
+      if (sandboxRefusal !== null) return { kind: 'refused', reason: sandboxRefusal }
+      let cwd: string
+      if (spec.sandbox === true) {
+        const made = resolveSandboxCwd(app.getPath('userData'), spec.id, realSandboxFs)
+        if (made.kind === 'refused') return { kind: 'refused', reason: made.reason }
+        cwd = made.path
+      } else {
+        // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
+        // to home could turn a refused folder into an allowed one silently.
+        const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
+        if (!place.ok) return { kind: 'refused', reason: place.reason }
+        cwd = resolveCwd(spec.cwd)
+      }
       // M100. The brief rides EVERY spawn from the roster main holds — the
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
@@ -1415,8 +1435,11 @@ app.whenReady().then(async () => {
         images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
       }
       const answer = agentSessions?.send(id, text, images) ?? 'no-session'
-      if (answer === 'refused-backend') return { refused: REASON_NO_CODEX }
-      if (answer === 'refused-images') return { refused: REASON_CODEX_NO_IMAGES }
+      // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
+      const row = BACKENDS[agentSessions?.get(id)?.backend ?? 'claude']
+      if (answer === 'refused-backend') return { refused: row.reasons.noCli }
+      if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
+      if (answer === 'refused-images') return { refused: row.reasons.noImages }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
@@ -1435,7 +1458,8 @@ app.whenReady().then(async () => {
     interrupt: (id) => agentSessions?.interrupt(id) ?? false,
     dispose: ({ id, drop }) => {
       agentSessions?.dispose(id)
-      if (drop) { agentTranscripts.drop(id); dropBaseline(id) }
+      // M120. The sandbox folder goes with the chat — on dispose, never on exit.
+      if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
     },
     // M98. `scope: 'session'` GRANTS the pending request's tool first, then
     // answers through the one `answerPermission` — the grant is keyed by the
@@ -1443,11 +1467,13 @@ app.whenReady().then(async () => {
     // renderer sent. A deny never grants, whatever the scope says.
     answer: ({ id, requestId, answer, scope }) => {
       const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
-      const answered = agentSessions?.answerPermission(id, requestId, answer) ?? false
-      // Granted only for a request that was really answered: a grant for a
-      // question the process never heard would outlive it invisibly.
-      if (answered && toolName !== undefined) approvals?.grant(id, toolName)
-      return answered
+      // M119. The grant goes FIRST so the answer itself can carry the vendor's
+      // word for it (ACP's allow_always — the manager reads preAnswer when it
+      // writes). `toolName` is defined only when the request is really PENDING
+      // in main's own record, so a grant for a question the process never heard
+      // cannot be minted here (the pending lookup above is the guard).
+      if (toolName !== undefined) approvals?.grant(id, toolName)
+      return agentSessions?.answerPermission(id, requestId, answer) ?? false
     },
     grants: (id) => approvals?.grantsOf(id) ?? [],
     revokeGrants: (id) => { approvals?.revoke(id) },
@@ -1694,10 +1720,17 @@ app.whenReady().then(async () => {
       // Gated on the SAME setting as tail: search reads the same files, so a
       // user who turned persistence off must get nothing rather than stale
       // hits from a log they asked not to keep.
-      search: (panelIds, query) =>
-        layoutStore.getSetting('scrollback.persist') === true
-          ? scrollbackLog.search(panelIds, query, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
-          : Promise.resolve([])
+      // M122. Both logs. The scrollback half stays gated on the setting; the
+      // transcript half is a chat's own durable file and answers regardless
+      // — the palette's off reason says so.
+      search: (panelIds, query) => {
+        const kinds = new Map((layoutStore.mergedWorkspaces().find((w) => w.active)?.panels ?? []).map((p) => [p.id, p.kind ?? 'terminal'] as const))
+        const panels = panelIds.map((id) => ({ id, kind: kinds.get(id) ?? 'terminal' }))
+        return searchPanels(query, panels, {
+          scrollback: (ids, q, caps) => layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.search(ids, q, caps) : Promise.resolve([]),
+          transcript: (id) => agentTranscripts.read(id).turns
+        }, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
+      }
     },
     // M48. The environment report, built on demand from facts this file
     // already holds: the probe's outcome, the login env, the same which()
@@ -1842,6 +1875,35 @@ app.whenReady().then(async () => {
         // is the same shape transcript-reader.ts's readFrom already returns.
         readDelta: readTranscriptFrom
       })
+    },
+    // M123. The update NOTICE's one verb, over the one real fetcher in the
+    // app that is not the broker's. Here and not in update-check.ts so the
+    // module runs under plain node and `verify:meta update.1` can pin that
+    // no suite bundles an `https` call. A GET with a deadline for the whole
+    // call (the M87 rule: node's socket timeout is inactivity, and a byte
+    // every 29 s holds a call open forever), GitHub's required User-Agent,
+    // and NO redirect following — the feed url is fixed, and a 3xx to
+    // somewhere else is a could-not-check naming the status, not a fetch of
+    // wherever it pointed. The repository is package.json's own
+    // `repository.url`; a build without one gets the third state by name.
+    {
+      check: () => {
+        let repo: string | null = null
+        try { repo = repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { repo = null }
+        if (repo === null) return Promise.resolve({ kind: 'could-not-check', reason: 'this build names no GitHub repository in its package.json' })
+        return checkForUpdate(app.getVersion(), {
+          repo,
+          fetch: (url) => new Promise((resolve, reject) => {
+            const deadline = setTimeout(() => { r.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
+            const r = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
+              const chunks: Buffer[] = []
+              res.on('data', (c: Buffer) => { chunks.push(c) })
+              res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
+            })
+            r.on('error', (error) => { clearTimeout(deadline); reject(error) })
+          })
+        })
+      }
     }
   )
   createWindow()

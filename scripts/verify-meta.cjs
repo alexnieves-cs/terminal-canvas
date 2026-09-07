@@ -607,14 +607,14 @@ console.log('\n' + '='.repeat(60))
   ok('audit.1 every palette REASON_* constant is named in docs/dead-end-audit.md', names.length >= 20 && missing.length === 0, JSON.stringify({ names: names.length, missing }))
 }
 
-// version.1 (M60; 1.1.0 at M70; 2.0.0 at M95; 2.2.0 at M108; 2.3.0 at M111). package.json says 2.3.0 and the README's status line
+// version.1 (M60; 1.1.0 at M70; 2.0.0 at M95; 2.2.0 at M108; 2.3.0 at M111; 3.0.0 at M125). package.json says 2.3.0 and the README's status line
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 2.3.0 and the README status line names the same version',
-    pkg.version === '2.3.0' && statusLine.includes('v2.3.0') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 3.0.0 and the README status line names the same version',
+    pkg.version === '3.0.0' && statusLine.includes('v3.0.0') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 
@@ -742,6 +742,36 @@ console.log('\n' + '='.repeat(60))
   ok('telemetry.5 the preload exposes window.__SENTRY_IPC__ via the non-side-effecting hookupIpc(), gated and never paired with the dead renderer-SDK import; the renderer\'s own init() names globalHandlersIntegration rather than relying on defaultIntegrations',
     importsNamespacedHookup && hookupInsideGate && noDeadRendererImport && rendererHasGlobalHandlers,
     JSON.stringify({ importsNamespacedHookup, hookupInsideGate, noDeadRendererImport, rendererHasGlobalHandlers }))
+}
+
+// M123 — update.1. THE UPDATE CHECK NEVER REACHES THE NETWORK FROM A SUITE,
+// AND NO PLAN MAY SWITCH IT ON. Three facts pinned as text, each with a
+// silent failure behind it. (a) The setting `update.checkOnLaunch` exists,
+// is a boolean, defaults to false and is NOT `planWritable`: a plan that
+// could turn on a launch-time network call has the shape of exfiltration,
+// the same reason telemetry's keys carry no flag. (b) `main/update-check.ts`
+// imports no `https` — the fetcher is injected and the real one lives in
+// `main/index.ts`, which no suite bundles — so the module runs under plain
+// node in verify:file. (c) No suite script holds a real fetcher: `https.get(`,
+// an `https` module import, or a TEMPLATED `api.github.com/repos/${…}` url
+// (a recorded fixture body carries the literal host — verify-panels and
+// shot do — and is not a call). Same honest limit as telemetry.3: a
+// wrapper module one hop away evades a substring grep.
+{
+  const { readdirSync } = require('node:fs')
+  // Comments stripped FIRST: the entry's own comment says "never planWritable",
+  // and a text check that read it would fail on the sentence explaining it.
+  const schema = stripComments(read('src/shared/settings-schema.ts') ?? '')
+  const start = schema.indexOf("id: 'update.checkOnLaunch'")
+  const entry = start === -1 ? '' : schema.slice(schema.lastIndexOf('{', start), schema.indexOf('}', start))
+  const settingOk = entry !== '' && /type: 'boolean'/.test(entry) && /default: false/.test(entry) && !/planWritable/.test(entry)
+  const moduleSrc = stripComments(read('src/main/update-check.ts') ?? '')
+  const moduleOk = moduleSrc !== '' && !/['"](node:)?https['"]/.test(moduleSrc) && /export (async )?function checkForUpdate/.test(moduleSrc)
+  const offenders = readdirSync(join(ROOT, 'scripts')).filter((n) => /\.cjs$/.test(n))
+    .filter((f) => /https\.get\(|['"](node:)?https['"]|api\.github\.com\/repos\/\$\{/.test(stripComments(read(join('scripts', f)) ?? '')))
+  ok('update.1 update.checkOnLaunch is a boolean, default false, not planWritable; main/update-check.ts imports no https (the fetcher is injected); no script under scripts/ holds https.get, an https import or a templated api.github.com url',
+    settingOk && moduleOk && offenders.length === 0,
+    JSON.stringify({ settingOk, moduleOk, offenders }))
 }
 
 const failed = results.filter((r) => !r.pass)

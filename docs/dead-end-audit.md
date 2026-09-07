@@ -180,6 +180,62 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 - **Discovery (M107).** `found` / `not found — install …` / `the shell didn't answer … put
   PATH edits in ~/.zprofile, then Check again`, with `Check again` on the launcher.
 
+### The surfaces this run added (M113–M123)
+
+- **The board's doors (M113).** `Add to board` on a GitHub or Jira row reads `Added` for two
+  seconds and `On board` when the key is already there — still pressable, a second press
+  updates; `New work item…` is a `canvas` row never disabled (a typed item needs no service,
+  no place, no CLI); an empty title is refused with `a work item needs a title` and the line
+  kept; `tc board add` with no title is a usage error naming it, at the URL door `a URL can
+  only open`, and with no window `no canvas is open to add to — open the app first`.
+- **Dispatch (M114).** `Assign to…` lists every teammate, each disabled by name with `<name>
+  has no places — add a folder in the Teammates pane`; a repository no place holds is
+  main's refusal on the card's note naming the repository and the pane; a typed item with
+  several places is refused naming the choice (the sheet that asks is deferred by name);
+  a closed lane leaves `working` with the note `lane closed` and `Review` on it says where
+  the worktree still is. The drag door is the CARD's chrome onto a Teammates-pane row —
+  the two panes never share the screen, so a Board row is not a drag source.
+- **The return path (M115).** `Open PR` disabled by the one list (`no lane yet — dispatch
+  the item first`, `a PR needs a GitHub repository — this item is jira`, the credential
+  rows' `not connected` sentence, `<name> may not spend github — grant it in the Teammates
+  pane`, `nothing to open a PR for — the lane has no commits past main`) BEFORE the click;
+  a push that fails carries git's own line as `push failed — …`; `done` from any door
+  offers the PR comment as a second card and declining still marks done; a `working` item
+  dropped on `todo` or `done` with its lane open says `lane still open — close the chat to
+  stop it`.
+- **The Board pane and the card (M116).** Drop targets on `todo` and `done` only (the
+  `working` and `review` columns take no drop, by construction); a row whose item has no
+  card offers `Show on canvas`; a card whose record is gone says `this item is no longer on
+  the board` and keeps only Close; the state word is a pill in the chrome, the provider's
+  word muted beside it.
+- **The engines (M117–M119).** `cursor-agent` has no row: declined in the spec with the
+  three steps (backlog #80), never a row that fails. The sheet lists every registered row,
+  `chat with copilot (acp) — not on PATH` when the binary is absent; the how row's mode and
+  effort read `no mode flag` / `no effort flag` disabled for a row without them; the
+  preview names how two copilot rows differ; a copilot Interrupt is disabled with `copilot
+  has no interrupt — close the panel to stop it`, an image refused with its row's sentence;
+  a pending ACP handshake reads `waiting for copilot (acp) to open its session` with
+  Interrupt disabled by name, and a handshake nobody answers ends the process with
+  `handshake-timeout` as the reason; a supervisor, routine or dispatch on a row without an
+  appended prompt is refused with `<label> takes no appended prompt — …`.
+- **Chat mode (M120).** `New chat (no folder)` is one row per registered backend beside
+  `New chat…`, disabled by `<label> has no read-only mode … — use the copilot row instead`
+  for acp and by `not on the login PATH` for an absent binary; the launcher's third card
+  says `read-only, nowhere to write`; a teammate beside a sandbox is refused with `a
+  teammate has places; a chat with no folder has none — pick one or the other`; the header
+  reads `sandboxed · no folder`; the model select's empty choice is `auto (the CLI's
+  default)`.
+- **Search (M122).** `Find in panels…` shows the cap (`the first 50 matches — narrow the
+  search`) and the redaction count (`2 secrets redacted from these lines`) before the hits;
+  with persistence off the reason reads `terminal output is not being kept — turn on Keep
+  output; chats still answer` and the transcript hits stay; `No matches for “word”` only
+  after a query.
+- **The update notice (M123).** Three states on the palette's own line — `up to date —
+  3.0.0`, `3.1.0 is out — Open release`, `could not check — <reason>`; the setting
+  `update.checkOnLaunch` is off by default, in the Updates category, and no plan may write
+  it; auto-swap is declined in the sentence the launcher shows (an unsigned build cannot
+  replace itself).
+
 ## Keyboard reach
 
 `verify:panels reach.1` presses a REAL Tab (`sendInputEvent`, not a dispatched event) from

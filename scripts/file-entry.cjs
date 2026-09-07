@@ -50,5 +50,13 @@ module.exports = {
   /* M129. The live skill trail: the pure scan/cap, and main's tail-from-a-
      byte-offset read over injected pinnedSession/resolveTranscript/readDelta. */
   ...require('../src/shared/skill-trail.ts'),
-  ...require('../src/main/skill-trail-read.ts')
+  ...require('../src/main/skill-trail-read.ts'),
+  /* M120. The sandbox cwd, pure over injected mkdir/rm. */
+  ...require('../src/main/sandbox.ts'),
+  /* M122. Find in panels: pure over the two logs' readers; the transcript log is bundled for the fixture. */
+  ...require('../src/main/panel-search.ts'),
+  ...require('../src/main/agent-transcript-log.ts'),
+  /* M123. The update check, pure over an injected fetcher — no https here;
+     the real fetcher lives in main/index.ts, which no suite bundles. */
+  ...require('../src/main/update-check.ts')
 }

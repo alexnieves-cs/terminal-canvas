@@ -61,13 +61,23 @@ export interface TranscriptTurn {
 
 /** What one stdout line parses to. */
 export type TranscriptEvent =
-  | { type: 'session'; sessionId: string; model?: string; cwd?: string; version?: string }
+  | {
+      type: 'session'
+      /** M119. '' from an ACP `initialize` answer: no session exists yet; the manager adopts only a non-empty id. */
+      sessionId: string
+      model?: string
+      cwd?: string
+      version?: string
+      /** M119. What the handshake ANSWERED (ACP's agentCapabilities) — the measured fact that outranks the row's promise. Absent for every other backend. */
+      negotiated?: { loadSession?: boolean; image?: boolean }
+    }
   | { type: 'message-start'; messageId: string; model?: string }
   | { type: 'block-start'; index: number; block: ContentBlock }
   | { type: 'block-delta'; index: number; delta: 'text' | 'thinking' | 'input-json'; text: string }
   | { type: 'block-stop'; index: number }
   | { type: 'message-end'; stopReason?: string }
-  | { type: 'assistant'; messageId: string; model?: string; blocks: ContentBlock[]; usage?: TokenTotals }
+  /** M119. `replay` marks history an ACP `session/load` replays: stored already, the manager skips it. Absent everywhere else. */
+  | { type: 'assistant'; messageId: string; model?: string; blocks: ContentBlock[]; usage?: TokenTotals; replay?: true }
   | { type: 'user'; blocks: ContentBlock[]; replay: boolean }
   | {
       type: 'result'

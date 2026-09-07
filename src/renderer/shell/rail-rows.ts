@@ -252,7 +252,10 @@ export function railCapsules(rows: readonly { id: string; kind: string; state: S
  * model. Every absent piece is absent — never `undefined`, never a
  * placeholder that reads as a value.
  */
-export function chatHeaderLine(input: { cwd: string; branch?: string; backend: string; model?: string }): string {
-  const folder = input.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'
+/** M120. The folder piece of a sandboxed chat: the app's directory name would read as a project the user never chose. */
+export const SANDBOX_HEADER = 'sandboxed · no folder'
+
+export function chatHeaderLine(input: { cwd: string; branch?: string; backend: string; model?: string; sandbox?: boolean }): string {
+  const folder = input.sandbox === true ? SANDBOX_HEADER : (input.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/')
   return [folder, input.branch, input.backend, input.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')
 }

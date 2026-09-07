@@ -47,6 +47,8 @@ export const TERMINAL_CATEGORY = 'Terminal'
 
 /** M112. Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
 export const TELEMETRY_CATEGORY = 'Privacy & telemetry'
+/** M123. Named once, for the same anti-typo reason RESTORE_CATEGORY is. */
+export const UPDATES_CATEGORY = 'Updates'
 
 export interface SettingDef {
   /** Dotted and stable — it is the persisted key, so renaming one loses the
@@ -436,6 +438,20 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'boolean',
     default: false,
     category: TELEMETRY_CATEGORY
+  },
+  {
+    // M123. OFF by default and never planWritable: a launch-time network
+    // call a plan could switch on has the shape of exfiltration, the same
+    // reason telemetry's keys carry no flag (`verify:meta update.1`). It is
+    // a NOTICE — nothing is downloaded or installed; auto-swap is declined
+    // by name for an unsigned build.
+    id: 'update.checkOnLaunch',
+    label: 'Check for updates at launch',
+    description: 'ask GitHub once at launch whether a newer release exists — nothing is downloaded or installed; the notice says where',
+    keywords: ['update', 'release', 'version', 'github', 'launch', 'newer', 'check'],
+    type: 'boolean',
+    default: false,
+    category: UPDATES_CATEGORY
   }
 ]
 

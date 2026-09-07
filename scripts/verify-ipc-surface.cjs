@@ -225,15 +225,16 @@ app.whenReady().then(() => {
   // M113–M115 board:lane / board:lane-status / board:open-pr /
   // board:comment-pr (111) — the dispatch into a lane and the two outward
   // halves behind the broker's spend card.
-  // M126 shelf:list / shelf:save (113) — the Skills pane's arrangement, a
+  // M123 update:check (112) — the update notice's one GET, three states, nothing installed.
+  // M126 shelf:list / shelf:save (114) — the Skills pane's arrangement, a
   // TOP-LEVEL record read and written whole rather than through layout:save.
-  // M127 plugin:details (114) — `claude plugin details <id>` as TEXT,
+  // M127 plugin:details (115) — `claude plugin details <id>` as TEXT,
   // rendered verbatim and parsed nowhere.
-  // M128 skill:write / skill:create / skill:rename / skill:delete (118) —
+  // M128 skill:write / skill:create / skill:rename / skill:delete (119) —
   // the only channels in the contract that put bytes into ~/.claude.
-  // M129 skill:trail (119) — a terminal panel's live skill trail, tailed
+  // M129 skill:trail (120) — a terminal panel's live skill trail, tailed
   // from the CLI's own transcript at a byte offset.
-  const EXPECTED_CHANNELS = 119
+  const EXPECTED_CHANNELS = 120
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

@@ -116,6 +116,15 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
       inside && inside.ok === true && outside && outside.ok === false && /\/home\/u\/work\/api/.test(outside.reason) && !/worktrees/.test(outside.reason) && plain && plain.ok === false && /worktrees\/other/.test(plain.reason),
       JSON.stringify({ inside, outside, plain }))
   }
+  // M120 — sandbox.1. A teammate has places; a chat with no folder has none.
+  // The refusal is ONE sentence in one place (`sandboxTeammateRefusal`), asked
+  // by agent:create before anything is made.
+  {
+    let both, alone, threw = null
+    try { both = G.sandboxTeammateRefusal({ sandbox: true, teammateId: 't1' }); alone = G.sandboxTeammateRefusal({ sandbox: true }) } catch (e) { threw = String(e) }
+    ok('sandbox.1 a sandboxed chat under a teammate is refused with the sentence naming both; a sandboxed chat alone is not',
+      threw === null && typeof both === 'string' && /places/.test(both) && /no folder/.test(both) && alone === null, JSON.stringify({ threw, both, alone }))
+  }
   // record.1 — the copy helper: an absent optional stays absent; the
   // required lists are always arrays.
   {

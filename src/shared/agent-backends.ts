@@ -30,10 +30,10 @@
  */
 
 /** M90. Which headless CLI answers. Absent on a record is claude — every pre-M90 file. */
-export type AgentBackend = 'claude' | 'codex'
+export type AgentBackend = 'claude' | 'codex' | 'copilot' | 'acp'
 
 /** Registry order — the spawn sheet's row order, and the union's, so a new backend is one row here. */
-export const BACKEND_IDS: readonly AgentBackend[] = ['claude', 'codex']
+export const BACKEND_IDS: readonly AgentBackend[] = ['claude', 'codex', 'copilot', 'acp']
 
 /** What an absent `backend` means, named once: every pre-M90 record. */
 export const DEFAULT_BACKEND: AgentBackend = 'claude'
@@ -62,6 +62,14 @@ export interface BackendDef {
   closeStdin: boolean
   /** The CLI mints the conversation id; the first stream is where the session learns it. */
   adoptsThreadId: boolean
+  /** M118. The CLI has a flag for an appended system prompt. False means a supervisor, a routine or a dispatched lane would silently not be one — the three doors refuse by name. */
+  appendsPrompt: boolean
+  /** M119. The process speaks a handshake before its first prompt (ACP's initialize → session/new); the manager holds the first send until it answers. */
+  handshake: boolean
+  /** M120. The tool-denying argv for a chat with no folder. Absent means the row DECLINES chat mode by name (`reasons.noSandbox`). */
+  sandboxArgs?: readonly string[]
+  /** M120. A closed list of model names where the CLI has one; absent means free text. */
+  models?: readonly string[]
   reasons: {
     /** The CLI was not found on the login PATH. */
     noCli: string
@@ -73,6 +81,10 @@ export interface BackendDef {
     noTerminal: string
     /** Shown where a permission grant would go. */
     noPermissions: string
+    /** M118. Shown on the supervisor row, the routine mint and the dispatch verb when the row cannot carry a prompt. */
+    noPrompt: string
+    /** M120. Shown on the `New chat (no folder)` door for a row with no read-only mode. */
+    noSandbox: string
   }
 }
 
@@ -95,12 +107,18 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     oneProcessPerTurn: false,
     closeStdin: false,
     adoptsThreadId: false,
+    appendsPrompt: true,
+    handshake: false,
+    // Plan mode: read-only, no edits, no shell writes — the one flag that makes a chat with no folder safe.
+    sandboxArgs: ['--permission-mode', 'plan'],
     reasons: {
       noCli: 'claude was not found on the login PATH — install it, or check the environment report',
       noInterrupt: 'nothing is answering — there is no turn to interrupt',
       noImages: 'claude takes images — this message could not be decoded',
       noTerminal: 'a claude chat continues in a terminal as claude --resume',
-      noPermissions: 'claude asks before a tool runs — a grant answers that question for the session'
+      noPermissions: 'claude asks before a tool runs — a grant answers that question for the session',
+      noPrompt: 'claude takes an appended prompt',
+      noSandbox: 'claude has plan mode'
     }
   },
   codex: {
@@ -116,12 +134,86 @@ export const BACKENDS: Readonly<Record<AgentBackend, BackendDef>> = {
     oneProcessPerTurn: true,
     closeStdin: true,
     adoptsThreadId: true,
+    appendsPrompt: false,
+    handshake: false,
+    sandboxArgs: ['--sandbox', 'read-only'],
     reasons: {
       noCli: 'codex was not found on the login PATH — install it, or check the environment report',
       noInterrupt: 'codex has no interrupt — close the panel to stop it',
       noImages: 'codex takes no images here — reference a file by its path instead',
       noTerminal: 'a codex chat continues only here — the terminal door is claude --resume',
-      noPermissions: 'codex asks no permission here — its sandbox policy decides'
+      noPermissions: 'codex asks no permission here — its sandbox policy decides',
+      noPrompt: 'codex takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
+      noSandbox: 'codex has a read-only sandbox'
+    }
+  },
+  // M118. Measured 2026-09-06 against GitHub Copilot CLI 1.0.83
+  // (`scripts/fixtures/agent-session/copilot/*.jsonl`): one process per turn
+  // with the prompt as `-p`; the stream states NO session id (`parentId`
+  // chains the previous event), so the HOST pins one with `--session-id` and
+  // resumes with `--resume=` — claude's shape behind codex's process model.
+  // `--allow-all-tools` is "required for non-interactive mode", so no
+  // permission ever reaches the host. Usage is credits, never dollars.
+  copilot: {
+    id: 'copilot',
+    label: 'copilot',
+    binary: 'copilot',
+    resumes: true,
+    interrupts: false,
+    images: false,
+    reportsCost: false,
+    asksPermission: false,
+    terminalDoor: false,
+    oneProcessPerTurn: true,
+    closeStdin: true,
+    adoptsThreadId: false,
+    appendsPrompt: false,
+    handshake: false,
+    // Denial rules outrank --allow-all-tools (`copilot help permissions`).
+    sandboxArgs: ['--deny-tool', 'shell', '--deny-tool', 'write'],
+    // The fixtures' own `availableModels`; `auto` (the CLI's router) is what NO `--model` means, so it is the empty choice, not a second row.
+    models: ['claude-haiku-4.5', 'gpt-5-mini', 'mai-code-1.1-flash'],
+    reasons: {
+      noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
+      noInterrupt: 'copilot has no interrupt — close the panel to stop it',
+      noImages: 'copilot takes an image only as a file path — reference it by its path instead',
+      noTerminal: 'a copilot chat continues only here — the terminal door is claude --resume',
+      noPermissions: 'copilot asks no permission here — every tool runs on its own policy (--allow-all-tools is required headless)',
+      noPrompt: 'copilot takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
+      noSandbox: 'copilot can deny its shell and write tools'
+    }
+  },
+  // M119. Measured 2026-09-06 against `copilot --acp`
+  // (`scripts/fixtures/agent-session/acp/*.log`): a RESIDENT process speaking
+  // JSON-RPC over stdio; `session/new` mints the id (adopted), `session/load`
+  // resumes (`loadSession: true` in initialize's answer), `session/cancel`
+  // interrupts, `session/request_permission` asks with allow_once /
+  // allow_always / reject_once — the first row whose vendor has M98's grant
+  // word. The row is the static promise; the handshake's answer is the
+  // measured fact and outranks it (`negotiated` on the snapshot).
+  acp: {
+    id: 'acp',
+    label: 'copilot (acp)',
+    binary: 'copilot',
+    resumes: true,
+    interrupts: true,
+    images: true,
+    reportsCost: false,
+    asksPermission: true,
+    terminalDoor: false,
+    oneProcessPerTurn: false,
+    closeStdin: false,
+    adoptsThreadId: true,
+    appendsPrompt: false,
+    handshake: true,
+    reasons: {
+      noCli: 'copilot was not found on the login PATH — install it, or check the environment report',
+      noInterrupt: 'nothing is answering — there is no turn to cancel',
+      noImages: 'copilot (acp) takes images — this message could not be decoded',
+      noTerminal: 'a copilot (acp) chat continues only here — the terminal door is claude --resume',
+      noPermissions: 'copilot (acp) asks before a command runs — a grant answers allow_always for the session',
+      noPrompt: 'copilot (acp) takes no appended prompt — a supervisor, a routine or a dispatched lane would silently not be one',
+      noSandbox: 'copilot (acp) has no read-only mode to run a chat with no folder in — use the copilot row instead'
     }
   }
 }

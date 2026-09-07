@@ -2863,6 +2863,15 @@ console.log('\n' + '='.repeat(60))
        placed.some((c) => c.id === R.UNGROUPED_COLUMN_ID), JSON.stringify(placed.map((c) => c.id)))
   } catch (e) { ok('skills.1 (threw)', false, String(e)) }
 }
+  // M120 — header.2. A sandboxed chat's header says so where the folder
+  // would be: `sandboxed · no folder`, never the app's own sandbox directory
+  // name, which would read as a project the user never chose.
+  {
+    let line = null
+    try { line = R.chatHeaderLine({ cwd: '/Users/u/Library/Application Support/terminal-canvas/sandbox/c9', backend: 'claude', sandbox: true }) } catch (e) { line = String(e) }
+    ok('header.2 a sandboxed chat\'s header line reads `sandboxed · no folder · claude`, the sandbox directory never named',
+      line === 'sandboxed · no folder · claude', JSON.stringify({ line }))
+  }
 
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

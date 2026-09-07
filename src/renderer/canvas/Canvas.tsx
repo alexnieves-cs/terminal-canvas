@@ -133,6 +133,7 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText, useChatsVersion } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { lastLineOf, railCapsules } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
 import { parseSkillKey, renameInShelf, skillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
@@ -172,7 +173,7 @@ import { railLabel } from '../shell/rail-rows'
 import { describeAutomation, isRestartable, isRunning } from '../shell/inspector-fields'
 import type { LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from './trigger-words'
-import type { ScrollbackSearchHit } from '@shared/ipc-contract'
+import type { PanelSearchResult } from '@shared/ipc-contract'
 // M128. Composed into shouldIgnoreKeys; see skills/editor-focus.ts.
 import { skillEditorFocused } from '../skills/editor-focus'
 
@@ -271,6 +272,10 @@ export function Canvas({
   // M56. Bookmarks: places, persisted beside the camera, per workspace.
   const [bookmarks, setBookmarks] = useState<PersistedBookmark[]>(() => initial.bookmarks ?? [])
   // M79. Runs: a history kept with the layout, owned by useRuns below.
+  // M121 (6). `sealAbandoned` seals every open run at load — the idle predicate
+  // it now takes is inert here (every panel is idle at load), and the stale
+  // row a seeded `running` auto status shows comes through useRuns.onAutoEvent;
+  // carried to M124 rather than redesigned here.
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
@@ -1826,7 +1831,7 @@ export function Canvas({
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
-    setMergedData
+    setMergedData, setFlipped
   })
 
   // The `window.__m4a*` surface verify:panels drives the renderer through,
@@ -2434,7 +2439,7 @@ export function Canvas({
     const mint = beginNewChatRef.current
     void (async () => {
       const mate = teammatesRef.current.find((t) => t.id === routine.teammateId)
-      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT })
+      const result = await mint({ cwd: mate?.places[0] ?? '', title: routine.name, teammateId: routine.teammateId, appendSystemPrompt: ROUTINE_PROMPT, routine: true })
       const at = Date.now()
       if (result.kind === 'refused') {
         const latestR = (await window.canvas.routine.list()).find((r) => r.id === routine.id) ?? routine
@@ -2839,6 +2844,31 @@ export function Canvas({
   useEffect(() => {
     let live = true
     void window.canvas.env.report().then((r) => { if (live) setEnvReport(r) }).catch(() => {})
+    return () => { live = false }
+  }, [])
+
+  // M123. The launch-time update check — ONCE per launch, and only when the
+  // setting says so. Read the way `agent.glow` and `vault.root` are (a
+  // settings:list of its own, never settingRows, which is empty until the
+  // palette has opened), and gated on the STORE rather than a ref: a second
+  // mount of this component (a workspace switch does not remount, but a
+  // reload does) finds the answer already there and asks nothing. Off by
+  // default, so a fresh install never makes a network call it was not told
+  // to; the by-hand row is the door for everyone else. The answer goes into
+  // the store and nowhere else — the launcher and the environment rows read
+  // it; no dialog, no badge: a notice, not an interruption.
+  const updateState = useUpdateState()
+  useEffect(() => {
+    let live = true
+    void window.canvas.settings.list().then((rows) => {
+      if (!live) return
+      const row = rows.find((r) => r.id === 'update.checkOnLaunch')
+      if (row === undefined || row.value !== true) return
+      if (getUpdateState().checking || getUpdateState().result !== null) return
+      beginUpdateCheck()
+      void window.canvas.update.check().then((result) => { setUpdateResult(result) })
+        .catch((e: unknown) => { setUpdateResult({ kind: 'could-not-check', reason: e instanceof Error ? e.message : 'the update check did not answer' }) })
+    }).catch(() => {})
     return () => { live = false }
   }, [])
 
@@ -3253,7 +3283,7 @@ export function Canvas({
    * further down — naming it up there is a TDZ error, not a style preference.
    */
   // M73. Assigned below, after beginNewChat is declared; read by the test hook.
-  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }) => Promise<SpawnResult>>(
+  const beginNewChatRef = useRef<(opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }) => Promise<SpawnResult>>(
     async () => ({ kind: 'refused', reason: 'the canvas is not ready' })
   )
   const openAsChatRef = useRef<(id: string) => Promise<{ kind: string; reason?: string }>>(async () => ({ kind: 'refused', reason: 'not ready' }))
@@ -3499,7 +3529,7 @@ export function Canvas({
   // is `search`; Canvas debounces 120ms, asks main, and holds the answer.
   // Both are CLEARED when the scope leaves search, so a reopened palette
   // starts from no answer (null), not stale hits.
-  const [searchResults, setSearchResults] = useState<ScrollbackSearchHit[] | null>(null)
+  const [searchResults, setSearchResults] = useState<PanelSearchResult | null>(null)
   const searchQueryRef = useRef('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onSearchQuery = useCallback((query: string) => {
@@ -3890,7 +3920,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -3906,16 +3936,25 @@ export function Canvas({
     if (opts?.appendSystemPrompt !== undefined && opts.teammateId === undefined && panelsRef.current.some((p) => isChatPanel(p) && p.chat.supervisor === true)) {
       return { kind: 'refused', reason: 'this canvas already has a supervisor' }
     }
+    // M118. A row that cannot carry an appended prompt refuses the three doors
+    // that append one (supervisor, routine, dispatch) BY NAME: a copilot
+    // supervisor would silently not be one.
+    if (opts?.appendSystemPrompt !== undefined && !BACKENDS[backendOf(opts ?? {})].appendsPrompt) return { kind: 'refused', reason: BACKENDS[backendOf(opts ?? {})].reasons.noPrompt }
     // M90. The backend rides the create and the record; absent stays absent.
     const backend = carryBackend(opts ?? {})
     // M100. The identity rides the create (main reads the brief and checks the places) and the record.
     const identity = opts?.teammateId === undefined ? {} : { teammateId: opts.teammateId }
-    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
+    // M120. The sandbox flag: main resolves the cwd to its own folder and ignores the one here; the record keeps the mark so a relaunch re-creates it the same way.
+    // The record's cwd is the INTENDED one except for a sandbox chat: the snapshot's cwd is a live session's, and a recycled panel id answers with a STALE session's folder (verify:panels codex.1 found it).
+    const sandbox = opts?.sandbox === true ? { sandbox: true as const } : {}
+    const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...sandbox, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
       const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd, sessionId, ...backend, ...identity, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      // M121. A routine's chat is MARKED, the way a lane is: the record is what
+      // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
+      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -5012,6 +5051,9 @@ export function Canvas({
         // mousemove (setCursor), so the class catches up within a frame or
         // two of the keypress rather than exactly on it. Cursor feedback
         // only; the gesture itself never consults this className.
+        // M121. The flip as a readable FACT on the host (verify:panels flip.1),
+        // never inferred from which panels happen to render summaries.
+        data-flipped={flipped ? '' : undefined}
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
@@ -5461,6 +5503,10 @@ export function Canvas({
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => { void beginNewChat({ backend: 'codex' }) }}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
+            onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
+            sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
+            update={updateState}
+            onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
           />
         )}
         {envReport !== null && !envReport.shell.ok && (
@@ -5471,6 +5517,7 @@ export function Canvas({
         )}
         {!merged && <HintStrip seen={hintsSeen} />}
         <CanvasHud
+          updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}
           cursor={cursor}
           selectedId={selectedId}
@@ -5493,6 +5540,7 @@ export function Canvas({
             credentials={credentialRows}
             worktrees={worktreeRows}
             envReport={envReport}
+            update={updateState}
             bookmarks={bookmarkRows}
             cameraTrail={trail}
             globalFontSize={globalFontSize}

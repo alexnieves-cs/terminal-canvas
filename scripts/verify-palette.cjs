@@ -207,9 +207,11 @@ const spyActions = () => {
     openTeammates: record('openTeammates'),
     // M103
     beginBrowser: record('beginBrowser'),
+    // M123
+    checkForUpdates: record('checkForUpdates'),
     // M106
     toggleFlip: record('toggleFlip'),
-    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'),
+    addWorkItem: record('addWorkItem'), beginNewWorkItem: record('beginNewWorkItem'), dispatchWorkItem: record('dispatchWorkItem'), openPr: record('openPr'), commentPr: record('commentPr'), markDone: record('markDone'), openBoard: record('openBoard'), newSandboxChat: record('newSandboxChat'), scrollChatTurn: record('scrollChatTurn'),
     // M92
     lockPanel: record('lockPanel'), unlockPanel: record('unlockPanel'), pinPanel: record('pinPanel'), unpinPanel: record('unpinPanel'), maximisePanel: record('maximisePanel'), restorePanel: record('restorePanel'),
     beginRenamePreset: record('beginRenamePreset'),
@@ -1788,7 +1790,7 @@ const WS = [
     { panelId: 'n1', line: 'Error: cannot read foo', lineIndex: 12 },
     { panelId: 'n2', line: 'Error: undefined bar', lineIndex: 3 }
   ]
-  const c = ctx({ searchQuery: 'error', searchResults: hits, panels: [{ id: 'n1', label: 'claude — api (n1)' }] })
+  const c = ctx({ searchQuery: 'error', searchResults: { hits: hits.map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 }, panels: [{ id: 'n1', label: 'claude — api (n1)' }] })
   const rows = P.buildCommands(c).filter((r) => r.scope === 'search')
   const r1 = byId(rows, 'search.hit.n1.12')
   const r2 = byId(rows, 'search.hit.n2.3')
@@ -1810,7 +1812,7 @@ const WS = [
 //      before the first keystroke) is NO row at all.
 {
   const off = P.buildCommands(ctx({ scrollbackEnabled: false, searchQuery: 'x', searchResults: null })).filter((r) => r.scope === 'search')
-  const none = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: 'zzz', searchResults: [] })).filter((r) => r.scope === 'search')
+  const none = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: 'zzz', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } })).filter((r) => r.scope === 'search')
   const blankBefore = P.buildCommands(ctx({ scrollbackEnabled: true, searchQuery: '', searchResults: null })).filter((r) => r.scope === 'search')
   ok('search.2 the three empty states are three distinct rows: off (its reason), no-match (names the query), and nothing before the first keystroke',
     off.length === 1 && off[0].disabledReason === P.REASON_SEARCH_OFF &&
@@ -1824,7 +1826,7 @@ const WS = [
 //      is scope 'search', and a hit row never leaks into the top level.
 {
   const hits = [{ panelId: 'n1', line: 'match here', lineIndex: 1 }]
-  const all = P.buildCommands(ctx({ searchQuery: 'match', searchResults: hits, panels: [{ id: 'n1', label: 'n1' }] }))
+  const all = P.buildCommands(ctx({ searchQuery: 'match', searchResults: { hits: hits.map((h) => ({ ...h, kind: 'scrollback' })), capped: false, cap: 50, redacted: 0 }, panels: [{ id: 'n1', label: 'n1' }] }))
   const searchRows = all.filter((r) => r.id.startsWith('search.'))
   ok('search.3 every search row is scope search and none leaks to the top level',
     searchRows.length >= 1 && searchRows.every((r) => r.scope === 'search'),
@@ -1937,7 +1939,7 @@ const WS = [
     nothing: ctx({}),
     sessionless: ctx({ panels: [{ id: 'r1', label: 'review', kind: 'review' }], capturedId: 'r1' }),
     merged: ctx({ merged: true, selectedIds: ['n1'], panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1' }),
-    scrollbackOff: ctx({ scrollbackEnabled: false, panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1', searchQuery: 'x', searchResults: [] }),
+    scrollbackOff: ctx({ scrollbackEnabled: false, panels: [{ id: 'n1', label: 'x', kind: 'terminal' }], capturedId: 'n1', searchQuery: 'x', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } }),
     noNoteRoot: ctx({ noteRoot: null }),
     envMissing: ctx({ envReport: null })
   }
@@ -2033,11 +2035,11 @@ const WS = [
       all.length === 4 && all[0] === 'panel.goto.p1' && all[1] === 'panel.goto.p2' && all[2] === 'panel.goto.p3' && all[3] === 'panel.goto.r1',
     JSON.stringify({ needs, all }))
 
-  const empty = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: [] })), 'search.none')
-  const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: [{ panelId: 'p2', lineIndex: 3, line: 'FAIL 3 the writer' }] })), 'search.hit.p2.3')
+  const empty = byId(P.buildCommands(ctx({ panels, searchQuery: 'zzqx', searchResults: { hits: [], capped: false, cap: 50, redacted: 0 } })), 'search.none')
+  const hit = byId(P.buildCommands(ctx({ panels, searchQuery: 'FAIL', searchResults: { hits: [{ panelId: 'p2', kind: 'scrollback', lineIndex: 3, line: 'FAIL 3 the writer' }], capped: false, cap: 50, redacted: 0 } })), 'search.hit.p2.3')
   ok('find.4 the empty search names the term once and a hit row leads with the panel\'s name',
     empty && empty.title === 'No matches for “zzqx”' && empty.subtitle === undefined &&
-      hit && hit.title === 'web front' && hit.subtitle === 'FAIL 3 the writer',
+      hit && hit.title.startsWith('web front') && hit.subtitle === 'FAIL 3 the writer',
     JSON.stringify({ empty: empty && [empty.title, empty.subtitle], hit: hit && [hit.title, hit.subtitle] }))
 }
 
@@ -2321,7 +2323,7 @@ const WS = [
   // Guarded: a throw here would abort every check below it (verify-suites.md rule 1).
   const has = typeof P.backendOptions === 'function' && Array.isArray(P.BACKEND_IDS)
   const rows = has ? P.backendOptions({ claude: true, codex: false }) : []
-  const all = has ? P.backendOptions({ claude: true, codex: true }) : []
+  const all = has ? P.backendOptions({ claude: true, codex: true, copilot: true, acp: true }) : []
   ok('backends.1 backendOptions lists every registered backend in registry order with its id and label; an absent CLI disables its row naming PATH; a present one is enabled with no suffix',
     has && rows.length === P.BACKEND_IDS.length && rows[0].id === 'claude' && rows[0].disabled === false && rows[0].label === 'chat with claude' &&
       rows[1].id === 'codex' && rows[1].disabled === true && /PATH/.test(rows[1].label) &&
@@ -2372,16 +2374,23 @@ const WS = [
   const bench = has ? P.lineupPlan(P.LINEUPS.workbench, { cwd: '/w', worktrees: true, maxConcurrent: 0, liveAgents: 0 }) : null
   const swarm = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: true, maxConcurrent: 2, liveAgents: 1 }) : null
   const solo = has ? P.lineupPlan(P.LINEUPS.solo, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 0 }) : null
+  // M121. Sends ALREADY WAITING behind the ceiling take room too: a ceiling
+  // of 3 with one live and one queued has room for ONE more, so a Swarm of
+  // three queues two — the preview said one (verifier 9, second half).
+  const queuedAhead = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 3, liveAgents: 1, queued: 1 }) : null
+  const queuedNoCeiling = has ? P.lineupPlan(P.LINEUPS.swarm, { cwd: '/w', worktrees: false, maxConcurrent: 0, liveAgents: 1, queued: 5 }) : null
   ok('lineup.1 the four lineups exist (solo, pair, workbench, swarm); in a Workbench launched into worktrees only the AGENT seat gets a lane and the shell and browser seats stay in the checkout; without worktrees no seat gets one',
     has && ids.join(',') === 'solo,pair,workbench,swarm' && bench !== null && bench.seats.length === 3 &&
       bench.seats.filter((s) => s.kind === 'agent').every((s) => s.lane === true) && bench.seats.filter((s) => s.kind !== 'agent').every((s) => s.lane === false) &&
       bench.seats.some((s) => s.kind === 'browser' && /localhost:3000/.test(s.url || '')) &&
       solo !== null && solo.seats.every((s) => s.lane === false),
     JSON.stringify({ ids, bench, solo }))
-  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing',
+  ok('lineup.2 the preview counts the sessions that will open and, against the live ceiling, how many agents will QUEUE — a Swarm of three agents with one live and a ceiling of two queues two, and the sentence says so before anything is minted; no ceiling queues nothing; (M121) sends already waiting take room too — one live and one queued under a ceiling of three queues two of three, the sentence names the waiting send, and with no ceiling a queue changes nothing',
     swarm !== null && swarm.sessions === 4 && swarm.agents === 3 && swarm.queued === 2 && /2 .*queue/.test(swarm.ceilingLine) && /ceiling of 2/.test(swarm.ceilingLine) &&
-      bench !== null && bench.queued === 0 && bench.ceilingLine === '',
-    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine }))
+      bench !== null && bench.queued === 0 && bench.ceilingLine === '' &&
+      queuedAhead !== null && queuedAhead.queued === 2 && /1 (already )?waiting/.test(queuedAhead.ceilingLine) &&
+      queuedNoCeiling !== null && queuedNoCeiling.queued === 0 && queuedNoCeiling.ceilingLine === '',
+    JSON.stringify({ swarm: swarm && { sessions: swarm.sessions, agents: swarm.agents, queued: swarm.queued, ceilingLine: swarm.ceilingLine }, benchLine: bench && bench.ceilingLine, queuedAhead: queuedAhead && { queued: queuedAhead.queued, line: queuedAhead.ceilingLine }, queuedNoCeiling: queuedNoCeiling && queuedNoCeiling.queued }))
 }
 
 // M113 — board.1. THE TYPED DOOR. `New work item…` is a canvas-group row (a
@@ -2399,6 +2408,100 @@ const WS = [
   ok('board.1 New work item… is a canvas-group row with no disabled reason that runs beginNewWorkItem',
     row !== undefined && row.group === 'canvas' && row.disabledReason === undefined && /New work item/.test(row.title) && calls.includes('beginNewWorkItem'),
     JSON.stringify({ row: row && { id: row.id, group: row.group, title: row.title, disabledReason: row.disabledReason }, calls }))
+}
+
+// M118 — sheet.copilot.1. THE THIRD ROW IN THE SHEET, and the prompt rule.
+// `backendOptions` lists copilot from the registry like any row (disabled
+// by name when absent); `supervisorRowReason(backend)` is the ONE sentence
+// the supervisor row, the routine mint and the dispatch verb read when a
+// row cannot carry an appended prompt — null for a row that can.
+{
+  let rows = [], reason = {}, threw = null
+  try {
+    rows = P.backendOptions({ claude: true, codex: false, copilot: true, acp: false })
+    reason = { claude: P.supervisorRowReason('claude'), copilot: P.supervisorRowReason('copilot'), acp: P.supervisorRowReason('acp') }
+  } catch (e) { threw = String(e) }
+  const cp = rows.find((r) => r.id === 'copilot'), acp = rows.find((r) => r.id === 'acp')
+  ok('sheet.copilot.1 the sheet lists `chat with copilot` enabled when the binary is present and `chat with copilot (acp) — not on PATH` when its is not; supervisorRowReason is null for claude and the row\'s own noPrompt sentence for copilot and acp',
+    threw === null && cp && cp.label === 'chat with copilot' && cp.disabled === false && acp && /PATH/.test(acp.label) && acp.disabled === true &&
+      reason.claude === null && typeof reason.copilot === 'string' && /appended prompt/.test(reason.copilot) && typeof reason.acp === 'string' && /appended prompt/.test(reason.acp),
+    JSON.stringify({ threw, cp, acp, reason }))
+}
+
+// M120 — sandbox.1. A CHAT WITH NO PLACE. The door is a canvas-group row per
+// row (`New chat (no folder)`), disabled by the row's own `noSandbox` sentence
+// for a row without `sandboxArgs`; `modelChoices(backend)` is the row's
+// closed list or null (free text).
+{
+  let rows = [], choices = {}, threw = null
+  try {
+    const c = ctx({ presets: [{ id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', agent: 'claude-code' }] })
+    rows = P.buildCommands(c).filter((r) => r.id.startsWith('chat.sandbox.'))
+    choices = { copilot: P.modelChoices('copilot'), claude: P.modelChoices('claude') }
+  } catch (e) { threw = String(e) }
+  const claude = rows.find((r) => r.id === 'chat.sandbox.claude'), acp = rows.find((r) => r.id === 'chat.sandbox.acp'), codex = rows.find((r) => r.id === 'chat.sandbox.codex')
+  ok('sandbox.1 New chat (no folder) is one spawn-group row per registered backend: enabled for claude when it is on the PATH, disabled by name for codex when it is not, and disabled with the row\'s noSandbox sentence for acp whatever the PATH says; modelChoices is copilot\'s closed list and null for claude',
+    threw === null && claude && claude.group === 'spawn' && claude.disabledReason === undefined && /no folder/.test(claude.title) &&
+      codex && /PATH/.test(codex.disabledReason || '') && acp && /read-only/.test(acp.disabledReason || '') &&
+      Array.isArray(choices.copilot) && choices.copilot.includes('gpt-5-mini') && !choices.copilot.includes('auto') && choices.claude === null,
+    JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.group, r.disabledReason]), choices }))
+}
+
+// M122 — psearch.1. THE SCOPE'S FIRST ROWS say what the answer left out: the
+// cap (`the first N matches — narrow the search`) and the redaction count,
+// each only when non-zero, before the hits; a transcript hit is a row like a
+// scrollback one, flying to its chat and turn. With persistence OFF the
+// reason says chats still answer — a folded "search is unavailable" would
+// send the user to a setting that would not bring the chat hits back.
+{
+  let rows = [], offRows = [], calls = [], threw = null
+  try {
+    const result = { hits: [{ panelId: 'n1', kind: 'scrollback', line: 'Error: cannot read foo', lineIndex: 12 }, { panelId: 'c1', kind: 'transcript', line: 'the flush gate is the cause', turnIndex: 1 }], capped: true, cap: 50, redacted: 2 }
+    const c = ctx({ searchQuery: 'a', searchResults: result, panels: [{ id: 'n1', label: 'api' }, { id: 'c1', label: 'api (chat)' }] })
+    rows = P.buildCommands(c).filter((r) => r.scope === 'search')
+    const t = byId(rows, 'search.hit.c1.t1'); if (t) t.run()
+    calls = c.actions.calls.map((x) => x[0])
+    const off = ctx({ searchQuery: 'a', searchResults: { hits: [result.hits[1]], capped: false, cap: 50, redacted: 0 }, scrollbackEnabled: false, panels: [{ id: 'c1', label: 'api (chat)' }] })
+    offRows = P.buildCommands(off).filter((r) => r.scope === 'search')
+  } catch (e) { threw = String(e) }
+  const cap = rows[0], red = rows[1]
+  ok('psearch.1 the cap row and the redaction row come first, each in its own words; a transcript hit is a search row running goToPanel then the chat-turn flight; with persistence off the reason names that chats still answer and the transcript hit stays',
+    threw === null && cap && cap.id === 'search.cap' && /first 50 matches/.test(cap.title) && red && red.id === 'search.redacted' && /2 secrets/.test(red.title) && rows.some((r) => r.id === 'search.hit.n1.12') && rows.some((r) => r.id === 'search.hit.c1.t1') &&
+      calls.includes('goToPanel') && calls.includes('scrollChatTurn') &&
+      offRows.some((r) => r.id === 'search.off' && /chats still answer/.test(r.disabledReason || '')) && offRows.some((r) => r.id === 'search.hit.c1.t1'),
+    JSON.stringify({ threw, rows: rows.map((r) => [r.id, r.title, r.disabledReason]), calls, offRows: offRows.map((r) => [r.id, r.disabledReason]) }))
+}
+
+// M123 — update.1. THE UPDATE NOTICE'S TWO ROWS. `Check for updates…` is a
+//     canvas-group row, present with NO credential and NO network and never
+//     disabled (the check's own third state is the offline answer), and it
+//     runs `checkForUpdates` — which is on EXCLUDED_ACTIONS, so no plan
+//     reaches it. `env.update` says FOUR sentences: `not checked` (the rest
+//     state — the launch check is off by default, and "never asked" must
+//     not read as "up to date"), `up to date — <v>`, `<v> is out` with the
+//     url in the subtitle, and `could not check — <reason>`.
+{
+  let threw = null
+  let door = null, notChecked = null, newer = null, current = null, failed = null, calls = []
+  try {
+    const c = ctx()
+    door = byId(P.buildCommands(c), 'update.check')
+    if (door) door.run()
+    calls = c.actions.calls
+    const report = { probedAt: 0, shell: { path: '/bin/zsh', ok: true }, pathEntries: [], clis: [], tmux: { kind: 'direct', reason: 'x', path: null }, layout: { path: '/x', backupWritten: false }, envKeys: [] }
+    const envRow = (update) => byId(P.buildEnvironmentRows(report, update), 'env.update')
+    notChecked = envRow(null)
+    newer = envRow({ result: { kind: 'newer', version: '3.1.0', url: 'https://github.com/acme/canvas/releases/tag/v3.1.0' }, checking: false, at: 1 })
+    current = envRow({ result: { kind: 'current', version: '3.0.0' }, checking: false, at: 1 })
+    failed = envRow({ result: { kind: 'could-not-check', reason: 'GitHub answered 403' }, checking: false, at: 1 })
+  } catch (e) { threw = String(e) }
+  ok('update.1 Check for updates… is a canvas row, never disabled, running checkForUpdates; env.update says not checked / up to date — v / v is out (url in the subtitle) / could not check — reason',
+    threw === null && door && door.group === 'canvas' && door.disabledReason === undefined && calls.length === 1 && calls[0][0] === 'checkForUpdates' &&
+      notChecked && /not checked/.test(notChecked.title) && notChecked.scope === 'environment' &&
+      newer && /3\.1\.0 is out/.test(newer.title) && /releases\/tag\/v3\.1\.0/.test(newer.subtitle) &&
+      current && /up to date — 3\.0\.0/.test(current.title) &&
+      failed && /could not check — GitHub answered 403/.test(failed.title),
+    JSON.stringify({ threw, door: door && [door.group, door.disabledReason], calls, titles: [notChecked, newer, current, failed].map((r) => r && r.title) }))
 }
 
 const failed = results.filter((r) => !r.pass)

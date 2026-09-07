@@ -1,3 +1,4 @@
+import type { AgentKind } from '@shared/cost'
 import type { AgentOptions } from '@shared/cost'
 import type { SpawnRequest } from '@shared/ipc-contract'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
@@ -18,7 +19,8 @@ export { BACKEND_IDS }
  * component (`SpawnSheet.tsx`) only renders and moves focus.
  */
 
-export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat' } | { kind: 'supervisor' } | { kind: 'codex' } | { kind: 'teammate'; id: string } | { kind: 'lineup'; id: LineupId }
+/** M118. ONE chat arm for every backend (`backend` absent is claude, carried by name); M90's `codex` kind folded in so a third row needs no new member — registry.1's rule reached for the sheet. */
+export type SheetWhat = { kind: 'preset'; id: string } | { kind: 'command'; command: string } | { kind: 'chat'; backend?: AgentBackend } | { kind: 'supervisor' } | { kind: 'teammate'; id: string } | { kind: 'lineup'; id: LineupId }
 
 /**
  * M73. The chat arm's stand-in preset id in the request the sheet PREVIEWS.
@@ -61,7 +63,12 @@ export function teammateOptions(teammates: readonly PersistedTeammate[], claudeA
 }
 
 /** M99. Each backend's value in the `what` select — the two M73/M90 ids, by row. */
-export const WHAT_ID_BY_BACKEND: Readonly<Record<AgentBackend, string>> = { claude: CHAT_WHAT_ID, codex: CODEX_WHAT_ID }
+export const WHAT_ID_BY_BACKEND: Readonly<Record<AgentBackend, string>> = { claude: CHAT_WHAT_ID, codex: CODEX_WHAT_ID, copilot: '__copilot__', acp: '__acp__' }
+
+/** The inverse: which backend a `what` id names, or undefined for every non-chat id. */
+export function backendOfWhatId(whatId: string): AgentBackend | undefined {
+  return (Object.keys(WHAT_ID_BY_BACKEND) as AgentBackend[]).find((b) => WHAT_ID_BY_BACKEND[b] === whatId)
+}
 
 export interface BackendOption {
   id: AgentBackend
@@ -76,6 +83,34 @@ export interface BackendOption {
  * vanishes reads as a backend that was never built. `available` is keyed by
  * backend so a third row needs no new parameter.
  */
+/**
+ * M118. Why a row cannot carry an appended prompt — the ONE sentence the
+ * supervisor row, the routine mint and the dispatch verb read; null for a
+ * row that can. A copilot supervisor would silently not be one.
+ */
+export function supervisorRowReason(backend: AgentBackend): string | null {
+  return BACKENDS[backend].appendsPrompt ? null : BACKENDS[backend].reasons.noPrompt
+}
+
+/** M120. The row's closed model list where the CLI has one, null for free text — what the sheet's model field renders as a select or an input. */
+/** M118. The preset KIND a backend's headless row shares its flags with — the sheet's how row reads the kind's flag table; acp shares copilot's binary and flags. */
+export const PRESET_KIND_BY_BACKEND: Readonly<Record<AgentBackend, AgentKind>> = { claude: 'claude-code', codex: 'codex', copilot: 'copilot', acp: 'copilot' }
+
+/** M119. What a user chooses between two rows on: the row's facts as one sentence, derived — never a second table. */
+export function rowCapabilitySentence(backend: AgentBackend): string {
+  const row = BACKENDS[backend]
+  return [
+    row.asksPermission ? 'asks before a command runs' : 'runs every tool on its own policy',
+    row.interrupts ? 'interrupts' : 'no interrupt',
+    row.images ? 'images' : 'no images',
+    row.sandboxArgs === undefined ? 'no read-only mode' : 'a read-only mode'
+  ].join(' · ')
+}
+
+export function modelChoices(backend: AgentBackend): readonly string[] | null {
+  return BACKENDS[backend].models ?? null
+}
+
 export function backendOptions(available: Partial<Record<AgentBackend, boolean>>): BackendOption[] {
   return BACKEND_IDS.map((id) => {
     const ok = available[id] === true
@@ -139,10 +174,10 @@ export function buildSpawnRequest(values: SheetValues, presets: readonly SheetPr
     if (title !== '') req.title = title
     return req
   }
-  if (what.kind === 'chat' || what.kind === 'codex') {
-    // M90. Both conversation arms are minted in the renderer; the id here
-    // only names which, for the preview's shape.
-    const req: SpawnRequest = { presetId: what.kind === 'chat' ? CHAT_WHAT_ID : CODEX_WHAT_ID, cwd }
+  if (what.kind === 'chat') {
+    // M90. Every conversation arm is minted in the renderer; the id here
+    // only names which backend, for the preview's shape.
+    const req: SpawnRequest = { presetId: WHAT_ID_BY_BACKEND[what.backend ?? 'claude'], cwd }
     if (title !== '') req.title = title
     if (Object.keys(values.agentOptions).length > 0) req.agentOptions = { ...values.agentOptions }
     return req

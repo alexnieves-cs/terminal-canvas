@@ -56,6 +56,14 @@ jobs:
       # that fails first if the native toolchain is wrong.
       - name: Install dependencies
         run: npm ci
+      # M125's first CI run after the ship: every plain-node suite passed on the
+      # runner (the across fixture's fix held), then the chain died at verify:pty
+      # with `Electron.app: No such file or directory` — npm ci on the runner did
+      # not leave Electron's binary in node_modules (the README's own
+      # `Error: Electron uninstall` gotcha). Fetch it explicitly; a no-op when
+      # the postinstall already did.
+      - name: Fetch Electron's binary
+        run: node node_modules/electron/install.js
 
       # The whole harness: every plain-node suite, the typecheck, the build,
       # and every suite that needs the real Electron runtime and a hidden
