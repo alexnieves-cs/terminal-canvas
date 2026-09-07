@@ -4355,7 +4355,8 @@ body {
 .rail-row__kind { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; }
 .rail-row__kind svg { width: 12px; height: 12px; }
 .rail-row__state-dot { flex: 0 0 auto; margin-left: auto; }
-.rail-row__tail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* SCOPED to the Panels list (the Act III critic): the same class carries a workspace row's `23 panels` and `1 waiting`, a teammate's facts and a routine's cadence — none a state word. */
+.rail-list--panels .rail-row__tail { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .rail-row__start { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
 .rail-row:hover .rail-row__start, .rail-row:focus-within .rail-row__start { opacity: 1; }
 .rail-row--selected { background: var(--iris-dim); border-radius: var(--r-md); }
@@ -4371,8 +4372,9 @@ body {
 .dock__label { position: absolute; left: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); z-index: 1; }
 .dock__button:hover .dock__label, .dock__button:focus-visible .dock__label { opacity: 1; }
 .dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); }
-.shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
-.shell__search:hover { color: var(--fg); background: var(--s-3); }
+/* `.shell__top .shell__search`: the bar's generic button rule is (0,1,1) and won over a bare class — the first golden showed no field (the Act III critic). */
+.shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
+.shell__top .shell__search:hover { color: var(--fg); background: var(--s-3); }
 @media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
 
 /* M173. The empty state's hints and the launcher's tmux banner: sentences in

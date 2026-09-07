@@ -124,7 +124,8 @@ function RailPanelRowImpl({
         >
           start
         </button>
-      ) : (row.state.kind === 'terminal' ? <span className="rail-row__start rail-row__start--empty" aria-hidden="true" /> : null)}
+      ) : <span className="rail-row__start rail-row__start--empty" aria-hidden="true" />}
+      {/* M171 (the Act III critic): EVERY row keeps the start slot, so the dot column lines up across kinds. */}
       <button
         type="button"
         className="rail-row__close icon-button"
