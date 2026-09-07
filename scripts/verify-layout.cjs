@@ -3560,6 +3560,33 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ w: w.annotations, v: Object.keys(v), u: u.annotations && [u.annotations.length, u.annotations[0].id], warnings: out.warnings }))
 }
 
+// M155 — ink.1. INK on the annotation record: `ink` is absent on every M93
+// label (absent stays absent through a re-serialise), a valid ink annotation
+// keeps its points and width, and a malformed `ink` (not an array, a point
+// that is not two finite numbers, a width that is not positive) drops THAT
+// annotation by name and keeps its neighbours.
+{
+  const out = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [
+    { id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [{ id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] }],
+      annotations: [
+        { id: 'l1', text: 'a label', anchor: { kind: 'world', x: 1, y: 2 } },
+        { id: 'k1', text: '', anchor: { kind: 'panel', panelId: 'n1', dx: 5, dy: 6 }, ink: { points: [[0, 0], [10, 4], [20, 0]], width: 3 } },
+        { id: 'k2', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: 'no', width: 3 } },
+        { id: 'k3', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: [[0, 0], [1, 'x']], width: 3 } },
+        { id: 'k4', text: '', anchor: { kind: 'world', x: 0, y: 0 }, ink: { points: [[0, 0], [1, 1]], width: 0 } },
+        { id: 'l2', text: 'after', anchor: { kind: 'world', x: 3, y: 4 } }
+      ] } ] }))
+  const a = out.snapshot.workspaces[0].annotations ?? []
+  const ids = a.map((x) => x.id).join(',')
+  const k1 = a.find((x) => x.id === 'k1')
+  const again = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [{ id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] }], annotations: a }] })).snapshot.workspaces[0].annotations
+  ok('ink.1 an ink annotation keeps its points and width, a label keeps NO ink key, and a malformed ink drops that annotation by name with the rest kept',
+    ids === 'l1,k1,l2' && k1 !== undefined && k1.ink.width === 3 && k1.ink.points.length === 3 && k1.ink.points[1][0] === 10 &&
+      !('ink' in a[0]) && !('ink' in a[2]) && out.warnings.filter((w) => /dropped annotation k[234]/.test(w)).length === 3 &&
+      JSON.stringify(again) === JSON.stringify(a),
+    JSON.stringify({ ids, k1, warnings: out.warnings }))
+}
+
 // M100 — teammate.1/.2. THE TEAMMATE RECORD on disk, with the record rules:
 // absent is every pre-existing file (no warning), a malformed record is
 // dropped BY NAME and the rest survive, an absent optional stays absent, and

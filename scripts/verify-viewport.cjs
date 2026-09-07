@@ -2144,6 +2144,23 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ sel, none, stale, empty }))
 }
 
+// M155 — ink.2. `simplifyStroke` (Ramer–Douglas–Peucker) over world points:
+// a straight run of many points collapses to its two ends, a corner is kept,
+// a tolerance of 0 keeps every point, and fewer than three points pass
+// through untouched.
+{
+  const has = typeof V.simplifyStroke === 'function'
+  const line = Array.from({ length: 50 }, (_, i) => [i, i * 0.5 + (i % 2 ? 0.01 : -0.01)])
+  const corner = [[0, 0], [10, 0], [20, 0], [20, 10], [20, 20]]
+  const straight = has ? V.simplifyStroke(line, 0.75) : null
+  const bent = has ? V.simplifyStroke(corner, 0.75) : null
+  const exact = has ? V.simplifyStroke(corner, 0) : null
+  const two = has ? V.simplifyStroke([[0, 0], [5, 5]], 0.75) : null
+  ok('ink.2 simplifyStroke collapses a straight run to its ends, keeps a corner, keeps every point at tolerance 0, and passes fewer than three points through',
+    has && straight.length === 2 && straight[0][0] === 0 && straight[1][0] === 49 && bent.length === 3 && bent[1][0] === 20 && bent[1][1] === 0 && exact.length === 5 && two.length === 2,
+    JSON.stringify({ straight, bent, exactLen: exact && exact.length, two }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

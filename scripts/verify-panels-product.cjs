@@ -1213,6 +1213,74 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+    // M155 — ink.3. INK: in annotate mode the DRAW tool turns a real drag on
+    // the ground into one stroke (a path on the annotation layer, world-
+    // anchored) and a drag that starts on a panel into a panel-anchored
+    // stroke that MOVES with the panel; Delete removes the selected stroke;
+    // the layout file carries `ink` and a reload paints it again. A click
+    // without movement is still M93's label.
+    {
+      const iLog = []
+      const onI = (_e, _l, m) => { iLog.push(String(m).slice(0, 200)) }
+      wc.on('console-message', onI)
+      try {
+        layoutStore.save({ panels: [
+          { id: 'inkA', x: 700, y: 300, w: 400, h: 300, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'] }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reI
+        await settle()
+        await wc.executeJavaScript(`if (document.querySelector('.palette') === null) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+        const entered = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-command-id="canvas.annotate"]'); if (!el) return 'no row'; el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        await settle()
+        const tool = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-annotate-tool="draw"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 3000)
+        const armed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotate-tool="draw"]')?.getAttribute('aria-pressed') === 'true'`), 2000)
+        const host = await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: r.left, y: r.top } })()`)
+        if (host === null) throw new Error('stage host: no .canvas')
+        const drag = (from, to, steps) => {
+          wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 })
+          for (let i = 1; i <= steps; i++) wc.sendInputEvent({ type: 'mouseMove', x: from.x + (to.x - from.x) * i / steps, y: from.y + (to.y - from.y) * i / steps, button: 'left', buttons: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 })
+        }
+        // A stroke on the ground: a bent path, so simplification keeps a corner.
+        drag({ x: host.x + 80, y: host.y + 80 }, { x: host.x + 260, y: host.y + 90 }, 12)
+        const ground = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"] path'); return g ? g.getAttribute('d') : false })()`), 3000)
+        // A stroke that STARTS on the panel: panel-anchored.
+        const pr = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="inkA"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: r.left + 60, y: r.top + 120 } })()`)
+        if (pr === null) throw new Error('stage: panel inkA gone')
+        drag(pr, { x: pr.x + 120, y: pr.y + 40 }, 10)
+        const onPanel = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="panel"] path'); if (!g) return false; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, d: g.getAttribute('d') } })()`), 3000)
+        // Move the panel through its chrome (a dispatched drag on the frame): the stroke follows.
+        await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="inkA"] .pf__chrome'); if (!c) return false; const r = c.getBoundingClientRect()
+          const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + 30, clientY: r.top + r.height / 2 }
+          c.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mousemove', { ...o, clientX: o.clientX + 90, clientY: o.clientY + 50 })); document.dispatchEvent(new MouseEvent('mouseup', { ...o, clientX: o.clientX + 90, clientY: o.clientY + 50 })); return true })()`)
+        const moved = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="panel"] path'); if (!g) return false; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top } })()`), 3000)
+        const followed = onPanel && moved && Math.abs(moved.x - onPanel.x - 90) < 6 && Math.abs(moved.y - onPanel.y - 50) < 6
+        // Select the ground stroke by a click on it, Delete removes it.
+        const gp = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"] path'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
+        await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"] [data-annotation-hit]'); if (!g) return false; g.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); g.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const selected = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"].annotation--selected') !== null`), 2000)
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))`)
+        const removed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-annotation][data-annotation-ink="true"][data-annotation-kind="world"]') === null`), 2000)
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await settle(); flushLayoutStore()
+        const onDisk = ((JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces || []).find((w) => (w.panels || []).some((p) => p.id === 'inkA')) || { annotations: [] }).annotations || []
+        const inkRows = onDisk.filter((a) => a.ink !== undefined)
+        const reI2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reI2
+        await settle()
+        const repainted = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-annotation][data-annotation-ink="true"] path').length`), 6000)
+        ok('ink.3 in annotate mode the draw tool turns a real drag into one stroke on the layer (world-anchored on the ground, panel-anchored from a panel, which follows the panel), a click on a stroke selects it and Delete removes it, the file carries ink and a reload paints it',
+          entered === true && tool === true && armed === true && typeof ground === 'string' && /^M/.test(ground) && onPanel !== false && followed === true && selected === true && removed === true &&
+            inkRows.length === 1 && inkRows[0].anchor.kind === 'panel' && Array.isArray(inkRows[0].ink.points) && inkRows[0].ink.points.length >= 2 && repainted === 1,
+          JSON.stringify({ entered, tool, armed, ground: ground && ground.slice(0, 40), onPanel, moved, followed, gp, selected, removed, inkRows: inkRows.length, repainted, log: iLog.slice(-3) }))
+      } finally {
+        wc.removeListener('console-message', onI)
+      }
+    }
+
     /* ---------------------------------------------------------------- */
     /* M94. Keyboard reach: every control this run added that a click     */
     /* check drives is also reached by a REAL Tab                          */
