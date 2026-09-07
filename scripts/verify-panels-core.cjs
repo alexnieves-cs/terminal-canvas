@@ -3989,8 +3989,10 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
       await settle()
       const target = await wc.executeJavaScript(`(() => {
-        const live = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('.xterm') && !p.classList.contains('panel--selected') && !p.matches(':hover'))
-        const p = live[0]; if (!p) return null
+        // Any kind's frame, live or carded: the rest rule is the FRAME's. A live one
+        // first when there is one; the end of this part may have carded them all.
+        const frames = [...document.querySelectorAll('.panel[data-panel-id]')].filter((p) => p.querySelector('[data-panel-more]') && !p.classList.contains('panel--selected') && !p.matches(':hover'))
+        const p = frames.find((f) => f.querySelector('.xterm')) ?? frames[0]; if (!p) return null
         const c = p.querySelector('.pf__chrome').getBoundingClientRect()
         const more = p.querySelector('[data-panel-more]')
         return { id: p.getAttribute('data-panel-id'), x: c.left + Math.min(60, c.width / 4), y: c.top + c.height / 2, rest: more ? getComputedStyle(more).opacity : null } })()`)
@@ -4001,11 +4003,13 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         hovered = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-more]'); return m ? getComputedStyle(m).opacity : null })()`)
         wc.sendInputEvent({ type: 'mouseMove', x: Math.round(away.x), y: Math.round(away.y) })
         await settle(); await sleep(250)
-        clicked = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}]'); const m = p.querySelector('[data-panel-more]'); const before = getComputedStyle(m).opacity; m.click(); return { before, menu: p.querySelector('[data-panel-menu]') !== null } })()`)
+        clicked = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}]'); const m = p.querySelector('[data-panel-more]'); const before = getComputedStyle(m).opacity; m.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return { before } })()`)
+        // The click's state update lands on React's next render (menu.1's lesson), never synchronously.
+        clicked.menu = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-menu]') !== null`), 3000)
         await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=${JSON.stringify(target.id)}] [data-panel-menu-close]'); if (c) c.click() })()`)
         await settle()
       }
-      ok('rest.1 a live unselected frame hides its ⋯ at rest (opacity 0), a real pointer over its chrome reveals it (1), and a script\'s click on the hidden ⋯ still opens the menu',
+      ok('rest.1 an unselected frame hides its ⋯ at rest (opacity 0), a real pointer over its chrome reveals it (1), and a script\'s click on the hidden ⋯ still opens the menu',
         target !== null && target.rest === '0' && hovered === '1' && clicked !== null && clicked.before === '0' && clicked.menu === true,
         JSON.stringify({ target, hovered, clicked }))
     }
