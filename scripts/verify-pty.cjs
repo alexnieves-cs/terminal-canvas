@@ -63,13 +63,30 @@ function run(cmd, args, opts = {}) {
   })
   ok('7 resize propagates', r7.includes('AFTER:171x44'), r7.match(/AFTER:\d+x\d+/)?.[0])
 
-  // 8. `claude` resolves on the PTY's PATH and launches
-  const r8 = await run('/bin/zsh', ['-lc', 'which claude && claude --version'], { timeout: 20000 })
-  ok('8 claude on PTY PATH', /\.local\/bin\/claude/.test(r8.buf), r8.buf.trim().split('\n').slice(0, 2).join(' | '))
-
-  // 9. `codex` resolves
-  const r9 = await run('/bin/zsh', ['-lc', 'which codex && codex --version'], { timeout: 20000 })
-  ok('9 codex on PTY PATH', /codex/.test(r9.buf), r9.buf.trim().split('\n').slice(0, 2).join(' | '))
+  // 8 / 9. `claude` and `codex` resolve on the PTY's PATH and launch. These
+  // are facts about the MACHINE, not the code — a runner with neither binary
+  // is not a broken PTY layer — so a missing binary is the loud SKIP shape
+  // verify:pty-manager 11-15 use for a missing tmux (a literal `true` with the
+  // reason and the install line), and a present one is a REAL assertion: the
+  // absolute path `which` printed and a version line, both from the PTY.
+  //
+  // M139. Before this, 8 asserted `.local/bin/claude` (this machine's install
+  // path, red on every CI runner for three pushes) and 9 asserted /codex/ —
+  // which `codex not found` also matches, so 9 was green on a runner with no
+  // codex, a vacuous check standing beside a red one. Both were wrong in the
+  // same direction: about the machine, not the layer.
+  const agentOnPath = async (n, name, versionRe) => {
+    const r = await run('/bin/zsh', ['-lc', `which ${name} && ${name} --version`], { timeout: 20000 })
+    const lines = r.buf.trim().split('\n').map((l) => l.replace(/\r$/, ''))
+    const which = lines.find((l) => l.startsWith('/') && l.endsWith('/' + name))
+    if (which === undefined) {
+      ok(`${n} ${name} on PTY PATH (SKIPPED — ${name} not found on the login shell's PATH)`, true, `install ${name} to cover this`)
+      return
+    }
+    ok(`${n} ${name} on PTY PATH`, versionRe.test(r.buf), `${which} | ${lines.slice(1, 2).join(' ')}`)
+  }
+  await agentOnPath('8', 'claude', /\d+\.\d+\.\d+/)
+  await agentOnPath('9', 'codex', /codex-cli \d+\.\d+\.\d+/)
 
   // 10. throughput: batching must collapse many reads into few flushes
   const FLUSH = 16

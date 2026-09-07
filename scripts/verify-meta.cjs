@@ -846,6 +846,32 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ gitErr, old: oldIds.size, now: newIds.size, lost: lost.slice(0, 20) }))
 }
 
+// handcheck.1 (M136). The eleven owed hand checks from the M126–M133 act live in
+// ONE source, `scripts/handcheck-steps.cjs`: the automated arms `npm run
+// handcheck` runs, and the human steps it prints. The manual-only block at the
+// end of docs/load-bearing.md must carry every HAND step's title verbatim, so
+// the list a person reads and the list the script prints cannot drift apart —
+// two lists of "what a green verify is silent on" that disagree are the same
+// silence wearing two faces. And `handcheck` is NOT in the verify chain: it
+// reaches the real machine (a real `claude`, the real Trash, a real ~/.claude
+// under a fence), the same reason verify:packaged stays out.
+{
+  let steps = null
+  let loadErr = null
+  try { steps = require(join(ROOT, 'scripts', 'handcheck-steps.cjs')).STEPS } catch (e) { loadErr = String(e && e.message || e).split('\n')[0] }
+  const lb = read('docs/load-bearing.md') || ''
+  const manualBlock = lb.slice(lb.lastIndexOf('**The manual-only list, re-read entire'))
+  const hand = Array.isArray(steps) ? steps.filter((s) => s.arm === 'hand') : []
+  const auto = Array.isArray(steps) ? steps.filter((s) => s.arm === 'auto') : []
+  const missing = hand.filter((s) => !manualBlock.includes(s.title)).map((s) => s.n)
+  const chain = String(pkg.scripts.verify || '')
+  ok('handcheck.1 scripts/handcheck-steps.cjs holds the eleven owed checks, every HAND title is in the manual-only block, every step has an arm, and handcheck is a script outside the verify chain',
+    loadErr === null && Array.isArray(steps) && steps.length === 11 && hand.length + auto.length === 11 &&
+      hand.every((s) => Array.isArray(s.steps) && s.steps.length >= 2) && auto.every((s) => typeof s.run === 'function') &&
+      missing.length === 0 && typeof pkg.scripts.handcheck === 'string' && !chain.includes('handcheck'),
+    JSON.stringify({ loadErr, count: Array.isArray(steps) ? steps.length : null, hand: hand.length, auto: auto.length, missing, script: pkg.scripts.handcheck ?? null }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
