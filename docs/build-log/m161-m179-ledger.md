@@ -379,3 +379,26 @@ Spec `docs/superpowers/specs/2026-09-07-v8-act2-conversation-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act2-conversation.md`, branch `m167-conversation`.
 Owed into this act from Act 0: a code fence in an assistant turn renders proportional until
 M167's markdown; from Act I: nothing (backlog #86 is its own).
+- **M167 — turns.** Red: `check(m167)` — rail `md.1` on a stub module (185/186), styles
+  `turns.1` (45/46). Feature: `shared/markdown.ts` (the closed grammar, a tree, `plainText`),
+  `chat/Markdown.tsx` (React from the tree; a `Copy` verb per fence; a link as text with its
+  URL on the title), the user's turn a bubble on `--bubble` at `--r-lg` ≤ 75% aligned right,
+  the assistant's unboxed at the measure at `--t-base`, `.chat__role` clipped to the
+  accessible name, `.chat__when` on hover from the turn's `at`, the caret a soft blink
+  (`prefers-reduced-motion` stops it). Green: rail 186/186, styles 46/46, product 59/59,
+  agents 77/77 (exit 0 each, m167-run.log). A harness slip: the rewritten `chat` scene intent
+  broke `shot.cjs`'s syntax and the first visual run hit its watchdog with no scene painted —
+  repaired, recorded.
+- **M168 — tool rows.** Red: rail `chat-model.7` (186/187), styles `tools.1` (46/47), agents
+  `tools.3` (77/78 against the M167 build). Feature: `toolGroups` / `toolVerb` / `toolState`
+  / `toolGroupLabel` (the span is between the first and last STAMPED rows), five tool glyphs,
+  one row per call (glyph · verb · target · pill), the well capped at twelve lines with `show
+  all`, consecutive rows under one header collapsed by default with the rows in the DOM and
+  any verb on them revealing the group. **A chain-ordering mistake, recorded:** the background
+  job that committed `feat(m168)` ran `git add -A` after M169's node and stylesheet edits had
+  reached the working tree, so those rode in `feat(m168)`'s commit; its `npm run build` then
+  failed on a type error in that half-finished M169 code (the trail's union), and the job's
+  agents / product / visual runs used the M167 build (so `tools.3` read red there a second
+  time, not green). M169's two plain-node checks HAD been watched red before those edits.
+  The split is recorded here rather than rewritten; M169's remainder and M170 follow as
+  their own commits.

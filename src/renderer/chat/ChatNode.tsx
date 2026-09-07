@@ -243,7 +243,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const backend = backendOf(props.panel.chat)
   // M169. The skills capsule's count: the trail's one door (M130).
   const trail = useTrailFor(id, 'chat')
-  const trailCount = trail.entries.length
+  const trailCount = trail.kind === 'entries' ? trail.entries.length + trail.more : 0
   const composer = composerState(snapshot, props.claudeAvailable, backend)
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
