@@ -2582,10 +2582,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-edit]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         return waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]') !== null`), 6000)
       })() : false
+      // The typed text goes through JSON.stringify: a `\n` written inside
+      // this template literal reaches the renderer as a REAL newline inside
+      // a quoted string, and `executeJavaScript` threw `Invalid or unexpected
+      // token` — the whole check reading as a failed Open door.
       const saved = editOpened ? await (async () => {
         await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]'); if (!t) return false
           const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-          setter.call(t, 'Say hello to the user, warmly.\n'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+          setter.call(t, ${JSON.stringify('Say hello to the user, warmly.\n')}); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-save]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         return waitUntil(() => readFileSync(cmdFile, 'utf8').includes('warmly'), 6000)

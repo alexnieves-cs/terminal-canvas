@@ -181,9 +181,12 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
               <span className="rail-row__label">{r.name}</span>
               <span className="rail-row__tail" data-routine-when>{everyWord(r.everyMs)}{r.paused ? ' · paused' : ''}</span>
             </div>
-            <p className="pf__note" data-routine-last>
-              {r.missed !== undefined && <span className="badge" data-tone="needs-you" data-routine-missed>missed at {when(r.missed.at)} — the app was closed</span>}{r.missed !== undefined ? ' · ' : ''}
-              {r.lastRun === undefined ? 'never run' : r.lastRun.outcome === 'started' ? `last run ${when(r.lastRun.at)}` : `last run ${when(r.lastRun.at)} was refused — ${r.lastRun.error ?? 'no reason given'}`}
+            {/* M149 (audit F.10). Two phrases that wrap BETWEEN each other,
+                never inside one: the missed badge and the last-run sentence
+                each keep their words together, and the line breaks at the gap. */}
+            <p className="pf__note teammates-pane__last" data-routine-last>
+              {r.missed !== undefined && <span className="badge" data-tone="needs-you" data-routine-missed>missed at {when(r.missed.at)} — the app was closed</span>}
+              <span className="teammates-pane__last-run">{r.lastRun === undefined ? 'never run' : r.lastRun.outcome === 'started' ? `last run ${when(r.lastRun.at)}` : `last run ${when(r.lastRun.at)} was refused — ${r.lastRun.error ?? 'no reason given'}`}</span>
             </p>
             <div className="teammates-pane__actions">
               <button type="button" className="pf__verb pf__verb--word" data-routine-run title="Run it now, whatever the schedule says" {...shellControl(() => props.onRun(r.id))}>Run now</button>

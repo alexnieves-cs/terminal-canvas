@@ -919,6 +919,13 @@ body {
 .sheet__field--hole { flex-direction: column; align-items: stretch; gap: var(--sp-1); }
 .sheet__field--hole .sheet__label { width: auto; text-align: left; align-self: flex-start; }
 .sheet__field--hole .sheet__input { width: 100%; flex: none; }
+/* M149 (audit F.10). A routine's status line: the missed badge and the
+   last-run sentence wrap between each other, never mid-phrase (`· last` /
+   `run 07:28` was the golden). A refusal's reason may still wrap inside its
+   own span — a sentence that long is better broken than clipped. */
+.teammates-pane__last { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+.teammates-pane__last-run { white-space: normal; }
+.teammates-pane__last .badge { white-space: nowrap; }
 /* M79. A run row in the Workspaces pane: name, facts in mono, the outcome word, Run again. */
 .rail-row--heading { margin-top: var(--sp-3); }
 .rail-run { flex-wrap: wrap; }

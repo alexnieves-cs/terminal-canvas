@@ -3905,7 +3905,11 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
     {
       const { clipboard, nativeImage } = require('electron')
       const panelsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
-      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', metaKey: true, bubbles: true }))`)
+      // The ECHO preset's shape, not Cmd+N's default: xterm brackets a paste
+      // only for an application that ENABLED mode 2004, and a bare `cat -v`
+      // never does — the first cut read `bracketed: false` from a terminal
+      // that could not have shown the brackets whatever the renderer did.
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: ECHO_PRESET.command, args: ECHO_PRESET.args, w: 400, h: 300 })
       const piId = await waitUntil(async () => {
         const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
         return now.find((id) => !panelsBefore.includes(id)) ?? false

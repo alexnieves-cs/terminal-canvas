@@ -16,7 +16,6 @@ import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/composer-model'
 import { allTemplates } from '@shared/templates'
-import { panelLabel } from './canvas-constants'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import type { Registry } from '@renderer/session/session-registry'
@@ -369,7 +368,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         if (cwd !== '' && /\{\{branch\}\}/.test(text)) {
           try { const status = await window.canvas.git.status(cwd); if (status.kind === 'status') branch = status.branch } catch { branch = '' }
         }
-        return fillBuiltIns(text, { cwd, branch, selection: session?.handle.getSelection() ?? '', panel: panel === undefined ? '' : panelLabel(panel) })
+        // `{{panel}}` is the panel's TITLE — railLabel's one-label rule, the
+        // words the frame and the rail show — never the switcher's label,
+        // which carries `— cwd (id)` for telling two rows apart (core
+        // `prompt.builtin.1` reads the frame's title back out of the terminal).
+        return fillBuiltIns(text, { cwd, branch, selection: session?.handle.getSelection() ?? '', panel: panel === undefined ? '' : railLabel(panel, session?.status) })
       }
       if (holes.length === 0) { void withBuiltIns(body).then(deliver); return }
       const values: Record<string, string> = {}

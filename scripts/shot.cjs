@@ -492,7 +492,41 @@ const SCENES = [
   { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram — the scan, the pool of six over a shared list, the judge and the collect, each block naming its kind and the edges naming their triggers — with the header counting the blocks. Every edge carries an ARROWHEAD at its target end and its trigger word sits on a small ground rectangle at the midpoint of its own segment. Every block names its kind first (SCRIPT - SH, POOL - 6 AT A TIME, ORCHESTRATOR - LEADS, COLLECT - JOINS RESULTS). Run is the surface\'s ONE filled primary control, and here it is disabled — so under the verb row two dim sentences name the reasons by verb (Run, because a pool block cannot run yet; Save, because the live canvas is the editor). A PROJECTION of the saved record: the live canvas is still the editor.',
     run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
-    run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } }
+    run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } },
+  // M149. The 4.0 audit's three owed scenes. Each is the REAL condition, set
+  // through the DevTools protocol rather than the renderer's test override:
+  // a scene proves what a person on that machine would see.
+  { name: 'reduced-motion', intent: 'M149. The camera with `prefers-reduced-motion: reduce` on: a palette jump to a far panel lands INSTANTLY — the frame captured a beat after Enter already shows the target framed and selected, with no mid-flight blur or trail — the M56 rule under the real media query, not the test override.', size: [1440, 900],
+    run: async (k) => {
+      try { k.wc.debugger.attach('1.3') } catch { /* attached by an earlier scene */ }
+      await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      console.log('[shot] reduced-motion matches:', await k.js(`window.matchMedia('(prefers-reduced-motion: reduce)').matches`))
+      await k.goTo('claude — api'); await sleep(300)
+      await k.press('k', { metaKey: true }); await sleep(300)
+      await k.type('worker b'); await sleep(200)
+      await k.js(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); return true })()`)
+      // A beat, not the goTo's 700ms: with reduce on there is no flight to wait out.
+      await sleep(80)
+      await k.shot('reduced-motion')
+      await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+    } },
+  { name: 'scale-100', intent: 'M149. The same shell at a device scale factor of 1 (a 100% display; every other scene on this machine is captured at 2, a 200% display): hairlines stay one device pixel, the glass blur and the state edge\'s glow survive the coarser grid, the WebGL terminal\'s glyphs are still legible.', size: [1440, 900],
+    run: async (k) => {
+      try { k.wc.debugger.attach('1.3') } catch { /* attached */ }
+      await k.wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+      await sleep(600)
+      await k.goTo('claude — api (2)'); await sleep(300)
+      await k.shot('scale-100')
+      await k.wc.debugger.sendCommand('Emulation.clearDeviceMetricsOverride')
+      await sleep(400)
+    } },
+  { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
+    run: async (k) => {
+      // Last, on purpose: the file stays gone for every scene after it.
+      rmSync(join(REPO, 'src', 'server.ts'))
+      await k.goTo('server.ts'); await sleep(1500)
+      await k.shot('file-missing')
+    } }
 ]
 
 app.whenReady().then(async () => {
@@ -909,6 +943,9 @@ app.whenReady().then(async () => {
   const js = (code) => wc.executeJavaScript(code)
   const kit = {
     js,
+    // M149. The window's webContents, for the scenes that set a REAL
+    // condition through the DevTools protocol (media, device scale).
+    wc,
     shot: async (name) => {
       await sleep(250)
       const img = await wc.capturePage()

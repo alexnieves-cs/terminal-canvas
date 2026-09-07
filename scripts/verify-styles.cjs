@@ -349,6 +349,16 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rule !== null && /margin-left:\s*auto/.test(rule) && /flex:\s*0 0 auto/.test(rule), rule || 'no rule')
 }
 
+// M149 — routine.last.1 (audit F.10). The routine status line is a wrapping
+// flex row — the badge and the sentence break BETWEEN each other — and the
+// badge never breaks inside itself.
+{
+  const row = (bare.match(/\.teammates-pane__last\s*\{[^}]*\}/g) || [])[0] || null
+  const badge = (bare.match(/\.teammates-pane__last \.badge\s*\{[^}]*\}/g) || [])[0] || null
+  ok('routine.last.1', 'a routine\'s status line wraps between its badge and its sentence (flex-wrap), and the badge keeps its words (nowrap)',
+    row !== null && /display:\s*flex/.test(row) && /flex-wrap:\s*wrap/.test(row) && badge !== null && /white-space:\s*nowrap/.test(badge), JSON.stringify({ row, badge }))
+}
+
 // M61 — hidden.1. `hidden` MUST WIN. The context pane's three tabs each
 // render a <section hidden={tab !== id}>, and `.context__panel { display:
 // block }` — a selector with higher specificity than the UA's `[hidden]`
