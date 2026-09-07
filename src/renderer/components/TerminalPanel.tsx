@@ -9,6 +9,7 @@ import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
 import type { AgentState } from '@shared/types'
 import { PanelFrame } from './PanelFrame'
+import { KindTerminal } from '@renderer/icons'
 
 export interface TerminalPanelProps {
   session: PanelSession
@@ -338,17 +339,15 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           <span className="panel__card-block-title">{title}</span>
         </div>
       ) : detail === 'summary' ? (
-        <div className="panel__card-summary" data-card-summary>
+        <div className="panel__card-summary" data-card-summary data-tone={shown.tone}>
+          {/* M166. The terminal's glyph: at a fifth of the size a card is a light with a name. */}
+          <span className="panel__card-summary-glyph" aria-hidden="true"><KindTerminal /></span>
           <div className="panel__card-summary-title">{title}</div>
           {/* The same affordance element the tail tier renders, with the same
               exact text: an unstarted panel's summary IS "not started", and
               three checks read this element wherever the camera is. */}
           <div className="panel__card-summary-state" data-tone={shown.tone}>{shown.word}</div>
           {!session.spawned && <div className="panel__card-idle">click to start</div>}
-          {(() => {
-            const last = session.spawned ? lines[lines.length - 1] : (recorded?.[recorded.length - 1])
-            return last ? <div className="panel__card-summary-line">{last}</div> : null
-          })()}
         </div>
       ) : session.spawned ? (
         lines.map((line, i) => (

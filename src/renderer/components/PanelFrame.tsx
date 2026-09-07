@@ -171,7 +171,9 @@ export function PanelFrame({
       </div>
     ) : detail === 'summary' ? (
       <div className="pf__body pf__far" data-card-summary>
-        <div className="panel__card-summary">
+        <div className="panel__card-summary" data-tone={tone}>
+          {/* M166. The kind's glyph, large: a light with a name. */}
+          <span className="panel__card-summary-glyph" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind as Exclude<Panel['kind'], 'terminal'>]; return G ? <G /> : null })()}</span>
           <div className="panel__card-summary-title">{title}</div>
           <div className="panel__card-summary-state" data-tone={tone}>{state?.word ?? kindWord ?? KIND_WORD[kind as Exclude<Panel['kind'], 'terminal'>]}</div>
           {far}

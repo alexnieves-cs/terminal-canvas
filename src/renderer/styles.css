@@ -2285,7 +2285,15 @@ body {
 .panel__card-summary-title { font-size: var(--t-2xl); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel__card-summary-state { font-size: var(--t-lg); color: var(--tone); align-self: flex-start; padding: var(--sp-1) var(--sp-4); border-radius: var(--r-full); background: var(--tone-dim); }
 .panel__card-summary-state[data-tone="asleep"], .panel__card-summary-state[data-tone="none"], .panel__card-summary-state[data-tone="starting"] { color: var(--fg-2); }
-.panel__card-summary-line { font-family: var(--font-mono); font-size: var(--t-md); color: var(--fg-3); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+/* M166. THE STATUS WALL: the summary tier is a glyph, a name and the tone's
+   wash — the SAME color-mix the block tier and the minimap draw (far.1 / far.2)
+   — and nothing else. The last line of scrollback went with M105's rail; the
+   machine figure with M163's inspector. */
+.panel__card-summary[data-tone] { background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); border-radius: var(--r-md); padding: var(--sp-5); }
+.panel__card-summary[data-tone="asleep"], .panel__card-summary[data-tone="none"], .panel__card-summary[data-tone="starting"], .panel__card-summary[data-tone="kind"] { background: var(--s-4); }
+.panel__card-summary-glyph { display: inline-flex; width: 32px; height: 32px; color: var(--tone); }
+.panel__card-summary-glyph svg { width: 100%; height: 100%; }
+.panel__card-summary[data-tone="asleep"] .panel__card-summary-glyph, .panel__card-summary[data-tone="none"] .panel__card-summary-glyph, .panel__card-summary[data-tone="starting"] .panel__card-summary-glyph, .panel__card-summary[data-tone="kind"] .panel__card-summary-glyph { color: var(--fg-2); }
 .panel__card--block { padding: 0; }
 .panel__card-block {
   flex: 1;
@@ -2775,9 +2783,21 @@ body {
    control's weight, and reads "keep" while armed so the same press cancels.
    The armed sentence is the disclosure and takes --red only on its confirm:
    destructive, once, and on the control that does it. */
-.review-node__file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+/* M165. DIFFS AS CARDS (the brief, Codex): a file row is a card — the control
+   radius, a hairline, a header of basename (bold, the UI face) and directory
+   (mono, quiet), the counts as two washed pills, the hunk beneath — and its
+   `discard` rests at opacity 0 (the rest rule), revealed on the card's hover
+   or focus and held at 1 while ARMED so `keep` can be read. */
+.review-node__file { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin: 0 0 var(--sp-3); background: var(--s-1); }
+.review-node__base { font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
+.review-node__dir { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.review-node__add, .review-node__del, .review-node__new { font-family: var(--font-mono); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); }
+.review-node__add { color: var(--green); background: var(--green-dim); }
+.review-node__del { color: var(--red); background: var(--red-dim); }
+.review-node__new { color: var(--blue); background: var(--blue-dim); }
+.review-node__file:hover .review-node__discard, .review-node__file:focus-within .review-node__discard, .review-node__discard--armed { opacity: 1; }
 .review-node__file > .review-node__file-button { flex: 1 1 auto; width: auto; }
-.review-node__discard {
+.review-node__discard { opacity: 0; transition: opacity var(--dur-1) var(--ease);
   flex: none;
   min-height: 24px;
   background: none;
@@ -4234,19 +4254,22 @@ body {
 
 /* M163. THE REST RULE (the brief, rule 2). At rest a header is the kind glyph,
    the title and one state — a dot, or the pill for a kind whose word IS the
-   state — plus the kind's summary line. Every VERB (⋯, the kind's own, fill),
-   every MARK (lock, pin) and the close sit in their box at opacity 0 and come
-   to 1 on the frame's :hover, :focus-within and selection. Opacity, never
-   display: the box stays, so header.1's widths, targets.1's 24px and a
-   script's click (menu.1, the close arming) all hold without a hover, and a
-   keyboard reaches every control by name (M44). 0 and 1 only (check 3).
-   The ⋯ menu's own rows are exempt: a menu that is open is being looked at. */
-.pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .pf__control, .pf__chrome .icon-button { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
-.pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close, .pf:hover .pf__control, .pf:hover .icon-button,
-.pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close, .pf:focus-within .pf__control, .pf:focus-within .icon-button,
-.panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close, .panel--selected .pf__control, .panel--selected .icon-button,
-.pf__menu .pf__verb { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close, .pf__chrome .pf__control, .pf__chrome .icon-button { transition: none; } }
+   state — plus the kind's summary line. Every BUTTON in the chrome (⋯, the
+   kind's own verbs, fill, the close) and every MARK (lock, pin) sit in their
+   box at opacity 0 and come to 1 on the frame's :hover, :focus-within and
+   selection. Opacity, never display: the box stays, so header.1's widths,
+   targets.1's 24px and a script's click (menu.1, the close arming) all hold
+   without a hover, and a keyboard reaches every control by name (M44). 0 and
+   1 only (check 3). The ⋯ menu's own rows are exempt: an open menu is being
+   looked at. `.pf__chrome button` rather than a class list: the first cut
+   listed .pf__verb and .icon-button and the review's `commit` and the file's
+   pencil — neither class — stayed on every golden. */
+.pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.pf:hover .pf__chrome button, .pf:hover .pf__verb, .pf:hover .pf__mark, .pf:hover .pf__close,
+.pf:focus-within .pf__chrome button, .pf:focus-within .pf__verb, .pf:focus-within .pf__mark, .pf:focus-within .pf__close,
+.panel--selected .pf__chrome button, .panel--selected .pf__verb, .panel--selected .pf__mark, .panel--selected .pf__close,
+.pf__menu button, .pf__menu .pf__verb { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .pf__chrome button, .pf__chrome .pf__verb, .pf__chrome .pf__mark, .pf__chrome .pf__close { transition: none; } }
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */
 .inspector__machine { font-variant-numeric: tabular-nums; }

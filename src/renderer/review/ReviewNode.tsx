@@ -566,16 +566,17 @@ function ReviewNodeImpl({
                   setExpandedPath(f.expanded ? null : f.path)
                 }}
               >
-                <span className="review-node__path">{f.path}</span>
+                {/* M165. The basename leads (the UI face, bold); the directory follows in mono. */}
+                <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
                 <span className="review-node__counts">
-                  {f.untracked ? 'new' : f.binary ? 'bin' : `+${f.added} −${f.removed}`}
+                  {f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">bin</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}
                 </span>
                 {f.touches !== undefined && <span className="review-node__touches" data-review-node-touches={f.touches}>· {f.touches} tool call{f.touches === 1 ? '' : 's'}</span>}
               </button>
               {model.discard.kind !== 'none' && !readOnly && (
                 <button
                   type="button"
-                  className="review-node__discard"
+                  className={`review-node__discard${armedPath === f.path ? ' review-node__discard--armed' : ''}`}
                   data-review-node-discard={f.path}
                   disabled={model.discard.kind === 'blocked' || discarding}
                   title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard the changes to ${f.path}`}
