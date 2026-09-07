@@ -5,5 +5,7 @@
 module.exports = {
   teammates: require('../src/shared/teammates'),
   places: require('../src/shared/places'),
-  gate: require('../src/main/places')
+  gate: require('../src/main/places'),
+  skills: require('../src/shared/skills'),
+  assign: require('../src/main/skill-assign')
 }

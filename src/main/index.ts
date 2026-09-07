@@ -12,6 +12,7 @@ import { resolveToolboxHome } from './toolbox-read'
 import { buildPushArgs } from './git-args'
 import { createBoardLane } from './board-lane'
 import { createPlacesGate, fsRealpath } from './places'
+import { skillsForBrief, skillsBriefLine, repoRootForBrief, notVisibleFor } from './skill-assign'
 import { createRoutineRunner } from './routine-runner'
 import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
 import { parseTeammates, parseRoutines } from '@shared/layout-schema'
@@ -1375,7 +1376,21 @@ app.whenReady().then(async () => {
       // renderer never carries it, and a relaunch's re-create gets it again
       // (the M81 supervisor rule, reached for an identity).
       const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
-      const brief = mate !== undefined && mate.brief.trim() !== '' ? { appendSystemPrompt: [spec.appendSystemPrompt, `You are ${mate.name}. ${mate.brief.trim()}`].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
+      // M130. THE ONE APPEND SITE (M100's rule: never a second path, never a
+      // renderer-side copy). A project-scoped skill outside this teammate's
+      // places is dropped here — never named to the agent — because "You
+      // can use X" for a skill it cannot read would be worse than silence.
+      // M130 fix round 1. A teammate chat's cwd is often a worktree LANE
+      // (M113's board dispatch), never the repository — the SAME
+      // translation `placesGate` already applies via `worktreeRootOf`, so a
+      // project skill whose repository IS in this teammate's places is not
+      // silently dropped just because the chat runs in a lane of it.
+      const skillsRepoRoot = repoRootForBrief(cwd, (p) => layoutStore.worktrees().find((w) => w.path === p)?.root)
+      const skillsLine = mate === undefined ? '' : skillsBriefLine(skillsForBrief(mate, skillsRepoRoot, fsRealpath).named)
+      const mateText = mate !== undefined && (mate.brief.trim() !== '' || skillsLine !== '')
+        ? `You are ${mate.name}.${mate.brief.trim() !== '' ? ` ${mate.brief.trim()}` : ''}${skillsLine}`
+        : undefined
+      const brief = mateText !== undefined ? { appendSystemPrompt: [spec.appendSystemPrompt, mateText].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
       let isDir = false
       try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
       if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
@@ -1603,14 +1618,21 @@ app.whenReady().then(async () => {
       // M100. The roster. A save is an upsert by id; the record is parsed by
       // the same rules the file is (a relative place never lands).
       listTeammates: () => layoutStore.teammates(),
-      saveTeammate: (teammate) => {
+      saveTeammate: (teammate, cwd) => {
         // A record the parser drops is REFUSED, never replaced with an empty one
         // (which would wipe its places and services silently — the verifier).
         const warnings: string[] = []
         const parsed = parseTeammates([teammate], warnings)[0]
         if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
         layoutStore.saveTeammate(parsed)
-        return parsed
+        // M130 fix round 2. `cwd` arrives only from the assign door; its
+        // REAL (symlink-resolved) verdict on every project-scoped key just
+        // saved rides back on THIS response — no new channel, and no
+        // silent drop the pane could show as a plain success.
+        const notVisible = cwd === undefined || cwd === ''
+          ? []
+          : notVisibleFor(parsed, repoRootForBrief(cwd, (p) => layoutStore.worktrees().find((w) => w.path === p)?.root), fsRealpath)
+        return notVisible.length > 0 ? { teammate: parsed, notVisible } : { teammate: parsed }
       },
       removeTeammate: (id) => layoutStore.deleteTeammate(id),
       // M101. A save is refused BY NAME against M96's table and the teammate's

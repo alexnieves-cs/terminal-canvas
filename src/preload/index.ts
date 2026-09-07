@@ -161,7 +161,7 @@ const bridge: CanvasBridge = {
   },
   teammate: {
     list: () => ipcRenderer.invoke(IPC.TEAMMATE_LIST),
-    save: (teammate) => ipcRenderer.invoke(IPC.TEAMMATE_SAVE, teammate),
+    save: (teammate, cwd) => ipcRenderer.invoke(IPC.TEAMMATE_SAVE, teammate, cwd),
     remove: (id: string) => ipcRenderer.invoke(IPC.TEAMMATE_DELETE, id),
     choosePlace: () => ipcRenderer.invoke(IPC.TEAMMATE_CHOOSE_PLACE)
   },

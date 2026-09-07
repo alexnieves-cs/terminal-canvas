@@ -15,6 +15,8 @@
  *
  * Pure; `verify:teammates record.1`, `verify:layout teammate.1–.2`.
  */
+import type { SkillKey } from './skills'
+
 export interface PersistedTeammate {
   id: string
   name: string
@@ -24,8 +26,15 @@ export interface PersistedTeammate {
   places: string[]
   /** Service ids it may spend through the broker (M102). */
   services: string[]
-  /** Absolute paths of `.md` skills it may read — a place rule applies to each. */
-  skills: string[]
+  /**
+   * M130. Skills assigned from the shelf, by key. ABSENT — never an empty
+   * array — is the pre-M130 record and every teammate nobody has assigned a
+   * skill to; `carryTeammate` writes the key only when present, the same
+   * rule every other optional field in this record follows. A project-scoped
+   * key outside the teammate's places is dropped from the brief and refused
+   * at the assign door (`main/skill-assign.ts`), never silently widened.
+   */
+  skills?: SkillKey[]
   /** The slug of its own memory file under `userData/memory/teammates`. */
   memory: string
   /** Panel ids of its chats, newest last. */
@@ -45,7 +54,7 @@ export function carryTeammate(t: PersistedTeammate): PersistedTeammate {
     brief: t.brief,
     places: [...t.places],
     services: [...t.services],
-    skills: [...t.skills],
+    ...(t.skills !== undefined ? { skills: [...t.skills] } : {}),
     memory: t.memory,
     chats: [...t.chats],
     messaging: t.messaging,
@@ -53,9 +62,9 @@ export function carryTeammate(t: PersistedTeammate): PersistedTeammate {
   }
 }
 
-/** A new teammate has NO places, no services and no schedule: nothing is granted by default. */
+/** A new teammate has NO places, no services, no skills and no schedule: nothing is granted by default. */
 export function emptyTeammate(id: string, name: string): PersistedTeammate {
-  return { id, name, brief: '', places: [], services: [], skills: [], memory: id, chats: [], messaging: false, scheduling: false }
+  return { id, name, brief: '', places: [], services: [], memory: id, chats: [], messaging: false, scheduling: false }
 }
 
 /** `chat as ada` — the sheet's row and the chrome's word. */

@@ -117,7 +117,14 @@ export interface PaletteHandlers {
   listTemplates(): PersistedTemplate[]
   /** M100. */
   listTeammates(): PersistedTeammate[]
-  saveTeammate(teammate: PersistedTeammate): PersistedTeammate
+  /**
+   * M130 fix round 2. `cwd`, present only from the assign door, lets main
+   * check a project-scoped skill's REAL visibility (symlink-resolved
+   * `insidePlace`) for this save and report it back on `notVisible` — never
+   * a new channel, and never silent: a skill the pane just "saved" that
+   * never reaches the agent is this repo's "row that disappears" failure.
+   */
+  saveTeammate(teammate: PersistedTeammate, cwd?: string): { teammate: PersistedTeammate; notVisible?: { name: string; repoRoot: string }[] }
   removeTeammate(id: string): boolean
   choosePlace(): Promise<string | null>
   /** M101. */
@@ -535,7 +542,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }) => palette.saveTemplate(template))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
   ipcMain.handle(IPC.TEAMMATE_LIST, () => palette.listTeammates())
-  ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate) => palette.saveTeammate(teammate))
+  ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate, cwd?: string) => palette.saveTeammate(teammate, cwd))
   ipcMain.handle(IPC.TEAMMATE_DELETE, (_event, id: string) => palette.removeTeammate(id))
   ipcMain.handle(IPC.TEAMMATE_CHOOSE_PLACE, () => palette.choosePlace())
   ipcMain.handle(IPC.ROUTINE_LIST, () => palette.listRoutines())
