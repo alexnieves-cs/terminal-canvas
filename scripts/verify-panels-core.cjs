@@ -3718,5 +3718,61 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       }
     }
 
+
+    // M146 — fit.1. ZOOM TO FIT, named apart from reset and from maximise
+    // (backlog #23): with two panels selected by a real shift-click, the
+    // palette row `Zoom to fit` flies the camera to frame BOTH — every
+    // selected rect lands inside the viewport — while `Reset zoom` returns to
+    // the INITIAL camera; nothing spawns and no panel's rect changes (a camera
+    // move only). Read through the viewport hook and the DOM, never a word.
+    {
+      wc.focus()
+      const ids = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].slice(0, 2).map((p) => p.getAttribute('data-panel-id'))`)
+      const chromeBox = async (id) => wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] .panel__chrome'); if (!c) return null; const r = c.getBoundingClientRect(); return { x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) } })()`)
+      const click = async (box, modifiers) => {
+        wc.sendInputEvent({ type: 'mouseDown', x: box.x, y: box.y, button: 'left', clickCount: 1, modifiers })
+        wc.sendInputEvent({ type: 'mouseUp', x: box.x, y: box.y, button: 'left', clickCount: 1, modifiers })
+        await sleep(120)
+      }
+      const rectsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
+      const sessionsBefore = (await sessionMap(wc)).size
+      const a = ids.length === 2 ? await chromeBox(ids[0]) : null
+      const b = ids.length === 2 ? await chromeBox(ids[1]) : null
+      if (a) await click(a, [])
+      if (b) await click(b, ['shift'])
+      const selected = await wc.executeJavaScript(`[...document.querySelectorAll('.panel--selected')].map((p) => p.getAttribute('data-panel-id'))`)
+      // The row is run the way a person runs it: Cmd+K, the title typed, the row pressed (check 52's shape).
+      const runRow = async (title) => {
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') !== null`), 2000)
+        const found = await wc.executeJavaScript(`(async () => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          const input = document.querySelector('.palette__input')
+          setter.call(input, ${JSON.stringify(title)})
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+          await new Promise((r) => setTimeout(r, 120))
+          const row = [...document.querySelectorAll('.palette__row')].find((r) => r.textContent.includes(${JSON.stringify(title)}))
+          if (!row) return 'not found'
+          row.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+          return 'ok'
+        })()`)
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette') === null`), 2000)
+        return found
+      }
+      const ranFit = await runRow('Zoom to fit')
+      const framed = await waitUntil(async () => {
+        const vp = await wc.executeJavaScript(`window.__m4aViewport()`)
+        const inside = await wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(); return ${JSON.stringify(ids)}.every((id) => { const p = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!p) return false; const r = p.getBoundingClientRect(); return r.left >= host.left && r.top >= host.top && r.right <= host.right && r.bottom <= host.bottom }) })()`)
+        return inside ? vp : false
+      }, 4000)
+      const ranReset = await runRow('Reset zoom')
+      const reset = await waitUntil(async () => { const vp = await wc.executeJavaScript(`window.__m4aViewport()`); return vp.scale === 1 && vp.x === DEFAULT_CAMERA.x && vp.y === DEFAULT_CAMERA.y ? vp : false }, 4000)
+      const rectsAfter = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id') + ':' + p.style.transform)`)
+      const sessionsAfter = (await sessionMap(wc)).size
+      ok('fit.1 Zoom to fit frames the two shift-selected panels inside the viewport as a flight and Reset zoom returns to the initial camera, with no panel rect changed and nothing spawned',
+        ids.length === 2 && selected.length === 2 && ranFit === 'ok' && framed !== false && ranReset === 'ok' && reset !== false &&
+          rectsAfter.join('|') === rectsBefore.join('|') && sessionsAfter === sessionsBefore,
+        JSON.stringify({ ids, selected, ranFit, framed, ranReset, reset, sessionsBefore, sessionsAfter }))
+    }
   }
 })

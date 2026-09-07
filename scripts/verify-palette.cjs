@@ -757,8 +757,10 @@ const MINE = { id: 'u1', name: 'claude — work', available: true, builtIn: fals
   const rows = P.buildCommands(ctx({ presets: [SHELL, MINE] }))
   const withHint = rows.filter((r) => r.shortcut !== undefined).map((r) => r.id + '=' + r.shortcut)
   // M65: the sheet's row carries its own chord (⌘⇧N), a different key.
+  // M146: `Zoom to fit` carries ⌘1 — the chord useViewport has bound to
+  // fitAll since M56, named on its row at last; still one ⌘N.
   ok('48 only the default preset advertises Cmd+N',
-    withHint.sort().join(',') === 'canvas.fit=\u23180,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
+    withHint.sort().join(',') === 'canvas.fit=\u23180,canvas.zoom-fit=\u23181,preset.spawn.shell=\u2318N,spawn.sheet=\u2318\u21e7N',
     withHint.join(','))
 }
 

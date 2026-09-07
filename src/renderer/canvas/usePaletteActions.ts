@@ -76,6 +76,10 @@ export interface PaletteActionsDeps {
   broadcastInput: boolean
   broadcastReady: boolean
   resetViewport: () => void
+  /** M146. Zoom to fit's two arms: the selection when any, else every panel. */
+  fitAll: () => void
+  fitSelection: (rects: WorldRect[]) => void
+  selectedIdsRef: RefObject<ReadonlySet<string>>
   centreOn: (rect: WorldRect) => void
   worldCentre: () => Point
   /** M56. The camera's named verbs and the bookmark state, read through refs. */
@@ -190,7 +194,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
-    broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, openReviewAcross, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal, instantiateTemplate,
@@ -560,8 +564,19 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // nothing about whether a reset happened and nothing here may act on it.
       void window.canvas.canvas.requestReset()
     },
-    // Cmd+0's INITIAL, which is the only camera reset useViewport exposes.
-    zoomToFit: () => resetViewport(),
+    // M146. TWO verbs, two names (backlog #23): `Reset zoom` is Cmd+0's
+    // INITIAL; `Zoom to fit` frames the SELECTION when there is one and every
+    // panel otherwise, as a flight, moving nothing but the camera. An empty
+    // canvas has nothing to fit and resets instead — a verb that did nothing
+    // would read as broken.
+    resetZoom: () => resetViewport(),
+    zoomToFit: () => {
+      const selected = selectedIdsRef.current
+      const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
+      if (rects.length > 0) fitSelection(rects)
+      else if (panelsRef.current.length > 0) fitAll()
+      else resetViewport()
+    },
     // M56. Bookmarks and the trail. Names are minted as "View N" over the
     // current count; a rename is a later milestone's, and a place with a
     // number is still a place.
@@ -1730,7 +1745,15 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
             return { kind: 'ran' }
           }
-          case 'zoom-fit': resetViewport(); return { kind: 'ran' }
+          case 'zoom-fit': {
+            const selected = selectedIdsRef.current
+            const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
+            if (rects.length > 0) fitSelection(rects)
+            else if (panelsRef.current.length > 0) fitAll()
+            else resetViewport()
+            return { kind: 'ran' }
+          }
+          case 'zoom-reset': resetViewport(); return { kind: 'ran' }
           case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
           case 'review': openReview(a.panel!); return { kind: 'ran' }
           case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
@@ -1903,7 +1926,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }), [resetViewport, centreOn, selectAndRaise, presetRows, promptRows,
+  }), [resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

@@ -1199,7 +1199,7 @@ export function Canvas({
   )
 
   const {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying
   } = useViewport(
@@ -4684,7 +4684,7 @@ export function Canvas({
   const paletteActions = usePaletteActions({
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
-    broadcastInput, broadcastReady, resetViewport, centreOn, worldCentre,
+    broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
     selectAndRaise, selectOnly, onSelectPanel, onClosePanel, openReview, openReviewAcross,
     openFilePanel, openToolboxPanel, openJiraPanel, openMemoryPanel, openWorkflowPanel, openGithubPanel, beginWatcher, beginNewNote, beginNewChat, openAsChat, openInTerminal,
