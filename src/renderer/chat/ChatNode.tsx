@@ -635,7 +635,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
             an approval is a sentence and two buttons in the same well (M76's
             "between the well and the composer" rule still holds — the question
             is never inside the scroll host). */}
-        <div className={`chat__composer${composer.interrupt.enabled ? ' chat__composer--live' : ''}`} data-chat-composer>
+        {/* `--live` is A TURN IN FLIGHT (streaming, or starting with a queue behind it — the Act II critic's auto scene), not the Interrupt arm's enabled bit: a codex chat mid-turn shows Interrupt disabled with its reason rather than a Send it cannot use. */}
+        <div className={`chat__composer${snapshot !== null && (snapshot.status === 'streaming' || snapshot.status === 'starting') ? ' chat__composer--live' : ''}`} data-chat-composer>
         {snapshot !== null && snapshot.pending.length > 0 && <div className="chat__questions" data-chat-questions>
           {snapshot.pending.map((p) => (
             <div key={p.requestId} className="chat__permission" data-chat-permission={p.requestId} role="group" aria-label={`${p.toolName} asks for permission`}>

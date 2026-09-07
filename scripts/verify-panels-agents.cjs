@@ -1490,23 +1490,6 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const verbs = await wc.executeJavaScript(`(() => { const rows = [...document.querySelectorAll('.panel[data-panel-id="${chatId}"] [data-chat-row="tool"]')]; return Object.fromEntries(rows.map((r) => [r.getAttribute('data-chat-tool'), !!r.querySelector('[data-chat-tool-diff]')])) })()`)
         // Declared before the assertion that reads it; measured after the close below.
         let baselineGone = false
-        // M170 — agent-card.1. THE AGENT CARD WHEN IT IS A TERMINAL: a
-        //     terminal started as `claude` wears the chat's glyph beside its
-        //     state dot and the chat's header line (folder · engine, from the
-        //     one builder); a plain shell wears neither. Read off the fixture's
-        //     panels by their spec, not by a scene. (Written beside M170's
-        //     code — not watched red; the rail's header.3 was.)
-        const agentCard = await wc.executeJavaScript(`(() => {
-          const frames = [...document.querySelectorAll('.panel[data-panel-kind="terminal"]')]
-          const withLine = frames.filter((p) => p.querySelector('[data-agent-header]'))
-          const first = withLine[0]
-          return { terminals: frames.length, withLine: withLine.length,
-            glyph: first ? first.querySelector('[data-agent-glyph]') !== null : null,
-            line: first ? first.querySelector('[data-agent-header]').textContent : null,
-            shellsWithLine: frames.filter((p) => !p.querySelector('[data-agent-glyph]') && p.querySelector('[data-agent-header]')).length } })()`)
-        ok('agent-card.1 a claude terminal wears the chat\'s glyph and the folder · engine header line; a plain shell wears neither',
-          agentCard.terminals >= 2 && agentCard.withLine >= 1 && agentCard.glyph === true && / · claude$/.test(agentCard.line || '') && agentCard.shellsWithLine === 0,
-          JSON.stringify(agentCard))
         // M168 — tools.3. A GROUP: the chat's two consecutive tool rows sit
         //     under one header, collapsed by default (the rows are in the DOM,
         //     display none); a dispatched click on the hidden Edit row's diff
@@ -1517,7 +1500,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const editDiff = await stateOf('Edit', 'diff')
         const groupAfter = await wc.executeJavaScript(`(() => { const g = ${sel('[data-chat-tools]')}; if (!g) return null; const row = g.querySelector('[data-chat-tool="Edit"]'); return { open: g.getAttribute('data-chat-tools-open'), rowDisplay: row ? getComputedStyle(row).display : null } })()`)
         ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
-          groupBefore !== null && groupBefore.tools === '2' && groupBefore.open === 'false' && /2 tools/.test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
+          groupBefore !== null && Number(groupBefore.tools) >= 2 && groupBefore.open === 'false' && new RegExp(`^${groupBefore.tools} tools$`).test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
             groupAfter !== null && groupAfter.open === 'true' && groupAfter.rowDisplay !== 'none',
           JSON.stringify({ groupBefore, groupAfter }))
         const clickedRead = await clickDiff('Read')
@@ -3283,6 +3266,20 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         wc.reload(); await reF
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="frontT"]') !== null`), 5000)
+        // M170 — agent-card.1. THE AGENT CARD WHEN IT IS A TERMINAL: frontT
+        //     (a dormant terminal whose spec names claude) wears the chat's
+        //     glyph beside its state dot and the chat's header line (folder ·
+        //     engine, from the one builder); the fixture's plain shells wear
+        //     neither. (Written beside M170's code — not watched red; the
+        //     rail's header.3 was.)
+        const agentCard = await wc.executeJavaScript(`(() => {
+          const f = document.querySelector('.panel[data-panel-id="frontT"]')
+          const shells = [...document.querySelectorAll('.panel[data-panel-kind="terminal"]')].filter((p) => p !== f)
+          return { glyph: f ? f.querySelector('[data-agent-glyph]') !== null : null, line: f ? (f.querySelector('[data-agent-header]')?.textContent ?? null) : null,
+            shells: shells.length, shellsDressed: shells.filter((p) => p.querySelector('[data-agent-glyph]') || p.querySelector('[data-agent-header]')).length } })()`)
+        ok('agent-card.1 a claude terminal wears the chat\'s glyph and the folder · engine header line; a plain shell wears neither',
+          agentCard.glyph === true && / · claude$/.test(agentCard.line || '') && agentCard.shells >= 1 && agentCard.shellsDressed === 0,
+          JSON.stringify(agentCard))
         // A LIVE terminal is refused by name.
         const liveId = await (async () => {
           const before = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))

@@ -1945,6 +1945,8 @@ body {
    the same state said twice on one frame. The element stays (checks read its
    attributes); it is not painted. */
 .pf--kind-terminal .pf__state { display: none; }
+/* M170. An agent terminal's chat glyph is a `.pf__state--kind` too — shown, beside the (hidden) dot. */
+.pf--kind-terminal .pf__state--kind[data-agent-glyph] { display: inline-flex; }
 .pf__body { flex: 1; min-height: 0; isolation: isolate; }
 /* M149 (audit F.12). `isolation: isolate` keeps every z-index INSIDE the body
    (xterm's layers run to 10) in the body's own stacking context, so the
@@ -3829,17 +3831,17 @@ body {
 @keyframes chat-caret { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .chat__row--live .chat__text::after { animation: none; } }
 .chat__row--thinking { }
-.chat__thinking-toggle { grid-column: 2; justify-self: start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
+.chat__thinking-toggle { align-self: flex-start; min-height: 24px; padding: 0 var(--sp-2); border: 0; background: transparent; color: var(--fg-3); font: inherit; font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; }
 .chat__thinking-toggle:disabled { cursor: default; }
 .chat__thinking-toggle:hover:not(:disabled), .chat__tool-toggle:hover { color: var(--fg-2); }
-.chat__thinking-text { grid-column: 2; margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
+.chat__thinking-text { margin: var(--sp-1) 0 0; white-space: pre-wrap; color: var(--fg-3); font: inherit; font-size: var(--t-sm); }
 
 /* M168. TOOL ROWS: one collapsed row per call — the family's glyph in a soft
    tint, the verb, the target, a state pill — and no `TOOL` label. A GROUP of
    consecutive rows folds under one header collapsed by default; its rows stay
    in the DOM (the checks count and click them) and are hidden by the class. */
 .chat__row--tool { flex-direction: row; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; padding: var(--sp-1) 0; font-size: var(--t-md); }
-.chat__tool-glyph { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; align-self: center; }
+.chat__tool-glyph { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: var(--r-sm); background: var(--iris-dim); color: var(--iris); flex: 0 0 auto; align-self: flex-start; margin-top: 1px; } /* flex-start: an opened diff wraps beneath the row, and a centred glyph floated to the well's middle (the critic's auto scene) */
 .chat__tool-glyph svg { width: 12px; height: 12px; }
 .chat__tool-state { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); padding: 0 var(--sp-2); border-radius: var(--r-full); flex: 0 0 auto; color: var(--green); background: var(--green-dim); }
 .chat__tool-state[data-chat-tool-state="running"] { color: var(--blue); background: var(--blue-dim); }
@@ -3850,6 +3852,8 @@ body {
 .chat__tools-chevron { display: inline-flex; width: 12px; height: 12px; }
 .chat__tools-chevron svg { width: 12px; height: 12px; }
 .chat__tools--collapsed .chat__row--tool { display: none; }
+/* The bodies a row opens — the diff and the result — take the whole line beneath the row (the auto scene had the diff beside the verb). */
+.chat__tool-diff, .chat__tool-result, .chat__tool-result + .chat__tool-toggle { flex: 1 0 100%; }
 /* M111. The tool's name is a CHIP: an object you could pick up, which M77 says it is. */
 .chat__tool-name { font-weight: 600; }
 .chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
@@ -3883,7 +3887,8 @@ body {
 .chat__composer--live .chat__verb--interrupt { display: inline-flex; }
 .chat__composer--live .chat__verb--send { display: none; }
 .chat__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
-.chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
+/* `.chat__chips .chat__chip--quiet`: two classes, so the M75 attachment chip's mono rule later in the file does not win by source order (the first golden had the chips in mono). */
+.chat__chips .chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
 .chat__chip--verb { cursor: pointer; }
 .chat__chip--verb:hover { color: var(--fg); background: var(--s-3); }
 .chat__permission-sentence { margin: 0; font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }

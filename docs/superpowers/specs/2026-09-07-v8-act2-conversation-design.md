@@ -76,7 +76,8 @@ thing it is. Every `data-chat-*` hook and every `chat__*` class a check reads st
   it?`) and two buttons (`Allow`, `Deny`), with `Allow for session` a third quiet verb
   (M98) — `[data-chat-allow]`, `[data-chat-allow-session]`, `[data-chat-deny]` stay;
   `data-chat-pending` on the root stays.
-- The composer's placeholder becomes `Message Claude…` (or the backend's name); the `⌘↩
+- The composer's placeholder becomes `Message claude…` (the backend's word, lower-case as
+  everywhere else in the app — the first draft of this line wrote `Claude`); the `⌘↩
   sends` hint moves to the Send button's `title`.
 
 ## M170 — the agent card when it is a terminal

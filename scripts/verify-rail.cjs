@@ -2398,7 +2398,7 @@ const session = (id, over = {}) => ({
   const first = g && g[1]
   ok('chat-model.7 consecutive tool rows fold into one group with the elapsed span when the times exist, a lone tool row stays a row, the rest pass through; toolVerb and toolState name the family and the pill',
     kinds === 'user,tools,text,tool' && first && first.rows.length === 3 && first.elapsedMs === 60000 &&
-      groups([tool('x', 'Read')])[0].kind === 'tool' && groups([tool('x', 'Read', 5), tool('y', 'Read')])[0].elapsedMs === undefined &&
+      groups([tool('x', 'Read')])[0].kind === 'tool' && groups([tool('x', 'Read', 5), tool('y', 'Read')])[0].elapsedMs === undefined && groups([tool('x', 'Read', 5), tool('y', 'Read', 900)])[0].elapsedMs === undefined &&
       verb('Read') === 'Read' && verb('Bash') === 'Run' && verb('Grep') === 'Search' && verb('WebFetch') === 'WebFetch' && verb('Write') === 'Edit' &&
       state(tool('a', 'Read')) === 'done' && state({ ...tool('a', 'Read'), live: true }) === 'running' && state({ ...tool('a', 'Read'), result: { content: 'x', isError: true } }) === 'error',
     JSON.stringify({ kinds, first: first && { n: first.rows.length, elapsedMs: first.elapsedMs }, verbs: [verb('Bash'), verb('Grep'), verb('Write')] }))

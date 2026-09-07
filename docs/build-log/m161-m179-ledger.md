@@ -402,3 +402,50 @@ M167's markdown; from Act I: nothing (backlog #86 is its own).
   time, not green). M169's two plain-node checks HAD been watched red before those edits.
   The split is recorded here rather than rewritten; M169's remainder and M170 follow as
   their own commits.
+- **M169 — the composer.** Red: styles `composer.1` (47/48), rail `composer-rows.1`
+  (187/188), both before the code. Feature: `.chat__composer` a rounded well (`--r-lg`, a
+  hairline, `inset 0 1px 2px var(--bezel)`, the iris ring on `:focus-within`), the chips
+  row (`model` · `N skills` from the trail's one door · `@ attach`, which drops an `@` into
+  the draft and opens M75's file completions — the honest attach door this app has), the
+  textarea's rows from `composerRows(draft)` (two to six), Send the one filled control and
+  Interrupt shown in its place only while a turn runs (`.chat__composer--live`; the button
+  stays in the DOM for `codex.1`), the approval moved into the well as a sentence (`claude
+  wants to run Bash npm test — allow it?`) with its three verbs, the placeholder `Message
+  claude…` and the chord on Send's title.
+- **M170 — the agent card when it is a terminal.** Red: rail `header.3` (188/189) before
+  `agentHeader`; agents `agent-card.1` written beside the code (said so in the check).
+  Feature: `agentHeader(spec, branch?)` over `chatHeaderLine` (one builder; the engine word
+  is the backend's, `claude-code` → `claude`; a plain shell → `null`), `PanelFrame`'s
+  `agentGlyph` (the chat's glyph beside the state dot), the terminal's `.pf__summary
+  [data-agent-header]`.
+- **The critic's walk of Act II's 33 changed scenes** (a fresh-context critic over the
+  diffs). Accepted the shape in every scene; its questions and the dispositions, each landed
+  before any golden was written: (1) the `auto` scene showed Send while a turn was in flight
+  — `--live` keyed on the Interrupt arm's enabled bit, which `starting` with a queue behind
+  it does not set; it keys on the turn (`streaming` or `starting`) now, so Interrupt shows
+  (disabled with its reason on a backend that cannot) whenever a turn runs; (2) the Edit
+  row's glyph floated to the middle of its opened diff — the glyph is `align-self:
+  flex-start` and the opened bodies take the whole line; (3) the `thought` toggle was centred
+  as an orphan word — it is left-aligned like a row; (4) M170 was unwitnessed by a golden —
+  the `.pf--kind-terminal .pf__state { display: none }` rule (M66's) had hidden the agent
+  glyph too; the `tests` card in `kinds` now shows the chat's glyph beside `repo · claude`;
+  the running-agent case is `agent-card.1`'s (79/79). Its minor: the placeholder reads
+  `Message claude…` lower-case — the spec's line said `Claude`; the spec is corrected (the
+  backend's word is lower-case everywhere in the app). The walk's own two: the chips had
+  inherited M75's mono chip rule by source order (`.chat__chips .chat__chip--quiet`); the
+  fixed chain-ordering slip above.
+- **Golden sentences, Act II** (the critic's, amended for the four scenes the wave changed
+  again):
+  - chat · the caps labels are gone; the user's question is a right-aligned bubble; the two tool rows fold under `› 2 tools`; the reply is UI-face prose with `start` / `health` as mono chips; the composer is a well with `claude` / `@ attach` chips in the UI face, `Message claude…` and one Send (outlined while the draft is empty); `thought` is a left-aligned quiet toggle.
+  - composer · the same restyle behind the file popover; the draft sits under the chips row and Send is the filled primary.
+  - auto · the group expanded (Read `done`, Edit with its diff open BENEATH the row, each glyph on its row), the auto continuation a bubble, `Interrupt` in Send's place while the turn is in flight.
+  - tool-objects · only the clock stamps beside the Read/Edit rows in the Tools detail (jitter).
+  - supervisor · the chat behind the sheet lost its caps labels; the codex chat at the top shows Send alone.
+  - chat-copilot · the chat at the right edge shows the bubble, prose, chips and well; the sheet unchanged.
+  - attention · the auto chat's bubble, prose and well behind the `needs you` terminal.
+  - subagents · the chat restyle behind `claude — api (2)`; pid jitter.
+  - header · the chat behind the narrow frame restyled; the scene's own subject unchanged.
+  - flip · the flipped cards unchanged; the chat behind and RAM jitter.
+  - kinds · the dormant `tests` card's header reads the chat's glyph and `repo · claude` (M170); the chat at the bottom right shows the bubble and `› 2 tools`.
+  - kinds-dark · the same on the dark theme.
+  - integrations, vault, watcher, board, memory, templates, palette, palette-query, palette-dark, lineup, spawn-sheet, search, search-empty, inspector-detail, inspector-work, inspector-tools, navigator-panels, navigator-workspaces, navigator-files, overview · the chat restyle behind each pane or sheet, the pane or sheet itself unchanged; pid / RAM / port / clock jitter where the critic named it.

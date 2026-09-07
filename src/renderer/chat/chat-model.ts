@@ -253,7 +253,8 @@ export function toolGroups(rows: readonly ChatRow[]): ChatGroup[] {
     const stamped = run.filter((r) => r.at !== undefined)
     const first = stamped[0]?.at
     const last = stamped[stamped.length - 1]?.at
-    const elapsed = stamped.length >= 2 && first !== undefined && last !== undefined && last >= first ? { elapsedMs: last - first } : {}
+    // Under a second is the same turn's stamp on every row: no span, the count alone.
+    const elapsed = stamped.length >= 2 && first !== undefined && last !== undefined && last - first >= 1000 ? { elapsedMs: last - first } : {}
     out.push({ kind: 'tools', id: `tools:${run[0].id}`, rows: run, ...elapsed })
     run = []
   }

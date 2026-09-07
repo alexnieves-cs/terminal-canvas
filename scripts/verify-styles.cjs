@@ -852,8 +852,8 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const label = all.some((r) => /\.chat__row--tool::before/.test(r.sel) && /content:\s*'tool'/.test(r.body))
   const glyph = all.some((r) => /\.chat__tool-glyph\b/.test(r.sel))
   const pill = all.some((r) => /\.chat__tool-state\b/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body))
-  const well = all.find((r) => /(^|,)\s*\.chat__tool-result\s*(,|$)/.test(r.sel))
-  const capped = well ? /max-height:\s*calc\(12 \*/.test(well.body) : false
+  // `some`, not `find`: a second rule names the same subject for its flex line (the opened body takes the whole row).
+  const capped = all.some((r) => /(^|,)\s*\.chat__tool-result\s*(,|$)/.test(r.sel) && /max-height:\s*calc\(12 \*/.test(r.body))
   const group = all.some((r) => /\.chat__tools-head\b/.test(r.sel)) && all.some((r) => /\.chat__tools--collapsed \.chat__row--tool/.test(r.sel) && /display:\s*none/.test(r.body))
   ok('tools.1', 'a tool row has a glyph slot, a state pill and no TOOL label; the result well is capped at twelve lines; a group has a header and hides its rows while collapsed',
     !label && glyph && pill && capped && group, JSON.stringify({ label, glyph, pill, capped, group }))
