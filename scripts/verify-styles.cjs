@@ -578,5 +578,29 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     scales, JSON.stringify({ kf: kf && kf[1].replace(/\s+/g, ' ').slice(0, 160) }))
 }
 
+// M127 — skills.1. THE COLUMN FITS THE NAVIGATOR. The navigator is a fixed
+// ~300px (M46: its width is the breakpoint's, never the pane's), so a Skills
+// column that asks for more than the pane can hold renders half off the left
+// edge with its title cut — which is what the `skills` shot scene found. The
+// three facts that keep it inside are lexical and are pinned here: the column
+// declares a FIXED width and `min-width: 0` (a flex basis alone loses to a
+// heading whose controls do not shrink), the heading's title GIVES (M106's
+// one header rule: the title ellipsises, every control is `flex: 0 0 auto`),
+// and the rack — the PANE, never the shell — is what scrolls sideways.
+//
+// What it cannot see: the rendered width. A `width` in a unit larger than the
+// navigator would pass this and fail the eye; the shot scene is the check for
+// that, and it is not in `npm run verify`.
+{
+  const col = all.find((r) => /(^|,)\s*\.skills-pane__column\s*(,|$)/.test(r.sel))
+  const colFixed = col ? /(^|;|\s)width:\s*[\d.]+r?em/.test(col.body) && /min-width:\s*0/.test(col.body) : false
+  const title = all.find((r) => /\.skills-pane__column-title\b/.test(r.sel))
+  const titleGives = title ? /text-overflow:\s*ellipsis/.test(title.body) && /min-width:\s*0/.test(title.body) : false
+  const rack = all.find((r) => /\.skills-pane__columns\b/.test(r.sel))
+  const rackScrolls = rack ? /overflow-x:\s*auto/.test(rack.body) : false
+  ok('skills.1', 'a Skills column has a fixed width and min-width: 0, its heading title ellipsises, and the rack scrolls sideways',
+    colFixed && titleGives && rackScrolls, JSON.stringify({ colFixed, titleGives, rackScrolls }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)
