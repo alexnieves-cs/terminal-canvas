@@ -72,7 +72,7 @@ export interface ToolboxNodeProps {
  */
 function ToolboxNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose,
-  readOnly = false, onBeginLink, linkTarget
+  readOnly = false, onBeginLink, linkTarget, onOpenFile
 }: ToolboxNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -193,7 +193,7 @@ function ToolboxNodeImpl({
                       entry's argument for hooks, permissions and MCP servers. */}
                   <button type="button" className="rail-row__verb toolbox-node__open" data-toolbox-open={row.name}
                     title={`Open ${row.sourcePath} in a file panel`}
-                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); props.onOpenFile(row.sourcePath) }}>open</button>
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onOpenFile(row.sourcePath) }}>open</button>
                 </li>
               ))}
             </ul>
