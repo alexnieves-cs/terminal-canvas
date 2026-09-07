@@ -61,7 +61,9 @@ import { telemetryPlan, scrubEvent } from './telemetry'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
-import { resolveTranscript } from './transcript-reader'
+import { resolveTranscript, readFrom as readTranscriptFrom } from './transcript-reader'
+import { trailFor, forgetTrail } from './skill-trail-read'
+import { StringDecoder } from 'node:string_decoder'
 import type { AgentHandlers } from './ipc'
 import { REASON_NO_CODEX, REASON_CODEX_NO_IMAGES, type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
 import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
@@ -179,6 +181,14 @@ let gitPath: string | null = null
 // it yet — M72's chat panel is its first caller — but it is wired into the
 // quit sequence now so a process it owns can never outlive the app.
 let agentSessions: AgentSessionManager | null = null
+// M129. One StringDecoder per pinned TERMINAL panel for the skill trail's own
+// read of the transcript — separate from PtyManager's own decoder map (M17's
+// usage tail), because the two are independent readers of the same
+// append-only file at independent offsets; sharing one decoder between them
+// would corrupt whichever read second whenever a chunk boundary split a
+// multibyte character (`transcript-reader.ts`'s own reason `readFrom` stays
+// stateless and hands back raw bytes).
+const trailDecoders = new Map<string, StringDecoder>()
 // M76. Assigned beside it once the runtime exists; create() re-syncs through it.
 let approvals: ApprovalTracker | null = null
 let claudePath: string | null = null
@@ -271,6 +281,12 @@ const captureBaseline = (panelId: string, cwd: string): void => baselineCapture.
 const dropBaseline = (panelId: string): void => {
   baselineCapture.drop(panelId)
   layoutStore.dropBaseline(panelId)
+  // M129. The trail's own per-panel state (offset/carry/entries and the
+  // decoder above it) is forgotten at the same panel-removing site
+  // PtyManager already calls this through — a recycled panel id must not
+  // inherit a dead panel's trail, the same reason dropPinnedSession exists.
+  forgetTrail(panelId)
+  trailDecoders.delete(panelId)
 }
 
 // The manager needs a way to reach the live renderer; a getter rather than a
@@ -1775,7 +1791,37 @@ app.whenReady().then(async () => {
         return listed.kind === 'ok' ? listed.plugins : []
       },
       trash: (path) => shell.trashItem(path)
-    })
+    }),
+    // M129. A chat panel's trail is derived in the renderer from events
+    // already in memory (Task 8) and never asks main — `agentSessions.get`
+    // is keyed by exactly the chat panels this manager tracks, so its
+    // presence is the same fact the chat store itself reads. A terminal
+    // panel here only ever runs claude (`codex.terminalDoor` is false —
+    // §6.1's `codex` refusal has no way to be reached from a terminal in
+    // this app today, and nothing here pretends otherwise): the only
+    // question is whether it has a pinned agent session at all.
+    async (panelId) => {
+      if (agentSessions?.get(panelId) != null) {
+        return { kind: 'unreadable', why: 'this is a chat; its trail is in memory' }
+      }
+      const sessionId = layoutStore.session(panelId)
+      return trailFor({
+        backend: 'claude',
+        panelId,
+        pinnedSession: () => sessionId,
+        resolveTranscript,
+        readDelta: (path, from) => {
+          const read = readTranscriptFrom(path, from)
+          if (read === undefined) return { text: '', offset: from }
+          let decoder = trailDecoders.get(panelId)
+          if (decoder === undefined) {
+            decoder = new StringDecoder('utf8')
+            trailDecoders.set(panelId, decoder)
+          }
+          return { text: decoder.write(read.bytes), offset: from + read.bytes.length }
+        }
+      })
+    }
   )
   createWindow()
 

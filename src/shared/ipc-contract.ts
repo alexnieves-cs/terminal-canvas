@@ -6,6 +6,7 @@ import type { OrphanRow } from './orphans'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
+import type { Trail } from './skill-trail'
 /**
  * Single source of truth for the IPC surface.
  *
@@ -620,6 +621,13 @@ export const IPC = {
   SKILL_CREATE: 'skill:create',
   SKILL_RENAME: 'skill:rename',
   SKILL_DELETE: 'skill:delete',
+  /**
+   * M129. A TERMINAL panel's live skill trail, main's half: tails the CLI's
+   * own transcript from a byte offset. A chat panel's trail is derived from
+   * events already in memory in the renderer (Task 8) and never asks main —
+   * this invoke refuses a chat panel id by name, never answering `none`.
+   */
+  SKILL_TRAIL: 'skill:trail',
   /**
    * M103. The browser pane's text, read in MAIN: the scheme is checked on
    * the guest's LIVE url (not the record's, not only at navigation), the
@@ -1576,6 +1584,12 @@ export interface CanvasBridge {
     create(req: SkillCreateRequest): Promise<SkillWriteResult>
     rename(req: SkillRenameRequest): Promise<SkillWriteResult>
     remove(req: SkillDeleteRequest): Promise<SkillWriteResult>
+    /**
+     * M129. A TERMINAL panel's live skill trail. A chat panel id refuses by
+     * name — its trail is derived in the renderer from events already in
+     * memory (Task 8) and never asks main.
+     */
+    trail(panelId: string): Promise<Trail>
   }
   /** M103. See BROWSER_READ. Three arms; never rejects. */
   browser: {

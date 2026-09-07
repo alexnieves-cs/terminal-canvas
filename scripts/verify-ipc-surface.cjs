@@ -224,7 +224,9 @@ app.whenReady().then(() => {
   // M103 browser:read (107) — the browser pane's text, read in main and passed outward.
   // M128 skill:write / skill:create / skill:rename / skill:delete (118) —
   // the only channels in the contract that put bytes into ~/.claude.
-  const EXPECTED_CHANNELS = 118
+  // M129 skill:trail (119) — a terminal panel's live skill trail, tailed
+  // from the CLI's own transcript at a byte offset.
+  const EXPECTED_CHANNELS = 119
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

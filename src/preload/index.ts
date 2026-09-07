@@ -337,7 +337,8 @@ const bridge: CanvasBridge = {
     write: (req) => ipcRenderer.invoke(IPC.SKILL_WRITE, req),
     create: (req) => ipcRenderer.invoke(IPC.SKILL_CREATE, req),
     rename: (req) => ipcRenderer.invoke(IPC.SKILL_RENAME, req),
-    remove: (req) => ipcRenderer.invoke(IPC.SKILL_DELETE, req)
+    remove: (req) => ipcRenderer.invoke(IPC.SKILL_DELETE, req),
+    trail: (panelId) => ipcRenderer.invoke(IPC.SKILL_TRAIL, panelId)
   },
   browser: {
     read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)

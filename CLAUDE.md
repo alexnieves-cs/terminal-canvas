@@ -157,6 +157,7 @@ renderer --invoke--> file:create                                              --
 renderer --invoke--> fs:list                                                  --> main
 renderer --invoke--> toolbox:read / toolbox:permissions                       --> main
 renderer --invoke--> skill:write / skill:create / skill:rename / skill:delete --> main
+renderer --invoke--> skill:trail                                              --> main
 renderer --invoke--> github:list / broker:audit                                   --> main
 renderer --invoke--> jira:list / jira:transitions                             --> main
 renderer --invoke--> jira:comment / jira:transition                           --> main

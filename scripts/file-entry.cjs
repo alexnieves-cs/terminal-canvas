@@ -46,5 +46,9 @@ module.exports = {
   ...require('../src/main/board-repo.ts'),
   ...require('../src/main/board-lane.ts'),
   /* M125. The enabled plugins, over an injected one-shot runner. */
-  ...require('../src/main/plugin-list.ts')
+  ...require('../src/main/plugin-list.ts'),
+  /* M129. The live skill trail: the pure scan/cap, and main's tail-from-a-
+     byte-offset read over injected pinnedSession/resolveTranscript/readDelta. */
+  ...require('../src/shared/skill-trail.ts'),
+  ...require('../src/main/skill-trail-read.ts')
 }

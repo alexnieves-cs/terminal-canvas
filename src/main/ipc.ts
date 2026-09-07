@@ -1,5 +1,6 @@
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
+import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
@@ -374,7 +375,16 @@ export function registerIpcHandlers(
    * not wire the writers gets a NAMED REFUSAL rather than a write, so no
    * suite can reach the real `~/.claude` through a channel it forgot about.
    */
-  skillWriters: SkillWriteHandlers = INERT_SKILL_WRITERS
+  skillWriters: SkillWriteHandlers = INERT_SKILL_WRITERS,
+  /**
+   * M129. A terminal panel's live skill trail. Inert by default for every
+   * collaborator's reason: a harness that does not wire it gets a named
+   * `unreadable` rather than a read against nothing.
+   */
+  skillTrail: (panelId: string) => Promise<Trail> = async () => ({
+    kind: 'unreadable',
+    why: 'the skill trail is not wired'
+  })
 ): void {
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
@@ -754,6 +764,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.SKILL_CREATE, (_event, req: SkillCreateRequest) => skillWriters.create(req))
   ipcMain.handle(IPC.SKILL_RENAME, (_event, req: SkillRenameRequest) => skillWriters.rename(req))
   ipcMain.handle(IPC.SKILL_DELETE, (_event, req: SkillDeleteRequest) => skillWriters.remove(req))
+  ipcMain.handle(IPC.SKILL_TRAIL, (_event, panelId: string) => skillTrail(panelId))
   ipcMain.handle(IPC.FILE_WRITE, (_event, req: FileWriteRequest) =>
     // No sender capture, unlike FILE_READ: this is a plain request/response
     // with nothing to push afterwards. Our own write lands back through the
