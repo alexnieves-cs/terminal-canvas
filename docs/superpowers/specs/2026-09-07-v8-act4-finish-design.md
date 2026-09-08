@@ -20,6 +20,10 @@ block exists and that no `transition`/`animation` outside it names a literal dur
   stylesheet is `var(--dur-1)` or `var(--dur-2)` (or `none`/`0s`), the spawn keyframe
   exists and scales from `.98`, and the reduced-motion block exists.
 - Golden: none moves (a spawn animation ends before a capture; the harness settles).
+- **DECLINED after the build (M178):** the scale from `.98`. `.pf__motion` is an ancestor of
+  `.pf__body`, and a scale there broke the annotation stage (product `annot.1`; a bisect on
+  the keyframe alone: 59/59 with a rise, 20/23 with the scale). The arrival is a rise of
+  8px; `motion.2` pins the rise and, since M179's verifier, the longhand delays too.
 
 ## M177 — empty states as places
 

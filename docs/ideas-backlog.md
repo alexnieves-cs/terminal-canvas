@@ -2469,3 +2469,21 @@ M43's edge indicator inset away from a frame's chrome (F.20); the fixture's run 
 group's summary as `2 tools · Read, Edit · server.ts` (F.24); the fixture PTYs given a tail so
 no golden reads as a blank body (F.26). One milestone, red-first each, a golden per fix.
 
+The Act IV reviews (M179) add to the same list: `notice.1`, the update link's click through
+the real link door (owed from Act III's ledger into M178 and never written — no check of that
+name exists); the workflow panel's two resting explanation lines under its verbs (`Stop — no
+pool is running`, `Save — the live canvas is the editor…`), the family of brief finding 5;
+the teammate pane's routine editor (native `every [30] minutes` inputs, `GitHub — granted —
+not connected` with two dashes) as the densest form left; the Skills pane's columns at 300px
+(`STARTING A MILESTO…`, mid-word truncation beside F.15's wrap); the six empty surfaces that
+keep their own three-state or dynamic sentence by name (the Files pane's `emptyReason`, the
+vault's `no notes`, the Integrations audit's per-service line, the teammates note, the work
+card's menu, the workflow's `RUNS_UNATTRIBUTED`) — each to route through `EmptyState` once
+its arms are data. DECLINED with the rule: a `<1%` floor on the inspector's CPU figure — a
+sampled `0%` for an idle shell is the measurement; the refusal the load-bearing entry names is
+`undefined` for a read that failed, which `formatCpu` never receives.
+Also from M179's goldens: the `header` scene's SUBAGENTS card came out once as two overlapping
+cards of `3 panels` and once as one card of `2 panels` between two runs the wave did not touch
+— the subagent scan's timing at capture; under budget either way, and the shot harness should
+freeze the scan (or wait for it) before the capture so the scene is deterministic.
+

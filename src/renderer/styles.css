@@ -67,6 +67,7 @@
   --dur-1: 90ms; --dur-2: 160ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
+  --dur-stagger: 30ms; /* M179: the ⌘G grid's per-cell delay — motion.2 reads the longhands too */
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -3508,14 +3509,14 @@ body {
   from { opacity: 0; transform: scale(.96); }
   to   { opacity: 1; transform: scale(1); }
 }
-.navgrid__cell:nth-child(2) { animation-delay: 30ms; }
-.navgrid__cell:nth-child(3) { animation-delay: 60ms; }
-.navgrid__cell:nth-child(4) { animation-delay: 90ms; }
-.navgrid__cell:nth-child(5) { animation-delay: 120ms; }
-.navgrid__cell:nth-child(6) { animation-delay: 150ms; }
-.navgrid__cell:nth-child(7) { animation-delay: 180ms; }
-.navgrid__cell:nth-child(8) { animation-delay: 210ms; }
-.navgrid__cell:nth-child(9) { animation-delay: 240ms; }
+.navgrid__cell:nth-child(2) { animation-delay: calc(var(--dur-stagger) * 1); }
+.navgrid__cell:nth-child(3) { animation-delay: calc(var(--dur-stagger) * 2); }
+.navgrid__cell:nth-child(4) { animation-delay: calc(var(--dur-stagger) * 3); }
+.navgrid__cell:nth-child(5) { animation-delay: calc(var(--dur-stagger) * 4); }
+.navgrid__cell:nth-child(6) { animation-delay: calc(var(--dur-stagger) * 5); }
+.navgrid__cell:nth-child(7) { animation-delay: calc(var(--dur-stagger) * 6); }
+.navgrid__cell:nth-child(8) { animation-delay: calc(var(--dur-stagger) * 7); }
+.navgrid__cell:nth-child(9) { animation-delay: calc(var(--dur-stagger) * 8); }
 .navgrid__cell--empty { background: var(--s-0); border-style: dashed; box-shadow: none; }
 /* --s-4 is the hover fill, and the cursor IS a hover. --s-5 is deliberately
    not used: verify:styles 11 excludes it as a text ground. */
@@ -4010,7 +4011,6 @@ body {
 .chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); white-space: nowrap; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chat__auto-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chat__auto-ring { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; /* M176: no spinner — the ring's colour is the state (the brief: a soft cursor, never a spinner) */ }
-@media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
 .chat__auto-dismiss { margin-left: var(--sp-1); }
 
 /* M100. The Teammates pane: the roster as rail rows, one record open beneath
@@ -4389,7 +4389,7 @@ body {
 
 /* M173. The empty state's hints and the launcher's tmux banner: sentences in
    the UI face where a person needs them; the strip that carried them is gone. */
-.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); text-align: center; /* M179: one alignment under the centred empty state */ }
 .rail-hint { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
 .launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
@@ -4423,6 +4423,7 @@ body {
 .empty-state__glyph svg { width: 16px; height: 16px; }
 .empty-state__sentence { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); max-width: var(--measure); color: var(--fg-2); }
 .empty-state__verb { margin-top: var(--sp-1); }
+.empty-state__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); max-width: var(--measure); overflow-wrap: anywhere; }
 .rail-empty .empty-state { padding: var(--sp-4) 0; }
 
 /* M178 (F.8). The rest rule reaches the group frame: its verbs rest at 0 and

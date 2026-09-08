@@ -1,3 +1,4 @@
+import { emptyState } from '@shared/empty-states'
 import { memo, useState, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft, More } from '@renderer/icons'
@@ -311,7 +312,7 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                 )}
                 <ul className="rail-list rail-list--skills">
                   {col.cards.length === 0 ? (
-                    <li className="rail-empty" data-skills-column-empty>drop a card here</li>
+                    <li className="rail-empty" data-skills-column-empty>{emptyState('skills-column').sentence}</li>
                   ) : col.cards.map((card) => {
                   const cardMenuKey = `card:${card.key}`
                   const cardMenuOpen = openMenu === cardMenuKey

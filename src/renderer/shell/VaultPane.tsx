@@ -107,11 +107,11 @@ function VaultPaneImpl(props: VaultPaneProps): JSX.Element {
         <p className="rail-empty" data-vault-arm="reading">reading…</p>
       ) : props.reason !== undefined ? (
         <div className="vault-pane__empty" data-vault-arm="missing">
-          <div className="empty-state" data-empty-state="vault-missing">
-            <span className="empty-state__glyph" aria-hidden="true"><KindNote /></span>
-            <p className="empty-state__sentence">{props.reason}</p>
+          {/* M179: the data sentence, the read's own reason beneath it (dynamic — the path, the error), one verb. */}
+          <EmptyState id="vault-missing" glyph={<KindNote />}>
+            <p className="empty-state__note" data-vault-reason>{props.reason}</p>
             <button type="button" className="vault-pane__verb empty-state__verb pf__verb pf__verb--word" data-vault-choose {...shellControl(props.onChooseRoot)}>Choose another folder…</button>
-          </div>
+          </EmptyState>
         </div>
       ) : (
         <>

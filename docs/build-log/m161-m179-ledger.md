@@ -760,3 +760,55 @@ act: `notice.1` (the update link's click, M178); the audit's own findings.
   rail scene — the wave's `.rail-empty .empty-state { padding: var(--sp-4) 0 }`, the
   Workspaces pane's two empties given the same air as the Panels pane's; named here rather
   than absorbed. The 27th changed golden is M177's launcher, sentenced above.
+- **M179 — reconcile.** The version and the docs (8a23b19: `package.json`, the lock's two root
+  entries, `verify:meta version.1`'s pin, README's status line and the M176–M179 rows, the
+  brief's finished pass, the Act IV build log opened). Then the act's two fresh-context
+  reviews (the build log's Reviews section carries both) and their wave, red-first where a
+  check pins it: the rail's run row loses its dollars (`verify:rail` 47's expectation moved:
+  `2 panels · 1m 0s`, no `$` and no trailing `—`); `motion.2` reads the longhands and the ⌘G
+  grid's eight `animation-delay` literals moved onto `--dur-stagger` (red on HEAD's stylesheet
+  55/56); `empty.2` reads the renderer as text and fails for an id nothing renders (the list
+  cut from sixteen to ten — six ids no surface read — with the vault's missing arm and a
+  skills column wired through it); the dead reduced-motion auto-ring rule removed; the hints
+  centred under the launcher's empty state; the brief, the design spec and the check's header
+  say the rise and why; README's M178 row 12/3/11; F.22 and F.23 re-declined under the rules
+  that cover them; `verify-meta`'s stale comment; `notice.1`, the workflow lines, the
+  teammate form, the skills columns, the six by-name empties and the CPU floor into #88
+  (the last declined with the rule). Typecheck green; styles 56/56; rail 194/194; product
+  59/59 and shell 96/96 alone over the wave's markup (m179-product.log, m179-shell.log).
+- **Golden sentences, M179** (49 scenes moved — every one that differed at all, most under
+  budget, FORCED and sentenced by a fresh-context critic comparing HEAD's file with the new,
+  because the Act IV critic had found fifteen goldens sitting under budget while contradicting
+  FIXED rows): chat, chat-copilot, kinds, kinds-dark, supervisor, templates, trail,
+  file-missing, across · the rail's chat row reads `Want me to wire /health to it?` with no
+  backticks (F.14 reaching every scene not re-baselined since Act III), the browser row's port
+  jitter; across also loses the group frame's `remove` at rest (F.8); navigator-panels,
+  overview · only the browser row's port; navigator-workspaces · only the run rows' `· $0.21`
+  gone — `3 panels · 2m 0s` and `1 panel · 7s`; palette, palette-dark, subagents, runs,
+  lineup, auto, palette-query · the run rows lose `· $0.21` / `· —`, the inspector's pid
+  jitter, palette-query's scrollbar thumb a few px; flip, search, search-empty, spawn-sheet,
+  inspector-tools, inspector-work, inspector-detail, ink, wide · the run rows' price gone
+  and/or the pid, inspector-detail's `RAM 2 MB` → `1 MB` (jitter); routine, teammate · clock
+  times and the port only; memory · the rail's backticks gone, the memory rows' stamps
+  (jitter), the port; watcher · backticks gone, the port, the group frame's `card remove` gone
+  at rest (F.8); group, group-collapsed, reduced-motion · the group frame's `card remove` /
+  `expand remove` no longer painted at rest beside the minimap (F.8), backticks, the port;
+  vault · the pane's header reads `VAULT · notes` adjacent rather than `· notes` at the right
+  edge (the missing arm's markup through `EmptyState`; same words); launcher · the four hint
+  lines centred under the empty state, nothing else; zoomed-out, zoomed-out-dark · backticks,
+  the port, the far-tier group's verbs gone, the auto chip's ring at a different rotation
+  phase (animation jitter); merged · backticks, the group's verbs, the ring's phase, and
+  `worker b`'s dormant body reads `asleep — nothing recorded before the last quit` where it
+  was blank (F.19 reaching a scene not re-baselined since Act III); approval, composer,
+  graph, tool-objects, verbs · the run row's price gone, the pid, the file stamps (jitter),
+  and the HISTORY empty line centred and wrapped where it was flush left — M177's
+  `EmptyState` reaching five scenes not re-baselined since Act III (the critic's Q1; the same
+  change the M178 block names for the rail scenes); browser, compact, github · port and pid,
+  and the dormant card's body reads `asleep — nothing recorded before the last quit` where it
+  was blank (F.19, the critic's Q2 — the routing, not timing: the sentence is the card's
+  resting text with no tail, M178); header · a SUBAGENTS card the fixture draws per
+  repository grouping came out as one card of `2 panels` where HEAD's golden had two
+  overlapping cards of `3 panels` — the subagent scan's timing at capture between two runs
+  the wave did not touch (the critic's Q3), under budget either way, owed to #88 as a harness
+  fix. Checked in no new golden: a `$` in a run row, backticks in a rail row, a `diff --git`
+  line above a hunk, a group's verbs at rest.

@@ -225,10 +225,14 @@ and nowhere new.
 
 ## Motion (M176)
 
-Five moments and no others: a panel spawning (scale from `.98`, `--dur-2`, `--ease`); a
-hover reveal (`--dur-1`); the needs-you pulse (once, M109's finite breaths); the palette
-opening (M109's rise); the camera's flight (M56's curve). `prefers-reduced-motion` removes
-every one. `verify:styles motion.2` pins the durations to the two tokens.
+Five moments and no others: a panel spawning (~~scale from `.98`~~ — STRUCK in M178: the
+keyframe runs on `.pf__motion`, an ancestor of `.pf__body`, and a scale there broke the
+annotation stage (product `annot.1`, bisected on the keyframe alone); the arrival is a RISE
+of 8px on `--dur-2`, `--ease`, the M3/M144 rule reaching one more place); a hover reveal
+(`--dur-1`); the needs-you pulse (once, M109's finite breaths); the palette opening (M109's
+rise); the camera's flight (M56's curve). `prefers-reduced-motion` removes every one.
+`verify:styles motion.2` pins every duration — shorthand and longhand — to the tokens
+(`--dur-1`, `--dur-2`, `--dur-breath`, `--dur-stagger`) and the arrival to a rise.
 
 ## Empty states (M177)
 
@@ -254,7 +258,7 @@ check or a golden's sentence pins it; struck means declined with its reason in t
 | BridgeMind One's places | Implemented — M171's groups, M172's named dock; ~~modes as a top-level switch~~ struck (the brief's own reason) |
 | The Claude app's conversation | Implemented — M167–M169; ~~avatars, a model picker, tables and images in the grammar~~ struck (the Act II spec's reasons) |
 | Codex's lists and diff cards | Implemented — M165's cards, M105's last line kept, M169's approval sentence |
-| Motion: five moments and no others | Implemented — M176; `motion.2` (a sixth keyframe, the ⌘G grid's rise, allowed by name as an overlay's arrival) |
+| Motion: five moments and no others | Implemented — M176, with the arrival's scale STRUCK (a rise instead; `annot.1`); `motion.2` (a sixth keyframe, the ⌘G grid's rise, allowed by name as an overlay's arrival; the grid's stagger on `--dur-stagger`) |
 | Empty states as places | Implemented — M177; the Integrations audit's per-service sentence, the Skills column, the work menu and the workflow tab keep their own inline sentences (each already a sentence with a verb) |
 | The golden-sentence rule | Implemented — every changed scene in the ledger; two harness facts recorded (the window's content size, the fixture's fixed name) |
 | What a restyle may not touch | Held — no DOM alias renamed (shell 83 caught the one attempt), `.pf__body` untransformed, the cells untouched, every control named and reachable |
