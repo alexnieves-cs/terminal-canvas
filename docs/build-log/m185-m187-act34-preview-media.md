@@ -37,8 +37,8 @@ Run on `v9-act4-media` at `af06120`, in the environment `out/v9-evidence/run-ele
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | every suite's tally, no FAIL line | `out/v9-evidence/act34-verify.log` |
-| `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/act34-visual.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/act34-verify.log` |
+| `npm run verify:visual` | 0 | 59/59, after four goldens changed with their sentences | `out/v9-evidence/act34-visual.log` |
 | `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/act34-packaged.log` |
 
 ## What these acts owe
@@ -53,3 +53,11 @@ Run on `v9-act4-media` at `af06120`, in the environment `out/v9-evidence/run-ele
   and drop targeting has six callers.
 - A person still owes the timed first-run trial and a real dev server hand check: no suite in
   this repo starts a project's server, by the same rule that keeps the network out of `verify`.
+
+The chain's tallies, in order:
+
+```
+14/14 38/38 56/56 141/141 6/6 12/12 38/38 251/251 18/18 15/15 7/7 143/143 194/194 98/98
+27/27 88/88 103/103 26/26 7/7 35/35 27/27 141/141 22/22 25/25 4/4 26/26 13/13 10/10
+63/63 4/4 1/1 6/6 11/11 78/78 96/96 49/49 80/80 74/74
+```
