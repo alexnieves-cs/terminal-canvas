@@ -1,5 +1,6 @@
-import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
+import { isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isFilePanel, isGithubPanel, isJiraPanel, isWatcherPanel, isMemoryPanel, isReviewPanel, isToolboxPanel, isChatPanel, isBrowserPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
+import { noteSummary } from '@shared/notes'
 
 /**
  * M64. IDENTITY LEADS, PROVENANCE FOLLOWS (brief, principle 3).
@@ -56,6 +57,8 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
   if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
   // M181. `image · <file>` — the rail's own label, so the Go-to row agrees.
   if (isImagePanel(panel)) return panel.title ?? `image · ${panel.image.path.split('/').pop() ?? 'image'}`
+  // M187. A note names itself by its own first line — the rail, the Go-to row and the far view agree.
+  if (isNotePanel(panel)) return panel.title ?? `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form)}`
   const command = resolvedCommand ?? panel.spec.command
   return command ? (command.split('/').pop() ?? command) : 'login shell'
 }
@@ -80,5 +83,7 @@ export function panelPath(panel: Panel): string | undefined {
   if (isWorkflowPanel(panel)) return undefined
   // M181. A picture's directory is its file's — the file panel's own rule.
   if (isImagePanel(panel)) return panel.image.path.slice(0, Math.max(0, panel.image.path.lastIndexOf('/'))) || '/'
+  // A note has no directory: it is text on a canvas, not a file (three-state, never a made-up path).
+  if (isNotePanel(panel)) return undefined
   return panel.spec.cwd
 }

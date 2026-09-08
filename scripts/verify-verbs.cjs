@@ -356,7 +356,7 @@ const FACTS = {
     // line names, because a verb whose first argument is a PANEL cannot bind
     // against an empty canvas — and "the example does not bind" would then be
     // reported for a door that works.
-    const facts = { panels: [{ id: 'img1', kind: 'image' }], templates: [{ id: 't1' }] }
+    const facts = { panels: [{ id: 'img1', kind: 'image' }, { id: 'nt1', kind: 'note' }], templates: [{ id: 't1' }] }
     const verdicts = ids.map((id) => {
       const d = doors?.[id]
       const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)

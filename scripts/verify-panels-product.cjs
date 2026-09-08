@@ -2148,7 +2148,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     //     bytes leave an object with a Replace action"), and after the repair
     //     it paints. A non-image is refused by its first bytes and mints
     //     nothing.
-    const IDS = ['image.2 image-add stores a picture content-addressed under userData/assets and the panel carries the id; the same file twice is one asset; a non-image is refused by its first bytes and mints no panel; a picture whose file is gone keeps its panel with the missing sentence and a Replace control, and Replace through the system chooser repoints it and paints']
+    const IMAGE_IDS = ['image.2 image-add stores a picture content-addressed under userData/assets and the panel carries the id; the same file twice is one asset; a non-image is refused by its first bytes and mints no panel; a picture whose file is gone keeps its panel with the missing sentence and a Replace control, and Replace through the system chooser repoints it and paints']
     try {
       const { writeFileSync: wf, mkdirSync: mk, unlinkSync: ul, readdirSync: rd } = require('node:fs')
       // NO SPACES in the fixture path: the verb line splits on whitespace, so
@@ -2191,7 +2191,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const pressed = victim ? await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}] [data-image-replace]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) : false
       const repaired = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); return n && n.getAttribute('data-image-arm') === 'data' && n.querySelector('[data-image-pixels]') !== null ? { arm: n.getAttribute('data-image-arm') } : false })()`), 8000) : false
       state.assetChoice = undefined
-      ok(IDS[0],
+      ok(IMAGE_IDS[0],
         added && added.kind === 'ran' && again && again.kind === 'ran' && /already in this canvas/.test(String(again.summary)) &&
           refusedAdd && refusedAdd.kind === 'refused' && /first bytes/.test(String(refusedAdd.reason)) &&
           images.length === 2 && images.every((p) => /^[0-9a-f]{64}$/.test(p.image.asset ?? '')) &&
@@ -2200,7 +2200,74 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           pressed === true && repaired !== false,
         JSON.stringify({ added, again, refusedAdd, images, stored, gone, pressed, repaired }))
     } catch (iErr) {
-      for (const id of IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr))
+      for (const id of IMAGE_IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr))
+    }
+
+    // M187 — note.1. THE NOTE KIND IN THE REAL RENDERER. Three claims:
+    //     (a) the agent door mints each form, the record carries it, and a
+    //         FRAME goes BEHIND everything (a region drawn over what it
+    //         encloses is a region a person must immediately send backwards);
+    //     (b) typing in the note's own editor and blurring it commits ONE
+    //         history entry with the text on the record — the canvas's keys
+    //         are stopped at the field, so the letters do not reach the
+    //         canvas's own shortcuts;
+    //     (c) a frame's INTERIOR takes no gesture: `elementFromPoint` in the
+    //         middle of a frame laid over a terminal panel answers the
+    //         TERMINAL, which is the brief's requirement and the one thing a
+    //         DOM read (not a screenshot) can prove.
+    const NOTE_IDS = ['note.1 note-add mints each form with its record (a frame behind everything and larger), the note editor commits its text on blur with the canvas keys stopped at the field, and a frame laid over a panel takes no gesture in its interior — elementFromPoint in its middle answers the panel underneath']
+    try {
+      // The frame is SEEDED exactly over the terminal (a record on disk, the
+      // ordinary door), because what is being proved is a property of the
+      // rendered frame and not of where the mint happens to place one.
+      layoutStore.save({ panels: [
+        { id: 'ntTerm', x: 200, y: 200, w: 400, h: 300, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'under the frame' },
+        { id: 'ntOver', kind: 'note', x: 180, y: 180, w: 440, h: 340, z: 1, note: { form: 'frame', text: 'release work' } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reN
+      await settle()
+      const sticky = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add sticky' }, null, 4000)
+      const freeText = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add text' }, null, 4000)
+      const frame = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add frame' }, null, 4000)
+      await settle(); flushLayoutStore()
+      const notes = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).filter((p) => p.kind === 'note')
+      const frameRecord = notes.find((p) => p.note.form === 'frame' && p.id !== 'ntOver')
+      const stickyRecord = notes.find((p) => p.note.form === 'sticky')
+      const termRecord = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'ntTerm')
+      // (b) Type into the sticky's own field and blur it.
+      const typed = stickyRecord ? await wc.executeJavaScript(`(async () => {
+        const f = document.querySelector('.panel[data-panel-id=${JSON.stringify(stickyRecord.id)}] [data-note-field]')
+        if (!f) return false
+        f.focus()
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(f, 'a thought worth keeping')
+        f.dispatchEvent(new Event('input', { bubbles: true }))
+        f.blur()
+        return true })()`) : false
+      await settle(); flushLayoutStore()
+      const afterType = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (stickyRecord && stickyRecord.id))
+      // (c) The SEEDED frame lies over the terminal: what does a click in its
+      // middle hit? A DOM read, not a picture — the paint could look right
+      // while the frame still swallowed every gesture.
+      const hit = await wc.executeJavaScript(`(() => {
+        const f = document.querySelector('.panel[data-panel-id="ntOver"]')
+        const t = document.querySelector('.panel[data-panel-id="ntTerm"]')
+        if (!f || !t) return false
+        const r = f.getBoundingClientRect()
+        const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2))
+        return { inTerminal: t.contains(el), inFrame: f.contains(el), tag: el ? el.className.toString().slice(0, 40) : null } })()`)
+      ok(NOTE_IDS[0],
+        sticky && sticky.kind === 'ran' && freeText && freeText.kind === 'ran' && frame && frame.kind === 'ran' &&
+          notes.length === 4 && notes.filter((p) => p.id !== 'ntOver').map((p) => p.note.form).sort().join(',') === 'frame,sticky,text' &&
+          frameRecord && stickyRecord && termRecord &&
+          frameRecord.z < termRecord.z && frameRecord.w > stickyRecord.w &&
+          typed === true && afterType && afterType.note.text === 'a thought worth keeping' &&
+          hit !== false && hit.inTerminal === true && hit.inFrame === false,
+        JSON.stringify({ sticky, freeText, frame, notes, termZ: termRecord && termRecord.z, typed, afterType: afterType && afterType.note, hit }))
+    } catch (nErr) {
+      for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
     }
 
     // M106 — header.1 / flip.1. HEADER DISCIPLINE in the real renderer: a

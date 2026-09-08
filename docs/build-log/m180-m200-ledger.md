@@ -1227,3 +1227,43 @@ same content-addressed path back, so an effect keyed on the path alone never re-
 **Green.** `verify:file` 88/88, `verify:layout` 250/250, `verify:verbs` 22/22, `verify:palette`
 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 140/140, typecheck 0,
 `verify:panels:product` 73/73 at 104.2 s (`out/v9-evidence/m186-product.log`, exit 0).
+
+## M187 — notes, free text and named frames as equal objects (Act IV.2)
+
+Spec `docs/superpowers/specs/2026-09-08-m187-notes.md`.
+
+**What shipped.** `shared/notes.ts` (the three forms, the four tints, `noteSummary`'s first
+non-empty line with a per-form sentence when there is none, `normaliseNoteText`'s cap); the
+sixteenth panel kind as ONE record with a `form` — three kinds would have meant three parsers,
+three partitions, three rail rows, three inspector arms and three export paths for objects that
+differ only in how they paint; `isNotePanel` on `isTerminalPanel`'s exclusion list; the record
+arm (`form` required and an unknown one drops the PANEL, an absent text is an empty note, a
+tint outside the four names or on a form that is not sticky is dropped with the note kept);
+`NoteNode` with an in-place editor that stops the canvas's keys and serves its own
+`edit:paste`; the four tint chips; `--tint-yellow|blue|green|pink` declared in BOTH theme
+blocks; and three verbs, five palette rows and three `V9_DOORS` entries.
+
+**Decisions.**
+- *A frame goes to the BACK at its mint and its interior takes no gesture.* A region drawn over
+  what it encloses is a region a person must immediately send backwards, and a click in its
+  middle must reach the object inside it — proved by `elementFromPoint` in the product check,
+  which is what a DOM read can prove and a screenshot cannot.
+- *A frame owns nothing.* It is a region drawn behind objects, never a group: a second
+  ownership model would give every panel two possible homes, which is the failure
+  `shared/groups.ts` exists to avoid.
+- *`text` has no card at all* — no fill, no border, no shadow. The brief asks for editable type,
+  and "a large empty terminal frame" is the thing it asks for instead of.
+
+**Red first.** `note.kind.1` and `note.1` (layout) were both written before the kind existed and
+watched failing; `note.1` (product) was red on a real defect of its own — two blocks in the
+product suite had both declared `const IDS`, which is a SyntaxError that aborts the whole file
+before any check runs (the "a check that throws aborts the run" rule reaching the suite's own
+top level). Renamed to `NOTE_IDS`/`IMAGE_IDS`.
+
+**Green.** `verify:file` 88/88, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
+`verify:panels:product` 74/74 at 105.9 s (`out/v9-evidence/m187-product.log`, exit 0).
+
+**Recorded bound.** `hitTest`'s pure rect math still names a frame for a DROP into its interior;
+only the DOM gesture is form-aware. Drop targeting has six callers and a form-aware exception
+belongs in its own milestone, so it is written down rather than changed.

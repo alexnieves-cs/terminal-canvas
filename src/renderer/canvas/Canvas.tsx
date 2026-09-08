@@ -86,7 +86,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -127,6 +127,7 @@ import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
+import { NoteNode } from '@renderer/note/NoteNode'
 import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
@@ -135,6 +136,7 @@ import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewD
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
+import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -4896,6 +4898,52 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M187. THE NOTE'S THREE VERBS. One record, three forms, and one door each:
+   * add (the palette's rows and the agent's verb), set the text (the node's
+   * own editor commits through here, so the canvas's history has one entry
+   * per commit rather than one per keystroke), and tint (a sticky's alone).
+   */
+  const addNote = useCallback((form: string, text?: string, world?: Point): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form — ${NOTE_FORMS.join(', ')}` }
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const noteId = `nt${nextIdRef.current++}`
+    setPanels((current) => {
+      // A FRAME goes to the BACK: a region drawn over the objects it encloses
+      // would cover them at the moment it is made, and the first thing a
+      // person would have to do is send it backwards.
+      const z = form === 'frame' ? Math.min(0, ...current.map((p) => p.z)) - 1 : nextZ(current)
+      const next = [...current, makeNotePanel(noteId, cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(noteId)
+    return { kind: 'ran', note: `${form} note` }
+  }, [commitHistory, selectOnly])
+  const setNoteText = useCallback((panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isNotePanel(target)) return { kind: 'refused', reason: 'that panel is not a note' }
+    const next = normaliseNoteText(text)
+    setPanels((current) => {
+      const updated = current.map((p) => (p.rect.id === panelId && isNotePanel(p) ? { ...p, note: { ...p.note, text: next } } : p))
+      commitHistory(updated)
+      return updated
+    })
+    return { kind: 'ran', note: noteSummary(next, target.note.form) }
+  }, [commitHistory])
+  const setNoteTint = useCallback((panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isNotePanel(target)) return { kind: 'refused', reason: 'that panel is not a note' }
+    if (!isNoteTint(tint)) return { kind: 'refused', reason: `${tint} is not a tint — ${NOTE_TINTS.join(', ')}` }
+    if (target.note.form !== 'sticky') return { kind: 'refused', reason: 'only a sticky note carries a tint' }
+    setPanels((current) => {
+      const updated = current.map((p) => (p.rect.id === panelId && isNotePanel(p) ? { ...p, note: { ...p.note, tint } } : p))
+      commitHistory(updated)
+      return updated
+    })
+    return { kind: 'ran', note: `${tint} note` }
+  }, [commitHistory])
+
+  /**
    * M186. A PICTURE INTO THE STORE AND ONTO THE CANVAS, the one door every
    * gesture takes: a drop on empty canvas, a paste with no agent to take it,
    * the palette row, the agent's verb and the node's Replace. The bytes go
@@ -5201,6 +5249,9 @@ export function Canvas({
     saveWorkflowCopyDraft: saveWorkflowCopy,
     addImageFromPath,
     replaceImagePanel: replaceImage,
+    addNote,
+    setNoteText,
+    setNoteTint,
     openPreviewNow: openPreview,
     setPreviewWidthNow: setPreviewWidth,
     capturePreviewNow,
@@ -6077,6 +6128,25 @@ export function Canvas({
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   onNavigated={onBrowserNavigated}
+                />
+              )
+            }
+            // M187. The sixteenth kind: a note, in one of its three forms.
+            if (isNotePanel(panel)) {
+              return (
+                <NoteNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  readOnly={merged}
+                  onText={(panelId, text) => { setNoteText(panelId, text) }}
+                  onTint={(panelId, tint) => { setNoteTint(panelId, tint) }}
                 />
               )
             }

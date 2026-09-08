@@ -1,3 +1,4 @@
+import { noteFormSentence } from '@shared/notes'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
@@ -73,7 +74,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image' | 'note'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -455,6 +456,9 @@ export interface PaletteActions {
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   replaceImage(panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   openPreview(url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2260,6 +2264,18 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
   const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
+  // M187. One row per FORM, because "add a note" and "draw a region around
+  // this work" are different intentions and a form picker would make a
+  // person choose twice. Each says what its form is FOR (the empty-state
+  // rule's sentence, from `noteFormSentence`).
+  // Three LITERAL ids: `closure.v9.1` reads this file as text for each door's
+  // row, and a template literal is a row it cannot see (which is exactly the
+  // "a declaration is not a door" failure the check exists for).
+  out.push({ id: 'note.add.sticky', title: 'Add a sticky note', subtitle: noteFormSentence('sticky'), group: 'canvas', searchText: 'note sticky add annotate label yellow', run: () => { actions.addNote('sticky') } })
+  out.push({ id: 'note.add.text', title: 'Add free text', subtitle: noteFormSentence('text'), group: 'canvas', searchText: 'note text add type words heading', run: () => { actions.addNote('text') } })
+  out.push({ id: 'note.add.frame', title: 'Add a named region', subtitle: noteFormSentence('frame'), group: 'canvas', searchText: 'note frame region group area label around', run: () => { actions.addNote('frame') } })
+  const notePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'note')?.id
+  out.push(withReason({ id: 'note.tint', title: 'Tint this note…', subtitle: 'yellow, blue, green or pink — type note-tint <panel> <tint>', group: 'canvas', searchText: 'note tint colour yellow blue green pink sticky', run: () => actions.beginRunVerb() }, notePanelId === undefined ? 'select a sticky note first' : undefined))
   // M186. The picture rows. `image.add` opens the verb line (a path is what
   // it needs and this app has no second file browser); `image.replace` acts on
   // the SELECTED picture through the system's own chooser, and is disabled by

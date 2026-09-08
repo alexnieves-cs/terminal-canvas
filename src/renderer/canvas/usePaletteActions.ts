@@ -49,7 +49,7 @@ import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
   isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel,
-  isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel,
+  isNotePanel, isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
 import { expandGroup, removeGroup, toggleGroup, type CanvasGroup } from '@renderer/groups/groups'
@@ -82,6 +82,10 @@ export interface PaletteActionsDeps {
   /** M184. Canvas's stop: every live pool of this template interrupted, nothing killed. */
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   saveWorkflowCopyDraft: (templateId: string) => Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }>
+  /** M187. The note's three verbs — one record, three forms. */
+  addNote: (form: string, text?: string, world?: { x: number; y: number }) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteText: (panelId: string, text: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteTint: (panelId: string, tint: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M186. A picture into the store and onto the canvas, and the repair beside it. */
   addImageFromPath: (path: string, world?: { x: number; y: number }) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   replaceImagePanel: (panelId: string, path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -224,7 +228,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -289,6 +293,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'workflow-run': return self.runWorkflowNow(a.template!)
           case 'workflow-stop': return self.stopWorkflow(a.template!)
           case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
+          case 'note-add': return self.addNote(a.form!, a.text)
+          case 'note-set': return self.setNoteText(a.panel!, a.text ?? '')
+          case 'note-tint': return self.setNoteTint(a.panel!, a.tint!)
           case 'image-add': return self.addImage(a.path!)
           case 'image-replace': return self.replaceImage(a.panel!, a.path)
           case 'preview-open': return self.openPreview(a.url)
@@ -736,6 +743,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (p.rect.id !== id) return p
               if (isReviewPanel(p)) {
                 return { kind: p.kind, rect: p.rect, subject: p.subject, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M187. The sixteenth kind: a rename carries the note's own
+              // record field by field, absent staying absent — the same rule
+              // the file panel's fontSize learned in M49.
+              if (isNotePanel(p)) {
+                return { kind: p.kind, rect: p.rect, note: p.note, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               if (isFilePanel(p)) {
                 return { kind: p.kind, rect: p.rect, source: p.source, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
@@ -1951,6 +1964,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const refusal = runWorkflowNow(templateId)
       return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
     },
+    addNote: (form, text) => addNote(form, text),
+    setNoteText: (panelId, text) => setNoteText(panelId, text),
+    setNoteTint: (panelId, tint) => setNoteTint(panelId, tint),
     addImage: (path) => addImageFromPath(path),
     replaceImage: (panelId, path) => replaceImagePanel(panelId, path),
     openPreview: (url) => openPreviewNow(url),
@@ -2243,7 +2259,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

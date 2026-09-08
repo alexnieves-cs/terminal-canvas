@@ -1,9 +1,10 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
-import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
+import { noteSummary } from '@shared/notes'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -115,6 +116,8 @@ export function railLabel(
   // can hold, and the part a person scans for (`localhost:3000` beside the
   // terminal that started it). The full url is the inspector's identity.
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
+  // M187. A note reads by its own first line — its name is what it says.
+  if (isNotePanel(panel)) return `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form, 32)}`
   // M73. The same split as the toolbox, for the same 260px reason.
   if (isChatPanel(panel)) {
     const cwd = panel.chat.cwd.replace(/\/+$/, '')

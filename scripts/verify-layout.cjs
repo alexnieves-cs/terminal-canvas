@@ -3744,6 +3744,45 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), i1: by('i1'), i2: by('i2'), i3: by('i3'), i4: by('i4'), warnings: out.warnings }))
 }
 
+// M187 — note.1. THE NOTE RECORD ON DISK. `form` is REQUIRED and a value
+// outside the three drops the PANEL by name: a note whose form the app
+// invented would paint as something the person did not draw. An absent `text`
+// is an EMPTY note (a person makes one and types later), not a malformed
+// record; a non-string text keeps the note empty WITH a warning, because the
+// note is the object and its words are a field. A tint belongs to the sticky
+// alone: on another form, or outside the four names, it is dropped with a
+// warning and the note is kept — an untinted note is still the note that was
+// written, and dropping the panel over a colour would read as a deletion.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'n1', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 1, note: { form: 'sticky', text: 'buy milk', tint: 'blue' } },
+      { id: 'n2', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 2, note: { form: 'text' } },
+      { id: 'n3', kind: 'note', x: 0, y: 0, w: 720, h: 480, z: 3, note: { form: 'frame', text: 'release work', tint: 'green' } },
+      { id: 'n4', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 4, note: { form: 'sticky', text: 'ok', tint: 'chartreuse' } },
+      { id: 'n5', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 5, note: { form: 'postit', text: 'no' } },
+      { id: 'n6', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 6 },
+      { id: 'n7', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 7, note: { form: 'sticky', text: 42 } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'n1')
+  const warns = (id, word) => out.warnings.some((w) => w.includes(id) && w.includes(word))
+  ok('note.1 a note round-trips as form + text (+ a sticky\'s tint); an absent text is an empty note and a non-string text keeps the note empty with a warning; a tint outside the four names, and a tint on a form that is not sticky, are each dropped with a warning and the note kept; an unknown form and a missing note object each drop their own panel by name',
+    panels.map((p) => p.id).join(',') === 'n1,n2,n3,n4,n7' &&
+      by('n1').note.form === 'sticky' && by('n1').note.text === 'buy milk' && by('n1').note.tint === 'blue' &&
+      round && round.note.tint === 'blue' && round.note.text === 'buy milk' &&
+      by('n2').note.text === '' && !('tint' in by('n2').note) &&
+      by('n3').note.form === 'frame' && !('tint' in by('n3').note) && warns('n3', 'sticky') &&
+      by('n4') && !('tint' in by('n4').note) && warns('n4', 'tint') &&
+      by('n7') && by('n7').note.text === '' && warns('n7', 'text') &&
+      warns('n5', 'form') && warns('n6', 'form'),
+    JSON.stringify({ ids: panels.map((p) => p.id), n1: by('n1'), n2: by('n2'), n3: by('n3'), n4: by('n4'), n7: by('n7'), warnings: out.warnings }))
+}
+
 // M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
 // malformed entry is dropped by name; the cap keeps the newest; the dedupe is
 // by key and never resets a working item; every absent optional stays absent

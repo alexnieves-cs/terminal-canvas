@@ -60,6 +60,12 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'workflow-edge', label: 'Workflow: connect', args: [{ name: 'template', kind: 'key' }, { name: 'from', kind: 'value' }, { name: 'to', kind: 'value' }, { name: 'trigger', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'an edge between two nodes; a cycle is refused' },
   { id: 'workflow-unedge', label: 'Workflow: disconnect', args: [{ name: 'template', kind: 'key' }, { name: 'from', kind: 'value' }, { name: 'to', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'remove an edge from the draft' },
   { id: 'workflow-save', label: 'Workflow: save', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflow'], target: 'canvas', hint: 'write the draft back to the record; a record saved by someone else is refused as stale' },
+  // M187. The note's three. `note-add` takes the FORM first because it is the
+  // thing a person chooses; the text is optional (an empty note is a real
+  // thing to make and type into).
+  { id: 'note-add', label: 'Note: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true }], destructive: false, actions: ['addNote'], target: 'canvas', hint: 'a sticky note, free text, or a named region' },
+  { id: 'note-set', label: 'Note: set the text', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text' }], destructive: false, actions: ['setNoteText'], target: 'panel', hint: 'replace a note\'s words' },
+  { id: 'note-tint', label: 'Note: set the tint', args: [{ name: 'panel', kind: 'panel' }, { name: 'tint', kind: 'value' }], destructive: false, actions: ['setNoteTint'], target: 'panel', hint: 'yellow, blue, green or pink — a sticky note only' },
   // M186. A picture in, and a picture repaired. Both take a path, and both go
   // through the store, so an agent's picture has the same identity a person's
   // dropped one has.
@@ -251,6 +257,9 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'workflow-remove': { canvas: 'Delete on a selected diagram block', palette: 'workflow.remove', agent: 'tc plan workflow-remove t1 n1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
   'workflow-edge': { canvas: 'a drag from a block\'s port onto another block', palette: 'workflow.edge', agent: 'tc plan workflow-edge t1 n1 n2 exit', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
   'workflow-save': { canvas: 'Save on the workflow panel', palette: 'workflow.save', agent: 'tc plan workflow-save t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-set': { canvas: "the note's own editor, committed on blur or Escape", palette: 'note.tint', agent: 'tc plan note-set nt1 hello', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-tint': { canvas: "the four tint chips on a sticky note's chrome", palette: 'note.tint', agent: 'tc plan note-tint nt1 blue', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
   'image-add': { canvas: 'drop a picture on the canvas, or paste one with no agent to take it', palette: 'image.add', agent: 'tc plan image-add /tmp/shot.png', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
   'image-replace': { canvas: 'Replace on a picture panel', palette: 'image.replace', agent: 'tc plan image-replace img1 /tmp/other.png', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
   'preview-open': { canvas: 'Find the project on the preview pane, and a candidate in its list', palette: 'preview.open', agent: 'tc plan preview-open', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },

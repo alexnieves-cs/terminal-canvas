@@ -183,6 +183,15 @@
   --panel-bg:  var(--glass-1);
   --chrome-bg: var(--glass-2);
   --border:    var(--line);
+
+  /* M187. The four sticky tints, LIGHT theme: restrained washes of the state
+     hues, not the hues themselves — a note is paper on a canvas, not a state
+     signal, and a saturated card would compete with the state edge for the
+     one thing colour means in this app. */
+  --tint-yellow: #fbf3d5;
+  --tint-blue:   #e2ecf9;
+  --tint-green:  #e0f0e4;
+  --tint-pink:   #f9e4ec;
 }
 
 :root[data-theme="dark"] {
@@ -242,6 +251,13 @@
   --panel-bg:  var(--glass-1);
   --chrome-bg: var(--glass-2);
   --border:    var(--line);
+
+  /* M187. The four sticky tints, DARK theme: the same four hues at the dark
+     ground's own lightness, so a note reads as paper without becoming a lamp. */
+  --tint-yellow: #2e2a1c;
+  --tint-blue:   #1c2634;
+  --tint-green:  #1b2a20;
+  --tint-pink:   #2f1e26;
 }
 
 /* Forced colours. Every boundary in this file is already a border, so the UA
@@ -4298,6 +4314,29 @@ body {
 .browser-node__found { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: 0 var(--sp-2) var(--sp-2); font-family: var(--font-ui); }
 .browser-node__said { padding: 0 var(--sp-2); font-family: var(--font-ui); }
 /* M186. A picture that cannot be painted is still an object: its two sentences stack, and Replace sits on the chrome above them. */
+/* M187. The note kind's three forms. A sticky is a tinted card in the UI face;
+   free text has NO card at all (no fill, no border, no shadow — the brief's
+   "editable type", not a frame); a named region is a quiet boundary whose
+   MIDDLE takes no gesture, so a click inside it reaches the object it
+   encloses. The tints are restrained theme tints declared in both theme
+   blocks (`theme.1`), never literal colours. */
+.note-node__body { padding: var(--sp-2); display: flex; min-height: 0; }
+.note-node__field { flex: 1 1 auto; min-height: 0; width: 100%; resize: none; border: 0; background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); line-height: var(--lh-body); outline: none; }
+.note-node__text { margin: 0; font-family: var(--font-ui); white-space: pre-wrap; }
+.note-node--sticky .pf { background: var(--tint-yellow); }
+.note-node--sticky[data-note-tint="blue"] .pf, .note-node--sticky [data-note-tint="blue"] { background: var(--tint-blue); }
+.note-node[data-note-tint="blue"] { background: var(--tint-blue); }
+.note-node[data-note-tint="green"] { background: var(--tint-green); }
+.note-node[data-note-tint="pink"] { background: var(--tint-pink); }
+.note-node[data-note-form="sticky"] { background: var(--tint-yellow); }
+.note-node[data-note-form="text"] { background: transparent; border-color: transparent; box-shadow: none; }
+.note-node[data-note-form="text"] .pf__chrome { opacity: 0; }
+.note-node[data-note-form="text"]:hover .pf__chrome, .note-node[data-note-form="text"]:focus-within .pf__chrome { opacity: 1; }
+.note-node[data-note-form="frame"] { background: transparent; box-shadow: none; }
+/* The interior takes NO gesture: the boundary and the name stay hittable. */
+.note-node[data-note-form="frame"] .note-node__body { pointer-events: none; }
+.note-node[data-note-form="frame"] .note-node__field { pointer-events: auto; align-self: flex-start; height: 2.2em; }
+.note-node__tint.is-on { color: var(--iris); border-color: var(--iris); }
 .image-node__gone { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3); font-family: var(--font-ui); }
 .browser-node__host[data-preview-width]:not([data-preview-width="full"]) { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .browser-node__live { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

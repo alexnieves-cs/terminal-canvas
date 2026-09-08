@@ -4,6 +4,7 @@ import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
 import type { DeviceWidthId } from '@shared/preview'
+import type { NoteForm, NoteTint } from '@shared/notes'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
@@ -261,7 +262,13 @@ export interface ImagePanel extends PanelBase {
   image: { path: string; asset?: string }
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel
+export interface NotePanel extends PanelBase {
+  kind: 'note'
+  /** M187. One record, three forms; the tint is the sticky's alone and absent otherwise. */
+  note: { form: NoteForm; text: string; tint?: NoteTint }
+}
+
+export type Panel = NotePanel | MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -327,6 +334,31 @@ export function isImagePanel(panel: Panel): panel is ImagePanel {
   return panel.kind === 'image'
 }
 
+export function isNotePanel(panel: Panel): panel is NotePanel {
+  return panel.kind === 'note'
+}
+
+export const NOTE_W = 320
+export const NOTE_H = 220
+export const FRAME_W = 720
+export const FRAME_H = 480
+
+/**
+ * M187. A note at a point. A FRAME is minted larger, because a region that
+ * does not enclose anything is a region a person has to resize before it means
+ * what they meant by drawing it.
+ */
+export function makeNotePanel(id: string, centre: Point, z: number, form: NoteForm, text: string, tint?: NoteTint): NotePanel {
+  const w = form === 'frame' ? FRAME_W : NOTE_W
+  const h = form === 'frame' ? FRAME_H : NOTE_H
+  return {
+    kind: 'note',
+    rect: { id, x: centre.x - w / 2, y: centre.y - h / 2, w, h },
+    z,
+    note: { form, text, ...(tint === undefined || form !== 'sticky' ? {} : { tint }) }
+  }
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -355,7 +387,10 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
     !isSkillPanel(panel) &&
     // M181. The fifteenth kind, for the same reason: a picture must never
     // reach assignTiers with no spec.
-    !isImagePanel(panel)
+    !isImagePanel(panel) &&
+    // M187. The sixteenth kind, same reason: a note has no spec and must never
+    // reach assignTiers or registry.ensure as one.
+    !isNotePanel(panel)
   )
 }
 

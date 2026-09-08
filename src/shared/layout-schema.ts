@@ -2,6 +2,7 @@ import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId } from './preview'
 import { isAssetId } from './assets'
+import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteForm, type NoteTint } from './notes'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
@@ -410,7 +411,21 @@ export interface PersistedImagePanel extends PersistedPanelBase {
   image: { path: string; asset?: string }
 }
 
+/**
+ * M187. The note kind on disk: one record, three forms. `form` is REQUIRED and
+ * a value outside the three drops the panel by name — a note whose form the
+ * app invented would paint as something the person did not draw. `text` absent
+ * is an EMPTY note (a person can make one and type later), not a malformed
+ * record. `tint` belongs to the sticky alone; anywhere else it is dropped with
+ * a warning and the panel is kept.
+ */
+export interface PersistedNotePanel extends PersistedPanelBase {
+  kind: 'note'
+  note: { form: NoteForm; text: string; tint?: NoteTint }
+}
+
 export type PersistedPanel =
+  | PersistedNotePanel
   | PersistedImagePanel
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -1056,6 +1071,22 @@ function parsePanel(
       else warnings.push(`image panel ${id}: image.asset ${JSON.stringify(assetRaw)} is not a sha-256 asset id — the picture is kept and its store identity dropped`)
     }
     return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }) } }
+  }
+  if (kind === 'note') {
+    const note = (raw as Record<string, unknown>).note
+    if (!isRecord(note) || !isNoteForm(note.form)) {
+      warnings.push(`dropped note panel ${id}: note.form was not one of ${NOTE_FORMS.join(', ')}`)
+      return null
+    }
+    const text = isStr(note.text) ? normaliseNoteText(note.text) : ''
+    if (note.text !== undefined && !isStr(note.text)) warnings.push(`note panel ${id}: note.text was not a string — the note is kept, empty`)
+    let tint: NoteTint | undefined
+    if (note.tint !== undefined) {
+      if (!isNoteTint(note.tint)) warnings.push(`note panel ${id}: note.tint ${JSON.stringify(note.tint)} is not one of ${NOTE_TINTS.join(', ')} — the note is kept untinted`)
+      else if (note.form !== 'sticky') warnings.push(`note panel ${id}: only a sticky note carries a tint — the note is kept untinted`)
+      else tint = note.tint
+    }
+    return { ...base, kind: 'note', note: { form: note.form, text, ...(tint === undefined ? {} : { tint }) } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

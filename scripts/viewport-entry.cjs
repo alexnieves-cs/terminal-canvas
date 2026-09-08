@@ -9,6 +9,8 @@ module.exports = {
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
   ...require('../src/renderer/panels/panels'),
+  // M187. The note kind's pure rules travel with the panel factories they shape.
+  ...require('../src/shared/notes'),
   /* M93. Annotation anchoring is pure geometry. */
   ...require('../src/shared/annotations'),
   // M49. toPanels/fromPanels: the sixth absent-stays-absent copy site.
