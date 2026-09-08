@@ -11,6 +11,7 @@ import { IPC, IPC_EVENTS, type SpawnRequest, type SpawnResult } from '../shared/
 import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
+import type { ImageResult, StarterFiles } from '../shared/starter'
 import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
@@ -114,6 +115,10 @@ export interface PaletteHandlers {
   snapshotList(): SnapshotMeta[]
   /** M142. The run ledger's usage rows at or after `since`. */
   ledgerUsage(since: number): Promise<UsageRow[]>
+  /** M181. An image panel's bytes, by magic number under the cap — four arms, never a throw. */
+  imageRead(path: string): ImageResult
+  /** M181. The starter's two files, written once under userData/starter. */
+  starterPrepare(): StarterFiles
   snapshotRestore(at: number, afterId?: number): { kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
   memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
@@ -420,6 +425,11 @@ export function registerIpcHandlers(
   update: UpdateHandlers = INERT_UPDATE
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
+  // M181. A relative path is refused as `missing` before the read: the record
+  // parser already drops one, and a read resolved against main's cwd would
+  // name a file nobody meant.
+  ipcMain.handle(IPC.IMAGE_READ, (_event, path: string) => (typeof path === 'string' && path.startsWith('/') ? palette.imageRead(path) : { kind: 'missing' as const }))
+  ipcMain.handle(IPC.STARTER_PREPARE, () => palette.starterPrepare())
   ipcMain.handle(IPC.AGENT_CREATE, (_event, spec: AgentSessionSpec) => agents.create(spec))
   ipcMain.handle(IPC.AGENT_SEND, (_event, id: string, text: string, attachments: ChatAttachment[] = []) => agents.send(id, text, Array.isArray(attachments) ? attachments : []))
   ipcMain.handle(IPC.AGENT_CLIPBOARD_IMAGE, () => agents.clipboardImage())

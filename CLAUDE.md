@@ -304,9 +304,10 @@ renderer --invoke--> board:open-pr / board:comment-pr                           
 renderer --invoke--> shelf:list / shelf:save                                     --> main
 renderer --invoke--> plugin:details                                               --> main
 renderer --invoke--> update:check                                                --> main
+renderer --invoke--> image:read / starter:prepare                                --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
-main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer
+main     --send-->   canvas:counts / canvas:model / canvas:reset / canvas:plan                              --> renderer
 main     --send-->   preset:spawn / preset:default / preset:capture            --> renderer
 main     --send-->   agent:state                                               --> renderer
 main     --send-->   session:live / session:recover                            --> renderer
@@ -988,6 +989,39 @@ check does not, and should not, cover it.
   synthetic move reports 0 while the press is down). The layer paints a path plus a wide
   transparent hit twin; the draft is dimmer by token (styles check 3 forbids opacity).
 
+- `src/shared/onboarding.ts` / `src/shared/plan.ts`'s `runAgentPlan` and `agentDoorRefusal` /
+  `control-protocol.ts`'s `plan` verb — M180 (v9 Act I). Readiness is a TABLE
+  (`FIRST_LAUNCH_ENGINES`, M99's rule: no consumer compares `backend` to a literal) over the
+  M107 env report: installed, missing or unanswered per engine, and installed NEVER means
+  signed in — the first message is what checks it. The launcher's one filled start is an
+  `.is-primary` site (`primary.1`); its hint says what the click does. The agent door: `tc
+  plan "<verb line>"` → the socket (the URL door refuses it, and a query can no longer
+  replace the verb) → `canvas:plan` with the caller main resolved from `TC_PANEL_TOKEN` →
+  the palette's ONE executor. A destructive step, a `submit`/`type`/`interrupt` against a
+  panel in `wants-you` (a TUI's permission menu defaults to Yes) and a teammate caller's
+  session-opening verbs are each refused BEFORE any step runs; every outgoing string passes
+  `outward`. `V9_DOORS` records each v9 verb's four doors, and `closure.v9.1` binds the
+  palette id to a real row and the agent line through `buildPlan` — a declaration alone is
+  not a door. Real-Electron suites run under the SYSTEM `TMPDIR`: a long repository-local
+  path wraps in a 78-column terminal and moves goldens' painted fixture paths past the tile
+  budget (three false reds in M180).
+- `src/shared/starter.ts` / `src/main/image-read.ts` / `src/main/starter-prepare.ts` /
+  `src/renderer/image/ImageNode.tsx` — M181. The starter canvas is DATA: a manifest of four
+  captioned examples placed relative to the agent (`STARTER_OBJECTS`, no two rects
+  overlapping — `starter.plan.1`) and a workspace record of the keys EVER applied
+  (`starter`, absent on every pre-M181 file and on a canvas the starter never touched; a
+  reset clears it), which is what makes applying it idempotent — a closed example stays
+  closed, and a later act that adds an object adds a key. `applyStarter` in `Canvas.tsx`
+  mints through the ORDINARY paths and spawns nothing: the chat through `beginNewChat`
+  (spawns on its first send), the terminal a dormant login-shell card, the workflow M133's
+  projection, the note a prose file panel and the image the fifteenth kind over two files
+  main writes once under `userData/starter` (`starter:prepare` never overwrites the person's
+  note). The image kind holds an ABSOLUTE path and nothing else; main reads the bytes by
+  MAGIC NUMBER under `IMAGE_MAX_BYTES` (`image:read`, four arms, never a throw) and the
+  renderer paints a data URL under the CSP's `img-src data:` — never a `file:` url.
+  `isImagePanel` joins `isTerminalPanel`'s exclusion list (a picture must never reach
+  `assignTiers` with no spec). The preview object is M185's; drop, paste and Replace are
+  M187's.
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through
   `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap

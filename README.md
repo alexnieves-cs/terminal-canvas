@@ -404,6 +404,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        skill:trail
                        agent:pool-start / agent:pool-stop
                        update:check
+                       image:read / starter:prepare
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
@@ -415,7 +416,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        board:add
                        pool:mint / pool:event
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
-                       canvas:counts / canvas:model / canvas:reset
+                       canvas:counts / canvas:model / canvas:reset / canvas:plan
                        preset:spawn / preset:default / preset:capture
 ```
 
@@ -969,6 +970,8 @@ price of not killing something.
 | M177 | v8 Act IV — empty states as places: `shared/empty-states.ts` and `shell/EmptyState.tsx` (glyph · sentence · one verb) across the panes, the vault, the palette, the chat and the attention popover — `empty.1`, `empty.2` | ✅ done |
 | M178 | v8 Act IV — the second full audit (`docs/ux-audit-4.1.md`): 26 findings, 12 fixed (the enabled Restart painted white on white since M46 — `restart.paint.1`; `displayLabel`; the hunk from the first `@@`; the fences stripped; the Files heading's root, `tree.1`), 3 declined by rule, 11 owed to #88 and #86; twelve scene intents rewritten | ✅ done |
 | M179 | v8 Act IV — 4.1.0: the version, the local tag `v4.1.0`, README / `CLAUDE.md` (the five rules as pinned entries) / the brief's finished pass, the release body as `docs/release-notes/4.1.0.md`, `npm run verify` and `npm run verify:packaged` green and pasted in the run's ledger; nothing pushed, no GitHub release | ✅ done |
+| M180 | v9 Act I — the first conversation: one primary `Start a conversation` over `shared/onboarding.ts`'s readiness rows (installed is never signed in), the bounded `plan` control verb (`tc plan` → `canvas:plan` → the palette's one executor; no destructive step, no human answer, a teammate caller bounded, the URL door closed), `V9_DOORS`, `paste.image.1` read from the PTY log — `verify:onboarding`, `plan.*`, `agent-door.1–.6`, `closure.v9.1`, `onboarding.start.1`, `onboarding.agent.1` | ✅ done |
+| M181 | v9 Act I — the captioned starter canvas: `shared/starter.ts`'s manifest and idempotent workspace record, the fifteenth kind (`image`, an absolute path read by main by magic number through `image:read`), `starter:prepare`'s two files written once, `applyStarter` through the ordinary mint paths with nothing spawned, the launcher's first-run primary and `Starter canvas…` line, the `starter.open` row and `starter` verb — `starter.1–.3`, `image.record.1`, `starter.plan.1`, `image.kind.1`, `image.1`, `starter.prepare.1`, product `starter.1`, `image.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

@@ -244,7 +244,18 @@ export interface WorkflowPanel extends PanelBase {
   workflow: { templateId: string }
 }
 
-export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel
+/**
+ * M181. The image panel — the FIFTEENTH kind, sessionless like the file
+ * panel: an absolute path, read by main on render. No spec, so it never
+ * reaches assignTiers (a picture spends no WebGL slot), and
+ * isTerminalPanel's clause below is what keeps that structural.
+ */
+export interface ImagePanel extends PanelBase {
+  kind: 'image'
+  image: { path: string }
+}
+
+export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel
 
 /**
  * The only kind test written against a `Panel` anywhere, and it is
@@ -305,6 +316,11 @@ export function isWorkflowPanel(panel: Panel): panel is WorkflowPanel {
   return panel.kind === 'workflow'
 }
 
+/** M181. The positive partition for the fifteenth kind (`verify:viewport image.kind.1`). */
+export function isImagePanel(panel: Panel): panel is ImagePanel {
+  return panel.kind === 'image'
+}
+
 /**
  * The partition test, and the reason it is spelled as a negation of the known
  * non-terminal kinds rather than as `kind === 'terminal'`.
@@ -330,7 +346,10 @@ export function isTerminalPanel(panel: Panel): panel is TerminalPanel {
     // M128. The thirteenth kind joins the partition HERE, and forgetting it
     // is the dangerous direction: a skill panel satisfying isTerminalPanel
     // reaches assignTiers and registry.ensure with no spec at all.
-    !isSkillPanel(panel)
+    !isSkillPanel(panel) &&
+    // M181. The fifteenth kind, for the same reason: a picture must never
+    // reach assignTiers with no spec.
+    !isImagePanel(panel)
   )
 }
 
@@ -959,6 +978,14 @@ export function makeSkillPanel(id: string, centre: Point, z: number, scope: Tool
 }
 
 /** M133. A workflow panel needs room for a diagram and a tab strip. */
+export const IMAGE_W = 480
+export const IMAGE_H = 360
+
+/** M181. An image panel centred on the point (makePanel's contract); the path is copied by name. */
+export function makeImagePanel(id: string, centre: Point, z: number, path: string, title: string): ImagePanel {
+  return { kind: 'image', rect: { id, x: centre.x - IMAGE_W / 2, y: centre.y - IMAGE_H / 2, w: IMAGE_W, h: IMAGE_H }, z, title, image: { path } }
+}
+
 export const WORKFLOW_W = 640
 export const WORKFLOW_H = 460
 /**

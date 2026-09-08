@@ -1,4 +1,5 @@
 import { carryWorkItem } from '../shared/work-items'
+import { carryStarter } from '../shared/starter'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
   DEFAULT_PRESET_ID,
@@ -403,7 +404,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       runs: (w.runs ?? []).map((r) => ({ ...r, panelIds: [...r.panelIds], edges: r.edges.map((e) => ({ ...e })), entries: r.entries.map((e) => ({ ...e })) })),
       ...(layout && w.annotations !== undefined ? { annotations: w.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } })) } : {}),
       // M113. Records, not layout — kept whatever the restore settings say, like bookmarks and runs.
-      ...(w.workItems !== undefined ? { workItems: w.workItems.map(carryWorkItem) } : {})
+      ...(w.workItems !== undefined ? { workItems: w.workItems.map(carryWorkItem) } : {}),
+      // M181. The starter record: a record, kept whatever the restore settings say.
+      ...carryStarter(w)
     }
   }
 
@@ -444,6 +447,9 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // M113. The same absent-when-empty rule, for the same reader.
     if (incoming.workItems !== undefined && incoming.workItems.length > 0) w.workItems = incoming.workItems.map(carryWorkItem)
     else delete w.workItems
+    // M181. Absent stays absent on disk: a canvas the starter never touched carries no record.
+    if (incoming.starter !== undefined) w.starter = carryStarter(incoming).starter
+    else delete w.starter
     scheduleWrite()
   }
 
@@ -866,6 +872,8 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       w.focusedId = null
       delete w.annotations
       delete w.workItems
+      // M181. A reset is a first run again: the starter may lay itself out once more.
+      delete w.starter
       scheduleWrite()
     },
 

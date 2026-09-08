@@ -34,5 +34,9 @@ module.exports = {
   ...require('../src/renderer/canvas/handoff-rules'),
   /* M79. Runs: the component, the roots, the reducer, the cost. */
   ...require('../src/renderer/canvas/run-model'),
-  ...require('../src/shared/runs')
+  ...require('../src/shared/runs'),
+  /* M181. STARTER_OBJECTS is pure geometry (rects relative to the agent's).
+     Required inside a try so this bundle still builds before the module
+     exists and starter.plan.1 fails by name instead of aborting the suite. */
+  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })())
 }

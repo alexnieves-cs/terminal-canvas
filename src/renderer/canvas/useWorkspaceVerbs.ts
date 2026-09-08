@@ -1,4 +1,5 @@
 import type { Annotation } from '@shared/annotations'
+import type { PersistedStarter } from '@shared/starter'
 import { seedAfter } from '@renderer/panels/recover'
 import { useCallback, useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
@@ -52,6 +53,9 @@ export interface WorkspaceVerbsDeps {
   setRuns: Dispatch<SetStateAction<PersistedRun[]>>
   /** M93. */
   setAnnotations: Dispatch<SetStateAction<Annotation[]>>
+  /** M181. The starter record travels with its workspace, like the notes. */
+  starterRef: RefObject<PersistedStarter | undefined>
+  setStarter: Dispatch<SetStateAction<PersistedStarter | undefined>>
   /** M79. Forget every open run's component: the incoming workspace's panels are different ones. */
   forgetOpenRuns: () => void
   setDormantIds: Dispatch<SetStateAction<ReadonlySet<string>>>
@@ -109,7 +113,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
     registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, forgetOpenRuns,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, starterRef, setStarter, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData, setFlipped
   } = deps
@@ -224,6 +228,7 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
           bookmarks: bookmarksRef.current,
           runs: runsRef.current,
           ...(annotationsRef.current.length === 0 ? {} : { annotations: annotationsRef.current }),
+          ...(starterRef.current === undefined ? {} : { starter: starterRef.current }),
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
           // `panels` is untouched either way — it stays the active workspace's
@@ -306,6 +311,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         // M93. The incoming workspace's notes, or none: the outgoing ones must
         // not be carried into a workspace that never had them (the verifier).
         setAnnotations(result.state.annotations ?? [])
+        // M181. The incoming workspace's starter record, or none.
+        setStarter(result.state.starter)
         setDormantIds(dormant)
         selectOnly(result.state.selectedId)
         setFocusedId(result.state.focusedId)

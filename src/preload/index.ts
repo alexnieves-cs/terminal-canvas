@@ -124,6 +124,15 @@ const bridge: CanvasBridge = {
       ipcRenderer.on(IPC_EVENTS.POOL_MINT, wrapped)
       return () => ipcRenderer.removeListener(IPC_EVENTS.POOL_MINT, wrapped)
     },
+    onPlan: (handle) => {
+      const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
+        Promise.resolve().then(() => handle(envelope.req)).then(
+          (reply) => ipcRenderer.send(envelope.replyChannel, reply),
+          () => ipcRenderer.send(envelope.replyChannel, { kind: 'refused', reason: 'the canvas could not execute the plan' }))
+      }
+      ipcRenderer.on(IPC_EVENTS.CANVAS_PLAN, wrapped)
+      return () => ipcRenderer.removeListener(IPC_EVENTS.CANVAS_PLAN, wrapped)
+    },
     onBoard: (handle) => {
       const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
         ipcRenderer.send(envelope.replyChannel, handle(envelope.req))
@@ -373,6 +382,12 @@ const bridge: CanvasBridge = {
   },
   update: {
     check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK)
+  },
+  image: {
+    read: (path) => ipcRenderer.invoke(IPC.IMAGE_READ, path)
+  },
+  starter: {
+    prepare: () => ipcRenderer.invoke(IPC.STARTER_PREPARE)
   },
   platform: process.platform,
   telemetry: { enabled: telemetryEnabled }

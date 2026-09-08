@@ -28,6 +28,7 @@ export const USAGE = [
   '       tc focus <panel-id>',
   '       tc ping',
   '       tc status',
+  '       tc plan "focus n3; read n3"',
   '       tc memory list [--root <dir> | --teammate <id>] [--limit <n>]',
   '       tc memory add --kind <decided|tried|failed|note> --text <text> [--root <dir> | --teammate <id>]',
   '       tc api <github|jira> <METHOD> </path> [body-json] [--panel <id>]',
@@ -58,6 +59,13 @@ export function socketCandidates(env: Record<string, string | undefined>): strin
 export function buildRequest(argv: readonly string[], env: Record<string, string | undefined> = {}): { kind: 'ok'; line: string } | { kind: 'usage'; error?: string } {
   const [verb, ...rest] = argv
   switch (verb) {
+    case 'plan': {
+      const line = rest.join(' ').trim()
+      if (line === '') return { kind: 'usage', error: 'plan needs a verb line' }
+      // M180. The session's token rides when this shell is a panel's (M102's rule for `api`).
+      const token = env['TC_PANEL_TOKEN']
+      return { kind: 'ok', line: JSON.stringify({ verb: 'plan', line, ...(token === undefined || token === '' ? {} : { token }) }) }
+    }
     case 'open': {
       const fields: Record<string, string> = { verb: 'open' }
       for (let i = 0; i < rest.length; i += 1) {

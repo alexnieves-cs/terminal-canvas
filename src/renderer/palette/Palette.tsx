@@ -121,6 +121,8 @@ export interface PaletteProps {
   worktrees: readonly WorktreeListRow[]
   /** M48. See PaletteContext.envReport. */
   envReport: EnvReport | null
+  /** M181. See PaletteContext.starterReason. */
+  starterReason?: string | null
   /** M123. See PaletteContext.update. Absent in a fixture: the rows read `not checked`. */
   update?: UpdateState | null
   /** M49. See PaletteContext.globalFontSize. */
@@ -214,6 +216,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         credentials: props.credentials,
         worktrees: props.worktrees,
         envReport: props.envReport,
+        starterReason: props.starterReason ?? null,
         update: props.update ?? null,
         globalFontSize: props.globalFontSize,
         bookmarks: props.bookmarks,

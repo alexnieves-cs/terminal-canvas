@@ -1621,6 +1621,87 @@ await (async () => {
     JSON.stringify({ has, commands, since8k: since8k && since8k.map((r) => r.panelId), all: all && all.length }))
 })()
 
+// M181 — image.1. THE IMAGE READ: the media type is decided by MAGIC NUMBER
+// and never by extension (a `.png` holding text is `not-an-image` — an
+// extension is a claim, the first bytes are a fact), a file over the cap is
+// `too-large` from stat WITHOUT its bytes ever reaching a data URL, a
+// missing path is its own arm and never a throw, and a real PNG's data URL
+// decodes back to the same bytes. Guarded so a missing module fails by name.
+{
+  const has = typeof F.readImage === 'function' && typeof F.IMAGE_MAX_BYTES === 'number'
+  if (!has) ok('image.1 readImage: PNG/JPEG/GIF/WebP by magic number, a .png of text is not-an-image, over the cap is too-large from stat, missing never throws, a PNG data URL round-trips its bytes', false, 'src/main/image-read.ts does not exist')
+  else {
+    mkdirSync(p('image'), { recursive: true })
+    const ip = (n) => join(p('image'), n)
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('IHDR-not-really-but-the-bytes-are-what-round-trip')])
+    writeFileSync(ip('real.png'), png)
+    writeFileSync(ip('photo.txt'), Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from('jfif body')]))
+    writeFileSync(ip('anim.bin'), Buffer.from('GIF89a' + 'x'.repeat(20)))
+    const webp = Buffer.alloc(24); webp.write('RIFF', 0); webp.writeUInt32LE(16, 4); webp.write('WEBP', 8); webp.write('VP8 ', 12)
+    writeFileSync(ip('pic.dat'), webp)
+    writeFileSync(ip('lying.png'), 'this is text, not a picture\n')
+    const bigPath = ip('big.png')
+    // The over-cap file is a REAL PNG by magic number so `too-large` cannot
+    // pass by being the not-an-image arm, and it is written from a stream
+    // of one buffer so the fixture is cheap.
+    writeFileSync(bigPath, Buffer.concat([png, Buffer.alloc(F.IMAGE_MAX_BYTES + 1 - png.length, 0x20)]))
+    let threw = null; let missing = null
+    try { missing = F.readImage(ip('nope.png')) } catch (e) { threw = String(e) }
+    const real = F.readImage(ip('real.png'))
+    const jpeg = F.readImage(ip('photo.txt'))
+    const gif = F.readImage(ip('anim.bin'))
+    const wp = F.readImage(ip('pic.dat'))
+    const lying = F.readImage(ip('lying.png'))
+    const big = F.readImage(bigPath)
+    const prefix = 'data:image/png;base64,'
+    const back = real && real.kind === 'data' && real.dataUrl.startsWith(prefix) ? Buffer.from(real.dataUrl.slice(prefix.length), 'base64') : null
+    ok('image.1 readImage: PNG/JPEG/GIF/WebP by magic number, a .png of text is not-an-image, over the cap is too-large from stat, missing never throws, a PNG data URL round-trips its bytes',
+      F.IMAGE_MAX_BYTES === 5 * 1024 * 1024 &&
+        real.kind === 'data' && real.mediaType === 'image/png' && real.bytes === png.length && back !== null && back.equals(png) &&
+        jpeg.kind === 'data' && jpeg.mediaType === 'image/jpeg' && jpeg.dataUrl.startsWith('data:image/jpeg;base64,') &&
+        gif.kind === 'data' && gif.mediaType === 'image/gif' &&
+        wp.kind === 'data' && wp.mediaType === 'image/webp' &&
+        lying.kind === 'not-an-image' &&
+        big.kind === 'too-large' && big.bytes === F.IMAGE_MAX_BYTES + 1 && big.cap === F.IMAGE_MAX_BYTES && !('dataUrl' in big) &&
+        threw === null && missing !== null && missing.kind === 'missing',
+      JSON.stringify({ real: real && { kind: real.kind, mediaType: real.mediaType, bytes: real.bytes, roundTrip: back && back.equals(png) }, jpeg: jpeg && jpeg.kind + '/' + jpeg.mediaType, gif: gif && gif.kind + '/' + gif.mediaType, webp: wp && wp.kind + '/' + wp.mediaType, lying: lying && lying.kind, big: big && { kind: big.kind, bytes: big.bytes, cap: big.cap, hasDataUrl: 'dataUrl' in big }, missing, threw }))
+  }
+}
+
+// M181 — starter.prepare.1. THE STARTER'S TWO FILES, written ONCE: the first
+// call creates the directory and both files and lists them; a second call
+// writes nothing and answers the same paths; a `welcome.md` the person has
+// since edited is NEVER overwritten (byte-identical after the call — a
+// starter that re-wrote its note on every launch would erase the one file
+// it invited the person to type in); the picture passes readImage as a PNG
+// and the note is Markdown with a heading first. Guarded like image.1.
+{
+  const has = typeof F.prepareStarter === 'function'
+  if (!has) ok('starter.prepare.1 prepareStarter writes welcome.md and welcome.png once (creating the directory), a second call writes nothing and answers the same paths, an edited welcome.md is never overwritten, the PNG reads as image/png and the note starts with a heading', false, 'src/main/starter-prepare.ts does not exist')
+  else {
+    const dir = join(p('starter fixture'), 'nested', 'starter')
+    const first = F.prepareStarter(dir)
+    const note1 = readFileSync(first.notePath)
+    const second = F.prepareStarter(dir)
+    const note2 = readFileSync(first.notePath)
+    const own = '# my own note\n\nI typed this.\n'
+    writeFileSync(first.notePath, own)
+    const third = F.prepareStarter(dir)
+    const noteAfter = readFileSync(first.notePath, 'utf8')
+    const pngRead = typeof F.readImage === 'function' ? F.readImage(first.imagePath) : { kind: 'readImage missing' }
+    const noteText = note1.toString('utf8')
+    ok('starter.prepare.1 prepareStarter writes welcome.md and welcome.png once (creating the directory), a second call writes nothing and answers the same paths, an edited welcome.md is never overwritten, the PNG reads as image/png and the note starts with a heading',
+      first.notePath === join(dir, 'welcome.md') && first.imagePath === join(dir, 'welcome.png') &&
+        [...first.wrote].sort().join(',') === [first.imagePath, first.notePath].sort().join(',') &&
+        existsSync(first.notePath) && existsSync(first.imagePath) &&
+        second.wrote.length === 0 && second.notePath === first.notePath && second.imagePath === first.imagePath && note2.equals(note1) &&
+        third.wrote.length === 0 && noteAfter === own &&
+        pngRead.kind === 'data' && pngRead.mediaType === 'image/png' &&
+        noteText.length > 0 && /^# /.test(noteText.split('\n')[0]),
+      JSON.stringify({ first, second, third, noteFirstLine: noteText.split('\n')[0], noteAfterKept: noteAfter === own, png: pngRead && { kind: pngRead.kind, mediaType: pngRead.mediaType } }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

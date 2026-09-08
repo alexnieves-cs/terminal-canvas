@@ -206,6 +206,10 @@ module.exports = {
   skillWriteHandlers: require('../src/main/skill-write').skillWriteHandlers,
   /* M85. The vault's reader — node:fs, the tier file-read.ts sits in. */
   readVault: require('../src/main/vault-read').readVault,
+  /* M181. The image read and the starter's two files: the REAL modules over a harness directory. */
+  readImage: require('../src/main/image-read').readImage,
+  prepareStarter: require('../src/main/starter-prepare').prepareStarter,
+  STARTER_OBJECTS: require('../src/shared/starter').STARTER_OBJECTS,
   /* M88. The GitHub client, real over a recorded requester in the suite. */
   listGithubWorkItems: require('../src/main/github-client').listAssignedWorkItems,
   /* M89. The broker's audit, for the Integrations pane's rows. */

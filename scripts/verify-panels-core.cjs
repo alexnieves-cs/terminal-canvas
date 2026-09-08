@@ -3964,17 +3964,30 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
       clipboard.clear()
       clipboard.writeImage(png)
       const textOnClipboard = clipboard.readText()
+      const imagesBefore = new Set(readdirSync(harnessAttachmentsDir))
       wc.send(IPC_EVENTS.EDIT_PASTE, textOnClipboard)
-      const echoedPath = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('.png') !== null && window.__m4aCellToScreen('attachments') !== null`), 6000)
+      // M180. A visible-row search can split "attachments" at the terminal's
+      // right edge (78 columns with a repo-local TMPDIR). Read the real PTY
+      // echo, as broadcast.1 does: the EXACT newly written path must arrive,
+      // shell-quoted and inside BOTH bracket markers, regardless of wrapping.
+      let written = []
+      let writtenPath = null
+      const echoedPath = await waitUntil(async () => {
+        written = readdirSync(harnessAttachmentsDir).filter((f) => f.endsWith('.png') && !imagesBefore.has(f))
+        if (typeof piId !== 'string' || written.length !== 1) return false
+        writtenPath = join(harnessAttachmentsDir, written[0])
+        const quotedPath = "'" + writtenPath.replace(/'/g, "'\\''") + "'"
+        return (await scrollbackLog.readAll(piId)).includes(`^[[200~${quotedPath}^[[201~`)
+      }, 6000)
       const bracketed = await wc.executeJavaScript(`window.__m4aCellToScreen('200~') !== null`)
-      const written = readdirSync(harnessAttachmentsDir).filter((f) => f.endsWith('.png'))
       clipboard.clear()
       clipboard.writeText('PLAIN-TEXT-PASTE-4471')
       wc.send(IPC_EVENTS.EDIT_PASTE, clipboard.readText())
-      const echoedText = await waitUntil(() => wc.executeJavaScript(`window.__m4aCellToScreen('PLAIN-TEXT-PASTE-4471') !== null`), 4000)
+      const echoedText = await waitUntil(async () => typeof piId === 'string' &&
+        (await scrollbackLog.readAll(piId)).includes('^[[200~PLAIN-TEXT-PASTE-4471^[[201~'), 4000)
       ok('paste.image.1 a clipboard image pasted into a spawned terminal lands as a bracketed shell-quoted path to a .png main wrote under attachments/, and a text paste is unchanged',
-        typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length >= 1 && echoedText !== false,
-        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, echoedText, clipboardHadImage: !clipboard.readImage().isEmpty(), pngEmpty: png.isEmpty() }))
+        typeof piId === 'string' && textOnClipboard === '' && echoedPath !== false && bracketed === true && written.length === 1 && echoedText !== false,
+        JSON.stringify({ piId, textOnClipboard, echoedPath, bracketed, written: written.length, writtenPath, echoedText, clipboardHadImage: !clipboard.readImage().isEmpty(), pngEmpty: png.isEmpty() }))
       if (typeof piId === 'string') await clickPanelClose(wc, piId)
     }
 

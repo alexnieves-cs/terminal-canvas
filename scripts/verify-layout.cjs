@@ -4095,6 +4095,120 @@ try {
     JSON.stringify({ spaced, eq, fine, w }))
 }
 
+// M181 — starter.1–.3, image.record.1. THE STARTER RECORD and THE IMAGE
+// PANEL on disk. Every check below is guarded on the module's presence so a
+// missing `src/shared/starter.ts` fails BY NAME rather than throwing and
+// taking every later check with it (the verify-suites rule).
+const STARTER_MISSING = 'src/shared/starter.ts does not exist'
+const hasStarter = typeof L.parseStarter === 'function' && typeof L.starterKeysToApply === 'function' && typeof L.carryStarter === 'function' && Array.isArray(L.STARTER_OBJECTS)
+
+// starter.1 — parseStarter's arms: absent is every pre-M181 file and warns
+// NOTHING; a non-object, a bad version or a non-array keys warns ONCE and is
+// dropped; a non-string key costs that entry, never the record; the result
+// is a fresh copy (mutating it must not reach the input — a shared array
+// would let a later `keys.push` rewrite the record the parser was handed).
+{
+  if (!hasStarter) ok('starter.1 parseStarter: absent warns nothing; a non-object / bad version / non-array keys warns once and is dropped; a non-string key is dropped with the rest kept; the result is a copy', false, STARTER_MISSING)
+  else {
+    const w0 = []; const absent = L.parseStarter(undefined, w0)
+    const bad = ['a string', 7, null, [], { version: 'x', keys: [] }, { version: -1, keys: [] }, { version: 1.5, keys: [] }, { version: 1, keys: 'agent' }, { version: 1 }]
+    const badOut = bad.map((raw) => { const w = []; return { r: L.parseStarter(raw, w), n: w.length } })
+    const input = { version: 1, keys: ['agent', 3, 'terminal', null, 'note'] }
+    const w1 = []; const mixed = L.parseStarter(input, w1)
+    // Read the parsed values BEFORE the mutation below: the copy test writes
+    // into the result on purpose, and the first cut asserted the pre-mutation
+    // values after it (the M181 green run found the check, not the parser).
+    const parsedVersion = mixed?.version
+    const parsedKeys = mixed?.keys.join(',')
+    let copy = false
+    if (mixed) { mixed.keys.push('zzz'); mixed.version = 99; copy = input.keys.length === 5 && input.version === 1 && !input.keys.includes('zzz') }
+    ok('starter.1 parseStarter: absent warns nothing; a non-object / bad version / non-array keys warns once and is dropped; a non-string key is dropped with the rest kept; the result is a copy',
+      absent === undefined && w0.length === 0 &&
+        badOut.every((o) => o.r === undefined && o.n === 1) &&
+        mixed !== undefined && parsedVersion === 1 && parsedKeys === 'agent,terminal,note' && copy,
+      JSON.stringify({ absent, w0, badOut, mixed, w1, copy }))
+  }
+}
+
+// starter.2 — the workspace round trip. A pre-M181 file has no `starter`
+// key, and it must have none after a parse AND after serialiseLayout: a
+// written `"starter":{"version":1,"keys":[]}` would be a record claiming the
+// starter was applied to a canvas it never touched. A present record
+// survives both directions; a malformed one drops by name with the
+// workspace kept.
+{
+  const ws = (over) => ({ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [], ...over })
+  const doc = (w) => JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [w] })
+  const plain = L.parseLayout(doc(ws({})))
+  const pw = plain.snapshot.workspaces[0]
+  const plainText = L.serialiseLayout({ ...plain.snapshot })
+  const present = L.parseLayout(doc(ws({ starter: { version: 1, keys: ['agent', 'note'] } })))
+  const prw = present.snapshot.workspaces[0]
+  const again = L.parseLayout(L.serialiseLayout({ ...present.snapshot })).snapshot.workspaces[0]
+  const mal = L.parseLayout(doc(ws({ starter: { version: 'one', keys: [] } })))
+  const mw = mal.snapshot.workspaces[0]
+  ok('starter.2 a workspace with no starter has none after parse and none in serialiseLayout\'s text; a present record survives parse → serialise → parse; a malformed one drops by name with the workspace kept',
+    hasStarter && pw !== undefined && !('starter' in pw) && !/"starter"/.test(plainText) && plain.warnings.length === 0 &&
+      prw !== undefined && prw.starter !== undefined && prw.starter.version === 1 && prw.starter.keys.join(',') === 'agent,note' && present.warnings.length === 0 &&
+      again !== undefined && again.starter !== undefined && again.starter.keys.join(',') === 'agent,note' &&
+      mw !== undefined && !('starter' in mw) && mal.warnings.some((m) => /starter/.test(m)),
+    hasStarter ? JSON.stringify({ pw: Object.keys(pw || {}), plainHasKey: /"starter"/.test(plainText), prw: prw && prw.starter, again: again && again.starter, mw: Object.keys(mw || {}), warnings: [plain.warnings, present.warnings, mal.warnings] }) : STARTER_MISSING)
+}
+
+// starter.3 — starterKeysToApply is `agent` first then every manifest key,
+// MINUS what the record already holds (a key applied once is never minted
+// again, whether its object is still there or was closed on purpose); an
+// unknown key in the record is ignored. carryStarter keeps absent ABSENT —
+// a spread would write `starter: undefined`, which survives IPC and reads as
+// present at every `in` test — and returns a copy when present.
+{
+  if (!hasStarter) ok('starter.3 starterKeysToApply: agent first then the manifest keys minus the record\'s, all five for no record, [] for a full record, an unknown key ignored; carryStarter keeps absent absent and copies a present record', false, STARTER_MISSING)
+  else {
+    const all = L.starterKeysToApply(undefined)
+    const manifestKeys = L.STARTER_OBJECTS.map((o) => o.key)
+    const full = L.starterKeysToApply({ version: 1, keys: [L.AGENT_KEY, ...manifestKeys] })
+    const some = L.starterKeysToApply({ version: 1, keys: [L.AGENT_KEY, 'note', 'not-a-key'] })
+    const empty = L.starterKeysToApply({ version: 1, keys: [] })
+    const carriedAbsent = L.carryStarter({})
+    const rec = { version: 1, keys: ['agent'] }
+    const carried = L.carryStarter({ starter: rec })
+    ok('starter.3 starterKeysToApply: agent first then the manifest keys minus the record\'s, all five for no record, [] for a full record, an unknown key ignored; carryStarter keeps absent absent and copies a present record',
+      L.AGENT_KEY === 'agent' && all.length === 5 && all[0] === 'agent' && all.slice(1).join(',') === manifestKeys.join(',') &&
+        full.length === 0 && empty.join(',') === all.join(',') &&
+        some.join(',') === manifestKeys.filter((k) => k !== 'note').join(',') &&
+        !('starter' in carriedAbsent) &&
+        carried.starter !== undefined && carried.starter !== rec && carried.starter.keys !== rec.keys && carried.starter.keys.join(',') === 'agent' && carried.starter.version === 1,
+      JSON.stringify({ all, full, some, empty, carriedAbsent: Object.keys(carriedAbsent), carried }))
+  }
+}
+
+// image.record.1 — the fifteenth kind on disk: `kind: 'image'` with an
+// ABSOLUTE `image.path` survives; a missing `image`, a non-string path or a
+// RELATIVE path drops the PANEL by name (a picture panel naming no file
+// would sit on the canvas saying `missing` about a file the record never
+// named; a relative path names a different file from every cwd), and the
+// other panels in the same array survive.
+{
+  const img = (id, image) => ({ id, kind: 'image', x: 0, y: 0, w: 400, h: 300, z: 1, ...(image === undefined ? {} : { image }) })
+  const out = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: [
+    { id: 'n1', x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [] },
+    img('i1', { path: '/tmp/welcome.png' }),
+    img('i2'),
+    img('i3', { path: 7 }),
+    img('i4', { path: 'relative/welcome.png' }),
+    { id: 'n2', x: 0, y: 0, w: 520, h: 340, z: 2, cwd: '~', command: 'sh', args: [] }
+  ] }] }))
+  const ps = out.snapshot.workspaces[0].panels
+  const ids = ps.map((p) => p.id).join(',')
+  const i1 = ps.find((p) => p.id === 'i1')
+  const again = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w', workspaces: [{ id: 'w', name: 'w', camera: { x: 0, y: 0, scale: 1 }, panels: ps }] })).snapshot.workspaces[0].panels
+  ok('image.record.1 an image panel with an absolute image.path survives parse and re-parse; a missing image, a non-string path or a relative path drops that panel by id with the rest kept',
+    ids === 'n1,i1,n2' && i1 !== undefined && i1.kind === 'image' && i1.image.path === '/tmp/welcome.png' &&
+      ['i2', 'i3', 'i4'].every((id) => out.warnings.some((m) => m.includes(id))) &&
+      again.map((p) => p.id).join(',') === 'n1,i1,n2' && again[1].image.path === '/tmp/welcome.png',
+    JSON.stringify({ ids, i1, warnings: out.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

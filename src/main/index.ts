@@ -1,3 +1,4 @@
+import type { AgentPlanReply, AgentPlanRequest } from '../shared/plan'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
@@ -64,6 +65,8 @@ import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
 import { checkForUpdate, repoOf } from './update-check'
+import { readImage } from './image-read'
+import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
@@ -750,6 +753,16 @@ const controlHandler = createControlHandler({
     return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
   },
   // M113. The board verb asks the renderer, which owns the workspace it renders.
+  // M180. The plan door asks the renderer the same way. No window is the
+  // handler's `null`; a plan that outlives the wait is a DIFFERENT answer —
+  // its steps are still running on the canvas, and "no canvas answered" would
+  // send the caller to relaunch an app that is mid-send (the critic).
+  plan: async (line, caller) => {
+    const wc = mainWindow?.webContents
+    if (!wc) return null
+    return requestFromRendererWith<AgentPlanReply, AgentPlanRequest>(wc, IPC_EVENTS.CANVAS_PLAN, { line, ...(caller === undefined ? {} : { caller }) },
+      { kind: 'refused', reason: 'the plan is still running on the canvas — it did not finish within 30 s; check the canvas before repeating it' }, 30000)
+  },
   board: async (req) => {
     const wc = mainWindow?.webContents
     if (!wc) return null
@@ -1658,6 +1671,9 @@ app.whenReady().then(async () => {
       snapshotList: () => layoutSnapshots.list(),
       // M142. History on #46's ledger; the renderer prices it.
       ledgerUsage: (since) => runLedger.usage(since),
+      // M181. Both under userData: the picture bytes never cross as a file path the renderer could open.
+      imageRead: (path) => readImage(path),
+      starterPrepare: () => prepareStarter(join(app.getPath('userData'), 'starter')),
       snapshotRestore: (at, afterId) => {
         const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
         let bytes: string

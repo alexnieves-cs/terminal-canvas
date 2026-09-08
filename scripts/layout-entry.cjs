@@ -48,5 +48,11 @@ module.exports = {
      different, unrelated milestone had already claimed M13. */
   ...require('../src/main/fs-tree'),
   /* M65. The spawn sheet's resolver: pure over an injected directory test. */
-  ...require('../src/main/spawn-request')
+  ...require('../src/main/spawn-request'),
+  /* M181. The starter manifest and its workspace record: pure data and the
+     record rules. Required inside a try so the suite still BUILDS while the
+     module does not exist yet — esbuild treats a require inside try/catch as
+     a warning, not an error — and the starter.* checks then fail by name
+     rather than every check in this file failing at buildSync. */
+  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })())
 }
