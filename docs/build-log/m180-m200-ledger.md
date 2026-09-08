@@ -1334,3 +1334,46 @@ neighbour and records no run.
 export and import), M190 (the feedback door and the getting-started guide), M191 (the third UX
 audit) and M192 (5.0.0, the DMG, the release notes and the local tag). The extension registry
 and the example plugin are addressed in M189's ledger line.
+
+## M189 — one portable file, and an import that starts nothing (Act VI)
+
+Spec `docs/superpowers/specs/2026-09-08-m189-portable.md`.
+
+**What shipped.** `shared/portable.ts` — the format, `buildPortable` (field by field, so a
+terminal's environment, a chat's session id and transcript, and a pid have nowhere to go),
+`parsePortable`'s three answers, `remapPortable`, and `exportSentence`; `portable:export` and
+`portable:import` in main (the file is main's; what to MAKE of it is the renderer's, M113's
+division); the two verbs, two palette rows and two door entries.
+
+**Decisions.**
+- *The renderer builds the record.* Only the renderer knows what is on this canvas; main writes
+  bytes and parses text and never turns a file into a workspace.
+- *Pictures are omitted by default and never called redacted.* A picture cannot be scrubbed by
+  machine; the omission says exactly that, and `with-pictures` on the verb line is the human
+  review choice the brief asks for.
+- *Import marks every panel DORMANT.* Found by the product check: a terminal panel added to the
+  array is a NEW panel, and the tiering effect asks `registry.ensure` without the dormant flag —
+  which spawns a process the person only asked to look at. The check counts PTYs across the
+  import and requires the count not to move.
+- *`gate.2` gains its fifth `redactSecrets` caller BY NAME.* An export scrubs field by field and
+  reports its count on the record, which `outward` (one text, one note) cannot express. Widening
+  the allowlist by name is what that check is for.
+
+**Struck, with reasons.** The extension registry and the example plugin (the plan's M195 and
+M196) are not built. A declarative plugin loader is a new trust path into Electron, the
+filesystem and the credential store, and the brief's own acceptance evidence for it is an
+example loaded "from the documented external directory, not from a special fixture-only
+registration" — which needs an external directory, an install consent flow and a person to walk
+it. This run can prove none of that, and a loader nobody has run from outside the repository is
+a trust path shipped on a promise.
+
+**Red first.** `portable.1` (pure) was watched failing with `portable.ts` absent. The product
+check was red four times against real problems: a `listSessions()` called without its
+`wc`; a check that switched workspaces and never switched back (six later checks failed with no
+idea why — the harness's own "checks share state" rule, now restored in a `finally`); a seeded
+watcher record in the wrong shape, which left the renderer with an empty canvas and every
+request timing out; and the import spawning a PTY, which was the product defect above.
+
+**Green.** `verify:file` 90/90, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
+`verify:panels:product` 76/76 at 106.8 s (`out/v9-evidence/m189-product.log`, exit 0).

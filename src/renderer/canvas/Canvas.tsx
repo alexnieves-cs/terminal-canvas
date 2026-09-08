@@ -136,6 +136,7 @@ import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewD
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
+import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
@@ -4912,6 +4913,79 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M189. EXPORT — the RENDERER builds the record, because the renderer is
+   * the only side that knows what is on this canvas (M113's rule for the
+   * board, reached again); main only writes the bytes. Pictures are omitted
+   * unless the person asked for them, and the sentence says what travelled,
+   * what was scrubbed and what was left out.
+   */
+  const exportCanvas = useCallback(async (path?: string, withPixels?: boolean): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const persisted = fromPanels(panelsRef.current)
+    const images: { id: string; mediaType: string; base64: string }[] = []
+    if (withPixels === true) {
+      for (const panel of panelsRef.current) {
+        if (!isImagePanel(panel) || panel.image.asset === undefined) continue
+        const read = await window.canvas.image.read(panel.image.path)
+        if (read.kind !== 'data') continue
+        const comma = read.dataUrl.indexOf(',')
+        images.push({ id: panel.image.asset, mediaType: read.mediaType, base64: read.dataUrl.slice(comma + 1) })
+      }
+    }
+    const file = buildPortable({
+      kind: 'canvas',
+      workspaceName: (await window.canvas.workspace.list()).find((w) => w.active)?.name ?? 'canvas',
+      panels: persisted,
+      templates: templateRowsRef.current,
+      app: '5.0.0',
+      now: Date.now(),
+      ...(images.length === 0 ? {} : { images }),
+      ...((await window.canvas.routine.list()).length > 0 ? { hasRoutines: true } : {})
+    })
+    const written = await window.canvas.portable.write({ ...(path === undefined ? {} : { path }), file, suggested: `${file.workspace.name.replace(/[^a-zA-Z0-9-_ ]/g, '') || 'canvas'}.tccanvas` })
+    if (written.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
+    if (written.kind === 'refused') return { kind: 'refused', reason: written.reason }
+    return { kind: 'ran', note: `${displayPath(written.path).short} · ${exportSentence(file)}` }
+  }, [])
+  /**
+   * M189. IMPORT — a SEPARATE workspace, every id remapped, and nothing
+   * started: no PTY is spawned, no chat session created, no watcher armed and
+   * no routine scheduled, because the kinds that would do any of those cannot
+   * travel at all (`travels`) and every panel arrives in its not-started
+   * state, which is the state a persisted panel has always had.
+   */
+  const importCanvas = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const answer = await window.canvas.portable.read(path === undefined ? {} : { path })
+    if (answer.kind === 'cancelled') return { kind: 'ran', note: 'nothing imported' }
+    if (answer.kind === 'refused') return { kind: 'refused', reason: answer.reason }
+    const parse = answer.parse as ReturnType<typeof parsePortable>
+    if (parse.kind !== 'file') return { kind: 'refused', reason: parse.reason }
+    const remapped = remapPortable(parse.file, (prefix) => `${prefix}i${nextIdRef.current++}`)
+    const made = await window.canvas.workspace.create(`${remapped.workspace.name} (imported)`)
+    if (made === null || made === undefined || made === '') return { kind: 'refused', reason: 'a new workspace could not be made for the import' }
+    // The templates travel with it, each under its new id; a name collision is
+    // a copy, never an overwrite of a workflow the person already had.
+    for (const template of remapped.templates) await window.canvas.template.save(template)
+    reloadTemplates()
+    const switched = await switchWorkspace(made)
+    reloadWorkspacesRef.current?.()
+    if (!switched) return { kind: 'refused', reason: 'the new workspace could not be opened' }
+    const next = toPanels(remapped.workspace.panels)
+    // M189. EVERY imported panel is DORMANT, exactly as a restored one is
+    // (the boot's own rule at `dormantIds`'s seed). Without this a terminal
+    // panel added to the array is a NEW panel, and the tiering effect asks
+    // `registry.ensure` for it without the dormant flag — which spawns a
+    // process the person only asked to look at. The check counts the PTYs
+    // across the whole import and requires the count not to move.
+    setDormantIds((current) => new Set([...current, ...next.map((p) => p.rect.id)]))
+    setPanels(() => {
+      commitHistory(next)
+      return next
+    })
+    const warned = parse.warnings.length === 0 ? '' : ` · ${parse.warnings.length} warning${parse.warnings.length === 1 ? '' : 's'}`
+    return { kind: 'ran', note: `${remapped.workspace.panels.length} object${remapped.workspace.panels.length === 1 ? '' : 's'} into a new workspace · nothing was started${warned}` }
+  }, [commitHistory, reloadTemplates, switchWorkspace])
+
+  /**
    * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
    * inspector's Test control and the `node-test` verb all take, so a node
    * cannot behave one way when a person tests it and another when the
@@ -5315,6 +5389,8 @@ export function Canvas({
     addImageFromPath,
     replaceImagePanel: replaceImage,
     testNodeNow: testNode,
+    exportCanvasFile: exportCanvas,
+    importCanvasFile: importCanvas,
     addNote,
     setNoteText,
     setNoteTint,

@@ -399,6 +399,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        preview:discover / preview:capture
                        asset:put / asset:choose
                        node:fetch
+                       portable:export / portable:import
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        shelf:list / shelf:save
@@ -982,6 +983,7 @@ price of not killing something.
 | M186 | v9 Act IV — durable images: `main/asset-store.ts` content-addressed by sha-256 (the same picture twice is one file, the extension from the magic number, both caps reported, the oldest pruned), `image.asset` on the record, `asset:put`/`asset:choose`, a drop or paste that lands on NOTHING becoming a picture with every agent target unchanged, and Replace on every arm through the system's own chooser — `asset.1`, `image.asset.1`, product `image.2` | ✅ done |
 | M187 | v9 Act IV — notes, free text and named frames: the sixteenth kind as ONE record with three forms, `shared/notes.ts`'s summary and caps, the four tints declared in both theme blocks, an in-place editor that stops the canvas's keys and serves its own paste, a frame minted behind what it encloses whose interior takes no gesture, and three verbs with five rows — `note.kind.1`, `note.1`, product `note.1` | ✅ done |
 | M188 | v9 Act V — node schemas and a bounded executor: `action` (a canvas verb line through the SAME `runAgentPlan` the agent door takes — the workflow door every v9 verb had owed) and `http` (a GET, and every other method refused by name because a write belongs on the broker's approval path), the response capped and passed through `outward`, `node:fetch` in main with the real fetcher called by no suite, and `Test this node` in the inspector, the palette and `node-test` — one block, its duration and a named failure, no neighbour started and no run recorded — `node.http.1`, `closure.v9.1` (the workflow door asserted, not owed), product `node.1` | ✅ done |
+| M189 | v9 Act VI — one portable file: `shared/portable.ts` built FIELD BY FIELD (no environment, session id, transcript or pid can travel), every string scrubbed with the count on the record, every kind that cannot travel omitted BY NAME with what it would do on the other machine, pictures omitted unless a person asks (never called "redacted"), three parse answers including a future version naming both numbers, and `remapPortable` moving each reference with its target; import makes a SEPARATE workspace with every panel dormant so nothing starts — `portable.1`, `gate.2` (the fifth redactSecrets caller, by name), product `portable.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

@@ -1,7 +1,7 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
-import type { PreviewCaptureResult, AssetPutResult, NodeFetchResult } from '@shared/ipc-contract'
+import type { PreviewCaptureResult, AssetPutResult, NodeFetchResult, PortableWriteResult, PortableReadResult } from '@shared/ipc-contract'
 import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
@@ -278,6 +278,17 @@ const INERT_NODES: NodeHandlers = {
   fetch: async () => ({ kind: 'refused', reason: 'fetch nodes are not available here' })
 }
 
+/** M189. The portable file's two doors; see shared/portable.ts for the format. */
+export interface PortableHandlers {
+  write(req: { path?: string; file: unknown; suggested?: string }): Promise<PortableWriteResult>
+  read(req: { path?: string }): Promise<PortableReadResult>
+}
+
+const INERT_PORTABLE: PortableHandlers = {
+  write: async () => ({ kind: 'refused', reason: 'export is not available here' }),
+  read: async () => ({ kind: 'refused', reason: 'import is not available here' })
+}
+
 /** M129. The four writers; see main/skill-write.ts for every rule they enforce. */
 export interface SkillWriteHandlers {
   write(req: SkillWriteRequest): Promise<SkillWriteResult>
@@ -463,7 +474,9 @@ export function registerIpcHandlers(
   /** M186. Appended last, like every collaborator before it. */
   assets: AssetHandlers = INERT_ASSETS,
   /** M188. Appended last, like every collaborator before it. */
-  nodes: NodeHandlers = INERT_NODES
+  nodes: NodeHandlers = INERT_NODES,
+  /** M189. Appended last, like every collaborator before it. */
+  portable: PortableHandlers = INERT_PORTABLE
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M181. A relative path is refused as `missing` before the read: the record
@@ -515,6 +528,10 @@ export function registerIpcHandlers(
   // M188. The fetch node's GET: main's, so the cap and the outward gate are
   // in one place and the renderer never holds a socket.
   ipcMain.handle(IPC.NODE_FETCH, (_event, req: { url: string; method?: string }) => nodes.fetch(req))
+  // M189. The file is main's to write and read; what to MAKE of it is the
+  // renderer's, which is the same division M113's board keeps.
+  ipcMain.handle(IPC.PORTABLE_EXPORT, (_event, req: { path?: string; file: unknown; suggested?: string }) => portable.write(req))
+  ipcMain.handle(IPC.PORTABLE_IMPORT, (_event, req: { path?: string }) => portable.read(req))
   ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
   ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))

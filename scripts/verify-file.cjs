@@ -1930,6 +1930,69 @@ await (async () => {
   }
 }
 
+// M189 — portable.1. THE PORTABLE FILE, and the parts it does not have.
+//      The record is built FIELD BY FIELD, so a terminal's resolved
+//      environment, a chat's session id and transcript, and a live pid have
+//      nowhere to go — the check plants all three on the input and asserts
+//      the file's text does not contain them. A planted token is scrubbed and
+//      COUNTED. A panel kind that cannot travel is dropped with a reason that
+//      says what would happen on the other machine. Pictures are omitted BY
+//      DEFAULT with an entry that says a picture cannot be scrubbed by
+//      machine — never "redacted". `parsePortable` answers three ways, and a
+//      FUTURE version is its own arm naming both numbers. `remapPortable`
+//      mints new ids for everything and moves each reference with its target.
+{
+  const has = typeof F.buildPortable === 'function' && typeof F.parsePortable === 'function' && typeof F.remapPortable === 'function'
+  const NAME = 'portable.1 buildPortable builds field by field (no env, session id, transcript or pid can travel), scrubs and COUNTS secrets, drops a kind that cannot travel with a reason naming what would happen, and omits pictures by default saying a picture cannot be scrubbed by machine; parsePortable answers not-portable / unknown-version (naming both numbers) / file with warnings; remapPortable mints new ids and moves a workflow panel\'s templateId and a panel\'s binding with their target'
+  if (!has) ok(NAME, false, 'portable.ts does not export buildPortable / parsePortable / remapPortable')
+  else {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const panels = [
+      { id: 'p1', x: 0, y: 0, w: 100, h: 100, z: 1, cwd: '/w/repo', command: '/bin/sh', args: ['-lc', `echo ${token}`], title: 'a terminal', env: { SECRET: token }, pid: 4242 },
+      { id: 'p2', kind: 'chat', x: 0, y: 0, w: 100, h: 100, z: 2, chat: { cwd: '/w/repo', sessionId: 'SESSION-UUID-1234', backend: 'codex', transcript: 'every word we said' } },
+      { id: 'p3', kind: 'note', x: 0, y: 0, w: 100, h: 100, z: 3, note: { form: 'sticky', text: `the key is ${token}`, tint: 'blue' } },
+      { id: 'p4', kind: 'image', x: 0, y: 0, w: 100, h: 100, z: 4, image: { path: '/w/pic.png', asset: 'a'.repeat(64) } },
+      { id: 'p5', kind: 'workflow', x: 0, y: 0, w: 100, h: 100, z: 5, workflow: { templateId: 't1' }, templateBinding: { templateId: 't1', key: 'n1' } },
+      { id: 'p6', kind: 'watcher', x: 0, y: 0, w: 100, h: 100, z: 6, watch: { command: 'rm -rf /', trigger: 'timer' } },
+      { id: 'p7', kind: 'review', x: 0, y: 0, w: 100, h: 100, z: 7, subject: { root: '/w/repo' } }
+    ]
+    const templates = [{ id: 't1', name: 'shape', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/w/repo', dx: 0, dy: 0 }], edges: [] }]
+    const file = F.buildPortable({ kind: 'canvas', workspaceName: 'work', panels, templates, app: '5.0.0', now: 1000 })
+    const text = JSON.stringify(file)
+    const withPixels = F.buildPortable({ kind: 'canvas', workspaceName: 'work', panels, templates, app: '5.0.0', now: 1000, images: [{ id: 'a'.repeat(64), mediaType: 'image/png', base64: 'AAAA' }], hasRoutines: true })
+    const parsed = F.parsePortable(text)
+    const notJson = F.parsePortable('<html>')
+    const notOurs = F.parsePortable(JSON.stringify({ hello: 'world' }))
+    const future = F.parsePortable(JSON.stringify({ version: 99, kind: 'canvas' }))
+    let n = 0
+    const remapped = parsed.kind === 'file' ? F.remapPortable(parsed.file, (prefix) => `${prefix}-new-${++n}`) : null
+    const wf = remapped && remapped.workspace.panels.find((p) => p.kind === 'workflow')
+    ok(NAME,
+      // Nothing of this machine travelled.
+      !text.includes('SESSION-UUID-1234') && !text.includes('every word we said') && !text.includes('4242') && !/"env"/.test(text) && !text.includes(token) &&
+        file.redacted >= 2 &&
+        // The shape did: five panels kept, two dropped BY KIND with reasons.
+        file.workspace.panels.length === 5 && file.workspace.panels.map((p) => p.id).join(',') === 'p1,p2,p3,p4,p5' &&
+        file.omitted.some((o) => /watcher/.test(o.what) && /arm itself/.test(o.why)) &&
+        file.omitted.some((o) => /review/.test(o.what) && /repository/.test(o.why)) &&
+        file.omitted.some((o) => /pixels of 1 picture/.test(o.what) && /cannot be scrubbed by machine/.test(o.why) && !/redact/.test(o.why)) &&
+        file.omitted.some((o) => /credential/.test(o.what)) &&
+        file.assets.length === 0 &&
+        // With pixels asked for: they travel and the omission is gone; routines are named.
+        withPixels.assets.length === 1 && !withPixels.omitted.some((o) => /pixels/.test(o.what)) && withPixels.omitted.some((o) => /routine/.test(o.what)) &&
+        // Three parse answers.
+        parsed.kind === 'file' && parsed.file.workspace.name === 'work' &&
+        notJson.kind === 'not-portable' && /not JSON/.test(notJson.reason) &&
+        notOurs.kind === 'not-portable' &&
+        future.kind === 'unknown-version' && future.found === 99 && future.known === F.PORTABLE_VERSION && /99/.test(future.reason) &&
+        // The remap: every id new, and each reference moved with its target.
+        remapped !== null && remapped.workspace.panels.every((p) => p.id.startsWith('p-new-')) &&
+        remapped.templates.every((t) => t.id.startsWith('t-new-')) &&
+        wf && wf.workflow.templateId === remapped.templates[0].id && wf.templateBinding.templateId === remapped.templates[0].id,
+      JSON.stringify({ redacted: file.redacted, kept: file.workspace.panels.map((p) => p.id), omitted: file.omitted, assets: file.assets.length, notJson, notOurs, future, remappedIds: remapped && remapped.workspace.panels.map((p) => p.id), wf }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

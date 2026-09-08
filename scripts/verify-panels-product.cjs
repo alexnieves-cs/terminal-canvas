@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 130000 // measured 2026-09-08 alone in the Electron tier after M185's preview.1 (which serves a page, attaches a guest and takes a real capture), two green runs: 101.5s, 103.3s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 140000 // measured 2026-09-08 after M188-M189 (node.1 and portable.1, the latter reloading three times): 106.8s wall green, and the chain's own green run below it; 1.25x the slower rounded up — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -699,7 +699,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // panel (committed at the mint), main's session is disposed WITHOUT
         // dropping the file, the renderer reloads.
         flushLayoutStore()
-        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const alive = await wc.executeJavaScript('1+1').catch((e) => String(e && e.message))
+      const bodyHead = await wc.executeJavaScript('document.body.innerHTML.slice(0, 160)').catch((e) => String(e && e.message))
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
         const wsNow = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
         const persisted = wsNow.panels.find((p) => p.id === chatId)
         agentSessions.dispose(chatId)
@@ -2268,6 +2270,82 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ sticky, freeText, frame, notes, termZ: termRecord && termRecord.z, typed, afterType: afterType && afterType.note, hit }))
     } catch (nErr) {
       for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
+    }
+
+    // M189 — portable.1. EXPORT AND IMPORT, END TO END IN THE REAL RENDERER.
+    //     The canvas holds a terminal (never started), a sticky note and a
+    //     watcher. Export writes one file: the terminal and the note travel,
+    //     the WATCHER does not (it would arm itself on the other machine) and
+    //     the file says so by name. Import then makes a SEPARATE workspace
+    //     with new ids for everything — and the claim that matters, counted
+    //     across the whole import: NO pty is spawned. An import that started
+    //     what it read would be the one failure this feature cannot have.
+    const PORT_IDS = ['portable.1 export writes one file with the objects that travel, the watcher omitted BY NAME with what it would do, and secrets scrubbed with a count; import makes a separate workspace with every id remapped and spawns NO pty at all']
+    try {
+      const { readFileSync: rf2 } = require('node:fs')
+      const filePath = join(mkdtempSync(join(tmpdir(), 'tc-portable-')), 'canvas.tccanvas')
+      let before = null
+      state.portablePath = filePath
+      layoutStore.save({ panels: [
+        { id: 'pt1', x: 200, y: 200, w: 400, h: 300, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'a terminal ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' },
+        { id: 'pt2', kind: 'note', x: 700, y: 200, w: 320, h: 220, z: 2, note: { form: 'sticky', text: 'remember this' } },
+        // A WATCHER, whose whole point here is that it cannot travel: the file
+        // must name it and say what it would do on the other machine.
+        { id: 'pt3', kind: 'watcher', x: 200, y: 600, w: 400, h: 300, z: 3, watch: { cwd: '~', command: '/usr/bin/true', args: [], trigger: { kind: 'timer', everyMs: 60000 } } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const alive = await wc.executeJavaScript('1+1').catch((e) => String(e && e.message))
+      const bodyHead = await wc.executeJavaScript('document.body.innerHTML.slice(0, 160)').catch((e) => String(e && e.message))
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const diskIds = onDisk.workspaces.map((w) => `${w.id}${w.id === onDisk.activeWorkspaceId ? '*' : ''}:${w.panels.map((p) => p.id).join('|')}`).join(' ; ')
+      const rePt = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await rePt
+      await settle()
+      const spawnsBefore = (await listSessions(wc)).length
+      // The workspace this check leaves the app in is EVERY later check's
+      // problem: the import makes a new one and switches to it, and a suite
+      // that walked on from there would fail six checks with no idea why (it
+      // did, once — the harness's own "checks share state" rule).
+      before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => (ws.find((w) => w.active) || {}).id || null)`)
+      // WAIT for the seeded canvas: `settle()` is not a mount guarantee, and
+      // a plan sent before the canvas mounts reaches no listener at all — the
+      // request then times out and reads as a refusal that never happened.
+      const seeded = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')); return ids.includes('pt1') ? ids.join(',') : false })()`), 20000)
+      const exported = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `export-canvas ${filePath}` }, null, 20000)
+      const written = exported && exported.kind === 'ran' ? JSON.parse(rf2(filePath, 'utf8')) : null
+      const imported = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `import-canvas ${filePath}` }, null, 10000)
+      await settle()
+      const spawnsAfter = (await listSessions(wc)).length
+      const shown = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')).join(',')`)
+      ok(PORT_IDS[0],
+        exported && exported.kind === 'ran' && /2 objects/.test(String(exported.summary)) &&
+          written && written.version === 1 && written.workspace.panels.length === 2 &&
+          written.workspace.panels.map((p) => p.id).join(',') === 'pt1,pt2' &&
+          !JSON.stringify(written).includes('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') && written.redacted >= 1 &&
+          written.omitted.some((o) => /watcher/.test(o.what) && /arm itself/.test(o.why)) &&
+          written.assets.length === 0 &&
+          imported && imported.kind === 'ran' && /nothing was started/.test(String(imported.summary)) &&
+          // Every id is new: neither of the exported ids is on the canvas now.
+          !shown.split(',').includes('pt1') && !shown.split(',').includes('pt2') && shown.split(',').filter((x) => x !== '').length === 2 &&
+          spawnsAfter === spawnsBefore,
+        JSON.stringify({ alive, bodyHead, diskIds, seeded, exported, written: written && { version: written.version, panels: written.workspace.panels.map((p) => p.id), omitted: written.omitted, redacted: written.redacted }, imported, shown, spawnsBefore, spawnsAfter }))
+      state.portablePath = undefined
+    } catch (ptErr) {
+      for (const id of PORT_IDS) ok(id, false, 'threw: ' + String(ptErr && ptErr.stack || ptErr))
+    } finally {
+      // Back to the workspace this check found, and the imported one removed,
+      // whatever happened above.
+      try {
+        const after = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => (ws.find((w) => w.active) || {}).id || null)`)
+        if (before && after && after !== before) {
+          await wc.executeJavaScript(`window.canvas.workspace.activate(${JSON.stringify(before)})`)
+          await settle()
+          await wc.executeJavaScript(`window.canvas.workspace.remove(${JSON.stringify(after)})`)
+          const reBack = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reBack
+          await settle()
+        }
+      } catch { /* the checks below will say so */ }
     }
 
     // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.

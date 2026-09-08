@@ -11,6 +11,7 @@ import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
+import { parsePortable } from '@shared/portable'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -2075,6 +2076,52 @@ app.whenReady().then(async () => {
           request.on('error', (error) => { clearTimeout(deadline); reject(error) })
         })
       })
+    },
+    // M189. The portable file on disk. Main writes and reads; the RENDERER
+    // built the record and the renderer decides what to make of a parse —
+    // main never turns a file into a workspace, the same division that keeps
+    // the board's own writes in the renderer (M113).
+    {
+      write: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showSaveDialog(mainWindow, {
+            title: 'Export this canvas',
+            defaultPath: join(app.getPath('downloads'), typeof req?.suggested === 'string' && req.suggested.trim() !== '' ? req.suggested : 'canvas.tccanvas'),
+            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
+          })
+          if (answer.canceled || answer.filePath === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePath
+        }
+        const text = `${JSON.stringify(req?.file ?? null, null, 2)}\n`
+        try {
+          writeFileSync(path, text, 'utf8')
+        } catch (error) {
+          return { kind: 'refused' as const, reason: `that file could not be written: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'written' as const, path, bytes: Buffer.byteLength(text, 'utf8') }
+      },
+      read: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showOpenDialog(mainWindow, {
+            title: 'Import a canvas',
+            properties: ['openFile'],
+            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
+          })
+          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePaths[0]
+        }
+        let text: string
+        try {
+          text = readFileSync(path, 'utf8')
+        } catch (error) {
+          return { kind: 'refused' as const, reason: `that file could not be read: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'read' as const, path, parse: parsePortable(text) }
+      }
     }
   )
   createWindow()
