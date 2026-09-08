@@ -20,7 +20,7 @@ export type ControlRequest =
   | { verb: 'list' }
   | { verb: 'focus'; id: string }
   | { verb: 'ping' }
-  | { verb: 'plan'; line: string }
+  | { verb: 'plan'; line: string; token?: string }
   /** M81. READ-ONLY: the canvas model, for a supervisor that answers about it. */
   | { verb: 'status' }
   /**
@@ -69,7 +69,11 @@ function fromFields(fields: Record<string, unknown>): ParsedControl {
       if (typeof line !== 'string' || line.trim() === '') return { kind: 'bad', error: 'a plan needs a nonempty line' }
       if (Buffer.byteLength(line, 'utf8') > 8192 || /[\x00-\x1f\x7f]/.test(line)) return { kind: 'bad', error: 'the plan line exceeds its size or control-character limit' }
       if (line.split(';').filter((part) => part.trim() !== '').length > 16) return { kind: 'bad', error: 'a plan may contain at most 16 operations' }
-      return { kind: 'ok', req: { verb: 'plan', line } }
+      // M180. The caller's own token, as `api` carries it: main maps it to the
+      // panel that really asked, so a teammate's chat is bounded at this door too.
+      const token = optionalString(fields['token'])
+      if (token === null) return { kind: 'bad', error: 'token must be a non-empty string' }
+      return { kind: 'ok', req: { verb: 'plan', line, ...(token === undefined ? {} : { token: token.slice(0, 128) }) } }
     }
     case 'open': {
       const preset = optionalString(fields['preset'])

@@ -125,7 +125,7 @@ const bridge: CanvasBridge = {
       return () => ipcRenderer.removeListener(IPC_EVENTS.POOL_MINT, wrapped)
     },
     onPlan: (handle) => {
-      const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: string }): void => {
+      const wrapped = (_event: IpcRendererEvent, envelope: { replyChannel: string; req: Parameters<typeof handle>[0] }): void => {
         Promise.resolve().then(() => handle(envelope.req)).then(
           (reply) => ipcRenderer.send(envelope.replyChannel, reply),
           () => ipcRenderer.send(envelope.replyChannel, { kind: 'refused', reason: 'the canvas could not execute the plan' }))

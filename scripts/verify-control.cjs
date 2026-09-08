@@ -567,6 +567,23 @@ const ok = (n, pass, detail = '') => {
     ok('plan.handler.3 an unavailable plan bridge, an unanswered renderer and a rejected request all return named refusals',
       [absent, quiet, rejected].every((r) => r && r.ok === false && typeof r.error === 'string' && /available|canvas|window|answer/i.test(r.error)) && sideEffects.length === 0,
       JSON.stringify({ absent, quiet, rejected, sideEffects }))
+
+    // M180 (the critic's finding 2). The caller's identity, as the `api` arm
+    // resolves it: a token this window never minted is refused before the
+    // bridge is asked; a minted one hands the panel AND its teammate to the
+    // renderer; no token is a plain caller. The parser carries the token.
+    const parsedToken = C.parseControlLine(JSON.stringify({ verb: 'plan', line: 'focus n1', token: 'tok-ada' }))
+    const callers = []
+    const identified = C.createControlHandler({ ...deps, panelOfToken: (t) => (t === 'tok-ada' ? 'c9' : undefined), teammateOf: (id) => (id === 'c9' ? 'ada' : undefined), plan: async (_line, caller) => { callers.push(caller); return { kind: 'ran', summary: 'ok' } } })
+    const unknown = await identified({ verb: 'plan', line: 'focus n1', token: 'tok-nobody' })
+    const mate = await identified({ verb: 'plan', line: 'focus n1', token: 'tok-ada' })
+    const plain = await identified({ verb: 'plan', line: 'focus n1' })
+    ok('plan.handler.4 a token names the panel that really asked: unknown refused before the bridge, a minted one carries its teammate, none is a plain caller',
+      parsedToken.kind === 'ok' && parsedToken.req.token === 'tok-ada' &&
+        unknown.ok === false && /token/.test(unknown.error) && callers.length === 2 &&
+        mate.ok === true && callers[0] && callers[0].panelId === 'c9' && callers[0].teammateId === 'ada' &&
+        plain.ok === true && callers[1] === undefined,
+      JSON.stringify({ parsedToken, unknown, mate, plain, callers }))
   }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)

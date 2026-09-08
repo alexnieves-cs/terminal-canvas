@@ -1,4 +1,4 @@
-import type { AgentPlanReply } from './plan'
+import type { AgentPlanReply, AgentPlanRequest } from './plan'
 import type { WatchTrigger } from './watch-trigger'
 import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
@@ -1334,7 +1334,8 @@ export interface CanvasBridge {
     onCounts(provide: () => { panels: number; running: number }): () => void
     /** M81. The canvas model for `tc status`. Same ephemeral-reply shape as onCounts. */
     onModel(provide: () => ControlCanvasModel): () => void
-    onPlan(handle: (line: string) => Promise<AgentPlanReply>): () => void
+    /** M180. `tc plan`: main sends the line and the resolved caller with a reply channel; the renderer runs it through the one executor and answers. */
+    onPlan(handle: (req: AgentPlanRequest) => Promise<AgentPlanReply>): () => void
     /** M113. `tc board add/done`: main sends the request and a reply channel; the renderer answers with the surviving id or a refusal. */
     onBoard(handle: (req: BoardControlRequest) => BoardControlReply): () => void
     /** M138. Main asks for one pool worker; the renderer mints a chat panel and answers with its id, or refuses by name. */

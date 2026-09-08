@@ -107,9 +107,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       JSON.stringify({ primary, started, openedId, typed, sent, reply, userLine, noTerminal, spawns: [before.spawns, chatSpawns.length] }))
       const agentId = 'onboarding.agent.1 the agent plan bridge returns readiness through main, preload and the renderer, and refuses a close needing human confirmation with the conversation kept'
       try {
-        const readinessReply = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, 'check-readiness', null, 3000)
+        // The envelope main sends: the line and the resolved caller (absent here — a person's own shell).
+        const readinessReply = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'check-readiness' }, null, 3000)
         const closeReply = typeof openedId === 'string'
-          ? await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, 'close ' + openedId, null, 3000)
+          ? await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'close ' + openedId }, null, 3000)
           : null
         const kept = typeof openedId === 'string' && await wc.executeJavaScript(`document.querySelector(${JSON.stringify('.panel[data-panel-id="' + openedId + '"]')}) !== null`)
         ok(agentId, readinessReply?.kind === 'ran' && /installed/.test(readinessReply.summary) && /sign-in/.test(readinessReply.summary) &&

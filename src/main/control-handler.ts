@@ -14,7 +14,7 @@ import type { Preset } from '../shared/layout-schema'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
 import type { ControlReply } from './control-server'
-import type { AgentPlanReply } from '../shared/plan'
+import type { AgentPlanCaller, AgentPlanReply } from '../shared/plan'
 
 export interface ControlSessionRow {
   panelId: string
@@ -27,7 +27,8 @@ export interface ControlSessionRow {
 export type { ControlCanvasModel } from '../shared/ipc-contract'
 
 export interface ControlHandlerDeps {
-  plan?: (line: string) => Promise<AgentPlanReply | null>
+  /** M180. The renderer's plan executor; the caller is the panel main resolved from the token, and its teammate. */
+  plan?: (line: string, caller?: AgentPlanCaller) => Promise<AgentPlanReply | null>
   presets: () => readonly Preset[]
   defaultId: () => string | null
   /** Injected for the plain-node tier; index.ts passes existsSync. */
@@ -67,7 +68,17 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
     switch (req.verb) {
       case 'plan': {
         if (deps.plan === undefined) return { ok: false, error: 'the plan bridge is not available here' }
-        const reply = await deps.plan(req.line).catch(() => null)
+        // M180. A token names the panel that REALLY asked (the `api` arm's
+        // rule): one this window never minted is refused, never trusted, and
+        // the panel's teammate rides to the renderer so a bounded chat stays bounded.
+        let caller: AgentPlanCaller | undefined
+        if (req.token !== undefined) {
+          const owner = deps.panelOfToken?.(req.token)
+          if (owner === undefined) return { ok: false, error: 'the panel token is not one this window minted — run tc from inside a panel this app opened' }
+          const teammateId = deps.teammateOf?.(owner)
+          caller = { panelId: owner, ...(teammateId === undefined ? {} : { teammateId }) }
+        }
+        const reply = await deps.plan(req.line, caller).catch(() => null)
         if (reply === null) return { ok: false, error: 'no canvas answered the plan — open the app first' }
         return reply.kind === 'ran' ? { ok: true, summary: reply.summary } : { ok: false, error: reply.reason }
       }

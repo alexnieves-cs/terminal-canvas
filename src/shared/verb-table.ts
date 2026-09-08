@@ -206,5 +206,5 @@ export function acceptsTyping(panel: { kind: string; agent?: AgentKind }): boole
 /** Act I exceptions have an owner and deadline; declarations never stand in for execution checks. */
 export const V9_DOORS: Record<string, { canvas: string; palette: string; agent: string; workflow: { reason: string; due: string } }> = {
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'new-chat': { canvas: 'launcher Start a conversation', palette: 'onboarding.conversation', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
+  'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
 }

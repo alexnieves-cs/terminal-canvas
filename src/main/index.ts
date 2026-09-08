@@ -1,4 +1,4 @@
-import type { AgentPlanReply } from '../shared/plan'
+import type { AgentPlanReply, AgentPlanRequest } from '../shared/plan'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
@@ -751,10 +751,15 @@ const controlHandler = createControlHandler({
     return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
   },
   // M113. The board verb asks the renderer, which owns the workspace it renders.
-  plan: async (line) => {
+  // M180. The plan door asks the renderer the same way. No window is the
+  // handler's `null`; a plan that outlives the wait is a DIFFERENT answer —
+  // its steps are still running on the canvas, and "no canvas answered" would
+  // send the caller to relaunch an app that is mid-send (the critic).
+  plan: async (line, caller) => {
     const wc = mainWindow?.webContents
     if (!wc) return null
-    return requestFromRendererWith<AgentPlanReply | null, string>(wc, IPC_EVENTS.CANVAS_PLAN, line, null, 30000)
+    return requestFromRendererWith<AgentPlanReply, AgentPlanRequest>(wc, IPC_EVENTS.CANVAS_PLAN, { line, ...(caller === undefined ? {} : { caller }) },
+      { kind: 'refused', reason: 'the plan is still running on the canvas — it did not finish within 30 s; check the canvas before repeating it' }, 30000)
   },
   board: async (req) => {
     const wc = mainWindow?.webContents

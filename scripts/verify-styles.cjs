@@ -628,11 +628,14 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // ordinary outlined button, which is the pre-M110 look and not an error.
 {
   const rule = all.find((r) => /\.is-primary\b/.test(r.sel) && /background:\s*var\(--iris\)/.test(r.body) && /color:\s*var\(--on-iris\)/.test(r.body))
-  const SITES = ['.shell__spawn', '.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect']
+  // M180 adds the launcher's one start (`.launcher__start`): its fill and ink
+  // come from THIS rule, never a second iris/ink pair the generic verb hover
+  // could repaint (the M180 critic).
+  const SITES = ['.shell__spawn', '.chat__verb--send', '.inspector__action--primary', '.rail-run .rail-row__verb', '.jira-node__connect', '.launcher__start']
   const sel = rule ? rule.sel.replace(/\s+/g, ' ') : ''
   const missing = SITES.filter((s) => !sel.includes(s))
   const commit = sel.includes('.review-node__commit')
-  ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its five sites and never Commit',
+  ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its sites (the launcher start among them) and never Commit',
     rule !== undefined && missing.length === 0 && !commit, JSON.stringify({ sel: sel.slice(0, 200), missing, commit }))
 }
 

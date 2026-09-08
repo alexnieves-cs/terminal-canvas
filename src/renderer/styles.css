@@ -2541,14 +2541,21 @@ body {
 .launcher__hero::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(50% 80% at 50% 30%, var(--aura-1), transparent 70%); }
 .launcher__wordmark { font-family: var(--font-ui); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); color: var(--fg); }
 .launcher__tagline { font-size: var(--t-sm); color: var(--fg-3); }
-.launcher__doors { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); margin: 0 0 var(--sp-6); }
+/* M180. Two or three door cards: the chat card steps down to a prompt line
+   while the primary is live, and the grid follows the count. */
+.launcher__doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--sp-4); margin: 0 0 var(--sp-6); }
+/* M180. THE ONE START. The fill and ink are `.is-primary`'s (primary.1 names
+   this site) — never a second iris/ink pair here, which is what let the
+   generic verb hover repaint it grey under white ink (the critic). Only the
+   box is this rule's: full width, stacked name and hint, the frame's radius. */
 .launcher__onboarding { margin-bottom: var(--sp-6); }
-.launcher__start { width: 100%; align-items: flex-start; flex-direction: column; gap: var(--sp-2); padding: var(--sp-5); border-radius: var(--r-lg); background: var(--iris); color: var(--s-1); }
+.launcher__start { width: 100%; align-items: flex-start; flex-direction: column; gap: var(--sp-2); padding: var(--sp-5); border-radius: var(--r-lg); }
 .launcher__start .launcher__verb-name { font-size: var(--t-lg); font-weight: 600; }
-.launcher__start .launcher__verb-hint { color: inherit; white-space: normal; }
-.launcher__start:disabled { background: var(--s-3); color: var(--fg-3); }
+.launcher__start .launcher__verb-hint { color: inherit; white-space: normal; line-height: var(--lh-body); }
 .launcher__readiness { margin-top: var(--sp-3); }
 .launcher__engine { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__engine + .launcher__engine { border-top: 1px solid var(--line); }
+.launcher__engine--check { color: var(--fg-4); }
 .launcher__verb--door { flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light); }
 .launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
 .launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }
@@ -3888,6 +3895,7 @@ body {
    AI) stay outlined. Run is not destructive — it mints panels — so the
    Commit refusal does not reach it. */
 .is-primary,
+.launcher__start,
 .workflow-node__verbs [data-workflow-verb="run"],
 .shell__top .shell__spawn,
 .chat__verb--send,
@@ -3900,6 +3908,7 @@ body {
   font-weight: 600;
 }
 .is-primary:hover:not(:disabled),
+.launcher__start:hover:not(:disabled),
 .workflow-node__verbs [data-workflow-verb="run"]:hover:not(:disabled),
 .shell__top .shell__spawn:hover:not(:disabled),
 .chat__verb--send:hover:not(:disabled),

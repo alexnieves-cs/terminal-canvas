@@ -305,13 +305,63 @@ const FACTS = {
     const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     const reply = typeof P.runAgentPlan === 'function' ? await P.runAgentPlan(`type p1 ${token}`, { panels: [{ id: 'p1', kind: 'chat' }] }, async () => ({ kind: 'ran', note: token })) : null
     ok('agent-door.4 outgoing summaries and executor notes scrub planted secrets', reply?.kind === 'ran' && !JSON.stringify(reply).includes(token), JSON.stringify(reply))
+    // M180 (the critic's finding 1). A terminal agent's permission question
+    // is a menu whose default is Yes: `submit` — or `type y; submit` — against
+    // a panel in wants-you is the approval M76 keeps human-owned. The agent
+    // door refuses it before ANY step runs; the palette's runner (a person
+    // typed the line) is untouched.
+    const waiting = { panels: [{ id: 'ag1', kind: 'terminal', agent: 'claude-code', state: 'wants-you' }, { id: 'ag2', kind: 'terminal', agent: 'claude-code', state: 'busy' }] }
+    const answered = []
+    const record = async (step) => { answered.push(step.verb + ' ' + step.args.panel); return { kind: 'ran' } }
+    const viaAgent = await P.runAgentPlan('focus ag1; type ag1 y; submit ag1', waiting, record)
+    const ranBeforeRefusal = answered.length
+    // `interrupt` is the third human-answer verb (Ctrl-C into a prompt is an answer too): refused the same way.
+    const viaInterrupt = await P.runAgentPlan('interrupt ag1', waiting, record)
+    const ranBeforeInterrupt = answered.length
+    const busyOk = await P.runAgentPlan('type ag2 hello; submit ag2', waiting, record)
+    const viaPalette = await P.runPlan(P.buildPlan(P.parsePlanLine('submit ag1'), waiting).plan, record, { acknowledged: false })
+    ok('agent-door.5 the agent door refuses type, submit and interrupt against a panel waiting for a person, before any step, while the palette runner still answers',
+      viaAgent?.kind === 'refused' && /waiting for a person/.test(viaAgent.reason) && ranBeforeRefusal === 0 &&
+        viaInterrupt?.kind === 'refused' && /waiting for a person/.test(viaInterrupt.reason) && ranBeforeInterrupt === 0,
+      JSON.stringify({ viaAgent, ranBeforeRefusal, viaInterrupt, ranBeforeInterrupt }))
+    // The two halves that must still work: a busy panel takes the line, and the palette answers.
+    ok('agent-door.5b a busy panel is typed into through the door and the palette answers a waiting one',
+      busyOk?.kind === 'ran' && viaPalette.steps.every((s) => s.kind === 'ran') && answered.includes('submit ag1') && answered.includes('type ag2'), JSON.stringify({ busyOk, answered }))
+
+    // M180 (finding 2). A place-bounded teammate reaches this door with its
+    // panel's token; the caller rides to the executor and a session-opening
+    // verb is refused by name, where a read or a focus still runs.
+    answered.length = 0
+    const mate = { panelId: 'c9', teammateId: 'ada' }
+    const mateChat = await P.runAgentPlan('focus ag2; new-chat', waiting, record, mate)
+    const ranBeforeMateRefusal = answered.length
+    // A setting is the person's too: refused for a teammate before any step (the `settings.1` writable list is the palette's own gate).
+    const mateSetting = await P.runAgentPlan('focus ag2; set-setting appearance.theme dark', waiting, record, mate)
+    const ranBeforeSetting = answered.length
+    const mateFocus = await P.runAgentPlan('focus ag2', waiting, record, mate)
+    const personChat = await P.runAgentPlan('new-chat', waiting, async () => ({ kind: 'ran', note: 'c1' }), { panelId: 'n1' })
+    ok('agent-door.6 a teammate caller cannot open sessions or change settings through the door, before any step; a person\'s panel can',
+      mateChat?.kind === 'refused' && /teammate/.test(mateChat.reason) && ranBeforeMateRefusal === 0 &&
+        mateSetting?.kind === 'refused' && /teammate/.test(mateSetting.reason) && ranBeforeSetting === 0 &&
+        mateFocus?.kind === 'ran' && personChat?.kind === 'ran', JSON.stringify({ mateChat, ranBeforeMateRefusal, mateSetting, ranBeforeSetting, mateFocus, personChat }))
+
+    // closure.v9.1 — the doors as FACTS, not declarations (the critic): the
+    // palette id must be a row `commands.ts` builds, the agent string must
+    // bind through buildPlan, and the workflow omission must carry its owner.
     const doors = V.V9_DOORS
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
-    const valid = doors && ids.every((id) => V.VERBS.some((v) => v.id === id) &&
-      ['canvas', 'palette', 'agent'].every((door) => typeof doors[id]?.[door] === 'string' && doors[id][door].length > 0) &&
-      typeof doors[id]?.workflow?.reason === 'string' && doors[id].workflow.due === 'M189')
-    ok('closure.v9.1 onboarding verbs declare every actual door and an expiring workflow exception', Boolean(valid), JSON.stringify(doors))
+    const commandsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+    const facts = { panels: [] }
+    const verdicts = ids.map((id) => {
+      const d = doors?.[id]
+      const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
+      const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
+      const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
+      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: typeof d?.canvas === 'string' && d.canvas.length > 0, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === 'M189' }
+    })
+    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture and an owned workflow omission',
+      ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
   }
 
   const failed = results.filter((r) => !r.pass)

@@ -1,4 +1,3 @@
-import { onboardingReadiness } from '@shared/onboarding'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
@@ -454,7 +453,8 @@ export interface PaletteActions {
    * parses and builds the plan against the live canvas, confirms a
    * destructive step, runs, and re-prompts with the refusal and its fix.
    */
-  runAgentPlan(line: string): Promise<import("@shared/plan").AgentPlanReply>
+  /** M180. The agent door: the same executor as the verb line, no destructive step, the caller main resolved. */
+  runAgentPlan(line: string, caller?: import("@shared/plan").AgentPlanCaller): Promise<import("@shared/plan").AgentPlanReply>
   beginRunVerb(): void
   /** M97. Start a bounded auto run on a chat; refused by name when one is live. */
   startAuto(id: string, mode: AutoModeId, task?: string): void
@@ -1285,7 +1285,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       {
         id: 'panel.new-chat',
         title: 'New chat…',
-        searchText: 'new chat claude conversation agent talk ask',
+        searchText: 'new chat claude conversation agent talk ask start a conversation',
         group: 'spawn',
         run: () => actions.newChat()
       },
@@ -2204,11 +2204,10 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     }
   }
 
-  {
-    const readiness = onboardingReadiness(ctx.envReport ?? null)
-    out.push(withReason({ id: 'onboarding.conversation', title: 'Start a conversation', subtitle: readiness.preferred === undefined ? 'Check engine readiness to begin' : `With ${readiness.preferred}`, group: 'spawn', searchText: 'onboarding first conversation start agent', run: () => actions.newChat(readiness.preferred) }, readiness.preferred === undefined ? 'no conversation engine has been discovered — Check engine readiness' : undefined))
-  }
-  out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Check installed conversation engines again', group: 'canvas', searchText: 'onboarding setup install claude codex environment', run: () => { void actions.checkReadiness() } })
+  // M180. The palette's door for `new-chat` is the existing `panel.new-chat`
+  // row (and the codex sandbox rows) — a third row minting the same chat was
+  // the critic's finding; only the readiness verb is new here.
+  out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })
 
   // --- M96: the verb line ------------------------------------------------------
   // ONE row takes a verb and its arguments. Present at rest, never hidden,

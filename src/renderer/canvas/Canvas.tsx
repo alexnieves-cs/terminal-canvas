@@ -4884,7 +4884,9 @@ export function Canvas({
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
   })
 
-  useEffect(() => window.canvas.canvas.onPlan((line) => paletteActions.runAgentPlan(line)), [paletteActions])
+  // M180. The agent door: `tc plan` lands on the SAME executor the palette's
+  // verb line runs, with the caller main resolved riding beside the line.
+  useEffect(() => window.canvas.canvas.onPlan((req) => paletteActions.runAgentPlan(req.line, req.caller)), [paletteActions])
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
   // panel while insertPath pastes into the FOCUSED one — see the hook's doc

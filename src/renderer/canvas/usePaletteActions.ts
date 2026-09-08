@@ -1,4 +1,4 @@
-import { onboardingReadiness } from '@shared/onboarding'
+import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import type { ToolScope } from '@shared/toolbox'
@@ -22,7 +22,7 @@ import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkIt
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
-import { clearAgentState } from '@renderer/session/agent-state-store'
+import { clearAgentState, getAgentState } from '@renderer/session/agent-state-store'
 import { clearLastLine } from '@renderer/session/last-line-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } from '@renderer/session/update-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
@@ -243,7 +243,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   }
   return useMemo<PaletteActions>(() => {
       const facts = (): PlanFacts => ({
-        panels: panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }) })),
+        // M180. The agent's state word rides on a terminal's facts so the
+        // agent door can refuse `submit` against a panel in wants-you
+        // (`agentDoorRefusal`); absent stays absent.
+        panels: panelsRef.current.map((p) => { const state = getAgentState(p.rect.id); return { id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }), ...(state === undefined ? {} : { state }) } }),
         presets: presetRows.map((r) => ({ id: r.id })),
         worktrees: worktreeRows.map((w) => ({ id: w.id }))
       })
@@ -256,7 +259,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             return { kind: 'ran', note: readiness.rows.map((row) => row.sentence).join(' ') }
           }
           case 'new-chat': {
-            if (a.backend !== undefined && a.backend !== 'claude' && a.backend !== 'codex') return { kind: 'refused', reason: 'choose claude or codex' }
+            if (a.backend !== undefined && !isFirstLaunchBackend(a.backend)) return { kind: 'refused', reason: `choose one of ${Object.keys(FIRST_LAUNCH_ENGINES).join(' or ')}` }
             const readiness = onboardingReadiness(await window.canvas.env.report(), a.backend)
             if (readiness.preferred === undefined) return { kind: 'refused', reason: 'no conversation engine is available — check readiness in the launcher' }
             if (a.backend !== undefined && readiness.preferred !== a.backend) return { kind: 'refused', reason: `${a.backend} is not available — check readiness` }
@@ -1896,7 +1899,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line) => runAgentPlan(line, facts(), execute),
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), execute, caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({

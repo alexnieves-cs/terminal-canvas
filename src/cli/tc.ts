@@ -62,7 +62,9 @@ export function buildRequest(argv: readonly string[], env: Record<string, string
     case 'plan': {
       const line = rest.join(' ').trim()
       if (line === '') return { kind: 'usage', error: 'plan needs a verb line' }
-      return { kind: 'ok', line: JSON.stringify({ verb: 'plan', line }) }
+      // M180. The session's token rides when this shell is a panel's (M102's rule for `api`).
+      const token = env['TC_PANEL_TOKEN']
+      return { kind: 'ok', line: JSON.stringify({ verb: 'plan', line, ...(token === undefined || token === '' ? {} : { token }) }) }
     }
     case 'open': {
       const fields: Record<string, string> = { verb: 'open' }

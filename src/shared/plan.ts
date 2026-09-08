@@ -35,14 +35,53 @@ export interface Plan {
 
 export type AgentPlanReply = { kind: 'ran'; summary: string } | { kind: 'refused'; reason: string }
 
+/**
+ * M180. Who asked over the socket: the panel main resolved from the caller's
+ * `TC_PANEL_TOKEN` and, when that panel is a teammate's chat, the teammate.
+ * Absent for a plain `tc plan` from the person's own shell.
+ */
+export interface AgentPlanCaller { panelId?: string; teammateId?: string }
+
+/** M180. The plan door and its two identity requests ride one envelope. */
+export interface AgentPlanRequest { line: string; caller?: AgentPlanCaller }
+
+/**
+ * M180 (the critic's first two findings). The verbs a plan may not run on
+ * behalf of SOMEONE ELSE. A terminal agent asks its permission question as
+ * a menu whose default is Yes, so `submit` (or `type y; submit`) against a
+ * panel in `wants-you` is the approval M76 keeps human-owned; the palette's
+ * runner is exempt because a person typed that line. And a place-bounded
+ * teammate (M100) may not mint a session or change the canvas through this
+ * door: `new-chat` in the focused panel's folder is exactly the fold the
+ * Places gate refuses at `agent:create`.
+ */
+const HUMAN_ANSWER_VERBS = new Set(['type', 'submit', 'interrupt'])
+const TEAMMATE_REFUSED_VERBS = new Set(['new-chat', 'spawn', 'workspace-from-template', 'run-template', 'dispatch', 'restart', 'set-setting', 'workspace', 'reset-canvas'])
+export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
+  if (HUMAN_ANSWER_VERBS.has(step.verb)) {
+    const panel = facts.panels.find((p) => p.id === step.args['panel'])
+    if (panel?.state === 'wants-you') return `${panel.id} is waiting for a person — a permission prompt is answered at the keyboard, never by a plan`
+  }
+  if (caller?.teammateId !== undefined && TEAMMATE_REFUSED_VERBS.has(step.verb)) {
+    return `a teammate's plan cannot ${step.verb} — sessions and settings are the person's to open and change`
+  }
+  return null
+}
+
 /** An agent cannot acknowledge a human confirmation, even after a harmless first step. */
-export async function runAgentPlan(line: string, facts: PlanFacts, execute: (step: PlanStep) => Promise<StepOutcome>): Promise<AgentPlanReply> {
+export async function runAgentPlan(line: string, facts: PlanFacts, execute: (step: PlanStep) => Promise<StepOutcome>, caller?: AgentPlanCaller): Promise<AgentPlanReply> {
   if (new TextEncoder().encode(line).length > 8192 || /[\x00-\x1f\x7f]/.test(line)) return { kind: 'refused', reason: 'the plan line exceeds its size or control-character limit' }
   const inputs = parsePlanLine(line)
   if (inputs.length > 16) return { kind: 'refused', reason: 'a plan may contain at most 16 operations' }
   const built = buildPlan(inputs, facts)
   if (built.kind === 'refused') return { kind: 'refused', reason: outward(`${built.reason} — ${built.fix}`, 'canvas plan').text }
   if (planIsDestructive(built.plan)) return { kind: 'refused', reason: 'this plan needs human confirmation — run it through the palette' }
+  // Every step is judged before the first runs: a refusal on step three
+  // must not leave steps one and two done (agent-door.1's rule, reached again).
+  for (const step of built.plan.steps) {
+    const reason = agentDoorRefusal(step, facts, caller)
+    if (reason !== null) return { kind: 'refused', reason: outward(reason, 'canvas plan').text }
+  }
   const report = await runPlan(built.plan, execute, { acknowledged: false })
   const refused = report.steps.find((step) => step.kind === 'refused')
   if (refused?.kind === 'refused') return { kind: 'refused', reason: outward(refused.reason, 'canvas plan').text }

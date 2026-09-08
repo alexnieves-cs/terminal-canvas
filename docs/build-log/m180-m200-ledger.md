@@ -202,3 +202,215 @@ checks. No red-first claim is made for those attempts. A corrected renderer-only
 appends the plugin after config resolution and asserts exactly one old-module replacement;
 that build exited 0. The old-launcher product run is pending. Source was never overwritten
 for this experiment; rebuild current source before any green claim or visual capture.
+
+## Act I — resumed on Fable 5.1
+
+Resumed at 2026-09-08 04:36 UTC (00:36 America/New_York) on `v9-act1-onboarding`, in a
+Claude Code goal-mode session on Fable 5.1, following
+`docs/superpowers/specs/2026-09-08-v9-resume-prompt-fable.md`. Astra's clock was stopped by a
+usage window and not by work, so the 24-hour wall-clock ceiling restarts from this resume:
+the deadline is now 2026-09-09 04:36 UTC. Astra's original deadline (2026-09-09 04:03:59 UTC)
+is historical.
+
+`npm run typecheck` exited 0 (`out/v9-evidence/m180-typecheck-resume.log`). The working tree
+Astra left was committed verbatim in four scoped commits, exact paths staged, no prose
+changed: `a240470 docs(v9)` (the plan, the brief, this ledger), `e7e737f docs(m180)` (the
+spec and plan), `cd60d53 check(m180)` (the five check files, the four evidence notes,
+`docs/verify-suites.md`, `package.json`), `b8cd4b3 feat(m180)` (sixteen source and doc
+files). The tree was clean after the fourth.
+
+Two items the "Act I — started" section lists as pending were already answered by logs
+Astra wrote before the window closed, and this session records them from those logs rather
+than claiming to have run them: `out/v9-evidence/m180-onboarding-ui-proven-old.log` is the
+old-launcher red for `onboarding.start.1` (59/60, exit 1 in `.exit`, only that check red,
+through `build-old-launcher.cjs`'s renderer-only build with exactly one module replacement);
+`out/v9-evidence/m180-annotation-product-green.log` (00:25, after the 00:22 rebuild from
+current source, which postdates every source edit) prints 61/61 with `onboarding.start.1`
+and `onboarding.agent.1` both PASS. No `.exit` file was written for the green run, so the
+full chain below is what proves it in this session.
+
+`npm run build` from current source exited 0 (`out/v9-evidence/m180-build-resume.log`).
+`npm run verify:visual` in comparison mode under the repository-local environment exited 1
+at 53/57 (`out/v9-evidence/m180-visual-compare.log`): `launcher` at 14.562 % of pixels (the
+intended M180 change), and `chat-copilot`, `supervisor` and `inspector-detail` each on ONE
+32 px tile. Reading the three diff images: every red tile is the fixture path painted in the
+spawn sheet's WHERE field or the inspector's CWD (`…/out/t/tc shot fixtures golden/repo`
+under the local `TMPDIR`, where the 4.1 goldens were painted under the system temp
+directory), plus a pid and a port. Decision: the visual suite runs with the system `TMPDIR`
+(the other local variables kept), because the goldens paint the fixture path and
+re-baselining three scenes for a path-text reason is exactly the blind change the golden
+sentence rule forbids. The verify chain keeps the local `TMPDIR`; it paints nothing.
+With the system `TMPDIR`, `npm run verify:visual` exited 1 at 56/57 with `launcher` the only
+red (`out/v9-evidence/m180-visual-compare-systmp.log`): the three tile reds were the path
+text, as diagnosed. The launcher's golden waits for the critic's sentence.
+
+### M180 — the critic's findings and what was done with each
+
+The fresh-context critic (Agent tool, cold: the diff, the spec, the plan, the brief's
+First launch, `CLAUDE.md`'s rules, the two launcher images) returned thirteen ranked findings
+and refused the first launcher capture as a draft. Each, by number:
+
+1. The agent door could answer a terminal agent's permission prompt (`submit` against a
+   panel in `wants-you` accepts the menu's default Yes). FIXED: `agentDoorRefusal` in
+   `shared/plan.ts`; the renderer's facts now carry the agent state word; `agent-door.5`.
+2. `plan` carried no caller identity, so a place-bounded teammate escaped M100's places
+   through `new-chat`. FIXED: the token rides as the `api` arm's does; the handler resolves
+   the panel and its teammate; a teammate caller is refused the session-opening and
+   setting verbs by name; `plan.handler.4`, `agent-door.6`.
+3. The generic verb hover repainted the primary grey under white ink. FIXED with 4.
+4. The primary dodged `primary.1` and `--on-iris`. FIXED: `.launcher__start` is an
+   `.is-primary` site; the check names it.
+5. Two sentences said "Codex is missing"; `Setup guide` sat beside an installed engine;
+   Check again was far from the rows it serves. FIXED: the guide only where discovery is
+   not `installed`, Check again in the readiness block, the footer a pointer at the full
+   report with the probe sentence on its title.
+6. Presets' cached `which` and the fresh report could disagree after Check again. FIXED:
+   the primary gates on readiness alone; main still refuses a missing binary by name.
+7. `closure.v9.1` pinned declarations. FIXED: it reads `commands.ts` for the palette row and
+   binds the agent line through `buildPlan`.
+8. Hint copy named a control that did not exist. FIXED.
+9. The 30 s timeout said "no canvas answered" while the plan kept running. FIXED: a distinct
+   "still running" refusal from `main/index.ts`.
+10. A third palette row minted the same chat. FIXED: dropped; `V9_DOORS.new-chat.palette`
+    names `panel.new-chat`.
+11. A separate `verify:onboarding` suite for a small module. DECLINED for M180 (it exists,
+    it is green, and removing it is churn); M181 adds no suite of its own.
+12. The launcher scrolled at 1440x865. FIXED through 5 and the chat card's demotion to a
+    prompt line while the primary is live (alias kept; the doors grid follows the count).
+13. `onboarding.agent.1` bypasses the socket and handler. RECORDED: it drives the
+    renderer's door through `requestFromRendererWith`; `plan.handler.*` drive the handler
+    over a fake bridge; no check runs `tc` → socket → handler → renderer end to end. The
+    `tc plan` round trip over a real socket is an owed hand check below.
+
+Two owed hand checks the critic asked to be named: the timed launch-to-first-answer trial
+on a fresh profile, and the install/sign-in path on a machine without a CLI; both are in the
+plan's "Known work a person will owe" table and are restated in the Act I build log.
+
+After the fixes: `npm run typecheck` exit 0; `verify:verbs` 22/22, `verify:control` 26/26,
+`verify:styles` 56/56, `verify:onboarding` 14/14, `verify:palette` 143/143, `verify:meta`
+38/38, each exit 0 (`out/v9-evidence/m180-fix-*.log`); `npm run build` exit 0; the visual
+comparison under the system `TMPDIR` 56/57 with `launcher` the only red at 16.064 %
+(`m180-visual-compare-2.log`).
+
+The first full `npm run verify` after the fixes exited 1 at `verify:agent-session
+registry.1` (140/141; `out/v9-evidence/m180-verify-chain.log`): M99's rule that no consumer
+compares a `backend` field to a literal engine name, which Astra's `shared/onboarding.ts`
+and the `new-chat` arm both did. FIXED: `FIRST_LAUNCH_ENGINES` is a table keyed by backend
+(name and setup link), `isFirstLaunchBackend` a membership test; a third first-launch engine
+is a third row. `verify:onboarding` 14/14 and `verify:agent-session` 141/141 after it.
+
+The critic's second pass ACCEPTED the launcher. Its sentence, recorded before the golden is
+written: *The launcher now leads with one filled "Start a conversation · With Claude" primary
+through `.is-primary`, followed by a divided readiness list (one sentence per engine, Setup
+guide only where Codex is missing, Check again on its own row beside the rows it serves), a
+two-card door row (New panel, Open a file) with Chat with Claude… stepped down to the first
+prompt line, and a footer reduced to a pointer at the full report — this is the intended M180
+amendment, the earlier duplicate copy and the installed-row verb are gone, and it reads as a
+finished premium first-run surface; accepted.* The scene's intent string is unchanged.
+
+Three new findings from that pass. `facts()` read the agent state twice per panel: FIXED,
+bound once. Caller identity is opt-in (a teammate's chat could run `env -u TC_PANEL_TOKEN tc
+plan new-chat` and pass as the person's shell): DECLINED, with the same standing as the `api`
+arm it copies — the socket is the user's own (0600) and a teammate's shell command runs under
+the CLI's permission system, which M100 names as the line the app does not police; the door
+bounds what the app does for a cooperative teammate, and refusing every tokenless plan while
+a teammate exists would refuse the person's own shell. `send` to a chat in `wants-you` is
+admitted on purpose: a chat's approval is answered only through `agent:answer`, never by a
+message. The launcher card at 1440x865 fits with the tmux banner dismissed and scrolls on a
+~800 px content area; M181 adds nothing to this card.
+
+### The verification environment, amended
+
+The second full chain (`out/v9-evidence/m180-verify-chain-2.log`) exited 1 at
+`verify:panels:agents handoff.1` (79/80): the target's PTY log never showed the pasted token
+while the source ran and the row counted its lines. Alone under the same repository-local
+environment the agents part failed `handoff.2` instead (79/80) and the product part failed
+`onboarding.start.1` with `sent: false` (60/61) — three different checks on three paths M180
+did not touch (`m180-panels-agents-rerun.log`, `m180-panels-product-rerun.log`). Under the
+system `TMPDIR`, with every other local variable kept, both parts were green alone: agents
+80/80, product 61/61, exit 0 each (`m180-panels-agents-systmp.log`,
+`m180-panels-product-systmp.log`).
+
+Decision, recorded rather than argued further: the repository-local `TMPDIR` is what reached
+the real-Electron suites — the 4.1 harness and its watchdogs were measured under the system
+temp directory, its fixture paths are short and carry no space, and the `paste.image.1`
+diagnosis had already shown a long local path changing what a terminal check observes — so
+from here every command that opens Electron (`npm run verify`, `verify:visual`,
+`verify:packaged`, `shot`) runs under the system `TMPDIR` with `TMUX_TMPDIR`,
+`CFFIXED_USER_HOME`, `npm_config_cache`, `GIT_CEILING_DIRECTORIES` and `TC_VERIFY_SUFFIX=v9`
+still repository-local. What that gives up: the suites' temp fixtures land under
+`/var/folders`, as they did in every earlier run. What it keeps: comparability with the
+goldens and the measured watchdogs. The agents part had not run at all in this run before
+these attempts (the Act 0 chain stopped at core), so this is the first evidence for it.
+
+### M180 — the chain, green
+
+Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m180-verify-chain-3.log`, `.exit`), every suite printing its tally:
+
+| Suite | Tally |
+|---|---|
+| `verify:onboarding` | 14/14 passed |
+| `verify:meta` | 38/38 passed |
+| `verify:styles` | 56/56 checks passed |
+| `verify:viewport` | 137/137 passed |
+| `verify:groups` | 6/6 passed |
+| `verify:merged` | 12/12 passed |
+| `verify:registry` | 38/38 passed |
+| `verify:layout` | 234/234 passed |
+| `verify:credentials` | 18/18 passed |
+| `verify:jira` | 15/15 passed |
+| `verify:github` | 7/7 passed |
+| `verify:palette` | 143/143 checks passed |
+| `verify:rail` | 194/194 passed |
+| `verify:review` | 98/98 passed |
+| `verify:subagent` | 27/27 passed |
+| `verify:file` | 83/83 passed |
+| `verify:toolbox` | 103/103 passed |
+| `verify:usage` | 26/26 passed |
+| `verify:machine-cost` | 7/7 passed |
+| `verify:tmux` | 35/35 passed |
+| `verify:agent-state` | 27/27 passed |
+| `verify:agent-session` | 141/141 passed |
+| `verify:verbs` | 22/22 passed |
+| `verify:teammates` | 25/25 passed |
+| `verify:electron` | 4/4 passed |
+| `verify:control` | 26/26 passed |
+| `verify:package` | 13/13 passed |
+| `verify:pty` | 10/10 passed |
+| `verify:pty-manager` | 63/63 passed |
+| `verify:window` | 4/4 passed |
+| `verify:ipc` | 1/1 passed |
+| `verify:canvas` | 6/6 passed |
+| `verify:xterm` | 11/11 passed |
+| `verify:panels:core` | 78/78 passed |
+| `verify:panels:shell` | 96/96 passed |
+| `verify:panels:kinds` | 49/49 passed |
+| `verify:panels:agents` | 80/80 passed |
+| `verify:panels:product` | 61/61 passed |
+
+`UPDATE_GOLDENS=1 npm run verify:visual` then wrote the launcher's golden over the same
+build, exit 0, 56/56 with `launcher golden written` (`out/v9-evidence/m180-visual-update.log`,
+`.exit`); the sentence above is its record. No other golden changed.
+
+### M180 — the verifier
+
+The fresh-context verifier (Agent tool, cold: the staged diff, the spec, the ledger's M180
+sections, the rules, the evidence paths; no Electron — the golden write owned the slot) ran
+the seven plain-node suites on the staged tree under a `--keep-index` stash and confirmed
+every tally (onboarding 14/14, verbs 22/22, control 26/26, styles 56/56, palette 143/143,
+meta 38/38, agent-session 141/141, exit 0 each) and the chain-3 log (38 tally lines, no
+FAIL, three build steps, exit file 0). It read the plan door's five properties in the source
+and found each holding; every `data-launcher-*` alias present at `29831fa` still renders;
+`.pf__body` untouched; no dependency added. Typecheck under the stash failed only inside
+the untracked M181 files, as expected.
+
+Its discrepancies, each answered: the chain-3 run and the golden write were not yet in the
+ledger — they are now (above). The control 16/25 red run has no log on disk, only Astra's
+prose in `m180-control-evidence.md`; recorded as such, not re-run (the parser and handler
+have since changed twice and the green is the evidence that stands). `agent-door.5` and
+`agent-door.6` named `interrupt` and settings without exercising them — FIXED: both checks
+now run `interrupt ag1` against the waiting panel and `set-setting` for the teammate
+caller, refused before any step; `verify:verbs` 22/22 exit 0 after
+(`out/v9-evidence/m180-fix-verbs-2.log`). Its stash pop conflicted on one import line in
+`ipc-contract.ts` (an M181 edit beside an M180 one); resolved by keeping both, the index reset
+and re-staged to the M180 set, the stash dropped.
