@@ -456,6 +456,10 @@ function InspectorPanel({
   onSetLinkAutomation: (from: string, to: string, automation: LinkAutomation) => void
   automationResults: ReadonlyMap<string, string>
 }): JSX.Element {
+  // M191. Is a BLOCK of this workflow selected? The Machine section is absent
+  // then: the object the pane is about is the node, and the panel's process
+  // metrics are not the node's.
+  const nodeSelected = useSelectedOf(model.kind === 'workflow' && model.templateId !== undefined ? model.templateId : '') !== null
   const state = useAgentState(model.id)
   const machine = useMachineCost(model.id)
   // M46. Close is DESTRUCTIVE and gated by the same one-click arming the
@@ -577,7 +581,13 @@ function InspectorPanel({
           tier. Three arms, never a blank: a reading; a live panel main has
           not sampled yet (`no reading yet` — never a confident 0%, which is
           the wrong answer costOf refuses too); a panel with no process. */}
-      {(() => {
+      {/* M191 (the golden audit, second half, 6). A selected workflow NODE is
+          the object the pane is about, and the enclosing panel's process
+          metrics are not that object's — the 5.0 brief says so by name ("a
+          workflow node's selection does not show the enclosing workflow
+          panel's unrelated process metadata"). The section is absent then,
+          rather than saying `not measured` about a block. */}
+      {!(model.kind === 'workflow' && nodeSelected) && (() => {
         // A chat's process is main's (M71) and the sampler walks terminal pids
         // only (Canvas.tsx's isTerminalPanel targets): for every kind but a
         // terminal the honest arm is `not measured`, never `not running`.
@@ -586,7 +596,12 @@ function InspectorPanel({
           <section className="inspector__section inspector__machine" data-inspector-machine={arm}>
             <h3 className="inspector__section-heading">Machine</h3>
             <div className="inspector__value" data-machine-cost>{arm === 'reading' && machine !== undefined
-              ? `CPU ${formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
+              // M191 (the golden audit, first half, 4). A sampled panel really
+              // sitting at 0.0% says `under 1%`: the metrics rule's "never a
+              // confident 0%" is about the READING, not only about the
+              // unsampled arm, and `CPU 0%` beside a working agent is the
+              // wrong answer whichever produced it.
+              ? `CPU ${machine.cpuPercent < 0.05 ? 'under 1%' : formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
               : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured — only a terminal\'s process tree is sampled' : 'not running — nothing to measure'}</div>
           </section>
         )
@@ -766,7 +781,11 @@ function InspectorPanel({
           <div className="inspector__run" data-work-run>
             <span className="inspector__run-name">{panelRun.name}</span>
             <span className="inspector__run-facts">{panelRun.facts} · <span data-tone={panelRun.tone}>{panelRun.outcome}</span></span>
-            <button type="button" className="inspector__action inspector__action--primary" data-work-run-again disabled={!panelRun.runAgain.enabled}
+            {/* M191 (the golden audit, 11). ONE filled primary per surface:
+                the action bar's Restart is this pane's, so Run again is a
+                quiet action beside it. Two filled controls on one pane make
+                neither of them the next thing to do. */}
+            <button type="button" className="inspector__action" data-work-run-again disabled={!panelRun.runAgain.enabled}
               title={panelRun.runAgain.enabled ? 'Restart this run\'s roots in order' : panelRun.runAgain.reason}
               {...shellControl(() => { if (panelRun.runAgain.enabled) onRunAgain(panelRun.id) })}>Run again</button>
           </div>
@@ -815,7 +834,7 @@ function InspectorPanel({
                 ))}
               </ul>
               <p className="inspector__usage-turns" data-usage-turns>
-                {model.usage.turns} turns
+                {model.usage.turns} turn{model.usage.turns === 1 ? '' : 's'}
                 {model.usage.subagentTurns > 0 ? `, ${model.usage.subagentTurns} by subagents` : ''}
               </p>
               {model.usage.cost !== undefined && (

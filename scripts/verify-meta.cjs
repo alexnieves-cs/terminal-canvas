@@ -625,14 +625,14 @@ console.log('\n' + '='.repeat(60))
 }
 
 // version.1 (4.1.0 at M179; M60; 1.1.0 at M70; 2.0.0 at M95; 2.2.0 at M108; 2.3.0 at M111; 3.0.0 at M125; 3.1.0 at M134 — the M126–M133 act shipped its rows unversioned and the v7 run's Act 0 paid that debt). package.json says 4.1.0 and the README's status line v4.1.0 at M179
-// 4.0.0 at M160, the v7 run's reconcile.
+// 4.0.0 at M160, the v7 run's reconcile; 5.0.0 at M192, the v9 run's.
 // agrees — the one number that must not drift between the two files that
 // name it.
 {
   const readme = readFileSync(join(__dirname, '..', 'README.md'), 'utf8')
   const statusLine = (readme.match(/^> \*\*Status:[^\n]*/m) || [''])[0]
-  ok('version.1 package.json is 4.1.0 and the README status line names the same version',
-    pkg.version === '4.1.0' && statusLine.includes('v4.1.0') && !/beta/i.test(statusLine),
+  ok('version.1 package.json is 5.0.0 and the README status line names the same version',
+    pkg.version === '5.0.0' && statusLine.includes('v5.0.0') && !/beta/i.test(statusLine),
     JSON.stringify({ version: pkg.version, statusLine }))
 }
 

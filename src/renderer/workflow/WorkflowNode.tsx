@@ -328,6 +328,13 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const disabled: { label: string; why: string }[] = []
   const verb = (key: string, label: string, own: string | null, run: () => void): JSX.Element => {
     const reason = readOnly ? REASON_MERGED_VIEW : own
+    // M191 (the golden audit, 3). The reason rides the control's OWN title
+    // and is announced there; it is no longer printed as a permanent line
+    // above the diagram. The 5.0 brief forbids that shape by name ("avoid
+    // duplicating a refusal as two permanent explanation lines above a
+    // graph"), and it cost the diagram two rows at every rest — M133's own
+    // "a reason must be on screen" idiom, applied to a surface where the
+    // reasons are ordinary and permanent rather than surprising.
     if (reason !== null) disabled.push({ label, why: reason })
     return (
       <button type="button" className="pf__verb pf__verb--word" data-workflow-verb={key} disabled={reason !== null}
@@ -393,6 +400,12 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 <button type="button" className="pf__verb pf__verb--word" data-workflow-verb="save-copy" onMouseDown={press(() => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}>Save a copy</button>
               </div>
             )}
+            {/* M191 (the golden audit, 3). The reasons are REVEALED, not
+                permanent: they appear while the panel is hovered or focused,
+                the same rule every other chrome verb follows, so a diagram at
+                rest is a diagram. Each disabled control also carries its own
+                reason in `title`, which is what a pointer and a screen reader
+                both reach. */}
             {disabled.length > 0 && (
               <div className="workflow-node__why" data-workflow-why>
                 {disabled.map((d) => (

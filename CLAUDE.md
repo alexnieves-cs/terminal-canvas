@@ -18,8 +18,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An Electron app for macOS: an infinite canvas where every node is a live terminal panel
-running a coding-agent CLI. **This is 4.1 (M179).** The ninth run, M161 to M179 (v8), was
+An Electron app for macOS: an infinite canvas of authored objects — agents, terminals, files,
+previews, workflows, pictures and notes — each of which a person arranges, edits and keeps.
+**This is 5.0 (M192).** The tenth run, M180 to M192 (v9), was unattended in goal mode and made
+the canvas a surface a person AUTHORS on rather than one they only start sessions from: Act I
+the first conversation (readiness as a table where installed never means signed in, the bounded
+`tc plan` door, the four-door closure as data) and the captioned starter canvas with the image
+kind (M180–M181); Act II one template with two editors — pure operations behind one draft door,
+a revision and a stale save, a library, a wire that refuses a cycle mid-drag, a schema-driven
+inspector, and Save/Run/Stop over a run's own immutable snapshot (M182–M184); Acts III and IV
+the preview that executes nothing, named device widths, a real capture, a content-addressed
+asset store with drop/paste/Replace, and notes, free text and named frames as one kind with
+three forms (M185–M187); Acts V, VI and VII the executor (an `action` node that closes the
+four-door rule, a `http` GET that refuses every write by name, `Test this node`), one portable
+file built field by field with an import that starts nothing — including its first Run — and a
+feedback draft this app never submits (M188–M190); Act VIII the third audit and this reconcile
+(M191–M192). Every milestone has a spec, red-first checks watched failing, a fresh-context
+critic, and a ledger line with its evidence, its decisions and everything it struck by name
+(`docs/build-log/m180-m200-ledger.md`). Before it, **4.1 (M179)**: the ninth run, M161 to M179 (v8), was
 unattended in goal mode and made the canvas read as a product rather than an instrument: Act 0
 the baseline and the brief with its five rules and their checks (M161–M162); Act I the frame
 every kind wears — the quiet header, the body's material and the path rule, diffs as cards,
@@ -96,25 +112,34 @@ Don't "simplify" those away.
 
 ## What it is
 
-The line above says "every node is a live terminal panel". That was 1.0's truth and it is the
-sentence this app has to outgrow. The destination, named in `docs/ideas-backlog.md` #9 and in
-the v7 and v8 run prompts, is an **agent super app**: one calm native window where a person
-arranges agents, conversations, files, boards and integrations on a canvas, and a terminal is
-*one* thing a panel can be — content inside a frame, not the material everything is made of.
-The register to hold it to is the Claude desktop app and Codex for the panels, and BridgeMind
-One for the posture (a rail of named places, panes that split and tidy). The 4.0 goldens
-showed how far off that register the build was: six controls on every header at rest, raw
-`/private/var/folders/…` paths at full width, monospace wherever a human read English, a
-status bar reciting CPU and RAM. The 4.1 goldens under `verify/visual/goldens/` are the
-register: a header at rest is a glyph, a name and a state; a chat is a conversation; the rail
-is a list of places; the status bar is a zoom pill. Being *correct* is not the same as being
-*finished*, and everything below this section is about correctness.
+The line above says "an infinite canvas of authored objects". That is 5.0's truth, and it is
+what the four runs before it were working towards: 1.0's sentence was "every node is a live
+terminal panel", 4.1's was "the canvas reads as a product", and v9's brief
+(`docs/superpowers/specs/2026-09-07-v9-design-brief.md`) named the destination — one calm native
+window where a person arranges agents, conversations, files, boards, workflows, pictures and
+notes, and a terminal is ONE thing a panel can be.
 
-The run that closed the gap is `docs/superpowers/specs/2026-09-07-v8-product-polish-prompt.md`
-(M161–M179, 4.1.0; its brief is `docs/superpowers/specs/2026-09-07-m162-product-polish-brief.md`
-and its ledger `docs/build-log/m161-m179-ledger.md`). The following rules are the standard
-every new or touched surface is held to, each pinned by a `verify:styles` check named beside
-it, so the gap does not reopen:
+What that means concretely, and what a later run must not undo:
+
+- **An object is authored, not only started.** A note, a picture, a workflow and a region are
+  things a person makes; they take the same selection, drag, resize, marks, grouping, undo,
+  tiering and export rules as everything else, and every one of them joins `isTerminalPanel`'s
+  exclusion list rather than getting a partition of its own.
+- **Four doors, and the fourth is real.** Every v9 verb reaches a canvas gesture, a palette row,
+  an agent line AND a workflow node (`V9_DOORS`, `verify:verbs closure.v9.1`). The workflow door
+  is M188's `action` node — a verb line run through the SAME executor the palette and `tc plan`
+  take. A door that is only declared is not a door, and the check binds each one.
+- **What arrives from outside is inert until a person looks.** An imported canvas starts no
+  process, and an imported workflow's action nodes are refused by name until they are read
+  (`reviewed: false`). A fetch node does a GET and refuses every write, because the approval
+  door this app already has is the only way a write should happen.
+- **Nothing leaves without passing the gate.** `outward` and `redactSecrets` have a named,
+  checked caller list; an export scrubs field by field and reports its count; a feedback draft
+  says what it scrubbed and is submitted by the person, not the app; pixels travel only when
+  asked, and are never called redacted.
+
+The 4.1 rules below still hold and are still checked — they are what "reads as a product" meant,
+and 5.0 did not spend them.
 
 - **The face rule** (`face.1`, `material.1`). `--font-mono` is for code, commands, paths and
   terminal cells. Titles, labels, rail rows, chat turns, descriptions, empty states, the

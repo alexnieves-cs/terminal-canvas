@@ -83,7 +83,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
               <button type="button" className="rail-row__main" {...shellControl(() => props.onSelect(t.id === props.selectedId ? null : t.id))}>
                 <span className="rail-row__label">{teammateWord(t)}</span>
                 {/* Short nouns so the PERMISSION word survives the row's width — the critic saw `1 service · s…`. */}
-                <span className="rail-row__tail">{t.places.length} place{t.places.length === 1 ? '' : 's'} · {t.services.length} svc{t.scheduling ? ' · scheduled' : ''}{t.messaging ? ' · messaging' : ''}</span>
+                <span className="rail-row__tail">{t.places.length} place{t.places.length === 1 ? '' : 's'} · {t.services.length} service{t.services.length === 1 ? '' : 's'}{t.scheduling ? ' · scheduled' : ''}{t.messaging ? ' · messaging' : ''}</span>
               </button>
             </li>
           ))}
@@ -125,7 +125,10 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
                 return (
                   <li key={svc.id} className="teammates-pane__item" data-teammate-service={svc.id}>
                     {/* The grant is SAID, not implied by the verb's word. */}
-                    <span>{svc.label}{granted ? ' — granted' : ''}{svc.connected ? '' : ' — not connected'}</span>
+                    {/* M191 (the golden audit, second half, 16). One sentence, not two states
+                        that read as a contradiction, and it names the next step: a grant
+                        without a credential is a permission waiting for a token. */}
+                    <span>{svc.label}{granted && !svc.connected ? ' — granted, but no credential yet: add one in Integrations' : granted ? ' — granted' : svc.connected ? '' : ' — not connected'}</span>
                     <button type="button" className="pf__verb pf__verb--word" data-teammate-service-toggle={svc.id}
                       title={granted ? `Revoke ${svc.label} from this teammate` : `Grant ${svc.label} to this teammate — it spends the app's credential through the broker`}
                       {...shellControl(() => props.onSave({ ...selected, services: granted ? selected.services.filter((x) => x !== svc.id) : [...selected.services, svc.id] }))}>{granted ? 'revoke' : 'grant'}</button>
