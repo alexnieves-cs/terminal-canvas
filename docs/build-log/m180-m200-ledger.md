@@ -663,3 +663,10 @@ name (`out/main/**`, `out/preload/**`, `out/renderer/**`); `verify:package` 13/1
 packaged app is 55 MB and `npm run verify:packaged` is 12/12, exit 0
 (`out/v9-evidence/act1-packaged-6.log`, `.exit`). Every temporary directory this run keeps
 under `out/` was invisible to the chain and to the goldens and visible only to the packager.
+
+## Act I — closed
+
+`3bf4bc5`: `npm run verify` exit 0 (38 suites, `act1-verify-3.log`), `npm run verify:visual`
+exit 0 58/58 (`act1-visual-2.log`), `npm run verify:packaged` exit 0 12/12
+(`act1-packaged-6.log`). Build log `docs/build-log/m180-m181-act1-onboarding.md`. Closed at
+2026-09-08 07:41 UTC, ~3.4 h since the resume. Merged to `main` with `--no-ff`; nothing pushed.

@@ -49,5 +49,55 @@ inherited manual-only list in `docs/load-bearing.md`.
 
 ## The three commands at the act's close
 
-Pasted below when the chain, the visual suite and the packaged suite have run on the branch
-head.
+On the branch head (`3bf4bc5`), under the environment the ledger records (system `TMPDIR`
+for every Electron command; `verify:packaged` with the default npm cache and no fixed home):
+
+`npm run verify:visual` — exit 0, `58/58 passed` (`out/v9-evidence/act1-visual-2.log`).
+`npm run verify:packaged` — exit 0, `12/12 passed` (`out/v9-evidence/act1-packaged-6.log`).
+`npm run verify` — see the line appended below this section once the chain on `3bf4bc5`
+has printed every tally (`out/v9-evidence/act1-verify-3.log`).
+
+`npm run verify` on `3bf4bc5` — exit 0 (`out/v9-evidence/act1-verify-3.log`), every suite's tally:
+
+| Suite | Tally |
+|---|---|
+| `verify:onboarding` | 14/14 passed |
+| `verify:meta` | 38/38 passed |
+| `verify:styles` | 56/56 checks passed |
+| `verify:viewport` | 139/139 passed |
+| `verify:groups` | 6/6 passed |
+| `verify:merged` | 12/12 passed |
+| `verify:registry` | 38/38 passed |
+| `verify:layout` | 238/238 passed |
+| `verify:credentials` | 18/18 passed |
+| `verify:jira` | 15/15 passed |
+| `verify:github` | 7/7 passed |
+| `verify:palette` | 143/143 checks passed |
+| `verify:rail` | 194/194 passed |
+| `verify:review` | 98/98 passed |
+| `verify:subagent` | 27/27 passed |
+| `verify:file` | 85/85 passed |
+| `verify:toolbox` | 103/103 passed |
+| `verify:usage` | 26/26 passed |
+| `verify:machine-cost` | 7/7 passed |
+| `verify:tmux` | 35/35 passed |
+| `verify:agent-state` | 27/27 passed |
+| `verify:agent-session` | 141/141 passed |
+| `verify:verbs` | 22/22 passed |
+| `verify:teammates` | 25/25 passed |
+| `verify:electron` | 4/4 passed |
+| `verify:control` | 26/26 passed |
+| `verify:package` | 13/13 passed |
+| `verify:pty` | 10/10 passed |
+| `verify:pty-manager` | 63/63 passed |
+| `verify:window` | 4/4 passed |
+| `verify:ipc` | 1/1 passed |
+| `verify:canvas` | 6/6 passed |
+| `verify:xterm` | 11/11 passed |
+| `verify:panels:core` | 78/78 passed |
+| `verify:panels:shell` | 96/96 passed |
+| `verify:panels:kinds` | 49/49 passed |
+| `verify:panels:agents` | 80/80 passed |
+| `verify:panels:product` | 63/63 passed |
+
+Act I closed at 2026-09-08 07:41 UTC: about 3.4 hours of wall clock since the resume at 04:36 UTC (Astra's stopped hour before it is not counted). Merged to `main` with a merge commit.
