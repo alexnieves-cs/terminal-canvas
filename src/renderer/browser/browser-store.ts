@@ -22,6 +22,16 @@
 interface LiveGuest {
   webContentsId: number
   reload: () => void
+  /**
+   * M186 (M185's critic, finding 2). NAVIGATE, which is not reload. The guest's
+   * `src` is set once from a ref and the effect is keyed on the panel id
+   * alone (rebuilding the guest on every navigation is the failure M103's own
+   * comment names), so writing a new url onto the RECORD moves nothing: the
+   * pane reloaded the page it already had, `did-navigate` then wrote the old
+   * url back over the record, and `preview-open <url>` answered `ran` while
+   * the person looked at the old page.
+   */
+  navigate: (url: string) => void
 }
 
 const guests = new Map<string, LiveGuest>()
@@ -32,6 +42,18 @@ export function registerBrowser(id: string, guest: LiveGuest): void {
 
 export function clearBrowser(id: string): void {
   guests.delete(id)
+}
+
+/**
+ * M186. Point a live guest at a url, answering whether one took it — so a
+ * caller with no guest (a pane whose node has not attached yet) can say so
+ * rather than reporting a navigation that did not happen.
+ */
+export function navigateBrowser(id: string, url: string): boolean {
+  const guest = guests.get(id)
+  if (guest === undefined) return false
+  guest.navigate(url)
+  return true
 }
 
 /** The guest's webContents id, or undefined before `did-attach` and after the node unmounted. */

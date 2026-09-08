@@ -97,7 +97,9 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
   const [found, setFound] = useState<PreviewDiscovery | { kind: 'refused'; reason: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string | null>(null)
-  const say = (text: string): void => { setSaid(text); window.setTimeout(() => setSaid((v) => (v === text ? null : v)), 4000) }
+  const sayTimer = useRef(0)
+  useEffect(() => () => { window.clearTimeout(sayTimer.current) }, [])
+  const say = (text: string): void => { setSaid(text); window.clearTimeout(sayTimer.current); sayTimer.current = window.setTimeout(() => setSaid((v) => (v === text ? null : v)), 4000) }
   const navigated = useRef(props.onNavigated)
   navigated.current = props.onNavigated
 
@@ -124,7 +126,11 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       let wc: number
       try { wc = el.getWebContentsId() } catch { return }
       setGuestId(wc)
-      registerBrowser(id, { webContentsId: wc, reload: () => { try { el.reload() } catch { /* gone */ } } })
+      registerBrowser(id, {
+        webContentsId: wc,
+        reload: () => { try { el.reload() } catch { /* gone */ } },
+        navigate: (url) => { try { void el.loadURL(url).catch(() => { /* did-fail-load names it */ }) } catch { /* gone */ } }
+      })
     }
     const onStart = (): void => setLoading(true)
     const onStop = (): void => setLoading(false)
@@ -163,6 +169,14 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
   useEffect(() => {
     let timer = 0
     const off = window.canvas.file.onChanged(() => {
+      // M186 (M185's critic, finding 7). ONLY a pane showing a LOOPBACK page
+      // is a preview of this machine's work. Without this every browser pane
+      // reloaded on any watched file's change: a person filling a form or
+      // scrolled deep into remote documentation lost it because an agent
+      // wrote an unrelated note.
+      let host: string
+      try { host = new URL(guestRef.current?.getURL() ?? '').hostname } catch { return }
+      if (host !== '127.0.0.1' && host !== 'localhost' && host !== '[::1]' && host !== '::1') return
       window.clearTimeout(timer)
       timer = window.setTimeout(() => { try { guestRef.current?.reload() } catch { /* gone */ } }, 300)
     })
@@ -278,7 +292,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
             ))}
             {found.kind !== 'refused' && found.candidates.length === 0 && found.scripts.map((sc) => (
               <button key={sc.name} type="button" className="pf__verb pf__verb--word" data-preview-script={sc.name}
-                title={`Runs ${sc.command} in a terminal panel you can see and stop`}
+                title={`Runs npm run ${sc.name} (the script is ${sc.command}) in a terminal panel you can see and stop`}
                 {...shellControl(() => { void props.onStartDev(sc.name).then((r) => { say(r.kind === 'refused' ? r.reason : (r.note ?? 'started')); setFound(null) }) })}>Start {sc.name}</button>
             ))}
           </div>

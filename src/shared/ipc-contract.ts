@@ -665,6 +665,10 @@ export const IPC = {
   PREVIEW_DISCOVER: 'preview:discover',
   /** M185. A real picture of a guest, written under userData/captures. */
   PREVIEW_CAPTURE: 'preview:capture',
+  /** M186. Take bytes into the content-addressed asset store. */
+  ASSET_PUT: 'asset:put',
+  /** M186. The system's own file chooser, for Replace. */
+  ASSET_CHOOSE: 'asset:choose',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -1314,6 +1318,11 @@ export type PreviewCaptureResult =
   | { kind: 'captured'; path: string; url: string; host: string; bytes: number }
   | { kind: 'refused'; reason: string }
 
+/** M186. What the asset store answers: the id and where the bytes are, or one named refusal. */
+export type AssetPutResult =
+  | { kind: 'stored'; id: string; path: string; mediaType: string; bytes: number; wrote: boolean; prunedCount: number }
+  | { kind: 'refused'; reason: string }
+
 export interface CanvasBridge {
   pty: {
     create(spec: PanelSpec): Promise<PtyCreateResult>
@@ -1724,6 +1733,16 @@ export interface CanvasBridge {
   preview: {
     discover(req: { pids: number[]; cwd: string }): Promise<PreviewDiscovery>
     capture(req: { webContentsId: number }): Promise<PreviewCaptureResult>
+  }
+  /**
+   * M186. The asset store: bytes in, an id and a path out. `put` takes a file
+   * path or raw bytes (a clipboard picture has no path); `choose` opens the
+   * system's own file chooser and answers the path, or `null` when the person
+   * cancelled — a cancel is not a refusal and says nothing.
+   */
+  asset: {
+    put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
+    choose(): Promise<string | null>
   }
   /** M114. The board's main-side verbs. */
   board: {

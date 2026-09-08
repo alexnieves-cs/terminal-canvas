@@ -82,6 +82,9 @@ export interface PaletteActionsDeps {
   /** M184. Canvas's stop: every live pool of this template interrupted, nothing killed. */
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   saveWorkflowCopyDraft: (templateId: string) => Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }>
+  /** M186. A picture into the store and onto the canvas, and the repair beside it. */
+  addImageFromPath: (path: string, world?: { x: number; y: number }) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  replaceImagePanel: (panelId: string, path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs and the discovery the pane's own control asks. */
   openPreviewNow: (url?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   setPreviewWidthNow: (device: string, paneId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -221,7 +224,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -286,6 +289,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'workflow-run': return self.runWorkflowNow(a.template!)
           case 'workflow-stop': return self.stopWorkflow(a.template!)
           case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
+          case 'image-add': return self.addImage(a.path!)
+          case 'image-replace': return self.replaceImage(a.panel!, a.path)
           case 'preview-open': return self.openPreview(a.url)
           case 'preview-width': return self.setPreviewWidth(a.device!)
           case 'preview-capture': return self.capturePreview()
@@ -1946,11 +1951,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const refusal = runWorkflowNow(templateId)
       return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
     },
+    addImage: (path) => addImageFromPath(path),
+    replaceImage: (panelId, path) => replaceImagePanel(panelId, path),
     openPreview: (url) => openPreviewNow(url),
     setPreviewWidth: (device) => setPreviewWidthNow(device),
     capturePreview: () => capturePreviewNow(),
     startDevServer: (script) => startDevServerNow(script),
-    discoverPreview: () => discoverProject(),
     saveWorkflowCopy: async (templateId) => {
       const r = await saveWorkflowCopyDraft(templateId)
       return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'ran', note: r.name === undefined ? 'saved as a copy' : `saved as ${r.name}` }
@@ -2237,7 +2243,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

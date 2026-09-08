@@ -257,7 +257,8 @@ export interface WorkflowPanel extends PanelBase {
  */
 export interface ImagePanel extends PanelBase {
   kind: 'image'
-  image: { path: string }
+  /** M186. The path is where the bytes are here; the asset id is what they are. Absent unless this app took them in. */
+  image: { path: string; asset?: string }
 }
 
 export type Panel = MemoryPanel | TerminalPanel | ReviewPanel | FilePanel | JiraPanel | GithubPanel | ToolboxPanel | ChatPanel | WatcherPanel | BrowserPanel | WorkPanel | SkillPanel | WorkflowPanel | ImagePanel
@@ -987,8 +988,8 @@ export const IMAGE_W = 480
 export const IMAGE_H = 360
 
 /** M181. An image panel centred on the point (makePanel's contract); the path is copied by name. */
-export function makeImagePanel(id: string, centre: Point, z: number, path: string, title: string): ImagePanel {
-  return { kind: 'image', rect: { id, x: centre.x - IMAGE_W / 2, y: centre.y - IMAGE_H / 2, w: IMAGE_W, h: IMAGE_H }, z, title, image: { path } }
+export function makeImagePanel(id: string, centre: Point, z: number, path: string, title: string, asset?: string): ImagePanel {
+  return { kind: 'image', rect: { id, x: centre.x - IMAGE_W / 2, y: centre.y - IMAGE_H / 2, w: IMAGE_W, h: IMAGE_H }, z, title, image: { path, ...(asset === undefined ? {} : { asset }) } }
 }
 
 export const WORKFLOW_W = 640

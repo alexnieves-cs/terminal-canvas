@@ -2070,7 +2070,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     //         NOTHING: the dev script is named, and the panel count is the same
     //         after the question as before it.
     {
-      const IDS = ['preview.1 a device width lays the guest out at 390px centred and writes device on the record, and full removes the key; Capture writes a real PNG under userData/captures and places an image panel titled by the page; discovery names the project and its dev script, starts nothing, and mints no panel']
+      const IDS = ['preview.1 a device width lays the guest out at 390px centred and writes device on the record, and full removes the key; Capture writes a real PNG under userData/captures and places an image panel titled by the page; discovery names the project and its dev script, answers not-asked for a panel with no process, starts nothing, and mints no panel']
       let server = null
       try {
         const http = require('node:http')
@@ -2126,7 +2126,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             image !== false && /^capture · 127\.0\.0\.1:/.test(image.title) &&
             imageRecord && typeof imageRecord.image.path === 'string' && /\/captures\//.test(imageRecord.image.path) &&
             png !== null && png.length > 0 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 &&
-            found && found.kind === 'none' && found.project === 'the shop' && found.scripts.map((x) => x.name).join(',') === 'dev' && /dev would start it/.test(found.note) &&
+            found && found.kind === 'not-asked' && found.project === 'the shop' && found.scripts.map((x) => x.name).join(',') === 'dev' && /nothing to ask/.test(found.note) &&
             after === before + 1,
           JSON.stringify({ attached, chips, atPhone, savedPhone, savedFull, image, imagePath: imageRecord && imageRecord.image.path, pngBytes: png && png.length, found, before, after }))
       } catch (pErr) {
@@ -2134,6 +2134,73 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         if (server) server.close()
       }
+    }
+
+    // M186 — image.2. A PICTURE INTO THE STORE, THROUGH THE REAL DOORS.
+    //     The agent door takes a real PNG in a fixture directory: the store
+    //     writes it under `userData/assets` named by the sha-256 of its own
+    //     bytes, the panel names that id, and the SAME file added twice is one
+    //     file and one id (the second call reports `wrote: false`) — which is
+    //     what makes the id portable rather than a fact about this disk.
+    //     Then Replace, through the node's own control against a planted
+    //     chooser answer, repoints a picture whose bytes are gone: the panel
+    //     SURVIVES the missing arm with Replace on it (the brief's "missing
+    //     bytes leave an object with a Replace action"), and after the repair
+    //     it paints. A non-image is refused by its first bytes and mints
+    //     nothing.
+    const IDS = ['image.2 image-add stores a picture content-addressed under userData/assets and the panel carries the id; the same file twice is one asset; a non-image is refused by its first bytes and mints no panel; a picture whose file is gone keeps its panel with the missing sentence and a Replace control, and Replace through the system chooser repoints it and paints']
+    try {
+      const { writeFileSync: wf, mkdirSync: mk, unlinkSync: ul, readdirSync: rd } = require('node:fs')
+      // NO SPACES in the fixture path: the verb line splits on whitespace, so
+      // a path with a space in it is two arguments and the door answers
+      // `that file is not there any more` about half a path. (The gesture
+      // doors take a path directly and are unaffected; this is the agent
+      // line's own bound, and it is worth knowing.)
+      const src = mkdtempSync(join(tmpdir(), 'tc-image-src-'))
+      mk(src, { recursive: true })
+      // A real 1x1 PNG, so the renderer paints real pixels rather than a fixture shape.
+      const PNG_1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+      const one = join(src, 'one.png')
+      const two = join(src, 'two.png')
+      const notPicture = join(src, 'notes.png')
+      wf(one, PNG_1x1); wf(two, PNG_1x1); wf(notPicture, Buffer.from('not a picture at all', 'utf8'))
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reI
+      await settle()
+      const added = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${one}` }, null, 5000)
+      // The same bytes under a different name: one asset, and the note says so.
+      const again = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${two}` }, null, 5000)
+      const refusedAdd = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${notPicture}` }, null, 5000)
+      await settle(); flushLayoutStore()
+      const images = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).filter((p) => p.kind === 'image')
+      const assetsDir = join(app.getPath('userData'), 'assets')
+      const stored = existsSync(assetsDir) ? rd(assetsDir).filter((n) => n.endsWith('.png')) : []
+      // The bytes are gone: the panel stays, says so, and offers Replace.
+      const victim = images[0]
+      if (victim) ul(victim.image.path)
+      const reJ = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reJ
+      await settle()
+      const gone = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); if (!n) return false
+        const arm = n.getAttribute('data-image-arm'); if (arm !== 'missing') return false
+        return { arm, note: n.querySelector('[data-image-note]')?.textContent ?? '', replace: n.querySelector('[data-image-replace]') !== null } })()`), 6000) : false
+      // Replace, through the node's own control, with the chooser answering a real file.
+      state.assetChoice = two
+      const pressed = victim ? await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}] [data-image-replace]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) : false
+      const repaired = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); return n && n.getAttribute('data-image-arm') === 'data' && n.querySelector('[data-image-pixels]') !== null ? { arm: n.getAttribute('data-image-arm') } : false })()`), 8000) : false
+      state.assetChoice = undefined
+      ok(IDS[0],
+        added && added.kind === 'ran' && again && again.kind === 'ran' && /already in this canvas/.test(String(again.summary)) &&
+          refusedAdd && refusedAdd.kind === 'refused' && /first bytes/.test(String(refusedAdd.reason)) &&
+          images.length === 2 && images.every((p) => /^[0-9a-f]{64}$/.test(p.image.asset ?? '')) &&
+          images[0].image.asset === images[1].image.asset && stored.length === 1 &&
+          gone !== false && gone.replace === true && /not there any more/.test(gone.note) &&
+          pressed === true && repaired !== false,
+        JSON.stringify({ added, again, refusedAdd, images, stored, gone, pressed, repaired }))
+    } catch (iErr) {
+      for (const id of IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr))
     }
 
     // M106 — header.1 / flip.1. HEADER DISCIPLINE in the real renderer: a

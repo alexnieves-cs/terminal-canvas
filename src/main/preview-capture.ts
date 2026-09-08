@@ -56,6 +56,14 @@ export async function capturePreview(deps: CaptureDeps): Promise<CaptureResult> 
   const png = image.toPNG()
   if (png.length === 0) return { kind: 'refused', reason: captureRefusal('empty') }
   const path = `${deps.dir.replace(/\/$/, '')}/${captureFileName(url, deps.now())}`
-  await deps.write(path, png)
+  // M185's critic (finding 4): the write is the one step that can fail for a
+  // reason outside this app (no space, a read-only volume, a permission), and
+  // an unguarded `writeFileSync` REJECTED the invoke — the renderer awaits it
+  // with no catch, so the Capture button said nothing at all.
+  try {
+    await deps.write(path, png)
+  } catch (error) {
+    return { kind: 'refused', reason: `the capture could not be written: ${error instanceof Error ? error.message : String(error)}` }
+  }
   return { kind: 'captured', path, url, host: browserHost(url), bytes: png.length }
 }

@@ -455,11 +455,12 @@ export interface PaletteActions {
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  replaceImage(panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   openPreview(url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   setPreviewWidth(device: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   capturePreview(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   startDevServer(script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
-  discoverPreview(): Promise<unknown>
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
   runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
@@ -2258,6 +2259,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
+  const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
+  // M186. The picture rows. `image.add` opens the verb line (a path is what
+  // it needs and this app has no second file browser); `image.replace` acts on
+  // the SELECTED picture through the system's own chooser, and is disabled by
+  // name when the selection is not a picture.
+  out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'type image-add <path> — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb() })
+  out.push(withReason({ id: 'image.replace', title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
   // M185. The preview's four rows. Every one is PRESENT at rest — the verbs
   // refuse by name against no subject (this repo's rule: a row that
   // disappears is indistinguishable from a feature that was never built) —

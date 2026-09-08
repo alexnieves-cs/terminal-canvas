@@ -186,6 +186,8 @@ module.exports = {
   // M185. The preview's two main-side halves, so the harness wires the same
   // discoverer and capture production does.
   discoverPreview: require('../src/main/preview-discover').discoverPreview,
+  descendantsOf: require('../src/main/machine-cost').descendantsOf,
+  putAsset: require('../src/main/asset-store').putAsset,
   capturePreview: require('../src/main/preview-capture').capturePreview,
   // M130. The REAL trail read, so the lane checks and the shot scene drive
   // the same tail production drives — a fixture function written in the

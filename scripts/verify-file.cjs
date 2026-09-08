@@ -1716,7 +1716,7 @@ await (async () => {
 //      different sentence each.
 {
   const has = typeof F.parseListeningPorts === 'function' && typeof F.parseDevScripts === 'function' && typeof F.discoveryOf === 'function' && typeof F.discoverPreview === 'function'
-  const NAME = 'preview.1 discovery runs ONE lsof and nothing else (no dev script is ever executed); parseListeningPorts reads the field form, drops an n line with no pid, dedupes one socket\'s two rows and takes the port after the last colon; parseDevScripts returns the four names in order with the project name, undefined for unparseable text and an empty list for a file that names none; discoveryOf answers none/one/many with a different sentence each; a missing package.json is not a failure'
+  const NAME = 'preview.1 discovery expands the panel\'s pid to its process TREE and runs ONE lsof over it and nothing else (no dev script is ever executed), and a panel with no process answers not-asked rather than none; parseListeningPorts reads the field form, drops an n line with no pid, dedupes one socket\'s two rows and takes the port after the last colon; parseDevScripts returns the four names in order with the project name, undefined for unparseable text and an empty list for a file that names none; discoveryOf answers not-asked/none/one/many with a different sentence each; a missing package.json is not a failure'
   if (!has) ok(NAME, false, 'preview.ts / preview-discover.ts do not export parseListeningPorts, parseDevScripts, discoveryOf and discoverPreview')
   else {
     const ports = F.parseListeningPorts([
@@ -1732,11 +1732,18 @@ await (async () => {
     const one = F.discoveryOf({ ports: [{ pid: 1, port: 5173 }], project: 'shop', scripts: [], where: '/w/shop' })
     const many = F.discoveryOf({ ports: [{ pid: 1, port: 5173 }, { pid: 2, port: 4000 }], where: '/w/shop' })
     const none = F.discoveryOf({ ports: [], scripts: [{ name: 'dev', command: 'vite' }], where: '/w/shop' })
+    // M186 (M185's critic, 6). NOT ASKED is not "nothing answered": one is
+    // fixed by selecting the running terminal, the other by starting a server.
+    const notAsked = F.discoveryOf({ ports: [], asked: false, scripts: [{ name: 'dev', command: 'vite' }], where: '/w/shop' })
     const bareNone = F.discoveryOf({ ports: [], where: '/w/shop' })
     // The discoverer over fakes: one process tree, one package.json, one recorded command.
     const asked = []
     const run = async (command, args) => { asked.push([command, ...args].join(' ')); return { code: 0, stdout: 'p4242\nn127.0.0.1:5173\n' } }
-    const found = await F.discoverPreview({ pids: [4242, 4243], cwd: '/w/shop', run, readText: async (path) => (path === '/w/shop/package.json' ? JSON.stringify({ name: 'shop', scripts: { dev: 'vite' } }) : undefined) })
+    // M186 (M185's critic, 1). The panel's pid is a SHELL; the socket is held
+    // by its descendant, so the discoverer expands the tree first and asks
+    // lsof about the descendant — a run that asked about 4242 alone answered
+    // `nothing is listening` for every real dev server.
+    const found = await F.discoverPreview({ pids: [4242], descendants: async (roots) => [...roots, 9001], cwd: '/w/shop', run, readText: async (path) => (path === '/w/shop/package.json' ? JSON.stringify({ name: 'shop', scripts: { dev: 'vite' } }) : undefined) })
     const noPkg = await F.discoverPreview({ pids: [4242], cwd: '/w/none', run, readText: async () => undefined })
     // No pid at all: nothing to ask lsof about, so lsof is not asked either.
     const before = asked.length
@@ -1752,9 +1759,11 @@ await (async () => {
         bareNone.kind === 'none' && /no dev script/.test(bareNone.note) &&
         found.kind === 'one' && found.project === 'shop' && found.candidates[0].url === 'http://127.0.0.1:5173/' && found.scripts.map((s) => s.name).join(',') === 'dev' &&
         noPkg.kind === 'one' && noPkg.project === undefined && noPkg.scripts.length === 0 &&
-        noPids.kind === 'none' && asked.length === before &&
-        asked.every((c) => c.startsWith('lsof ')) && asked.length === 2,
-      JSON.stringify({ ports, good, bare, notJson, notObject, one, many, none, bareNone, found, noPkg, noPids, asked }))
+        notAsked.kind === 'not-asked' && /nothing to ask/.test(notAsked.note) && /select the terminal/.test(notAsked.note) &&
+        noPids.kind === 'not-asked' && asked.length === before &&
+        asked.every((c) => c.startsWith('lsof ')) && asked.length === 2 &&
+        asked[0] === 'lsof -nP -iTCP -sTCP:LISTEN -F pn -a -p 4242,9001',
+      JSON.stringify({ ports, good, bare, notJson, notObject, one, many, none, notAsked, bareNone, found, noPkg, noPids, asked }))
   }
 }
 
@@ -1770,7 +1779,7 @@ await (async () => {
 //      page that was merely not ready. The result names the PAGE.
 {
   const has = typeof F.capturePreview === 'function' && typeof F.captureFileName === 'function'
-  const NAME = 'preview.capture.1 capturePreview refuses a data:/file:/about: page by name and an empty image by name, writing NOTHING in either case; a real capture writes one PNG under the given directory, names the page and its host on the result, and its file name carries a sortable stamp and the host'
+  const NAME = 'preview.capture.1 capturePreview refuses a data:/file:/about: page by name, an empty image by name and a write that throws by name, writing NOTHING in any of them; a real capture writes one PNG under the given directory, names the page and its host on the result, and its file name carries a sortable stamp and the host'
   if (!has) ok(NAME, false, 'preview-capture.ts does not export capturePreview / captureFileName')
   else {
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])
@@ -1798,6 +1807,12 @@ await (async () => {
     const threw = make('http://127.0.0.1:5173/app', null)
     threw.deps.capture = async () => { throw new Error('gone') }
     const refusedThrow = await F.capturePreview(threw.deps)
+    // M186 (M185's critic, 4). A write that THROWS takes the refused arm: the
+    // renderer awaits this with no catch, so a rejection was a Capture button
+    // that said nothing at all.
+    const badWrite = make('http://127.0.0.1:5173/app', { toPNG: () => png, isEmpty: () => false })
+    badWrite.deps.write = async () => { throw new Error('no space left on device') }
+    const refusedWrite = await F.capturePreview(badWrite.deps)
     const good = make('http://127.0.0.1:5173/app', { toPNG: () => png, isEmpty: () => false })
     const captured = await F.capturePreview(good.deps)
     const name = F.captureFileName('http://127.0.0.1:5173/app', Date.UTC(2026, 8, 8, 17, 40, 12))
@@ -1807,10 +1822,68 @@ await (async () => {
         refusedEmpty.kind === 'refused' && /no pixels/.test(refusedEmpty.reason) && emptyOne.wrote.length === 0 &&
         refusedZero.kind === 'refused' && zeroOne.wrote.length === 0 &&
         refusedThrow.kind === 'refused' && /gone/.test(refusedThrow.reason) && threw.wrote.length === 0 &&
+        refusedWrite.kind === 'refused' && /could not be written/.test(refusedWrite.reason) && /no space left/.test(refusedWrite.reason) &&
         captured.kind === 'captured' && captured.url === 'http://127.0.0.1:5173/app' && captured.host === '127.0.0.1:5173' && captured.bytes === png.length &&
         good.wrote.length === 1 && good.wrote[0].path === `/w/captures/${name}` && good.wrote[0].bytes === png.length &&
         /^2026-09-08T17-40-12/.test(name) && /127\.0\.0\.1_5173/.test(name) && name.endsWith('.png'),
-      JSON.stringify({ refusedData, refusedFile, refusedEmpty, refusedZero, refusedThrow, captured, name, wrote: good.wrote }))
+      JSON.stringify({ refusedData, refusedFile, refusedEmpty, refusedZero, refusedThrow, refusedWrite, captured, name, wrote: good.wrote }))
+  }
+}
+
+// M186 — asset.1. THE CONTENT-ADDRESSED STORE, over a real fixture directory.
+//      The id is a digest of the BYTES, so the same picture taken in twice is
+//      ONE file and the second write is skipped — which is what makes an id a
+//      fact an export can carry rather than a fact about this filesystem. The
+//      extension comes from the MAGIC NUMBER and never from the name the file
+//      arrived under (a `.png` holding a JPEG is the ordinary downloaded
+//      picture, and a store that believed the name would hand the renderer a
+//      data URL with the wrong type in it). Both caps are REPORTED: an asset
+//      over the single cap is refused by name with its size and never written,
+//      and a store over its cap is pruned oldest-first with the count on the
+//      result. A file that is not an image, and a file that is not there, are
+//      two different named refusals — never one.
+{
+  const has = typeof F.putAsset === 'function' && typeof F.isAssetId === 'function' && typeof F.assetFileName === 'function'
+  const NAME = 'asset.1 putAsset content-addresses by sha-256 (the same bytes twice = one file, written once), takes its extension from the magic number and not the name, refuses a file over the single cap with its size and writes nothing, refuses a non-image by its first bytes, refuses a missing path, and prunes the OLDEST past the store cap with the count reported'
+  if (!has) ok(NAME, false, 'assets.ts / asset-store.ts do not export putAsset, isAssetId and assetFileName')
+  else {
+    const dir = join(DIR, 'asset store')
+    const src = join(DIR, 'asset sources')
+    mkdirSync(src, { recursive: true })
+    const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)])
+    const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 9)])
+    const TEXT = Buffer.from('this is not a picture, whatever it is called', 'utf8')
+    // A JPEG under a .png name: the extension must follow the bytes.
+    writeFileSync(join(src, 'one.png'), PNG)
+    writeFileSync(join(src, 'copy-of-one.PNG'), PNG)
+    writeFileSync(join(src, 'lying.png'), JPEG)
+    writeFileSync(join(src, 'notes.png'), TEXT)
+    const first = await F.putAsset({ dir, path: join(src, 'one.png') })
+    const again = await F.putAsset({ dir, path: join(src, 'copy-of-one.PNG') })
+    const lying = await F.putAsset({ dir, path: join(src, 'lying.png') })
+    const notImage = await F.putAsset({ dir, path: join(src, 'notes.png') })
+    const missing = await F.putAsset({ dir, path: join(src, 'no-such-file.png') })
+    const tooBig = await F.putAsset({ dir, path: join(src, 'one.png'), maxBytes: 8 })
+    const filesAfter = readdirSync(dir).sort()
+    // Read BEFORE the prune below: the prune deletes these two, and asserting
+    // existsSync afterwards would fail for the store working exactly as it
+    // should (the check's own ordering, not the store's).
+    const firstExisted = existsSync(first.path)
+    // The prune: a store cap smaller than what is in it drops the OLDEST.
+    const pruned = await F.putAsset({ dir, bytes: Buffer.concat([Buffer.from([0x47, 0x49, 0x46, 0x38]), Buffer.alloc(32, 3)]), storeMaxBytes: 90 })
+    const filesPruned = readdirSync(dir).sort()
+    ok(NAME,
+      first.kind === 'stored' && F.isAssetId(first.id) && first.mediaType === 'image/png' &&
+        first.path === join(dir, F.assetFileName(first.id, 'image/png')) && first.wrote === true && firstExisted &&
+        again.kind === 'stored' && again.id === first.id && again.wrote === false &&
+        lying.kind === 'stored' && lying.mediaType === 'image/jpeg' && lying.path.endsWith('.jpg') && lying.id !== first.id &&
+        notImage.kind === 'refused' && /first bytes/.test(notImage.reason) &&
+        missing.kind === 'refused' && /not there/.test(missing.reason) &&
+        tooBig.kind === 'refused' && /over this app/.test(tooBig.reason) &&
+        filesAfter.length === 2 &&
+        pruned.kind === 'stored' && pruned.prunedCount >= 1 && filesPruned.includes(F.assetFileName(pruned.id, 'image/gif')) &&
+        filesPruned.length < filesAfter.length + 1,
+      JSON.stringify({ first, again, lying, notImage, missing, tooBig, filesAfter, firstExisted, pruned, filesPruned }))
   }
 }
 

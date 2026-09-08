@@ -4297,6 +4297,8 @@ body {
 .browser-node__chip.is-on { color: var(--iris); border-color: var(--iris); }
 .browser-node__found { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: 0 var(--sp-2) var(--sp-2); font-family: var(--font-ui); }
 .browser-node__said { padding: 0 var(--sp-2); font-family: var(--font-ui); }
+/* M186. A picture that cannot be painted is still an object: its two sentences stack, and Replace sits on the chrome above them. */
+.image-node__gone { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3); font-family: var(--font-ui); }
 .browser-node__host[data-preview-width]:not([data-preview-width="full"]) { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .browser-node__live { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-node__failure { margin: var(--sp-2) var(--sp-3) 0; }

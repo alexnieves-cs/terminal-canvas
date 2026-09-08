@@ -1,7 +1,7 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
-import type { PreviewCaptureResult } from '@shared/ipc-contract'
+import type { PreviewCaptureResult, AssetPutResult } from '@shared/ipc-contract'
 import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
@@ -258,6 +258,17 @@ const INERT_PREVIEW: PreviewHandlers = {
   capture: async () => ({ kind: 'refused', reason: 'the preview is not available here' })
 }
 
+/** M186. The asset store's two doors; see main/asset-store.ts. */
+export interface AssetHandlers {
+  put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
+  choose(): Promise<string | null>
+}
+
+const INERT_ASSETS: AssetHandlers = {
+  put: async () => ({ kind: 'refused', reason: 'the asset store is not available here' }),
+  choose: async () => null
+}
+
 /** M129. The four writers; see main/skill-write.ts for every rule they enforce. */
 export interface SkillWriteHandlers {
   write(req: SkillWriteRequest): Promise<SkillWriteResult>
@@ -439,7 +450,9 @@ export function registerIpcHandlers(
   /** M123. Appended last, like every collaborator before it. */
   update: UpdateHandlers = INERT_UPDATE,
   /** M185. Appended last, like every collaborator before it. */
-  preview: PreviewHandlers = INERT_PREVIEW
+  preview: PreviewHandlers = INERT_PREVIEW,
+  /** M186. Appended last, like every collaborator before it. */
+  assets: AssetHandlers = INERT_ASSETS
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M181. A relative path is refused as `missing` before the read: the record
@@ -484,6 +497,10 @@ export function registerIpcHandlers(
   // read is — the renderer names the panel and nothing else.
   ipcMain.handle(IPC.PREVIEW_DISCOVER, (_event, req: { pids: number[]; cwd: string }) => preview.discover(req))
   ipcMain.handle(IPC.PREVIEW_CAPTURE, (_event, req: { webContentsId: number }) => preview.capture(req))
+  // M186. The store is main's: the renderer holds no file handle and can name
+  // a path, never write one.
+  ipcMain.handle(IPC.ASSET_PUT, (_event, req: { path?: string; bytes?: Uint8Array }) => assets.put(req))
+  ipcMain.handle(IPC.ASSET_CHOOSE, () => assets.choose())
   ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
   ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))

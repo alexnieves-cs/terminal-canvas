@@ -352,18 +352,23 @@ const FACTS = {
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
     const commandsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
-    const facts = { panels: [] }
+    // M186. The fixture holds one panel of every kind a v9 door's example
+    // line names, because a verb whose first argument is a PANEL cannot bind
+    // against an empty canvas — and "the example does not bind" would then be
+    // reported for a door that works.
+    const facts = { panels: [{ id: 'img1', kind: 'image' }], templates: [{ id: 't1' }] }
     const verdicts = ids.map((id) => {
       const d = doors?.[id]
       const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
       const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
       const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
-      // M185. The workflow debt names ITS OWN milestone as data rather than one
-      // literal: the run's plan amendment moved the executor from M189 to M188,
-      // and a hardcoded number turns a truthful record into a red suite.
+      // M186. The workflow debt is compared against the table's OWN constant
+      // (`WORKFLOW_EXECUTOR_DUE`): a literal here turned a truthful table red
+      // when the plan moved the executor, and a bare /^M\d+$/ would accept a
+      // milestone that has already shipped.
       // A canvas door is a gesture STRING, or an OWED object naming a later milestone — the debt as data (the M182 critic); never an empty label.
       const canvasDoor = typeof d?.canvas === 'string' ? d.canvas.length > 0 : typeof d?.canvas?.reason === 'string' && /^M\d+$/.test(String(d.canvas.due))
-      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: typeof d?.workflow?.reason === 'string' && /^M\d+$/.test(String(d.workflow.due)) }
+      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === V.WORKFLOW_EXECUTOR_DUE }
     })
     ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and an owned workflow omission',
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))

@@ -7,7 +7,9 @@ import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, we
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
 import { createBrowserHandlers } from './browser-read'
 import { discoverPreview } from './preview-discover'
+import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
+import { putAsset } from './asset-store'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -1984,15 +1986,35 @@ app.whenReady().then(async () => {
     // read path does — one rule, two doors.
     {
       discover: (req) => discoverPreview({
+      // M186. The tree, from ONE `ps` snapshot: the socket is held by a
+      // descendant of the panel's shell, never by the shell.
+      descendants: async (roots) => {
+        try {
+          const out = await new Promise((resolve) => {
+            const child = spawnChild('ps', ['-Ao', 'pid=,ppid='], { stdio: ['ignore', 'pipe', 'ignore'] })
+            let text = ''
+            child.stdout && child.stdout.on('data', (c) => { text += c.toString('utf8') })
+            child.on('error', () => resolve(''))
+            child.on('close', () => resolve(text))
+          })
+          const rows = String(out).split('\n').map((line) => line.trim().split(/\s+/).map(Number)).filter((f) => f.length === 2 && Number.isInteger(f[0]) && Number.isInteger(f[1])).map(([pid, ppid]) => ({ pid, ppid }))
+          return descendantsOf(roots, rows)
+        } catch { return roots }
+      },
         pids: Array.isArray(req?.pids) ? req.pids.filter((n) => Number.isInteger(n) && n > 0) : [],
         cwd: typeof req?.cwd === 'string' && req.cwd.trim() !== '' ? req.cwd : app.getPath('home'),
         run: async (command, args) => {
           const out = await new Promise<{ code: number; stdout: string }>((resolve) => {
             const child = spawnChild(command, [...args], { stdio: ['ignore', 'pipe', 'ignore'] })
             let stdout = ''
+            // M186 (M185's critic, 3). A DEADLINE, and deliberately not
+            // unref'd: lsof blocks indefinitely on a stale network mount and
+            // the invoke would never settle — the pane would say `looking…`
+            // for ever. M128 recorded the same lesson for the same reason.
+            const deadline = setTimeout(() => { try { child.kill() } catch { /* already gone */ } finally { resolve({ code: 1, stdout: '' }) } }, 3000)
             child.stdout?.on('data', (c: Buffer) => { stdout += c.toString('utf8') })
-            child.on('error', () => resolve({ code: 1, stdout: '' }))
-            child.on('close', (code: number | null) => resolve({ code: code ?? 0, stdout }))
+            child.on('error', () => { clearTimeout(deadline); resolve({ code: 1, stdout: '' }) })
+            child.on('close', (code: number | null) => { clearTimeout(deadline); resolve({ code: code ?? 0, stdout }) })
           })
           return out
         },
@@ -2011,6 +2033,21 @@ app.whenReady().then(async () => {
           dir,
           now: () => Date.now()
         })
+      }
+    },
+    // M186. The asset store: bytes in, an id out. The chooser is the system's
+    // own dialog, so this app never invents a file browser and never sees a
+    // path the person did not point at.
+    {
+      put: (req) => putAsset({ dir: join(app.getPath('userData'), 'assets'), ...(typeof req?.path === 'string' ? { path: req.path } : {}), ...(req?.bytes === undefined ? {} : { bytes: req.bytes }) }),
+      choose: async () => {
+        if (mainWindow === null || mainWindow.isDestroyed()) return null
+        const answer = await dialog.showOpenDialog(mainWindow, {
+          title: 'Choose a picture',
+          properties: ['openFile'],
+          filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+        })
+        return answer.canceled || answer.filePaths[0] === undefined ? null : answer.filePaths[0]
       }
     }
   )

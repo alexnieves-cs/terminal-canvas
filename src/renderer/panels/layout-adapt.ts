@@ -110,7 +110,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
     // M181. The image panel: one field, copied by name.
-    if (p.kind === 'image') return { ...base, kind: 'image' as const, image: { path: p.image.path } }
+    // M186. An absent asset id stays absent through both copy sites.
+    if (p.kind === 'image') return { ...base, kind: 'image' as const, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }) } }
     // M128. The skill panel: two fields, copied BY NAME. A spread of
     // `p.skill` would share the persisted object with the live panel.
     if (p.kind === 'skill') return { ...base, kind: 'skill' as const, skill: { scope: p.skill.scope, name: p.skill.name } }
@@ -212,7 +213,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     // M181. Same rule; the path is the record's whole identity.
-    if (isImagePanel(panel)) return { ...base, kind: 'image' as const, image: { path: panel.image.path } }
+    if (isImagePanel(panel)) return { ...base, kind: 'image' as const, image: { path: panel.image.path, ...(panel.image.asset === undefined ? {} : { asset: panel.image.asset }) } }
     // M128. Same rule; the pair is the record's whole identity.
     if (isSkillPanel(panel)) return { ...base, kind: 'skill' as const, skill: { scope: panel.skill.scope, name: panel.skill.name } }
     // M133. The template id alone, field by field like every sibling.

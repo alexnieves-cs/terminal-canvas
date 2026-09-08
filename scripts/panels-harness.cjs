@@ -97,7 +97,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, capturePreview, parseLayout,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, parseLayout,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1426,14 +1426,30 @@ app.whenReady().then(async () => {
   // off disk rather than trusting a fake.
   {
     discover: (req) => discoverPreview({
+      // M186. The tree, from ONE `ps` snapshot: the socket is held by a
+      // descendant of the panel's shell, never by the shell.
+      descendants: async (roots) => {
+        try {
+          const out = await new Promise((resolve) => {
+            const child = spawnChild('ps', ['-Ao', 'pid=,ppid='], { stdio: ['ignore', 'pipe', 'ignore'] })
+            let text = ''
+            child.stdout && child.stdout.on('data', (c) => { text += c.toString('utf8') })
+            child.on('error', () => resolve(''))
+            child.on('close', () => resolve(text))
+          })
+          const rows = String(out).split('\n').map((line) => line.trim().split(/\s+/).map(Number)).filter((f) => f.length === 2 && Number.isInteger(f[0]) && Number.isInteger(f[1])).map(([pid, ppid]) => ({ pid, ppid }))
+          return descendantsOf(roots, rows)
+        } catch { return roots }
+      },
       pids: Array.isArray(req && req.pids) ? req.pids.filter((n) => Number.isInteger(n) && n > 0) : [],
       cwd: typeof (req && req.cwd) === 'string' && req.cwd.trim() !== '' ? req.cwd : app.getPath('home'),
       run: async (command, args) => new Promise((resolve) => {
         const child = spawnChild(command, [...args], { stdio: ['ignore', 'pipe', 'ignore'] })
         let stdout = ''
+        const deadline = setTimeout(() => { try { child.kill() } catch {} finally { resolve({ code: 1, stdout: '' }) } }, 3000)
         child.stdout && child.stdout.on('data', (c) => { stdout += c.toString('utf8') })
-        child.on('error', () => resolve({ code: 1, stdout: '' }))
-        child.on('close', (code) => resolve({ code: code === null ? 0 : code, stdout }))
+        child.on('error', () => { clearTimeout(deadline); resolve({ code: 1, stdout: '' }) })
+        child.on('close', (code) => { clearTimeout(deadline); resolve({ code: code === null ? 0 : code, stdout }) })
       }),
       readText: async (path) => { try { return readFileSync(path, 'utf8') } catch { return undefined } }
     }),
@@ -1451,6 +1467,12 @@ app.whenReady().then(async () => {
         now: () => Date.now()
       })
     }
+  },
+  // M186. The REAL store, into the harness's own userData; the chooser
+  // answers whatever a check planted, so no dialog opens in a suite.
+  {
+    put: (req) => putAsset({ dir: join(app.getPath('userData'), 'assets'), ...(req && typeof req.path === 'string' ? { path: req.path } : {}), ...(req && req.bytes !== undefined ? { bytes: req.bytes } : {}) }),
+    choose: async () => state.assetChoice ?? null
   })
   ipcMain.handle = realIpcMainHandle
 

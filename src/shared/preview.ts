@@ -121,8 +121,15 @@ export function previewUrlFor(port: number): string {
 export interface PreviewCandidate { url: string; why: string }
 
 export interface Discovery {
-  /** `none`, `one` or `many` — three states, because "nothing answered" and "three answered" need different next actions. */
-  kind: 'none' | 'one' | 'many'
+  /**
+   * `not-asked`, `none`, `one` or `many` — FOUR states, because each leads to
+   * a different next action. M185's critic (finding 6) found the first two
+   * collapsed: a panel with no running process was told "nothing of X is
+   * listening yet", which asserts a fact the app never checked. The fix for
+   * "not asked" is to select the terminal the project runs in; the fix for
+   * "nothing answered" is to start the server.
+   */
+  kind: 'not-asked' | 'none' | 'one' | 'many'
   project?: string
   candidates: PreviewCandidate[]
   scripts: DevScript[]
@@ -141,13 +148,17 @@ export function discoveryOf(input: {
   scripts?: readonly DevScript[]
   /** The directory the question was asked about, for the sentence. */
   where: string
+  /** False when there was no process to ask lsof about — never conflated with an empty answer. */
+  asked?: boolean
 }): Discovery {
   const candidates = input.ports.map((p) => ({ url: previewUrlFor(p.port), why: `a process of this panel is listening on ${p.port}` }))
   const scripts = [...(input.scripts ?? [])]
-  const kind = candidates.length === 0 ? 'none' : candidates.length === 1 ? 'one' : 'many'
+  const kind = input.asked === false ? 'not-asked' : candidates.length === 0 ? 'none' : candidates.length === 1 ? 'one' : 'many'
   const project = input.project
   const named = project === undefined ? input.where : `${project} (${input.where})`
-  const note = kind === 'one'
+  const note = kind === 'not-asked'
+    ? `nothing of ${named} is running, so there was nothing to ask — select the terminal your project runs in${scripts.length > 0 ? `, or start ${scripts.map((s) => s.name).join(' or ')}` : ''}`
+    : kind === 'one'
     ? `${named} is listening on ${input.ports[0]?.port} — open it to see the page`
     : kind === 'many'
       ? `${named} has ${candidates.length} processes listening — pick the one you meant`

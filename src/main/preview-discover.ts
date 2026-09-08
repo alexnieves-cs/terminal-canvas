@@ -17,8 +17,16 @@ import { discoveryOf, parseDevScripts, parseListeningPorts, type Discovery } fro
  * a fact about the project, not a failure of the question.
  */
 export interface DiscoverDeps {
-  /** The pids of the panel's own process tree. No pid means no question worth asking. */
+  /**
+   * The panel's OWN pids — a shell, or a tmux client. The tree below them is
+   * expanded here through `descendants`, because the process holding the
+   * listening socket is `npm run dev`'s child and never the shell itself
+   * (M185's critic, finding 1: without this every real dev server answered
+   * `nothing is listening`).
+   */
   pids: readonly number[]
+  /** The pids' descendants, including themselves. Absent = ask about the roots alone. */
+  descendants?: (roots: readonly number[]) => Promise<readonly number[]>
   cwd: string
   run: (command: string, args: readonly string[]) => Promise<{ code: number; stdout: string }>
   readText: (path: string) => Promise<string | undefined>
@@ -36,11 +44,15 @@ export async function discoverPreview(deps: DiscoverDeps): Promise<Discovery> {
   // and `lsof` is not asked. (An `lsof -p` with an empty list answers for EVERY
   // process on the machine, which would offer a person their mail client.)
   if (deps.pids.length === 0) {
-    return discoveryOf({ ports: [], where: deps.cwd, ...(parsed?.name === undefined ? {} : { project: parsed.name }), scripts: parsed?.scripts ?? [] })
+    return discoveryOf({ ports: [], asked: false, where: deps.cwd, ...(parsed?.name === undefined ? {} : { project: parsed.name }), scripts: parsed?.scripts ?? [] })
+  }
+  const asked = deps.descendants === undefined ? [...deps.pids] : [...await deps.descendants(deps.pids)]
+  if (asked.length === 0) {
+    return discoveryOf({ ports: [], asked: false, where: deps.cwd, ...(parsed?.name === undefined ? {} : { project: parsed.name }), scripts: parsed?.scripts ?? [] })
   }
   let stdout = ''
   try {
-    const answer = await deps.run('lsof', buildLsofArgs(deps.pids))
+    const answer = await deps.run('lsof', buildLsofArgs(asked))
     // A non-zero exit is lsof's ordinary answer for "none of these pids is
     // listening"; its stdout is then empty and the parse says the same thing.
     stdout = answer.stdout

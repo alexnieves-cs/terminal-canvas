@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId } from './preview'
+import { isAssetId } from './assets'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
@@ -398,7 +399,15 @@ export interface PersistedWorkflowPanel extends PersistedPanelBase {
  */
 export interface PersistedImagePanel extends PersistedPanelBase {
   kind: 'image'
-  image: { path: string }
+  /**
+   * M186. `path` is where the bytes are on THIS machine; `asset` is what they
+   * ARE — a sha-256 of the content, present only for a picture this app took
+   * into its own store, absent for one the person pointed at in place and on
+   * every pre-M186 record. Malformed costs the FIELD, never the panel: the
+   * path still paints, and a picture that vanished because its id was
+   * misspelled would read as a panel the app deleted.
+   */
+  image: { path: string; asset?: string }
 }
 
 export type PersistedPanel =
@@ -1040,7 +1049,13 @@ function parsePanel(
       warnings.push(`dropped image panel ${id}: image.path was not an absolute path`)
       return null
     }
-    return { ...base, kind: 'image', image: { path: image.path } }
+    const assetRaw = image.asset
+    let asset: string | undefined
+    if (assetRaw !== undefined) {
+      if (isAssetId(assetRaw)) asset = assetRaw
+      else warnings.push(`image panel ${id}: image.asset ${JSON.stringify(assetRaw)} is not a sha-256 asset id — the picture is kept and its store identity dropped`)
+    }
+    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }) } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)

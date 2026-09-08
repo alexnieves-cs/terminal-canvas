@@ -1177,3 +1177,53 @@ discoverer and capture production uses).
 `M189`. The plan amendment moved the executor to M188, so a truthful record turned the suite
 red: the check now reads the due as data (`/^M\d+$/`), the same shape its canvas arm already
 used, and every v9 row's due is M188.
+
+### M185 — the fresh-context critic and verifier, and what was done about it
+
+A fresh agent re-ran every pure suite (typecheck 0; file 87/87, layout 249/249, verbs 22/22,
+palette 143/143, styles 56/56, meta 38/38, viewport 140/140), confirmed no golden and no
+dependency changed, judged all three red logs TRUE reds (one named failure each, a tally line
+printed, and the layout red with a later check still passing below it), and returned eleven
+ranked findings. Ten were fixed in M186's branch (they are M185's code and the fix belongs
+beside the milestone that shipped it, recorded here rather than silently folded in); one was
+answered with a decision.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | Discovery asked `lsof` about the PANEL's pid, which is a shell or a tmux client — `npm run dev` and the server holding the socket are its DESCENDANTS, so every real dev server answered "nothing is listening" and offered to start a second one on the taken port | Fixed: `machine-cost.ts` exports `descendantsOf` (the same tree walk the cost sampler uses) and the discoverer expands the roots through an injected `descendants` before asking; `preview.1` now asserts the lsof line names the descendant |
+| 2 | `preview-open <url>` into an open pane wrote the record and RELOADED, which reloads the page it already has — and the guest's own `did-navigate` then wrote the old url back, so the verb answered `ran` over an unchanged page | Fixed: `browser-store.ts` gained a `navigate` door (the guest's `loadURL`), and the verb reports `refused`-shaped truth when no guest took it |
+| 3 | `lsof` ran with no deadline; it blocks indefinitely on a stale network mount and the invoke would never settle, leaving the pane at `looking…` for ever | Fixed: a 3 s timer that kills the child and resolves empty, deliberately not unref'd (M128's recorded reason) |
+| 4 | A capture whose WRITE threw rejected the invoke instead of taking the refused arm; the renderer awaits it with no catch, so Capture said nothing at all | Fixed, and `preview.capture.1` gained the arm |
+| 5 | `Start dev`'s tooltip promised the script's own command and the spawn ran `npm run <name>` | Fixed: the tooltip names both, and the code says why `npm run` is the right one (it resolves the project's own binaries) |
+| 6 | "We did not ask" was rendered as "nothing is listening" — a chat panel or a dormant terminal has no process, and the sentence asserted a fact the app never checked | Fixed: `not-asked` is a fourth discovery state with its own sentence ("select the terminal your project runs in"), pinned in `preview.1` and in the product check |
+| 7 | The coalesced reload fired on EVERY `file:changed` for EVERY browser pane, so a person filling a form in a pane pointed at a remote page lost it when an agent wrote an unrelated file | Fixed: only a pane showing a loopback host reloads |
+| 8 | `PaletteActions.discoverPreview` had no caller and existed only to need an `EXCLUDED_ACTIONS` row | Fixed: the member and its exclusion are gone; the pane calls Canvas's function through its prop |
+| 9 | `closure.v9.1`'s due check had become `/^M\d+$/`, which accepts a milestone that has already shipped | Fixed: `WORKFLOW_EXECUTOR_DUE` is one constant the table and the check share |
+| 10 | The spec said the image record carries the page a capture came from; what shipped puts the host in the panel's TITLE, which a person can rename | Recorded as the weaker thing it is. The provenance field is M190's export work, where a record that must survive a round trip is the point; M186 adds `image.asset` (the identity that travels) and this row names the remaining gap rather than claiming it |
+| 11 | Minor: the width row's `…` promises a picker; `say`'s timer was not cleared on unmount; the two subject rules read focus and selection in opposite orders | The timer is cleared; the row's subtitle names the verb line it opens; the two orders stand and now say why (a pane is acted on where the eye is, a project is discovered where the work is) |
+
+## M186 — durable images: drop, paste, capture, and an identity that travels (Act IV.1)
+
+Spec `docs/superpowers/specs/2026-09-08-m186-images.md`.
+
+**What shipped.** `shared/assets.ts` (the two caps, `assetFileName` from the media type,
+`isAssetId` as a parse, the refusal and missing sentences); `main/asset-store.ts`, content-
+addressed by sha-256 with dedupe (`wrote: false` says which happened), the extension from the
+MAGIC NUMBER and never the name, a single-asset cap checked from `stat` before the bytes reach
+memory, and an oldest-first prune whose count is reported; `image.asset` on the record (absent
+stays absent through both copy sites and serialises to no key, malformed costs the field);
+`asset:put` and `asset:choose`; the canvas arms for a drop and a paste that landed on NOTHING
+(every agent target keeps its behaviour); `Replace` on the image panel's chrome at every arm,
+through the system's own chooser; and two verbs, two palette rows and two `V9_DOORS` entries.
+
+**Red first.** `asset.1` was watched failing with `asset-store.ts` absent (87/88,
+`out/v9-evidence/m186-asset-red.log`, exit 1). `image.2` in the product part was red against
+two real defects it found: the plan line splits on whitespace, so a fixture path with a space
+in it is two arguments (the agent line's own bound, now recorded in the check), and — the
+product defect — replacing a picture whose file was deleted with the SAME picture writes the
+same content-addressed path back, so an effect keyed on the path alone never re-read and
+`missing` stayed on screen over a file that was now there (`reloadKey`).
+
+**Green.** `verify:file` 88/88, `verify:layout` 250/250, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 140/140, typecheck 0,
+`verify:panels:product` 73/73 at 104.2 s (`out/v9-evidence/m186-product.log`, exit 0).

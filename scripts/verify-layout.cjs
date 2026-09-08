@@ -3710,6 +3710,40 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), d1: by('d1'), d2: by('d2'), d3: by('d3'), d4: by('d4'), warnings: out.warnings }))
 }
 
+// M186 — image.asset.1. THE ASSET IDENTITY ON DISK. `image.asset` is a
+// sha-256 of the picture's own bytes: absent on every pre-M186 record and on
+// any picture the person pointed at in place (and it serialises to NO key),
+// present when this app holds the bytes. A malformed id costs the FIELD with
+// a warning naming the panel — never the panel, because the path still paints
+// and a picture that vanished for a misspelled id reads as a deletion the app
+// performed. The PATH keeps its own rule: absent or relative still drops the
+// panel, because a picture with no file is a different failure entirely.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'i1', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 1, image: { path: '/w/one.png' } },
+      { id: 'i2', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 2, image: { path: '/w/two.png', asset: 'a'.repeat(64) } },
+      { id: 'i3', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 3, image: { path: '/w/three.png', asset: 'NOT-A-DIGEST' } },
+      { id: 'i4', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 4, image: { path: '/w/four.png', asset: 42 } },
+      { id: 'i5', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 5, image: { path: 'relative.png', asset: 'a'.repeat(64) } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'i2')
+  ok('image.asset.1 image.asset: absent stays absent and serialises to no key; a 64-hex digest round-trips; a non-digest string and a number each cost the FIELD with a warning naming the panel while the picture is kept; a relative path still drops the whole panel',
+    panels.map((p) => p.id).join(',') === 'i1,i2,i3,i4' &&
+      by('i1') && !('asset' in by('i1').image) &&
+      by('i2') && by('i2').image.asset === 'a'.repeat(64) && round && round.image.asset === 'a'.repeat(64) &&
+      by('i3') && !('asset' in by('i3').image) && by('i3').image.path === '/w/three.png' && out.warnings.some((w) => w.includes('i3') && w.includes('asset')) &&
+      by('i4') && !('asset' in by('i4').image) && out.warnings.some((w) => w.includes('i4') && w.includes('asset')) &&
+      out.warnings.some((w) => w.includes('i5') && w.includes('absolute')) &&
+      !/"asset"/.test(text.split('"i1"')[1].split('}')[0] || ''),
+    JSON.stringify({ ids: panels.map((p) => p.id), i1: by('i1'), i2: by('i2'), i3: by('i3'), i4: by('i4'), warnings: out.warnings }))
+}
+
 // M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
 // malformed entry is dropped by name; the cap keeps the newest; the dedupe is
 // by key and never resets a working item; every absent optional stays absent

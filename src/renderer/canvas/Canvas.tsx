@@ -132,8 +132,9 @@ import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
 import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
-import { reloadBrowser, browserGuestId } from '@renderer/browser/browser-store'
+import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
+import { displayPath } from '@shared/display-path'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -1446,7 +1447,18 @@ export function Canvas({
       // attaches it through its composer. A terminal that is not spawned gets
       // nothing (a paste into a dormant card has nowhere to land), and an
       // empty clipboard is the `empty` arm, not a paste of nothing.
-      if (id === null) return
+      // M186. NO PANEL HAS THE KEYBOARD: the picture is the canvas's. This is
+      // the arm that did not exist — the paste simply returned, so ⌘V over an
+      // empty canvas did nothing and said nothing. Every agent target below
+      // keeps its behaviour exactly.
+      if (id === null) {
+        void window.canvas.agentSession.clipboardFile().then((file) => {
+          if (file.kind === 'empty') return
+          if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+          void addImageRef.current?.(file.path)
+        })
+        return
+      }
       const panel = panelsRef.current.find((p) => p.rect.id === id)
       // A chat keeps its OWN door: ChatNode subscribes to this same event and
       // attaches the clipboard's bytes when its textarea is focused. The first
@@ -3363,6 +3375,7 @@ export function Canvas({
     const base = cwd.replace(/\/+$/, '')
     return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
   }
+  const addImageRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
   const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
     if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
     const world = screenToWorld(screen, viewportRef.current)
@@ -3382,6 +3395,18 @@ export function Canvas({
         else insertIntoComposer(hit, `@${relativeTo(target.chat.cwd, path)} `)
         return 'pasted'
       }
+    }
+    // M186. A PICTURE dropped on nothing becomes a picture. The agent targets
+    // above are untouched — a drop on a chat is still an attachment and a drop
+    // on a terminal is still a shell-quoted path — because this is the arm for
+    // a gesture that landed on the canvas itself, which had no arm at all.
+    // Through a REF: `addImageFromPath` is declared with the other media
+    // verbs further down, and naming a `const` from a hook's dependency list
+    // above its declaration is a TDZ error rather than a style preference
+    // (the same reason `openFilePanel`'s own test hook sits in its own effect).
+    if (attachmentKind(path) === 'image') {
+      void addImageRef.current?.(path, world)
+      return 'opened'
     }
     openFilePanel(path, world)
     return 'opened'
@@ -4871,6 +4896,53 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M186. A PICTURE INTO THE STORE AND ONTO THE CANVAS, the one door every
+   * gesture takes: a drop on empty canvas, a paste with no agent to take it,
+   * the palette row, the agent's verb and the node's Replace. The bytes go
+   * into the content-addressed store first (so the panel names an identity a
+   * later export can carry), and the panel is minted from the store's own
+   * path — never from the source, which the person may move or delete.
+   */
+  const addImageFromPath = useCallback(async (path: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const stored = await window.canvas.asset.put({ path })
+    if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const imageId = `img${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeImagePanel(imageId, at, nextZ(current), stored.path, displayPath(path).short, stored.id)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(imageId)
+    return { kind: 'ran', note: `${displayPath(path).short}${stored.wrote ? '' : ' (already in this canvas\'s pictures)'}` }
+  }, [commitHistory, selectOnly])
+  addImageRef.current = addImageFromPath
+  /**
+   * M186. Replace: the SAME store door, pointed at an existing panel. A
+   * picture whose bytes are gone is an object a person can repair — the arm
+   * that says `missing` keeps the panel, and this is the verb beside it.
+   */
+  const [imageReloads, setImageReloads] = useState<Record<string, number>>({})
+  const replaceImage = useCallback(async (panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isImagePanel(target)) return { kind: 'refused', reason: 'that panel is not a picture' }
+    // No path given: the SYSTEM's own chooser. A cancel is not a refusal and
+    // says nothing — a sentence about a dialog the person closed on purpose
+    // is noise.
+    const chosen = path ?? await window.canvas.asset.choose()
+    if (chosen === null || chosen === undefined) return { kind: 'ran', note: 'nothing chosen' }
+    const stored = await window.canvas.asset.put({ path: chosen })
+    if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
+    setPanels((current) => {
+      const next = current.map((p) => (p.rect.id === panelId && isImagePanel(p) ? { ...p, image: { path: stored.path, asset: stored.id }, title: displayPath(chosen).short } : p))
+      commitHistory(next)
+      return next
+    })
+    setImageReloads((current) => ({ ...current, [panelId]: (current[panelId] ?? 0) + 1 }))
+    return { kind: 'ran', note: `${displayPath(chosen).short} is this picture now` }
+  }, [commitHistory])
+
+  /**
    * M185. THE PREVIEW'S FOUR VERBS, all over one subject rule.
    *
    * The SUBJECT of discovery is a running terminal or chat — the panel that
@@ -4916,9 +4988,11 @@ export function Canvas({
       // record is written and the guest reloaded through the store's own door,
       // which is what the node listens to — never a second guest.
       const pane = previewPane()
-      if (pane !== undefined) {
+      // The guest is NAVIGATED (M185's critic, finding 2) — a reload reloads
+      // the page it already has, and the record's new url would then be
+      // written back to the old one by the guest's own did-navigate.
+      if (pane !== undefined && navigateBrowser(pane.rect.id, normalised.url)) {
         setPanels((current) => current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, url: normalised.url } : p)))
-        reloadBrowser(pane.rect.id)
         return { kind: 'ran', note: `${pane.title ?? 'the preview'} now shows ${normalised.url}` }
       }
       openBrowserPanel(normalised.url)
@@ -4995,6 +5069,10 @@ export function Canvas({
     // Through the ORDINARY spawn door: the dev server is a panel a person can
     // see, read and stop, never a hidden child of the preview. Discovery
     // itself still runs nothing — this is a separate verb a person asked for.
+    // `npm run <name>` and not the script's own command: the script line is
+    // what npm runs FOR you (it resolves the project's own binaries), and
+    // running it directly would miss node_modules/.bin. The pane's tooltip
+    // says both, so the promise and the spawn agree (M185's critic, 5).
     const spawned = await window.canvas.spawn.sheet({ cwd: subject.cwd, command: `npm run ${chosen.name}`, title: `${chosen.name} · ${found.project ?? 'project'}` })
     if (spawned.kind === 'refused') return { kind: 'refused', reason: spawned.reason }
     return { kind: 'ran', note: `npm run ${chosen.name} in ${subject.cwd}` }
@@ -5121,6 +5199,8 @@ export function Canvas({
     applyStarter,
     saveWorkflowDraft,
     saveWorkflowCopyDraft: saveWorkflowCopy,
+    addImageFromPath,
+    replaceImagePanel: replaceImage,
     openPreviewNow: openPreview,
     setPreviewWidthNow: setPreviewWidth,
     capturePreviewNow,
@@ -6006,6 +6086,8 @@ export function Canvas({
                 <ImageNode
                   key={panel.rect.id}
                   panel={panel}
+                  onReplace={replaceImage}
+                  reloadKey={imageReloads[panel.rect.id]}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
