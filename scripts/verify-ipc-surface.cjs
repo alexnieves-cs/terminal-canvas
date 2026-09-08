@@ -249,7 +249,10 @@ app.whenReady().then(() => {
   // picture of a guest, written under userData/captures.
   // M186 asset:put (129) — bytes into the content-addressed asset store;
   // asset:choose (130) — the system's own file chooser, for Replace.
-  const EXPECTED_CHANNELS = 130
+  // M188 node:fetch (131) — a fetch node's one GET, capped and gated in main.
+  // M189 portable:export (132) / portable:import (133) — one portable canvas
+  // file written and read by main; what to make of a parse is the renderer's.
+  const EXPECTED_CHANNELS = 133
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

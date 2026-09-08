@@ -456,6 +456,7 @@ export interface PaletteActions {
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2270,6 +2271,10 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
   const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
+  // M190. Feedback: a DRAFT, opened in the person's own browser. The row says
+  // what the door does, because "Send feedback" would promise a send this app
+  // never makes.
+  out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
   // M189. The portable file's two rows. Export writes what is on this canvas
   // (pictures only when the person asks, through the verb line); Import makes
   // a SEPARATE workspace and starts nothing.

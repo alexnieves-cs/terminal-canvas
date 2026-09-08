@@ -1993,6 +1993,42 @@ await (async () => {
   }
 }
 
+// M190 — feedback.1. THE DRAFT THIS APP NEVER SENDS. What travels is chosen
+//      by TYPE — a version, a platform, engine WORDS and panel COUNTS — so
+//      there is nowhere in the shape for a path, a command, a transcript or a
+//      token, the same structural refusal the diagnostics bundle makes. What
+//      the person typed is scrubbed and the count is IN the draft's own
+//      sentence, so they can see what was taken out before they send
+//      anything. A body too long for a link is cut WITH a line saying so.
+{
+  const has = typeof F.buildFeedback === 'function'
+  const NAME = 'feedback.1 buildFeedback scrubs a planted token out of what the person typed and counts it, states that nothing has been sent, carries only the version, platform, engine words and panel counts (no path, command or transcript can reach it), points at the repository\'s issues/new, and cuts an over-long body WITH a line saying so'
+  if (!has) ok(NAME, false, 'feedback.ts does not export buildFeedback')
+  else {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const facts = {
+      version: '5.0.0', platform: 'darwin arm64',
+      engines: [{ name: 'claude', state: 'installed' }, { name: 'codex', state: 'missing' }],
+      kinds: [{ kind: 'terminal', count: 2 }, { kind: 'note', count: 1 }, { kind: 'image', count: 0 }],
+      says: `it broke when I ran the thing, my token is ${token}`
+    }
+    const draft = F.buildFeedback('acme/canvas', facts)
+    const empty = F.buildFeedback('acme/canvas', { ...facts, says: '' })
+    const huge = F.buildFeedback('acme/canvas', { ...facts, says: 'x'.repeat(20000) })
+    ok(NAME,
+      !draft.body.includes(token) && !draft.url.includes(token) && draft.redacted >= 1 &&
+        /Nothing has been sent/.test(draft.body) &&
+        draft.body.includes('5.0.0') && draft.body.includes('darwin arm64') &&
+        draft.body.includes('claude: installed') && draft.body.includes('codex: missing') &&
+        draft.body.includes('2 terminal') && draft.body.includes('1 note') && !draft.body.includes('0 image') &&
+        draft.url.startsWith('https://github.com/acme/canvas/issues/new?title=') && draft.url.includes('&body=') &&
+        draft.truncated === false && /^Feedback: it broke/.test(draft.title) &&
+        empty.title === 'Feedback' && /Say what happened/.test(empty.body) &&
+        huge.truncated === true && huge.url.length <= F.FEEDBACK_URL_MAX && /cut to fit in a link/.test(huge.body),
+      JSON.stringify({ redacted: draft.redacted, truncated: draft.truncated, title: draft.title, urlHead: draft.url.slice(0, 60), urlLen: draft.url.length, hugeLen: huge.url.length, bodyHead: draft.body.slice(0, 120) }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

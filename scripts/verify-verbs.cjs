@@ -197,13 +197,15 @@ const FACTS = {
     const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
     const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
-    // M189 adds the FIFTH caller by name, which is what this allowlist is
-    // for: `shared/portable.ts` scrubs every string that travels in an export
-    // and reports the count on the record, and it cannot go through `outward`
-    // because outward answers one text and a note — an export is a structure,
-    // scrubbed field by field, whose count is part of the file.
-    ok('gate.2 redactSecrets has exactly five callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — and M189\'s portable export, which scrubs field by field and reports its count), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    // M189 and M190 add the fifth and SIXTH callers by name, which is what
+    // this allowlist is for. `shared/portable.ts` scrubs every string that
+    // travels in an export and reports the count on the record; it cannot go
+    // through `outward`, which answers one text and one note, because an
+    // export is a structure scrubbed field by field whose count is part of the
+    // file. `shared/feedback.ts` scrubs a draft whose count is stated IN the
+    // draft, so the person can see what was taken out before they send it.
+    ok('gate.2 redactSecrets has exactly six callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, and M190\'s feedback draft, whose count is stated in the draft itself), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 

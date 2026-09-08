@@ -1377,3 +1377,32 @@ request timing out; and the import spawning a PTY, which was the product defect 
 **Green.** `verify:file` 90/90, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
 `verify:panels:product` 76/76 at 106.8 s (`out/v9-evidence/m189-product.log`, exit 0).
+
+## M190 — the feedback door and the getting-started guide (Act VII)
+
+Spec `docs/superpowers/specs/2026-09-08-m190-feedback-guide.md`.
+
+**What shipped.** `shared/feedback.ts` (the draft, built from facts chosen by TYPE, scrubbed
+with the count stated inside the draft, truncated with a line saying so when a URL cannot carry
+it); the `feedback` verb, its palette row (`Prepare feedback…`, whose subtitle says the app does
+not send it) and its door entry; and `docs/getting-started.md`, written from the shipped
+behaviour and checked as a file by `guide.1`.
+
+**Decisions.**
+- *The row says what the door does.* "Send feedback" would promise a send this app never makes;
+  the row and the result sentence both say the draft is the person's to read and submit.
+- *The repository is a CONSTANT, not a runtime read of `package.json`.* The packaged app's
+  `package.json` is inside the asar, and the update check already learned that lesson; a door
+  that silently pointed at nothing would look like it worked.
+- *`guide.1` checks the two ways a guide goes wrong.* It must name the Gatekeeper right-click
+  (this build is unsigned, and without it a person's first experience is a refusal from macOS
+  with no explanation), and every `npm run` script it names must exist — a guide that sends a
+  person to a dead end makes them doubt the parts that are true.
+- *`gate.2` gains its sixth `redactSecrets` caller by name*, with the reason: a feedback draft's
+  count is stated in the draft itself, which is not something `outward`'s one text and one note
+  can express.
+
+**Green.** `verify:file` 91/91, `verify:meta` 39/39, `verify:verbs` 22/22, `verify:palette`
+143/143, typecheck 0, `verify:panels:product` 77/77 at 107.2 s
+(`out/v9-evidence/m190-product.log`, exit 0) — `feedback.1` reads the exact url the door opened
+and asserts the planted token is not in it, encoded or decoded.

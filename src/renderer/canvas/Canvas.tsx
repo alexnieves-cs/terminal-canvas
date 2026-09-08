@@ -136,10 +136,11 @@ import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewD
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
+import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness } from '@shared/onboarding'
+import { onboardingReadiness, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -4913,6 +4914,28 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M190. FEEDBACK — a DRAFT in the person's own browser, never a submission.
+   * The facts are chosen by type (a version, a platform, engine words, panel
+   * counts) and scrubbed; the draft says so; and the only thing that leaves
+   * this app is a link the person opens, through the ONE `link:open` door.
+   */
+  const prepareFeedback = useCallback(async (says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const report = await window.canvas.env.report()
+    const counts = new Map<string, number>()
+    for (const panel of panelsRef.current) counts.set(panel.kind, (counts.get(panel.kind) ?? 0) + 1)
+    const draft = buildFeedback(FEEDBACK_REPO, {
+      version: '5.0.0',
+      platform: 'macOS',
+      engines: onboardingReadiness(report).rows.map((row) => ({ name: FIRST_LAUNCH_ENGINES[row.backend].name, state: row.discovery === 'unknown' ? 'unanswered' : row.discovery })),
+      kinds: [...counts].map(([kind, count]) => ({ kind, count })),
+      says: says ?? ''
+    })
+    const opened = await window.canvas.links.open({ panelId: focusedIdRef.current ?? 'canvas', target: draft.url })
+    if (opened.kind === 'refused') return { kind: 'refused', reason: opened.reason ?? 'that link could not be opened' }
+    return { kind: 'ran', note: `a draft in your browser · ${draft.redacted} secret${draft.redacted === 1 ? '' : 's'} scrubbed${draft.truncated ? ' · cut to fit a link' : ''} · nothing was sent` }
+  }, [])
+
+  /**
    * M189. EXPORT — the RENDERER builds the record, because the renderer is
    * the only side that knows what is on this canvas (M113's rule for the
    * board, reached again); main only writes the bytes. Pictures are omitted
@@ -5390,6 +5413,7 @@ export function Canvas({
     replaceImagePanel: replaceImage,
     testNodeNow: testNode,
     exportCanvasFile: exportCanvas,
+    prepareFeedbackNow: prepareFeedback,
     importCanvasFile: importCanvas,
     addNote,
     setNoteText,

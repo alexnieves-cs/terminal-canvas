@@ -2272,6 +2272,31 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
     }
 
+    // M190 — feedback.1. THE DRAFT DOOR, and the claim that matters: this app
+    //     SUBMITS NOTHING. The `link:open` calls are recorded by the harness,
+    //     so the check reads the exact url the door opened: it is the
+    //     repository's issues/new, it carries a title and a body, and a token
+    //     planted in what the person typed is NOT in it. No credential is
+    //     read and no request is made — the only outward thing is a link.
+    const FB_IDS = ['feedback.1 the feedback door opens the repository\'s issues/new with a title and a body in the person\'s own browser, a planted token scrubbed out of it, and submits nothing itself']
+    try {
+      const opensBefore = linkOpens.length
+      const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      const asked = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `feedback it broke and my token is ${token}` }, null, 6000)
+      await settle()
+      const opened = linkOpens.slice(opensBefore)
+      const url = opened[0] && (opened[0].target || opened[0])
+      ok(FB_IDS[0],
+        asked && asked.kind === 'ran' && /nothing was sent/.test(String(asked.summary)) &&
+          opened.length === 1 && typeof url === 'string' &&
+          url.startsWith('https://github.com/') && url.includes('/issues/new?title=') && url.includes('&body=') &&
+          !url.includes(token) && !decodeURIComponent(url).includes(token) &&
+          /Nothing has been sent/.test(decodeURIComponent(url)),
+        JSON.stringify({ asked, openedCount: opened.length, urlHead: typeof url === 'string' ? url.slice(0, 80) : url, hasToken: typeof url === 'string' && decodeURIComponent(url).includes(token) }))
+    } catch (fbErr) {
+      for (const id of FB_IDS) ok(id, false, 'threw: ' + String(fbErr && fbErr.message || fbErr))
+    }
+
     // M189 — portable.1. EXPORT AND IMPORT, END TO END IN THE REAL RENDERER.
     //     The canvas holds a terminal (never started), a sticky note and a
     //     watcher. Export writes one file: the terminal and the note travel,
