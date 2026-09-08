@@ -1544,3 +1544,25 @@ recorded decision.
 **Green after the fixes.** `verify:file` 91/91, `verify:layout` 252/252, `verify:verbs` 23/23,
 `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 39/39, `verify:viewport` 141/141,
 typecheck 0.
+
+### M191 — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after the audit's fixes exited 1 at 46/59. Thirteen scenes, four causes;
+each was looked at before a golden was written.
+
+- **workflow**, **starter** — The diagram's blocks now read `Script · sh`, `Pool · 6 at a time`,
+  `Orchestrator · leads` and `Collect · joins results` in sentence case with no tracking, and the
+  two permanent refusal lines above the diagram are gone: their space is reserved (opacity, not
+  display — the rest rule's own mechanism) and they appear with the panel's other chrome. In
+  `starter` the workflow example is 640×360, so its verb row no longer wraps into its header and
+  its two blocks are whole.
+- **teammate**, **routine** — The teammate row reads `1 service` rather than `1 svc`, and a
+  granted service with no credential says so in one sentence that names the next step
+  (`granted, but no credential yet: add one in Integrations`) instead of two states that read as
+  a contradiction.
+- **runs**, **composer**, **tool-objects**, **approval**, **verbs**, **subagents**, **lineup** —
+  The inspector's `Run again` is a quiet control, so the action bar's `Restart` is the one filled
+  primary on the pane; the usage line reads `1 turn` rather than `1 turns`; and a sampled panel
+  at 0.0% reads `CPU under 1%`.
+- **palette**, **palette-query** — The same inspector changes behind the overlay; no palette row
+  changed its words.
