@@ -1,5 +1,6 @@
 import { carryWorkItem } from '../shared/work-items'
 import { carryStarter } from '../shared/starter'
+import type { TemplateSaveResult } from '../shared/templates'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import {
   DEFAULT_PRESET_ID,
@@ -104,7 +105,8 @@ export interface LayoutStore {
   prompts(): Prompt[]
   /** M80. Saved templates (the user's; built-ins are code). */
   templates(): PersistedTemplate[]
-  saveTemplate(template: PersistedTemplate): void
+  /** M182. Saves and answers the record as written, or `stale` with the record that stands when `expectedRevision` does not match it. */
+  saveTemplate(template: PersistedTemplate, expectedRevision?: number): TemplateSaveResult
   /**
    * M127. The skill shelf, copied out and written whole.
    *
@@ -610,10 +612,23 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       scheduleWrite()
       return true
     },
-    saveTemplate(template) {
-      const copy = { ...template, nodes: template.nodes.map((n) => ({ ...n })), edges: template.edges.map((e) => ({ ...e })) }
+    saveTemplate(template, expectedRevision) {
+      // M182. The revision is the store's, never the caller's: a matching
+      // expectation (absent on disk reads as 0) writes current + 1; a
+      // mismatch writes NOTHING and hands the standing record back; no
+      // expectation is an unconditional save (the M80 door), still bumped.
+      const standing = snapshot.templates.find((t) => t.id === template.id)
+      const current = standing?.revision ?? 0
+      if (expectedRevision !== undefined && (standing === undefined ? expectedRevision !== 0 : expectedRevision !== current)) {
+        // A record read at revision N that no longer exists is not resurrected under its old id (the critic).
+        if (standing === undefined) return { kind: 'stale', reason: `${template.name} no longer exists — save yours as a copy` }
+        return { kind: 'stale', current: { ...standing, nodes: standing.nodes.map((n) => ({ ...n })), edges: standing.edges.map((e) => ({ ...e })) }, reason: `${standing.name} was saved by someone else at revision ${current} — reload it, or save yours as a copy` }
+      }
+      const revision = standing === undefined ? 0 : current + 1
+      const copy: PersistedTemplate = { ...template, nodes: template.nodes.map((n) => ({ ...n })), edges: template.edges.map((e) => ({ ...e })), revision }
       snapshot.templates = [copy, ...snapshot.templates.filter((t) => t.id !== template.id)].slice(0, TEMPLATES_MAX)
       scheduleWrite()
+      return { kind: 'saved', template: { ...copy, nodes: copy.nodes.map((n) => ({ ...n })), edges: copy.edges.map((e) => ({ ...e })) } }
     },
 
     deleteTemplate(id) {

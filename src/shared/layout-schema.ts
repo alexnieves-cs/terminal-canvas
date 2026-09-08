@@ -86,6 +86,8 @@ export interface PersistedPanelBase {
   pinned?: true
   /** M92. Filling the viewport, with the rect to restore. */
   maximised?: { restore: { x: number; y: number; w: number; h: number } }
+  /** M182. The template node this panel was minted from (`instantiateTemplate`); the canvas binding's edit route. Absent unless minted so. */
+  templateBinding?: { templateId: string; key: string }
   /**
    * M130. The skill trail's lane, folded away. The ONE stored fact about the
    * trail — the entries themselves are re-derived from the transcript on
@@ -891,6 +893,10 @@ function parsePanel(
     ...(parseFlag(raw.locked, 'locked', id, warnings) ? { locked: true as const } : {}),
     ...(parseFlag(raw.pinned, 'pinned', id, warnings) ? { pinned: true as const } : {}),
     ...(parseMaximised(raw.maximised, id, warnings)),
+    // M182. The canvas binding: which template's node this panel was minted
+    // from. Absent stays absent; a malformed one costs the FIELD by name,
+    // never the panel — a binding names an edit route, not the panel's life.
+    ...(parseTemplateBinding(raw.templateBinding, id, warnings)),
     // M130. Absent stays absent; the one word round-trips; anything else
     // warns by id and costs the FIELD, never the panel.
     ...(raw.skillTrail === undefined
@@ -1547,6 +1553,17 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       })
     }
     if (nodes.length === 0) { warnings.push(`dropped template ${entry.id}: it had no usable node`); return }
+    // M182. Two counters, each absent on a pre-M182 record and NEVER normalised
+    // in: a written `revision: 0` would claim a save that never happened. A
+    // present value that is not a whole number ≥ 0 drops the template by name.
+    const counter = (name: 'revision' | 'nextKey'): { ok: boolean; value?: number } => {
+      const v = entry[name]
+      if (v === undefined) return { ok: true }
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return { ok: false }
+      return { ok: true, value: v }
+    }
+    const revision = counter('revision'), nextKey = counter('nextKey')
+    if (!revision.ok || !nextKey.ok) { warnings.push(`dropped template ${entry.id}: ${!revision.ok ? 'revision' : 'nextKey'} was not a whole number`); return }
     const keys = new Set(nodes.map((n) => n.key))
     const edges: TemplateEdge[] = []
     if (Array.isArray(entry.edges)) for (const e of entry.edges) {
@@ -1559,7 +1576,7 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       edges.push({ from: e.from, to: e.to, trigger: e.trigger as HandoffTrigger })
     }
     seen.add(entry.id)
-    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges })
+    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges, ...(revision.value === undefined ? {} : { revision: revision.value }), ...(nextKey.value === undefined ? {} : { nextKey: nextKey.value }) })
   })
   return out.slice(0, TEMPLATES_MAX)
 }
@@ -2068,6 +2085,16 @@ function parseFlag(value: unknown, name: string, id: string, warnings: string[])
   if (value === true) return true
   warnings.push(`dropped panel ${id}'s ${name}: ${JSON.stringify(value)} is not true or false`)
   return false
+}
+
+/** M182. `{ templateId, key }`, both non-empty strings; anything else present warns by id and costs the field. */
+function parseTemplateBinding(value: unknown, id: string, warnings: string[]): { templateBinding?: { templateId: string; key: string } } {
+  if (value === undefined) return {}
+  if (isRecord(value) && isStr(value.templateId) && value.templateId.trim() !== '' && isStr(value.key) && value.key.trim() !== '') {
+    return { templateBinding: { templateId: value.templateId, key: value.key } }
+  }
+  warnings.push(`dropped panel ${id}'s templateBinding: it was not { templateId, key }`)
+  return {}
 }
 
 function parseMaximised(value: unknown, id: string, warnings: string[]): { maximised?: { restore: { x: number; y: number; w: number; h: number } } } {

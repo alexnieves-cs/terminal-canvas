@@ -1,5 +1,6 @@
 import type { AgentPlanReply, AgentPlanRequest } from './plan'
 import type { ImageResult, StarterFiles } from './starter'
+import type { TemplateSaveResult } from './templates'
 import type { WatchTrigger } from './watch-trigger'
 import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
@@ -1438,8 +1439,8 @@ export interface CanvasBridge {
   /** M80. Templates: a shape of work saved once and instantiated with its parameters filled. */
   template: {
     list(): Promise<PersistedTemplate[]>
-    /** The template as saved, with its minted id. */
-    save(template: Omit<PersistedTemplate, 'id'> & { id?: string }): Promise<PersistedTemplate>
+    /** The template as saved, with its minted id — or, M182, `stale` with the standing record when `expectedRevision` does not match it. */
+    save(template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number): Promise<TemplateSaveResult>
     /** False for an id the saved store does not hold — every built-in id, for one. */
     remove(id: string): Promise<boolean>
   }

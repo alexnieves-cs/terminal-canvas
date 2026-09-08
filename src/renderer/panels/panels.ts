@@ -52,6 +52,8 @@ export interface PanelBase {
   pinned?: true
   /** M92. Filling the viewport, with the rect to go back to. Cleared by the first move or resize. */
   maximised?: { restore: WorldRect }
+  /** M182. The template node this panel was minted from; absent unless minted by an instantiation. Carried by `carryMarks`. */
+  templateBinding?: { templateId: string; key: string }
   /**
    * M130. The skill trail's lane, folded away — the ONE stored fact about
    * the trail (see layout-schema.ts). Absent means expanded.
@@ -1014,7 +1016,7 @@ export function maximiseRect(viewport: { x: number; y: number; scale: number }, 
  * `title` is: present only when set. Every site that rebuilds a Panel by
  * name spreads this, or a rename silently unlocks (the verifier's find).
  */
-export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?: { restore: WorldRect }; skillTrail?: 'collapsed' } {
+export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?: { restore: WorldRect }; skillTrail?: 'collapsed'; templateBinding?: { templateId: string; key: string } } {
   return {
     ...(p.locked === true ? { locked: true as const } : {}),
     ...(p.pinned === true ? { pinned: true as const } : {}),
@@ -1022,6 +1024,8 @@ export function carryMarks(p: Panel): { locked?: true; pinned?: true; maximised?
     // M130. The fourth mark, here for the same reason as the other three: a
     // rename that rebuilt the panel by name would silently re-expand a lane
     // the user folded away.
-    ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {})
+    ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {}),
+    // M182. The fifth mark: a copy, never the same object, absent stays absent.
+    ...(p.templateBinding === undefined ? {} : { templateBinding: { templateId: p.templateBinding.templateId, key: p.templateBinding.key } })
   }
 }

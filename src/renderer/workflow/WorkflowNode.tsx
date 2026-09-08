@@ -1,4 +1,5 @@
-import { useMemo, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { applyDraftOp, useTemplateDraft } from './template-draft-store'
 import { usePool, usePoolsLive } from './pool-store'
 import { poolStoppedWord, REASON_NO_POOL_LIVE } from './pool-model'
 import type { WorkflowPanel } from '@renderer/panels/panels'
@@ -72,7 +73,7 @@ export const TEMPLATE_GONE = 'that template is no longer saved'
  * There is no second editor here to save FROM — that is spec §9's whole
  * claim — so the sentence names the door that does work.
  */
-export const REASON_NO_EDITOR = 'the live canvas is the editor — arrange the panels, then Save selection as template'
+export const REASON_NO_EDITOR = 'the draft is kept on this panel; Save on the diagram arrives with M184 — until then, Save selection as template from the bound panels'
 /**
  * M133, fix round 1. THREE STATES, NOT TWO, and this sentence is the third.
  *
@@ -97,8 +98,69 @@ function durationWord(run: PersistedRun): string {
 }
 
 export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
-  const { panel, template } = props
+  const { panel, template: saved } = props
+  // M182. The DRAFT is what the diagram draws — the saved record until an
+  // edit, then the edited copy, dirty until Save (M184) or a reload. Both
+  // editors (this SVG's drag and the palette/agent verbs) go through the
+  // store's one door, so the two views cannot disagree.
+  const { template, dirty } = useTemplateDraft(panel.workflow.templateId, saved)
   const [tab, setTab] = useState<'definition' | 'runs'>('definition')
+  // M182. A block DRAG on the diagram: a real pointer gesture on the SVG,
+  // committed on release as ONE `moveNode` (one undo of the draft); the
+  // offset during the gesture is view state. The panel's own drag is stopped
+  // at the block, so the panel does not move with it.
+  const [selectedBlock, setSelectedBlock] = useState<string | null>(null)
+  const [dragging, setDragging] = useState<{ key: string; dx: number; dy: number } | null>(null)
+  const dragRef = useRef<{ key: string; startX: number; startY: number; scale: number; baseDx: number; baseDy: number } | null>(null)
+  const beginBlockDrag = (key: string, e: ReactMouseEvent<SVGGElement>): void => {
+    if (readOnly || template === undefined) return
+    e.stopPropagation(); e.preventDefault()
+    const node = template.nodes.find((n) => n.key === key)
+    if (node === undefined) return
+    // The SVG's own screen scale (the camera's scale times the viewBox's):
+    // a screen delta divided by it is an authored-offset delta.
+    const svg = (e.currentTarget as SVGGElement).ownerSVGElement
+    const ctm = svg?.getScreenCTM()
+    const scale = ctm === null || ctm === undefined || ctm.a === 0 ? 1 : ctm.a
+    dragRef.current = { key, startX: e.clientX, startY: e.clientY, scale, baseDx: node.dx, baseDy: node.dy }
+    setSelectedBlock(key)
+    props.onFocus(panel.rect.id)
+    const onMove = (ev: MouseEvent): void => {
+      const d = dragRef.current; if (d === null) return
+      setDragging({ key: d.key, dx: (ev.clientX - d.startX) / d.scale, dy: (ev.clientY - d.startY) / d.scale })
+    }
+    const onUp = (ev: MouseEvent): void => {
+      window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)
+      const d = dragRef.current; dragRef.current = null
+      setDragging(null)
+      if (d === null) return
+      const ddx = (ev.clientX - d.startX) / d.scale, ddy = (ev.clientY - d.startY) / d.scale
+      if (Math.abs(ddx) < 2 && Math.abs(ddy) < 2) return
+      applyDraftOp(panel.workflow.templateId, saved, { type: 'move', key: d.key, dx: Math.round(d.baseDx + ddx), dy: Math.round(d.baseDy + ddy) })
+    }
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
+  }
+  // Delete on the selected block removes it from the draft — while THIS
+  // panel is the selected one, in the capture phase so the canvas's own
+  // Delete (a selected link or note) never sees it.
+  // A stale selection is cleared: when the panel is deselected, and when the
+  // key is no longer in the draft (removed through another door).
+  useEffect(() => { if (!props.selected) setSelectedBlock(null) }, [props.selected])
+  useEffect(() => { if (selectedBlock !== null && template !== undefined && !template.nodes.some((n) => n.key === selectedBlock)) setSelectedBlock(null) }, [template, selectedBlock])
+  useEffect(() => {
+    if (!props.selected || selectedBlock === null) return
+    const onKey = (ev: KeyboardEvent): void => {
+      if (ev.key !== 'Delete' && ev.key !== 'Backspace') return
+      const target = ev.target as HTMLElement | null
+      if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return
+      const r = applyDraftOp(panel.workflow.templateId, saved, { type: 'remove', key: selectedBlock })
+      setSelectedBlock(null)
+      // Only a remove that happened is this listener's to stop; otherwise the canvas's own Delete keeps its turn.
+      if (r.kind === 'ok') { ev.preventDefault(); ev.stopPropagation() }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [props.selected, selectedBlock, panel.workflow.templateId, saved])
   const readOnly = props.readOnly === true
   const state = panelState({ kind: 'workflow', status: undefined, dormant: false }, undefined)
   const diagram = useMemo(() => (template === undefined ? null : buildDiagram(template)), [template])
@@ -139,7 +201,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
       linkTarget={props.linkTarget}
       readOnly={readOnly}
       className="workflow-node"
-      rootAttrs={{ 'data-workflow-node': '', 'data-workflow-template': panel.workflow.templateId }}
+      rootAttrs={{ 'data-workflow-node': '', 'data-workflow-template': panel.workflow.templateId, 'data-workflow-dirty': dirty ? 'true' : 'false', ...(selectedBlock === null ? {} : { 'data-workflow-selected': selectedBlock }) }}
       title={template?.name ?? panel.title ?? 'workflow'}
       state={state}
       onSelect={props.onSelect}
@@ -224,13 +286,19 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                     </g>
                   )
                 })}
-                {diagram.blocks.map((b) => (
-                  <g key={b.key} data-workflow-block={b.key}>
-                    <rect className="workflow-node__block" x={b.x} y={b.y} width={b.w} height={b.h} rx={8} />
-                    <text className="workflow-node__block-label" x={b.x + 12} y={b.y + 26}>{b.label}</text>
-                    <text className="workflow-node__block-sub" x={b.x + 12} y={b.y + BLOCK_H - 18}>{b.sublabel}</text>
-                  </g>
-                ))}
+                {diagram.blocks.map((b) => {
+                  const off = dragging !== null && dragging.key === b.key ? dragging : { dx: 0, dy: 0 }
+                  return (
+                    <g key={b.key} data-workflow-block={b.key} data-workflow-block-selected={selectedBlock === b.key ? 'true' : undefined}
+                      className={selectedBlock === b.key ? 'workflow-node__blockg workflow-node__blockg--selected' : 'workflow-node__blockg'}
+                      transform={off.dx === 0 && off.dy === 0 ? undefined : `translate(${off.dx} ${off.dy})`}
+                      onMouseDown={(e) => beginBlockDrag(b.key, e)}>
+                      <rect className="workflow-node__block" x={b.x} y={b.y} width={b.w} height={b.h} rx={8} />
+                      <text className="workflow-node__block-label" x={b.x + 12} y={b.y + 26}>{b.label}</text>
+                      <text className="workflow-node__block-sub" x={b.x + 12} y={b.y + BLOCK_H - 18}>{b.sublabel}</text>
+                    </g>
+                  )
+                })}
               </svg>
             </section>
             <section className="workflow-node__pane" data-workflow-panel="runs" role="tabpanel" hidden={tab !== 'runs'}>

@@ -96,7 +96,8 @@ export function buildDiagram(template: PersistedTemplate): Diagram {
   const minY = nodes.length === 0 ? 0 : Math.min(...nodes.map((n) => n.dy))
   const blocks: DiagramBlock[] = nodes.map((node) => ({
     key: node.key,
-    label: node.key,
+    // M182. A node's own title when the editor gave it one; the key otherwise.
+    label: 'title' in node && typeof node.title === 'string' && node.title.trim() !== '' ? node.title : node.key,
     sublabel: sublabelOf(node),
     x: DIAGRAM_PAD + (node.dx - minX),
     y: DIAGRAM_PAD + (node.dy - minY),

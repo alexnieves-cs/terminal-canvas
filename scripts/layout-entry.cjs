@@ -54,5 +54,9 @@ module.exports = {
      module does not exist yet — esbuild treats a require inside try/catch as
      a warning, not an error — and the starter.* checks then fail by name
      rather than every check in this file failing at buildSync. */
-  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })()),
+  /* M182. The template's pure edit verbs (add/move/configure/remove a node,
+     add/remove an edge, the minted key): the same try shape as M181 above,
+     so the edit.* checks fail by name while the module does not exist. */
+  ...((() => { try { return require('../src/shared/template-edit.ts') } catch { return {} } })())
 }

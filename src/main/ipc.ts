@@ -12,6 +12,7 @@ import { INERT_ENV_REPORT, type EnvReport } from '../shared/env-report'
 import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { ImageResult, StarterFiles } from '../shared/starter'
+import type { TemplateSaveResult } from '../shared/templates'
 import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
@@ -140,7 +141,8 @@ export interface PaletteHandlers {
   saveRoutine(routine: PersistedRoutine): { kind: 'saved'; routine: PersistedRoutine } | { kind: 'refused'; reason: string }
   removeRoutine(id: string): boolean
   runRoutine(id: string): boolean
-  saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }): PersistedTemplate
+  /** M182. The saved record, or `stale` with the standing one when `expectedRevision` does not match. */
+  saveTemplate(template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number): TemplateSaveResult
   removeTemplate(id: string): boolean
   removePrompt(id: string): boolean
   /** M127. The skill shelf, whole. */
@@ -581,7 +583,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.MEMORY_LIST, (_event, root: string, limit: number) => palette.memoryList(root, limit))
   ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string }) => palette.memoryAdd(req))
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
-  ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }) => palette.saveTemplate(template))
+  ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number) => palette.saveTemplate(template, typeof expectedRevision === 'number' ? expectedRevision : undefined))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
   ipcMain.handle(IPC.TEAMMATE_LIST, () => palette.listTeammates())
   ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate, cwd?: string) => palette.saveTeammate(teammate, cwd))

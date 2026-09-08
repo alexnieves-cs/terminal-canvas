@@ -53,7 +53,19 @@ export interface PersistedTemplate {
   description?: string
   nodes: TemplateNode[]
   edges: TemplateEdge[]
+  /**
+   * M182. The record's revision, bumped by every save that goes through the
+   * store: a save that expected another revision is refused as stale, so two
+   * editors of one record cannot overwrite each other silently. ABSENT on
+   * every pre-M182 file and read as 0; never normalised into the record.
+   */
+  revision?: number
+  /** M182. One past the highest node key ever minted, so a removed key is never reused (a run's node mapping names keys). Absent on a pre-M182 record. */
+  nextKey?: number
 }
+
+/** M182. What the store answers a save with: the record as written, or the record that stands and why. */
+export type TemplateSaveResult = { kind: 'saved'; template: PersistedTemplate } | { kind: 'stale'; current?: PersistedTemplate; reason: string }
 
 /** The newest kept; a library, not a history. */
 export const TEMPLATES_MAX = 30

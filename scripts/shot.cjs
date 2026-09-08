@@ -508,7 +508,7 @@ const SCENES = [
       if (process.env.SHOT_PROBE) console.log('PROBE compact', await k.js(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.top), Math.round(b.bottom), Math.round(b.height), getComputedStyle(e).display, getComputedStyle(e).height] }
         return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
       await k.shot('compact'); await k.context(false) } },
-  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the live canvas is the editor), Delete and Build with AI; the Definition tab selected.',
+  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the draft is kept on the panel; Save on the diagram arrives with M184), Delete and Build with AI; the Definition tab selected.',
     run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } },
@@ -932,7 +932,7 @@ app.whenReady().then(async () => {
       saveRoutine: (r) => { layoutStore.saveRoutine(r); return { kind: 'saved', routine: r } },
       removeRoutine: (id) => layoutStore.deleteRoutine(id),
       runRoutine: () => false,
-      saveTemplate: (t) => { const saved = { ...t, id: t.id || `tpl-${Date.now().toString(36)}` }; layoutStore.saveTemplate(saved); return saved },
+      saveTemplate: (t, expectedRevision) => layoutStore.saveTemplate({ ...t, id: t.id || `tpl-${Date.now().toString(36)}` }, expectedRevision),
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
       spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories(),
       // M127. The shelf, through the store and main's OWN parser. Without

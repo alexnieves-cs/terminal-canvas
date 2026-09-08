@@ -127,6 +127,7 @@ import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
+import { clearDraft } from '@renderer/workflow/template-draft-store'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -2589,7 +2590,10 @@ export function Canvas({
   // palette and running the row.
   const templateRowsRef = useRef<PersistedTemplate[]>([])
   templateRowsRef.current = templateRows
-  useEffect(() => { void window.canvas.template.list().then(setTemplateRows) }, [])
+  // M182. Reloaded after every save through the binding's Update: a second
+  // Update with the rows read at mount would always expect the old revision.
+  const reloadTemplates = useCallback(() => { void window.canvas.template.list().then(setTemplateRows) }, [])
+  useEffect(() => { reloadTemplates() }, [reloadTemplates])
   const reloadPresets = useCallback(() => {
     void window.canvas.preset.list().then(setPresetRows)
   }, [])
@@ -3445,6 +3449,8 @@ export function Canvas({
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
     // M113/M114. The board's doors for verify:panels — the SAME verbs the
     // palette rows and the card call, through the palette ref.
+    // M182. The binding's Update, through the same member the text mode's submit calls.
+    w.__m182Update = (ids: string[]): Promise<{ kind: string; reason?: string; note?: string }> => paletteActionsRef.current?.updateBoundTemplate(ids) ?? Promise.resolve({ kind: 'refused', reason: 'not ready' })
     w.__m113 = {
       add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
         paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
@@ -3875,7 +3881,8 @@ export function Canvas({
         if (result.kind === 'refused') { undoCreated(); return { kind: 'refused', reason: result.reason } }
         createdChats.push(id)
         const panel = makeChatPanel(id, place.centre, 1, { cwd: node.cwd, sessionId })
-        madePanels.push(node.title === undefined ? panel : { ...panel, title: node.title })
+        // M182. The canvas binding: this panel is the template's node `key`; `Save selection as template` reads it to UPDATE the same record.
+        madePanels.push({ ...(node.title === undefined ? panel : { ...panel, title: node.title }), templateBinding: { templateId: template.id, key: node.key } })
         minted.set(node.key, id)
         // The message goes in AFTER the panel is committed: the insert bus only
         // reaches a chat the store has seeded, and the store is seeded by the
@@ -3904,7 +3911,7 @@ export function Canvas({
         if (result.kind === 'refused') { undoCreated(); return { kind: 'refused', reason: result.reason } }
         createdChats.push(id)
         const chat = node.kind === 'orchestrator' ? { cwd: node.cwd, sessionId, orchestrator: node.prompt } : { cwd: node.cwd, sessionId }
-        madePanels.push({ ...makeChatPanel(id, place.centre, 1, chat), title: `${node.key} · ${node.kind}` })
+        madePanels.push({ ...makeChatPanel(id, place.centre, 1, chat), title: `${node.key} · ${node.kind}`, templateBinding: { templateId: template.id, key: node.key } })
         minted.set(node.key, id)
         if (node.kind === 'collect') messages.push({ id, text: `Results are handed off into this chat as the workers finish. Join them in the order they arrive and write the joined text to ${node.target}.` })
         continue
@@ -3930,7 +3937,7 @@ export function Canvas({
       if (spec === null) { undoCreated(); return { kind: 'refused', reason: `${node.key} names neither a preset nor a command` } }
       const id = `n${nextIdRef.current++}`
       const panel = makePanel(id, place.centre, 1, { ...spec, panelId: id })
-      madePanels.push(node.title === undefined ? panel : { ...panel, title: node.title })
+      madePanels.push({ ...(node.title === undefined ? panel : { ...panel, title: node.title }), templateBinding: { templateId: template.id, key: node.key } })
       minted.set(node.key, id)
     }
     setPanels((current) => {
@@ -4644,6 +4651,8 @@ export function Canvas({
 
   const deleteWorkflowTemplate = useCallback((templateId: string) => {
     if (isBuiltInTemplate(templateId)) return
+    // M182. The draft goes with the record: a deleted template is not editable through a draft that outlived it.
+    clearDraft(templateId)
     void window.canvas.template.remove(templateId).then(() => window.canvas.template.list().then(setTemplateRows))
   }, [])
 
@@ -4878,6 +4887,8 @@ export function Canvas({
 
   const paletteActions = usePaletteActions({
     applyStarter,
+    templateRowsRef,
+    reloadTemplates,
     recheckEnvironment,
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
@@ -6065,6 +6076,7 @@ export function Canvas({
             envReport={envReport}
             starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent' : starter === undefined && panels.length > 0 ? 'the starter lays out on an empty canvas — reset the canvas or make a new workspace for it' : null}
             update={updateState}
+            workflowTemplateOf={(panelId) => { const p = panelsRef.current.find((x) => x.rect.id === panelId); return p !== undefined && isWorkflowPanel(p) ? p.workflow.templateId : undefined }}
             bookmarks={bookmarkRows}
             cameraTrail={trail}
             globalFontSize={globalFontSize}

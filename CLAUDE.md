@@ -1022,6 +1022,19 @@ check does not, and should not, cover it.
   `isImagePanel` joins `isTerminalPanel`'s exclusion list (a picture must never reach
   `assignTiers` with no spec). The preview object is M185's; drop, paste and Replace are
   M187's.
+- `src/shared/template-edit.ts` / `src/renderer/workflow/template-draft-store.ts` — M182 (v9
+  Act II). ONE TEMPLATE, TWO EDITORS: every mutation a template undergoes is a pure function
+  answering a fresh record or a refusal by name (keys minted from `nextKey`, never reused; a
+  cycle refused with the word — M78's rule from the record's side); the draft store's
+  `applyDraftOp` is the one door every editor takes (the diagram's drag and Delete, the
+  palette's text modes, the agent's `workflow-*` verbs, and the canvas binding's Update), so
+  the two views cannot disagree. The record's `revision` is the STORE's: a save with a matching
+  expectation writes revision + 1, a mismatch writes nothing and answers `stale` with the
+  standing record; absent on every pre-M182 file and never normalised in. `templateBinding`
+  on a panel an instantiation minted is the fifth mark `carryMarks` carries; `Save selection
+  as template` over panels bound to one template, under its own name, updates that record.
+  M133's "the diagram is only a projection" is struck (the 5.0 brief); `workflow.panel.1a–d`
+  still compare the diagram against the record it draws, now the draft when one exists.
 - `src/main/panel-search.ts` / `src/main/update-check.ts` — M122/M123. Search is ONE
   answer over both durable logs, built in main over injected readers, every line through
   `redactSecrets` (the outward gate's fourth named caller in `verify:verbs gate.2`), the cap

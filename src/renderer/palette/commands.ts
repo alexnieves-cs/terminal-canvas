@@ -445,6 +445,12 @@ export interface PaletteActions {
   checkReadiness(): Promise<import("@shared/env-report").EnvReport>
   /** M181. Lay the starter canvas out: the conversation and one captioned example of each kind, only the keys never applied; refused by name. */
   openStarter(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M182. One template-editing operation over the draft, through `shared/template-edit.ts`; refused by name. */
+  editWorkflow(templateId: string, op: import("@renderer/workflow/template-draft-store").DraftOp): { kind: 'ok' } | { kind: 'refused'; reason: string }
+  /** M182. The palette's text mode for one editing verb on a template: `add <kind>`, `move <key> <dx> <dy>`, `set <key> <field> <value>`, `remove <key>`, `edge <from> <to> <trigger>`, `unedge <from> <to>`. */
+  beginWorkflowEdit(templateId: string, verb: 'add' | 'move' | 'set' | 'remove' | 'edge' | 'unedge'): void
+  /** M182. The canvas binding's Update: the selected panels' positions and fields back onto the template they came from, through the operations, with the revision check. */
+  updateBoundTemplate(panelIds: readonly string[]): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M74. A claude terminal's session, rendered and continued as a chat. */
   openAsChat(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
@@ -518,6 +524,8 @@ export interface PaletteContext {
   envReport?: EnvReport | null
   /** M181. Why the starter cannot be opened now (every key applied, no engine), or null/absent when it can. */
   starterReason?: string | null
+  /** M182. A workflow panel's template id, by panel id — the editing rows' target. */
+  workflowTemplateOf?: (panelId: string) => string | undefined
   /**
    * M123. The last update check's answer (update-store.ts), or null/absent
    * when none has been asked. Read by the `update.check` row's subtitle and
@@ -2213,6 +2221,23 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // the critic's finding; only the readiness verb is new here.
   out.push(withReason({ id: 'starter.open', title: 'Open the starter canvas', subtitle: 'Your agent and one captioned example of each kind of object', group: 'canvas', searchText: 'starter canvas examples onboarding first run welcome', run: () => { void actions.openStarter() } },
     ctx.starterReason ?? undefined))
+  // M182. The six editing verbs as rows over the SELECTED workflow panel's
+  // template, each opening the palette's text mode; disabled by name when no
+  // workflow panel is selected. The diagram's drag and Delete are the canvas
+  // doors for move and remove; M183 brings the library and the port drag.
+  {
+    const wf = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'workflow')
+    const templateId = wf === undefined ? undefined : (ctx.workflowTemplateOf?.(wf.id))
+    const reason = templateId === undefined ? 'select a workflow panel first' : undefined
+    // Six literal ids (closure.v9.1 reads this file as TEXT for each door's row).
+    const edit = (verb: 'add' | 'move' | 'set' | 'remove' | 'edge' | 'unedge') => () => { if (templateId !== undefined) actions.beginWorkflowEdit(templateId, verb) }
+    out.push(withReason({ id: 'workflow.add', title: 'Workflow: add node…', subtitle: 'a terminal, chat, pool, orchestrator or collect node in the draft', group: 'canvas', searchText: 'workflow template edit add node diagram', run: edit('add') }, reason))
+    out.push(withReason({ id: 'workflow.move', title: 'Workflow: move node…', subtitle: '<key> <dx> <dy>', group: 'canvas', searchText: 'workflow template edit move node diagram', run: edit('move') }, reason))
+    out.push(withReason({ id: 'workflow.set', title: 'Workflow: set field…', subtitle: '<key> <field> <value>', group: 'canvas', searchText: 'workflow template edit set field node diagram', run: edit('set') }, reason))
+    out.push(withReason({ id: 'workflow.remove', title: 'Workflow: remove node…', subtitle: '<key> — its edges go with it', group: 'canvas', searchText: 'workflow template edit remove node diagram', run: edit('remove') }, reason))
+    out.push(withReason({ id: 'workflow.edge', title: 'Workflow: connect…', subtitle: '<from> <to> <trigger>', group: 'canvas', searchText: 'workflow template edit connect edge diagram', run: edit('edge') }, reason))
+    out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
+  }
   out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })
 
   // --- M96: the verb line ------------------------------------------------------
