@@ -1267,3 +1267,22 @@ top level). Renamed to `NOTE_IDS`/`IMAGE_IDS`.
 **Recorded bound.** `hitTest`'s pure rect math still names a frame for a DROP into its interior;
 only the DOM gesture is form-aware. Drop targeting has six callers and a form-aware exception
 belongs in its own milestone, so it is written down rather than changed.
+
+### Acts III–IV — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after M187 exited 1 at 55/59. Four scenes, two causes; each was looked
+at (fresh and diff, `out/visual/`) before a golden was written.
+
+- **browser** — The pane gains M185's control row under the address bar: four named width chips
+  with the current one pressed, Capture, and Find the project. The page below moves down by that
+  one row and nothing else on the page moves; the address readout, the guest and the rail row
+  are unchanged.
+- **teammate** — The same browser pane is visible behind the teammates pane, so it wears the
+  same one-row change. The pane itself — brief, places, services, routines — is untouched, which
+  is what this scene is for.
+- **routine** — Identical to `teammate`'s reason: the browser pane in the background gained its
+  control row; the routine rows and their verbs are unchanged.
+- **palette-query** — The canvas section gained M186's and M187's rows (`Image: add a picture…`,
+  `Add a sticky note`, `Add free text`, `Add a named region`, `Tint this note…`), so the
+  filtered list is longer and its scrolled window moves. No existing row changed its words or
+  its order relative to its neighbours.

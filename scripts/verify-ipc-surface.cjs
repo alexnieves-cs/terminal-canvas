@@ -244,7 +244,12 @@ app.whenReady().then(() => {
   // M181 image:read (125) — an image panel's bytes as a data URL, by magic
   // number under the cap; starter:prepare (126) — the starter's two files
   // under userData/starter, written once.
-  const EXPECTED_CHANNELS = 126
+  // M185 preview:discover (127) — what project a panel is pointed at and
+  // whether anything of it is listening; preview:capture (128) — a real
+  // picture of a guest, written under userData/captures.
+  // M186 asset:put (129) — bytes into the content-addressed asset store;
+  // asset:choose (130) — the system's own file chooser, for Replace.
+  const EXPECTED_CHANNELS = 130
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
