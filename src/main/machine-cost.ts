@@ -32,6 +32,22 @@ export function parseProcessList(stdout: string): ProcessRow[] {
   return rows
 }
 
+/**
+ * M186 (M185's critic, finding 1). EXPORTED so the preview's discoverer asks
+ * about the same processes the cost sampler measures. A panel's own pid is a
+ * shell or a tmux CLIENT; `npm run dev` and the server holding the socket are
+ * its DESCENDANTS, so `lsof -p <panel pid>` answers `none` for every real dev
+ * server — the discoverer then told a person nothing was listening while
+ * their site was up, and offered to start a second one on the taken port.
+ */
+export function descendantsOf(roots: readonly number[], rows: readonly { pid: number; ppid: number }[]): number[] {
+  const children = new Map<number, number[]>()
+  for (const row of rows) children.set(row.ppid, [...(children.get(row.ppid) ?? []), row.pid])
+  const all = new Set<number>()
+  for (const root of roots) for (const pid of treePids(root, children)) all.add(pid)
+  return [...all]
+}
+
 function treePids(root: number, children: ReadonlyMap<number, readonly number[]>): Set<number> {
   const result = new Set<number>()
   const pending = [root]

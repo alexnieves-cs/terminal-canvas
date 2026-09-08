@@ -18,6 +18,8 @@ import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
 import type { PendingApproval } from './rail-sections'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
+import { noteSummary } from '@shared/notes'
+import { isNotePanel } from '@renderer/panels/panels'
 
 /**
  * What the inspector renders, as plain data.
@@ -461,6 +463,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  * string would have hidden the next one exactly as well; tsc will not.
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  note: 'A note',
   image: 'An image panel',
   skill: 'A skill panel',
   workflow: 'A workflow panel',
@@ -784,6 +787,16 @@ export function buildInspectorModelBare(
   }
   if (isBrowserPanel(panel)) {
     return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'url', label: 'url', value: panel.url }] }
+  }
+  // M187. The sixteenth kind: what it IS and what changes it — its form, its
+  // own text and (a sticky's) tint. No process metrics: a note has no process,
+  // and the Machine section's own rule is that an absent arm is absent.
+  if (isNotePanel(panel)) {
+    return { kind: 'note', reviewable: false, state: { kind: 'note', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
+      { key: 'form', label: 'form', value: panel.note.form },
+      { key: 'text', label: 'text', value: panel.note.text === '' ? 'empty — click the note to write in it' : noteSummary(panel.note.text, panel.note.form, 60) },
+      ...(panel.note.tint === undefined ? [] : [{ key: 'tint', label: 'tint', value: panel.note.tint }])
+    ] }
   }
   const running = status?.kind === 'running' ? status : undefined
   const fields: InspectorField[] = [

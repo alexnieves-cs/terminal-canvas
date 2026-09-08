@@ -3678,6 +3678,111 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), b1, warnings: out.warnings }))
 }
 
+// M185 — preview.device.1. THE NAMED DEVICE WIDTH ON DISK. Absent is every
+// pre-M185 browser record and warns nothing, and serialises back to NO key —
+// a written `"device": null` would claim a width the person never picked. A
+// present value that is not one of the four names costs the FIELD with a
+// warning naming the panel and the four names, never the panel: a preview
+// that vanished because a width was misspelled is a worse answer than one at
+// full width, and it would read as a panel the app deleted.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'd1', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 1, url: 'http://127.0.0.1:5173/' },
+      { id: 'd2', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 2, url: 'http://127.0.0.1:5173/', device: 'phone' },
+      { id: 'd3', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 3, url: 'http://127.0.0.1:5173/', device: 'watch' },
+      { id: 'd4', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 4, url: 'http://127.0.0.1:5173/', device: 390 }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'd2')
+  const named = (id) => out.warnings.some((w) => w.includes(id) && w.includes('device'))
+  ok('preview.device.1 a browser panel\'s device: absent stays absent and serialises to no key; one of the four names round-trips; a name that is not one of them and a number each cost the FIELD with a warning naming the panel and the four names, and their panels survive at full width',
+    panels.length === 4 &&
+      by('d1') && !('device' in by('d1')) && !/"device"/.test(text.split('"d1"')[1].split('}')[0] || '') &&
+      by('d2') && by('d2').device === 'phone' && round && round.device === 'phone' &&
+      by('d3') && !('device' in by('d3')) && named('d3') && out.warnings.some((w) => w.includes('d3') && w.includes('phone, tablet, laptop, full')) &&
+      by('d4') && !('device' in by('d4')) && named('d4') &&
+      !named('d1') && !named('d2'),
+    JSON.stringify({ ids: panels.map((p) => p.id), d1: by('d1'), d2: by('d2'), d3: by('d3'), d4: by('d4'), warnings: out.warnings }))
+}
+
+// M186 — image.asset.1. THE ASSET IDENTITY ON DISK. `image.asset` is a
+// sha-256 of the picture's own bytes: absent on every pre-M186 record and on
+// any picture the person pointed at in place (and it serialises to NO key),
+// present when this app holds the bytes. A malformed id costs the FIELD with
+// a warning naming the panel — never the panel, because the path still paints
+// and a picture that vanished for a misspelled id reads as a deletion the app
+// performed. The PATH keeps its own rule: absent or relative still drops the
+// panel, because a picture with no file is a different failure entirely.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'i1', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 1, image: { path: '/w/one.png' } },
+      { id: 'i2', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 2, image: { path: '/w/two.png', asset: 'a'.repeat(64) } },
+      { id: 'i3', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 3, image: { path: '/w/three.png', asset: 'NOT-A-DIGEST' } },
+      { id: 'i4', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 4, image: { path: '/w/four.png', asset: 42 } },
+      { id: 'i5', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 5, image: { path: 'relative.png', asset: 'a'.repeat(64) } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'i2')
+  ok('image.asset.1 image.asset: absent stays absent and serialises to no key; a 64-hex digest round-trips; a non-digest string and a number each cost the FIELD with a warning naming the panel while the picture is kept; a relative path still drops the whole panel',
+    panels.map((p) => p.id).join(',') === 'i1,i2,i3,i4' &&
+      by('i1') && !('asset' in by('i1').image) &&
+      by('i2') && by('i2').image.asset === 'a'.repeat(64) && round && round.image.asset === 'a'.repeat(64) &&
+      by('i3') && !('asset' in by('i3').image) && by('i3').image.path === '/w/three.png' && out.warnings.some((w) => w.includes('i3') && w.includes('asset')) &&
+      by('i4') && !('asset' in by('i4').image) && out.warnings.some((w) => w.includes('i4') && w.includes('asset')) &&
+      out.warnings.some((w) => w.includes('i5') && w.includes('absolute')) &&
+      !/"asset"/.test(text.split('"i1"')[1].split('}')[0] || ''),
+    JSON.stringify({ ids: panels.map((p) => p.id), i1: by('i1'), i2: by('i2'), i3: by('i3'), i4: by('i4'), warnings: out.warnings }))
+}
+
+// M187 — note.1. THE NOTE RECORD ON DISK. `form` is REQUIRED and a value
+// outside the three drops the PANEL by name: a note whose form the app
+// invented would paint as something the person did not draw. An absent `text`
+// is an EMPTY note (a person makes one and types later), not a malformed
+// record; a non-string text keeps the note empty WITH a warning, because the
+// note is the object and its words are a field. A tint belongs to the sticky
+// alone: on another form, or outside the four names, it is dropped with a
+// warning and the note is kept — an untinted note is still the note that was
+// written, and dropping the panel over a colour would read as a deletion.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'n1', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 1, note: { form: 'sticky', text: 'buy milk', tint: 'blue' } },
+      { id: 'n2', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 2, note: { form: 'text' } },
+      { id: 'n3', kind: 'note', x: 0, y: 0, w: 720, h: 480, z: 3, note: { form: 'frame', text: 'release work', tint: 'green' } },
+      { id: 'n4', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 4, note: { form: 'sticky', text: 'ok', tint: 'chartreuse' } },
+      { id: 'n5', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 5, note: { form: 'postit', text: 'no' } },
+      { id: 'n6', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 6 },
+      { id: 'n7', kind: 'note', x: 0, y: 0, w: 320, h: 220, z: 7, note: { form: 'sticky', text: 42 } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'n1')
+  const warns = (id, word) => out.warnings.some((w) => w.includes(id) && w.includes(word))
+  ok('note.1 a note round-trips as form + text (+ a sticky\'s tint); an absent text is an empty note and a non-string text keeps the note empty with a warning; a tint outside the four names, and a tint on a form that is not sticky, are each dropped with a warning and the note kept; an unknown form and a missing note object each drop their own panel by name',
+    panels.map((p) => p.id).join(',') === 'n1,n2,n3,n4,n7' &&
+      by('n1').note.form === 'sticky' && by('n1').note.text === 'buy milk' && by('n1').note.tint === 'blue' &&
+      round && round.note.tint === 'blue' && round.note.text === 'buy milk' &&
+      by('n2').note.text === '' && !('tint' in by('n2').note) &&
+      by('n3').note.form === 'frame' && !('tint' in by('n3').note) && warns('n3', 'sticky') &&
+      by('n4') && !('tint' in by('n4').note) && warns('n4', 'tint') &&
+      by('n7') && by('n7').note.text === '' && warns('n7', 'text') &&
+      warns('n5', 'form') && warns('n6', 'form'),
+    JSON.stringify({ ids: panels.map((p) => p.id), n1: by('n1'), n2: by('n2'), n3: by('n3'), n4: by('n4'), n7: by('n7'), warnings: out.warnings }))
+}
+
 // M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
 // malformed entry is dropped by name; the cap keeps the newest; the dedupe is
 // by key and never resets a working item; every absent optional stays absent

@@ -60,6 +60,25 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'workflow-edge', label: 'Workflow: connect', args: [{ name: 'template', kind: 'key' }, { name: 'from', kind: 'value' }, { name: 'to', kind: 'value' }, { name: 'trigger', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'an edge between two nodes; a cycle is refused' },
   { id: 'workflow-unedge', label: 'Workflow: disconnect', args: [{ name: 'template', kind: 'key' }, { name: 'from', kind: 'value' }, { name: 'to', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'remove an edge from the draft' },
   { id: 'workflow-save', label: 'Workflow: save', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflow'], target: 'canvas', hint: 'write the draft back to the record; a record saved by someone else is refused as stale' },
+  // M187. The note's three. `note-add` takes the FORM first because it is the
+  // thing a person chooses; the text is optional (an empty note is a real
+  // thing to make and type into).
+  { id: 'note-add', label: 'Note: add', args: [{ name: 'form', kind: 'value' }, { name: 'text', kind: 'text', optional: true }], destructive: false, actions: ['addNote'], target: 'canvas', hint: 'a sticky note, free text, or a named region' },
+  { id: 'note-set', label: 'Note: set the text', args: [{ name: 'panel', kind: 'panel' }, { name: 'text', kind: 'text' }], destructive: false, actions: ['setNoteText'], target: 'panel', hint: 'replace a note\'s words' },
+  { id: 'note-tint', label: 'Note: set the tint', args: [{ name: 'panel', kind: 'panel' }, { name: 'tint', kind: 'value' }], destructive: false, actions: ['setNoteTint'], target: 'panel', hint: 'yellow, blue, green or pink — a sticky note only' },
+  // M186. A picture in, and a picture repaired. Both take a path, and both go
+  // through the store, so an agent's picture has the same identity a person's
+  // dropped one has.
+  { id: 'image-add', label: 'Image: add a picture', args: [{ name: 'path', kind: 'text' }], destructive: false, actions: ['addImage'], target: 'canvas', hint: 'take a PNG, JPEG, GIF or WebP into this canvas and place it' },
+  { id: 'image-replace', label: 'Image: replace a picture', args: [{ name: 'panel', kind: 'panel' }, { name: 'path', kind: 'text' }], destructive: false, actions: ['replaceImage'], target: 'panel', hint: 'point an existing picture panel at different bytes — the repair for a missing one' },
+  // M185. The preview's four. `preview-open` takes an OPTIONAL url: with one
+  // it points the pane, without one it asks discovery — which reads and runs
+  // nothing, so the verb that opens a page and the verb that starts a server
+  // are two verbs a person (or an agent) chooses between by name.
+  { id: 'preview-open', label: 'Preview: open the project', args: [{ name: 'url', kind: 'text', optional: true }], destructive: false, actions: ['openPreview'], target: 'canvas', hint: 'open the page a process of the selected panel is serving, or the url you name' },
+  { id: 'preview-width', label: 'Preview: set the width', args: [{ name: 'device', kind: 'value' }], destructive: false, actions: ['setPreviewWidth'], target: 'canvas', hint: 'phone, tablet, laptop or full — the named widths, never a number' },
+  { id: 'preview-capture', label: 'Preview: capture the page', args: [], destructive: false, actions: ['capturePreview'], target: 'canvas', hint: 'a real picture of the pane, written under this app\'s own directory and placed as an image' },
+  { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
   { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram — the draft when there is one' },
   { id: 'workflow-stop', label: 'Workflow: stop', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['stopWorkflow'], target: 'canvas', hint: 'interrupt what this workflow started; nothing is killed' },
@@ -220,18 +239,35 @@ export function acceptsTyping(panel: { kind: string; agent?: AgentKind }): boole
 /** Act I exceptions have an owner and deadline; declarations never stand in for execution checks. */
 /** A door is a STRING naming the gesture, or an OWED object with its reason and the milestone due — data a later check can retire, never a label. */
 export type DoorEntry = string | { reason: string; due: string }
+/**
+ * M186 (M185's critic, finding 9). ONE constant for the milestone every v9
+ * verb's workflow door is owed to, shared by the table and the check — a
+ * regex over `M\d+` accepts a due that has already shipped, and a literal in
+ * the check turns a truthful table red when the plan moves.
+ */
+export const WORKFLOW_EXECUTOR_DUE = 'M188'
+
 export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agent: string; workflow: { reason: string; due: string } }> = {
-  'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-add': { canvas: 'a drag from the library onto the diagram; the entry\'s Add control', palette: 'workflow.add', agent: 'tc plan workflow-add t1 terminal', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-move': { canvas: 'a drag on a diagram block', palette: 'workflow.move', agent: 'tc plan workflow-move t1 n1 0 0', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-set': { canvas: 'the inspector\'s fields over the selected block', palette: 'workflow.set', agent: 'tc plan workflow-set t1 n1 title hello', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-remove': { canvas: 'Delete on a selected diagram block', palette: 'workflow.remove', agent: 'tc plan workflow-remove t1 n1', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-edge': { canvas: 'a drag from a block\'s port onto another block', palette: 'workflow.edge', agent: 'tc plan workflow-edge t1 n1 n2 exit', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-save': { canvas: 'Save on the workflow panel', palette: 'workflow.save', agent: 'tc plan workflow-save t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-run': { canvas: 'Run on the workflow panel', palette: 'workflow.run', agent: 'tc plan workflow-run t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-stop': { canvas: 'Stop on the workflow panel', palette: 'workflow.stop', agent: 'tc plan workflow-stop t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'workflow-unedge': { canvas: 'Delete on a selected edge (click its word)', palette: 'workflow.unedge', agent: 'tc plan workflow-unedge t1 n1 n2', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
+  'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-add': { canvas: 'a drag from the library onto the diagram; the entry\'s Add control', palette: 'workflow.add', agent: 'tc plan workflow-add t1 terminal', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-move': { canvas: 'a drag on a diagram block', palette: 'workflow.move', agent: 'tc plan workflow-move t1 n1 0 0', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-set': { canvas: 'the inspector\'s fields over the selected block', palette: 'workflow.set', agent: 'tc plan workflow-set t1 n1 title hello', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-remove': { canvas: 'Delete on a selected diagram block', palette: 'workflow.remove', agent: 'tc plan workflow-remove t1 n1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-edge': { canvas: 'a drag from a block\'s port onto another block', palette: 'workflow.edge', agent: 'tc plan workflow-edge t1 n1 n2 exit', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-save': { canvas: 'Save on the workflow panel', palette: 'workflow.save', agent: 'tc plan workflow-save t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-set': { canvas: "the note's own editor, committed on blur or Escape", palette: 'note.tint', agent: 'tc plan note-set nt1 hello', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'note-tint': { canvas: "the four tint chips on a sticky note's chrome", palette: 'note.tint', agent: 'tc plan note-tint nt1 blue', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'image-add': { canvas: 'drop a picture on the canvas, or paste one with no agent to take it', palette: 'image.add', agent: 'tc plan image-add /tmp/shot.png', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'image-replace': { canvas: 'Replace on a picture panel', palette: 'image.replace', agent: 'tc plan image-replace img1 /tmp/other.png', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'preview-open': { canvas: 'Find the project on the preview pane, and a candidate in its list', palette: 'preview.open', agent: 'tc plan preview-open', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'preview-width': { canvas: 'the four width chips on the preview pane', palette: 'preview.width', agent: 'tc plan preview-width phone', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'preview-dev': { canvas: 'Start dev server in the preview pane\'s discovery list', palette: 'preview.dev', agent: 'tc plan preview-dev dev', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-run': { canvas: 'Run on the workflow panel', palette: 'workflow.run', agent: 'tc plan workflow-run t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-stop': { canvas: 'Stop on the workflow panel', palette: 'workflow.stop', agent: 'tc plan workflow-stop t1', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } },
+  'workflow-unedge': { canvas: 'Delete on a selected edge (click its word)', palette: 'workflow.unedge', agent: 'tc plan workflow-unedge t1 n1 n2', workflow: { reason: 'canvas-action adapter ships with node execution', due: WORKFLOW_EXECUTOR_DUE } }
 }

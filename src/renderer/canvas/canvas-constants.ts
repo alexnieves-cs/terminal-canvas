@@ -1,11 +1,12 @@
 import { triggerWord } from '@shared/watch-trigger'
-import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
+import { isNotePanel, isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
   isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { SettingRow, WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { FileRow } from '../shell/file-tree-model'
+import { noteSummary } from '@shared/notes'
 
 /**
  * Canvas's module-scope constants and its two pure label/selection helpers.
@@ -115,6 +116,8 @@ export function panelLabel(panel: Panel): string {
   if (isWorkflowPanel(panel)) return `workflow: ${panel.title ?? panel.workflow.templateId} (${panel.rect.id})`
   // M181. The fifteenth kind, named by its file.
   if (isImagePanel(panel)) return `image: ${panel.title ?? panel.image.path} (${panel.rect.id})`
+  // M187. The sixteenth kind, named by its own first line (`noteSummary`).
+  if (isNotePanel(panel)) return `${panel.note.form}: ${panel.title ?? noteSummary(panel.note.text, panel.note.form)} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

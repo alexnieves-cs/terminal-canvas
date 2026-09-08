@@ -183,6 +183,12 @@ module.exports = {
   /* M103. The browser pane's read over a real guest, and the parser so a
      check can assert a file: record was dropped by name at parse. */
   createBrowserHandlers: require('../src/main/browser-read').createBrowserHandlers,
+  // M185. The preview's two main-side halves, so the harness wires the same
+  // discoverer and capture production does.
+  discoverPreview: require('../src/main/preview-discover').discoverPreview,
+  descendantsOf: require('../src/main/machine-cost').descendantsOf,
+  putAsset: require('../src/main/asset-store').putAsset,
+  capturePreview: require('../src/main/preview-capture').capturePreview,
   // M130. The REAL trail read, so the lane checks and the shot scene drive
   // the same tail production drives — a fixture function written in the
   // harness would leave the whole byte-offset path proven only by

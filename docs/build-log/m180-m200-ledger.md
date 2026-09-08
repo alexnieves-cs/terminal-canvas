@@ -1123,3 +1123,166 @@ workflow — its chats included — is what Stop now acts on.
 - **starter** — The workflow example wears the same two changes, and a built-in's `Save a copy`
   is now a live verb rather than a greyed one — it is the only save a built-in has, and gating
   it on an edit made the primary path unreachable from the example a beginner is looking at.
+
+## M185 — the preview reads as the app beside its code (Act III.1)
+
+Spec `docs/superpowers/specs/2026-09-08-m185-preview.md`. This milestone is the plan's M185 and
+M186 rows together, under the recorded plan amendment: discovery, device widths and capture are
+one surface and splitting them would have shipped a preview that could not be looked at.
+
+**What shipped.** `shared/preview.ts` (the named widths, `parseListeningPorts` over lsof's
+field form, `parseDevScripts` over a package.json text, `discoveryOf`'s three states and one
+sentence each, `captureRefusal`); `main/preview-discover.ts`, which asks ONE `lsof` over the
+pids the renderer already holds and reads ONE `package.json`, and runs nothing else;
+`main/preview-capture.ts`, which checks the scheme on the guest's LIVE url, refuses an empty
+image by name and writes one PNG under `userData/captures` with the page named on the result;
+`device` on the browser record (absent is full width, malformed costs the field); the pane's own
+controls (four width chips, Capture, Find the project, a Retry on the failure line and the
+discovery list with Start dev); a coalesced 300 ms reload on `file:changed` that reloads the
+guest it already has rather than rebuilding it; and four verbs, four palette rows and four
+`V9_DOORS` entries.
+
+**Decisions.**
+- *Discovery's subject is a running terminal or chat, not the browser pane.* The pane knows a
+  url and nothing about a project; the panel with a directory and a process tree is the only
+  thing on the canvas that knows what is being built. No subject is a refusal that names what
+  to select.
+- *`full` is the ABSENT default.* Choosing it REMOVES the key rather than writing
+  `device: 'full'`, so the record, the parser and the node keep one spelling of the default.
+- *The width is a LAYOUT, never a transform.* A scaled guest reports the pane's viewport to the
+  page and every media query then answers for the wrong device — the check asserts the computed
+  transform is `none` beside the 390 px.
+- *A capture is an ordinary image object.* It moves, groups, exports and deletes like every
+  other picture and its title names the page, so provenance is on screen rather than in a log.
+- *A dev script is offered, never run by discovery.* Starting it is its own verb and it goes
+  through the ordinary spawn door, so the server is a panel a person can see and stop.
+
+**Red first.** `preview.1` was watched failing with `preview.ts` and `preview-discover.ts`
+absent (85/86, `out/v9-evidence/m185-file-red.log`, exit 1); `preview.capture.1` was watched
+failing with `preview-capture.ts` moved out of the tree (86/87,
+`out/v9-evidence/m185-capture-red.log`, exit 1); `preview.device.1` was watched failing with
+its parser arm removed (248/249, `out/v9-evidence/m185-layout-red.log`, exit 1). `preview.1`
+in the product part was red twice against real defects it found: a chip that pressed nothing
+(the verb read the selection through a ref React had not written yet — the pane is now NAMED by
+its own control) and a harness with the inert preview handlers (now wired to the same
+discoverer and capture production uses).
+
+**Green.** `verify:file` 87/87, `verify:layout` 249/249, `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport`
+140/140, `npm run typecheck` 0, `verify:panels:product` 72/72 at 103.3 s
+(`out/v9-evidence/m185-product.log`, exit 0). The product watchdog is re-measured at 130000 ms
+(1.25× the slower of two green runs, 101.5 s and 103.3 s).
+
+**One rule changed.** `closure.v9.1` compared each verb's owed workflow door to the literal
+`M189`. The plan amendment moved the executor to M188, so a truthful record turned the suite
+red: the check now reads the due as data (`/^M\d+$/`), the same shape its canvas arm already
+used, and every v9 row's due is M188.
+
+### M185 — the fresh-context critic and verifier, and what was done about it
+
+A fresh agent re-ran every pure suite (typecheck 0; file 87/87, layout 249/249, verbs 22/22,
+palette 143/143, styles 56/56, meta 38/38, viewport 140/140), confirmed no golden and no
+dependency changed, judged all three red logs TRUE reds (one named failure each, a tally line
+printed, and the layout red with a later check still passing below it), and returned eleven
+ranked findings. Ten were fixed in M186's branch (they are M185's code and the fix belongs
+beside the milestone that shipped it, recorded here rather than silently folded in); one was
+answered with a decision.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | Discovery asked `lsof` about the PANEL's pid, which is a shell or a tmux client — `npm run dev` and the server holding the socket are its DESCENDANTS, so every real dev server answered "nothing is listening" and offered to start a second one on the taken port | Fixed: `machine-cost.ts` exports `descendantsOf` (the same tree walk the cost sampler uses) and the discoverer expands the roots through an injected `descendants` before asking; `preview.1` now asserts the lsof line names the descendant |
+| 2 | `preview-open <url>` into an open pane wrote the record and RELOADED, which reloads the page it already has — and the guest's own `did-navigate` then wrote the old url back, so the verb answered `ran` over an unchanged page | Fixed: `browser-store.ts` gained a `navigate` door (the guest's `loadURL`), and the verb reports `refused`-shaped truth when no guest took it |
+| 3 | `lsof` ran with no deadline; it blocks indefinitely on a stale network mount and the invoke would never settle, leaving the pane at `looking…` for ever | Fixed: a 3 s timer that kills the child and resolves empty, deliberately not unref'd (M128's recorded reason) |
+| 4 | A capture whose WRITE threw rejected the invoke instead of taking the refused arm; the renderer awaits it with no catch, so Capture said nothing at all | Fixed, and `preview.capture.1` gained the arm |
+| 5 | `Start dev`'s tooltip promised the script's own command and the spawn ran `npm run <name>` | Fixed: the tooltip names both, and the code says why `npm run` is the right one (it resolves the project's own binaries) |
+| 6 | "We did not ask" was rendered as "nothing is listening" — a chat panel or a dormant terminal has no process, and the sentence asserted a fact the app never checked | Fixed: `not-asked` is a fourth discovery state with its own sentence ("select the terminal your project runs in"), pinned in `preview.1` and in the product check |
+| 7 | The coalesced reload fired on EVERY `file:changed` for EVERY browser pane, so a person filling a form in a pane pointed at a remote page lost it when an agent wrote an unrelated file | Fixed: only a pane showing a loopback host reloads |
+| 8 | `PaletteActions.discoverPreview` had no caller and existed only to need an `EXCLUDED_ACTIONS` row | Fixed: the member and its exclusion are gone; the pane calls Canvas's function through its prop |
+| 9 | `closure.v9.1`'s due check had become `/^M\d+$/`, which accepts a milestone that has already shipped | Fixed: `WORKFLOW_EXECUTOR_DUE` is one constant the table and the check share |
+| 10 | The spec said the image record carries the page a capture came from; what shipped puts the host in the panel's TITLE, which a person can rename | Recorded as the weaker thing it is. The provenance field is M190's export work, where a record that must survive a round trip is the point; M186 adds `image.asset` (the identity that travels) and this row names the remaining gap rather than claiming it |
+| 11 | Minor: the width row's `…` promises a picker; `say`'s timer was not cleared on unmount; the two subject rules read focus and selection in opposite orders | The timer is cleared; the row's subtitle names the verb line it opens; the two orders stand and now say why (a pane is acted on where the eye is, a project is discovered where the work is) |
+
+## M186 — durable images: drop, paste, capture, and an identity that travels (Act IV.1)
+
+Spec `docs/superpowers/specs/2026-09-08-m186-images.md`.
+
+**What shipped.** `shared/assets.ts` (the two caps, `assetFileName` from the media type,
+`isAssetId` as a parse, the refusal and missing sentences); `main/asset-store.ts`, content-
+addressed by sha-256 with dedupe (`wrote: false` says which happened), the extension from the
+MAGIC NUMBER and never the name, a single-asset cap checked from `stat` before the bytes reach
+memory, and an oldest-first prune whose count is reported; `image.asset` on the record (absent
+stays absent through both copy sites and serialises to no key, malformed costs the field);
+`asset:put` and `asset:choose`; the canvas arms for a drop and a paste that landed on NOTHING
+(every agent target keeps its behaviour); `Replace` on the image panel's chrome at every arm,
+through the system's own chooser; and two verbs, two palette rows and two `V9_DOORS` entries.
+
+**Red first.** `asset.1` was watched failing with `asset-store.ts` absent (87/88,
+`out/v9-evidence/m186-asset-red.log`, exit 1). `image.2` in the product part was red against
+two real defects it found: the plan line splits on whitespace, so a fixture path with a space
+in it is two arguments (the agent line's own bound, now recorded in the check), and — the
+product defect — replacing a picture whose file was deleted with the SAME picture writes the
+same content-addressed path back, so an effect keyed on the path alone never re-read and
+`missing` stayed on screen over a file that was now there (`reloadKey`).
+
+**Green.** `verify:file` 88/88, `verify:layout` 250/250, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 140/140, typecheck 0,
+`verify:panels:product` 73/73 at 104.2 s (`out/v9-evidence/m186-product.log`, exit 0).
+
+## M187 — notes, free text and named frames as equal objects (Act IV.2)
+
+Spec `docs/superpowers/specs/2026-09-08-m187-notes.md`.
+
+**What shipped.** `shared/notes.ts` (the three forms, the four tints, `noteSummary`'s first
+non-empty line with a per-form sentence when there is none, `normaliseNoteText`'s cap); the
+sixteenth panel kind as ONE record with a `form` — three kinds would have meant three parsers,
+three partitions, three rail rows, three inspector arms and three export paths for objects that
+differ only in how they paint; `isNotePanel` on `isTerminalPanel`'s exclusion list; the record
+arm (`form` required and an unknown one drops the PANEL, an absent text is an empty note, a
+tint outside the four names or on a form that is not sticky is dropped with the note kept);
+`NoteNode` with an in-place editor that stops the canvas's keys and serves its own
+`edit:paste`; the four tint chips; `--tint-yellow|blue|green|pink` declared in BOTH theme
+blocks; and three verbs, five palette rows and three `V9_DOORS` entries.
+
+**Decisions.**
+- *A frame goes to the BACK at its mint and its interior takes no gesture.* A region drawn over
+  what it encloses is a region a person must immediately send backwards, and a click in its
+  middle must reach the object inside it — proved by `elementFromPoint` in the product check,
+  which is what a DOM read can prove and a screenshot cannot.
+- *A frame owns nothing.* It is a region drawn behind objects, never a group: a second
+  ownership model would give every panel two possible homes, which is the failure
+  `shared/groups.ts` exists to avoid.
+- *`text` has no card at all* — no fill, no border, no shadow. The brief asks for editable type,
+  and "a large empty terminal frame" is the thing it asks for instead of.
+
+**Red first.** `note.kind.1` and `note.1` (layout) were both written before the kind existed and
+watched failing; `note.1` (product) was red on a real defect of its own — two blocks in the
+product suite had both declared `const IDS`, which is a SyntaxError that aborts the whole file
+before any check runs (the "a check that throws aborts the run" rule reaching the suite's own
+top level). Renamed to `NOTE_IDS`/`IMAGE_IDS`.
+
+**Green.** `verify:file` 88/88, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
+`verify:panels:product` 74/74 at 105.9 s (`out/v9-evidence/m187-product.log`, exit 0).
+
+**Recorded bound.** `hitTest`'s pure rect math still names a frame for a DROP into its interior;
+only the DOM gesture is form-aware. Drop targeting has six callers and a form-aware exception
+belongs in its own milestone, so it is written down rather than changed.
+
+### Acts III–IV — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after M187 exited 1 at 55/59. Four scenes, two causes; each was looked
+at (fresh and diff, `out/visual/`) before a golden was written.
+
+- **browser** — The pane gains M185's control row under the address bar: four named width chips
+  with the current one pressed, Capture, and Find the project. The page below moves down by that
+  one row and nothing else on the page moves; the address readout, the guest and the rail row
+  are unchanged.
+- **teammate** — The same browser pane is visible behind the teammates pane, so it wears the
+  same one-row change. The pane itself — brief, places, services, routines — is untouched, which
+  is what this scene is for.
+- **routine** — Identical to `teammate`'s reason: the browser pane in the background gained its
+  control row; the routine rows and their verbs are unchanged.
+- **palette-query** — The canvas section gained M186's and M187's rows (`Image: add a picture…`,
+  `Add a sticky note`, `Add free text`, `Add a named region`, `Tint this note…`), so the
+  filtered list is longer and its scrolled window moves. No existing row changed its words or
+  its order relative to its neighbours.

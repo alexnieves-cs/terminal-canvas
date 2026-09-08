@@ -1,3 +1,4 @@
+import { noteFormSentence } from '@shared/notes'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
@@ -73,7 +74,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image' | 'note'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -454,6 +455,16 @@ export interface PaletteActions {
   /** M184. Save a workflow's draft back to its record with the revision it was read at. */
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  addImage(path: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  replaceImage(panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  openPreview(url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  setPreviewWidth(device: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  capturePreview(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  startDevServer(script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
   runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
@@ -2252,6 +2263,33 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
+  const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
+  // M187. One row per FORM, because "add a note" and "draw a region around
+  // this work" are different intentions and a form picker would make a
+  // person choose twice. Each says what its form is FOR (the empty-state
+  // rule's sentence, from `noteFormSentence`).
+  // Three LITERAL ids: `closure.v9.1` reads this file as text for each door's
+  // row, and a template literal is a row it cannot see (which is exactly the
+  // "a declaration is not a door" failure the check exists for).
+  out.push({ id: 'note.add.sticky', title: 'Add a sticky note', subtitle: noteFormSentence('sticky'), group: 'canvas', searchText: 'note sticky add annotate label yellow', run: () => { actions.addNote('sticky') } })
+  out.push({ id: 'note.add.text', title: 'Add free text', subtitle: noteFormSentence('text'), group: 'canvas', searchText: 'note text add type words heading', run: () => { actions.addNote('text') } })
+  out.push({ id: 'note.add.frame', title: 'Add a named region', subtitle: noteFormSentence('frame'), group: 'canvas', searchText: 'note frame region group area label around', run: () => { actions.addNote('frame') } })
+  const notePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'note')?.id
+  out.push(withReason({ id: 'note.tint', title: 'Tint this note…', subtitle: 'yellow, blue, green or pink — type note-tint <panel> <tint>', group: 'canvas', searchText: 'note tint colour yellow blue green pink sticky', run: () => actions.beginRunVerb() }, notePanelId === undefined ? 'select a sticky note first' : undefined))
+  // M186. The picture rows. `image.add` opens the verb line (a path is what
+  // it needs and this app has no second file browser); `image.replace` acts on
+  // the SELECTED picture through the system's own chooser, and is disabled by
+  // name when the selection is not a picture.
+  out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'type image-add <path> — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb() })
+  out.push(withReason({ id: 'image.replace', title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
+  // M185. The preview's four rows. Every one is PRESENT at rest — the verbs
+  // refuse by name against no subject (this repo's rule: a row that
+  // disappears is indistinguishable from a feature that was never built) —
+  // and the four ids are literals `closure.v9.1` reads this file as text for.
+  out.push({ id: 'preview.open', title: 'Preview: open the project', subtitle: 'the page a process of the selected panel is serving', group: 'canvas', searchText: 'preview open project port dev server localhost discover', run: () => { void actions.openPreview() } })
+  out.push({ id: 'preview.width', title: 'Preview: set the width…', subtitle: 'phone, tablet, laptop or full — type preview-width <name> on the verb line', group: 'canvas', searchText: 'preview width device phone tablet laptop responsive', run: () => actions.beginRunVerb() })
+  out.push({ id: 'preview.capture', title: 'Preview: capture the page', subtitle: 'a real picture of the pane, placed as an image on the canvas', group: 'canvas', searchText: 'preview capture screenshot picture image page', run: () => { void actions.capturePreview() } })
+  out.push({ id: 'preview.dev', title: 'Preview: start the dev server', subtitle: "the project's own dev script, in a terminal you can see and stop", group: 'canvas', searchText: 'preview dev server npm run start serve project', run: () => { void actions.startDevServer() } })
   out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })
 
   // --- M96: the verb line ------------------------------------------------------

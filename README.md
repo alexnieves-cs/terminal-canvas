@@ -396,6 +396,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        teammate:choose-place
                        routine:list / routine:save / routine:delete / routine:run
                        browser:read
+                       preview:discover / preview:capture
+                       asset:put / asset:choose
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        shelf:list / shelf:save
@@ -975,6 +977,9 @@ price of not killing something.
 | M182 | v9 Act II — one template, two editors: `shared/template-edit.ts`'s six operations, the record's revision and the stale save, the canvas binding (Update through the operations), the diagram's drag and Delete, six `workflow-*` verbs and rows — `edit.1–.6`, `store.edit.1`, product `workflow.edit.1–.3` | ✅ done |
 | M183 | v9 Act II — the library, the wire and the inspector: `shared/template-library.ts`'s table (an entry, a default node and the placement per kind), a real drag from the library onto the diagram, a port drag that wires an edge and refuses a cycle by name, edge selection and Delete, and the context pane's node editor rendering the selected block's fields from its kind's schema — `library.1–.2`, product `workflow.lib.1`, `workflow.wire.1`, `workflow.inspect.1` | ✅ done |
 | M184 | v9 Act II — Save, Run and Stop on the diagram: the draft saved back with the revision it was read at (stale keeps the draft and offers Reload or Save a copy), Run over the DRAFT, the run's immutable `definition` snapshot and node→panel `mapping`, `shared/run-outcome.ts`'s per-block words on the selected run, and the `workflow-save`/`-run`/`-stop` verbs — `run.def.1`, `run.outcome.1`, product `workflow.save.1` | ✅ done |
+| M185 | v9 Act III — the preview reads as the app beside its code: `shared/preview.ts`'s named device widths and four discovery states, `main/preview-discover.ts` asking ONE `lsof` over the panel's process TREE and reading one `package.json` while running nothing, `main/preview-capture.ts` (the scheme on the guest's live url, an empty image and a failed write each refused by name, one PNG under `userData/captures`), `device` on the browser record laid out (never transformed), a capture as an ordinary image object, a loopback-only coalesced reload, Retry on a failed page, and four verbs/rows/doors — `preview.1`, `preview.capture.1`, `preview.device.1`, product `preview.1` | ✅ done |
+| M186 | v9 Act IV — durable images: `main/asset-store.ts` content-addressed by sha-256 (the same picture twice is one file, the extension from the magic number, both caps reported, the oldest pruned), `image.asset` on the record, `asset:put`/`asset:choose`, a drop or paste that lands on NOTHING becoming a picture with every agent target unchanged, and Replace on every arm through the system's own chooser — `asset.1`, `image.asset.1`, product `image.2` | ✅ done |
+| M187 | v9 Act IV — notes, free text and named frames: the sixteenth kind as ONE record with three forms, `shared/notes.ts`'s summary and caps, the four tints declared in both theme blocks, an in-place editor that stops the canvas's keys and serves its own paste, a frame minted behind what it encloses whose interior takes no gesture, and three verbs with five rows — `note.kind.1`, `note.1`, product `note.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

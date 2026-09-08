@@ -2296,6 +2296,39 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M187 — note.kind.1. THE SIXTEENTH KIND, one record and three FORMS.
+//      `makeNotePanel` centres on the point and a FRAME is minted larger,
+//      because a region that encloses nothing is a region a person has to
+//      resize before it means what they drew. `isNotePanel` is true for it
+//      alone, and — the dangerous direction — `isTerminalPanel` must be FALSE
+//      for it: a note satisfying the terminal partition reaches assignTiers
+//      and registry.ensure with no spec at all, which is a crash with no
+//      message rather than a missing feature. The tint belongs to the sticky
+//      alone and is dropped for the other two forms at the mint.
+{
+  const has = typeof V.makeNotePanel === 'function' && typeof V.isNotePanel === 'function' && typeof V.noteSummary === 'function'
+  const NAME = 'note.kind.1 makeNotePanel centres on the point, mints a frame larger than a note, keeps a tint only on a sticky; isNotePanel is true for it alone and every other kind\'s partition — isTerminalPanel included — is false for it; noteSummary is the first non-empty line, cut, with a per-form sentence when there is none'
+  if (!has) ok(NAME, false, 'panels.ts / notes.ts do not export makeNotePanel, isNotePanel and noteSummary')
+  else {
+    const sticky = V.makeNotePanel('nt1', { x: 100, y: 50 }, 3, 'sticky', 'first line\nsecond', 'blue')
+    const text = V.makeNotePanel('nt2', { x: 0, y: 0 }, 1, 'text', '', 'blue')
+    const frame = V.makeNotePanel('nt3', { x: 0, y: 0 }, 1, 'frame', '')
+    const partitions = ['isTerminalPanel', 'isReviewPanel', 'isFilePanel', 'isJiraPanel', 'isGithubPanel', 'isToolboxPanel', 'isMemoryPanel', 'isChatPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel', 'isImagePanel']
+    const leaked = partitions.filter((name) => typeof V[name] === 'function' && V[name](sticky) === true)
+    ok(NAME,
+      sticky.kind === 'note' && sticky.note.form === 'sticky' && sticky.note.text === 'first line\nsecond' && sticky.note.tint === 'blue' &&
+        sticky.rect.x === 100 - sticky.rect.w / 2 && sticky.rect.y === 50 - sticky.rect.h / 2 &&
+        // A frame is minted larger than a note, in both dimensions.
+        frame.rect.w > sticky.rect.w && frame.rect.h > sticky.rect.h &&
+        !('tint' in text.note) && !('tint' in frame.note) &&
+        V.isNotePanel(sticky) === true && leaked.length === 0 &&
+        V.noteSummary('', 'frame') === 'an unnamed region' && V.noteSummary('', 'text') === 'empty text' && V.noteSummary('', 'sticky') === 'an empty note' &&
+        V.noteSummary('\n  hello there  \nmore', 'sticky') === 'hello there' &&
+        V.noteSummary('x'.repeat(80), 'sticky', 10) === `${'x'.repeat(9)}…`,
+      JSON.stringify({ sticky, text, frame, leaked }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

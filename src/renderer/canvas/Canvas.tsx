@@ -86,7 +86,7 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeNotePanel, isNotePanel, makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
@@ -127,10 +127,16 @@ import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
+import { NoteNode } from '@renderer/note/NoteNode'
 import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
+import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
+import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
+import { normaliseTypedUrl } from '@shared/browser-panel'
+import { displayPath } from '@shared/display-path'
+import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -1443,7 +1449,18 @@ export function Canvas({
       // attaches it through its composer. A terminal that is not spawned gets
       // nothing (a paste into a dormant card has nowhere to land), and an
       // empty clipboard is the `empty` arm, not a paste of nothing.
-      if (id === null) return
+      // M186. NO PANEL HAS THE KEYBOARD: the picture is the canvas's. This is
+      // the arm that did not exist — the paste simply returned, so ⌘V over an
+      // empty canvas did nothing and said nothing. Every agent target below
+      // keeps its behaviour exactly.
+      if (id === null) {
+        void window.canvas.agentSession.clipboardFile().then((file) => {
+          if (file.kind === 'empty') return
+          if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+          void addImageRef.current?.(file.path)
+        })
+        return
+      }
       const panel = panelsRef.current.find((p) => p.rect.id === id)
       // A chat keeps its OWN door: ChatNode subscribes to this same event and
       // attaches the clipboard's bytes when its textarea is focused. The first
@@ -3360,6 +3377,7 @@ export function Canvas({
     const base = cwd.replace(/\/+$/, '')
     return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
   }
+  const addImageRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
   const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
     if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
     const world = screenToWorld(screen, viewportRef.current)
@@ -3379,6 +3397,18 @@ export function Canvas({
         else insertIntoComposer(hit, `@${relativeTo(target.chat.cwd, path)} `)
         return 'pasted'
       }
+    }
+    // M186. A PICTURE dropped on nothing becomes a picture. The agent targets
+    // above are untouched — a drop on a chat is still an attachment and a drop
+    // on a terminal is still a shell-quoted path — because this is the arm for
+    // a gesture that landed on the canvas itself, which had no arm at all.
+    // Through a REF: `addImageFromPath` is declared with the other media
+    // verbs further down, and naming a `const` from a hook's dependency list
+    // above its declaration is a TDZ error rather than a style preference
+    // (the same reason `openFilePanel`'s own test hook sits in its own effect).
+    if (attachmentKind(path) === 'image') {
+      void addImageRef.current?.(path, world)
+      return 'opened'
     }
     openFilePanel(path, world)
     return 'opened'
@@ -4868,6 +4898,235 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M187. THE NOTE'S THREE VERBS. One record, three forms, and one door each:
+   * add (the palette's rows and the agent's verb), set the text (the node's
+   * own editor commits through here, so the canvas's history has one entry
+   * per commit rather than one per keystroke), and tint (a sticky's alone).
+   */
+  const addNote = useCallback((form: string, text?: string, world?: Point): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    if (!isNoteForm(form)) return { kind: 'refused', reason: `${form} is not a note form — ${NOTE_FORMS.join(', ')}` }
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const noteId = `nt${nextIdRef.current++}`
+    setPanels((current) => {
+      // A FRAME goes to the BACK: a region drawn over the objects it encloses
+      // would cover them at the moment it is made, and the first thing a
+      // person would have to do is send it backwards.
+      const z = form === 'frame' ? Math.min(0, ...current.map((p) => p.z)) - 1 : nextZ(current)
+      const next = [...current, makeNotePanel(noteId, cascadeCentre(at, current), z, form, normaliseNoteText(text ?? ''))]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(noteId)
+    return { kind: 'ran', note: `${form} note` }
+  }, [commitHistory, selectOnly])
+  const setNoteText = useCallback((panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isNotePanel(target)) return { kind: 'refused', reason: 'that panel is not a note' }
+    const next = normaliseNoteText(text)
+    setPanels((current) => {
+      const updated = current.map((p) => (p.rect.id === panelId && isNotePanel(p) ? { ...p, note: { ...p.note, text: next } } : p))
+      commitHistory(updated)
+      return updated
+    })
+    return { kind: 'ran', note: noteSummary(next, target.note.form) }
+  }, [commitHistory])
+  const setNoteTint = useCallback((panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isNotePanel(target)) return { kind: 'refused', reason: 'that panel is not a note' }
+    if (!isNoteTint(tint)) return { kind: 'refused', reason: `${tint} is not a tint — ${NOTE_TINTS.join(', ')}` }
+    if (target.note.form !== 'sticky') return { kind: 'refused', reason: 'only a sticky note carries a tint' }
+    setPanels((current) => {
+      const updated = current.map((p) => (p.rect.id === panelId && isNotePanel(p) ? { ...p, note: { ...p.note, tint } } : p))
+      commitHistory(updated)
+      return updated
+    })
+    return { kind: 'ran', note: `${tint} note` }
+  }, [commitHistory])
+
+  /**
+   * M186. A PICTURE INTO THE STORE AND ONTO THE CANVAS, the one door every
+   * gesture takes: a drop on empty canvas, a paste with no agent to take it,
+   * the palette row, the agent's verb and the node's Replace. The bytes go
+   * into the content-addressed store first (so the panel names an identity a
+   * later export can carry), and the panel is minted from the store's own
+   * path — never from the source, which the person may move or delete.
+   */
+  const addImageFromPath = useCallback(async (path: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const stored = await window.canvas.asset.put({ path })
+    if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const imageId = `img${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeImagePanel(imageId, at, nextZ(current), stored.path, displayPath(path).short, stored.id)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(imageId)
+    return { kind: 'ran', note: `${displayPath(path).short}${stored.wrote ? '' : ' (already in this canvas\'s pictures)'}` }
+  }, [commitHistory, selectOnly])
+  addImageRef.current = addImageFromPath
+  /**
+   * M186. Replace: the SAME store door, pointed at an existing panel. A
+   * picture whose bytes are gone is an object a person can repair — the arm
+   * that says `missing` keeps the panel, and this is the verb beside it.
+   */
+  const [imageReloads, setImageReloads] = useState<Record<string, number>>({})
+  const replaceImage = useCallback(async (panelId: string, path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const target = panelsRef.current.find((p) => p.rect.id === panelId)
+    if (target === undefined || !isImagePanel(target)) return { kind: 'refused', reason: 'that panel is not a picture' }
+    // No path given: the SYSTEM's own chooser. A cancel is not a refusal and
+    // says nothing — a sentence about a dialog the person closed on purpose
+    // is noise.
+    const chosen = path ?? await window.canvas.asset.choose()
+    if (chosen === null || chosen === undefined) return { kind: 'ran', note: 'nothing chosen' }
+    const stored = await window.canvas.asset.put({ path: chosen })
+    if (stored.kind === 'refused') return { kind: 'refused', reason: stored.reason }
+    setPanels((current) => {
+      const next = current.map((p) => (p.rect.id === panelId && isImagePanel(p) ? { ...p, image: { path: stored.path, asset: stored.id }, title: displayPath(chosen).short } : p))
+      commitHistory(next)
+      return next
+    })
+    setImageReloads((current) => ({ ...current, [panelId]: (current[panelId] ?? 0) + 1 }))
+    return { kind: 'ran', note: `${displayPath(chosen).short} is this picture now` }
+  }, [commitHistory])
+
+  /**
+   * M185. THE PREVIEW'S FOUR VERBS, all over one subject rule.
+   *
+   * The SUBJECT of discovery is a running terminal or chat — the panel that
+   * has a directory and a process tree — because that is the only thing on
+   * this canvas that knows what project is open and what it started. The
+   * focused panel first, then the selection; no subject is a REFUSAL BY NAME
+   * that says what to select, never a silent nothing.
+   */
+  const previewSubject = useCallback((): { id: string; cwd: string; pids: number[] } | undefined => {
+    const candidates = [focusedIdRef.current, ...selectedIdsRef.current].filter((id): id is string => id !== null && id !== undefined)
+    for (const id of candidates) {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (panel === undefined) continue
+      if (isChatPanel(panel)) return { id, cwd: panel.chat.cwd, pids: [] }
+      if (!isTerminalPanel(panel)) continue
+      const status = registry.get(id)?.status
+      const cwd = getLiveSession(id)?.cwd ?? panel.spec.cwd
+      return { id, cwd, pids: status?.kind === 'running' ? [status.pid] : [] }
+    }
+    return undefined
+  }, [registry])
+  const REASON_NO_PREVIEW_SUBJECT = 'select the terminal your project runs in — discovery reads that panel\'s own directory and processes'
+  const discoverProject = useCallback(async (): Promise<PreviewDiscovery | { kind: 'refused'; reason: string }> => {
+    const subject = previewSubject()
+    if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
+    return window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
+  }, [previewSubject])
+  /** The pane the verbs act on: the selected browser panel, else the focused one. */
+  const previewPane = useCallback((): Extract<Panel, { kind: 'browser' }> | undefined => {
+    const ids = [...selectedIdsRef.current, focusedIdRef.current]
+    for (const id of ids) {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (panel !== undefined && isBrowserPanel(panel)) return panel
+    }
+    return undefined
+  }, [])
+  const openPreview = useCallback(async (url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    if (url !== undefined) {
+      const normalised = normaliseTypedUrl(url)
+      if (normalised.kind === 'refused') return { kind: 'refused', reason: normalised.reason }
+      // An open pane is POINTED at the page rather than a second pane minted:
+      // two panes on one project is the thing a person then has to tidy. The
+      // record is written and the guest reloaded through the store's own door,
+      // which is what the node listens to — never a second guest.
+      const pane = previewPane()
+      // The guest is NAVIGATED (M185's critic, finding 2) — a reload reloads
+      // the page it already has, and the record's new url would then be
+      // written back to the old one by the guest's own did-navigate.
+      if (pane !== undefined && navigateBrowser(pane.rect.id, normalised.url)) {
+        setPanels((current) => current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, url: normalised.url } : p)))
+        return { kind: 'ran', note: `${pane.title ?? 'the preview'} now shows ${normalised.url}` }
+      }
+      openBrowserPanel(normalised.url)
+      return { kind: 'ran', note: `opened ${normalised.url}` }
+    }
+    const found = await discoverProject()
+    if (found.kind === 'refused') return found
+    if (found.kind === 'one') {
+      const one = found.candidates[0]
+      if (one === undefined) return { kind: 'refused', reason: found.note }
+      openBrowserPanel(one.url)
+      return { kind: 'ran', note: found.note }
+    }
+    // `many` and `none` are two different next actions and neither is an open:
+    // the note says which, and the pane's own list is where a person picks.
+    return { kind: 'refused', reason: found.note }
+  }, [discoverProject, openBrowserPanel, previewPane])
+  /**
+   * The pane is NAMED by the pane's own control and found by the verb's
+   * subject rule otherwise. The first cut had the control `selectOnly` the
+   * pane and then call this, which reads the selection through a ref that
+   * React had not written yet — the chip did nothing at all on a pane that
+   * was not already selected, and the state update it depended on arrived
+   * one render later.
+   */
+  const setPreviewWidth = useCallback((device: string, paneId?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    if (!isDeviceWidthId(device)) return { kind: 'refused', reason: `${device} is not a device width — ${DEVICE_WIDTHS.map((d) => d.id).join(', ')}` }
+    const named = paneId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === paneId)
+    const pane = named !== undefined && isBrowserPanel(named) ? named : previewPane()
+    if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
+    setPanels((current) => {
+      // `full` is the ABSENT default, so choosing it REMOVES the key rather
+      // than writing `device: 'full'`: the record, the parser and the node all
+      // spell "the pane's own width" as the absence, and a written `full`
+      // would be a second spelling that only the parser would ever see.
+      const next = current.map((p) => {
+        if (p.rect.id !== pane.rect.id || !isBrowserPanel(p)) return p
+        const { device: _was, ...rest } = p
+        return (device === 'full' ? rest : { ...rest, device }) as typeof p
+      })
+      commitHistory(next)
+      return next
+    })
+    return { kind: 'ran', note: `${deviceWidth(device).label} in ${pane.title ?? 'the preview'}` }
+  }, [commitHistory, previewPane])
+  const capturePreviewNow = useCallback(async (): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const pane = previewPane()
+    if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
+    const guestId = browserGuestId(pane.rect.id)
+    if (guestId === undefined) return { kind: 'refused', reason: 'no page is open in this pane — open one, then capture it' }
+    const shot = await window.canvas.preview.capture({ webContentsId: guestId })
+    if (shot.kind === 'refused') return { kind: 'refused', reason: shot.reason }
+    // A capture is an ORDINARY image object, not a new kind: it moves, groups,
+    // exports and deletes like every other picture, and its title names the
+    // page it is of so its provenance is on screen rather than in a log.
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const imageId = `img${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(imageId)
+    return { kind: 'ran', note: `captured ${shot.url}` }
+  }, [commitHistory, previewPane, selectOnly])
+  const startDevServer = useCallback(async (script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const subject = previewSubject()
+    if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
+    const found = await window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
+    const chosen = script === undefined ? found.scripts[0] : found.scripts.find((s) => s.name === script)
+    if (chosen === undefined) {
+      return { kind: 'refused', reason: found.scripts.length === 0 ? found.note : `${script} is not one of this project's dev scripts — ${found.scripts.map((s) => s.name).join(', ')}` }
+    }
+    // Through the ORDINARY spawn door: the dev server is a panel a person can
+    // see, read and stop, never a hidden child of the preview. Discovery
+    // itself still runs nothing — this is a separate verb a person asked for.
+    // `npm run <name>` and not the script's own command: the script line is
+    // what npm runs FOR you (it resolves the project's own binaries), and
+    // running it directly would miss node_modules/.bin. The pane's tooltip
+    // says both, so the promise and the spawn agree (M185's critic, 5).
+    const spawned = await window.canvas.spawn.sheet({ cwd: subject.cwd, command: `npm run ${chosen.name}`, title: `${chosen.name} · ${found.project ?? 'project'}` })
+    if (spawned.kind === 'refused') return { kind: 'refused', reason: spawned.reason }
+    return { kind: 'ran', note: `npm run ${chosen.name} in ${subject.cwd}` }
+  }, [previewSubject])
+
+  /**
    * M128. The skill panel's mint — the ONE door, called by the Skills pane's
    * drop, a click on a card, and (through the palette's action object) by
    * anything later. The world point is the drop's own, so the panel lands
@@ -4988,6 +5247,16 @@ export function Canvas({
     applyStarter,
     saveWorkflowDraft,
     saveWorkflowCopyDraft: saveWorkflowCopy,
+    addImageFromPath,
+    replaceImagePanel: replaceImage,
+    addNote,
+    setNoteText,
+    setNoteTint,
+    openPreviewNow: openPreview,
+    setPreviewWidthNow: setPreviewWidth,
+    capturePreviewNow,
+    startDevServerNow: startDevServer,
+    discoverProject,
     stopWorkflowRun,
     runWorkflowNow: runWorkflow,
     templateRowsRef,
@@ -5845,6 +6114,11 @@ export function Canvas({
                 <BrowserNode
                   key={panel.rect.id}
                   panel={panel}
+                  onDiscover={discoverProject}
+                  onOpenPreview={(url) => { void openPreview(url) }}
+                  onSetDevice={(paneId, device) => { setPreviewWidth(device, paneId) }}
+                  onCapture={capturePreviewNow}
+                  onStartDev={startDevServer}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
@@ -5857,12 +6131,33 @@ export function Canvas({
                 />
               )
             }
+            // M187. The sixteenth kind: a note, in one of its three forms.
+            if (isNotePanel(panel)) {
+              return (
+                <NoteNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                  readOnly={merged}
+                  onText={(panelId, text) => { setNoteText(panelId, text) }}
+                  onTint={(panelId, tint) => { setNoteTint(panelId, tint) }}
+                />
+              )
+            }
             // M181. The fifteenth kind: a picture, sessionless like the file panel.
             if (isImagePanel(panel)) {
               return (
                 <ImageNode
                   key={panel.rect.id}
                   panel={panel}
+                  onReplace={replaceImage}
+                  reloadKey={imageReloads[panel.rect.id]}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}

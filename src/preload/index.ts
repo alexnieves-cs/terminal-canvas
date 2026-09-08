@@ -374,6 +374,14 @@ const bridge: CanvasBridge = {
   browser: {
     read: (req) => ipcRenderer.invoke(IPC.BROWSER_READ, req)
   },
+  preview: {
+    discover: (req) => ipcRenderer.invoke(IPC.PREVIEW_DISCOVER, req),
+    capture: (req) => ipcRenderer.invoke(IPC.PREVIEW_CAPTURE, req)
+  },
+  asset: {
+    put: (req) => ipcRenderer.invoke(IPC.ASSET_PUT, req),
+    choose: () => ipcRenderer.invoke(IPC.ASSET_CHOOSE)
+  },
   board: {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),
     laneStatus: (req) => ipcRenderer.invoke(IPC.BOARD_LANE_STATUS, req),

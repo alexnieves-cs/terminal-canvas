@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 124000 // measured 2026-09-08 alone in the Electron tier after the M180–M183 checks (onboarding.*, starter.1, image.1, workflow.edit.1–.3, workflow.lib.1, workflow.wire.1, workflow.inspect.1), two green runs: 99.0s, 98.7s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 130000 // measured 2026-09-08 alone in the Electron tier after M185's preview.1 (which serves a page, attaches a guest and takes a real capture), two green runs: 101.5s, 103.3s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -2053,6 +2053,221 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } finally {
         if (server) server.close()
       }
+    }
+
+    // M185 — preview.1. THE PREVIEW IN THE REAL RENDERER, over a real local
+    //     page. Three claims, each one a silent failure if undone:
+    //     (a) a named width LAYS OUT the guest (390 css pixels, centred) —
+    //         never a transform, which would report the pane's viewport to the
+    //         page and make every media query answer for the wrong device —
+    //         and `full` REMOVES the key rather than writing `device: 'full'`,
+    //         so the record and the parser keep one spelling of the default;
+    //     (b) Capture writes a REAL PNG (its magic number read off disk) under
+    //         the app's own directory and places an ORDINARY image object whose
+    //         title names the page, so a capture's provenance is on screen;
+    //     (c) discovery through main's own handler reads the project's
+    //         package.json and answers the three-state sentence — and starts
+    //         NOTHING: the dev script is named, and the panel count is the same
+    //         after the question as before it.
+    {
+      const IDS = ['preview.1 a device width lays the guest out at 390px centred and writes device on the record, and full removes the key; Capture writes a real PNG under userData/captures and places an image panel titled by the page; discovery names the project and its dev script, answers not-asked for a panel with no process, starts nothing, and mints no panel']
+      let server = null
+      try {
+        const http = require('node:http')
+        const { existsSync: ex, readFileSync: rf } = require('node:fs')
+        server = http.createServer((_req, res) => {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end('<!doctype html><html><head><title>preview</title></head><body style="background:#123456"><h1>a page to look at</h1></body></html>')
+        })
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+        const port = server.address().port
+        // A real project directory with a real package.json: main's own
+        // handler reads it, so the fixture proves the path and not a fake.
+        const projectDir = mkdtempSync(join(tmpdir(), 'tc preview project '))
+        writeFileSync(join(projectDir, 'package.json'), JSON.stringify({ name: 'the shop', scripts: { build: 'tsc', dev: 'vite' } }), 'utf8')
+        layoutStore.save({ panels: [
+          { id: 'pv1', kind: 'browser', x: 60, y: 60, w: 720, h: 520, z: 1, url: `http://127.0.0.1:${port}/` }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'pv1', focusedId: 'pv1' })
+        flushLayoutStore()
+        const rePv = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await rePv
+        await settle()
+        const attached = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pv1"]'); return n && n.getAttribute('data-browser-live') === 'yes' ? { wc: Number(n.getAttribute('data-browser-wc')) } : false })()`), 20000)
+        const chips = await wc.executeJavaScript(`[...document.querySelectorAll('[data-preview-device]')].map((b) => b.getAttribute('data-preview-device')).join(',')`)
+        // A shell control acts on CLICK (`shellControl` preventDefaults the
+        // mousedown so focus never leaves the terminal's textarea), so a
+        // mousedown alone presses nothing — the first cut of this check
+        // dispatched one and read a pane that had not moved.
+        const press = async (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await press('[data-preview-device="phone"]')
+        const atPhone = await waitUntil(() => wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="pv1"] .browser-node__host'); if (!h || h.getAttribute('data-preview-width') !== 'phone') return false
+          const r = h.getBoundingClientRect(); const b = document.querySelector('.panel[data-panel-id="pv1"] .pf__body').getBoundingClientRect()
+          return { width: Math.round(r.width), centred: Math.abs((r.left - b.left) - (b.right - r.right)) < 4, transform: getComputedStyle(h).transform } })()`), 4000)
+        await settle(); flushLayoutStore()
+        const savedPhone = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pv1')
+        await press('[data-preview-device="full"]')
+        await settle(); flushLayoutStore()
+        const savedFull = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pv1')
+        // (b) Capture, through the pane's own control.
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+        await press('[data-preview-capture]')
+        const image = await waitUntil(() => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="image"]')].pop(); return n ? { title: n.querySelector('.pf__title')?.textContent ?? '', id: n.getAttribute('data-panel-id') } : false })()`), 15000)
+        await settle(); flushLayoutStore()
+        const imageRecord = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (image && image.id))
+        const png = imageRecord && ex(imageRecord.image.path) ? rf(imageRecord.image.path) : null
+        // (c) Discovery through main's own handler, over a real package.json.
+        const found = await wc.executeJavaScript(`window.canvas.preview.discover({ pids: [], cwd: ${JSON.stringify(projectDir)} })`)
+        const after = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+        ok(IDS[0],
+          attached !== false && chips === 'phone,tablet,laptop,full' &&
+            atPhone !== false && atPhone.width === 390 && atPhone.centred === true && (atPhone.transform === 'none' || atPhone.transform === '') &&
+            savedPhone && savedPhone.device === 'phone' &&
+            savedFull && !('device' in savedFull) &&
+            image !== false && /^capture · 127\.0\.0\.1:/.test(image.title) &&
+            imageRecord && typeof imageRecord.image.path === 'string' && /\/captures\//.test(imageRecord.image.path) &&
+            png !== null && png.length > 0 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 &&
+            found && found.kind === 'not-asked' && found.project === 'the shop' && found.scripts.map((x) => x.name).join(',') === 'dev' && /nothing to ask/.test(found.note) &&
+            after === before + 1,
+          JSON.stringify({ attached, chips, atPhone, savedPhone, savedFull, image, imagePath: imageRecord && imageRecord.image.path, pngBytes: png && png.length, found, before, after }))
+      } catch (pErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(pErr && pErr.message || pErr))
+      } finally {
+        if (server) server.close()
+      }
+    }
+
+    // M186 — image.2. A PICTURE INTO THE STORE, THROUGH THE REAL DOORS.
+    //     The agent door takes a real PNG in a fixture directory: the store
+    //     writes it under `userData/assets` named by the sha-256 of its own
+    //     bytes, the panel names that id, and the SAME file added twice is one
+    //     file and one id (the second call reports `wrote: false`) — which is
+    //     what makes the id portable rather than a fact about this disk.
+    //     Then Replace, through the node's own control against a planted
+    //     chooser answer, repoints a picture whose bytes are gone: the panel
+    //     SURVIVES the missing arm with Replace on it (the brief's "missing
+    //     bytes leave an object with a Replace action"), and after the repair
+    //     it paints. A non-image is refused by its first bytes and mints
+    //     nothing.
+    const IMAGE_IDS = ['image.2 image-add stores a picture content-addressed under userData/assets and the panel carries the id; the same file twice is one asset; a non-image is refused by its first bytes and mints no panel; a picture whose file is gone keeps its panel with the missing sentence and a Replace control, and Replace through the system chooser repoints it and paints']
+    try {
+      const { writeFileSync: wf, mkdirSync: mk, unlinkSync: ul, readdirSync: rd } = require('node:fs')
+      // NO SPACES in the fixture path: the verb line splits on whitespace, so
+      // a path with a space in it is two arguments and the door answers
+      // `that file is not there any more` about half a path. (The gesture
+      // doors take a path directly and are unaffected; this is the agent
+      // line's own bound, and it is worth knowing.)
+      const src = mkdtempSync(join(tmpdir(), 'tc-image-src-'))
+      mk(src, { recursive: true })
+      // A real 1x1 PNG, so the renderer paints real pixels rather than a fixture shape.
+      const PNG_1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+      const one = join(src, 'one.png')
+      const two = join(src, 'two.png')
+      const notPicture = join(src, 'notes.png')
+      wf(one, PNG_1x1); wf(two, PNG_1x1); wf(notPicture, Buffer.from('not a picture at all', 'utf8'))
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reI
+      await settle()
+      const added = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${one}` }, null, 5000)
+      // The same bytes under a different name: one asset, and the note says so.
+      const again = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${two}` }, null, 5000)
+      const refusedAdd = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${notPicture}` }, null, 5000)
+      await settle(); flushLayoutStore()
+      const images = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).filter((p) => p.kind === 'image')
+      const assetsDir = join(app.getPath('userData'), 'assets')
+      const stored = existsSync(assetsDir) ? rd(assetsDir).filter((n) => n.endsWith('.png')) : []
+      // The bytes are gone: the panel stays, says so, and offers Replace.
+      const victim = images[0]
+      if (victim) ul(victim.image.path)
+      const reJ = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reJ
+      await settle()
+      const gone = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); if (!n) return false
+        const arm = n.getAttribute('data-image-arm'); if (arm !== 'missing') return false
+        return { arm, note: n.querySelector('[data-image-note]')?.textContent ?? '', replace: n.querySelector('[data-image-replace]') !== null } })()`), 6000) : false
+      // Replace, through the node's own control, with the chooser answering a real file.
+      state.assetChoice = two
+      const pressed = victim ? await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}] [data-image-replace]'); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`) : false
+      const repaired = victim ? await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id=${JSON.stringify(victim.id)}]'); return n && n.getAttribute('data-image-arm') === 'data' && n.querySelector('[data-image-pixels]') !== null ? { arm: n.getAttribute('data-image-arm') } : false })()`), 8000) : false
+      state.assetChoice = undefined
+      ok(IMAGE_IDS[0],
+        added && added.kind === 'ran' && again && again.kind === 'ran' && /already in this canvas/.test(String(again.summary)) &&
+          refusedAdd && refusedAdd.kind === 'refused' && /first bytes/.test(String(refusedAdd.reason)) &&
+          images.length === 2 && images.every((p) => /^[0-9a-f]{64}$/.test(p.image.asset ?? '')) &&
+          images[0].image.asset === images[1].image.asset && stored.length === 1 &&
+          gone !== false && gone.replace === true && /not there any more/.test(gone.note) &&
+          pressed === true && repaired !== false,
+        JSON.stringify({ added, again, refusedAdd, images, stored, gone, pressed, repaired }))
+    } catch (iErr) {
+      for (const id of IMAGE_IDS) ok(id, false, 'threw: ' + String(iErr && iErr.message || iErr))
+    }
+
+    // M187 — note.1. THE NOTE KIND IN THE REAL RENDERER. Three claims:
+    //     (a) the agent door mints each form, the record carries it, and a
+    //         FRAME goes BEHIND everything (a region drawn over what it
+    //         encloses is a region a person must immediately send backwards);
+    //     (b) typing in the note's own editor and blurring it commits ONE
+    //         history entry with the text on the record — the canvas's keys
+    //         are stopped at the field, so the letters do not reach the
+    //         canvas's own shortcuts;
+    //     (c) a frame's INTERIOR takes no gesture: `elementFromPoint` in the
+    //         middle of a frame laid over a terminal panel answers the
+    //         TERMINAL, which is the brief's requirement and the one thing a
+    //         DOM read (not a screenshot) can prove.
+    const NOTE_IDS = ['note.1 note-add mints each form with its record (a frame behind everything and larger), the note editor commits its text on blur with the canvas keys stopped at the field, and a frame laid over a panel takes no gesture in its interior — elementFromPoint in its middle answers the panel underneath']
+    try {
+      // The frame is SEEDED exactly over the terminal (a record on disk, the
+      // ordinary door), because what is being proved is a property of the
+      // rendered frame and not of where the mint happens to place one.
+      layoutStore.save({ panels: [
+        { id: 'ntTerm', x: 200, y: 200, w: 400, h: 300, z: 2, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'under the frame' },
+        { id: 'ntOver', kind: 'note', x: 180, y: 180, w: 440, h: 340, z: 1, note: { form: 'frame', text: 'release work' } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const reN = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reN
+      await settle()
+      const sticky = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add sticky' }, null, 4000)
+      const freeText = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add text' }, null, 4000)
+      const frame = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'note-add frame' }, null, 4000)
+      await settle(); flushLayoutStore()
+      const notes = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).filter((p) => p.kind === 'note')
+      const frameRecord = notes.find((p) => p.note.form === 'frame' && p.id !== 'ntOver')
+      const stickyRecord = notes.find((p) => p.note.form === 'sticky')
+      const termRecord = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'ntTerm')
+      // (b) Type into the sticky's own field and blur it.
+      const typed = stickyRecord ? await wc.executeJavaScript(`(async () => {
+        const f = document.querySelector('.panel[data-panel-id=${JSON.stringify(stickyRecord.id)}] [data-note-field]')
+        if (!f) return false
+        f.focus()
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
+        setter.call(f, 'a thought worth keeping')
+        f.dispatchEvent(new Event('input', { bubbles: true }))
+        f.blur()
+        return true })()`) : false
+      await settle(); flushLayoutStore()
+      const afterType = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (stickyRecord && stickyRecord.id))
+      // (c) The SEEDED frame lies over the terminal: what does a click in its
+      // middle hit? A DOM read, not a picture — the paint could look right
+      // while the frame still swallowed every gesture.
+      const hit = await wc.executeJavaScript(`(() => {
+        const f = document.querySelector('.panel[data-panel-id="ntOver"]')
+        const t = document.querySelector('.panel[data-panel-id="ntTerm"]')
+        if (!f || !t) return false
+        const r = f.getBoundingClientRect()
+        const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2))
+        return { inTerminal: t.contains(el), inFrame: f.contains(el), tag: el ? el.className.toString().slice(0, 40) : null } })()`)
+      ok(NOTE_IDS[0],
+        sticky && sticky.kind === 'ran' && freeText && freeText.kind === 'ran' && frame && frame.kind === 'ran' &&
+          notes.length === 4 && notes.filter((p) => p.id !== 'ntOver').map((p) => p.note.form).sort().join(',') === 'frame,sticky,text' &&
+          frameRecord && stickyRecord && termRecord &&
+          frameRecord.z < termRecord.z && frameRecord.w > stickyRecord.w &&
+          typed === true && afterType && afterType.note.text === 'a thought worth keeping' &&
+          hit !== false && hit.inTerminal === true && hit.inFrame === false,
+        JSON.stringify({ sticky, freeText, frame, notes, termZ: termRecord && termRecord.z, typed, afterType: afterType && afterType.note, hit }))
+    } catch (nErr) {
+      for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
     }
 
     // M106 — header.1 / flip.1. HEADER DISCIPLINE in the real renderer: a

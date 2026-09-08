@@ -1,9 +1,11 @@
-import { useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ImagePanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { displayPath } from '@shared/display-path'
 import type { ImageResult } from '@shared/starter'
+import { missingImageSentence } from '@shared/assets'
+import { shellControl } from '@renderer/shell/shell-control'
 
 /**
  * M181. THE IMAGE PANEL — the fifteenth kind, sessionless like the file
@@ -17,8 +19,12 @@ import type { ImageResult } from '@shared/starter'
  * do, with the full path on the frame's title (the path rule). A blank
  * picture panel would be indistinguishable from a broken one.
  *
- * No drop, paste or replace door here — M187 owns ingestion and the asset
- * lifecycle; `Replace` arrives with it. Equal to a panel in selection, drag,
+ * M186. REPLACE, on every arm that is not a picture: the brief's "missing
+ * bytes leave an OBJECT with a Replace action" — an object a person can
+ * repair, never a hole. It is present on the chrome at every arm (a picture
+ * that reads fine can still be pointed at other bytes) and it opens the
+ * SYSTEM's own chooser through main, so this app invents no file browser and
+ * sees no path the person did not point at. Equal to a panel in selection, drag,
  * resize, marks, grouping, undo and export by construction: PanelFrame and
  * the panel array do all of that, and this component owns nothing.
  */
@@ -32,6 +38,16 @@ export interface ImageNodeProps {
   readOnly?: boolean
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
   linkTarget: boolean
+  /** M186. Point this picture at other bytes; no path opens the system's chooser. */
+  onReplace: (panelId: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /**
+   * M186. Bumped when this panel's BYTES may have changed while its path did
+   * not. The store is content-addressed, so replacing a picture whose file was
+   * deleted with the same picture writes the same path back — and an effect
+   * keyed on the path alone would never re-read, leaving `missing` on screen
+   * over a file that is now there. Found by `image.2`.
+   */
+  reloadKey?: number
 }
 
 /** The sentence per arm — words, not codes (the empty-state rule). */
@@ -53,8 +69,12 @@ export function ImageNode(props: ImageNodeProps): JSX.Element {
     setResult(null)
     void window.canvas.image.read(path).then((r) => { if (live) setResult(r) }).catch(() => { if (live) setResult({ kind: 'missing' }) })
     return () => { live = false }
-  }, [path])
+  }, [path, props.reloadKey])
   const arm = result === null ? 'reading' : result.kind
+  const [said, setSaid] = useState<string | null>(null)
+  const sayTimer = useRef(0)
+  useEffect(() => () => { window.clearTimeout(sayTimer.current) }, [])
+  const say = (text: string): void => { setSaid(text); window.clearTimeout(sayTimer.current); sayTimer.current = window.setTimeout(() => setSaid((v) => (v === text ? null : v)), 4000) }
   const title = panel.title ?? (path.split('/').pop() || 'image')
   return (
     <PanelFrame
@@ -69,6 +89,11 @@ export function ImageNode(props: ImageNodeProps): JSX.Element {
       // The path rule: the basename in the chrome, the full path on the frame's title.
       rootAttrs={{ 'data-image-node': '', 'data-image-arm': arm, 'data-image-path': path, title: path }}
       title={title}
+      chrome={props.readOnly === true ? undefined : (
+        <button type="button" className="pf__verb pf__verb--word" data-image-replace
+          title="Choose different bytes for this picture"
+          {...shellControl(() => { void props.onReplace(panel.rect.id).then((r) => { if (r.kind === 'refused') say(r.reason) }) })}>Replace</button>
+      )}
       onSelect={props.onSelect}
       onBeginDrag={props.onBeginDrag}
       onBeginLink={props.onBeginLink}
@@ -80,8 +105,12 @@ export function ImageNode(props: ImageNodeProps): JSX.Element {
         ) : result.kind === 'data' ? (
           <img className="image-node__img" data-image-pixels src={result.dataUrl} alt={title} draggable={false} />
         ) : (
-          <p className="pf__note image-node__note" data-image-note title={path}>{imageArmSentence(result, path)}</p>
+          <div className="image-node__gone">
+            <p className="pf__note image-node__note" data-image-note title={path}>{imageArmSentence(result, path)}</p>
+            <p className="pf__note image-node__note">{missingImageSentence(result.kind, result.kind === 'too-large' ? { bytes: result.bytes, cap: result.cap } : undefined)}</p>
+          </div>
         )}
+        {said !== null && <p className="pf__note image-node__note" data-image-said role="status">{said}</p>}
       </div>
     </PanelFrame>
   )

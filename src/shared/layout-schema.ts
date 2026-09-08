@@ -1,5 +1,8 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
+import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId } from './preview'
+import { isAssetId } from './assets'
+import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteForm, type NoteTint } from './notes'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
@@ -338,6 +341,14 @@ export interface PersistedChatPanel extends PersistedPanelBase {
 export interface PersistedBrowserPanel extends PersistedPanelBase {
   kind: 'browser'
   url: string
+  /**
+   * M185. The named device width the guest is laid out at. ABSENT is `full`
+   * (the pane's own width) and is every pre-M185 record, so an absent key
+   * warns nothing; a present value that is not one of the four names is
+   * malformed and costs the FIELD, never the panel — a preview that vanished
+   * because a width was misspelled is a worse answer than one at full width.
+   */
+  device?: DeviceWidthId
 }
 
 /**
@@ -389,10 +400,32 @@ export interface PersistedWorkflowPanel extends PersistedPanelBase {
  */
 export interface PersistedImagePanel extends PersistedPanelBase {
   kind: 'image'
-  image: { path: string }
+  /**
+   * M186. `path` is where the bytes are on THIS machine; `asset` is what they
+   * ARE — a sha-256 of the content, present only for a picture this app took
+   * into its own store, absent for one the person pointed at in place and on
+   * every pre-M186 record. Malformed costs the FIELD, never the panel: the
+   * path still paints, and a picture that vanished because its id was
+   * misspelled would read as a panel the app deleted.
+   */
+  image: { path: string; asset?: string }
+}
+
+/**
+ * M187. The note kind on disk: one record, three forms. `form` is REQUIRED and
+ * a value outside the three drops the panel by name — a note whose form the
+ * app invented would paint as something the person did not draw. `text` absent
+ * is an EMPTY note (a person can make one and type later), not a malformed
+ * record. `tint` belongs to the sticky alone; anywhere else it is dropped with
+ * a warning and the panel is kept.
+ */
+export interface PersistedNotePanel extends PersistedPanelBase {
+  kind: 'note'
+  note: { form: NoteForm; text: string; tint?: NoteTint }
 }
 
 export type PersistedPanel =
+  | PersistedNotePanel
   | PersistedImagePanel
   | PersistedMemoryPanel
   | PersistedTerminalPanel
@@ -970,7 +1003,13 @@ function parsePanel(
       warnings.push(`dropped browser panel ${id}: url ${JSON.stringify(url)} is not an http(s) page`)
       return null
     }
-    return { ...base, kind: 'browser', url }
+    const deviceRaw = (raw as Record<string, unknown>).device
+    let device: DeviceWidthId | undefined
+    if (deviceRaw !== undefined) {
+      if (isDeviceWidthId(deviceRaw)) device = deviceRaw
+      else warnings.push(`browser panel ${id}: device ${JSON.stringify(deviceRaw)} is not one of ${DEVICE_WIDTHS.map((d) => d.id).join(', ')} — the panel is kept at full width`)
+    }
+    return { ...base, kind: 'browser', url, ...(device === undefined ? {} : { device }) }
   }
   if (kind === 'work') {
     // M116. The item id is the card's only identity, so an unusable one
@@ -1025,7 +1064,29 @@ function parsePanel(
       warnings.push(`dropped image panel ${id}: image.path was not an absolute path`)
       return null
     }
-    return { ...base, kind: 'image', image: { path: image.path } }
+    const assetRaw = image.asset
+    let asset: string | undefined
+    if (assetRaw !== undefined) {
+      if (isAssetId(assetRaw)) asset = assetRaw
+      else warnings.push(`image panel ${id}: image.asset ${JSON.stringify(assetRaw)} is not a sha-256 asset id — the picture is kept and its store identity dropped`)
+    }
+    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }) } }
+  }
+  if (kind === 'note') {
+    const note = (raw as Record<string, unknown>).note
+    if (!isRecord(note) || !isNoteForm(note.form)) {
+      warnings.push(`dropped note panel ${id}: note.form was not one of ${NOTE_FORMS.join(', ')}`)
+      return null
+    }
+    const text = isStr(note.text) ? normaliseNoteText(note.text) : ''
+    if (note.text !== undefined && !isStr(note.text)) warnings.push(`note panel ${id}: note.text was not a string — the note is kept, empty`)
+    let tint: NoteTint | undefined
+    if (note.tint !== undefined) {
+      if (!isNoteTint(note.tint)) warnings.push(`note panel ${id}: note.tint ${JSON.stringify(note.tint)} is not one of ${NOTE_TINTS.join(', ')} — the note is kept untinted`)
+      else if (note.form !== 'sticky') warnings.push(`note panel ${id}: only a sticky note carries a tint — the note is kept untinted`)
+      else tint = note.tint
+    }
+    return { ...base, kind: 'note', note: { form: note.form, text, ...(tint === undefined ? {} : { tint }) } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
