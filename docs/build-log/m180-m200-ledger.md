@@ -1619,8 +1619,9 @@ Beyond `docs/load-bearing.md`'s standing manual-only list, this run adds four:
 | `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/final3-visual.log` |
 | `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/final3-packaged.log` |
 
-Run at `ce6bdb8`, the commit the tag `v5.0.0` names, with a clean tree. (`tag-*.log` beside them
-are the same three at the commit before this one, which differs only in this file.)
+Run at the tagged commit with a clean tree. The `tag-*.log` files beside them are the same three
+commands at the previous commit, and the `main-*.log` files the same three at the act's merge —
+three green passes over the same tree, the last of them at the tag.
 
 `verify:packaged` was red once at this commit and green on the re-run, and the reason is worth
 recording rather than hiding: checks 9 and 11 read a spawned PTY's pid in the packaged app, and
