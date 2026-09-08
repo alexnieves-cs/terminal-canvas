@@ -4845,7 +4845,7 @@ export function Canvas({
     for (const o of wanted) {
       const centre = { x: at.x + o.rect.dx + o.rect.w / 2, y: at.y + o.rect.dy + o.rect.h / 2 }
       const size = { w: o.rect.w, h: o.rect.h }
-      const z = nextZ([...panelsRef.current, ...minted])
+      const z = nextZ([...panelsRef.current, ...minted]) + 1
       let panel: Panel
       if (o.kind === 'terminal') { const id = `n${nextIdRef.current++}`; panel = { ...makePanel(id, centre, z, undefined, size), title: 'a terminal' }; dormant.push(id) }
       else if (o.kind === 'file') { panel = { ...makeFilePanel(`f${nextIdRef.current++}`, centre, z, { path: files!.notePath, prose: true }, size), title: 'a note' } }
@@ -4856,9 +4856,11 @@ export function Canvas({
       applied.push(o.key)
     }
     if (minted.length > 0) {
-      const next = [...panelsRef.current, ...minted]
-      setPanels(next)
-      commitHistory(next)
+      // A FUNCTIONAL update, never a value from the ref: the chat's own
+      // setPanels is still queued at this point, and a value computed from
+      // the ref would replace the array WITHOUT the chat (the act-close
+      // visual run: four examples, no conversation).
+      setPanels((current) => { const next = [...current, ...minted]; commitHistory(next); return next })
       if (dormant.length > 0) setDormantIds((current) => new Set([...current, ...dormant]))
       setAnnotations((current) => [...current, ...captions].slice(-ANNOTATIONS_MAX))
       const number = nextGroupIdRef.current++

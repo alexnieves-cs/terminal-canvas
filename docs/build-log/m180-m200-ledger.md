@@ -625,3 +625,21 @@ note had drawn its slowest figure from a failing run — corrected to green wall
 `onboarding.agent.1` failed in the two runs where `onboarding.start.1`'s chat never appeared
 (it closes that chat), the stale-closure cause fixed above; the README row is now done; the
 narrowed `noTerminal` predicate is the milestone's own change and is documented in the check.
+
+### Act I — the close, first attempt
+
+On `efb810a` the three commands ran in sequence (`out/v9-evidence/act1-*.log`, `.exit`):
+`npm run verify` exit 0 (38 suites, `act1-verify.log`); `npm run verify:visual` exit 1 at
+57/58 — the `starter` scene threw its own guard, "the arrangement is not on screen
+(file,image,terminal,workflow)": four examples and NO conversation; `npm run verify:packaged`
+exit 1 at 0/1 — electron-builder's `npx` tried to write its debug log under the
+repository-local npm cache (`out/cache/npm/_logs/…`, ENOENT).
+
+The visual red is a real race the loud scene guard caught (the critic's point about the
+guard, vindicated within the hour): `applyStarter` built the examples' array from
+`panelsRef.current` and committed it as a VALUE while `beginNewChat`'s own `setPanels` was
+still queued, so the later value replaced the array without the chat — the product harness
+and every earlier capture had a commit land in the gap. FIXED: a functional update over
+`current`, which is how every other mint in `Canvas.tsx` commits. The packaged red is the
+environment: `mkdir -p out/cache/npm/_logs` and the same command again; recorded so the next
+session creates it before `verify:packaged`. Both are rerun below on the fixed head.
