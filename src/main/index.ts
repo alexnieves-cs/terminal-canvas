@@ -6,6 +6,8 @@ import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chm
 import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
 import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
 import { createBrowserHandlers } from './browser-read'
+import { discoverPreview } from './preview-discover'
+import { capturePreview } from './preview-capture'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -1971,6 +1973,43 @@ app.whenReady().then(async () => {
             })
             r.on('error', (error) => { clearTimeout(deadline); reject(error) })
           })
+        })
+      }
+    },
+    // M185. The preview: discovery READS (one lsof over the pids the renderer
+    // already holds, one package.json at the directory it named) and starts
+    // nothing; capture writes one PNG under `userData/captures` and answers
+    // with the page it is a picture of. The guest is resolved by the id the
+    // node learned on did-attach, and checked to be a webview, exactly as the
+    // read path does — one rule, two doors.
+    {
+      discover: (req) => discoverPreview({
+        pids: Array.isArray(req?.pids) ? req.pids.filter((n) => Number.isInteger(n) && n > 0) : [],
+        cwd: typeof req?.cwd === 'string' && req.cwd.trim() !== '' ? req.cwd : app.getPath('home'),
+        run: async (command, args) => {
+          const out = await new Promise<{ code: number; stdout: string }>((resolve) => {
+            const child = spawnChild(command, [...args], { stdio: ['ignore', 'pipe', 'ignore'] })
+            let stdout = ''
+            child.stdout?.on('data', (c: Buffer) => { stdout += c.toString('utf8') })
+            child.on('error', () => resolve({ code: 1, stdout: '' }))
+            child.on('close', (code: number | null) => resolve({ code: code ?? 0, stdout }))
+          })
+          return out
+        },
+        readText: async (path) => { try { return readFileSync(path, 'utf8') } catch { return undefined } }
+      }),
+      capture: async (req) => {
+        const guest = typeof req?.webContentsId === 'number' ? webContents.fromId(req.webContentsId) : null
+        if (guest === null || guest === undefined || guest.isDestroyed()) return { kind: 'refused' as const, reason: 'no page is open in this pane — open one, then capture it' }
+        if (guest.getType() !== 'webview') return { kind: 'refused' as const, reason: 'that id is not a page in a browser panel' }
+        const dir = join(app.getPath('userData'), 'captures')
+        try { mkdirSync(dir, { recursive: true }) } catch { /* the write below names the failure */ }
+        return capturePreview({
+          getUrl: () => guest.getURL(),
+          capture: () => guest.capturePage(),
+          write: async (path, data) => { writeFileSync(path, data) },
+          dir,
+          now: () => Date.now()
         })
       }
     }

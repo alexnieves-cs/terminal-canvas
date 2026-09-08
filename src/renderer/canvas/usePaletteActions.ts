@@ -67,6 +67,7 @@ import { zoomTarget } from './viewport'
 import type { PersistedBookmark } from '@shared/layout-schema'
 import type { PersistedTeammate } from '@shared/teammates'
 import type { NavigatorPane } from '@renderer/shell/useShellChrome'
+import type { Discovery as PreviewDiscovery } from '@shared/preview'
 
 export interface PaletteActionsDeps {
   recheckEnvironment: () => Promise<import("@shared/env-report").EnvReport>
@@ -81,6 +82,12 @@ export interface PaletteActionsDeps {
   /** M184. Canvas's stop: every live pool of this template interrupted, nothing killed. */
   stopWorkflowRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   saveWorkflowCopyDraft: (templateId: string) => Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }>
+  /** M185. The preview's four verbs and the discovery the pane's own control asks. */
+  openPreviewNow: (url?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  setPreviewWidthNow: (device: string, paneId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  capturePreviewNow: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  startDevServerNow: (script?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  discoverProject: () => Promise<PreviewDiscovery | { kind: 'refused'; reason: string }>
   /** M184. Canvas's Run over the draft (the same instantiation the panel's Run calls). */
   runWorkflowNow: (templateId: string) => string | undefined
   registry: Registry
@@ -214,7 +221,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -279,6 +286,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'workflow-run': return self.runWorkflowNow(a.template!)
           case 'workflow-stop': return self.stopWorkflow(a.template!)
           case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
+          case 'preview-open': return self.openPreview(a.url)
+          case 'preview-width': return self.setPreviewWidth(a.device!)
+          case 'preview-capture': return self.capturePreview()
+          case 'preview-dev': return self.startDevServer(a.script)
           // M182. The six editing verbs, each one draft operation through the store's door.
           case 'workflow-add': {
             const kind = String(a.kind ?? '')
@@ -1935,6 +1946,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const refusal = runWorkflowNow(templateId)
       return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
     },
+    openPreview: (url) => openPreviewNow(url),
+    setPreviewWidth: (device) => setPreviewWidthNow(device),
+    capturePreview: () => capturePreviewNow(),
+    startDevServer: (script) => startDevServerNow(script),
+    discoverPreview: () => discoverProject(),
     saveWorkflowCopy: async (templateId) => {
       const r = await saveWorkflowCopyDraft(templateId)
       return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'ran', note: r.name === undefined ? 'saved as a copy' : `saved as ${r.name}` }
@@ -2221,7 +2237,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

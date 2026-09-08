@@ -131,6 +131,9 @@ import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-dr
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
+import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
+import { reloadBrowser, browserGuestId } from '@renderer/browser/browser-store'
+import { normaliseTypedUrl } from '@shared/browser-panel'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -4868,6 +4871,136 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M185. THE PREVIEW'S FOUR VERBS, all over one subject rule.
+   *
+   * The SUBJECT of discovery is a running terminal or chat — the panel that
+   * has a directory and a process tree — because that is the only thing on
+   * this canvas that knows what project is open and what it started. The
+   * focused panel first, then the selection; no subject is a REFUSAL BY NAME
+   * that says what to select, never a silent nothing.
+   */
+  const previewSubject = useCallback((): { id: string; cwd: string; pids: number[] } | undefined => {
+    const candidates = [focusedIdRef.current, ...selectedIdsRef.current].filter((id): id is string => id !== null && id !== undefined)
+    for (const id of candidates) {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (panel === undefined) continue
+      if (isChatPanel(panel)) return { id, cwd: panel.chat.cwd, pids: [] }
+      if (!isTerminalPanel(panel)) continue
+      const status = registry.get(id)?.status
+      const cwd = getLiveSession(id)?.cwd ?? panel.spec.cwd
+      return { id, cwd, pids: status?.kind === 'running' ? [status.pid] : [] }
+    }
+    return undefined
+  }, [registry])
+  const REASON_NO_PREVIEW_SUBJECT = 'select the terminal your project runs in — discovery reads that panel\'s own directory and processes'
+  const discoverProject = useCallback(async (): Promise<PreviewDiscovery | { kind: 'refused'; reason: string }> => {
+    const subject = previewSubject()
+    if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
+    return window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
+  }, [previewSubject])
+  /** The pane the verbs act on: the selected browser panel, else the focused one. */
+  const previewPane = useCallback((): Extract<Panel, { kind: 'browser' }> | undefined => {
+    const ids = [...selectedIdsRef.current, focusedIdRef.current]
+    for (const id of ids) {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (panel !== undefined && isBrowserPanel(panel)) return panel
+    }
+    return undefined
+  }, [])
+  const openPreview = useCallback(async (url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    if (url !== undefined) {
+      const normalised = normaliseTypedUrl(url)
+      if (normalised.kind === 'refused') return { kind: 'refused', reason: normalised.reason }
+      // An open pane is POINTED at the page rather than a second pane minted:
+      // two panes on one project is the thing a person then has to tidy. The
+      // record is written and the guest reloaded through the store's own door,
+      // which is what the node listens to — never a second guest.
+      const pane = previewPane()
+      if (pane !== undefined) {
+        setPanels((current) => current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, url: normalised.url } : p)))
+        reloadBrowser(pane.rect.id)
+        return { kind: 'ran', note: `${pane.title ?? 'the preview'} now shows ${normalised.url}` }
+      }
+      openBrowserPanel(normalised.url)
+      return { kind: 'ran', note: `opened ${normalised.url}` }
+    }
+    const found = await discoverProject()
+    if (found.kind === 'refused') return found
+    if (found.kind === 'one') {
+      const one = found.candidates[0]
+      if (one === undefined) return { kind: 'refused', reason: found.note }
+      openBrowserPanel(one.url)
+      return { kind: 'ran', note: found.note }
+    }
+    // `many` and `none` are two different next actions and neither is an open:
+    // the note says which, and the pane's own list is where a person picks.
+    return { kind: 'refused', reason: found.note }
+  }, [discoverProject, openBrowserPanel, previewPane])
+  /**
+   * The pane is NAMED by the pane's own control and found by the verb's
+   * subject rule otherwise. The first cut had the control `selectOnly` the
+   * pane and then call this, which reads the selection through a ref that
+   * React had not written yet — the chip did nothing at all on a pane that
+   * was not already selected, and the state update it depended on arrived
+   * one render later.
+   */
+  const setPreviewWidth = useCallback((device: string, paneId?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    if (!isDeviceWidthId(device)) return { kind: 'refused', reason: `${device} is not a device width — ${DEVICE_WIDTHS.map((d) => d.id).join(', ')}` }
+    const named = paneId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === paneId)
+    const pane = named !== undefined && isBrowserPanel(named) ? named : previewPane()
+    if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
+    setPanels((current) => {
+      // `full` is the ABSENT default, so choosing it REMOVES the key rather
+      // than writing `device: 'full'`: the record, the parser and the node all
+      // spell "the pane's own width" as the absence, and a written `full`
+      // would be a second spelling that only the parser would ever see.
+      const next = current.map((p) => {
+        if (p.rect.id !== pane.rect.id || !isBrowserPanel(p)) return p
+        const { device: _was, ...rest } = p
+        return (device === 'full' ? rest : { ...rest, device }) as typeof p
+      })
+      commitHistory(next)
+      return next
+    })
+    return { kind: 'ran', note: `${deviceWidth(device).label} in ${pane.title ?? 'the preview'}` }
+  }, [commitHistory, previewPane])
+  const capturePreviewNow = useCallback(async (): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const pane = previewPane()
+    if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
+    const guestId = browserGuestId(pane.rect.id)
+    if (guestId === undefined) return { kind: 'refused', reason: 'no page is open in this pane — open one, then capture it' }
+    const shot = await window.canvas.preview.capture({ webContentsId: guestId })
+    if (shot.kind === 'refused') return { kind: 'refused', reason: shot.reason }
+    // A capture is an ORDINARY image object, not a new kind: it moves, groups,
+    // exports and deletes like every other picture, and its title names the
+    // page it is of so its provenance is on screen rather than in a log.
+    const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    const imageId = `img${nextIdRef.current++}`
+    setPanels((current) => {
+      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`)]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(imageId)
+    return { kind: 'ran', note: `captured ${shot.url}` }
+  }, [commitHistory, previewPane, selectOnly])
+  const startDevServer = useCallback(async (script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const subject = previewSubject()
+    if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
+    const found = await window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
+    const chosen = script === undefined ? found.scripts[0] : found.scripts.find((s) => s.name === script)
+    if (chosen === undefined) {
+      return { kind: 'refused', reason: found.scripts.length === 0 ? found.note : `${script} is not one of this project's dev scripts — ${found.scripts.map((s) => s.name).join(', ')}` }
+    }
+    // Through the ORDINARY spawn door: the dev server is a panel a person can
+    // see, read and stop, never a hidden child of the preview. Discovery
+    // itself still runs nothing — this is a separate verb a person asked for.
+    const spawned = await window.canvas.spawn.sheet({ cwd: subject.cwd, command: `npm run ${chosen.name}`, title: `${chosen.name} · ${found.project ?? 'project'}` })
+    if (spawned.kind === 'refused') return { kind: 'refused', reason: spawned.reason }
+    return { kind: 'ran', note: `npm run ${chosen.name} in ${subject.cwd}` }
+  }, [previewSubject])
+
+  /**
    * M128. The skill panel's mint — the ONE door, called by the Skills pane's
    * drop, a click on a card, and (through the palette's action object) by
    * anything later. The world point is the drop's own, so the panel lands
@@ -4988,6 +5121,11 @@ export function Canvas({
     applyStarter,
     saveWorkflowDraft,
     saveWorkflowCopyDraft: saveWorkflowCopy,
+    openPreviewNow: openPreview,
+    setPreviewWidthNow: setPreviewWidth,
+    capturePreviewNow,
+    startDevServerNow: startDevServer,
+    discoverProject,
     stopWorkflowRun,
     runWorkflowNow: runWorkflow,
     templateRowsRef,
@@ -5845,6 +5983,11 @@ export function Canvas({
                 <BrowserNode
                   key={panel.rect.id}
                   panel={panel}
+                  onDiscover={discoverProject}
+                  onOpenPreview={(url) => { void openPreview(url) }}
+                  onSetDevice={(paneId, device) => { setPreviewWidth(device, paneId) }}
+                  onCapture={capturePreviewNow}
+                  onStartDev={startDevServer}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}

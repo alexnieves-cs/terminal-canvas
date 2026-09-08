@@ -1123,3 +1123,57 @@ workflow — its chats included — is what Stop now acts on.
 - **starter** — The workflow example wears the same two changes, and a built-in's `Save a copy`
   is now a live verb rather than a greyed one — it is the only save a built-in has, and gating
   it on an edit made the primary path unreachable from the example a beginner is looking at.
+
+## M185 — the preview reads as the app beside its code (Act III.1)
+
+Spec `docs/superpowers/specs/2026-09-08-m185-preview.md`. This milestone is the plan's M185 and
+M186 rows together, under the recorded plan amendment: discovery, device widths and capture are
+one surface and splitting them would have shipped a preview that could not be looked at.
+
+**What shipped.** `shared/preview.ts` (the named widths, `parseListeningPorts` over lsof's
+field form, `parseDevScripts` over a package.json text, `discoveryOf`'s three states and one
+sentence each, `captureRefusal`); `main/preview-discover.ts`, which asks ONE `lsof` over the
+pids the renderer already holds and reads ONE `package.json`, and runs nothing else;
+`main/preview-capture.ts`, which checks the scheme on the guest's LIVE url, refuses an empty
+image by name and writes one PNG under `userData/captures` with the page named on the result;
+`device` on the browser record (absent is full width, malformed costs the field); the pane's own
+controls (four width chips, Capture, Find the project, a Retry on the failure line and the
+discovery list with Start dev); a coalesced 300 ms reload on `file:changed` that reloads the
+guest it already has rather than rebuilding it; and four verbs, four palette rows and four
+`V9_DOORS` entries.
+
+**Decisions.**
+- *Discovery's subject is a running terminal or chat, not the browser pane.* The pane knows a
+  url and nothing about a project; the panel with a directory and a process tree is the only
+  thing on the canvas that knows what is being built. No subject is a refusal that names what
+  to select.
+- *`full` is the ABSENT default.* Choosing it REMOVES the key rather than writing
+  `device: 'full'`, so the record, the parser and the node keep one spelling of the default.
+- *The width is a LAYOUT, never a transform.* A scaled guest reports the pane's viewport to the
+  page and every media query then answers for the wrong device — the check asserts the computed
+  transform is `none` beside the 390 px.
+- *A capture is an ordinary image object.* It moves, groups, exports and deletes like every
+  other picture and its title names the page, so provenance is on screen rather than in a log.
+- *A dev script is offered, never run by discovery.* Starting it is its own verb and it goes
+  through the ordinary spawn door, so the server is a panel a person can see and stop.
+
+**Red first.** `preview.1` was watched failing with `preview.ts` and `preview-discover.ts`
+absent (85/86, `out/v9-evidence/m185-file-red.log`, exit 1); `preview.capture.1` was watched
+failing with `preview-capture.ts` moved out of the tree (86/87,
+`out/v9-evidence/m185-capture-red.log`, exit 1); `preview.device.1` was watched failing with
+its parser arm removed (248/249, `out/v9-evidence/m185-layout-red.log`, exit 1). `preview.1`
+in the product part was red twice against real defects it found: a chip that pressed nothing
+(the verb read the selection through a ref React had not written yet — the pane is now NAMED by
+its own control) and a harness with the inert preview handlers (now wired to the same
+discoverer and capture production uses).
+
+**Green.** `verify:file` 87/87, `verify:layout` 249/249, `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport`
+140/140, `npm run typecheck` 0, `verify:panels:product` 72/72 at 103.3 s
+(`out/v9-evidence/m185-product.log`, exit 0). The product watchdog is re-measured at 130000 ms
+(1.25× the slower of two green runs, 101.5 s and 103.3 s).
+
+**One rule changed.** `closure.v9.1` compared each verb's owed workflow door to the literal
+`M189`. The plan amendment moved the executor to M188, so a truthful record turned the suite
+red: the check now reads the due as data (`/^M\d+$/`), the same shape its canvas arm already
+used, and every v9 row's due is M188.

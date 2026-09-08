@@ -1,5 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
+import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId } from './preview'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
@@ -338,6 +339,14 @@ export interface PersistedChatPanel extends PersistedPanelBase {
 export interface PersistedBrowserPanel extends PersistedPanelBase {
   kind: 'browser'
   url: string
+  /**
+   * M185. The named device width the guest is laid out at. ABSENT is `full`
+   * (the pane's own width) and is every pre-M185 record, so an absent key
+   * warns nothing; a present value that is not one of the four names is
+   * malformed and costs the FIELD, never the panel — a preview that vanished
+   * because a width was misspelled is a worse answer than one at full width.
+   */
+  device?: DeviceWidthId
 }
 
 /**
@@ -970,7 +979,13 @@ function parsePanel(
       warnings.push(`dropped browser panel ${id}: url ${JSON.stringify(url)} is not an http(s) page`)
       return null
     }
-    return { ...base, kind: 'browser', url }
+    const deviceRaw = (raw as Record<string, unknown>).device
+    let device: DeviceWidthId | undefined
+    if (deviceRaw !== undefined) {
+      if (isDeviceWidthId(deviceRaw)) device = deviceRaw
+      else warnings.push(`browser panel ${id}: device ${JSON.stringify(deviceRaw)} is not one of ${DEVICE_WIDTHS.map((d) => d.id).join(', ')} — the panel is kept at full width`)
+    }
+    return { ...base, kind: 'browser', url, ...(device === undefined ? {} : { device }) }
   }
   if (kind === 'work') {
     // M116. The item id is the card's only identity, so an unusable one

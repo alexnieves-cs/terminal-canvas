@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 124000 // measured 2026-09-08 alone in the Electron tier after the M180–M183 checks (onboarding.*, starter.1, image.1, workflow.edit.1–.3, workflow.lib.1, workflow.wire.1, workflow.inspect.1), two green runs: 99.0s, 98.7s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 130000 // measured 2026-09-08 alone in the Electron tier after M185's preview.1 (which serves a page, attaches a guest and takes a real capture), two green runs: 101.5s, 103.3s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -2050,6 +2050,87 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           JSON.stringify({ live, read: read && { kind: read.kind, url: read.url, note: read.note, head: (read.text || '').slice(0, 80) }, bogus, dropped, droppedFacts, parsedIds, warnings: parsed.warnings, rail }))
       } catch (bErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr))
+      } finally {
+        if (server) server.close()
+      }
+    }
+
+    // M185 — preview.1. THE PREVIEW IN THE REAL RENDERER, over a real local
+    //     page. Three claims, each one a silent failure if undone:
+    //     (a) a named width LAYS OUT the guest (390 css pixels, centred) —
+    //         never a transform, which would report the pane's viewport to the
+    //         page and make every media query answer for the wrong device —
+    //         and `full` REMOVES the key rather than writing `device: 'full'`,
+    //         so the record and the parser keep one spelling of the default;
+    //     (b) Capture writes a REAL PNG (its magic number read off disk) under
+    //         the app's own directory and places an ORDINARY image object whose
+    //         title names the page, so a capture's provenance is on screen;
+    //     (c) discovery through main's own handler reads the project's
+    //         package.json and answers the three-state sentence — and starts
+    //         NOTHING: the dev script is named, and the panel count is the same
+    //         after the question as before it.
+    {
+      const IDS = ['preview.1 a device width lays the guest out at 390px centred and writes device on the record, and full removes the key; Capture writes a real PNG under userData/captures and places an image panel titled by the page; discovery names the project and its dev script, starts nothing, and mints no panel']
+      let server = null
+      try {
+        const http = require('node:http')
+        const { existsSync: ex, readFileSync: rf } = require('node:fs')
+        server = http.createServer((_req, res) => {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end('<!doctype html><html><head><title>preview</title></head><body style="background:#123456"><h1>a page to look at</h1></body></html>')
+        })
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+        const port = server.address().port
+        // A real project directory with a real package.json: main's own
+        // handler reads it, so the fixture proves the path and not a fake.
+        const projectDir = mkdtempSync(join(tmpdir(), 'tc preview project '))
+        writeFileSync(join(projectDir, 'package.json'), JSON.stringify({ name: 'the shop', scripts: { build: 'tsc', dev: 'vite' } }), 'utf8')
+        layoutStore.save({ panels: [
+          { id: 'pv1', kind: 'browser', x: 60, y: 60, w: 720, h: 520, z: 1, url: `http://127.0.0.1:${port}/` }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'pv1', focusedId: 'pv1' })
+        flushLayoutStore()
+        const rePv = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await rePv
+        await settle()
+        const attached = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pv1"]'); return n && n.getAttribute('data-browser-live') === 'yes' ? { wc: Number(n.getAttribute('data-browser-wc')) } : false })()`), 20000)
+        const chips = await wc.executeJavaScript(`[...document.querySelectorAll('[data-preview-device]')].map((b) => b.getAttribute('data-preview-device')).join(',')`)
+        // A shell control acts on CLICK (`shellControl` preventDefaults the
+        // mousedown so focus never leaves the terminal's textarea), so a
+        // mousedown alone presses nothing — the first cut of this check
+        // dispatched one and read a pane that had not moved.
+        const press = async (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await press('[data-preview-device="phone"]')
+        const atPhone = await waitUntil(() => wc.executeJavaScript(`(() => { const h = document.querySelector('.panel[data-panel-id="pv1"] .browser-node__host'); if (!h || h.getAttribute('data-preview-width') !== 'phone') return false
+          const r = h.getBoundingClientRect(); const b = document.querySelector('.panel[data-panel-id="pv1"] .pf__body').getBoundingClientRect()
+          return { width: Math.round(r.width), centred: Math.abs((r.left - b.left) - (b.right - r.right)) < 4, transform: getComputedStyle(h).transform } })()`), 4000)
+        await settle(); flushLayoutStore()
+        const savedPhone = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pv1')
+        await press('[data-preview-device="full"]')
+        await settle(); flushLayoutStore()
+        const savedFull = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pv1')
+        // (b) Capture, through the pane's own control.
+        const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+        await press('[data-preview-capture]')
+        const image = await waitUntil(() => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="image"]')].pop(); return n ? { title: n.querySelector('.pf__title')?.textContent ?? '', id: n.getAttribute('data-panel-id') } : false })()`), 15000)
+        await settle(); flushLayoutStore()
+        const imageRecord = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === (image && image.id))
+        const png = imageRecord && ex(imageRecord.image.path) ? rf(imageRecord.image.path) : null
+        // (c) Discovery through main's own handler, over a real package.json.
+        const found = await wc.executeJavaScript(`window.canvas.preview.discover({ pids: [], cwd: ${JSON.stringify(projectDir)} })`)
+        const after = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+        ok(IDS[0],
+          attached !== false && chips === 'phone,tablet,laptop,full' &&
+            atPhone !== false && atPhone.width === 390 && atPhone.centred === true && (atPhone.transform === 'none' || atPhone.transform === '') &&
+            savedPhone && savedPhone.device === 'phone' &&
+            savedFull && !('device' in savedFull) &&
+            image !== false && /^capture · 127\.0\.0\.1:/.test(image.title) &&
+            imageRecord && typeof imageRecord.image.path === 'string' && /\/captures\//.test(imageRecord.image.path) &&
+            png !== null && png.length > 0 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 &&
+            found && found.kind === 'none' && found.project === 'the shop' && found.scripts.map((x) => x.name).join(',') === 'dev' && /dev would start it/.test(found.note) &&
+            after === before + 1,
+          JSON.stringify({ attached, chips, atPhone, savedPhone, savedFull, image, imagePath: imageRecord && imageRecord.image.path, pngBytes: png && png.length, found, before, after }))
+      } catch (pErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(pErr && pErr.message || pErr))
       } finally {
         if (server) server.close()
       }

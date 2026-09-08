@@ -454,6 +454,12 @@ export interface PaletteActions {
   /** M184. Save a workflow's draft back to its record with the revision it was read at. */
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  openPreview(url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  setPreviewWidth(device: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  capturePreview(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  startDevServer(script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  discoverPreview(): Promise<unknown>
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
   runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
@@ -2252,6 +2258,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
+  // M185. The preview's four rows. Every one is PRESENT at rest — the verbs
+  // refuse by name against no subject (this repo's rule: a row that
+  // disappears is indistinguishable from a feature that was never built) —
+  // and the four ids are literals `closure.v9.1` reads this file as text for.
+  out.push({ id: 'preview.open', title: 'Preview: open the project', subtitle: 'the page a process of the selected panel is serving', group: 'canvas', searchText: 'preview open project port dev server localhost discover', run: () => { void actions.openPreview() } })
+  out.push({ id: 'preview.width', title: 'Preview: set the width…', subtitle: 'phone, tablet, laptop or full — type preview-width <name> on the verb line', group: 'canvas', searchText: 'preview width device phone tablet laptop responsive', run: () => actions.beginRunVerb() })
+  out.push({ id: 'preview.capture', title: 'Preview: capture the page', subtitle: 'a real picture of the pane, placed as an image on the canvas', group: 'canvas', searchText: 'preview capture screenshot picture image page', run: () => { void actions.capturePreview() } })
+  out.push({ id: 'preview.dev', title: 'Preview: start the dev server', subtitle: "the project's own dev script, in a terminal you can see and stop", group: 'canvas', searchText: 'preview dev server npm run start serve project', run: () => { void actions.startDevServer() } })
   out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })
 
   // --- M96: the verb line ------------------------------------------------------

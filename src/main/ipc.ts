@@ -1,6 +1,8 @@
 import type { SnapshotMeta, ClipboardFile } from '@shared/ipc-contract'
 import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
+import type { PreviewCaptureResult } from '@shared/ipc-contract'
+import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
@@ -245,6 +247,17 @@ const INERT_BROWSER: BrowserHandlers = {
   read: async () => ({ kind: 'refused', reason: 'the browser pane is not available here' })
 }
 
+/** M185. The preview's two main-side questions; see main/preview-discover.ts and main/preview-capture.ts. */
+export interface PreviewHandlers {
+  discover(req: { pids: number[]; cwd: string }): Promise<PreviewDiscovery>
+  capture(req: { webContentsId: number }): Promise<PreviewCaptureResult>
+}
+
+const INERT_PREVIEW: PreviewHandlers = {
+  discover: async (req) => ({ kind: 'none', candidates: [], scripts: [], note: `discovery is not available here (${req?.cwd ?? 'no directory'})` }),
+  capture: async () => ({ kind: 'refused', reason: 'the preview is not available here' })
+}
+
 /** M129. The four writers; see main/skill-write.ts for every rule they enforce. */
 export interface SkillWriteHandlers {
   write(req: SkillWriteRequest): Promise<SkillWriteResult>
@@ -424,7 +437,9 @@ export function registerIpcHandlers(
     why: 'the skill trail is not wired'
   }),
   /** M123. Appended last, like every collaborator before it. */
-  update: UpdateHandlers = INERT_UPDATE
+  update: UpdateHandlers = INERT_UPDATE,
+  /** M185. Appended last, like every collaborator before it. */
+  preview: PreviewHandlers = INERT_PREVIEW
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M181. A relative path is refused as `missing` before the read: the record
@@ -464,6 +479,11 @@ export function registerIpcHandlers(
   // the scheme on its live url, the cap, the outward gate — the renderer
   // only names which panel.
   ipcMain.handle(IPC.BROWSER_READ, (_event, req: BrowserReadRequest) => browser.read(req))
+  // M185. Discovery READS (one lsof, one package.json) and capture writes one
+  // PNG into the app's own directory; both are main's for the same reason the
+  // read is — the renderer names the panel and nothing else.
+  ipcMain.handle(IPC.PREVIEW_DISCOVER, (_event, req: { pids: number[]; cwd: string }) => preview.discover(req))
+  ipcMain.handle(IPC.PREVIEW_CAPTURE, (_event, req: { webContentsId: number }) => preview.capture(req))
   ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
   ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))

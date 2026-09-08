@@ -5,6 +5,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { shellControl } from '@renderer/shell/shell-control'
 import { browserHost, normaliseTypedUrl } from '@shared/browser-panel'
 import { clearBrowser, registerBrowser } from './browser-store'
+import { DEVICE_WIDTHS, deviceWidth, type Discovery as PreviewDiscovery, type DeviceWidthId } from '@shared/preview'
 import { ChevronLeft, ChevronRight, RotateCw } from '@renderer/icons'
 
 /**
@@ -47,6 +48,17 @@ export interface BrowserNodeProps {
   linkTarget: boolean
   /** The guest navigated: the record follows (Canvas.tsx writes it with no history entry). */
   onNavigated: (id: string, url: string) => void
+  /**
+   * M185. The preview's four verbs, from the pane itself — the canvas door of
+   * the four-door rule. Discovery answers a LIST, which is why it is its own
+   * prop rather than a verb: the pane is where a person picks between several
+   * candidates, and a plan has nowhere to put a list.
+   */
+  onDiscover: () => Promise<PreviewDiscovery | { kind: 'refused'; reason: string }>
+  onOpenPreview: (url: string) => void
+  onSetDevice: (id: string, device: DeviceWidthId) => void
+  onCapture: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  onStartDev: (script: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
 }
 
 /** The webview tag's surface this node touches, structurally — no electron types in the renderer. */
@@ -79,6 +91,13 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
   const [canForward, setCanForward] = useState(false)
   const [loading, setLoading] = useState(true)
   const [failure, setFailure] = useState<string | null>(null)
+  // M185. Discovery's answer, rendered here because it is a LIST: three
+  // states, never two — not asked yet (absent), asked and answered (the note
+  // plus whatever candidates and scripts there are), asked and refused.
+  const [found, setFound] = useState<PreviewDiscovery | { kind: 'refused'; reason: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string | null>(null)
+  const say = (text: string): void => { setSaid(text); window.setTimeout(() => setSaid((v) => (v === text ? null : v)), 4000) }
   const navigated = useRef(props.onNavigated)
   navigated.current = props.onNavigated
 
@@ -133,6 +152,22 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       clearBrowser(id)
     }
   }, [id])
+
+  // M185. A file change reloads the page it is a preview OF, coalesced: an
+  // editor's save fires several `file:changed` events in a few milliseconds
+  // (write, rename, chmod) and a reload per event is a flashing pane and
+  // three page loads. The GUEST is reloaded through the element it already
+  // has — never rebuilt — so the pane's identity, its history and its
+  // webContents id all survive, which is what `browser:read` and
+  // `preview:capture` resolve against.
+  useEffect(() => {
+    let timer = 0
+    const off = window.canvas.file.onChanged(() => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => { try { guestRef.current?.reload() } catch { /* gone */ } }, 300)
+    })
+    return () => { window.clearTimeout(timer); off() }
+  }, [])
 
   const submitAddress = (): void => {
     const normalised = normaliseTypedUrl(draft)
@@ -215,10 +250,54 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
             }} />
           <span className="browser-node__loading" data-browser-loading={loading ? 'yes' : 'no'} aria-live="polite">{loading ? 'loading' : ''}</span>
         </div>
-        {failure !== null && (
-          <p className="pf__note browser-node__failure" data-browser-failure role="alert">{failure}</p>
+        {/* M185. The preview's own controls, compact and NAMED: four width
+            chips (the current one pressed), Capture, and the one question that
+            reads the project. Every control is present and disabled with its
+            reason, never removed. */}
+        <div className="browser-node__preview" data-preview-controls>
+          {DEVICE_WIDTHS.map((d) => (
+            <button key={d.id} type="button" className={`pf__verb pf__verb--word browser-node__chip${(panel.device ?? 'full') === d.id ? ' is-on' : ''}`}
+              data-preview-device={d.id} aria-pressed={(panel.device ?? 'full') === d.id} disabled={readOnly}
+              title={d.px === null ? 'the pane\'s own width' : `${d.px} css pixels`}
+              {...shellControl(() => props.onSetDevice(id, d.id))}>{d.label}</button>
+          ))}
+          <button type="button" className="pf__verb pf__verb--word" data-preview-capture disabled={readOnly || guestId === null}
+            title={guestId === null ? 'no page is open in this pane — open one, then capture it' : 'A picture of this page, placed on the canvas'}
+            {...shellControl(() => { void props.onCapture().then((r) => say(r.kind === 'refused' ? r.reason : (r.note ?? 'captured'))) })}>Capture</button>
+          <button type="button" className="pf__verb pf__verb--word" data-preview-discover disabled={readOnly || busy}
+            title="Ask the selected panel what project it is running and whether anything is listening"
+            {...shellControl(() => { setBusy(true); void props.onDiscover().then((r) => { setFound(r); setBusy(false) }) })}>{busy ? 'looking…' : 'Find the project'}</button>
+        </div>
+        {said !== null && <p className="pf__note browser-node__said" data-preview-said role="status">{said}</p>}
+        {found !== null && (
+          <div className="browser-node__found" data-preview-found>
+            <p className="pf__note" data-preview-note>{found.kind === 'refused' ? found.reason : found.note}</p>
+            {found.kind !== 'refused' && found.candidates.map((c) => (
+              <button key={c.url} type="button" className="pf__verb pf__verb--word" data-preview-candidate={c.url}
+                title={c.why} {...shellControl(() => { props.onOpenPreview(c.url); setFound(null) })}>{c.url}</button>
+            ))}
+            {found.kind !== 'refused' && found.candidates.length === 0 && found.scripts.map((sc) => (
+              <button key={sc.name} type="button" className="pf__verb pf__verb--word" data-preview-script={sc.name}
+                title={`Runs ${sc.command} in a terminal panel you can see and stop`}
+                {...shellControl(() => { void props.onStartDev(sc.name).then((r) => { say(r.kind === 'refused' ? r.reason : (r.note ?? 'started')); setFound(null) }) })}>Start {sc.name}</button>
+            ))}
+          </div>
         )}
-        <div className="browser-node__host" ref={hostRef} />
+        {failure !== null && (
+          // M185. A failed page KEEPS its address and offers one verb: the
+          // address is what a person checks, and a pane that cleared it left
+          // nothing to retry and nothing to correct.
+          <p className="pf__note browser-node__failure" data-browser-failure role="alert">
+            {failure}
+            <button type="button" className="pf__verb pf__verb--word" data-preview-retry disabled={readOnly}
+              title="Load this address again" {...shellControl(() => { setFailure(null); const el = guestRef.current; if (el !== null) void el.loadURL(liveUrl ?? panel.url).catch(() => { /* did-fail-load names it */ }) })}>Retry</button>
+          </p>
+        )}
+        {/* M185. The named width is a LAYOUT of the host, not a transform: a
+            scaled guest would report the wrong viewport to the page and every
+            media query would answer for the pane rather than the device. */}
+        <div className="browser-node__host" ref={hostRef} data-preview-width={panel.device ?? 'full'}
+          style={deviceWidth(panel.device).px === null ? undefined : { width: `${deviceWidth(panel.device).px}px`, margin: '0 auto' }} />
       </div>
     </PanelFrame>
   )

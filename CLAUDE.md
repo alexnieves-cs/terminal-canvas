@@ -299,6 +299,7 @@ renderer --invoke--> teammate:choose-place                                      
 renderer --invoke--> routine:list / routine:save / routine:delete / routine:run   --> main
 renderer --invoke--> snapshot:list / snapshot:restore                            --> main
 renderer --invoke--> browser:read                                                --> main
+renderer --invoke--> preview:discover / preview:capture                          --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer --invoke--> shelf:list / shelf:save                                     --> main

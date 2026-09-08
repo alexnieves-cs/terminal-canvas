@@ -7,7 +7,7 @@
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
 const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync, openSync, readSync, closeSync } = require('node:fs')
-const { execFileSync } = require('node:child_process')
+const { execFileSync, spawn: spawnChild } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain, webContents, clipboard } = require('electron')
 
@@ -97,7 +97,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, parseLayout,
+  createBrowserHandlers, discoverPreview, capturePreview, parseLayout,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1417,7 +1417,41 @@ app.whenReady().then(async () => {
     })
     : { kind: 'unreadable', why: 'the skill trail is not wired' }),
   // M123. No harness reaches the network: the third state, by name.
-  { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }) })
+  { check: async () => ({ kind: 'could-not-check', reason: 'no network in the harness' }),
+  },
+  // M185. The REAL preview handlers — the same discoverer and the same
+  // capture main/index.ts wires. Discovery's process seam is the real `lsof`
+  // (the check drives it with no pid, so nothing is asked), and the capture
+  // writes into the harness's own userData, so preview.1 reads a real PNG
+  // off disk rather than trusting a fake.
+  {
+    discover: (req) => discoverPreview({
+      pids: Array.isArray(req && req.pids) ? req.pids.filter((n) => Number.isInteger(n) && n > 0) : [],
+      cwd: typeof (req && req.cwd) === 'string' && req.cwd.trim() !== '' ? req.cwd : app.getPath('home'),
+      run: async (command, args) => new Promise((resolve) => {
+        const child = spawnChild(command, [...args], { stdio: ['ignore', 'pipe', 'ignore'] })
+        let stdout = ''
+        child.stdout && child.stdout.on('data', (c) => { stdout += c.toString('utf8') })
+        child.on('error', () => resolve({ code: 1, stdout: '' }))
+        child.on('close', (code) => resolve({ code: code === null ? 0 : code, stdout }))
+      }),
+      readText: async (path) => { try { return readFileSync(path, 'utf8') } catch { return undefined } }
+    }),
+    capture: async (req) => {
+      const guest = req && typeof req.webContentsId === 'number' ? webContents.fromId(req.webContentsId) : null
+      if (guest === null || guest === undefined || guest.isDestroyed()) return { kind: 'refused', reason: 'no page is open in this pane — open one, then capture it' }
+      if (guest.getType() !== 'webview') return { kind: 'refused', reason: 'that id is not a page in a browser panel' }
+      const dir = join(app.getPath('userData'), 'captures')
+      try { mkdirSync(dir, { recursive: true }) } catch {}
+      return capturePreview({
+        getUrl: () => guest.getURL(),
+        capture: () => guest.capturePage(),
+        write: async (path, data) => { writeFileSync(path, data) },
+        dir,
+        now: () => Date.now()
+      })
+    }
+  })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

@@ -9,6 +9,7 @@ import type { OrphanRow } from './orphans'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
+import type { Discovery as PreviewDiscovery } from './preview'
 import type { Trail } from './skill-trail'
 /**
  * Single source of truth for the IPC surface.
@@ -660,6 +661,10 @@ export const IPC = {
    * it crosses back. Reading the pane is leaving the app.
    */
   BROWSER_READ: 'browser:read',
+  /** M185. What project is this panel pointed at, and is anything of it listening. Reads; runs nothing. */
+  PREVIEW_DISCOVER: 'preview:discover',
+  /** M185. A real picture of a guest, written under userData/captures. */
+  PREVIEW_CAPTURE: 'preview:capture',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -1304,6 +1309,11 @@ export interface SettingRow {
 }
 
 /** Shape of the bridge the preload exposes on window.canvas. */
+/** M185. What a capture answers: the file it wrote and the page it is of, or one named refusal. */
+export type PreviewCaptureResult =
+  | { kind: 'captured'; path: string; url: string; host: string; bytes: number }
+  | { kind: 'refused'; reason: string }
+
 export interface CanvasBridge {
   pty: {
     create(spec: PanelSpec): Promise<PtyCreateResult>
@@ -1704,6 +1714,16 @@ export interface CanvasBridge {
   /** M103. See BROWSER_READ. Three arms; never rejects. */
   browser: {
     read(req: BrowserReadRequest): Promise<BrowserReadResult>
+  }
+  /**
+   * M185. The preview's two main-side questions. `discover` READS — one
+   * `lsof` over the pids the renderer already holds and one `package.json` —
+   * and starts nothing; `capture` writes one PNG into the app's own
+   * directory and answers with the page it is a picture of.
+   */
+  preview: {
+    discover(req: { pids: number[]; cwd: string }): Promise<PreviewDiscovery>
+    capture(req: { webContentsId: number }): Promise<PreviewCaptureResult>
   }
   /** M114. The board's main-side verbs. */
   board: {

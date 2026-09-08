@@ -105,7 +105,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       }
     }
     // M103. The browser pane: one field, copied by name.
-    if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url }
+    // M185. An ABSENT device stays absent through both copy sites — a spread writing `device: undefined` survives IPC and reads as present.
+    if (p.kind === 'browser') return { ...base, kind: 'browser' as const, url: p.url, ...(p.device === undefined ? {} : { device: p.device }) }
     // M116. The work card: one field, copied by name.
     if (p.kind === 'work') return { ...base, kind: 'work' as const, work: { itemId: p.work.itemId } }
     // M181. The image panel: one field, copied by name.
@@ -207,7 +208,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       }
     }
     // M103. Same no-cwd/no-args rule as every branch above.
-    if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url }
+    if (isBrowserPanel(panel)) return { ...base, kind: 'browser' as const, url: panel.url, ...(panel.device === undefined ? {} : { device: panel.device }) }
     // M116. Same rule; the id is the record's whole identity.
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     // M181. Same rule; the path is the record's whole identity.

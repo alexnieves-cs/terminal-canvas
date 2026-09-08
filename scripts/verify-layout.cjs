@@ -3678,6 +3678,38 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), b1, warnings: out.warnings }))
 }
 
+// M185 — preview.device.1. THE NAMED DEVICE WIDTH ON DISK. Absent is every
+// pre-M185 browser record and warns nothing, and serialises back to NO key —
+// a written `"device": null` would claim a width the person never picked. A
+// present value that is not one of the four names costs the FIELD with a
+// warning naming the panel and the four names, never the panel: a preview
+// that vanished because a width was misspelled is a worse answer than one at
+// full width, and it would read as a panel the app deleted.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'd1', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 1, url: 'http://127.0.0.1:5173/' },
+      { id: 'd2', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 2, url: 'http://127.0.0.1:5173/', device: 'phone' },
+      { id: 'd3', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 3, url: 'http://127.0.0.1:5173/', device: 'watch' },
+      { id: 'd4', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 4, url: 'http://127.0.0.1:5173/', device: 390 }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  const by = (id) => panels.find((p) => p.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.workspaces[0].panels.find((p) => p.id === 'd2')
+  const named = (id) => out.warnings.some((w) => w.includes(id) && w.includes('device'))
+  ok('preview.device.1 a browser panel\'s device: absent stays absent and serialises to no key; one of the four names round-trips; a name that is not one of them and a number each cost the FIELD with a warning naming the panel and the four names, and their panels survive at full width',
+    panels.length === 4 &&
+      by('d1') && !('device' in by('d1')) && !/"device"/.test(text.split('"d1"')[1].split('}')[0] || '') &&
+      by('d2') && by('d2').device === 'phone' && round && round.device === 'phone' &&
+      by('d3') && !('device' in by('d3')) && named('d3') && out.warnings.some((w) => w.includes('d3') && w.includes('phone, tablet, laptop, full')) &&
+      by('d4') && !('device' in by('d4')) && named('d4') &&
+      !named('d1') && !named('d2'),
+    JSON.stringify({ ids: panels.map((p) => p.id), d1: by('d1'), d2: by('d2'), d3: by('d3'), d4: by('d4'), warnings: out.warnings }))
+}
+
 // M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
 // malformed entry is dropped by name; the cap keeps the newest; the dedupe is
 // by key and never resets a working item; every absent optional stays absent

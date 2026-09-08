@@ -3,6 +3,7 @@ import { carryBackend } from '@shared/agent-backends'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
+import type { DeviceWidthId } from '@shared/preview'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
@@ -204,6 +205,8 @@ export interface WatcherPanel extends PanelBase {
 export interface BrowserPanel extends PanelBase {
   kind: 'browser'
   url: string
+  /** M185. The named device width the guest is laid out at; absent is full width. */
+  device?: DeviceWidthId
 }
 
 /**

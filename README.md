@@ -396,6 +396,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        teammate:choose-place
                        routine:list / routine:save / routine:delete / routine:run
                        browser:read
+                       preview:discover / preview:capture
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        shelf:list / shelf:save

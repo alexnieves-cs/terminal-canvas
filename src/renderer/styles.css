@@ -4287,6 +4287,17 @@ body {
 .browser-node__address:focus { outline: none; border-color: var(--focus); }
 .browser-node__address:disabled { color: var(--fg-3); }
 .browser-node__loading { flex: none; min-width: 48px; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); text-align: right; }
+
+/* M185. The preview's own controls: compact named chips in a row under the
+   address bar, the current width pressed. The chips are `--font-ui` (they are
+   English words a person reads, the face rule) and carry no colour of their
+   own — the pressed one wears the accent the rest of the app uses for "this
+   is the one". The found list is prose plus verbs, never a table. */
+.browser-node__preview { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; padding: 0 var(--sp-2) var(--sp-1); font-family: var(--font-ui); }
+.browser-node__chip.is-on { color: var(--iris); border-color: var(--iris); }
+.browser-node__found { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: 0 var(--sp-2) var(--sp-2); font-family: var(--font-ui); }
+.browser-node__said { padding: 0 var(--sp-2); font-family: var(--font-ui); }
+.browser-node__host[data-preview-width]:not([data-preview-width="full"]) { border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 .browser-node__live { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .browser-node__failure { margin: var(--sp-2) var(--sp-3) 0; }
 .browser-node__host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--well); }
