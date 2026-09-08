@@ -1437,3 +1437,18 @@ by `template.reviewed.1`'s fixture and fixed in the same line.
 concurrent `npm run typecheck` and seven plain-node suites were enough to blow two measured
 watchdogs (`verify` at 96 s, `verify:visual` at 221 s) in an otherwise green tree. The three
 commands were re-run alone.
+
+### Acts V–VII — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after the critic's fixes exited 1 at 57/59. Two scenes, both looked at
+before a golden was written.
+
+- **launcher** — The empty canvas gains one line, `Import a canvas…`, at the top of the verb
+  list with its own hint ("a file someone exported — into a new workspace, with nothing
+  started"); the lines below it move down by that row. It is here because an empty canvas is
+  exactly where a person arrives holding someone else's file, and because M190's critic found
+  the door claimed in `V9_DOORS` did not exist. The primary start, the readiness sentences and
+  the two cards above are unchanged.
+- **palette-query** — The canvas section gained M188's and M190's rows (`Test this node`,
+  `Prepare feedback…`, `Export this canvas…`, `Import a canvas…`), so the filtered list is
+  longer and its scrolled window moves again. No existing row changed its words.

@@ -39,7 +39,7 @@ sets.
 | Command | Exit | Result | Log |
 |---|---|---|---|
 | `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/act56-verify.log` |
-| `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/act56-visual.log` |
+| `npm run verify:visual` | 0 | 59/59, after two goldens changed with their sentences | `out/v9-evidence/act56-visual.log` |
 | `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/act56-packaged.log` |
 
 ## What these acts struck, and why
@@ -53,3 +53,16 @@ from any node (the broker's approval door has no node-side entry, and a node tha
 without it would be a way around the door this app already built); and the extension registry
 with its example plugin (a new trust path into Electron, the filesystem and the credential
 store, whose own acceptance evidence requires an external directory and a person to walk it).
+
+The chain's tallies, in order:
+
+```
+14/14 39/39 56/56 141/141 6/6 12/12 38/38 252/252 18/18 15/15 7/7 143/143 194/194 98/98
+27/27 91/91 103/103 26/26 7/7 35/35 27/27 141/141 23/23 25/25 4/4 26/26 13/13 10/10
+63/63 4/4 1/1 6/6 11/11 78/78 96/96 49/49 80/80 77/77
+```
+
+The acts' own critic ran between the implementation and this close; its eleven findings and
+their dispositions are in the ledger under `### M188–M190 — the fresh-context critic`. Six were
+security or correctness defects, and the two that mattered most — a teammate reaching refused
+verbs through an action node, and an imported file's first Run — are each pinned by a check.
