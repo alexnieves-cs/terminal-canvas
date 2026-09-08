@@ -14,6 +14,7 @@ import type { Preset } from '../shared/layout-schema'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
 import type { ControlReply } from './control-server'
+import type { AgentPlanReply } from '../shared/plan'
 
 export interface ControlSessionRow {
   panelId: string
@@ -26,6 +27,7 @@ export interface ControlSessionRow {
 export type { ControlCanvasModel } from '../shared/ipc-contract'
 
 export interface ControlHandlerDeps {
+  plan?: (line: string) => Promise<AgentPlanReply | null>
   presets: () => readonly Preset[]
   defaultId: () => string | null
   /** Injected for the plain-node tier; index.ts passes existsSync. */
@@ -63,6 +65,12 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
   const exists = deps.exists ?? existsSync
   return async (req: ControlRequest): Promise<ControlReply> => {
     switch (req.verb) {
+      case 'plan': {
+        if (deps.plan === undefined) return { ok: false, error: 'the plan bridge is not available here' }
+        const reply = await deps.plan(req.line).catch(() => null)
+        if (reply === null) return { ok: false, error: 'no canvas answered the plan — open the app first' }
+        return reply.kind === 'ran' ? { ok: true, summary: reply.summary } : { ok: false, error: reply.reason }
+      }
       case 'ping':
         return { ok: true }
       case 'open': {

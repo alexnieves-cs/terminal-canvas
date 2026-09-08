@@ -7,12 +7,14 @@ import { probeOutcome } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { displayPath } from '@shared/display-path'
 import { TMUX_HINT } from './hints'
+import { onboardingReadiness } from '@shared/onboarding'
 
 export interface LauncherProps {
   presets: PresetRow[]
   report: EnvReport | null
   /** M107. Ask the login shell again; absent hides the control (a fixture). */
   onCheckAgain?: () => void
+  onOpenSetup?: (url: string) => void
   /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
   tmux?: string | null
   onDismissTmux?: () => void
@@ -66,7 +68,11 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, onOpenSetup, update, onOpenRelease }: LauncherProps): JSX.Element {
+  const readiness = onboardingReadiness(report)
+  const engine = readiness.preferred
+  const startReason = engine === undefined ? 'Check engine readiness below to start a conversation'
+    : engine === 'claude' ? chatReason : codexReason
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -89,6 +95,22 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpen
       <div className="launcher__hero" aria-hidden="true">
         <span className="launcher__wordmark">terminal canvas</span>
         <span className="launcher__tagline">every agent on one canvas, one person at the desk</span>
+      </div>
+      <div className="launcher__onboarding" data-onboarding>
+        <button type="button" className="launcher__verb launcher__start" data-onboarding-start
+          disabled={startReason !== null} title={startReason ?? `Start with ${engine === 'claude' ? 'Claude' : 'Codex'}`}
+          {...shellControl(() => { if (startReason === null) { if (engine === 'claude') onNewChat(); else onNewCodexChat() } })}>
+          <span className="launcher__verb-name">Start a conversation</span>
+          <span className="launcher__verb-hint">{engine === undefined ? 'Choose an engine below — no terminal knowledge needed' : `With ${engine === 'claude' ? 'Claude' : 'Codex'} · write your first message in plain language`}</span>
+        </button>
+        <div className="launcher__readiness" aria-label="Conversation engines">
+          {readiness.rows.map((row) => <div key={row.backend} className="launcher__engine" data-onboarding-engine={row.backend} data-discovery={row.discovery}>
+            <span>{row.sentence}</span>
+            <button type="button" className="pf__verb pf__verb--word" disabled={onOpenSetup === undefined}
+              title={onOpenSetup === undefined ? 'Setup links are unavailable in this view' : row.setupUrl}
+              {...shellControl(() => onOpenSetup?.(row.setupUrl))}>Setup guide</button>
+          </div>)}
+        </div>
       </div>
       <div className="launcher__doors">
         <button type="button" className="launcher__verb launcher__verb--door launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>

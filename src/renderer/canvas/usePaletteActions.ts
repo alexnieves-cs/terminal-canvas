@@ -1,3 +1,4 @@
+import { onboardingReadiness } from '@shared/onboarding'
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import type { ToolScope } from '@shared/toolbox'
@@ -8,7 +9,7 @@ import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
-import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
+import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
@@ -63,6 +64,7 @@ import type { PersistedTeammate } from '@shared/teammates'
 import type { NavigatorPane } from '@renderer/shell/useShellChrome'
 
 export interface PaletteActionsDeps {
+  recheckEnvironment: () => Promise<import("@shared/env-report").EnvReport>
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -194,7 +196,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -239,7 +241,172 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     }
     return result
   }
-  return useMemo<PaletteActions>(() => { const self: PaletteActions = ({
+  return useMemo<PaletteActions>(() => {
+      const facts = (): PlanFacts => ({
+        panels: panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }) })),
+        presets: presetRows.map((r) => ({ id: r.id })),
+        worktrees: worktreeRows.map((w) => ({ id: w.id }))
+      })
+      const execute = async (step: PlanStep): Promise<StepOutcome> => {
+        const a = step.args
+        const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
+        switch (step.verb) {
+          case 'check-readiness': {
+            const readiness = onboardingReadiness(await recheckEnvironment())
+            return { kind: 'ran', note: readiness.rows.map((row) => row.sentence).join(' ') }
+          }
+          case 'new-chat': {
+            if (a.backend !== undefined && a.backend !== 'claude' && a.backend !== 'codex') return { kind: 'refused', reason: 'choose claude or codex' }
+            const readiness = onboardingReadiness(await window.canvas.env.report(), a.backend)
+            if (readiness.preferred === undefined) return { kind: 'refused', reason: 'no conversation engine is available — check readiness in the launcher' }
+            if (a.backend !== undefined && readiness.preferred !== a.backend) return { kind: 'refused', reason: `${a.backend} is not available — check readiness` }
+            const result = await beginNewChat({ backend: readiness.preferred })
+            return result.kind === 'refused' ? result : { kind: 'ran', note: result.id ?? 'conversation opened' }
+          }
+          case 'focus': selectAndRaise(a.panel!); { const p = panelOf(a.panel!); if (p) centreOn(p.rect) } return { kind: 'ran' }
+          case 'start': onSelectPanel(a.panel!); return { kind: 'ran' }
+          case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; void window.canvas.preset.spawnById(a.preset!); return { kind: 'ran' } }
+          case 'type': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) { insertIntoComposer(p.rect.id, a.text ?? ''); return { kind: 'ran', note: 'inserted into the composer' } }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+            // paste, not write: bracketed paste is the one handoff an agent
+            // TUI treats as text rather than keystrokes (the Jira rule).
+            h.paste(a.text ?? '')
+            return { kind: 'ran' }
+          }
+          case 'submit': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) return { kind: 'refused', reason: 'a chat sends with `send <panel> <text>` — submit is for an agent terminal' }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
+            h.write('\r')
+            return { kind: 'ran' }
+          }
+          case 'send': {
+            const answer = await window.canvas.agentSession.send(a.panel!, a.text ?? '')
+            if (typeof answer === 'object') return { kind: 'refused', reason: answer.refused }
+            if (answer === 'no-session') return { kind: 'refused', reason: `${a.panel} has no chat session yet — open it first` }
+            if (answer.startsWith('refused')) return { kind: 'refused', reason: `the send was refused: ${answer}` }
+            return { kind: 'ran', note: answer }
+          }
+          case 'interrupt': {
+            const p = panelOf(a.panel!)
+            if (p && isChatPanel(p)) { const did = await window.canvas.agentSession.interrupt(p.rect.id); return did ? { kind: 'ran' } : { kind: 'refused', reason: 'nothing is in flight' } }
+            const h = registry.get(a.panel!)?.handle
+            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session` }
+            h.write('\x03')
+            return { kind: 'ran' }
+          }
+          case 'restart': { const p = panelOf(a.panel!); if (!p || !isTerminalPanel(p)) return { kind: 'refused', reason: 'only a terminal panel restarts' }; restartWithSpec(p.rect.id, p.spec); return { kind: 'ran' } }
+          case 'read': {
+            // Guardrail 2: through the ONE outward gate, whichever front-end.
+            const p = panelOf(a.panel!)
+            // M103. A browser panel's text is read in MAIN, which owns the
+            // scheme check, the cap and the gate; the note it hands back says
+            // the content is a remote page's, and that is what the plan reads
+            // out. No live guest is a named refusal, never an empty read.
+            if (p && isBrowserPanel(p)) {
+              const guest = browserGuestId(p.rect.id)
+              if (guest === undefined) return { kind: 'refused', reason: `${a.panel}: ${REASON_NO_LIVE_PAGE}` }
+              const page = await window.canvas.browser.read({ panelId: p.rect.id, webContentsId: guest })
+              if (page.kind === 'refused') return { kind: 'refused', reason: `${a.panel}: ${page.reason}` }
+              return { kind: 'ran', note: `${page.note}: ${page.text.slice(0, 160).replace(/\s+/g, ' ')}` }
+            }
+            const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
+            const gate = outward(raw, `panel ${a.panel}`)
+            return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
+          }
+          case 'set-setting': {
+            const row = settingRows.find((r) => r.id === a.setting)
+            if (!row) return { kind: 'refused', reason: `no setting is called ${a.setting}` }
+            const v = a.value ?? ''
+            const value: SettingValue = row.type === 'boolean' ? v === 'true' || v === 'on' : row.type === 'number' ? Number(v) : row.type === 'list' ? v.split(',').map((x) => x.trim()) : v
+            if (row.type === 'number' && !Number.isFinite(value as number)) return { kind: 'refused', reason: `${a.setting} takes a number` }
+            // Main owns the store and refuses an unknown id or a wrong type; the
+            // reload is what makes a refusal visible (the row keeps its value).
+            await window.canvas.settings.set(a.setting!, value)
+            reloadSettings()
+            return { kind: 'ran' }
+          }
+          case 'lock': lockPanel(a.panel!); return { kind: 'ran' }
+          case 'unlock': unlockPanel(a.panel!); return { kind: 'ran' }
+          case 'pin': pinPanel(a.panel!); return { kind: 'ran' }
+          case 'unpin': unpinPanel(a.panel!); return { kind: 'ran' }
+          case 'maximise': maximisePanel(a.panel!); return { kind: 'ran' }
+          case 'restore': restorePanel(a.panel!); return { kind: 'ran' }
+          case 'tidy': {
+            // The same arithmetic as the `tidyPanels` member above (one history
+            // entry, locked panels stay), repeated rather than called because a
+            // member of this literal cannot name a sibling before the object
+            // exists — and `verify:verbs closure.1` maps this verb to it.
+            const chosen = panelsRef.current.filter((p) => p.locked !== true)
+            if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy — fewer than two unlocked panels' }
+            const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
+            commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
+            return { kind: 'ran' }
+          }
+          case 'zoom-fit': {
+            const selected = selectedIdsRef.current
+            const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
+            if (rects.length > 0) fitSelection(rects)
+            else if (panelsRef.current.length > 0) fitAll()
+            else resetViewport()
+            return { kind: 'ran' }
+          }
+          case 'zoom-reset': resetViewport(); return { kind: 'ran' }
+          // M149. The table had advertised the verb with no arm here (the Act
+          // II critic): a plan naming it was refused as `no executor`.
+          case 'workspace-from-template': self.workspaceFromTemplate(String(step.args.template ?? '')); return { kind: 'ran' }
+          // M149. `dispatch` and `board` had sat in the table since M113–M116
+          // with no arm here — `verify:verbs executor.1` found both beside
+          // the workspace verb. Each binds by KEY and refuses by name.
+          case 'dispatch': {
+            const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
+            if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
+            const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
+            if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
+            self.dispatchWorkItem(item.id, mate.id); return { kind: 'ran' }
+          }
+          case 'board': {
+            const what = String(a.what ?? '').trim()
+            if (a.op === 'add') {
+              if (what === '') return { kind: 'refused', reason: 'board add needs a title' }
+              const id = self.addWorkItem({ source: 'typed', title: what, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+              return { kind: 'ran', note: `added ${id}` }
+            }
+            if (a.op === 'done') {
+              const item = (workItemsRef.current ?? []).find((w) => w.id === what || w.key === what)
+              if (item === undefined) return { kind: 'refused', reason: `no work item is called ${what}` }
+              self.markDone(item.id); return { kind: 'ran' }
+            }
+            return { kind: 'refused', reason: `board ${String(a.op)} is not a verb — add <title> or done <id>` }
+          }
+          case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
+          case 'review': openReview(a.panel!); return { kind: 'ran' }
+          case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
+          case 'close': onClosePanel(a.panel!); return { kind: 'ran' }
+          case 'reset-canvas': void window.canvas.canvas.requestReset(); return { kind: 'ran', note: 'the reset asks once more in its own dialog' }
+          case 'discard': {
+            const p = panelOf(a.panel!)
+            if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node — open one with \`review <panel>\` first` }
+            const result = await window.canvas.review.at(p.subject)
+            if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard — the review reads ${result.kind}` }
+            const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path) })
+            if (done.kind === 'discarded') return { kind: 'ran', note: `${result.files.length} files` }
+            return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.detail }
+          }
+          case 'remove-worktree': {
+            const done = await window.canvas.worktree.remove(a.worktree!)
+            reloadWorktrees()
+            return done.kind === 'removed' ? { kind: 'ran' } : { kind: 'refused', reason: done.kind === 'unknown' ? `no worktree is called ${a.worktree}` : done.reason }
+          }
+          default: return { kind: 'refused', reason: `${step.verb} has no executor` }
+        }
+      }
+
+    const self: PaletteActions = ({
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -1660,7 +1827,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     beginWatcher,
     openJira: () => openJiraPanel(),
     newNote: () => beginNewNote(),
-    newChat: () => { void beginNewChat() },
+    newChat: (backend) => { void beginNewChat(backend === undefined ? undefined : { backend }) },
+    checkReadiness: recheckEnvironment,
     openAsChat: (id) => openAsChat(id),
     openInTerminal: (id) => openInTerminal(id),
     // M76. The ONE answer verb every surface calls; main clears every
@@ -1728,158 +1896,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
+    runAgentPlan: (line) => runAgentPlan(line, facts(), execute),
     beginRunVerb: () => {
-      const facts = (): PlanFacts => ({
-        panels: panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }) })),
-        presets: presetRows.map((r) => ({ id: r.id })),
-        worktrees: worktreeRows.map((w) => ({ id: w.id }))
-      })
-      const execute = async (step: PlanStep): Promise<StepOutcome> => {
-        const a = step.args
-        const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
-        switch (step.verb) {
-          case 'focus': selectAndRaise(a.panel!); { const p = panelOf(a.panel!); if (p) centreOn(p.rect) } return { kind: 'ran' }
-          case 'start': onSelectPanel(a.panel!); return { kind: 'ran' }
-          case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; void window.canvas.preset.spawnById(a.preset!); return { kind: 'ran' } }
-          case 'type': {
-            const p = panelOf(a.panel!)
-            if (p && isChatPanel(p)) { insertIntoComposer(p.rect.id, a.text ?? ''); return { kind: 'ran', note: 'inserted into the composer' } }
-            const h = registry.get(a.panel!)?.handle
-            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
-            // paste, not write: bracketed paste is the one handoff an agent
-            // TUI treats as text rather than keystrokes (the Jira rule).
-            h.paste(a.text ?? '')
-            return { kind: 'ran' }
-          }
-          case 'submit': {
-            const p = panelOf(a.panel!)
-            if (p && isChatPanel(p)) return { kind: 'refused', reason: 'a chat sends with `send <panel> <text>` — submit is for an agent terminal' }
-            const h = registry.get(a.panel!)?.handle
-            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session — start it first` }
-            h.write('\r')
-            return { kind: 'ran' }
-          }
-          case 'send': {
-            const answer = await window.canvas.agentSession.send(a.panel!, a.text ?? '')
-            if (typeof answer === 'object') return { kind: 'refused', reason: answer.refused }
-            if (answer === 'no-session') return { kind: 'refused', reason: `${a.panel} has no chat session yet — open it first` }
-            if (answer.startsWith('refused')) return { kind: 'refused', reason: `the send was refused: ${answer}` }
-            return { kind: 'ran', note: answer }
-          }
-          case 'interrupt': {
-            const p = panelOf(a.panel!)
-            if (p && isChatPanel(p)) { const did = await window.canvas.agentSession.interrupt(p.rect.id); return did ? { kind: 'ran' } : { kind: 'refused', reason: 'nothing is in flight' } }
-            const h = registry.get(a.panel!)?.handle
-            if (!h) return { kind: 'refused', reason: `${a.panel} has no live session` }
-            h.write('\x03')
-            return { kind: 'ran' }
-          }
-          case 'restart': { const p = panelOf(a.panel!); if (!p || !isTerminalPanel(p)) return { kind: 'refused', reason: 'only a terminal panel restarts' }; restartWithSpec(p.rect.id, p.spec); return { kind: 'ran' } }
-          case 'read': {
-            // Guardrail 2: through the ONE outward gate, whichever front-end.
-            const p = panelOf(a.panel!)
-            // M103. A browser panel's text is read in MAIN, which owns the
-            // scheme check, the cap and the gate; the note it hands back says
-            // the content is a remote page's, and that is what the plan reads
-            // out. No live guest is a named refusal, never an empty read.
-            if (p && isBrowserPanel(p)) {
-              const guest = browserGuestId(p.rect.id)
-              if (guest === undefined) return { kind: 'refused', reason: `${a.panel}: ${REASON_NO_LIVE_PAGE}` }
-              const page = await window.canvas.browser.read({ panelId: p.rect.id, webContentsId: guest })
-              if (page.kind === 'refused') return { kind: 'refused', reason: `${a.panel}: ${page.reason}` }
-              return { kind: 'ran', note: `${page.note}: ${page.text.slice(0, 160).replace(/\s+/g, ' ')}` }
-            }
-            const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
-            const gate = outward(raw, `panel ${a.panel}`)
-            return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
-          }
-          case 'set-setting': {
-            const row = settingRows.find((r) => r.id === a.setting)
-            if (!row) return { kind: 'refused', reason: `no setting is called ${a.setting}` }
-            const v = a.value ?? ''
-            const value: SettingValue = row.type === 'boolean' ? v === 'true' || v === 'on' : row.type === 'number' ? Number(v) : row.type === 'list' ? v.split(',').map((x) => x.trim()) : v
-            if (row.type === 'number' && !Number.isFinite(value as number)) return { kind: 'refused', reason: `${a.setting} takes a number` }
-            // Main owns the store and refuses an unknown id or a wrong type; the
-            // reload is what makes a refusal visible (the row keeps its value).
-            await window.canvas.settings.set(a.setting!, value)
-            reloadSettings()
-            return { kind: 'ran' }
-          }
-          case 'lock': lockPanel(a.panel!); return { kind: 'ran' }
-          case 'unlock': unlockPanel(a.panel!); return { kind: 'ran' }
-          case 'pin': pinPanel(a.panel!); return { kind: 'ran' }
-          case 'unpin': unpinPanel(a.panel!); return { kind: 'ran' }
-          case 'maximise': maximisePanel(a.panel!); return { kind: 'ran' }
-          case 'restore': restorePanel(a.panel!); return { kind: 'ran' }
-          case 'tidy': {
-            // The same arithmetic as the `tidyPanels` member above (one history
-            // entry, locked panels stay), repeated rather than called because a
-            // member of this literal cannot name a sibling before the object
-            // exists — and `verify:verbs closure.1` maps this verb to it.
-            const chosen = panelsRef.current.filter((p) => p.locked !== true)
-            if (chosen.length < 2) return { kind: 'refused', reason: 'nothing to tidy — fewer than two unlocked panels' }
-            const tidied = new Map(tidyPanels(chosen.map((p) => p.rect)).map((r) => [r.id, r]))
-            commitHistory(panelsRef.current.map((p) => { const r = tidied.get(p.rect.id); return r === undefined ? p : { ...p, rect: r } }))
-            return { kind: 'ran' }
-          }
-          case 'zoom-fit': {
-            const selected = selectedIdsRef.current
-            const rects = panelsRef.current.filter((p) => selected.has(p.rect.id)).map((p) => p.rect)
-            if (rects.length > 0) fitSelection(rects)
-            else if (panelsRef.current.length > 0) fitAll()
-            else resetViewport()
-            return { kind: 'ran' }
-          }
-          case 'zoom-reset': resetViewport(); return { kind: 'ran' }
-          // M149. The table had advertised the verb with no arm here (the Act
-          // II critic): a plan naming it was refused as `no executor`.
-          case 'workspace-from-template': self.workspaceFromTemplate(String(step.args.template ?? '')); return { kind: 'ran' }
-          // M149. `dispatch` and `board` had sat in the table since M113–M116
-          // with no arm here — `verify:verbs executor.1` found both beside
-          // the workspace verb. Each binds by KEY and refuses by name.
-          case 'dispatch': {
-            const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
-            if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
-            const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
-            if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
-            self.dispatchWorkItem(item.id, mate.id); return { kind: 'ran' }
-          }
-          case 'board': {
-            const what = String(a.what ?? '').trim()
-            if (a.op === 'add') {
-              if (what === '') return { kind: 'refused', reason: 'board add needs a title' }
-              const id = self.addWorkItem({ source: 'typed', title: what, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
-              return { kind: 'ran', note: `added ${id}` }
-            }
-            if (a.op === 'done') {
-              const item = (workItemsRef.current ?? []).find((w) => w.id === what || w.key === what)
-              if (item === undefined) return { kind: 'refused', reason: `no work item is called ${what}` }
-              self.markDone(item.id); return { kind: 'ran' }
-            }
-            return { kind: 'refused', reason: `board ${String(a.op)} is not a verb — add <title> or done <id>` }
-          }
-          case 'workspace': { const ok = await switchWorkspace(a.workspace!); return ok ? { kind: 'ran' } : { kind: 'refused', reason: `could not switch to ${a.workspace}` } }
-          case 'review': openReview(a.panel!); return { kind: 'ran' }
-          case 'run-template': palette.openPalette(); return { kind: 'refused', reason: 'open the spawn sheet on the template from New panel… — its parameters are asked there' }
-          case 'close': onClosePanel(a.panel!); return { kind: 'ran' }
-          case 'reset-canvas': void window.canvas.canvas.requestReset(); return { kind: 'ran', note: 'the reset asks once more in its own dialog' }
-          case 'discard': {
-            const p = panelOf(a.panel!)
-            if (!p || !isReviewPanel(p)) return { kind: 'refused', reason: `${a.panel} is not a review node — open one with \`review <panel>\` first` }
-            const result = await window.canvas.review.at(p.subject)
-            if (result.kind !== 'changes') return { kind: 'refused', reason: `nothing to discard — the review reads ${result.kind}` }
-            const done = await window.canvas.review.discard({ root: result.root, baseline: p.subject.baselineSha, subjectId: p.subject.subjectId, paths: result.files.map((f) => f.path) })
-            if (done.kind === 'discarded') return { kind: 'ran', note: `${result.files.length} files` }
-            return { kind: 'refused', reason: done.kind === 'nothing-to-discard' ? 'nothing to discard' : done.detail }
-          }
-          case 'remove-worktree': {
-            const done = await window.canvas.worktree.remove(a.worktree!)
-            reloadWorktrees()
-            return done.kind === 'removed' ? { kind: 'ran' } : { kind: 'refused', reason: done.kind === 'unknown' ? `no worktree is called ${a.worktree}` : done.reason }
-          }
-          default: return { kind: 'refused', reason: `${step.verb} has no executor` }
-        }
-      }
       const open = (initial: string, refused?: string): void => {
         setInputMode({
           kind: 'text',
@@ -2030,7 +2048,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

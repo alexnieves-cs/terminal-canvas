@@ -51,6 +51,8 @@ export interface VerbDef {
 const panel = (name = 'panel'): VerbArg => ({ name, kind: 'panel' })
 
 export const VERBS: readonly VerbDef[] = [
+  { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
+  { id: 'new-chat', label: 'Start a conversation', args: [{ name: 'backend', kind: 'key', optional: true }], destructive: false, actions: ['newChat'], target: 'canvas', hint: 'open an available conversation engine; optionally claude or codex' },
   { id: 'focus', label: 'Focus', args: [panel()], destructive: false, actions: ['goToPanel'], target: 'panel', hint: 'go to a panel without waking it' },
   { id: 'start', label: 'Start', args: [panel()], destructive: false, actions: ['startPanel'], target: 'panel', hint: 'wake a dormant panel' },
   { id: 'spawn', label: 'Spawn', args: [{ name: 'preset', kind: 'preset' }], destructive: false, actions: ['spawnPreset'], target: 'canvas', hint: 'a new panel from a preset' },
@@ -165,10 +167,10 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   beginClearScrollback: 'clears every durable log at once — beyond any single verb\'s confirmation',
   openFile: 'opens the OS file dialog — a plan has no pointer',
   newNote: 'opens the palette\'s text mode',
-  newChat: 'a chat is minted through the spawn sheet; `spawn` is the plan\'s door',
   openAsChat: 'moves a conversation between front-ends — the user\'s decision (M74)',
   openInTerminal: 'moves a conversation between front-ends — the user\'s decision (M74)',
   openJira: 'a work panel is opened by the user',
+  runAgentPlan: 'agent transport for the same executor, not a recursively callable product verb',
   beginRunVerb: 'the verb line itself — a plan that ran plans would be a loop with no ceiling',
   startAuto: 'M97\'s door: an auto run is started by the user, never by a plan (a plan that starts runs has no turn limit of its own)',
   stopAuto: 'M97\'s door, the stop half',
@@ -199,4 +201,10 @@ export function stripControl(text: string): string {
 export function acceptsTyping(panel: { kind: string; agent?: AgentKind }): boolean {
   if (panel.kind === 'chat') return true
   return panel.kind === 'terminal' && panel.agent !== undefined
+}
+
+/** Act I exceptions have an owner and deadline; declarations never stand in for execution checks. */
+export const V9_DOORS: Record<string, { canvas: string; palette: string; agent: string; workflow: { reason: string; due: string } }> = {
+  'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
+  'new-chat': { canvas: 'launcher Start a conversation', palette: 'onboarding.conversation', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
 }

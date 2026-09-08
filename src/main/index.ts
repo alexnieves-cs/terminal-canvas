@@ -1,3 +1,4 @@
+import type { AgentPlanReply } from '../shared/plan'
 import { homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
@@ -750,6 +751,11 @@ const controlHandler = createControlHandler({
     return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
   },
   // M113. The board verb asks the renderer, which owns the workspace it renders.
+  plan: async (line) => {
+    const wc = mainWindow?.webContents
+    if (!wc) return null
+    return requestFromRendererWith<AgentPlanReply | null, string>(wc, IPC_EVENTS.CANVAS_PLAN, line, null, 30000)
+  },
   board: async (req) => {
     const wc = mainWindow?.webContents
     if (!wc) return null

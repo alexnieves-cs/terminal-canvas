@@ -2950,6 +2950,11 @@ export function Canvas({
   // report says when. Null until the invoke answers, and the launcher and the
   // palette both render the null honestly rather than as "nothing found".
   const [envReport, setEnvReport] = useState<EnvReport | null>(null)
+  const recheckEnvironment = useCallback(async (): Promise<EnvReport> => {
+    const report = await window.canvas.env.report(true)
+    setEnvReport(report)
+    return report
+  }, [])
   useEffect(() => {
     let live = true
     void window.canvas.env.report().then((r) => { if (live) setEnvReport(r) }).catch(() => {})
@@ -4764,6 +4769,7 @@ export function Canvas({
   }, [])
 
   const paletteActions = usePaletteActions({
+    recheckEnvironment,
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
@@ -4877,6 +4883,8 @@ export function Canvas({
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
   })
+
+  useEffect(() => window.canvas.canvas.onPlan((line) => paletteActions.runAgentPlan(line)), [paletteActions])
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
   // panel while insertPath pastes into the FOCUSED one — see the hook's doc
@@ -5881,7 +5889,8 @@ export function Canvas({
             tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
             onDismissTmux={() => markHint('tmux')}
             report={envReport}
-            onCheckAgain={() => { void window.canvas.env.report(true).then(setEnvReport) }}
+            onOpenSetup={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
+            onCheckAgain={() => { void paletteActions.checkReadiness() }}
             onSpawnPreset={paletteActions.spawnPreset}
             onOpenSheet={paletteActions.beginSpawnSheet}
             onOpenFile={paletteActions.openFile}
@@ -5889,7 +5898,7 @@ export function Canvas({
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
             onNewChat={paletteActions.newChat}
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
-            onNewCodexChat={() => { void beginNewChat({ backend: 'codex' }) }}
+            onNewCodexChat={() => paletteActions.newChat('codex')}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
             onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
             sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}

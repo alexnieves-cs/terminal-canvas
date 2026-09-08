@@ -306,7 +306,7 @@ renderer --invoke--> plugin:details                                             
 renderer --invoke--> update:check                                                --> main
 renderer <--send---  pty:data (batched ~16ms) / pty:exit                       <-- main
 main     --send-->   edit:copy / edit:paste / edit:undo / edit:redo            --> renderer
-main     --send-->   canvas:counts / canvas:model / canvas:reset                              --> renderer
+main     --send-->   canvas:counts / canvas:model / canvas:reset / canvas:plan                              --> renderer
 main     --send-->   preset:spawn / preset:default / preset:capture            --> renderer
 main     --send-->   agent:state                                               --> renderer
 main     --send-->   session:live / session:recover                            --> renderer

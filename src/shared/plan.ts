@@ -1,3 +1,4 @@
+import { outward } from './outward'
 import { VERBS, verbById, stripControl, acceptsTyping, type VerbDef } from './verb-table'
 import { settingDef } from './settings-schema'
 import type { AgentKind } from './cost'
@@ -30,6 +31,24 @@ export interface PlanStep {
 
 export interface Plan {
   steps: PlanStep[]
+}
+
+export type AgentPlanReply = { kind: 'ran'; summary: string } | { kind: 'refused'; reason: string }
+
+/** An agent cannot acknowledge a human confirmation, even after a harmless first step. */
+export async function runAgentPlan(line: string, facts: PlanFacts, execute: (step: PlanStep) => Promise<StepOutcome>): Promise<AgentPlanReply> {
+  if (new TextEncoder().encode(line).length > 8192 || /[\x00-\x1f\x7f]/.test(line)) return { kind: 'refused', reason: 'the plan line exceeds its size or control-character limit' }
+  const inputs = parsePlanLine(line)
+  if (inputs.length > 16) return { kind: 'refused', reason: 'a plan may contain at most 16 operations' }
+  const built = buildPlan(inputs, facts)
+  if (built.kind === 'refused') return { kind: 'refused', reason: outward(`${built.reason} — ${built.fix}`, 'canvas plan').text }
+  if (planIsDestructive(built.plan)) return { kind: 'refused', reason: 'this plan needs human confirmation — run it through the palette' }
+  const report = await runPlan(built.plan, execute, { acknowledged: false })
+  const refused = report.steps.find((step) => step.kind === 'refused')
+  if (refused?.kind === 'refused') return { kind: 'refused', reason: outward(refused.reason, 'canvas plan').text }
+  const summary = report.summary + report.steps.filter((step) => step.kind === 'ran' && step.note).map((step) => step.kind === 'ran' ? ` · ${step.note}` : '').join('')
+  const gate = outward(summary, 'canvas plan')
+  return { kind: 'ran', summary: `${gate.text} · ${gate.note}` }
 }
 
 export type PlanResult = { kind: 'plan'; plan: Plan } | { kind: 'refused'; reason: string; fix: string }
