@@ -11,6 +11,10 @@ import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
 import { Close, Pencil, RotateCw } from '@renderer/icons'
+import type { PersistedTemplate } from '@shared/templates'
+import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from '@renderer/workflow/template-draft-store'
+import { fieldsOf } from '@shared/template-edit'
+import { HANDOFF_TRIGGERS } from '@shared/handoff'
 import type { ContextTab } from './useShellChrome'
 import type { RunRow } from '@shared/run-ledger'
 
@@ -65,6 +69,8 @@ export interface AutomationRow {
 
 export interface InspectorProps {
   onToggle: () => void
+  /** M183. The saved template by id — the node editor's record; absent (a fixture) hides the editor. */
+  templateOf?: (id: string) => PersistedTemplate | undefined
   /** M46. The active tab of the context pane, persisted as shell.contextTab. */
   tab: ContextTab
   onSelectTab: (tab: ContextTab) => void
@@ -152,7 +158,7 @@ export interface InspectorProps {
  * reason the rail's does: it is the only way back without ⇧⌘\.
  */
 function InspectorImpl({
-  onToggle: _onToggle, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
+  onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
@@ -168,6 +174,7 @@ function InspectorImpl({
             <InspectorEmpty summary={summary} />
           </>
         : <InspectorPanel
+            templateOf={templateOf}
             branchLine={branchLine}
             repository={repository}
             tab={tab}
@@ -403,10 +410,11 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  tab, onSelectTab, automations,
+  tab, onSelectTab, automations, templateOf,
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
+  templateOf?: (id: string) => PersistedTemplate | undefined
   tab: ContextTab
   onSelectTab: (tab: ContextTab) => void
   automations: AutomationRow[]
@@ -519,6 +527,8 @@ function InspectorPanel({
       </div>
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
+      {/* M183. THE NODE EDITOR: the selected block's fields from its kind's schema, committed through the draft store's one door. */}
+      {model.kind === 'workflow' && model.templateId !== undefined && templateOf !== undefined && <NodeFields templateId={model.templateId} templateOf={templateOf} />}
       <dl className="inspector__fields">
         {/* M68. Through the one filter: no pid (the header has it), no
             `asked for` that only repeats `command`. */}
@@ -1001,5 +1011,92 @@ function InspectorPanel({
         </button>
       </div>
     </div>
+  )
+}
+
+
+/**
+ * M183. THE NODE EDITOR. The selected block's fields, rendered from
+ * `fieldsOf(kind)` — the same table the validator reads, so a field here is
+ * a field the record has. Every commit (Enter, or blur) applies
+ * `configureNode` through the draft store's one door; a refusal keeps the
+ * typed value in the field and shows the reason beside it (`data-inspector-
+ * node-reason`) — the draft is never lost to validation. A selected EDGE
+ * shows its trigger as a select over the one vocabulary; changing it
+ * re-adds the edge under the new trigger. Nothing selected: nothing here —
+ * the panel's own fields below are M133's.
+ */
+/** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them). */
+const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target' }
+const HIDDEN_NODE_FIELDS = new Set(['dx', 'dy', 'w', 'h'])
+
+function NodeFields({ templateId, templateOf }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined }): JSX.Element | null {
+  const saved = templateOf(templateId)
+  const { template } = useTemplateDraft(templateId, saved)
+  const selected = useSelectedOf(templateId)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [reasons, setReasons] = useState<Record<string, string>>({})
+  // Reset on the TEMPLATE, never on the selection: a blur that refuses sets the
+  // reason and then the click that moved the selection wiped both, losing the
+  // typed value the refusal promised to keep (the M183 critic).
+  useEffect(() => { setDrafts({}); setReasons({}) }, [templateId])
+  if (template === undefined || selected === null) return null
+  if (selected.includes('>')) {
+    const [from, to] = selected.split('>') as [string, string]
+    const edge = template.edges.find((e) => e.from === from && e.to === to)
+    if (edge === undefined) return null
+    return (
+      <section className="inspector__section inspector__section--node" data-inspector-node="edge" data-inspector-node-edge={selected}>
+        <h3 className="inspector__section-heading inspector__section-heading--node">Edge · {from} to {to}</h3>
+        <div className="inspector__field" data-inspector-node-field-row="trigger">
+          <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>trigger</label>
+          <select id={`edge-trigger-${templateId}`} className="inspector__input" data-inspector-node-field="trigger" value={edge.trigger}
+            // ONE operation, in place: an unedge-then-re-add is two undo steps and loses the edge if the second refuses (the critic).
+            onChange={(e) => { const r = applyDraftOp(templateId, saved, { type: 'retrigger', from, to, trigger: e.target.value as typeof edge.trigger }); if (r.kind === 'refused') setReasons({ trigger: r.reason }) }}>
+            {HANDOFF_TRIGGERS.map((t) => <option key={t} value={t}>{TRIGGER_WORDS[t]}</option>)}
+          </select>
+          {reasons.trigger !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason="trigger">{reasons.trigger}</p>}
+        </div>
+      </section>
+    )
+  }
+  const node = template.nodes.find((n) => n.key === selected)
+  if (node === undefined) return null
+  const fields = fieldsOf(node.kind)
+  const current = (name: string): string => {
+    const v = (node as unknown as Record<string, unknown>)[name]
+    return v === undefined ? '' : Array.isArray(v) ? (v as string[]).join(' ') : String(v)
+  }
+  const commit = (name: string, type: 'string' | 'number' | 'string[]'): void => {
+    const raw = drafts[name]
+    if (raw === undefined || raw === current(name)) return
+    const value: unknown = type === 'number' ? Number(raw) : type === 'string[]' ? raw.split(/\s+/).filter((w) => w !== '') : raw
+    const r = applyDraftOp(templateId, saved, { type: 'set', key: node.key, patch: { [name]: value } })
+    if (r.kind === 'refused') setReasons((rs) => ({ ...rs, [name]: r.reason }))
+    else { setReasons((rs) => { const { [name]: _gone, ...rest } = rs; return rest }); setDrafts((ds) => { const { [name]: _gone, ...rest } = ds; return rest }) }
+  }
+  return (
+    <section className="inspector__section inspector__section--node" data-inspector-node="block" data-inspector-node-key={node.key}>
+      <h3 className="inspector__section-heading inspector__section-heading--node">{node.kind} · {'title' in node && typeof node.title === 'string' && node.title.trim() !== '' ? node.title : node.key}</h3>
+      {fields.filter((f) => !HIDDEN_NODE_FIELDS.has(f.name)).map((f) => (
+        <div className="inspector__field" key={f.name} data-inspector-node-field-row={f.name}>
+          <label className="inspector__label" htmlFor={`node-${templateId}-${f.name}`}>{NODE_FIELD_LABELS[f.name] ?? f.name}</label>
+          <input id={`node-${templateId}-${f.name}`} className={`inspector__input${f.name === 'cwd' || f.name === 'command' || f.name === 'args' || f.name === 'list' || f.name === 'target' ? ' inspector__value--mono' : ''}`}
+            data-inspector-node-field={f.name} type={f.type === 'number' ? 'number' : 'text'}
+            // The path rule: the field must hold the real value (it is editable), so the whole of it rides the title.
+            title={drafts[f.name] ?? current(f.name)}
+            value={drafts[f.name] ?? current(f.name)}
+            onChange={(e) => { setDrafts((ds) => ({ ...ds, [f.name]: e.target.value })); setReasons((rs) => { const { [f.name]: _gone, ...rest } = rs; return rest }) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(f.name, f.type) } e.stopPropagation() }}
+            onBlur={() => commit(f.name, f.type)}
+            // Focus EXPLICITLY: the pane's own mousedown rule keeps focus on the canvas (shellControl), and an input that never takes it swallows the typing.
+            onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.focus() }}
+            onMouseUp={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); e.currentTarget.focus() }} />
+          {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
+        </div>
+      ))}
+      <button type="button" className="pf__verb pf__verb--word" data-inspector-node-deselect onClick={() => select(templateId, null)}>Done</button>
+    </section>
   )
 }

@@ -6105,6 +6105,7 @@ export function Canvas({
         )}
       </div>
       <Inspector
+        templateOf={(id) => allTemplates(templateRows).find((t) => t.id === id)}
         onToggle={chrome.toggleContext}
         tab={chrome.contextTab}
         onSelectTab={chrome.setContextTab}

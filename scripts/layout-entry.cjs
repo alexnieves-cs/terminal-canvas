@@ -58,5 +58,7 @@ module.exports = {
   /* M182. The template's pure edit verbs (add/move/configure/remove a node,
      add/remove an edge, the minted key): the same try shape as M181 above,
      so the edit.* checks fail by name while the module does not exist. */
-  ...((() => { try { return require('../src/shared/template-edit.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/template-edit.ts') } catch { return {} } })()),
+  /* M183. The library table: one entry per node kind, the default node and the placement. */
+  ...((() => { try { return require('../src/shared/template-library.ts') } catch { return {} } })())
 }

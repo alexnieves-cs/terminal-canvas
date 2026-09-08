@@ -1,6 +1,7 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
 import { configureNode, moveNode } from '@shared/template-edit'
+import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
 import { HANDOFF_TRIGGERS } from '@shared/handoff'
 import { isBuiltInTemplate, type TemplateNode } from '@shared/templates'
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
@@ -270,12 +271,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           // M182. The six editing verbs, each one draft operation through the store's door.
           case 'workflow-add': {
             const kind = String(a.kind ?? '')
-            const node = kind === 'terminal' || kind === 'chat' ? { kind, cwd: '~', dx: 0, dy: 0 }
-              : kind === 'pool' ? { kind: 'pool' as const, width: 2, list: '', prompt: '', cwd: '~', dx: 0, dy: 0 }
-                : kind === 'orchestrator' ? { kind: 'orchestrator' as const, prompt: '', cwd: '~', dx: 0, dy: 0 }
-                  : kind === 'collect' ? { kind: 'collect' as const, target: '', cwd: '~', dx: 0, dy: 0 } : null
-            if (node === null) return { kind: 'refused', reason: `${kind} is not a node kind — terminal, chat, pool, orchestrator or collect` }
-            const r = self.editWorkflow(a.template!, { type: 'add', node: node as Omit<TemplateNode, 'key'> })
+            // M183. The library's default for the kind, placed where a drop would land (to the right of the rightmost block).
+            if (!LIBRARY.some((e) => e.kind === kind)) return { kind: 'refused', reason: `${kind} is not a node kind — ${LIBRARY.map((e) => e.kind).join(', ')}` }
+            const saved = allTemplates(templateRowsRef.current).find((t) => t.id === a.template)
+            const base = getDraft(a.template!)?.template ?? saved
+            const at = base === undefined ? { dx: 0, dy: 0 } : placementFor(base)
+            const r = self.editWorkflow(a.template!, { type: 'add', node: { ...defaultNodeOf(kind as TemplateNode['kind']), ...at } as Omit<TemplateNode, 'key'> })
             return r.kind === 'ok' ? { kind: 'ran', note: 'node added to the draft' } : r
           }
           case 'workflow-move': {

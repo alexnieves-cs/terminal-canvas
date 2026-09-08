@@ -510,6 +510,37 @@ const SCENES = [
       await k.shot('compact'); await k.context(false) } },
   { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the draft is kept on the panel; Save on the diagram arrives with M184), Delete and Build with AI; the Definition tab selected.',
     run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
+  { name: 'workflow-edit', intent: 'M183. The workflow panel as an EDITOR: the node library opened from its `Add node…` disclosure (an entry per kind, each a name, one sentence and an example, with its own Add control), the diagram beside it with a port on every block, the `scan` block selected with the accent stroke, and the context pane on Detail showing that node\'s own fields from its kind\'s schema — folder, title, command, arguments, preset, first message — as editable inputs with a Done verb; Save still disabled with the sentence naming M184; nothing running.', size: [1800, 1000],
+    run: async (k) => {
+      // In order, and every step a REAL press: select the panel (the pane names
+      // the selected panel), open the library (a disclosure, and it shifts the
+      // diagram), THEN press the block — a point computed before the shift
+      // lands on the wrong block. Everything is put back after the shot: the
+      // library closed, the context tab as it was (a persisted setting), the
+      // pane as it was, and nothing selected.
+      const press = async (sel) => {
+        const p = await k.js(`(() => { const t = document.querySelector(${JSON.stringify(sel)}); if (!t) return null; const r = t.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (!p) return false
+        k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...p, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...p, button: 'left', clickCount: 1 })
+        await sleep(250)
+        return true
+      }
+      await press('.panel[data-panel-kind="workflow"] .pf__title')
+      await press('[data-workflow-library-toggle]')
+      await sleep(300)
+      await press('[data-workflow-block="scan"] rect')
+      const tabBefore = await k.js(`document.querySelector('[data-context-tab][aria-selected="true"]')?.getAttribute('data-context-tab') ?? 'detail'`)
+      await k.context(true)
+      await k.tab('detail')
+      for (let i = 0; i < 20 && !(await k.js(`document.querySelector('[data-inspector-node="block"]') !== null`)); i++) await sleep(100)
+      await sleep(500)
+      await k.shot('workflow-edit')
+      await press('[data-workflow-library-toggle]')
+      await k.tab(tabBefore)
+      await k.context(false)
+      await k.js(`(() => { const bg = document.querySelector('.canvas'); if (!bg) return false; bg.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 1300, clientY: 800 })); bg.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 1300, clientY: 800 })); return true })()`)
+      await sleep(300)
+    } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } },
   // M149. The 4.0 audit's three owed scenes. Each is the REAL condition, set

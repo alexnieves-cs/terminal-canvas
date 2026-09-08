@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PersistedTemplate, TemplateNode } from '@shared/templates'
 import type { HandoffTrigger } from '@shared/handoff'
-import { addEdge, addNode, configureNode, moveNode, removeEdge, removeNode, type EditResult } from '@shared/template-edit'
+import { addEdge, addNode, configureNode, moveNode, removeEdge, removeNode, retriggerEdge, type EditResult } from '@shared/template-edit'
 
 /**
  * M182. THE DRAFT — one per template, the record both editors edit. A
@@ -24,6 +24,7 @@ export type DraftOp =
   | { type: 'remove'; key: string }
   | { type: 'edge'; from: string; to: string; trigger: HandoffTrigger }
   | { type: 'unedge'; from: string; to: string }
+  | { type: 'retrigger'; from: string; to: string; trigger: HandoffTrigger }
 
 export interface TemplateDraft {
   template: PersistedTemplate
@@ -33,6 +34,8 @@ export interface TemplateDraft {
 
 const drafts = new Map<string, TemplateDraft>()
 const listeners = new Map<string, Set<() => void>>()
+/** M183. The selected block (a node key) or edge (`from>to`) per template — a fact of the store, so the panel, the inspector and the palette agree. */
+const selection = new Map<string, string | null>()
 
 function notify(id: string): void { for (const fn of listeners.get(id) ?? []) fn() }
 
@@ -54,7 +57,8 @@ export function applyDraftOp(id: string, saved: PersistedTemplate | undefined, o
       : op.type === 'set' ? configureNode(base, op.key, op.patch)
         : op.type === 'remove' ? removeNode(base, op.key)
           : op.type === 'edge' ? addEdge(base, op.from, op.to, op.trigger)
-            : removeEdge(base, op.from, op.to)
+            : op.type === 'retrigger' ? retriggerEdge(base, op.from, op.to, op.trigger)
+              : removeEdge(base, op.from, op.to)
   if (result.kind === 'refused') return result
   const previous = drafts.get(id)
   drafts.set(id, { template: result.template, baseRevision: previous?.baseRevision ?? saved?.revision ?? 0, dirty: true })
@@ -69,7 +73,17 @@ export function resetDraft(id: string, saved?: PersistedTemplate): void {
   notify(id)
 }
 
-export function clearDraft(id: string): void { if (drafts.delete(id)) notify(id) }
+export function clearDraft(id: string): void { const had = drafts.delete(id); selection.delete(id); if (had) notify(id) }
+
+export function selectedOf(id: string): string | null { return selection.get(id) ?? null }
+export function select(id: string, what: string | null): void { if ((selection.get(id) ?? null) === what) return; selection.set(id, what); notify(id) }
+
+/** The selected block or edge of a template, live. */
+export function useSelectedOf(id: string): string | null {
+  const [, bump] = useState(0)
+  useEffect(() => subscribeDraft(id, () => bump((n) => n + 1)), [id])
+  return selectedOf(id)
+}
 
 /** The draft when there is one, else the saved record; and whether it is dirty. */
 export function useTemplateDraft(id: string, saved: PersistedTemplate | undefined): { template: PersistedTemplate | undefined; dirty: boolean } {

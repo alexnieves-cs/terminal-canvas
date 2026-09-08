@@ -4492,6 +4492,90 @@ const tpl = (nodes, edges = [], over = {}) => ({ id: 'e1', name: 'edit me', node
     JSON.stringify({ fresh, matched, stale, onDisk, inMemory, forced, afterForce }))
 }
 
+// M183 — library.1–.2. THE NODE LIBRARY (`src/shared/template-library.ts`):
+// the pure table the workflow panel's library column, the inspector and the
+// validator share. Guarded on the module's presence the way edit.1–.4 are,
+// so a missing module fails BY NAME rather than throwing and taking the
+// checks below it with it.
+const LIB_MISSING = 'src/shared/template-library.ts does not exist'
+const hasLibrary = Array.isArray(L.LIBRARY) && typeof L.defaultNodeOf === 'function' && typeof L.placementFor === 'function' && typeof L.LIBRARY_GAP === 'number'
+const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect']
+
+// library.1 — LIBRARY holds exactly one entry per kind, in the kind order
+// the diagram draws, and each entry is something a person can READ: a
+// non-empty name no other entry shares, one sentence (ends in `.`, at most
+// 90 characters — the column is narrow) and an example line (at most 60).
+// defaultNodeOf(kind) is what the library's drop and `Add` apply, so
+// addNode must ACCEPT it for every kind — a default the validator refuses
+// is a library entry that can never be added, with nothing on screen to say
+// why; terminal/chat carry `cwd: '~'`, pool carries `width: 2`, offsets are
+// 0. An unknown kind is a programmer error (the table is closed; user input
+// never reaches it) and THROWS a TypeError naming the kind rather than
+// answering a node of no kind.
+{
+  const ID = 'library.1 LIBRARY: one entry per kind in order (terminal, chat, pool, orchestrator, collect), distinct non-empty names, a sentence ending in . of ≤ 90 chars, an example of ≤ 60 chars; defaultNodeOf(kind) is accepted by addNode for every kind (cwd ~ on terminal/chat, width 2 on pool, dx/dy 0); an unknown kind throws a TypeError naming it'
+  if (!hasLibrary || typeof L.addNode !== 'function') ok(ID, false, hasLibrary ? 'addNode (template-edit.ts) is missing' : LIB_MISSING)
+  else {
+    const kinds = L.LIBRARY.map((e) => e.kind)
+    const orderOk = JSON.stringify(kinds) === JSON.stringify(LIBRARY_KINDS)
+    const names = L.LIBRARY.map((e) => e.name)
+    const namesOk = names.every((n) => typeof n === 'string' && n.trim().length > 0) && new Set(names).size === names.length
+    const sentencesOk = L.LIBRARY.every((e) => typeof e.sentence === 'string' && e.sentence.trim().length > 1 && e.sentence.endsWith('.') && e.sentence.length <= 90)
+    const examplesOk = L.LIBRARY.every((e) => typeof e.example === 'string' && e.example.trim().length > 0 && e.example.length <= 60)
+    const empty = { id: 't', name: 't', nodes: [], edges: [] }
+    const defaults = {}
+    const accepted = {}
+    for (const kind of LIBRARY_KINDS) {
+      try {
+        const d = L.defaultNodeOf(kind)
+        defaults[kind] = d
+        const r = L.addNode(empty, d)
+        accepted[kind] = r
+      } catch (e) { accepted[kind] = { kind: 'threw', reason: e.message } }
+    }
+    const acceptedOk = LIBRARY_KINDS.every((k) => accepted[k] && accepted[k].kind === 'ok' && accepted[k].template.nodes.length === 1 && accepted[k].template.nodes[0].kind === k)
+    const shapeOk = LIBRARY_KINDS.every((k) => defaults[k] && defaults[k].kind === k && !('key' in defaults[k]) && defaults[k].dx === 0 && defaults[k].dy === 0) &&
+      defaults.terminal && defaults.terminal.cwd === '~' && defaults.chat && defaults.chat.cwd === '~' && defaults.pool && defaults.pool.width === 2
+    let unknown
+    try { unknown = { returned: L.defaultNodeOf('widget') } } catch (e) { unknown = { threw: e instanceof TypeError, message: e.message } }
+    const unknownOk = unknown.threw === true && typeof unknown.message === 'string' && unknown.message.includes('widget')
+    ok(ID, orderOk && namesOk && sentencesOk && examplesOk && acceptedOk && shapeOk && unknownOk,
+      JSON.stringify({ kinds, names, orderOk, namesOk, sentencesOk, examplesOk, acceptedOk, shapeOk, unknownOk, defaults, accepted, unknown, library: L.LIBRARY }))
+  }
+}
+
+// library.2 — placementFor is where `Add` (the keyboard door) puts a new
+// block: a template with no nodes answers the origin; otherwise one GAP
+// (LIBRARY_GAP = 40) to the right of the RIGHTMOST block's right edge
+// (max over dx + BLOCK_W), at the TOPMOST block's dy. The property the
+// gesture depends on is that the point never lands ON an existing block —
+// asserted geometrically against every node's rect, with three blocks that
+// overlap each other so a "rightmost by dx" or "last node" reading would
+// land inside one. BLOCK_W/BLOCK_H are the diagram's own constants (already
+// in this bundle through workflow-diagram.ts), never restated here.
+{
+  const ID = 'library.2 placementFor: no nodes → {0,0}; nodes at (0,0), (100,20), (150,-10) → dx = 150 + BLOCK_W + LIBRARY_GAP (358), dy = -10, overlapping no block\'s rect; one node at (0,0) → {BLOCK_W + LIBRARY_GAP (208), 0}; LIBRARY_GAP is 40'
+  if (!hasLibrary || typeof L.BLOCK_W !== 'number' || typeof L.BLOCK_H !== 'number') ok(ID, false, hasLibrary ? 'BLOCK_W/BLOCK_H (workflow-diagram.ts) are missing from the bundle' : LIB_MISSING)
+  else {
+    const W = L.BLOCK_W; const H = L.BLOCK_H
+    const node = (key, dx, dy) => ({ key, kind: 'terminal', cwd: '~', dx, dy })
+    const t = (nodes) => ({ id: 'p', name: 'place', nodes, edges: [] })
+    const call = (tpl) => { try { return L.placementFor(tpl) } catch (e) { return { threw: e.message } } }
+    const none = call(t([]))
+    const three = call(t([node('n1', 0, 0), node('n2', 100, 20), node('n3', 150, -10)]))
+    const one = call(t([node('n1', 0, 0)]))
+    const overlaps = (p, n) => p.dx < n.dx + W && p.dx + W > n.dx && p.dy < n.dy + H && p.dy + H > n.dy
+    const threeNodes = [node('n1', 0, 0), node('n2', 100, 20), node('n3', 150, -10)]
+    const noOverlap = three && typeof three.dx === 'number' && threeNodes.every((n) => !overlaps(three, n))
+    ok(ID,
+      L.LIBRARY_GAP === 40 &&
+        Boolean(none) && none.dx === 0 && none.dy === 0 &&
+        Boolean(three) && three.dx === 150 + W + 40 && three.dx === 358 && three.dy === -10 && noOverlap &&
+        Boolean(one) && one.dx === W + 40 && one.dx === 208 && one.dy === 0,
+      JSON.stringify({ gap: L.LIBRARY_GAP, W, H, none, three, one, noOverlap }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

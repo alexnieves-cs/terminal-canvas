@@ -141,9 +141,18 @@ export function addEdge(t: PersistedTemplate, from: string, to: string, trigger:
   if (!keys.has(to)) return { kind: 'refused', reason: `no node is called ${to}` }
   if (from === to) return { kind: 'refused', reason: 'an edge cannot start and end on the same node' }
   if (t.edges.some((e) => e.from === from && e.to === to)) return { kind: 'refused', reason: `${from} already hands off to ${to}` }
-  if (edgeWouldCycle(t.edges, from, to)) return { kind: 'refused', reason: `${from} → ${to} would close a cycle — a workflow runs forward` }
+  // `to`, never `→`: this reason reaches the screen (M183's refusal line) and `icons.1` bans a symbol glyph in renderer text.
+  if (edgeWouldCycle(t.edges, from, to)) return { kind: 'refused', reason: `${from} to ${to} would close a cycle — a workflow runs forward` }
   const next = copyOf(t)
   next.edges.push({ from, to, trigger })
+  return { kind: 'ok', template: next }
+}
+
+/** M183. An edge's trigger, changed IN PLACE: an unedge-then-re-add is two operations, reorders the list, and loses the edge if the re-add refuses. */
+export function retriggerEdge(t: PersistedTemplate, from: string, to: string, trigger: HandoffTrigger): EditResult {
+  if (!t.edges.some((e) => e.from === from && e.to === to)) return { kind: 'refused', reason: `${from} does not hand off to ${to}` }
+  const next = copyOf(t)
+  next.edges = next.edges.map((e) => (e.from === from && e.to === to ? { ...e, trigger } : e))
   return { kind: 'ok', template: next }
 }
 
