@@ -665,7 +665,7 @@ package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels 
 shell 95 / kinds 49 / agents 80 / product 59. Build log
 `docs/build-log/m171-m175-act3-shell.md`. Merged to `main`.
 
-## Act IV — M176–M179 (in progress)
+## Act IV — M176–M179 (closed 2026-09-07)
 
 Spec `docs/superpowers/specs/2026-09-07-v8-act4-finish-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act4-finish.md`, branch `m176-finish`. Owed into this
@@ -812,3 +812,17 @@ act: `notice.1` (the update link's click, M178); the audit's own findings.
   the wave did not touch (the critic's Q3), under budget either way, owed to #88 as a harness
   fix. Checked in no new golden: a `$` in a run row, backticks in a rail row, a `diff --git`
   line above a hunk, a group's verbs at rest.
+
+### Act IV's closing evidence (0ad5ea0 + this entry)
+
+`npm run verify` (m179-verify-final.log), exit 0, in the chain's order: meta 38/38 · styles
+56/56 · viewport 137/137 · groups 6/6 · merged 12/12 · registry 38/38 · layout 234/234 ·
+credentials 18/18 · jira 15/15 · github 7/7 · palette 143/143 · rail 194/194 · review 98/98 ·
+subagent 27/27 · file 83/83 · toolbox 103/103 · usage 26/26 · machine-cost 7/7 · tmux 35/35 ·
+agent-state 27/27 · agent-session 141/141 · verbs 14/14 · teammates 25/25 · electron 4/4 ·
+control 15/15 · package 13/13 · pty 10/10 · pty-manager 63/63 · window 4/4 · ipc 1/1 ·
+canvas 6/6 · xterm 11/11 · panels core 78/78 · shell 96/96 · kinds 49/49 · agents 80/80 ·
+product 59/59. `npm run verify:packaged` (m179-packaged.log) 12/12, exit 0. `npm run
+verify:visual` (m179-visual-plain.log) 57/57, exit 0, over the 49 forced goldens. The
+rehearsal chain before the reviews' wave (m179-verify-rehearsal.log) was green too, exit 0.
+Main merged with `--no-ff`, tagged `v4.1.0`, nothing pushed, no release.
