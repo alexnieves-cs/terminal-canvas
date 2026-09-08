@@ -1031,7 +1031,7 @@ function InspectorPanel({
  * the panel's own fields below are M133's.
  */
 /** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them). */
-const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target' }
+const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target', line: 'verb line', url: 'address', method: 'method' }
 const HIDDEN_NODE_FIELDS = new Set(['dx', 'dy', 'w', 'h'])
 
 function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined; onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> }): JSX.Element | null {

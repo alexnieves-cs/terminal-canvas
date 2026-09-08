@@ -325,6 +325,7 @@ main     --send-->   agent:event (batched ~16ms)                                
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
 main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
+main     --send-->   canvas:feedback                                              --> renderer
 main     --send-->   board:add                                                    --> renderer
 main     --send-->   pool:mint (ephemeral reply) / pool:event                     --> renderer
 ```

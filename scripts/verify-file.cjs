@@ -1899,7 +1899,7 @@ await (async () => {
 //      scrubbed and the note names the host and the count.
 {
   const has = typeof F.runHttpNode === 'function' && typeof F.httpNodeRefusal === 'function'
-  const NAME = 'node.http.1 runHttpNode refuses every method but GET by name (naming the method as written) and a non-http(s) url, and fetches NOTHING when it refuses; a GET is capped, passed through the outward gate with a planted token scrubbed and the host and count in its note, and reports its duration'
+  const NAME = 'node.http.1 runHttpNode refuses every method but GET by name (naming the method as written), a non-http(s) url and a url carrying a name and password, and fetches NOTHING when it refuses; a GET is capped, passed through the outward gate with a planted token scrubbed and the host and count in its note, and reports its duration'
   if (!has) ok(NAME, false, 'node-run.ts does not export runHttpNode / httpNodeRefusal')
   else {
     const asked = []
@@ -1908,6 +1908,10 @@ await (async () => {
     const del = await F.runHttpNode({ url: 'https://example.com/', method: 'DELETE' }, deps(''))
     const fileUrl = await F.runHttpNode({ url: 'file:///etc/passwd' }, deps(''))
     const notUrl = await F.runHttpNode({ url: 'nonsense' }, deps(''))
+    // M190's critic (5). A url carrying a name and password sends Basic auth
+    // on the wire and shows only the HOST in the note — the credential would
+    // be neither scrubbed nor visible anywhere.
+    const withPassword = await F.runHttpNode({ url: 'https://user:secret@example.com/' }, deps(''))
     const askedBefore = asked.length
     const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     const okDeps = deps(`hello world GITHUB_TOKEN=${token}`)
@@ -1921,12 +1925,13 @@ await (async () => {
         del.kind === 'refused' && /DELETE is a write/.test(del.reason) &&
         fileUrl.kind === 'refused' && /file:/.test(fileUrl.reason) &&
         notUrl.kind === 'refused' && /not a URL/.test(notUrl.reason) &&
+        withPassword.kind === 'refused' && /name and password/.test(withPassword.reason) &&
         askedBefore === 0 &&
         fetched.kind === 'ok' && fetched.status === 200 && fetched.text.includes('hello world') && !fetched.text.includes(token) &&
         /example\.com/.test(fetched.note) && /redacted/.test(fetched.note) && fetched.truncated === false && fetched.ms > 0 &&
         big.kind === 'ok' && big.truncated === true && big.text.length <= F.NODE_FETCH_MAX_BYTES &&
         failed.kind === 'refused' && /no route to host/.test(failed.reason),
-      JSON.stringify({ post, del, fileUrl, notUrl, askedBefore, fetched: { ...fetched, text: fetched.text && fetched.text.slice(0, 40) }, bigTruncated: big.truncated, failed }))
+      JSON.stringify({ post, del, fileUrl, notUrl, withPassword, askedBefore, fetched: { ...fetched, text: fetched.text && fetched.text.slice(0, 40) }, bigTruncated: big.truncated, failed }))
   }
 }
 

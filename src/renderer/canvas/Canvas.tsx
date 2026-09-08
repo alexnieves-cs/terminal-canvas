@@ -137,6 +137,7 @@ import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
 import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
+import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
@@ -4027,7 +4028,7 @@ export function Canvas({
     // and the `node-test` verb take — one executor, so a node cannot behave
     // one way when a person tests it and another when the workflow runs it.
     for (const node of runNodes) {
-      const outcome = await runNodeRef.current?.(node)
+      const outcome = await runNodeRef.current?.(node, undefined, template.reviewed !== false)
       if (outcome !== undefined && outcome.kind === 'failed') sayRef.current(`${node.key}: ${outcome.reason}`)
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
@@ -4987,7 +4988,10 @@ export function Canvas({
     if (made === null || made === undefined || made === '') return { kind: 'refused', reason: 'a new workspace could not be made for the import' }
     // The templates travel with it, each under its new id; a name collision is
     // a copy, never an overwrite of a workflow the person already had.
-    for (const template of remapped.templates) await window.canvas.template.save(template)
+    // M190 (the critic, 2). An imported template is UNREVIEWED: its action
+    // nodes hold verb lines somebody else wrote, and Run is refused by name
+    // until a person has read them.
+    for (const template of remapped.templates) await window.canvas.template.save({ ...template, reviewed: false })
     reloadTemplates()
     const switched = await switchWorkspace(made)
     reloadWorkspacesRef.current?.()
@@ -5019,11 +5023,21 @@ export function Canvas({
    * confirmation, an unbindable line is refused by name, and nothing here is
    * a second executor. A `http` node's GET is main's.
    */
-  const runNodeNow = useCallback(async (node: { key?: string; kind: string; line?: string; url?: string; method?: string }): Promise<{ kind: 'ok'; output: string; ms: number } | { kind: 'failed'; reason: string; ms: number }> => {
+  const runNodeNow = useCallback(async (node: { key?: string; kind: string; line?: string; url?: string; method?: string }, caller?: AgentPlanCaller, reviewed?: boolean): Promise<{ kind: 'ok'; output: string; ms: number } | { kind: 'failed'; reason: string; ms: number }> => {
     const started = Date.now()
     if (node.kind === 'action') {
       const line = node.line ?? ''
-      const reply = await paletteActionsRef.current?.runAgentPlan(line)
+      // M190 (the critic, finding 2). A template that ARRIVED from a file is
+      // unreviewed: its action nodes hold verb lines somebody else wrote, and
+      // the import is inert only until the first Run. The person opens the
+      // node, sees the line and marks it reviewed; until then it is refused
+      // by name with the line quoted, so the refusal is also the review.
+      if (reviewed === false) {
+        return { kind: 'failed', reason: `this workflow came from a file and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
+      }
+      // The CALLER travels with the line: without it a teammate's plan could
+      // write a verb into a template and run it with its identity erased.
+      const reply = await paletteActionsRef.current?.runAgentPlan(line, caller)
       if (reply === undefined) return { kind: 'failed', reason: 'the canvas is not ready to run a verb', ms: Date.now() - started }
       return reply.kind === 'ran'
         ? { kind: 'ok', output: reply.summary, ms: Date.now() - started }
@@ -5053,7 +5067,7 @@ export function Canvas({
     if (chosenKey === undefined) return { kind: 'refused', reason: 'select a node on the diagram, or name one' }
     const node = template.nodes.find((n) => n.key === chosenKey)
     if (node === undefined) return { kind: 'refused', reason: `no node is called ${chosenKey}` }
-    const outcome = await runNodeRef.current(node as { key?: string; kind: string; line?: string; url?: string; method?: string })
+    const outcome = await runNodeRef.current(node as { key?: string; kind: string; line?: string; url?: string; method?: string }, undefined, template.reviewed !== false)
     return outcome.kind === 'ok'
       ? { kind: 'ran', note: `${chosenKey} · ${outcome.ms} ms · ${outcome.output.split('\n')[0]?.slice(0, 120) ?? ''}` }
       : { kind: 'refused', reason: `${chosenKey} · ${outcome.ms} ms · ${outcome.reason}` }
@@ -5545,6 +5559,8 @@ export function Canvas({
   // M180. The agent door: `tc plan` lands on the SAME executor the palette's
   // verb line runs, with the caller main resolved riding beside the line.
   useEffect(() => window.canvas.canvas.onPlan((req) => paletteActions.runAgentPlan(req.line, req.caller)), [paletteActions])
+  // M190. Help ▸ Prepare feedback… — main's menu item, the renderer's draft.
+  useEffect(() => window.canvas.canvas.onFeedback(() => { void prepareFeedback() }), [prepareFeedback])
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
   // panel while insertPath pastes into the FOCUSED one — see the hook's doc
@@ -6588,6 +6604,7 @@ export function Canvas({
         {panels.length === 0 && !merged && (
           <Launcher
             presets={presetRows}
+            onImportCanvas={() => { void importCanvas() }}
             recents={launcherRecents}
             onOpenRecent={(dir) => paletteActions.beginSpawnSheet(undefined, undefined, { cwd: dir })}
             tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}

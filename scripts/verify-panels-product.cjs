@@ -699,9 +699,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // panel (committed at the mint), main's session is disposed WITHOUT
         // dropping the file, the renderer reloads.
         flushLayoutStore()
-        const alive = await wc.executeJavaScript('1+1').catch((e) => String(e && e.message))
-      const bodyHead = await wc.executeJavaScript('document.body.innerHTML.slice(0, 160)').catch((e) => String(e && e.message))
-      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+        const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
         const wsNow = onDisk.workspaces.find((w) => w.id === onDisk.activeWorkspaceId) || onDisk.workspaces[0]
         const persisted = wsNow.panels.find((p) => p.id === chatId)
         agentSessions.dispose(chatId)
@@ -2305,11 +2303,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     //     with new ids for everything — and the claim that matters, counted
     //     across the whole import: NO pty is spawned. An import that started
     //     what it read would be the one failure this feature cannot have.
-    const PORT_IDS = ['portable.1 export writes one file with the objects that travel, the watcher omitted BY NAME with what it would do, and secrets scrubbed with a count; import makes a separate workspace with every id remapped and spawns NO pty at all']
+    const PORT_IDS = ['portable.1 export writes one file with the objects that travel, the watcher omitted BY NAME with what it would do, and secrets scrubbed with a count; import makes a separate workspace with every id remapped, every imported template marked UNREVIEWED so its action node is refused until a person reads it, and spawns NO pty at all']
     try {
       const { readFileSync: rf2 } = require('node:fs')
       const filePath = join(mkdtempSync(join(tmpdir(), 'tc-portable-')), 'canvas.tccanvas')
       let before = null
+      // A template with an ACTION node — the shape that makes an imported file
+      // code somebody else wrote (M190's critic, 2).
+      layoutStore.saveTemplate({ id: 'tpl-portable-1', name: 'theirs', nodes: [{ key: 'a1', kind: 'action', line: 'note-add sticky', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
       state.portablePath = filePath
       layoutStore.save({ panels: [
         { id: 'pt1', x: 200, y: 200, w: 400, h: 300, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'a terminal ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' },
@@ -2319,8 +2320,6 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         { id: 'pt3', kind: 'watcher', x: 200, y: 600, w: 400, h: 300, z: 3, watch: { cwd: '~', command: '/usr/bin/true', args: [], trigger: { kind: 'timer', everyMs: 60000 } } }
       ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
-      const alive = await wc.executeJavaScript('1+1').catch((e) => String(e && e.message))
-      const bodyHead = await wc.executeJavaScript('document.body.innerHTML.slice(0, 160)').catch((e) => String(e && e.message))
       const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
       const diskIds = onDisk.workspaces.map((w) => `${w.id}${w.id === onDisk.activeWorkspaceId ? '*' : ''}:${w.panels.map((p) => p.id).join('|')}`).join(' ; ')
       const rePt = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -2336,14 +2335,40 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // a plan sent before the canvas mounts reaches no listener at all — the
       // request then times out and reads as a refusal that never happened.
       const seeded = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')); return ids.includes('pt1') ? ids.join(',') : false })()`), 20000)
-      const exported = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `export-canvas ${filePath}` }, null, 20000)
-      const written = exported && exported.kind === 'ran' ? JSON.parse(rf2(filePath, 'utf8')) : null
+      // M190's critic (3). Export is DESTRUCTIVE now — a named path skips the
+      // save dialog and writes it — so the agent door refuses it outright and
+      // the person's door is the palette. Both are asserted: the refusal is
+      // the guarantee, and the palette row is how the export actually happens
+      // (the harness's chooser answers `state.portablePath`).
+      const refusedAtDoor = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `export-canvas ${filePath}` }, null, 8000)
+      const openPalette = async () => {
+        await wc.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })); true`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+      }
+      const clickRow = async (rowId) => {
+        if ((await openPalette()) !== true) return 'no palette'
+        const r = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify('ROW')}) + ']'); if (!el) return 'no row'; el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`.replace('ROW', rowId))
+        await settle()
+        return r
+      }
+      const exported = await clickRow('portable.export')
+      await waitUntil(() => existsSync(filePath), 8000)
+      const written = existsSync(filePath) ? JSON.parse(rf2(filePath, 'utf8')) : null
       const imported = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `import-canvas ${filePath}` }, null, 10000)
+      await settle()
       await settle()
       const spawnsAfter = (await listSessions(wc)).length
       const shown = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')).join(',')`)
+      // The imported template is UNREVIEWED, and running it is refused by name
+      // with its line quoted — the import is inert, and so is the first Run.
+      flushLayoutStore()
+      const importedTemplate = layoutStore.current().templates.find((t) => t.reviewed === false)
+      const ranImported = importedTemplate === undefined ? null : await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${importedTemplate.id}` }, null, 6000)
+      await settle()
+      const notesAfterRun = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="note"]').length`)
       ok(PORT_IDS[0],
-        exported && exported.kind === 'ran' && /2 objects/.test(String(exported.summary)) &&
+        refusedAtDoor && refusedAtDoor.kind === 'refused' && /human confirmation/.test(String(refusedAtDoor.reason)) &&
+          exported === true &&
           written && written.version === 1 && written.workspace.panels.length === 2 &&
           written.workspace.panels.map((p) => p.id).join(',') === 'pt1,pt2' &&
           !JSON.stringify(written).includes('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') && written.redacted >= 1 &&
@@ -2352,9 +2377,15 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           imported && imported.kind === 'ran' && /nothing was started/.test(String(imported.summary)) &&
           // Every id is new: neither of the exported ids is on the canvas now.
           !shown.split(',').includes('pt1') && !shown.split(',').includes('pt2') && shown.split(',').filter((x) => x !== '').length === 2 &&
-          spawnsAfter === spawnsBefore,
-        JSON.stringify({ alive, bodyHead, diskIds, seeded, exported, written: written && { version: written.version, panels: written.workspace.panels.map((p) => p.id), omitted: written.omitted, redacted: written.redacted }, imported, shown, spawnsBefore, spawnsAfter }))
+          spawnsAfter === spawnsBefore &&
+          // The imported template travelled, is marked unreviewed, and its Run
+          // is refused by name — the sticky note its action node would make is
+          // not on the canvas.
+          importedTemplate !== undefined && importedTemplate.name === 'theirs' && importedTemplate.id !== 'tpl-portable-1' &&
+          ranImported !== null && ranImported.kind === 'ran' && notesAfterRun === 1,
+        JSON.stringify({ refusedAtDoor, importedTemplate: importedTemplate && { id: importedTemplate.id, reviewed: importedTemplate.reviewed }, ranImported, notesAfterRun, diskIds, seeded, exported, written: written && { version: written.version, panels: written.workspace.panels.map((p) => p.id), omitted: written.omitted, redacted: written.redacted }, imported, shown, spawnsBefore, spawnsAfter }))
       state.portablePath = undefined
+      layoutStore.deleteTemplate('tpl-portable-1')
     } catch (ptErr) {
       for (const id of PORT_IDS) ok(id, false, 'threw: ' + String(ptErr && ptErr.stack || ptErr))
     } finally {

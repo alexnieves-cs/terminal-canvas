@@ -55,9 +55,18 @@ const CANNOT_TRAVEL: Readonly<Record<string, string>> = {
   toolbox: 'a toolbox panel reads this machine\'s own permissions'
 }
 
-/** A panel kind travels when it is a shape rather than a live connection to this machine. */
+/**
+ * The kinds this file KNOWS HOW TO WRITE. An allowlist, not the absence of a
+ * denylist (M190's critic, 7): a sixteenth kind added later would otherwise
+ * travel by default AND be written by the terminal arm below — shipping
+ * whatever its record holds, typed as something it is not. A kind on neither
+ * list is omitted by name, which is the honest answer for a shape this
+ * version of the format cannot carry.
+ */
+const TRAVELS: ReadonlySet<string> = new Set(['terminal', 'chat', 'file', 'note', 'image', 'workflow'])
+
 export function travels(kind: string | undefined): boolean {
-  return CANNOT_TRAVEL[kind ?? 'terminal'] === undefined
+  return TRAVELS.has(kind ?? 'terminal')
 }
 
 interface BuildInput {
@@ -104,8 +113,11 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
   }
   if (kind === 'image') {
     const image = raw.image as { path: string; asset?: string }
-    // The PATH is this machine's; only the asset identity travels, and the
-    // bytes only when the person asked for them.
+    // The path travels AS TEXT and will not resolve on another machine — the
+    // panel arrives `missing` with Replace beside it, which is the honest
+    // arm. The ASSET id is what identifies the picture; the bytes travel only
+    // when the person asked for them. (M190's critic, 8: an earlier comment
+    // here claimed the path did not travel, which the line below disproves.)
     return { ...base, kind: 'image', image: { path: image.path, ...(image.asset === undefined ? {} : { asset: image.asset }) } } as PersistedPanel
   }
   if (kind === 'workflow') {
@@ -141,7 +153,15 @@ export function buildPortable(input: BuildInput): PortableFile {
     if (!travels(kind)) { dropped.set(kind, (dropped.get(kind) ?? 0) + 1); continue }
     kept.push(portablePanel(panel, tally))
   }
-  for (const [kind, count] of dropped) omitted.push({ what: `${count} ${kind} panel${count === 1 ? '' : 's'}`, why: CANNOT_TRAVEL[kind] as string })
+  for (const [kind, count] of dropped) {
+    omitted.push({ what: `${count} ${kind} panel${count === 1 ? '' : 's'}`, why: CANNOT_TRAVEL[kind] ?? `this version of the canvas file has no shape for a ${kind} panel` })
+  }
+  // Said once, plainly: the file carries the DIRECTORIES and file paths of
+  // what travelled. They are part of the shape (a terminal without its
+  // directory is not the terminal that was exported), they are scrubbed only
+  // for things that look like secrets, and a person sending this file to
+  // someone else is sending their folder names.
+  if (kept.length > 0) omitted.push({ what: 'nothing of the paths', why: 'folder and file paths travel as text — they are part of each object\'s shape, and they name your own directories' })
   const images = input.images ?? []
   const pictures = kept.filter((p) => (p as unknown as { kind?: string }).kind === 'image').length
   if (pictures > 0 && images.length === 0) {

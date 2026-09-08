@@ -1406,3 +1406,34 @@ behaviour and checked as a file by `guide.1`.
 143/143, typecheck 0, `verify:panels:product` 77/77 at 107.2 s
 (`out/v9-evidence/m190-product.log`, exit 0) — `feedback.1` reads the exact url the door opened
 and asserts the planted token is not in it, encoded or decoded.
+
+### M188–M190 — the fresh-context critic, and what was done about it
+
+A fresh agent read the three diffs and ran every plain-node suite (typecheck 0; file 91/91,
+layout 251/251, verbs 22/22, palette 143/143, styles 56/56, meta 39/39, viewport 141/141) and
+returned eleven ranked findings. Six were security or correctness defects in code this run had
+just written; all eleven are answered below.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | The action node ran its verb line with NO caller, and the workflow-editing verbs were not on the teammate's refused list — so a place-bounded teammate could write `new-chat` into a template and `workflow-run` it, reaching every verb the agent door refuses one indirection away | Fixed: the caller travels into `runNodeNow` and out to `runAgentPlan`, and the editing verbs, the run, `node-test` and both portable verbs join `TEAMMATE_REFUSED_VERBS`. Pinned by a new check, `agent-door.7` |
+| 2 | Import → Run was NOT safe: an imported template's action node holds a verb line somebody else wrote, and `type`/`submit`/`spawn` are not destructive, so the first Run of a shared file could type into and submit to an agent panel | Fixed: a template that arrived from a file is marked `reviewed: false` on the record, and an action node of an unreviewed template is refused BY NAME with its line quoted until a person has read it. `template.reviewed.1` pins the parse (absent means reviewed; a non-boolean fails SAFE to unreviewed), and the product check imports a file carrying an action node and asserts its Run makes nothing |
+| 3 | `export-canvas <path>` skipped the save dialog and overwrote any file, and was marked non-destructive — so a plan or a teammate could replace `~/.zshrc` with canvas JSON | Fixed: the verb is `destructive: true`, so the agent door refuses it outright and the palette confirms. The product check now asserts BOTH: the refusal at the door, and the export through the palette row |
+| 4 | `httpNodeRefusal` allowed `http:` while the fetcher was `https.get`, so an `http://` node failed TLS and reported "the server did not answer" — a named-refusal system reporting a network fault for a shape it had allowed | Fixed: the getter follows the scheme |
+| 5 | No host policy, and a url carrying a name and password sent Basic auth while only the HOST appeared in the note — the credential was neither scrubbed nor visible | Fixed for the credential (refused by name); the host policy is DECLINED and recorded: a fetch node reaching this machine's own network is what a person previewing a local API needs, and the loopback preview is a shipped feature of this same run. The bound that makes it safe is finding 2's review gate — an imported template cannot run without a person reading its nodes |
+| 6 | The cap was not real at either place: the socket allowed 1 KB over and kept streaming, and the module compared a byte constant against a character length | Fixed: the request is destroyed at the cap, and the module measures and slices in bytes |
+| 7 | `travels()` failed OPEN, so a seventeenth panel kind would export by default AND be written by the terminal arm | Fixed: an allowlist, with an unknown kind omitted by name |
+| 8 | A comment claimed a picture's path did not travel; the line below it carried the path | Fixed: the comment says what happens (the path travels as text and will not resolve elsewhere, so the panel arrives `missing` with Replace), and the export's `omitted` list now says plainly that folder and file paths travel |
+| 9 | Three `V9_DOORS` canvas entries named doors nothing had — a Help-menu line and two launcher lines | Fixed by BUILDING two of them (Help ▸ Prepare feedback… in the menu bar; `Import a canvas…` on the launcher, where a person arrives with someone else's file) and by recording export's canvas door as OWED with its reason and milestone, which is what the owed shape is for |
+| 10 | The truncated feedback URL was never re-measured, so a CJK or emoji draft could report `truncated` and still not fit | Fixed: the cut is measured against the built url in a loop |
+| 11 | The two new node kinds had no field labels | Fixed: `verb line`, `address`, `method` |
+
+**A defect the critic's work surfaced indirectly.** `parseTemplates` routed only `pool`,
+`orchestrator` and `collect` to `parseWorkflowNode`, so an `action` or `http` node was dropped
+at the next load with `kind was unusable` — M188's own kinds could not survive a relaunch. Found
+by `template.reviewed.1`'s fixture and fixed in the same line.
+
+**A harness lesson.** The run's own critic must not run while the Electron tier is running: a
+concurrent `npm run typecheck` and seven plain-node suites were enough to blow two measured
+watchdogs (`verify` at 96 s, `verify:visual` at 221 s) in an otherwise green tree. The three
+commands were re-run alone.

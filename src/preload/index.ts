@@ -149,6 +149,7 @@ const bridge: CanvasBridge = {
     },
     onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener),
     onTidy: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_TIDY, () => listener()),
+    onFeedback: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_FEEDBACK, () => listener()),
     onFlip: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_FLIP, () => listener()),
     requestReset: () => ipcRenderer.invoke(IPC.CANVAS_REQUEST_RESET)
   },

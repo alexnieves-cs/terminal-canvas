@@ -74,6 +74,7 @@ import { checkForUpdate, repoOf } from './update-check'
 import { readImage } from './image-read'
 import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
+import { get as httpGet } from 'node:http'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
@@ -542,6 +543,7 @@ function rebuildMenu(): void {
     // M65. The sheet is the renderer's; the menu only asks for it.
     onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
     onTidy: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_TIDY) },
+    onFeedback: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FEEDBACK) },
     onFlip: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FLIP) },
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
@@ -2060,15 +2062,24 @@ app.whenReady().then(async () => {
         now: () => Date.now(),
         fetch: (url) => new Promise((resolve, reject) => {
           const done = (status: number, body: string): void => { clearTimeout(deadline); resolve({ status, body }) }
-          const request = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas' } }, (res) => {
+          // M190's critic (4). The GETTER FOLLOWS THE SCHEME: `httpNodeRefusal`
+          // allows http(s), and an `http:` url sent through `https.get` fails
+          // TLS on port 80 and comes back as "the server did not answer" — a
+          // named-refusal system reporting a network fault for a shape this
+          // app decided to allow.
+          const get = url.startsWith('http://') ? httpGet : httpsGet
+          const request = get(url, { headers: { 'User-Agent': 'terminal-canvas' } }, (res) => {
             const chunks: Buffer[] = []
             let bytes = 0
             res.on('data', (c: Buffer) => {
               // The cap is applied HERE too, not only after: a server that
               // answers a gigabyte would otherwise be held in memory whole
-              // before `runHttpNode` sliced it.
+              // before `runHttpNode` sliced it — and the request is DESTROYED
+              // at the cap rather than left streaming for the whole deadline
+              // (M190's critic, 6).
               bytes += c.length
-              if (bytes <= NODE_FETCH_MAX_BYTES + 1024) chunks.push(c)
+              if (bytes <= NODE_FETCH_MAX_BYTES) chunks.push(c)
+              else { request.destroy(); done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')) }
             })
             res.on('end', () => done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')))
           })

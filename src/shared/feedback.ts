@@ -74,7 +74,18 @@ export function buildFeedback(repo: string, facts: FeedbackFacts): FeedbackDraft
   // A cut that is SAID: a body silently truncated at a byte boundary is a
   // report missing the half the person cared about, with nothing on screen to
   // say so.
-  const room = Math.max(200, body.length - (full.length - FEEDBACK_URL_MAX) - 120)
-  const cutBody = `${body.slice(0, room)}\n\n_(this draft was cut to fit in a link — paste the rest in yourself)_`
-  return { title, body: cutBody, url: `${base}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(cutBody)}`, redacted: count + saidCount, truncated: true }
+  // M190's critic (10). The cut is MEASURED against the built url, not
+  // guessed from the unencoded length: one CJK or emoji character encodes to
+  // nine or twelve, so an arithmetic estimate can report `truncated` for a
+  // draft that still does not fit.
+  const tail = '\n\n_(this draft was cut to fit in a link — paste the rest in yourself)_'
+  let room = body.length
+  let cutBody = body
+  let url = full
+  while (url.length > FEEDBACK_URL_MAX && room > 100) {
+    room = Math.floor(room * 0.8)
+    cutBody = `${body.slice(0, room)}${tail}`
+    url = `${base}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(cutBody)}`
+  }
+  return { title, body: cutBody, url, redacted: count + saidCount, truncated: true }
 }

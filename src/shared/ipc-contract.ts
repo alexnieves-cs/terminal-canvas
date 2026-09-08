@@ -907,6 +907,8 @@ export const IPC_EVENTS = {
   ROUTINE_FIRE: 'routine:fire',
   /** M106. The Workspace menu's two verbs: Tidy Panes and Flip Terminals (a view state, never persisted). */
   CANVAS_TIDY: 'canvas:tidy',
+  /** M190. Help ▸ Prepare feedback… — main asks, the renderer builds the draft and opens it. */
+  CANVAS_FEEDBACK: 'canvas:feedback',
   CANVAS_FLIP: 'canvas:flip',
   /** M113. `tc board` asks the RENDERER over an ephemeral reply channel (canvas:model's shape) — main writes no record itself. */
   BOARD_ADD: 'board:add',
@@ -1392,6 +1394,8 @@ export interface CanvasBridge {
     /** M106. The menu's Tidy Panes and Flip Terminals. */
     onTidy(listener: () => void): () => void
     onFlip(listener: () => void): () => void
+    /** M190. Help ▸ Prepare feedback…; the renderer builds the draft and opens it. */
+    onFeedback(listener: () => void): () => void
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
   }

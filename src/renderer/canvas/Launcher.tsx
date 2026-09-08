@@ -23,6 +23,8 @@ export interface LauncherProps {
    */
   onStart?: (engine: 'claude' | 'codex') => void
   starterFirstRun?: boolean
+  /** M190. Import a canvas… — absent hides the line (a fixture). */
+  onImportCanvas?: () => void
   /** M181. The `Starter canvas…` prompt line; its reason when every key is applied. Absent hides the line. */
   onOpenStarter?: () => void
   starterReason?: string | null
@@ -79,7 +81,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, onOpenSetup, onStart, starterFirstRun, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, onOpenSetup, onStart, starterFirstRun, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   // M180. ONE start. Readiness (the env report's fresh probe) is the one
   // source of truth for the primary: the preset rows' cached `which` and the
   // report disagreed after Check again (the critic), and the mint itself is
@@ -180,6 +182,17 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpen
             title={starterReason ?? 'Your agent and one captioned example of each kind of object'} {...shellControl(() => { if ((starterReason ?? null) === null) onOpenStarter() })}>
             <span className="launcher__verb-name">Starter canvas…</span>
             <span className="launcher__verb-hint">{starterReason ?? 'your agent and one captioned example of each kind of object'}</span>
+          </button>
+        )}
+        {/* M190. Import is a launcher line because an EMPTY canvas is exactly
+            where a person arrives with someone else's file; it makes a new
+            workspace and starts nothing. */}
+        {onImportCanvas !== undefined && (
+          <button type="button" className="launcher__verb" data-launcher-import
+            title="Read a canvas file into a new workspace; nothing in it is started"
+            {...shellControl(() => { void onImportCanvas() })}>
+            <span className="launcher__verb-name">Import a canvas…</span>
+            <span className="launcher__verb-hint">a file someone exported — into a new workspace, with nothing started</span>
           </button>
         )}
         {startReason === null && (

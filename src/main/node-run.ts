@@ -39,6 +39,11 @@ export function httpNodeRefusal(url: string, method: string | undefined): string
   let parsed: URL
   try { parsed = new URL(url.trim()) } catch { return `${url.trim() === '' ? 'that node' : url.trim()} is not a URL` }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return `a ${parsed.protocol} url is not one this node fetches — http(s) only`
+  // M190's critic (5). A url carrying a username or a password sends Basic
+  // auth on the wire and shows only the HOST in the outward note, so the
+  // credential is neither scrubbed nor visible. Refused by name; a header is
+  // not a thing this node has, deliberately.
+  if (parsed.username !== '' || parsed.password !== '') return 'a url with a name and password in it would send them on the wire and show them nowhere — remove them'
   return null
 }
 
@@ -52,8 +57,11 @@ export async function runHttpNode(node: { url: string; method?: string }, deps: 
   } catch (error) {
     return { kind: 'refused', reason: `that request did not answer: ${error instanceof Error ? error.message : String(error)}` }
   }
-  const truncated = answer.body.length > NODE_FETCH_MAX_BYTES
-  const body = truncated ? answer.body.slice(0, NODE_FETCH_MAX_BYTES) : answer.body
+  // BYTES, not characters (M190's critic, 6): the cap is a byte count and a
+  // UTF-8 body sliced by characters disagrees with the socket's own count.
+  const raw = Buffer.from(answer.body, 'utf8')
+  const truncated = raw.length > NODE_FETCH_MAX_BYTES
+  const body = truncated ? raw.subarray(0, NODE_FETCH_MAX_BYTES).toString('utf8') : answer.body
   let host = 'a remote server'
   try { host = new URL(node.url.trim()).host } catch { /* the refusal above already parsed it */ }
   const gated = outward(body, `a remote server at ${host}`)

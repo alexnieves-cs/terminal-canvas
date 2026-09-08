@@ -392,7 +392,42 @@ const FACTS = {
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
   }
 
-  const failed = results.filter((r) => !r.pass)
+  // M190 (the Acts V-VII critic, 1 and 3) — agent-door.7. THE ACTION NODE'S
+//      INDIRECTION IS CLOSED. M188's action node runs a verb LINE, so a
+//      teammate that may not `new-chat` could otherwise write it into a
+//      template (`workflow-add`, `workflow-set`, `workflow-save`) and then
+//      `workflow-run` it, with every refusal this door makes reachable one
+//      step away. The editing verbs, the run and the two portable verbs now
+//      refuse a teammate caller by name. And `export-canvas` is DESTRUCTIVE:
+//      a named path skips the save dialog, so `export-canvas ~/.zshrc` would
+//      replace a file nobody meant to lose — the agent door refuses a
+//      destructive plan outright and the palette confirms it.
+{
+  const facts = { panels: [{ id: 'p1', kind: 'terminal' }], templates: [{ id: 't1' }] }
+  const teammate = { panelId: 'p1', teammateId: 'ada' }
+  const refusalOf = (line, caller) => {
+    const built = V.buildPlan ? null : null
+    const plan = P.buildPlan(P.parsePlanLine(line), facts)
+    if (plan.kind !== 'plan') return `unbindable: ${plan.reason}`
+    for (const step of plan.plan.steps) {
+      const r = P.agentDoorRefusal(step, facts, caller)
+      if (r !== null) return r
+    }
+    return null
+  }
+  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x']
+    .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))
+  const exportVerb = V.VERBS.find((verb) => verb.id === 'export-canvas')
+  const destructivePlan = P.buildPlan(P.parsePlanLine('export-canvas /tmp/x'), facts)
+  ok('agent-door.7 a teammate\'s plan is refused BY NAME for every workflow-editing verb, for workflow-run and node-test, and for both portable verbs — the action node\'s indirection cannot reach what the door refuses; the same lines are allowed to a person; and export-canvas is destructive, so it carries a confirmation and the agent door refuses it outright',
+    editRefusals.every((r) => typeof r.teammate === 'string' && /teammate/.test(r.teammate)) &&
+      editRefusals.every((r) => r.person === null) &&
+      exportVerb !== undefined && exportVerb.destructive === true &&
+      destructivePlan.kind === 'plan' && P.planIsDestructive(destructivePlan.plan) === true,
+    JSON.stringify({ editRefusals, destructive: exportVerb && exportVerb.destructive }))
+}
+
+const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)
 })().catch((e) => { console.error(e); process.exit(1) })

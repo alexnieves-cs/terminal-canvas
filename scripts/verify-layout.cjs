@@ -3783,6 +3783,36 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), n1: by('n1'), n2: by('n2'), n3: by('n3'), n4: by('n4'), n7: by('n7'), warnings: out.warnings }))
 }
 
+// M190 — template.reviewed.1. THE UNREAD MARK. `reviewed: false` says a
+// template arrived from somebody else's file and no person has read its
+// action nodes — which run verb lines, so an imported template is code
+// somebody else wrote. Absent means reviewed (every template this canvas made
+// itself, and every pre-M190 record); anything present that is not a boolean
+// costs the FIELD and is treated as UNREVIEWED, which is the safe direction:
+// an unreadable mark must never read as "a person has checked this".
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }],
+    activeWorkspaceId: 'w1',
+    templates: [
+      { id: 'mine', name: 'mine', nodes: [{ key: 'n1', kind: 'terminal', cwd: '~', dx: 0, dy: 0 }], edges: [] },
+      { id: 'theirs', name: 'theirs', nodes: [{ key: 'n1', kind: 'action', line: 'note-add sticky', cwd: '~', dx: 0, dy: 0 }], edges: [], reviewed: false },
+      { id: 'read', name: 'read', nodes: [{ key: 'n1', kind: 'terminal', cwd: '~', dx: 0, dy: 0 }], edges: [], reviewed: true },
+      { id: 'odd', name: 'odd', nodes: [{ key: 'n1', kind: 'terminal', cwd: '~', dx: 0, dy: 0 }], edges: [], reviewed: 'yes' }
+    ]
+  }))
+  const by = (id) => (out.snapshot.templates ?? []).find((t) => t.id === id)
+  const text = L.serialiseLayout({ ...out.snapshot })
+  const round = L.parseLayout(text).snapshot.templates.find((t) => t.id === 'theirs')
+  ok('template.reviewed.1 a template\'s reviewed mark: absent stays absent (and serialises to no key), false round-trips, true is normalised to absent, and a value that is not a boolean costs the field and is treated as UNREVIEWED with a warning naming the template',
+    by('mine') && !('reviewed' in by('mine')) &&
+      by('theirs') && by('theirs').reviewed === false && round && round.reviewed === false &&
+      by('read') && !('reviewed' in by('read')) &&
+      by('odd') && by('odd').reviewed === false && out.warnings.some((w) => w.includes('odd') && w.includes('reviewed')) &&
+      !/"reviewed"/.test(text.split('"mine"')[1].split('}')[0] || ''),
+    JSON.stringify({ mine: by('mine'), theirs: by('theirs'), read: by('read'), odd: by('odd'), warnings: out.warnings }))
+}
+
 // M113 — work.1..3. THE WORK ITEM RECORD. Absent is every pre-M113 file; a
 // malformed entry is dropped by name; the cap keeps the newest; the dedupe is
 // by key and never resets a working item; every absent optional stays absent
