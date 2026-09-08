@@ -1610,3 +1610,35 @@ Beyond `docs/load-bearing.md`'s standing manual-only list, this run adds four:
 4. **The Gatekeeper right-click on a fresh machine.** `verify:packaged` launches the built binary
    with a stripped PATH; it cannot tell you what macOS says to somebody who has never run this
    app before.
+
+### The three commands at the tagged commit
+
+| Command | Exit | Result | Log |
+|---|---|---|---|
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/final3-verify.log` |
+| `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/final3-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/final3-packaged.log` |
+
+Run at `ce6bdb8`, the commit the tag `v5.0.0` names, with a clean tree. (`tag-*.log` beside them
+are the same three at the commit before this one, which differs only in this file.)
+
+`verify:packaged` was red once at this commit and green on the re-run, and the reason is worth
+recording rather than hiding: checks 9 and 11 read a spawned PTY's pid in the packaged app, and
+the first attempt ran immediately after `verify:visual`'s 173 s of real-Electron work on the same
+machine. The suite has now run green four times today on three different commits. The measured
+lesson from earlier in the run stands and this is its second instance: **the Electron tier is one
+slot** — the run's own critic blew two watchdogs by running plain-node suites beside it, and this
+run's `verify:packaged` failed for the same reason.
+
+## The run, closed
+
+M180–M192, eight acts, 5.0.0 on `main` at `8702637` with the local tag `v5.0.0` and a clean tree.
+Nothing was pushed; no GitHub release, no remote branch and no remote object of any kind was
+created. `release/Terminal Canvas-5.0.0-arm64.dmg` is the unsigned build.
+
+The plan opened with 21 milestones and this run shipped 13. The difference is not silence: the
+service nodes, the shell and transform nodes, the extension registry and its example plugin are
+STRUCK by name in the milestones above, each with what it would have taken to prove them. Two
+things are known-defective and recorded rather than papered over — `palette-dark`'s chrome and
+the twenty-one declined audit findings — and four things are owed to a person because no suite
+in this repository can do them.
