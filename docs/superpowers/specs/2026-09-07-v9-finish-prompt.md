@@ -87,6 +87,18 @@ questions, complete the work that is already authorized from context and necessa
 the proposed action concrete and reviewable; in this run that means there are no clarifying
 questions after `go`, only recorded decisions.
 
+For the user interface and the user experience you have full authority. Change any layout,
+control, motion, typography, spacing, colour, empty state, sheet, rail, header, composer or
+flow that you judge is below the look and feel of a premium production application, whether
+or not an act above names it. The standard is the register named in `CLAUDE.md`: the Claude
+desktop app and Codex for the panels, BridgeMind One for the posture, and now Orca and n8n for
+the canvas and the graph. Treat the 4.1 goldens as the floor, not the ceiling. Make these
+changes as part of the act they fall nearest to, so each carries a spec line, a golden with
+the critic's sentence, and a ledger entry. Three things bound this authority and nothing
+else does: the Obsidian material survives unless you strike a principle in the 5.0 brief with
+a reason; the DOM aliases the checks select on are restyled and never renamed; and a golden
+changes with the critic's sentence or not at all.
+
 You may add a dependency with a written reason in the plan and the ledger. Prefer none,
 prefer small. Run `npm run verify:electron` after any native module.
 
