@@ -66,3 +66,15 @@ export function displayPath(path: string, root?: string, home?: string): Display
   }
   return { short: shortPath(path), full }
 }
+
+/**
+ * M178 (F.2). A LABEL that embeds an absolute path — `chat: /Users/ada/work/api (c3)`,
+ * a titleless chat's name in the palette's verb rows — has every path token
+ * shortened by `displayPath` and the words around it kept. Pure; the arm in
+ * `verify:rail path.1`.
+ */
+export function displayLabel(label: string, root?: string): string {
+  // A path may hold SPACES (`tc shot fixtures golden`): the token runs from its
+  // leading slash to the ` (` that opens the id, or to the end of the label.
+  return label.replace(/\/[^()]*?(?=\s\(|$)/g, (token) => displayPath(token, root).short)
+}

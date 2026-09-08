@@ -383,6 +383,8 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
               the camera never reached alike — so the affordance is the same
               sentence for both; the pill in the chrome is what tells them
               apart. (A word line here said it a second time on one frame.) */}
+          {/* M178 (F.19): the sentence before the verb — an asleep card with no tail is not a blank. */}
+          {session.dormant && (recorded === undefined || recorded.length === 0) && <div className="panel__card-sentence">asleep — nothing recorded before the last quit</div>}
           <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </>
       )}

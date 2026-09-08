@@ -2455,3 +2455,17 @@ re-read the three memo comments that cite the mousemove churn as their reason �
 simpler once it is gone. A behaviour-preserving change with a measurable payoff (a 5,900-line
 component re-rendering at pointer speed), its own milestone.
 
+## 88. What the 4.1 audit owed — the small words the second walk found
+
+`docs/ux-audit-4.1.md` (M178) fixed the defects it found and OWES these here, each a sentence
+or a slot rather than a design: the run row's facts as data with no `—` segment and the
+lineup preview's sentence (F.7); header and row meta that drops whole rather than clipping
+mid-word, and `svc` as a word (F.9); the workflow diagram's block meta in sentence case with
+`·` (F.12); the GitHub row's `issue · open` as a state pill beside the mono key (F.13); a
+skill card's `⋯` pinned to its name row when the name wraps (F.15); `1 turns` pluralised in
+`inspector-fields.ts` (F.17); the compact drawer's top verified against the shell's (F.18);
+M43's edge indicator inset away from a frame's chrome (F.20); the fixture's run given an
+`endedAt` and a frozen clock so no golden carries a live figure (F.21); the collapsed tool
+group's summary as `2 tools · Read, Edit · server.ts` (F.24); the fixture PTYs given a tail so
+no golden reads as a blank body (F.26). One milestone, red-first each, a golden per fix.
+

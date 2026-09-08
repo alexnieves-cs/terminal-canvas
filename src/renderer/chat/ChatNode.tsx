@@ -155,7 +155,8 @@ const ToolRow = memo(function ToolRow({ row, panelId, reveal }: { row: Extract<C
             : diff.diff.kind === 'binary' ? <p className="review-node__hunk-note">binary file</p>
             : diff.diff.kind === 'unavailable' ? <p className="review-node__hunk-note">this diff could not be read</p>
             : <div className="review-node__hunks" data-review-node-hunks>
-                {diff.diff.lines.map((line, i) => <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>)}
+                {/* M178 (F.10): git's own header lines (`diff --git`, `index`, `---`, `+++`) say what the card's header already says — the hunk starts at the first `@@`. */}
+{diff.diff.lines.filter((line) => line.kind !== 'meta').map((line, i) => <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>)}
                 {diff.diff.truncated > 0 && <div className="review-node__hunk-note">+{diff.diff.truncated} more lines</div>}
               </div>}
         </div>

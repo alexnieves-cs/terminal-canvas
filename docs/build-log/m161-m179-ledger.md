@@ -703,3 +703,60 @@ act: `notice.1` (the update link's click, M178); the audit's own findings.
   m177-agents.log, m177-agents2.log) — the 109 s watchdog had 1.2× of that after the three
   checks Acts II–III added, and a chained run tripped it; re-pinned at 113 s (1.25× the
   slower run, the M135 rule).
+- **M178 — the second full audit.** `docs/ux-audit-4.1.md`: a fresh-context critic walked all
+  55 goldens with the five rules as the lens; 26 findings, dispositioned there. Fixed in the
+  audit's wave, red-first where a check pins it: F.1 (the enabled Restart painted white on
+  white since M46 — a `(0,2,1)` grid rule's background over the primary's fill; shell
+  `restart.paint.1` reads the computed fill and ink on a live panel — written beside the fix,
+  the probe that found it is in the shot harness's `inspector-detail` scene log), F.2
+  (`displayLabel` in `shared/display-path.ts`, the verb rows' target through it; `path.1`
+  gains the arm), F.3 (`.palette__row--mono .palette__title` in the UI face, `.palette__title`
+  in `face.1`), F.4 (the Files heading's root keeps its width), F.6 (Detail prints the full
+  path), F.8 (the group's verbs rest hidden), F.10 (the hunk starts at the first `@@`), F.11
+  (a label and a note), F.14 (`lastLineOf` strips fences — `lastline.2`; `lastline.1`'s
+  expectation moved with the rule), F.15 (the facts line in the UI face), F.16 (`direction:
+  ltr`), F.19 (the asleep card's sentence). Declined with the rule: F.22, F.23, F.25. Owed to
+  backlog #88 by name: F.5's rows (#86), F.7, F.9, F.12, F.13, F.15's wrap, F.17, F.18, F.20,
+  F.21, F.24, F.26. Twelve stale scene intents in `shot.cjs` rewritten to what the goldens
+  show. **The audit's own run found a defect of M176's:** the product part failed
+  deterministically at `annot.1` (a panel's note and its frame disagreed on where the frame
+  was after a drag, and the checks after it staged on nothing) — a bisect on the arrival
+  keyframe alone (product 59/59 with the rise restored, 20/23 with the scale) pinned it to
+  the scale on `.pf__motion`, an ancestor of `.pf__body`: the M3/M144 rule reaches the
+  arrival. The brief's "scale from 0.98" is DECLINED for the arrival; `motion.2` pins a rise.
+- **Golden sentences, M178** (a fresh-context critic over the 26 scenes the wave moved, then a
+  second walk of the two it questioned; every sentence a reader can check against the image):
+  skills · `placed` and `no bundled files` in the UI face on every card (the critic's first
+  walk read the resources sentence still mono — `.skill-card__resources` had kept its M127
+  mono, fixed and pinned in `face.1`'s list); teammate · the place path reads left-to-right
+  as `…/tc shot fixtures golden/repo` (F.16), ROUTINES a caps label with `runs while the app
+  is open — not while it is closed` beneath (F.11), the asleep card behind reads
+  `…recorded before the last quit` (F.19); routine · the pane scrolled ~15 px because F.11's
+  two labels each gained a note line, the rows identical; runs · Restart at the pane foot is
+  the iris fill with `--on-iris` ink (F.1), the HISTORY empty line lower (see the note);
+  auto · the Edit card's hunk begins at `@@ -1,4 +1,4 @@` with no `diff --git`/`index`/
+  `---`/`+++` (F.10), the prose beneath rose four lines; subagents, header, flip,
+  inspector-work, inspector-tools · only the chat behind shifting with F.10, Restart iris,
+  pid jitter; palette · panel-row titles in the UI face while the `…/repo` hints stay mono
+  (F.3), the state column a dot (M175); palette-query · the `group` query's verb row reads
+  `Open toolbox for chat: …/tc shot fixtures golden/repo (chat)` instead of `/private/var/…`
+  (F.2), the row set re-ranked because the raw path no longer fuzzy-matches; lineup,
+  spawn-sheet, search-empty, navigator-workspaces · Restart, pid, run duration and the HISTORY
+  shift only (the lineup's `Workbench · —` dash is F.7, owed); palette-dark · the palette's
+  changes in the dark theme, Restart the cyan iris with dark ink; search · result titles
+  `tests · line 8` in the UI face with the mono match kept (F.3); inspector-detail · CWD
+  prints the full path wrapped over three lines, FONT SIZE and MACHINE pushed down (F.6);
+  navigator-panels, attention, wide · the chat row's last line reads `Want me to wire
+  /health to it?` with the backticks gone (F.14), browser port jitter (wide's `POOL - 6 AT A
+  TIME` caps are F.12, owed); navigator-files · the heading reads `REPO · review: the health
+  check wir…` (F.4) — the critic's first walk read `R…` unchanged: the first fix wrote a 3ch
+  floor under a pre-M178 `min-width: 0` that overrode it, and 3ch is exactly `R…`; the root
+  is now `flex: 0 0 auto` to a 60 % ceiling and the attribution beside it gives, pinned by
+  `verify:styles tree.1` (red on HEAD's stylesheet beside `face.1` and `motion.2`: 53/56);
+  overview, compact · only pid and Restart iris in the context pane; ink · the asleep card in
+  the WORKERS group reads `asleep — nothing recorded…` above `click to start` (F.19), the
+  group frame shows no `card`/`remove` at rest (F.8), the strokes identical. The critic's
+  third question: the HISTORY empty line (`no snapshots yet…`) sits ~10 px lower in every
+  rail scene — the wave's `.rail-empty .empty-state { padding: var(--sp-4) 0 }`, the
+  Workspaces pane's two empties given the same air as the Panels pane's; named here rather
+  than absorbed. The 27th changed golden is M177's launcher, sentenced above.

@@ -173,7 +173,7 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
   }
   return (
     <div className="teammates-pane__field" data-teammate-routines>
-      <span className="teammates-pane__label">routines · {ROUTINE_LIMIT_WORD}</span>
+      <span className="teammates-pane__label">routines</span><span className="teammates-pane__note">{ROUTINE_LIMIT_WORD}</span>
       {props.routines.length === 0 && <p className="pf__note" data-routines-empty>no routines — a routine starts a fresh chat as {teammateWord(props.teammate)} on a schedule</p>}
       <ul className="teammates-pane__list">
         {props.routines.map((r) => (
@@ -202,7 +202,7 @@ function RoutinesSection(props: { teammate: PersistedTeammate; routines: readonl
         <input className="teammates-pane__name" data-routine-name placeholder="routine name…" value={name} onChange={(e) => setName(e.target.value)} />
         <label className="teammates-pane__item"><span>every</span><input className="teammates-pane__minutes" data-routine-minutes type="number" min={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} /><span>minutes</span></label>
         <label className="teammates-pane__field"><span className="teammates-pane__label">prompt</span><textarea className="teammates-pane__brief" data-routine-prompt placeholder="asked of the fresh chat each time" value={prompt} onChange={(e) => setPrompt(e.target.value)} /></label>
-        <label className="teammates-pane__field"><span className="teammates-pane__label">verb line · optional, never destructive</span><input className="teammates-pane__name" data-routine-plan placeholder="focus n3" value={plan} onChange={(e) => setPlan(e.target.value)} /></label>
+        <label className="teammates-pane__field"><span className="teammates-pane__label">verb line</span><span className="teammates-pane__note">optional — never destructive</span><input className="teammates-pane__name" data-routine-plan placeholder="focus n3" value={plan} onChange={(e) => setPlan(e.target.value)} /></label>
         {refusal !== null && <p className="pf__note chat__refusal" data-routine-refusal role="alert">{refusal}</p>}
         <button type="button" className="inspector__action" data-routine-add disabled={!props.teammate.scheduling} title={props.teammate.scheduling ? 'Save this routine' : `${teammateWord(props.teammate)} may not be scheduled — allow scheduling above first`} {...shellControl(() => { if (props.teammate.scheduling) submit() })}>Add routine</button>
       </div>
