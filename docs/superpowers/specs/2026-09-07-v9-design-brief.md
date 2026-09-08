@@ -147,28 +147,31 @@ it broke annotation geometry. No rule permits transforming `.pf__body`, changing
 metrics, bypassing the flush gate, renaming aliases, adding credential readers or weakening
 the broker audit.
 
-## Acceptance register
+## Acceptance register — closed at 5.0.0 (M192)
 
-Every row is pending in Act 0. Close it with implemented milestone/check/scene evidence, or
-strike the principle with a specific reason. Do not label inherited behavior newly verified.
+Every row below is closed with the milestone that implemented it and the evidence that holds it,
+or struck with the reason. The ledger `docs/build-log/m180-m200-ledger.md` carries the
+per-milestone detail, every declined finding by name, and the sentence for every golden that
+changed.
 
-| Principle | Owner | Completion evidence required |
+| Principle | Closed by | Evidence |
 |---|---|---|
-| Obsidian material, two themes, face/path/rest/metrics rules | All; M198 final audit | Existing styles/renderer checks plus critic sentences for every changed scene |
-| A first conversation without terminal knowledge | M180–M181 | Readiness arms, real renderer start/send over a fake, first-launch scenes; timed human trial owed |
-| Equal core objects and a useful starter | M181, M187–M188 | Per-kind selection/marks/history/partition checks; starter and media scenes |
-| One template edited in both views | M182–M184 | Cross-view operations, save/reload/conflict, immutable run attribution |
-| Library, wiring and configuration inspector | M183, M189–M192 | Real drag and keyboard Add, invalid edge refusal, schema edit/test; editor scenes |
-| Live preview, width and capture | M185–M186 | Discovery ownership, project-watch lifecycle, guest capture pixels and named failures |
-| Useful bounded integrations | M189–M192 | Schema/example coverage, fake requester/runner, write approval refusal and redaction |
-| Portable work with inert import | M193–M194 | Version/record failure arms, id remap, planted-secret export, no execution on import |
-| External node and panel declarations | M195–M196 | Bounded manifest loader, missing-plugin persistence and example loaded outside source |
-| Named places and contextual actions | M180, M183, M188, M198 | Rail/inspector agreement, readable narrow states and real keyboard reach |
-| Four doors or explicit exceptions | Every milestone; M200 audit | Expanded `verify:verbs` closure and evidence for actual execution through each door |
-| Intentional motion and accessible input | All; M198 | Existing reduced-motion rules, real input checks, dark/light/compact/reduced-motion scenes |
-| Installable 5.0 with feedback and guidance | M197–M200 | Three verification commands, package output, guide, feedback draft and local release audit |
+| Obsidian material, two themes, face/path/rest/metrics rules | M191, and every act's own critic | `verify:styles` 56/56 (theme parity, one primary, one resting shadow, the tone block), `verify:panels` `rest.1`/`header.1`, and thirteen scenes re-sentenced in M191 after two critics walked all 57 goldens. **One defect stands and is not re-baselined**: `palette-dark` renders its chrome light, recorded as owed with a hand check |
+| A first conversation without terminal knowledge | M180–M181 | `verify:onboarding`, product `onboarding.start.1` / `onboarding.agent.1` / `starter.1`; the timed human trial is owed and named |
+| Equal core objects and a useful starter | M181, M186–M187 | `image.kind.1`, `note.kind.1` (every other kind's partition false for it, `isTerminalPanel` included), `note.1`, `asset.1`, product `starter.1` / `image.2` / `note.1` |
+| One template edited in both views | M182–M184 | `edit.1–.6`, `store.edit.1`, `run.def.1`, `run.outcome.1`, product `workflow.edit.1–.3` / `workflow.save.1`; a run's outcomes are drawn from its own snapshot, so a later edit cannot rewrite them |
+| Library, wiring and configuration inspector | M183, M188 | `library.1–.2`, product `workflow.lib.1` / `workflow.wire.1` / `workflow.inspect.1`; the schema table is one registry the library, the inspector and the executor all read |
+| Live preview, width and capture | M185 | `preview.1`, `preview.capture.1`, `preview.device.1`, product `preview.1`; **the real dev server behind discovery is owed** as a hand check, by the same rule that keeps the network out of `verify` |
+| Useful bounded integrations | M188, partly STRUCK | The `http` GET node ships with every write refused by name (`node.http.1`); Slack, email, webhook and cron nodes are STRUCK — each needs a token, a sender domain, an armed listener across a relaunch or real elapsed minutes, and this run can prove none of them. GitHub keeps its audited `tc api` path |
+| Portable work with inert import | M189 | `portable.1` (nothing of this machine travels; three parse answers; the remap), product `portable.1` — the import spawns no PTY and an imported workflow's action nodes are refused until read |
+| External node and panel declarations | STRUCK | A declarative plugin registry is a new trust path into Electron, the filesystem and the credential store, and this brief's own evidence for it requires an example installed from an external directory by a person. Neither is here rather than a loader nobody has run from outside the repository |
+| Named places and contextual actions | M180, M183, M187, M191 | `verify:rail` 194/194, the inspector's node editor, and M191's fix for the one case this brief named: a selected workflow node no longer shows the enclosing panel's process metrics |
+| Four doors or explicit exceptions | M180–M190, closed at M188 | `closure.v9.1` binds every v9 verb to a palette row that exists, an agent line that BINDS, a canvas gesture, and a WORKFLOW door — an `action` node whose line binds to the same verb, with `action` a kind the library offers. `node-test` alone keeps an owed workflow door, with its reason |
+| Intentional motion and accessible input | Inherited, re-checked | `reduced-motion` and `compact` scenes, `verify:styles` motion rules, and the disabled-reason reveal M191 added follows the same opacity rule (never `display`), so a script's click still lands |
+| Installable 5.0 with feedback and guidance | M190, M192 | `feedback.1`, `guide.1`, product `feedback.1`; `npm run verify`, `npm run verify:visual` and `npm run verify:packaged` green at the version; `release/Terminal Canvas-5.0.0-arm64.dmg`; `docs/getting-started.md`; `docs/release-notes/5.0.0.md` |
 
-The Act VIII critic walks every committed golden, including unchanged ones, against its scene
-intent and these principles. Fix each finding near the affected product surface, or decline
-it by name with the rule and consequence. The finished brief is the completed register, not
-an assertion that the pictures look premium.
+The Act VIII critics walked every committed golden, including the unchanged ones. Thirteen
+findings were fixed at their surface; twenty-one are declined BY NAME in the ledger with the rule
+each cites and the consequence of leaving it. This register is the finished brief: not an
+assertion that the pictures look premium, but a list of what was built, what was proved, and what
+was refused with a reason.
