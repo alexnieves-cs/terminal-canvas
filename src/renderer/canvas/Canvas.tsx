@@ -4920,12 +4920,21 @@ export function Canvas({
    * counts) and scrubbed; the draft says so; and the only thing that leaves
    * this app is a link the person opens, through the ONE `link:open` door.
    */
+  // M192. The app's own version, learned once from main's update check (which
+  // answers `app.getVersion()` in every arm) and used by the feedback draft
+  // and the portable file's `app` field.
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+  useEffect(() => { void window.canvas.update.check().then((r) => { if ('version' in r && typeof r.version === 'string') setAppVersion(r.version) }) }, [])
   const prepareFeedback = useCallback(async (says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
     const report = await window.canvas.env.report()
     const counts = new Map<string, number>()
     for (const panel of panelsRef.current) counts.set(panel.kind, (counts.get(panel.kind) ?? 0) + 1)
     const draft = buildFeedback(FEEDBACK_REPO, {
-      version: '5.0.0',
+      // The version comes from MAIN (`app.getVersion()`, through the update
+      // check's own answer), never a literal in the renderer: a hardcoded
+      // number is right for exactly one release and then quietly lies in
+      // every bug report that carries it.
+      version: appVersion ?? 'unknown',
       platform: 'macOS',
       engines: onboardingReadiness(report).rows.map((row) => ({ name: FIRST_LAUNCH_ENGINES[row.backend].name, state: row.discovery === 'unknown' ? 'unanswered' : row.discovery })),
       kinds: [...counts].map(([kind, count]) => ({ kind, count })),
@@ -4934,7 +4943,7 @@ export function Canvas({
     const opened = await window.canvas.links.open({ panelId: focusedIdRef.current ?? 'canvas', target: draft.url })
     if (opened.kind === 'refused') return { kind: 'refused', reason: opened.reason ?? 'that link could not be opened' }
     return { kind: 'ran', note: `a draft in your browser · ${draft.redacted} secret${draft.redacted === 1 ? '' : 's'} scrubbed${draft.truncated ? ' · cut to fit a link' : ''} · nothing was sent` }
-  }, [])
+  }, [appVersion])
 
   /**
    * M189. EXPORT — the RENDERER builds the record, because the renderer is
@@ -4960,7 +4969,7 @@ export function Canvas({
       workspaceName: (await window.canvas.workspace.list()).find((w) => w.active)?.name ?? 'canvas',
       panels: persisted,
       templates: templateRowsRef.current,
-      app: '5.0.0',
+      app: appVersion ?? 'unknown',
       now: Date.now(),
       ...(images.length === 0 ? {} : { images }),
       ...((await window.canvas.routine.list()).length > 0 ? { hasRoutines: true } : {})
@@ -4969,7 +4978,7 @@ export function Canvas({
     if (written.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
     if (written.kind === 'refused') return { kind: 'refused', reason: written.reason }
     return { kind: 'ran', note: `${displayPath(written.path).short} · ${exportSentence(file)}` }
-  }, [])
+  }, [appVersion])
   /**
    * M189. IMPORT — a SEPARATE workspace, every id remapped, and nothing
    * started: no PTY is spawned, no chat session created, no watcher armed and
