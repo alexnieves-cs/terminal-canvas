@@ -1,8 +1,11 @@
-# Acts V and VI — the executor and the portable file (M188–M189)
+# Acts V, VI and VII — the executor, the portable file and the feedback door (M188–M190)
 
-The v9 run's fifth and sixth acts, built together on `v9-act5-nodes` and merged as one. Their
-ledger lines — the specs, the red-first evidence, every decision and every strike — are
-`docs/build-log/m180-m200-ledger.md` under `## M188` and `## M189`.
+The v9 run's fifth, sixth and seventh acts, built together on `v9-act5-nodes` and merged as one
+— consolidated under the ledger's recorded plan amendment, because with the service nodes and
+the extension registry struck each act was one milestone and three separate verification cycles
+would have spent the run's remaining hours on ceremony rather than on work. Their ledger lines —
+the specs, the red-first evidence, every decision and every strike — are
+`docs/build-log/m180-m200-ledger.md` under `## M188`, `## M189` and `## M190`.
 
 ## What the acts are
 
@@ -11,6 +14,10 @@ ledger lines — the specs, the red-first evidence, every decision and every str
   `http` node does a GET, with every other method refused by name because a write belongs on the
   broker's approval path and no node speaks to it. `Test this node` runs ONE block and reports
   its input, its duration and a named failure, starting no neighbour and recording no run.
+- **M190, the door and the guide.** Feedback is a DRAFT in the person's own browser: built from
+  facts chosen by type, scrubbed with the count stated inside it, opened through the one
+  `link:open` door. This app submits nothing and reads no credential to do it.
+  `docs/getting-started.md` is written from the shipped behaviour and checked as a file.
 - **M189, the file.** One portable canvas file, built field by field so nothing of this machine
   can travel, scrubbed with its count on the record, with every omission named by what it would
   do elsewhere. Import makes a separate workspace, remaps every id, and starts nothing.
@@ -31,7 +38,7 @@ sets.
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | every suite's tally, no FAIL line | `out/v9-evidence/act56-verify.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/act56-verify.log` |
 | `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/act56-visual.log` |
 | `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/act56-packaged.log` |
 
