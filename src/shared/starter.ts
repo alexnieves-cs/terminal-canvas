@@ -57,8 +57,13 @@ export const STARTER_OBJECTS: readonly StarterObject[] = [
   { key: 'terminal', kind: 'terminal', caption: 'A terminal. Click it to start a shell here.', rect: { dx: 640, dy: 0, w: 440, h: 160 } },
   { key: 'note', kind: 'file', caption: 'A note. A Markdown file you can edit in place.', rect: { dx: 640, dy: 200, w: 440, h: 160 } },
   // The workflow's verb strip and its two tabs need the height; 160 clipped them (the M181 critic).
-  { key: 'workflow', kind: 'workflow', caption: 'A workflow. A saved shape of work you can run.', rect: { dx: 640, dy: 400, w: 440, h: 260 } },
-  { key: 'image', kind: 'image', caption: 'An image. A picture kept beside the work.', rect: { dx: 640, dy: 700, w: 440, h: 160 } }
+  // M191 (the golden audit, second half, 7). The workflow example is WIDER
+  // and TALLER than the others: at 440x260 its verb row wrapped into the
+  // header and its diagram was sliced, so the one object meant to show what a
+  // workflow is showed a broken panel instead. The others stay small; a
+  // shape of work needs room to be a shape.
+  { key: 'workflow', kind: 'workflow', caption: 'A workflow. A saved shape of work you can run.', rect: { dx: 640, dy: 400, w: 640, h: 360 } },
+  { key: 'image', kind: 'image', caption: 'An image. A picture kept beside the work.', rect: { dx: 640, dy: 800, w: 440, h: 160 } }
 ]
 
 export interface PersistedStarter {

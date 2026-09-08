@@ -218,7 +218,13 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
               <li key={s.dir} role="option" aria-selected={i === highlight}
                 className={`sheet__suggestion${i === highlight ? ' sheet__suggestion--on' : ''}`}
                 onMouseDown={(e) => { e.preventDefault(); accept(i) }}>
-                <span className="sheet__suggestion-path" title={s.dir}>{shortPath(s.dir, 3)}</span>
+                {/* M191 (the golden audit, second half, 8). TWO segments, not
+                    three: a macOS temp directory's middle segment is a
+                    32-character machine id, and at three the row printed it
+                    at full width beside a sibling that had been shortened.
+                    The path rule's own answer is the last two segments; the
+                    whole path stays on the title. */}
+                <span className="sheet__suggestion-path" title={s.dir}>{shortPath(s.dir, 2)}</span>
                 <span className="sheet__suggestion-why">{s.why}</span>
               </li>
             ))}

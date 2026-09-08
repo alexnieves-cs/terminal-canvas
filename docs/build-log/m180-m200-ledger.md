@@ -1452,3 +1452,95 @@ before a golden was written.
 - **palette-query** — The canvas section gained M188's and M190's rows (`Test this node`,
   `Prepare feedback…`, `Export this canvas…`, `Import a canvas…`), so the filtered list is
   longer and its scrolled window moves again. No existing row changed its words.
+
+## M191 — the third UX audit, over every committed golden (Act VIII)
+
+Two fresh-context critics walked all 57 goldens (a disjoint half each) against the 5.0 brief and
+CLAUDE.md's face, rest, path, metrics and words-not-codes rules. They returned 34 findings. What
+follows is every one of them with its disposition: fixed near the surface, or declined by name
+with the rule and the consequence, which is what this milestone owes.
+
+**Fixed (13).**
+
+| Finding | Fix |
+|---|---|
+| Node metadata was UPPER-CASE (`POOL - 6 AT A TIME`), reading as a code | Sentence case with the kind first (`Pool · 6 at a time`), and the letter-spacing that made an upper-case code legible is gone |
+| Two permanent refusal lines above the diagram (the brief forbids this shape by name) | The reasons REVEAL with the panel's other chrome (opacity 0 → 1, never display) and each disabled control carries its own in `title` |
+| The diagram was clipped at the panel's right edge, slicing a block mid-word | The definition pane scrolls horizontally; `.pf__body` is untouched |
+| The inspector showed the workflow PANEL's Machine section while a NODE was selected | The section is absent while a block is selected — the brief names this case |
+| A sampled panel at 0.0% read `CPU 0%` | `under 1%`: the metrics rule's "never a confident 0%" is about the reading, not only the unsampled arm |
+| Two filled primary controls on the inspector (`Run again` and `Restart`) | `Run again` is a quiet action; the action bar's Restart stays the one primary |
+| `1 turns` | Pluralised |
+| `GitHub — granted — not connected` read as a contradiction with no next step | One sentence that names it: `granted, but no credential yet: add one in Integrations` |
+| `1 svc` used a code | `1 service` / `n services` |
+| The spawn sheet printed a raw temp path at full width beside a shortened sibling | Two segments, not three: a macOS temp path's middle segment is a 32-character machine id |
+| The starter's workflow example was squeezed (its verb row wrapped into the header, its diagram sliced) | The example is 640×360; the other four stay small |
+| The two new node kinds had no field labels in the inspector | `verb line`, `address`, `method` (also M190's critic) |
+| The action and http kinds had no sublabel arm, so a new block read as a script | `Action · <verb>` and `Fetch · a GET` |
+
+**Declined, each by name with its reason (21).** None of these is disputed as an observation;
+each is declined because the fix is larger than this act, or because the shape is already a
+recorded decision.
+
+- *A collapsed group looks like an expanded one.* True, and it is M35's surface, not this run's.
+  Painting collapsed members at the card tier is a tiering change with its own checks
+  (`assignTiers`' `cardIds` is what a collapse routes through), and a tiering change on the last
+  day of a run is how a canvas silently kills sessions. Owed as its own milestone.
+- *A group member's terminal body lost its inset.* Same surface, same argument; the fix is one
+  CSS rule but the check that would hold it does not exist, and an unchecked style fix on the
+  frame is what the golden-sentence rule exists to prevent.
+- *The broker audit rows read as mono.* The sentence is already `--font-ui`
+  (`.integration__row-meta`); the mono is the method-and-path leaf above it, which is what the
+  face rule asks for. Recorded rather than changed.
+- *The minimap overlays panel chrome in five scenes.* Real, and the fix is a camera-fit change
+  (`fitAll`'s inset) that moves every scene's framing — every golden would change at once, and
+  each would need a sentence about a change nobody asked for on the last day.
+- *The `⋯` menu offers no verbs and spends a row on dismissal.* M106's own decision: the menu is
+  the full title plus the door to the palette. Changing it means deciding which verbs belong on
+  every kind's menu, which is a milestone.
+- *A missing FILE offers no verb where a missing PICTURE offers Replace.* Correct and worth
+  doing; the file panel has no equivalent door and adding one is a new verb with four doors.
+- *`fill` reads as a state pill and does not name what it does.* Renaming it to `Maximise` is a
+  one-word change and `verify:panels` selects on the label in three places; the rename belongs
+  with those checks in one milestone, not beside a release.
+- *Two blank panel bodies in `attention`.* That scene's panels are seeded without output; the
+  sentence a spawned-but-silent panel shows is a fixture fact, not a product one.
+- *Two "N panels share this repository" sentences with different numbers.* They are different
+  facts (panels sharing a repository; agents whose subagents cannot be told apart) and both are
+  true; the wording overlap is real and the rewrite is a sentence in M53's surface.
+- *`On board` and `Add to board` both look like verbs.* M116's surface; the state/verb split is
+  a work-card milestone.
+- *The copilot sheet's run-on hint.* M118's recorded text; shortening it is a wording pass over
+  every backend row, which belongs with the row table.
+- *The compact breakpoint's inspector touches the window edge.* M46's breakpoint; a spacing
+  change there moves every compact scene.
+- *`Start Login shell…`'s mid-phrase capital, and the tmux notice above the product name.* Both
+  are M174/M180 launcher decisions with goldens; the capital is a one-word fix and is owed, the
+  notice's position was chosen so a person sees the constraint before they start something that
+  will not survive a relaunch.
+- *`palette-dark`'s chrome is not dark.* This is the most serious of the declined findings and it
+  is recorded as OWED with a hand check: the scene captures the palette over a canvas whose theme
+  the shot harness sets per scene, and whether the shell's own theme read is late or the fixture
+  is wrong needs the app in front of a person. It is a scene-level defect, not a code path this
+  run touched, and re-baselining it would be exactly the blind re-baseline the golden rule
+  forbids.
+- *The attention capsule overlaps the diagram and the library card.* M43's flag placement; it is
+  correct at every other zoom and the fix is a layout rule for the flag with its own check.
+- *The Skills pane's columns clip and one card shows a bare ellipsis.* M127's surface; the
+  horizontal scroll is one rule and the ellipsis is a description this fixture does not have.
+- *The preview's address appears three times.* Two of them are load-bearing: `data-browser-url`
+  is the readout `verify:panels browser.1` asserts is the guest's real url, and the address bar is
+  the editable field. The panel title is the third and is the kind's own naming rule.
+- *`TOKENS 0` / `LIST PRICE $0.00` in the canvas section.* The canvas totals are a different
+  surface from the panel's Machine arm; the zero rule's fix there is a sentence, and it is owed.
+- *The lineup sheet's split label and trailing `· —`.* M104's sheet; owed.
+- *The library entries have no glyph.* Already a recorded M183 decision: `KIND_GLYPH` has no
+  terminal key, and one entry wearing another kind's mark is worse than none.
+- *The starter chat header clips its own controls at that width.* The header's overflow rule is
+  M106's and applies; at the starter's 440 px the chat's chrome has more controls than the width
+  allows. The example is the surface to widen, and this act widened the workflow one; the chat
+  one is owed with it.
+
+**Green after the fixes.** `verify:file` 91/91, `verify:layout` 252/252, `verify:verbs` 23/23,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 39/39, `verify:viewport` 141/141,
+typecheck 0.

@@ -4236,6 +4236,11 @@ body {
    block's right edge; the wire preview is the accent line; a refusal is one
    sentence under the verbs, the M133 idiom. */
 .workflow-node__editor { display: flex; gap: var(--sp-3); min-height: 0; align-items: flex-start; }
+/* M191 (the golden audit, 4). The diagram SCROLLS rather than clipping: an
+   SVG wider than the panel used to slice a block mid-word with nothing to say
+   so. The pane's own overflow, never the body's (`.pf__body` is never
+   transformed and never scrolled by a kind). */
+.workflow-node__pane[data-workflow-panel="definition"] { overflow-x: auto; }
 .workflow-node__library { flex: 0 0 168px; align-self: stretch; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
 .workflow-node__entry { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); cursor: grab; font-family: var(--font-ui); }
 .workflow-node__entry-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
@@ -4265,6 +4270,11 @@ body {
 .workflow-node__edgeg { cursor: pointer; }
 .workflow-node__edgeg--selected .workflow-node__line { stroke: var(--iris); stroke-width: 2.5; }
 /* Out of the FLOW: a sentence that shows for four seconds must not push the diagram down under the reader's pointer (the M183 verifier). */
+/* M191. The disabled verbs' reasons REVEAL with the panel's other chrome
+   (opacity 0 → 1, never display — the rest rule's own mechanism, so the box,
+   the text and the tab order stay and a script's click still lands). */
+.workflow-node__why { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.panel:hover .workflow-node__why, .panel:focus-within .workflow-node__why, .panel--selected .workflow-node__why { opacity: 1; }
 .workflow-node__editor { position: relative; }
 .workflow-node__refusal { position: absolute; top: 0; right: 0; z-index: 1; max-width: 60%; margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--s-1); color: var(--red); font-family: var(--font-ui); font-size: var(--t-xs); }
 /* M182. A block is a handle: grab, and the selected one carries the accent stroke (one selection treatment, the brief). */
@@ -4272,7 +4282,8 @@ body {
 .workflow-node__blockg--selected .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
 .workflow-node__block { fill: var(--s-2); stroke: var(--line-strong); stroke-width: 1; }
 .workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
-.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: 0.04em; }
+/* M191. Sentence case, and no letter-spacing: the tracking was there to make an upper-case code legible, and the code is gone. */
+.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 .workflow-node__line { stroke: var(--line-strong); stroke-width: 1.5; }
 /* The arrowhead is the LINE's own colour: an edge that pointed in a
    different tone would read as a second kind of edge. */

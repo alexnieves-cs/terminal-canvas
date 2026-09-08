@@ -58,7 +58,12 @@ export const DIAGRAM_PAD = 28
  */
 function sublabelOf(node: TemplateNode): string {
   switch (node.kind) {
-    case 'pool': return `POOL - ${node.width} AT A TIME`
+    // M191 (the golden audit, second half, finding 2). SENTENCE CASE, not
+    // upper case: the brief asks for "names and sentence-case metadata", and
+    // `POOL - 6 AT A TIME` reads as a code even set in the UI face. The KIND
+    // still comes first (M133's critic), and the strings stay short for the
+    // same reason as before — an SVG text node neither wraps nor clips.
+    case 'pool': return `Pool · ${node.width} at a time`
     // M133 critic wave. EVERY sublabel names the KIND first: `POOL` and
     // `SCRIPT` did and these two did not, so two of the four blocks stated a
     // behaviour with no vocabulary word behind it and the reader could not
@@ -66,19 +71,21 @@ function sublabelOf(node: TemplateNode): string {
     // Short enough to fit `BLOCK_W`: the sublabel is drawn as SVG text and
     // an SVG text node does not wrap or clip, so a long one simply runs out
     // over the block's own edge — which is what the first pass showed.
-    case 'orchestrator': return 'ORCHESTRATOR - LEADS'
-    case 'collect': return 'COLLECT - JOINS RESULTS'
-    case 'chat': return 'CHAT'
+    case 'orchestrator': return 'Orchestrator · leads'
+    case 'collect': return 'Collect · joins results'
+    case 'chat': return 'Chat'
+    case 'action': return `Action · ${(node.line ?? '').split(' ')[0] || 'a verb'}`
+    case 'http': return 'Fetch · a GET'
     default: {
       // A terminal node: its preset, else the binary it runs, else the login
       // shell — the same three-way answer the spawn sheet's preview gives,
       // and never `—`, which reads as a node that failed to load.
       const t = node as TerminalOrChatNode
-      if (t.presetId !== undefined) return `SCRIPT - ${t.presetId.toUpperCase()}`
+      if (t.presetId !== undefined) return `Script · ${t.presetId}`
       const command = (t.command ?? '').trim()
-      if (command === '') return 'SCRIPT - LOGIN SHELL'
+      if (command === '') return 'Script · login shell'
       const tail = command.split('/').filter((p) => p !== '').slice(-1)[0] ?? command
-      return `SCRIPT - ${tail.toUpperCase()}`
+      return `Script · ${tail}`
     }
   }
 }
