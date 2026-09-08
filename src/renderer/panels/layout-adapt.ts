@@ -53,6 +53,8 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       ...(p.maximised === undefined ? {} : { maximised: { restore: { id: p.id, ...p.maximised.restore } } }),
       // M130. The fourth mark; absent stays absent like the three above.
       ...(p.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {}),
+      // M182. The binding, copied by name.
+      ...(p.templateBinding === undefined ? {} : { templateBinding: { templateId: p.templateBinding.templateId, key: p.templateBinding.key } }),
       // Absent stays absent, the rule `title` above and `command` below obey.
       // Copied element-wise rather than by reference so a parsed record and
       // the live Panel cannot share a mutable array.
@@ -158,6 +160,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       ...(panel.pinned === true ? { pinned: true as const } : {}),
       ...(panel.maximised === undefined ? {} : { maximised: { restore: { x: panel.maximised.restore.x, y: panel.maximised.restore.y, w: panel.maximised.restore.w, h: panel.maximised.restore.h } } }),
       ...(panel.skillTrail === 'collapsed' ? { skillTrail: 'collapsed' as const } : {}),
+      ...(panel.templateBinding === undefined ? {} : { templateBinding: { templateId: panel.templateBinding.templateId, key: panel.templateBinding.key } }),
       ...(panel.links === undefined
         ? {}
         : { links: panel.links.map((l) => ({ ...l, ...(l.automation === undefined ? {} : { automation: { ...l.automation } }) })) })

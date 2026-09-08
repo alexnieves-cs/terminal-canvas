@@ -205,7 +205,7 @@ const bridge: CanvasBridge = {
   },
   template: {
     list: () => ipcRenderer.invoke(IPC.TEMPLATE_LIST),
-    save: (template) => ipcRenderer.invoke(IPC.TEMPLATE_SAVE, template),
+    save: (template, expectedRevision) => ipcRenderer.invoke(IPC.TEMPLATE_SAVE, template, expectedRevision),
     remove: (id: string) => ipcRenderer.invoke(IPC.TEMPLATE_DELETE, id)
   },
   prompt: {

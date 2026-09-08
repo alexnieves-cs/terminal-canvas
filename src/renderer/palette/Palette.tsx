@@ -123,6 +123,8 @@ export interface PaletteProps {
   envReport: EnvReport | null
   /** M181. See PaletteContext.starterReason. */
   starterReason?: string | null
+  /** M182. See PaletteContext.workflowTemplateOf. */
+  workflowTemplateOf?: (panelId: string) => string | undefined
   /** M123. See PaletteContext.update. Absent in a fixture: the rows read `not checked`. */
   update?: UpdateState | null
   /** M49. See PaletteContext.globalFontSize. */
@@ -217,6 +219,7 @@ export function Palette(props: PaletteProps): JSX.Element {
         worktrees: props.worktrees,
         envReport: props.envReport,
         starterReason: props.starterReason ?? null,
+        ...(props.workflowTemplateOf === undefined ? {} : { workflowTemplateOf: props.workflowTemplateOf }),
         update: props.update ?? null,
         globalFontSize: props.globalFontSize,
         bookmarks: props.bookmarks,

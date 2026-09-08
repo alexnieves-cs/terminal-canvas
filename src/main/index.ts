@@ -69,7 +69,7 @@ import { readImage } from './image-read'
 import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
-import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
+import { allTemplates, isBuiltInTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
 import { resolveTranscript, readFrom as readTranscriptFrom } from './transcript-reader'
 import { trailFor, forgetTrail } from './skill-trail-read'
@@ -1752,13 +1752,12 @@ app.whenReady().then(async () => {
         const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Choose a folder this teammate may touch' })
         return r.canceled || r.filePaths.length === 0 ? null : (r.filePaths[0] ?? null)
       },
-      saveTemplate: (template) => {
+      saveTemplate: (template, expectedRevision) => {
+        // A built-in saves as a user COPY with a new id (the built-ins are code, M80).
         const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id)
           ? template.id
           : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-        const saved: PersistedTemplate = { ...template, id }
-        layoutStore.saveTemplate(saved)
-        return saved
+        return layoutStore.saveTemplate({ ...template, id }, expectedRevision)
       },
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id))
     },

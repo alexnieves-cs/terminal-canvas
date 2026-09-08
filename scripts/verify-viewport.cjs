@@ -2230,6 +2230,72 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M184 — run.outcome.1. THE BLOCK'S OUTCOME is read from the run's OWN
+//      snapshot (`definition.nodes` for the keys, `mapping` for the panel each
+//      key became) against the run's entries — never from the live draft, so
+//      editing the diagram after a run leaves that run's tones as they were.
+//      The vocabulary is the recorder's (`useHandoff`'s `fired` events, the
+//      only writer of `RunEntry.outcome`): `exit 0` and `a turn` finished,
+//      `exit 1` / `exit by signal` failed, `skipped — …` (a fork that did not
+//      fire) and `stopped` their own words rather than red.
+//      M184 (the critic, 7, 8 and 11). Four facts kept apart that were one
+//      word: a key with NO MAPPING was never instantiated (`absent`), a
+//      mapped key with no entry is `queued`, an entry with no outcome is
+//      `working` on an OPEN run and `unknown` on a SEALED one. `RunEntry`
+//      records no pending question, so `wants-you` has no fixture and is
+//      reserved; `outcomeWord` and `outcomeTone` still answer for it.
+{
+  const has = typeof V.blockOutcomes === 'function' && typeof V.outcomeWord === 'function' && typeof V.outcomeTone === 'function'
+  const NAME = 'run.outcome.1 blockOutcomes reads definition + mapping against the run\'s entries: no mapping → absent; mapped with no entry → queued; started with no outcome → working on an open run and unknown on a sealed one; exit 0 and a turn → finished; a failing exit or a signal → failed; skipped and stopped keep their own words; no definition → {}; outcomeWord and outcomeTone answer for every member'
+  if (!has) ok(NAME, false, 'blockOutcomes / outcomeWord / outcomeTone do not exist in src/shared/run-outcome.ts')
+  else {
+    const def = (keys) => ({ templateId: 't1', revision: 3, nodes: keys.map((key, i) => ({ key, kind: 'terminal', cwd: '~', dx: i * 100, dy: 0 })), edges: [] })
+    const run = (over = {}) => ({ id: 'r1', name: 'a run', panelIds: ['a', 'b', 'c'], edges: [], startedAt: 1000, templateId: 't1', ...over })
+    const first = V.blockOutcomes(run({
+      definition: def(['n1', 'n2', 'n3', 'n4']),
+      mapping: { n1: 'a', n2: 'b', n3: 'c' },
+      entries: [
+        { panelId: 'b', startedAt: 1000 },
+        { panelId: 'c', startedAt: 1000, endedAt: 1500, outcome: 'exit 0' }
+      ]
+    }))
+    const second = V.blockOutcomes(run({
+      definition: def(['n1', 'n2', 'n3', 'n4', 'n5']),
+      mapping: { n1: 'a', n2: 'b', n3: 'c', n4: 'd', n5: 'e' },
+      entries: [
+        { panelId: 'a', startedAt: 1000, endedAt: 1200, outcome: 'exit 1' },
+        { panelId: 'b', startedAt: 1000, endedAt: 1300, outcome: 'a turn' },
+        { panelId: 'c', startedAt: 1000, endedAt: 1400, outcome: 'exit by signal' },
+        { panelId: 'd', startedAt: 1000, endedAt: 1400, outcome: 'skipped — exit 1 is not exit 0' },
+        { panelId: 'e', startedAt: 1000, endedAt: 1400, outcome: 'stopped' }
+      ]
+    }))
+    // The same entry, on an open run and on a sealed one: `working` then `unknown`.
+    const sealedArgs = {
+      definition: def(['n1']),
+      mapping: { n1: 'a' },
+      entries: [{ panelId: 'a', startedAt: 1000 }]
+    }
+    const open = V.blockOutcomes(run(sealedArgs))
+    const sealed = V.blockOutcomes(run({ ...sealedArgs, endedAt: 9000 }))
+    const none = V.blockOutcomes(run({ entries: [{ panelId: 'a', startedAt: 1000, endedAt: 1200, outcome: 'exit 0' }] }))
+    const members = ['absent', 'queued', 'working', 'unknown', 'finished', 'failed', 'skipped', 'stopped', 'wants-you']
+    const words = members.map((o) => V.outcomeWord(o))
+    const tones = members.map((o) => V.outcomeTone(o))
+    ok(NAME,
+      first !== null && typeof first === 'object' && Object.keys(first).sort().join(',') === 'n1,n2,n3,n4' &&
+        first.n1 === 'queued' && first.n2 === 'working' && first.n3 === 'finished' && first.n4 === 'absent' &&
+        second !== null && typeof second === 'object' && Object.keys(second).sort().join(',') === 'n1,n2,n3,n4,n5' &&
+        second.n1 === 'failed' && second.n2 === 'finished' && second.n3 === 'failed' &&
+        second.n4 === 'skipped' && second.n5 === 'stopped' &&
+        open.n1 === 'working' && sealed.n1 === 'unknown' &&
+        none !== null && typeof none === 'object' && Object.keys(none).length === 0 &&
+        words.join('|') === 'not run|queued|working|no outcome|finished|failed|skipped|stopped|needs you' &&
+        tones.join('|') === 'none|starting|working|none|idle|exited|asleep|asleep|needs-you',
+      JSON.stringify({ first, second, open, sealed, none, words, tones }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

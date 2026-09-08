@@ -670,3 +670,456 @@ under `out/` was invisible to the chain and to the goldens and visible only to t
 exit 0 58/58 (`act1-visual-2.log`), `npm run verify:packaged` exit 0 12/12
 (`act1-packaged-6.log`). Build log `docs/build-log/m180-m181-act1-onboarding.md`. Closed at
 2026-09-08 07:41 UTC, ~3.4 h since the resume. Merged to `main` with `--no-ff`; nothing pushed.
+
+## Act II — the editable workflow graph
+
+Branch `v9-act2-workflow` from `main` at `50cf9f6`. Started 2026-09-08 ~08:05 UTC.
+
+## M182 — one template, two editors: the shared operations
+
+Spec `docs/superpowers/specs/2026-09-08-m182-template-editing.md`, plan
+`docs/superpowers/plans/2026-09-08-m182-template-editing.md`.
+
+Rule amendment, recorded before the check changed: M133's "the live canvas is the editor; the
+diagram is a projection; Save is disabled with `REASON_NO_EDITOR`" is struck by the 5.0 brief's
+first amendment. The diagram now draws the DRAFT and edits it; Save on the diagram is M184's
+(the verb stays disabled with its sentence until then); the canvas binding is the other
+editor of the same record. No M133 check was weakened: `workflow.panel.1a–d` still compare
+the diagram against the record it projects, which is now the draft when one exists.
+
+Decisions. Every mutation is a pure function in `shared/template-edit.ts` answering a fresh
+record or a refusal by name; keys are minted from `nextKey` and never reused (a run's node
+mapping, M184, names keys); a cycle is refused with the word, M78's rule from the record's
+side. The record's `revision` is the store's alone — a save with a matching expectation
+writes revision + 1, a mismatch writes nothing and hands the standing record back as `stale`,
+no expectation is M80's unconditional door, still bumped; absent on a pre-M182 file and never
+normalised in. The draft lives in a per-template mirror (`template-draft-store.ts`, the M105
+shape) with one door, `applyDraftOp`; the diagram is `buildDiagram(draft)`. The canvas
+binding is `templateBinding { templateId, key }` on every panel an instantiation mints, a
+fifth mark carried by `carryMarks`; `Save selection as template` over panels bound to one
+template, under that template's own name, UPDATES the record with the revision it was read
+at. The label a block shows is the node's title when it has one.
+
+Red first. The pure checks were delegated (`docs/build-log/m182-pure-red-evidence.md`):
+`verify:layout` 238/245 exit 1 (`edit.1–.6`, `store.edit.1`), every pre-existing check
+green; 245/245 after the module, the fields, the binding and the store. The product checks
+`workflow.edit.1` (a real drag on a block moves the draft, the panel reads dirty, the record
+on disk is unchanged, Delete removes the selected block) and `workflow.edit.2` (the agent door
+runs set / add / a refused remove / a refused cycle over the same draft) ran red against the
+Act I build — 63/65, exit 1 (`out/v9-evidence/m182-product-red.log`) — and green after the
+renderer: 65/65, exit 0 (`m182-product-green.log`).
+
+Doors. Canvas: a drag on a diagram block (move), Delete on the selected block (remove); add,
+set, connect and disconnect by gesture are M183's library, inspector and port drag, and the
+`V9_DOORS` rows say so by name — until then the palette's text modes are their canvas-side
+door. Palette: six `workflow.*` rows over the selected workflow panel, each a text mode that
+runs the same plan line the agent door takes. Agent: `workflow-add/-move/-set/-remove/-edge/
+-unedge` through M180's door; `closure.v9.1` binds every row and line. Workflow: the M189
+omission. No golden changes: the workflow scene's panel is at rest with no block selected.
+
+### M182 — the critic's findings and what was done with each
+
+Thirteen findings from the fresh-context critic (the working tree against `50cf9f6`), by number:
+
+1. The binding's Update rewrote the record wholesale: pools became chats, unselected nodes
+   vanished. FIXED: `updateBoundTemplate` runs `moveNode` per bound panel and `configureNode`
+   only for a terminal or chat's captured fields, refuses a key the record lacks or two panels
+   on one key, and leaves unselected nodes alone; product `workflow.edit.3` proves the pool
+   node survives with its fields.
+2. A second Update was always stale (the rows were read at mount). FIXED: `reloadTemplates`
+   after every save; `workflow.edit.3` updates twice (revision 1, then 2) and then proves a
+   bumped record is refused as stale with the record kept.
+3. Update fired on an exact retyped name. FIXED: the text mode prefills the bound template's
+   name and its label says "Enter updates … (revision N); another name saves a copy".
+4. Update discarded a dirty diagram draft. FIXED: refused by name while the draft is dirty.
+5. `clearDraft` had no caller; a draft outlived a deleted template. FIXED: cleared at the
+   delete site, and `applyDraftOp` refuses when the record is gone. Spec amendment: a draft
+   outlives its PANEL (closing the diagram is not discarding an edit) until Save, reload or
+   the record's deletion; recorded here.
+6. `validateNode` accepted what `parseTemplates` drops (an empty list, prompt, target).
+   FIXED: the three rules mirrored; `workflow-add` still mints those kinds with empty fields
+   — DECLINED as a placeholder: an empty `list` is refused by `addNode` now, so the agent
+   door refuses `workflow-add … pool` until M183's library supplies a default the parser
+   accepts (recorded for M183).
+7. `w`/`h` missing from the field table. FIXED.
+8. Four `V9_DOORS` canvas strings were palette rows wearing a label. FIXED: an owed door is
+   `{ reason, due }` data and `closure.v9.1` accepts a gesture string or an owed object with
+   a due milestone — the debt a later check can retire (M183 retires these four).
+9. The Delete capture kept a stale selection and ignored `<select>`. FIXED: the selection
+   clears on deselect and when the key leaves the draft; `SELECT` ignored; the event is
+   stopped only when a remove happened.
+10. A deleted record with a stale expectation was resurrected. FIXED: `stale` with the reason
+    and no `current`.
+11. `REASON_NO_EDITOR` was false. FIXED: the draft-kept sentence naming M184.
+12. `nextNodeKey` trusted `nextKey` under a higher present key. FIXED: the larger of the two.
+13. Small: `fieldsOf` unread until M183 (kept — M183 is next and reads it); `args` cannot
+    carry a quoted argument through the text mode (DECLINED, recorded); the diagram
+    re-normalises to its minimum on release so moving the leftmost block shifts the others
+    (DECLINED here, recorded for M183 with the golden change it needs).
+
+After the fixes: typecheck 0; `verify:verbs` 22/22, `verify:layout` 245/245, `verify:palette`
+143/143; product part 66/66, exit 0 (`out/v9-evidence/m182-product-green-2.log`), with
+`workflow.edit.3` the Update round trip the plan promised. The chain reruns on this tree below.
+
+### M182 — the chain, green, and the verifier
+
+`npm run verify` on the fixed tree exited 0, 38 suites (`out/v9-evidence/m182-verify-chain-2.log`,
+`.exit`); the earlier chain on the pre-fix tree also exited 0 (`m182-verify-chain.log`). The
+fresh-context verifier confirmed typecheck 0, the six plain tallies, the red evidence, the
+green logs, all twelve FIXED dispositions by line, no weakened assertion, no golden change,
+no new channel. Its notes, answered: `workflow.edit.3` was written with the critic's fixes and
+was never seen red — it pins the round trip the plan promised, and this sentence is its
+record; the delegated red-evidence file's two premises (the spec "not in the worktree", the
+`nextKey` arm) are out of date after the fixes and are left as the writer wrote them, this
+line being the correction; `closure.v9.1` accepts any `M\d+` as an owed door's due and its
+title still says "a canvas gesture" — M183 retires the four owed doors and renames the title
+then; the `workflow` scene's intent prose still quoted M133's struck sentence — rewritten
+(prose in the manifest, no pixel). `feat(m182)` follows.
+
+## M183 — the library, the wire and the inspector
+
+Spec `docs/superpowers/specs/2026-09-08-m183-library-wiring-inspector.md`, plan
+`docs/superpowers/plans/2026-09-08-m183-library-wiring-inspector.md`.
+
+Decisions. The library is a TABLE (`shared/template-library.ts`): one entry per node kind
+with a glyph, a name, one sentence and an example; `defaultNodeOf` is the node `addNode`
+accepts (placeholders the parser keeps — an empty list, prompt or target is dropped at the
+next launch, so the defaults name a file the person replaces in the inspector; this retires
+M182's finding 6); `placementFor` is the keyboard Add's landing point, to the right of the
+rightmost block, never over one. The selection (a block key, or an edge as `from>to`) is a
+FACT of the draft store, so the panel, the inspector and the palette rows agree. The port is
+a dot on a block's right edge; a wire is a real pointer gesture committed on release as one
+`addEdge` with `exit`, the trigger changed in the inspector; a refusal is one sentence under
+the verbs for a moment. The inspector's node editor renders the selected block's fields from
+`fieldsOf(kind)` (the validator's own table) as real inputs that commit on Enter or blur
+through `applyDraftOp`; a refusal keeps the typed value and shows the reason beside the field.
+The SVG carries DROP ROOM (one block and a gap beyond the diagram's extent) so a drop or a
+wire past the last block lands inside it. The four owed canvas doors of M182 are retired to
+gesture strings.
+
+Red first. The pure checks were delegated (`docs/build-log/m183-pure-red-evidence.md`):
+`verify:layout` 245/247 exit 1 (`library.1–.2`), 247/247 after the module. The three
+real-renderer checks ran red against the M182 build — 66/69, exit 1
+(`out/v9-evidence/m183-product-red.log`) — and green after the renderer: 69/69, exit 0
+(`m183-product-green-7.log`, 99.0 s wall; the watchdog re-measured to 124 s).
+
+What the real renderer taught, each fixed at its cause and recorded: the SVG beside the
+library was a shrinkable flex item and collapsed to ~110 px, so every drop and wire mapped to
+its left edge (`flex: 0 0 auto`); the diagram was exactly its content's size, so a drop to
+the right of the rightmost block fell outside it (the drop room); a `gap: 2px` literal broke
+the scale rule (`--sp-1`); the inspector's inputs, unstyled, overflowed the 260 px pane
+(a block field the pane's width in its hairline material); and the context pane in the
+harness sits CLOSED just past a 1400-wide window's edge, so the check opens it through the
+top bar's own toggle before reading the fields — a hidden input can neither be hit nor
+focused, which was every "active: false" the probe showed.
+
+Doors. Canvas: the library drag and its Add control (`workflow-add`), the port drag
+(`workflow-edge`), Delete on a selected edge (`workflow-unedge`), the inspector's fields
+(`workflow-set`) — the four `V9_DOORS` rows now name these gestures and `closure.v9.1`'s
+title names the owed arm it still accepts. Palette and agent: M182's. Workflow: the M189
+omission. Scenes: `workflow-edit` (new) and `workflow` (ports and room at rest), sentences
+before the goldens below.
+
+Visual, M183. The first comparison (`out/v9-evidence/m183-visual-compare.log`) changed
+`workflow` (3.2 %: the ports and the drop room), `wide` (3.3 %: the panel is in that frame,
+and the scene after `workflow-edit` inherited its selection) and `workflow-edit` was
+MISSING — and the first `workflow-edit` capture had no node editor in it, because the shot
+harness keeps the context pane closed. The scene now opens the pane through the top bar's own
+toggle, selects the Detail tab, shoots, restores the tab it found (the active tab is a
+persisted setting — the second comparison, `-2.log`, showed four later scenes at 0.6–1 %
+with the inspector on Detail instead of Tools) and closes the pane, then deselects the block
+and the panel. Two harness lessons for the memory: a scene that touches a persisted setting
+puts it back, and a scene that selects deselects.
+
+### M183 — the critic's findings and what was done with each
+
+The fresh-context critic REFUSED the first `workflow` and `workflow-edit` captures and
+returned twenty-two findings. The refusal was right and its cause was a product defect, not a
+scene: a 180 px library column beside a 640 px panel left half the diagram past the frame's
+edge at rest, with two blocks cut mid-word. By number:
+
+1, 2. The library is now a DISCLOSURE (`Add node…` beside the tabs, closed at rest, the
+   diagram whole again), and the column scrolls in place when open rather than sharing the
+   diagram's scroll region.
+3. The entry glyph is gone: `KIND_GLYPH` has no `terminal` key and the code was substituting
+   the chat's mark for it — no glyph beats the wrong one.
+4. The pool default taught `{{item}}`, which nothing substitutes (`pool-caller.ts` appends
+   the item instead). FIXED: `work on the item below`.
+5. The wire preview lit a cycle as ALLOWED and the release refused it. FIXED: the preview
+   asks `edgeWouldCycle`, the same rule `addEdge` applies.
+6. The drop maths restated `DIAGRAM_PAD`, `BLOCK_W` and `BLOCK_H` as literals. FIXED.
+7. The node editor scraped the template id out of a display field. FIXED: `templateId` is a
+   typed member of the workflow inspector model.
+8. A refusal could be lost when the selection changed on blur. FIXED: the drafts and reasons
+   reset on the template only, and a keystroke clears its own field's reason.
+9. The labels were codes (`PRESETID`, `W`, `H`) and four inputs were empty boxes. FIXED: a
+   label map (folder, title, command, arguments, preset, first message, workers, list file,
+   prompt, target) and `w`/`h` dropped from the rendered set — the diagram's drag owns the
+   geometry; the agent verb keeps the fields.
+10. The `cwd` field showed a truncated `/private/var/folders/…`. FIXED as far as the path rule
+    allows an EDITABLE field: the whole value rides the input's `title`.
+11. `workflow.lib.1` asserted Add's presence, not its placement. FIXED.
+12. The selection outlived the panel. FIXED: cleared on unmount.
+13. Two screen→world conversions in one file. RECORDED as a follow-up (both correct today;
+    `beginBlockDrag`'s camera-scale division is the one M184 should fold into `toSvg`).
+14. Changing a trigger was unedge-then-re-add — two operations, one of which could refuse and
+    leave the edge gone. FIXED: `retriggerEdge`, one pure op in place.
+15. Debug scaffolding inside a check. FIXED: the probe is gone.
+16. The cycle reason carried `→`, which `icons.1` bans in renderer text and which now reaches
+    the screen. FIXED: `to`.
+17. Examples were English set in mono. FIXED: a command or a file name each.
+18. A press that never moved said "drop a node onto the diagram". FIXED: silent; only a real
+    drag landing off the diagram says anything.
+19. The node heading was the key (`TERMINAL · N1`). FIXED: the node's title when it has one.
+20. The refusal line pushed the diagram down and showed on the Runs tab. FIXED: inside the
+    definition pane.
+21. The watchdog rested on one sample. FIXED: two green runs (99.0 s, 98.7 s), 1.25× the
+    slower.
+22. `args` cannot carry an argument with a space. RECORDED as inherited from M182's text mode.
+
+The scene itself took four corrections, each a harness lesson: it presses the panel's header
+first (the pane names the SELECTED panel), then opens the library, THEN presses the block — a
+point computed before the disclosure shifts the diagram lands on the wrong block — and it
+puts the library, the context tab and the pane back afterwards. Product part 69/69 exit 0
+after every fix (`out/v9-evidence/m183-product-green-9.log`).
+
+### M183 — the critic's sentences, before the goldens
+
+`workflow-edit` (new): *The workflow panel as an editor at the wide breakpoint: `Add node…`
+open beside the tabs with the library column scrolling in place (Terminal, Chat, Pool
+visible, no glyph), a port on every block, `scan` selected with the accent stroke, and the
+context pane on Detail naming the node `TERMINAL · SCAN` over its own fields in words —
+FOLDER, TITLE, COMMAND, ARGUMENTS, PRESET, FIRST MESSAGE — with dx/dy/w/h gone and a Done
+verb.* Accepted.
+
+`workflow`: *The panel at rest with the library closed: the diagram is whole again, all four
+blocks and their full sublabels in frame, each carrying the port a wire starts from, and
+`Add node…` at the head of the tab row as the way in.* Accepted — "the resting state is now
+strictly better than the pre-M183 golden".
+
+`wide`: *The same panel inside the wide frame, library closed, diagram whole, ports at rest;
+the change is entirely inherited from `workflow`.* Accepted.
+
+Two further fixes were made after those sentences and before the goldens were written, both
+presentational and both the critic's: the disclosure is `aria-expanded` and set apart from
+the two tabs it neighbours (it read as a third tab), and the node editor is its own section
+with a hairline and a heading at the surface's weight, so the pane reads "this node" then
+"this panel". `UPDATE_GOLDENS=1 npm run verify:visual` then wrote `workflow`, `wide` and the
+new `workflow-edit`, 58/58 exit 0 (`out/v9-evidence/m183-visual-update.log`), and the written
+`workflow-edit` golden was read back.
+
+Four things the critic left open, recorded rather than fixed: with the library OPEN two
+sublabels are still clipped at this panel width and two of five kinds sit below the fold (the
+closed state is whole, which is the resting one); `beginBlockDrag` still divides by the camera
+scale where the library and wire use `toSvg` (both correct today — M184 folds them);
+`args` cannot carry an argument with a space (inherited from M182's text mode); and a
+full-width sublabel (`COLLECT - JOINS RESULTS`) sits flush with its block's right edge because
+SVG text does not clip — `sublabelOf`'s own comment already records the rule.
+
+### M183 — the verifier, and what its nine discrepancies cost
+
+The fresh-context verifier confirmed typecheck 0, all seven plain tallies, the red evidence,
+the golden set and their sentence order, every FIXED disposition by line, no weakened
+assertion, no dependency, no renamed alias, the channel pin. Its nine discrepancies, each
+answered rather than argued:
+
+1, 2. The green product log had no `.exit` file, and — the one that mattered — the product
+   part had NOT been re-run after the two presentational fixes made before the goldens. Both
+   answered by running it again on the current tree: 69/69, exit 0, 98.5 s wall
+   (`out/v9-evidence/m183-product-green-10.log`, `.exit`).
+3. Two of the five library examples were English set in mono. FIXED: the example is in the
+   UI face — a slot that mixes a command and a sentence is prose in mono either way.
+4. Finding 16's rationale overstated `icons.1` (which bans a symbol as a CONTROL's text).
+   Recorded: the fix stands on its own — a reason that reaches the screen reads as words.
+5. `template-library.ts` restates `BLOCK_W`/`BLOCK_H` because `shared/` may not import
+   `renderer/`. Recorded in the file, with the note that `library.2` reads both copies so a
+   drift goes red.
+6. A stale CSS comment still described the removed glyph. FIXED.
+7. The last debug residue in `workflow.inspect.1`. FIXED.
+8. The refusal still pushed the diagram down when it fired. FIXED: out of the flow, over the
+   pane's top-right corner.
+9. The chain it saw mid-run has since finished, exit 0.
+
+The visual suite then tripped its own 209 s watchdog on an update run: the workflow editor's
+scene made 58 scenes take 174.1 s and 176.4 s wall, so the ceiling is re-measured to 221 s
+(1.25× the slower, the M135 rule) with the M160 figures it replaces named beside it. The
+golden rewrite after the face fix compared EQUAL — the example's face change sits under both
+budgets — so the three goldens written above still describe the surface, and no fourth write
+was needed (`m183-visual-update-3.log`, 58/58, exit 0).
+
+### M183 — the chain, green
+
+Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m183-verify-chain-3.log`, `.exit`), every suite printing its tally:
+
+| Suite | Tally |
+|---|---|
+| `verify:onboarding` | 14/14 passed |
+| `verify:meta` | 38/38 passed |
+| `verify:styles` | 56/56 checks passed |
+| `verify:viewport` | 139/139 passed |
+| `verify:groups` | 6/6 passed |
+| `verify:merged` | 12/12 passed |
+| `verify:registry` | 38/38 passed |
+| `verify:layout` | 247/247 passed |
+| `verify:credentials` | 18/18 passed |
+| `verify:jira` | 15/15 passed |
+| `verify:github` | 7/7 passed |
+| `verify:palette` | 143/143 checks passed |
+| `verify:rail` | 194/194 passed |
+| `verify:review` | 98/98 passed |
+| `verify:subagent` | 27/27 passed |
+| `verify:file` | 85/85 passed |
+| `verify:toolbox` | 103/103 passed |
+| `verify:usage` | 26/26 passed |
+| `verify:machine-cost` | 7/7 passed |
+| `verify:tmux` | 35/35 passed |
+| `verify:agent-state` | 27/27 passed |
+| `verify:agent-session` | 141/141 passed |
+| `verify:verbs` | 22/22 passed |
+| `verify:teammates` | 25/25 passed |
+| `verify:electron` | 4/4 passed |
+| `verify:control` | 26/26 passed |
+| `verify:package` | 13/13 passed |
+| `verify:pty` | 10/10 passed |
+| `verify:pty-manager` | 63/63 passed |
+| `verify:window` | 4/4 passed |
+| `verify:ipc` | 1/1 passed |
+| `verify:canvas` | 6/6 passed |
+| `verify:xterm` | 11/11 passed |
+| `verify:panels:core` | 78/78 passed |
+| `verify:panels:shell` | 96/96 passed |
+| `verify:panels:kinds` | 49/49 passed |
+| `verify:panels:agents` | 80/80 passed |
+| `verify:panels:product` | 69/69 passed |
+
+## M184 — Save, Run and Stop on the diagram
+
+Spec `docs/superpowers/specs/2026-09-08-m184-save-run-stop.md`, plan
+`docs/superpowers/plans/2026-09-08-m184-save-run-stop.md`. This closes Act II: the diagram is
+an editor that can save what it edits, run what it shows, and say what a run did.
+
+Decisions. Save hands the store the revision the DRAFT WAS READ AT, so a record saved by
+anyone else in between is refused as stale with the draft kept and two verbs beside the
+reason — Reload (take the record) and Save a copy (a new id at revision 0, which is also a
+built-in's only save, M80's rule). Run runs the DRAFT when there is one: what the person sees
+is what starts. A run records `definition` — the template as it was at that instant, its
+revision, nodes and edges — and `mapping`, node key → the panel id the instantiation minted,
+filtered to the panels the run actually holds; both absent on every pre-M184 run, both
+dropped BY FIELD when malformed (a run is history and history is not dropped for a bad
+annotation), and the definition's nodes go through `parseTemplates`' own rules so a snapshot
+can never hold a shape the app cannot draw. `shared/run-outcome.ts` reads the entries through
+the mapping into one word per block — queued, working, finished, failed — and the diagram
+wears the selected run's words in the state vocabulary's tones. Because the words come from
+the SNAPSHOT, an edit after a run never moves them.
+
+Red first. The pure checks were delegated (`docs/build-log/m184-pure-red-evidence.md`):
+`verify:layout` 245/246 and `verify:viewport` 139/140, exit 1 each, red on `run.def.1` and
+`run.outcome.1`; 248/248 and 140/140 after the parser and the module. One correction to the
+delegated check, recorded as a fixture repair and not a weakening: its pool node in the run's
+definition carried no `width` and no `cwd`, which `parseWorkflowNode` refuses — the fixture
+was wrong, not the rule, and the assertion set is unchanged. The real-renderer check
+`workflow.save.1` ran red against the M183 build (69/70, exit 1,
+`out/v9-evidence/m184-product-red.log`) and green after: 70/70, exit 0, 99.9 s wall
+(`m184-product-green.log`).
+
+Doors. Canvas: Save (enabled while dirty, otherwise disabled with "nothing to save — the
+diagram matches the template"), Run and Stop on the panel, and a run row in the Runs tab that
+selects its outcome onto the diagram. Palette: `workflow.save`, `workflow.run`,
+`workflow.stop`. Agent: `workflow-save`, `workflow-run`, `workflow-stop` through M180's door
+(`workflow-run` got its own `runWorkflowNow` member — mapping it to the excluded
+`openWorkflow` would have put one member on both lists, which `closure.1` refuses). Workflow:
+the M189 omission. No golden changed: the outcome tones appear only while a run is selected,
+and the panel at rest is M183's.
+
+## Plan amendment — the remaining acts, consolidated
+
+Recorded 2026-09-08 ~13:00 UTC, about 8.5 hours into the resumed run with ~15.5 hours of the
+ceiling left. Four milestones (M180–M184, one of them Astra's start) have taken that time,
+and sixteen remain in the plan. The v9 plan says a row may be amended when the work proves it
+wrong, with the amendment recorded here; this is that record.
+
+What changes: the milestone BOUNDARIES, never the capabilities. Each act keeps its spec, its
+red-first checks, its critic and verifier, its build log and its ledger lines; what folds is
+the per-milestone overhead where two rows describe one seam. The authority's stop condition
+asks that every capability be shipped through the four doors OR struck with a reason — that
+rule is untouched, and the strikes are named below rather than discovered at the end.
+
+| Act | Now | Was |
+|---|---|---|
+| III | M185 — the preview panel: discovery from an owned port or a dev script, the reload watch, the device widths and the real screenshot | M185 + M186 |
+| IV | M186 — images and their app-owned assets (drop, paste, screenshot); M187 — sticky notes, free text and named frames | M187 + M188 |
+| V | M188 — the node schema registry and a bounded main-owned executor with HTTP, shell, transform and agent steps, each with an example and Test this node | M189 + M190 |
+| V | M189 — GitHub through the existing broker as a node kind; **struck**: Slack and email nodes, the loopback webhook and the cron trigger | M191 + M192 |
+| VI | M190 — the portable file: export with the redaction and the pixel rule, import as an inert workspace | M193 + M194 |
+| VII | M191 — the extension registry and the shipped example plugin with its guide | M195 + M196 |
+| VIII | M192 — the feedback door and `docs/getting-started.md`; M193 — the third UX audit over every golden; M194 — 5.0.0, the DMG, the release notes and this ledger closed | M197 + M198 + M199 + M200 |
+
+The strikes in Act V, each with its reason, so the final message does not have to discover
+them: **Slack and email nodes** need a workspace token, a sender domain and a real
+destination to prove anything, and the plan's own owed-work table already says a person must
+supply all three — shipping an unexercised adapter would be the "pretend it was checked"
+this run refuses. **The loopback webhook** needs an armed local listener whose lifetime
+crosses a relaunch, and **cron** needs real elapsed minutes and a sleep/wake to prove a
+missed run; both are hand checks by construction and neither is reachable inside the
+remaining clock. GitHub stays because its broker path, its audit and its approval already
+exist and are already exercised by fakes. Each strike is repeated in the final message.
+
+### M184 — the fresh-context critic and verifier, and what was done about it
+
+One agent ran both roles with no history of this session. It re-ran every pure suite and read
+the red and green logs: `typecheck` 0, `verify:layout` 248/248, `verify:viewport` 140/140,
+`verify:verbs` 22/22, `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, the
+red log one named failure with no throw and every check below it still executed, no golden
+touched, no dependency added, no alias renamed. It then criticised the milestone in fifteen
+ranked findings. Fourteen were fixed; the disposition of each is below, and the two the fix
+changed elsewhere carry the check that now pins them.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | `runWorkflowNow`'s adapter read `runWorkflow`'s answer backwards — `undefined` is SUCCESS there and a sentence is the refusal — so the agent door reported a refusal for every run that started and `ran` for every one that did not, with no check on it | Fixed (`usePaletteActions.ts`), and pinned by a new check, `workflow.door.1`, driven through `tc plan` against a template that is saved and bindable and cannot run — a name `buildPlan` cannot bind is refused before the adapter is reached and would pass whichever way round it read its answer |
+| 2 | The diagram drew the live draft's BLOCKS while wearing the selected run's WORDS, so a node deleted after a run vanished from that run's view and a node added rendered `queued` in a run that never held it | Fixed: `drawn` is the run's `definition` while a run is selected, the live template otherwise |
+| 3 | Stop read pool keys off the record, interrupted no chat at all and never looked at a run, so a workflow of three chats mid-turn answered `no pool is running` | Fixed: the subject is the selected run (every open run of the template when none is selected), its pools stopped and its chats interrupted, both counts named; the reason is now `nothing of this workflow is running` and the panel's own Stop goes through the same door (`onStopRun`) |
+| 4 | `Save a copy` dropped the draft with no rebind, so on a built-in's only save path the edits left the screen with no message and the copy holding them had no panel open on it | Fixed: the panel is rebound to the copy in one history entry before the draft is dropped, and the verb answers with the copy's name |
+| 5 | A run of a DIRTY draft recorded the record's revision, so two runs of two shapes both printed `revision 3` | Fixed: `-1` is the unsaved mark, kept by the parser (below `-1` is still malformed) and rendered `unsaved` |
+| 6 | `snapshotRef` was keyed by TEMPLATE id, so a run opened by panels of an earlier instantiation read the latest snapshot and the mapping filter then pruned the whole foreign mapping to `{}` — every block `queued` for work that ran | Fixed: the snapshot is stored per MINTED PANEL id beside `originRef`, on the same key, read from the same panel the template mark came from |
+| 7 | `skipped — …`, which `useHandoff` writes onto the target of a fork that did NOT fire, classified as `failed` — a node that never ran painted red, and the ordinary case for every `exit-ok`/`exit-fail` fork | Fixed: `skipped` and `stopped` are their own words with their own dim tone |
+| 8 | A sealed run showed a started-and-never-ended entry as `working` for ever | Fixed: on a run with `endedAt` that entry is `unknown`, rendered `no outcome` |
+| 9 | `workflow.save.1`'s `atRest` term was `false === false` — both branches of its ternary were `''`, so the spec's own sentence was asserted nowhere and the term passed in the red run too | Fixed: the check reads the verb's `title` AND the on-screen reason line, and asserts the sentence in both |
+| 10 | The Runs tab showed a revision only on the run already selected | Fixed: every row reads its own `definition.revision` |
+| 11 | `queued` conflated a key never instantiated, a key mapped into another run and a key waiting its turn | Fixed: a key with no mapping is `absent` (`not run`) on a dashed block |
+| 12 | The outcome word REPLACED the block's sublabel, so the run view was less legible about the shape than the rest view | Fixed: the sublabel stays and the word is right-aligned beside it |
+| 13 | `parseRuns` passed a throwaway array to `parseTemplates`, so a snapshot that silently lost a node reported nothing | Fixed: the template parser's own warnings are forwarded prefixed `run <id>: ` |
+| 14 | `mapping` survived a dropped definition and kept keys the definition does not hold | Fixed: dropped with the definition, pruned to the definition's keys with a warning |
+| 15 | Seven smaller things | Six fixed: the reversed-copy `find`, the hardcoded `--blue`/`--green`/`--red` (the block now stamps `data-tone` through `outcomeTone` and the wire's target/refusal rules moved after it so a drag still wins), the run selection pointing at nothing, the stale strip outliving its reason, a built-in's copy gated on `dirty`, and the missing copy door (a `workflow-copy` verb, a `Workflow: save a copy` palette row and its `V9_DOORS` entry). `STALE_VERBS` is now RENDERED in the strip rather than deleted |
+| 15b | `wants-you` is unreachable — nothing writes a pending question onto a run entry | DECLINED as a removal, recorded instead: the member stays with the reason in the module's own comment and in the check's name, because `RunEntry` gaining a pending question is a milestone away and a vocabulary with a hole in it is the thing that gets filled wrong |
+
+Evidence for the fixes: `verify:layout` 248/248 (`run.def.1` extended with the unsaved mark,
+the forwarded warning and the pruned mapping), `verify:viewport` 140/140 (`run.outcome.1`
+extended with `absent`, `skipped`, `stopped` and the open/sealed pair), `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `npm run typecheck` 0.
+`workflow.door.1` was watched failing against the pre-fix adapter — 70/71, that check the only
+failure (`out/v9-evidence/m184b-door-red.log`, exit 1) — and passes with it
+(`m184b-product.log`, 71/71, exit 0, 101.5 s wall against a 124 s watchdog).
+
+### Act II — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after M184 exited 1 at 54/59. Five scenes changed; each was looked at
+(fresh and diff, `out/visual/`) before a golden was written, and each changed for the same two
+product reasons: the M183 line that promised saving "arrives with M184" is gone because it has
+arrived, and Stop's disabled reason names the workflow rather than the pool because the
+workflow — its chats included — is what Stop now acts on.
+
+- **workflow** — The resting panel drops one disabled sentence and renames another, so Save now
+  says only that the diagram matches the template and Stop says nothing of this workflow is
+  running; the diagram rises by that one line (16 px) and nothing else on the page moves.
+- **workflow-edit** — The same two lines, in the maximised editor: the library column and the
+  diagram both rise one line together, so the pointer mapping the scene exists to show is
+  unchanged, and the library, the inspector and the rail are untouched.
+- **wide** — The same panel at the wide breakpoint with the context pane resident, the same
+  one-line rise; the pane's own fields do not move, which is the point of keeping this scene.
+- **palette-query** — The canvas section gained M184's copy door (`Workflow: save a copy`), so
+  the scrolled list moves by exactly one row: the panels row leaves the top of the window and
+  `Workflow: run` comes into view above `Clear scrollback logs`. No row changed its words.
+- **starter** — The workflow example wears the same two changes, and a built-in's `Save a copy`
+  is now a live verb rather than a greyed one — it is the only save a built-in has, and gating
+  it on an edit made the primary path unreachable from the example a beginner is looking at.

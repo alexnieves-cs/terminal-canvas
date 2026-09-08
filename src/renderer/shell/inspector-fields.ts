@@ -75,6 +75,8 @@ export interface InspectorModel {
   /** The COLLAPSED honest chain — the one answer the header and rail show. */
   heading: string
   fields: InspectorField[]
+  /** M183. The workflow panel's template id, for the node editor. Absent on every other kind. */
+  templateId?: string
   reattached: boolean
   restartable: boolean
   /** M92. The three layout facts, present only when one is set — the pane's toggles read them. */
@@ -765,7 +767,10 @@ export function buildInspectorModelBare(
   // IS the template's id — the one field, and the same reason the panel
   // record carries nothing else.
   if (isWorkflowPanel(panel)) {
-    return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }] }
+    // M183. The id is a typed MEMBER, never scraped out of a display field: the
+    // node editor reads it, and a field made honest (a name) would silently
+    // stop rendering the editor (the critic).
+    return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, templateId: panel.workflow.templateId, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }] }
   }
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows

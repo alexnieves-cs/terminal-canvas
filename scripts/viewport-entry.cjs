@@ -38,5 +38,7 @@ module.exports = {
   /* M181. STARTER_OBJECTS is pure geometry (rects relative to the agent's).
      Required inside a try so this bundle still builds before the module
      exists and starter.plan.1 fails by name instead of aborting the suite. */
-  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })()),
+  /* M184. The run's outcome per block, pure over the run's own record. */
+  ...((() => { try { return require('../src/shared/run-outcome.ts') } catch { return {} } })())
 }

@@ -1265,6 +1265,23 @@ body {
 .inspector__fields { margin: 0; }
 
 .inspector__field { margin-bottom: var(--sp-4); }
+/* M183. THE NODE EDITOR's fields: a block input the pane's width (an inline
+   one overflowed the 260 px column off the window's edge), the pane's
+   hairline material, the accent on focus; a refusal is one small sentence
+   under its field in the state tone. */
+.inspector__input { display: block; width: 100%; box-sizing: border-box; margin-top: var(--sp-1); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
+.inspector__input:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 3px var(--iris-dim); }
+.inspector__input.inspector__value--mono { font-family: var(--font-mono); }
+.inspector__reason { color: var(--red); margin-top: var(--sp-1); }
+/* M183. The node editor is ITS OWN section, not another run of fields: the
+   heading carries the node's identity at the surface's weight and a hairline
+   closes it, so the pane reads "this node" then "this panel". */
+.inspector__section--node { border-bottom: 1px solid var(--border); padding-bottom: var(--sp-4); }
+.inspector__section-heading--node { color: var(--fg); font-size: var(--t-sm); font-weight: 600; letter-spacing: var(--track-tight); text-transform: none; }
+/* The disclosure is not a third tab: it sits apart from the two it neighbours. */
+.workflow-node__library-toggle { margin-right: var(--sp-3); }
+[data-inspector-node] .inspector__field { display: block; }
+[data-inspector-node-deselect] { margin-top: var(--sp-2); }
 
 .inspector__label {
   color: var(--fg-3);
@@ -4197,7 +4214,46 @@ body {
 .workflow-node__tabs { display: flex; align-items: center; gap: var(--sp-1); border-bottom: 1px solid var(--line); }
 .workflow-node__tab[aria-selected="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--iris); }
 .workflow-node__pane { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.workflow-node__diagram { display: block; max-width: none; }
+.workflow-node__diagram { display: block; max-width: none; flex: 0 0 auto; } /* M183. Never a shrinkable flex item beside the library: it collapsed to ~110 px and every drop landed at its left edge. */
+/* M183. THE LIBRARY beside the diagram: a quiet column of entries in the UI
+   face (a name, one sentence, an example), each with its Add control; the diagram takes the rest. A port is a small accent dot on the
+   block's right edge; the wire preview is the accent line; a refusal is one
+   sentence under the verbs, the M133 idiom. */
+.workflow-node__editor { display: flex; gap: var(--sp-3); min-height: 0; align-items: flex-start; }
+.workflow-node__library { flex: 0 0 168px; align-self: stretch; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.workflow-node__entry { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); cursor: grab; font-family: var(--font-ui); }
+.workflow-node__entry-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.workflow-node__entry-name { font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.workflow-node__entry-sentence { font-size: var(--t-xs); color: var(--fg-3); line-height: var(--lh-body); }
+.workflow-node__entry-example { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); } /* M183 (the verifier): the UI FACE — two of the five examples are English, and a mixed slot set in mono is prose in mono. */
+.workflow-node__port { fill: var(--iris); stroke: var(--s-1); stroke-width: 1.5; cursor: crosshair; }
+.workflow-node__wire { stroke: var(--iris); stroke-width: 2; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
+.workflow-node__ghost { fill: var(--iris-dim); stroke: var(--iris); stroke-dasharray: 4 3; pointer-events: none; }
+/* M184. A selected run's outcome on the diagram, in the state vocabulary's own
+   tones — the block wears its panel's word, drawn from the run's SNAPSHOT so a
+   later edit of the template never moves a finished run's colours.
+   M184 (the critic, 15c). The tone comes from `data-tone` and the ONE tone
+   block above (`outcomeTone` stamps it); binding --blue/--green/--red here
+   made this the one surface a new state would not reach. It sits BEFORE the
+   wire's target/refusal rules so a drag's own signal still wins at equal
+   specificity while a run is selected. */
+.workflow-node__blockg[data-workflow-outcome] .workflow-node__block { stroke: var(--tone); }
+.workflow-node__blockg[data-workflow-outcome="queued"] .workflow-node__block,
+.workflow-node__blockg[data-workflow-outcome="absent"] .workflow-node__block { stroke-dasharray: 4 3; }
+.workflow-node__block-outcome { fill: var(--tone); font-family: var(--font-ui); font-size: var(--t-xs); }
+.workflow-node__blockg--target .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
+.workflow-node__blockg--refused .workflow-node__block { stroke: var(--red); stroke-width: 2; }
+.workflow-node__run { cursor: pointer; }
+.workflow-node__run--selected { outline: 1px solid var(--iris); outline-offset: 2px; border-radius: var(--r-sm); }
+.workflow-node__stale { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: var(--sp-2) 0; }
+.workflow-node__edgeg { cursor: pointer; }
+.workflow-node__edgeg--selected .workflow-node__line { stroke: var(--iris); stroke-width: 2.5; }
+/* Out of the FLOW: a sentence that shows for four seconds must not push the diagram down under the reader's pointer (the M183 verifier). */
+.workflow-node__editor { position: relative; }
+.workflow-node__refusal { position: absolute; top: 0; right: 0; z-index: 1; max-width: 60%; margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--s-1); color: var(--red); font-family: var(--font-ui); font-size: var(--t-xs); }
+/* M182. A block is a handle: grab, and the selected one carries the accent stroke (one selection treatment, the brief). */
+.workflow-node__blockg { cursor: grab; }
+.workflow-node__blockg--selected .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
 .workflow-node__block { fill: var(--s-2); stroke: var(--line-strong); stroke-width: 1; }
 .workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
 .workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: 0.04em; }

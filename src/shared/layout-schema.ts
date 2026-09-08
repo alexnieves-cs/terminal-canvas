@@ -86,6 +86,8 @@ export interface PersistedPanelBase {
   pinned?: true
   /** M92. Filling the viewport, with the rect to restore. */
   maximised?: { restore: { x: number; y: number; w: number; h: number } }
+  /** M182. The template node this panel was minted from (`instantiateTemplate`); the canvas binding's edit route. Absent unless minted so. */
+  templateBinding?: { templateId: string; key: string }
   /**
    * M130. The skill trail's lane, folded away. The ONE stored fact about the
    * trail — the entries themselves are re-derived from the transcript on
@@ -891,6 +893,10 @@ function parsePanel(
     ...(parseFlag(raw.locked, 'locked', id, warnings) ? { locked: true as const } : {}),
     ...(parseFlag(raw.pinned, 'pinned', id, warnings) ? { pinned: true as const } : {}),
     ...(parseMaximised(raw.maximised, id, warnings)),
+    // M182. The canvas binding: which template's node this panel was minted
+    // from. Absent stays absent; a malformed one costs the FIELD by name,
+    // never the panel — a binding names an edit route, not the panel's life.
+    ...(parseTemplateBinding(raw.templateBinding, id, warnings)),
     // M130. Absent stays absent; the one word round-trips; anything else
     // warns by id and costs the FIELD, never the panel.
     ...(raw.skillTrail === undefined
@@ -1547,6 +1553,17 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       })
     }
     if (nodes.length === 0) { warnings.push(`dropped template ${entry.id}: it had no usable node`); return }
+    // M182. Two counters, each absent on a pre-M182 record and NEVER normalised
+    // in: a written `revision: 0` would claim a save that never happened. A
+    // present value that is not a whole number ≥ 0 drops the template by name.
+    const counter = (name: 'revision' | 'nextKey'): { ok: boolean; value?: number } => {
+      const v = entry[name]
+      if (v === undefined) return { ok: true }
+      if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) return { ok: false }
+      return { ok: true, value: v }
+    }
+    const revision = counter('revision'), nextKey = counter('nextKey')
+    if (!revision.ok || !nextKey.ok) { warnings.push(`dropped template ${entry.id}: ${!revision.ok ? 'revision' : 'nextKey'} was not a whole number`); return }
     const keys = new Set(nodes.map((n) => n.key))
     const edges: TemplateEdge[] = []
     if (Array.isArray(entry.edges)) for (const e of entry.edges) {
@@ -1559,7 +1576,7 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       edges.push({ from: e.from, to: e.to, trigger: e.trigger as HandoffTrigger })
     }
     seen.add(entry.id)
-    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges })
+    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges, ...(revision.value === undefined ? {} : { revision: revision.value }), ...(nextKey.value === undefined ? {} : { nextKey: nextKey.value }) })
   })
   return out.slice(0, TEMPLATES_MAX)
 }
@@ -1763,7 +1780,56 @@ function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string
     // tab's "unattributed" arm read as truth about the run rather than the file.
     const templateId = isStr(entry.templateId) && entry.templateId.trim() !== '' ? entry.templateId : undefined
     if (entry.templateId !== undefined && templateId === undefined) warnings.push(`run ${entry.id}: templateId was not a string — the run is kept, its workflow mark dropped`)
-    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }) })
+    // M184. THE RUN'S SNAPSHOT. Both fields absent on every pre-M184 run and
+    // never normalised in; a malformed one costs the FIELD by name, never the
+    // run — a run is history, and history is not dropped for a bad annotation.
+    // The definition's nodes and edges go through the TEMPLATE parser's own
+    // rules (a node it would drop is dropped here, its edges with it), so the
+    // snapshot can never hold a shape the app could not draw.
+    let definition: PersistedRun['definition']
+    if (entry.definition !== undefined) {
+      const d = entry.definition as Record<string, unknown>
+      const rev = isRecord(d) ? d.revision : undefined
+      // `-1` is the UNSAVED mark (M184's critic, finding 5): a run of a dirty
+      // draft ran a shape no record holds, and claiming the record's revision
+      // would print one number over two different shapes. Anything below it
+      // is malformed.
+      if (!isRecord(d) || !isStr(d.templateId) || d.templateId.trim() === '' || typeof rev !== 'number' || !Number.isInteger(rev) || rev < -1 || !Array.isArray(d.nodes) || !Array.isArray(d.edges)) {
+        warnings.push(`run ${entry.id}: definition was not { templateId, revision, nodes[], edges[] } — the run is kept, its snapshot dropped`)
+      } else {
+        // M184 (the critic, 13). The template parser's own warnings are
+        // FORWARDED rather than thrown away: a snapshot that silently lost a
+        // node while the load report said nothing is the exact asymmetry the
+        // absent/malformed/unknown rule exists to prevent.
+        const inner: string[] = []
+        const parsed = parseTemplates([{ id: d.templateId, name: 'snapshot', nodes: d.nodes, edges: d.edges }], inner)
+        for (const w of inner) warnings.push(`run ${entry.id}: ${w}`)
+        const one = parsed[0]
+        if (one === undefined) warnings.push(`run ${entry.id}: definition held no usable node — the run is kept, its snapshot dropped`)
+        else definition = { templateId: d.templateId, revision: rev, nodes: one.nodes, edges: one.edges }
+      }
+    }
+    let mapping: Record<string, string> | undefined
+    if (entry.mapping !== undefined) {
+      if (!isRecord(entry.mapping)) warnings.push(`run ${entry.id}: mapping was not an object — the run is kept, its mapping dropped`)
+      else {
+        const out: Record<string, string> = {}
+        for (const [k, v] of Object.entries(entry.mapping)) if (isStr(v)) out[k] = v
+        mapping = out
+      }
+    }
+    // M184 (the critic, 14). The mapping is the DEFINITION's index and cannot
+    // outlive it: a mapping kept beside a dropped snapshot names keys nothing
+    // will ever look up, and a key the definition does not hold is a block
+    // this run could light that its own shape never had.
+    if (definition === undefined) mapping = undefined
+    else if (mapping !== undefined) {
+      const keys = new Set(definition.nodes.map((n) => n.key))
+      const pruned = Object.fromEntries(Object.entries(mapping).filter(([k]) => keys.has(k)))
+      if (Object.keys(pruned).length !== Object.keys(mapping).length) warnings.push(`run ${entry.id}: mapping named keys the snapshot does not hold — those entries were dropped`)
+      mapping = pruned
+    }
+    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }), ...(definition === undefined ? {} : { definition }), ...(mapping === undefined ? {} : { mapping }) })
   })
   return runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, RUNS_MAX)
 }
@@ -2068,6 +2134,16 @@ function parseFlag(value: unknown, name: string, id: string, warnings: string[])
   if (value === true) return true
   warnings.push(`dropped panel ${id}'s ${name}: ${JSON.stringify(value)} is not true or false`)
   return false
+}
+
+/** M182. `{ templateId, key }`, both non-empty strings; anything else present warns by id and costs the field. */
+function parseTemplateBinding(value: unknown, id: string, warnings: string[]): { templateBinding?: { templateId: string; key: string } } {
+  if (value === undefined) return {}
+  if (isRecord(value) && isStr(value.templateId) && value.templateId.trim() !== '' && isStr(value.key) && value.key.trim() !== '') {
+    return { templateBinding: { templateId: value.templateId, key: value.key } }
+  }
+  warnings.push(`dropped panel ${id}'s templateBinding: it was not { templateId, key }`)
+  return {}
 }
 
 function parseMaximised(value: unknown, id: string, warnings: string[]): { maximised?: { restore: { x: number; y: number; w: number; h: number } } } {

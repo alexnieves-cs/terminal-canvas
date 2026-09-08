@@ -358,9 +358,11 @@ const FACTS = {
       const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
       const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
       const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
-      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: typeof d?.canvas === 'string' && d.canvas.length > 0, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === 'M189' }
+      // A canvas door is a gesture STRING, or an OWED object naming a later milestone — the debt as data (the M182 critic); never an empty label.
+      const canvasDoor = typeof d?.canvas === 'string' ? d.canvas.length > 0 : typeof d?.canvas?.reason === 'string' && /^M\d+$/.test(String(d.canvas.due))
+      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === 'M189' }
     })
-    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture and an owned workflow omission',
+    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and an owned workflow omission',
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
   }
 

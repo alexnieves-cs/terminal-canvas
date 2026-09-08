@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 104000 // measured 2026-09-08 alone in the Electron tier after the M180/M181 checks (onboarding.*, starter.1, image.1), GREEN runs only: 82.1s, 82.3s, 82.4s, 82.9s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 124000 // measured 2026-09-08 alone in the Electron tier after the M180–M183 checks (onboarding.*, starter.1, image.1, workflow.edit.1–.3, workflow.lib.1, workflow.wire.1, workflow.inspect.1), two green runs: 99.0s, 98.7s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -245,6 +245,365 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     } catch (error) {
       ok(id, false, String(error && error.message || error))
     } finally {
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M182 — workflow.edit.1. THE DIAGRAM IS AN EDITOR: a real drag on a block
+    // moves the DRAFT (the diagram follows, the panel says dirty) and the
+    // saved record is untouched until Save (M184); Delete on the selected
+    // block removes it from the draft, the record still whole on disk.
+    const id = 'workflow.edit.1 a real drag on a diagram block moves the draft — the block follows, the panel reads dirty, the saved record is unchanged — and Delete removes the selected block from the draft only'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-edit-1'
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'edit me', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }, { key: 'n2', kind: 'chat', cwd: '/tmp', dx: 300, dy: 0 }
+      ], edges: [{ from: 'n1', to: 'n2', trigger: 'exit' }] })
+      layoutStore.save({ panels: [{ id: 'wfe', kind: 'workflow', x: 40, y: 40, w: 640, h: 460, z: 1, title: 'edit me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore(); await reload()
+      // Screen for the drag's start; SVG units (the rect's own x/y) for the
+      // comparison — the diagram rescales when its extent grows (M183's library
+      // sits beside it), so a screen delta is not the authored one.
+      const rectOf = (key) => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="${key}"] rect'); if (!g) return null; const r = g.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height, ax: Number(g.getAttribute('x')), ay: Number(g.getAttribute('y')) } })()`)
+      const before = await waitUntil(() => rectOf('n2'), 4000)
+      const drag = async (from, dx, dy) => {
+        const x = Math.round(from.x + from.w / 2), y = Math.round(from.y + from.h / 2)
+        wc.focus()
+        wc.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 }); await settle()
+        for (let i = 1; i <= 4; i++) { wc.sendInputEvent({ type: 'mouseMove', x: x + Math.round(dx * i / 4), y: y + Math.round(dy * i / 4), button: 'left', buttons: 1 }); await settle() }
+        wc.sendInputEvent({ type: 'mouseUp', x: x + dx, y: y + dy, button: 'left', clickCount: 1 }); await settle()
+      }
+      if (before) await drag(before, 80, 60)
+      const after = await rectOf('n2')
+      const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfe"]')?.getAttribute('data-workflow-dirty')`)
+      flushLayoutStore()
+      const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
+      const diskN2 = onDisk && onDisk.nodes.find((n) => n.key === 'n2')
+      // Delete on the selected block: the drag selected it; Delete removes it from the draft.
+      const selected = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfe"]')?.getAttribute('data-workflow-selected')`)
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Delete' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Delete' }); await settle()
+      const gone = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') === null && document.querySelector('[data-workflow-block="n1"]') !== null && document.querySelectorAll('[data-workflow-edge]').length === 0`)
+      const wholeOnDisk = layoutStore.current().templates.find((t) => t.id === TPL)
+      ok(id, before && after && after.ax > before.ax + 40 && after.ay > before.ay + 30 && dirty === 'true' &&
+        diskN2 && diskN2.dx === 300 && selected === 'n2' && gone === true && wholeOnDisk && wholeOnDisk.nodes.length === 2 && wholeOnDisk.edges.length === 1,
+      JSON.stringify({ before, after, dirty, diskN2, selected, gone, diskNodes: wholeOnDisk && wholeOnDisk.nodes.length }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M182 — workflow.edit.2. THE AGENT DOOR edits the same draft through the
+    // same operations: `workflow-set` renames a node's title, `workflow-add`
+    // mints a node with a fresh key, `workflow-remove` of a missing key is
+    // refused by name, `workflow-edge` closing a cycle is refused with the word.
+    const id = 'workflow.edit.2 the agent door edits the draft through the shared operations — set, add, a refused remove, a refused cycle — and the diagram shows the result'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-edit-2'
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'agent edits', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }, { key: 'n2', kind: 'chat', cwd: '/tmp', dx: 300, dy: 0 }
+      ], edges: [{ from: 'n1', to: 'n2', trigger: 'exit' }] })
+      layoutStore.save({ panels: [{ id: 'wfa', kind: 'workflow', x: 40, y: 40, w: 640, h: 460, z: 1, title: 'agent edits', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') !== null`), 4000)
+      const plan = (line) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, 3000)
+      const set = await plan(`workflow-set ${TPL} n2 title renamed`)
+      const add = await plan(`workflow-add ${TPL} terminal`)
+      const removeMissing = await plan(`workflow-remove ${TPL} n9`)
+      const cycle = await plan(`workflow-edge ${TPL} n2 n1 exit`)
+      await settle()
+      const blocks = await wc.executeJavaScript(`[...document.querySelectorAll('[data-workflow-block]')].map((g) => g.getAttribute('data-workflow-block')).sort().join(',')`)
+      const label = await wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"] .workflow-node__block-label')?.textContent`)
+      const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfa"]')?.getAttribute('data-workflow-dirty')`)
+      ok(id, set?.kind === 'ran' && add?.kind === 'ran' && removeMissing?.kind === 'refused' && /n9/.test(removeMissing.reason) &&
+        cycle?.kind === 'refused' && /cycle/.test(cycle.reason) && blocks === 'n1,n2,n3' && label === 'renamed' && dirty === 'true',
+      JSON.stringify({ set, add, removeMissing, cycle, blocks, label, dirty }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M182 — workflow.edit.3. THE CANVAS BINDING'S UPDATE round trip: two
+    // terminal panels bound to a template's nodes, moved apart on the canvas,
+    // saved back through the one member — the SAME id at revision + 1, the
+    // pool node the selection never held kept with its fields; a second
+    // Update expects the reloaded revision and succeeds; an expectation that
+    // is stale (the record bumped underneath) is refused with the record kept.
+    const id = 'workflow.edit.3 Update over bound panels saves the same record at revision + 1 through the operations, keeps the unselected pool node, succeeds again after the reload, and a stale expectation is refused'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-bound-3'
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'bound shape', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: -100, dy: 0 }, { key: 'n2', kind: 'terminal', cwd: '/tmp', dx: 100, dy: 0 },
+        { key: 'n3', kind: 'pool', width: 3, list: '/tmp/items.txt', prompt: 'work', cwd: '/tmp', dx: 0, dy: 200 }
+      ], edges: [{ from: 'n1', to: 'n2', trigger: 'exit' }] })
+      layoutStore.save({ panels: [
+        { id: 'b1', x: 100, y: 100, w: 300, h: 200, z: 1, cwd: '/tmp', command: '/bin/sh', args: [], title: 'left', templateBinding: { templateId: TPL, key: 'n1' } },
+        { id: 'b2', x: 900, y: 100, w: 300, h: 200, z: 2, cwd: '/tmp', command: '/bin/sh', args: [], title: 'right', templateBinding: { templateId: TPL, key: 'n2' } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id="b1"], .panel[data-panel-id="b2"]').length === 2`), 4000)
+      const first = await wc.executeJavaScript(`window.__m182Update(['b1', 'b2'])`)
+      flushLayoutStore()
+      const afterFirst = layoutStore.current().templates.find((t) => t.id === TPL)
+      const n1 = afterFirst && afterFirst.nodes.find((n) => n.key === 'n1'), n2 = afterFirst && afterFirst.nodes.find((n) => n.key === 'n2'), n3 = afterFirst && afterFirst.nodes.find((n) => n.key === 'n3')
+      await settle()
+      const second = await wc.executeJavaScript(`window.__m182Update(['b1', 'b2'])`)
+      flushLayoutStore()
+      const afterSecond = layoutStore.current().templates.find((t) => t.id === TPL)
+      // Bump the record underneath the renderer's rows: the next Update is stale.
+      layoutStore.saveTemplate({ ...afterSecond, name: 'bound shape' })
+      const stale = await wc.executeJavaScript(`window.__m182Update(['b1', 'b2'])`)
+      flushLayoutStore()
+      const afterStale = layoutStore.current().templates.find((t) => t.id === TPL)
+      ok(id, first && first.kind === 'ran' && afterFirst && afterFirst.revision === 1 && afterFirst.nodes.length === 3 && afterFirst.edges.length === 1 &&
+        n1 && n2 && n2.dx - n1.dx === 800 && n1.title === 'left' && n2.title === 'right' && n3 && n3.kind === 'pool' && n3.width === 3 && n3.list === '/tmp/items.txt' &&
+        second && second.kind === 'ran' && afterSecond && afterSecond.revision === 2 &&
+        stale && stale.kind === 'refused' && /revision/.test(stale.reason) && afterStale && afterStale.revision === 3,
+      JSON.stringify({ first, revision1: afterFirst && afterFirst.revision, n1, n2, n3, second, revision2: afterSecond && afterSecond.revision, stale, revision3: afterStale && afterStale.revision }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M183 — workflow.lib.1 / workflow.wire.1 / workflow.inspect.1. THE THREE
+    // GESTURES: a real drag from the library to the diagram adds a block at
+    // the drop point and the Add control adds one at the placement point; a
+    // real drag from a block's port to another block wires an edge, and a
+    // second drag that would close a cycle shows the refusal and adds nothing;
+    // selecting a block shows its fields in the inspector, editing `title`
+    // renames the block, and a bad `width` keeps the value with the reason.
+    const ids = ['workflow.lib.1 a real drag from the library adds a block at the drop point and Add adds one at the placement point — both in the draft only', 'workflow.wire.1 a real port drag wires an edge with the default trigger; a drag that would close a cycle shows the refusal by name and adds nothing', 'workflow.inspect.1 selecting a block shows its kind\'s fields in the inspector; Enter on title renames the block; a bad width keeps the typed value and shows the reason']
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-lib-1'
+    const centreOf = async (selector) => wc.executeJavaScript(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), w: r.width, h: r.height } })()`)
+    const dragTo = async (from, to) => {
+      wc.focus()
+      wc.sendInputEvent({ type: 'mouseDown', x: from.x, y: from.y, button: 'left', clickCount: 1 }); await settle()
+      for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(from.x + (to.x - from.x) * i / 5), y: Math.round(from.y + (to.y - from.y) * i / 5), button: 'left', buttons: 1 }); await settle() }
+      wc.sendInputEvent({ type: 'mouseUp', x: to.x, y: to.y, button: 'left', clickCount: 1 }); await settle()
+    }
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'library shape', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }, { key: 'n2', kind: 'pool', width: 2, list: '/tmp/l.txt', prompt: 'p', cwd: '/tmp', dx: 0, dy: 160 }
+      ], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfl', kind: 'workflow', x: 40, y: 40, w: 760, h: 560, z: 1, title: 'library shape', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfl', focusedId: 'wfl' })
+      flushLayoutStore(); await reload()
+      // M183. The library is a disclosure: open it the way a person does.
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-library-toggle]') !== null && document.querySelector('[data-workflow-block="n1"]') !== null`), 4000)
+      await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-library-toggle]'); if (t && t.getAttribute('aria-pressed') !== 'true') t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="chat"]') !== null`), 3000)
+      // lib.1: drag the chat entry onto the diagram, well right of the blocks.
+      const entry = await centreOf('[data-workflow-library-kind="chat"]')
+      // The drop point: to the right of n1's block, inside the SVG's drop room.
+      const n1Before = await centreOf('[data-workflow-block="n1"] rect')
+      const svgBox = n1Before ? { x: Math.round(n1Before.x + n1Before.w / 2 + 150), y: Math.round(n1Before.y) } : null
+      if (entry && svgBox) await dragTo(entry, svgBox)
+      const afterDrop = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n3"]'); if (!g) return false; const r = g.querySelector('rect').getBoundingClientRect(); return { x: r.left, y: r.top, kind: g.getAttribute('data-workflow-block-kind') } })()`), 3000)
+      const n1Box = await centreOf('[data-workflow-block="n1"] rect')
+      // Add through the keyboard-reachable control on the terminal entry.
+      await wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="terminal"] [data-workflow-library-add]').click(); true`)
+      // The placement, not just the presence: a regression to dx 0 would stack the new block on an existing one, which is what placementFor exists to prevent.
+      const added = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n4"] rect'); if (!g) return false; const others = [...document.querySelectorAll('[data-workflow-block] rect')].filter((r) => r !== g).map((r) => Number(r.getAttribute('x')) + Number(r.getAttribute('width'))); return { ax: Number(g.getAttribute('x')), rightmost: Math.max(...others) } })()`), 3000)
+      const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfl"]')?.getAttribute('data-workflow-dirty')`)
+      flushLayoutStore()
+      const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
+      ok(ids[0], afterDrop && afterDrop.kind === 'chat' && n1Box && afterDrop.x > n1Box.x + 100 && added && added.ax >= added.rightmost && dirty === 'true' && onDisk && onDisk.nodes.length === 2,
+        JSON.stringify({ entry, svgBox, afterDrop, n1Box, added, dirty, diskNodes: onDisk && onDisk.nodes.length }))
+      // wire.1: port of n1 → block n2 wires n1 → n2; then n2's port → n1 would close a cycle.
+      const port1 = await centreOf('[data-workflow-block="n1"] [data-workflow-port]')
+      const block2 = await centreOf('[data-workflow-block="n2"] rect')
+      if (port1 && block2) await dragTo(port1, block2)
+      const wired = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"]') !== null`), 3000)
+      const edgeWord = await wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"] .workflow-node__edge-word')?.textContent`)
+      const port2 = await centreOf('[data-workflow-block="n2"] [data-workflow-port]')
+      const block1 = await centreOf('[data-workflow-block="n1"] rect')
+      if (port2 && block1) await dragTo(port2, block1)
+      const refusal = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-refusal]')?.textContent || false`), 3000)
+      const edgesNow = await wc.executeJavaScript(`document.querySelectorAll('[data-workflow-edge]').length`)
+      ok(ids[1], wired === true && typeof edgeWord === 'string' && edgeWord.length > 0 && typeof refusal === 'string' && /cycle/.test(refusal) && edgesNow === 1,
+        JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow }))
+      // inspect.1: click n2 (the pool) → the inspector shows its fields; rename via title? a pool has no title — use n1 (terminal): click it, edit title.
+      // The context pane may be CLOSED here (it sits just past the window's right edge then): open it through the top bar's own toggle, the way a person does.
+      await wc.executeJavaScript(`(() => { const t = document.querySelector('.shell__inspector-toggle'); if (t && t.getAttribute('aria-pressed') !== 'true') { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return true })()`); await settle()
+      // The node editor lives in the Detail tab; the pane may be resting on another (M180's runs left it on Tools).
+      await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="detail"]'); if (t) { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return true })()`); await settle()
+      const b1 = await centreOf('[data-workflow-block="n1"] rect')
+      wc.sendInputEvent({ type: 'mouseDown', x: b1.x, y: b1.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: b1.x, y: b1.y, button: 'left', clickCount: 1 }); await settle()
+      let journeyNote = null
+      const fields = await waitUntil(() => wc.executeJavaScript(`(() => { const f = [...document.querySelectorAll('[data-inspector-node-field]')].map((n) => n.getAttribute('data-inspector-node-field')); return f.length > 0 ? f : false })()`), 3000)
+      const titleInput = await centreOf('input[data-inspector-node-field="title"]')
+      if (titleInput) {
+        wc.sendInputEvent({ type: 'mouseDown', x: titleInput.x, y: titleInput.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: titleInput.x, y: titleInput.y, button: 'left', clickCount: 1 }); await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.activeElement === document.querySelector('input[data-inspector-node-field="title"]')`), 2000)
+        await wc.insertText('renamed by inspector')
+        await settle()
+        journeyNote = await wc.executeJavaScript(`(() => { const i = document.querySelector('input[data-inspector-node-field="title"]'); return { active: document.activeElement === i, value: i && i.value } })()`)
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' }); await settle()
+      }
+      const label = await waitUntil(() => wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-block="n1"] .workflow-node__block-label')?.textContent; return t === 'renamed by inspector' ? t : false })()`), 3000)
+      // The pool: a bad width keeps the typed value and shows the reason.
+      const b2 = await centreOf('[data-workflow-block="n2"] rect')
+      wc.sendInputEvent({ type: 'mouseDown', x: b2.x, y: b2.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: b2.x, y: b2.y, button: 'left', clickCount: 1 }); await settle()
+      const widthInput = await waitUntil(() => centreOf('input[data-inspector-node-field="width"]'), 3000)
+      let widthReason = false, widthValue = null
+      if (widthInput) {
+        wc.sendInputEvent({ type: 'mouseDown', x: widthInput.x, y: widthInput.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: widthInput.x, y: widthInput.y, button: 'left', clickCount: 1 }); await settle()
+        await waitUntil(() => wc.executeJavaScript(`document.activeElement === document.querySelector('input[data-inspector-node-field="width"]')`), 2000)
+        await wc.executeJavaScript(`(() => { const i = document.querySelector('input[data-inspector-node-field="width"]'); const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, '999'); i.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' }); await settle()
+        widthReason = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-inspector-node-reason="width"]')?.textContent || false`), 3000)
+        widthValue = await wc.executeJavaScript(`document.querySelector('input[data-inspector-node-field="width"]')?.value`)
+      }
+      ok(ids[2], Array.isArray(fields) && fields.includes('title') && label === 'renamed by inspector' && typeof widthReason === 'string' && /width/.test(widthReason) && widthValue === '999',
+        JSON.stringify({ fields, journeyNote, label, widthReason, widthValue }))
+    } catch (error) {
+      for (const id of ids) ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M184 — workflow.save.1. SAVE ON THE DIAGRAM: an edit makes the panel
+    // dirty and enables Save; Save writes revision + 1 and the panel reads
+    // clean; a record bumped underneath makes the next Save STALE with its
+    // reason and two verbs, the draft kept; Reload takes the record and the
+    // draft is clean again.
+    const id = 'workflow.save.1 an edit enables Save, Save writes revision + 1 and cleans the panel, a bumped record makes the next Save stale with the draft kept, and Reload takes the record as it stands'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-save-1'
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'save me', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }, { key: 'n2', kind: 'chat', cwd: '/tmp', dx: 300, dy: 0 }
+      ], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfs', kind: 'workflow', x: 40, y: 40, w: 760, h: 560, z: 1, title: 'save me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfs', focusedId: 'wfs' })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') !== null`), 4000)
+      // M184 (the critic, finding 9). The REASON is read, not a ternary whose
+      // branches are both '' — the spec's own sentence was asserted nowhere.
+      // The frame writes a disabled verb's reason into `title` and repeats it
+      // under the row (`workflow-node__why-line`), so both are captured.
+      const saveState = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-workflow-verb="save"]'); const p = document.querySelector('.panel[data-panel-id="wfs"]'); const lines = [...document.querySelectorAll('.panel[data-panel-id="wfs"] .workflow-node__why-line')].map((n) => n.textContent).join(' | '); return { label: b && b.textContent, reason: b && b.getAttribute('title'), lines, disabled: b ? b.disabled : null, dirty: p && p.getAttribute('data-workflow-dirty') } })()`)
+      const atRest = await saveState()
+      // One edit through the agent door — the same operations the diagram's drag uses.
+      const edited = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-move ${TPL} n2 500 40` }, null, 3000)
+      await settle()
+      const whenDirty = await saveState()
+      const click = async (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      const pressed = await click('[data-workflow-verb="save"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfs"]')?.getAttribute('data-workflow-dirty') === 'false'`), 3000)
+      flushLayoutStore()
+      const afterSave = layoutStore.current().templates.find((t) => t.id === TPL)
+      const n2 = afterSave && afterSave.nodes.find((n) => n.key === 'n2')
+      // Bump the record underneath the panel, edit again, save: stale.
+      layoutStore.saveTemplate({ ...afterSave, name: 'save me' })
+      await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-move ${TPL} n2 600 60` }, null, 3000)
+      await settle()
+      await click('[data-workflow-verb="save"]')
+      const staleStrip = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-workflow-stale]'); return s ? { text: s.textContent, reload: !!s.querySelector('[data-workflow-verb="reload"]'), copy: !!s.querySelector('[data-workflow-verb="save-copy"]') } : false })()`), 3000)
+      flushLayoutStore()
+      const afterStale = layoutStore.current().templates.find((t) => t.id === TPL)
+      const stillDirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfs"]')?.getAttribute('data-workflow-dirty')`)
+      // Reload takes the record as it stands: the draft is clean and the block is back where the record has it.
+      await click('[data-workflow-verb="reload"]')
+      const afterReload = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="wfs"]'); const g = document.querySelector('[data-workflow-block="n2"] rect'); return p && p.getAttribute('data-workflow-dirty') === 'false' && g ? { dirty: p.getAttribute('data-workflow-dirty') } : false })()`), 3000)
+      ok(id, atRest && atRest.disabled === true && atRest.dirty === 'false' &&
+        /nothing to save — the diagram matches the template/.test(String(atRest.reason)) &&
+        /nothing to save — the diagram matches the template/.test(String(atRest.lines)) &&
+        edited && edited.kind === 'ran' && whenDirty && whenDirty.disabled === false && whenDirty.dirty === 'true' &&
+        pressed === true && afterSave && afterSave.revision === 1 && n2 && n2.dx === 500 && n2.dy === 40 &&
+        staleStrip && /revision/.test(staleStrip.text) && staleStrip.reload && staleStrip.copy &&
+        afterStale && afterStale.revision === 2 && stillDirty === 'true' && afterReload !== false,
+      JSON.stringify({ atRest, edited, whenDirty, pressed, revision1: afterSave && afterSave.revision, n2, staleStrip, revision2: afterStale && afterStale.revision, stillDirty, afterReload }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M184 (the critic, findings 1 and 15f) — workflow.door.1. THE AGENT DOOR
+    //     ANSWERS THE TRUTH. `runWorkflow` returns `undefined` on success and
+    //     a SENTENCE on refusal; the adapter read those backwards, so the one
+    //     door with nobody watching answered `refused` for every run that
+    //     started and `ran` for every one that did not — a defect no check
+    //     could see, because nothing drove the door. Here a run of a template
+    //     that is not saved is refused IN ITS OWN WORDS, and `workflow-copy`
+    //     (the only save a built-in has) writes a second record through the
+    //     same door and names it.
+    const id = 'workflow.door.1 through tc plan: workflow-run on a template that is not saved is REFUSED with its own sentence (never reported as ran), and workflow-copy writes a second record under a new name and says which'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-door-1'
+    const BAD = 'tpl-door-bad'
+    let copyId
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'door me', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
+      // Saved BEFORE the reload: the renderer reads its template rows once at
+      // load, so a record written after it is not bindable and the plan is
+      // refused at the binding — which would pass whichever way round the
+      // adapter read its answer, which is exactly what this check exists for.
+      layoutStore.saveTemplate({ id: BAD, name: 'cannot run', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfd', kind: 'workflow', x: 40, y: 40, w: 760, h: 560, z: 1, title: 'door me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfd', focusedId: 'wfd' })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="n1"]') !== null`), 4000)
+      // The refusal has to be RUNWORKFLOW'S OWN — a name buildPlan cannot bind
+      // is refused before the adapter is ever called, and would pass whichever
+      // way round the adapter read its answer. This template is saved and
+      // bindable, and cannot run: its node names neither a preset nor a
+      // command, which is the sentence Run's door shows.
+      const gone = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${BAD}` }, null, 3000)
+      const copied = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-copy ${TPL}` }, null, 3000)
+      await settle(); flushLayoutStore()
+      const all = layoutStore.current().templates
+      const copy = all.find((t) => t.id !== TPL && t.name === 'door me (copy)')
+      copyId = copy && copy.id
+      ok(id,
+        gone && gone.kind === 'refused' && /names neither a preset nor a command/.test(String(gone.reason)) &&
+          copied && copied.kind === 'ran' && /door me \(copy\)/.test(String(copied.summary)) &&
+          copy !== undefined && copy.revision === 0 && copy.nodes.length === 1 && copy.nodes[0].key === 'n1',
+        JSON.stringify({ gone, copied, copy }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.deleteTemplate(BAD)
+      if (copyId) layoutStore.deleteTemplate(copyId)
       layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
     }
   }
@@ -2696,7 +3055,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             Array.isArray(workerTitles) && workerTitles.some((t) => /alpha/.test(String(t))) &&
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
             typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
-            stopAfter !== null && stopAfter.disabled === true && /no pool is running/.test(String(stopAfter.title)),
+            stopAfter !== null && stopAfter.disabled === true && /nothing of this workflow is running/.test(String(stopAfter.title)),
           JSON.stringify({ workers, spawnedForWorkers, poolRows, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
         // workflow.panel.1g — the same door on a template with NO blocks:

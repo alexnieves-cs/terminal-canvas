@@ -62,9 +62,12 @@ const TILE_BUDGET = 0.35 // of one tile's pixels: a changed word fills a tile pa
 // way before the comparison, so the two sides see one scale.
 const GOLDEN_SCALE = 0.5
 // The whole run: the harness paints 55 scenes in under three minutes.
-// Measured (M160): two runs of 166.5 s and 166.2 s, alone in the Electron
-// tier, times 1.25 — the M135 rule; re-measure when a milestone adds scenes.
-const WATCHDOG_MS = 209000
+// Measured (M183): the harness paints 58 scenes, the workflow editor's among
+// them. Two green runs of this suite, alone in the Electron tier: 174.1 s and
+// 176.4 s wall, times 1.25 — the M135 rule; the M160 figures (166.5 s, 166.2 s
+// over 55 scenes) are what this replaces, and an update run that writes
+// goldens tripped the old 209 s ceiling. Re-measure when a milestone adds scenes.
+const WATCHDOG_MS = 221000
 
 const results = []
 const ok = (n, pass, detail) => {

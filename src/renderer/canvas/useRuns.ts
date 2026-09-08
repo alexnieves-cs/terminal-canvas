@@ -45,7 +45,7 @@ export interface RunsApi {
    * to open, and a panel with no origin leaves the run unmarked rather than
    * guessed into a template's list.
    */
-  noteTemplate: (panelIds: readonly string[], templateId: string) => void
+  noteTemplate: (panelIds: readonly string[], templateId: string, snapshot?: { definition: NonNullable<PersistedRun['definition']>; mapping: Record<string, string> }) => void
   /** M97. An auto run IS a run: opened on `running` at turn 0, sealed with its cost on any resolution. */
   onAutoEvent: (panelId: string, status: AutoStatus) => void
   /** Restart the run's terminal roots in order; a chat root is skipped by name. Returns the sentence. */
@@ -68,8 +68,20 @@ export function useRuns(deps: RunsDeps): RunsApi {
   // never persisted: it is read once, when a run opens, and the RUN is what
   // carries the fact onto disk.
   const originRef = useRef<Map<string, string>>(new Map())
-  const noteTemplate = useCallback((panelIds: readonly string[], templateId: string) => {
-    for (const id of panelIds) originRef.current.set(id, templateId)
+  // M184. The shape a run RAN, by MINTED PANEL id — beside `originRef` and on
+  // exactly the same key, so the two are read together and cannot disagree.
+  //
+  // M184 (the critic, finding 6). Keyed by TEMPLATE id it was one slot for
+  // every instantiation of a shape: a run opened by panels from an earlier
+  // instantiation read the LATEST snapshot, whose mapping named panels this
+  // run never held, and the `panelIds.includes` filter below then pruned the
+  // whole foreign mapping to `{}` — every block `queued` for work that ran.
+  const snapshotRef = useRef<Map<string, { definition: NonNullable<PersistedRun['definition']>; mapping: Record<string, string> }>>(new Map())
+  const noteTemplate = useCallback((panelIds: readonly string[], templateId: string, snapshot?: { definition: NonNullable<PersistedRun['definition']>; mapping: Record<string, string> }) => {
+    for (const id of panelIds) {
+      originRef.current.set(id, templateId)
+      if (snapshot !== undefined) snapshotRef.current.set(id, snapshot)
+    }
   }, [])
   // Roots this app is restarting on purpose: the kill's own exit is not a
   // run's fire, and recording it would write a `failed` run on every
@@ -113,8 +125,17 @@ export function useRuns(deps: RunsDeps): RunsApi {
       let run = beginRun(component, event.panelId, event.at, runName(current))
       // M133. The mark, if any of this run's panels came from a template.
       // ABSENT stays absent — never written as `templateId: undefined`.
-      const templateId = component.panelIds.map((id) => originRef.current.get(id)).find((t) => t !== undefined)
+      const originPanel = component.panelIds.find((id) => originRef.current.get(id) !== undefined)
+      const templateId = originPanel === undefined ? undefined : originRef.current.get(originPanel)
       if (templateId !== undefined) run = { ...run, templateId }
+      // M184. The snapshot rides with the mark, and only the panels this run
+      // actually holds are mapped — a mapping naming a panel of another run
+      // would light a block this run never touched.
+      const snap = originPanel === undefined ? undefined : snapshotRef.current.get(originPanel)
+      if (snap !== undefined) {
+        const mapping = Object.fromEntries(Object.entries(snap.mapping).filter(([, panelId]) => component.panelIds.includes(panelId)))
+        run = { ...run, definition: { ...snap.definition, nodes: snap.definition.nodes.map((n) => ({ ...n })), edges: snap.definition.edges.map((e) => ({ ...e })) }, mapping }
+      }
       run = recordRunEvent(run, event)
       runId = run.id
       openRef.current.set(run.id, { component, baseline })

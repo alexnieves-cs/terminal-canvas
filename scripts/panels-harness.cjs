@@ -1277,11 +1277,9 @@ app.whenReady().then(async () => {
     saveRoutine: (r) => { layoutStore.saveRoutine(r); return { kind: 'saved', routine: r } },
     removeRoutine: (id) => layoutStore.deleteRoutine(id),
     runRoutine: () => false,
-    saveTemplate: (template) => {
+    saveTemplate: (template, expectedRevision) => {
       const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id) ? template.id : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-      const saved = { ...template, id }
-      layoutStore.saveTemplate(saved)
-      return saved
+      return layoutStore.saveTemplate({ ...template, id }, expectedRevision)
     },
     removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id))
   }, () => {

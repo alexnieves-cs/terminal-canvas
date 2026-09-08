@@ -1,4 +1,9 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
+import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
+import { configureNode, moveNode } from '@shared/template-edit'
+import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
+import { HANDOFF_TRIGGERS } from '@shared/handoff'
+import { isBuiltInTemplate, type TemplateNode } from '@shared/templates'
 import { useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react'
 import type { AgentOptions } from '@shared/cost'
 import type { ToolScope } from '@shared/toolbox'
@@ -65,8 +70,19 @@ import type { NavigatorPane } from '@renderer/shell/useShellChrome'
 
 export interface PaletteActionsDeps {
   recheckEnvironment: () => Promise<import("@shared/env-report").EnvReport>
+  /** M182. Every saved template, through a ref: the editing verbs bind and edit against the live list. */
+  templateRowsRef: RefObject<PersistedTemplate[]>
+  /** M182. Re-read the saved templates after a save through the binding. */
+  reloadTemplates: () => void
   /** M181. Canvas's starter layout: mints through the ordinary paths and records the keys. */
   applyStarter: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's save of a workflow draft (the revision check lives there). */
+  saveWorkflowDraft: (templateId: string) => Promise<{ kind: 'saved' } | { kind: 'stale'; reason: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's stop: every live pool of this template interrupted, nothing killed. */
+  stopWorkflowRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  saveWorkflowCopyDraft: (templateId: string) => Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's Run over the draft (the same instantiation the panel's Run calls). */
+  runWorkflowNow: (templateId: string) => string | undefined
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -198,7 +214,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -250,6 +266,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         // (`agentDoorRefusal`); absent stays absent.
         panels: panelsRef.current.map((p) => { const state = getAgentState(p.rect.id); return { id: p.rect.id, kind: p.kind, ...(registry.get(p.rect.id)?.spec.agent === undefined ? {} : { agent: registry.get(p.rect.id)!.spec.agent }), ...(state === undefined ? {} : { state }) } }),
         presets: presetRows.map((r) => ({ id: r.id })),
+        // M182. Every template (built-in and saved): the editing verbs bind against it.
+        templates: allTemplates(templateRowsRef.current).map((t) => ({ id: t.id })),
         worktrees: worktreeRows.map((w) => ({ id: w.id }))
       })
       const execute = async (step: PlanStep): Promise<StepOutcome> => {
@@ -257,6 +275,43 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
         switch (step.verb) {
           case 'starter': return applyStarter()
+          case 'workflow-save': return self.saveWorkflow(a.template!)
+          case 'workflow-run': return self.runWorkflowNow(a.template!)
+          case 'workflow-stop': return self.stopWorkflow(a.template!)
+          case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
+          // M182. The six editing verbs, each one draft operation through the store's door.
+          case 'workflow-add': {
+            const kind = String(a.kind ?? '')
+            // M183. The library's default for the kind, placed where a drop would land (to the right of the rightmost block).
+            if (!LIBRARY.some((e) => e.kind === kind)) return { kind: 'refused', reason: `${kind} is not a node kind — ${LIBRARY.map((e) => e.kind).join(', ')}` }
+            const saved = allTemplates(templateRowsRef.current).find((t) => t.id === a.template)
+            const base = getDraft(a.template!)?.template ?? saved
+            const at = base === undefined ? { dx: 0, dy: 0 } : placementFor(base)
+            const r = self.editWorkflow(a.template!, { type: 'add', node: { ...defaultNodeOf(kind as TemplateNode['kind']), ...at } as Omit<TemplateNode, 'key'> })
+            return r.kind === 'ok' ? { kind: 'ran', note: 'node added to the draft' } : r
+          }
+          case 'workflow-move': {
+            const dx = Number(a.dx), dy = Number(a.dy)
+            if (!Number.isFinite(dx) || !Number.isFinite(dy)) return { kind: 'refused', reason: 'dx and dy must be numbers' }
+            const r = self.editWorkflow(a.template!, { type: 'move', key: String(a.key), dx, dy })
+            return r.kind === 'ok' ? { kind: 'ran' } : r
+          }
+          case 'workflow-set': {
+            const raw = String(a.value ?? '')
+            const field = String(a.field ?? '')
+            // A number where the field takes one; a list where it takes one; text otherwise.
+            const value: unknown = field === 'width' ? Number(raw) : field === 'args' ? raw.split(/\s+/).filter((w) => w !== '') : raw
+            const r = self.editWorkflow(a.template!, { type: 'set', key: String(a.key), patch: { [field]: value } })
+            return r.kind === 'ok' ? { kind: 'ran' } : r
+          }
+          case 'workflow-remove': { const r = self.editWorkflow(a.template!, { type: 'remove', key: String(a.key) }); return r.kind === 'ok' ? { kind: 'ran' } : r }
+          case 'workflow-edge': {
+            const trigger = String(a.trigger ?? '')
+            if (!(HANDOFF_TRIGGERS as readonly string[]).includes(trigger)) return { kind: 'refused', reason: `${trigger} is not a trigger — ${HANDOFF_TRIGGERS.join(', ')}` }
+            const r = self.editWorkflow(a.template!, { type: 'edge', from: String(a.from), to: String(a.to), trigger: trigger as HandoffTrigger })
+            return r.kind === 'ok' ? { kind: 'ran' } : r
+          }
+          case 'workflow-unedge': { const r = self.editWorkflow(a.template!, { type: 'unedge', from: String(a.from), to: String(a.to) }); return r.kind === 'ok' ? { kind: 'ran' } : r }
           case 'check-readiness': {
             const readiness = onboardingReadiness(await recheckEnvironment())
             return { kind: 'ran', note: readiness.rows.map((row) => row.sentence).join(' ') }
@@ -1487,8 +1542,16 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       }
       setInputMode({
         kind: 'text',
-        label: `Name this ${usable.length}-panel template…${dropped === 0 ? '' : ` (${dropped} other panel${dropped === 1 ? '' : 's'} cannot be saved)`}`,
-        initial: '',
+        // M182. Bound panels PREFILL their template's name and the label says
+        // what Enter does; another name saves a copy (the critic's F3).
+        label: (() => {
+          const bs = usable.map((p) => p.templateBinding?.templateId)
+          const one = bs[0] !== undefined && bs.every((b) => b === bs[0]) ? allTemplates(templateRowsRef.current).find((t) => t.id === bs[0]) : undefined
+          return one !== undefined && !isBuiltInTemplate(one.id)
+            ? `Enter updates "${one.name}" (revision ${one.revision ?? 0}); another name saves a copy${dropped === 0 ? '' : ` (${dropped} other panel${dropped === 1 ? '' : 's'} cannot be saved)`}`
+            : `Name this ${usable.length}-panel template…${dropped === 0 ? '' : ` (${dropped} other panel${dropped === 1 ? '' : 's'} cannot be saved)`}`
+        })(),
+        initial: (() => { const bs = usable.map((p) => p.templateBinding?.templateId); const one = bs[0] !== undefined && bs.every((b) => b === bs[0]) ? allTemplates(templateRowsRef.current).find((t) => t.id === bs[0]) : undefined; return one !== undefined && !isBuiltInTemplate(one.id) ? one.name : '' })(),
         submit: (value) => {
           const name = value.trim()
           setInputMode(null)
@@ -1516,6 +1579,24 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           const edges = usable.flatMap((p) => linksOf(p)
             .filter((l) => l.automation?.kind === 'handoff' && l.automation.enabled && keyOf.has(l.to))
             .map((l) => ({ from: keyOf.get(p.rect.id) as string, to: keyOf.get(l.to) as string, trigger: (l.automation as { trigger: HandoffTrigger }).trigger })))
+          // M182. THE CANVAS BINDING'S UPDATE (the critic's F1–F4): when every
+          // saved panel carries one template's binding and the name typed is
+          // that template's, the record is updated THROUGH THE OPERATIONS —
+          // `moveNode` for every bound panel, `configureNode` for a terminal or
+          // chat's captured fields — so a pool, orchestrator or collect node
+          // keeps its kind and its fields and an unselected node is left alone.
+          // Refused by name for a dirty diagram draft, a key not in the record
+          // or two panels on one key; saved with the revision the rows hold,
+          // which are reloaded on every save.
+          const bindings = usable.map((p) => p.templateBinding?.templateId)
+          const boundId = bindings[0] !== undefined && bindings.every((b) => b === bindings[0]) ? bindings[0] : undefined
+          const bound = boundId === undefined ? undefined : allTemplates(templateRowsRef.current).find((t) => t.id === boundId)
+          if (bound !== undefined && bound.name === name && !isBuiltInTemplate(bound.id)) {
+            void self.updateBoundTemplate(usable.map((p) => p.rect.id)).then((r) => {
+              if (r.kind === 'refused') { setInputMode({ kind: 'text', label: r.reason, initial: '', submit: () => setInputMode(null) }); palette.openPalette() }
+            })
+            return
+          }
           void window.canvas.template.save({ name, nodes, edges })
         }
       })
@@ -1840,6 +1921,87 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     newChat: (backend) => { void beginNewChat(backend === undefined ? undefined : { backend }) },
     checkReadiness: recheckEnvironment,
     openStarter: applyStarter,
+    saveWorkflow: async (templateId) => {
+      const r = await saveWorkflowDraft(templateId)
+      return r.kind === 'saved' ? { kind: 'ran', note: 'saved' } : { kind: 'refused', reason: r.reason }
+    },
+    stopWorkflow: (templateId) => stopWorkflowRun(templateId),
+    // M184 (the critic, finding 1). `runWorkflow` answers `undefined` on
+    // SUCCESS and a refusal SENTENCE on failure (it is the fire path's own
+    // shape). The first cut read those the other way round, so the one door
+    // with nobody watching reported a refusal for every run that started and
+    // a success for every one that did not.
+    runWorkflowNow: (templateId) => {
+      const refusal = runWorkflowNow(templateId)
+      return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
+    },
+    saveWorkflowCopy: async (templateId) => {
+      const r = await saveWorkflowCopyDraft(templateId)
+      return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'ran', note: r.name === undefined ? 'saved as a copy' : `saved as ${r.name}` }
+    },
+    // M182. The binding's Update as ONE member, so the text mode's submit and
+    // a check drive the same path: every selected panel must carry the same
+    // template's binding with a key the record holds, once each.
+    updateBoundTemplate: async (panelIds) => {
+      if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+      const chosen = panelsRef.current.filter((p) => panelIds.includes(p.rect.id) && (isTerminalPanel(p) || isChatPanel(p)))
+      const ids = new Set(chosen.map((p) => p.templateBinding?.templateId))
+      const templateId = chosen[0]?.templateBinding?.templateId
+      if (chosen.length === 0 || templateId === undefined || ids.size !== 1 || ids.has(undefined)) return { kind: 'refused', reason: 'every selected panel must have been minted by the same template — save as a new template instead' }
+      const bound = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+      if (bound === undefined) return { kind: 'refused', reason: `the template these panels came from is gone — save as a new template` }
+      if (isBuiltInTemplate(bound.id)) return { kind: 'refused', reason: `${bound.name} is built in — save as a new template (a copy)` }
+      if (getDraft(bound.id)?.dirty === true) return { kind: 'refused', reason: `the diagram holds unsaved edits to ${bound.name} — save or reload them first` }
+      const seen = new Set<string>()
+      let next: PersistedTemplate = bound
+      const centre = chosen.reduce((acc, p) => ({ x: acc.x + (p.rect.x + p.rect.w / 2) / chosen.length, y: acc.y + (p.rect.y + p.rect.h / 2) / chosen.length }), { x: 0, y: 0 })
+      for (const p of chosen) {
+        const key = p.templateBinding!.key
+        if (seen.has(key)) return { kind: 'refused', reason: `two panels are bound to ${key} — keep one of them` }
+        seen.add(key)
+        if (!next.nodes.some((n) => n.key === key)) return { kind: 'refused', reason: `${bound.name} has no node ${key} any more — save as a new template` }
+        const moved = moveNode(next, key, Math.round(p.rect.x + p.rect.w / 2 - centre.x), Math.round(p.rect.y + p.rect.h / 2 - centre.y))
+        if (moved.kind === 'refused') return moved
+        next = moved.template
+        const node = next.nodes.find((n) => n.key === key)!
+        if (node.kind === 'terminal' || node.kind === 'chat') {
+          const patch: Record<string, unknown> = isChatPanel(p)
+            ? { cwd: p.chat.cwd, ...(p.title === undefined ? {} : { title: p.title }) }
+            : isTerminalPanel(p) ? { cwd: getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd, ...(p.title === undefined ? {} : { title: p.title }), ...(p.spec.command === undefined ? { presetId: 'shell' } : { command: p.spec.command, args: [...(p.spec.args ?? [])] }) } : {}
+          const set = configureNode(next, key, patch)
+          if (set.kind === 'refused') return set
+          next = set.template
+        }
+      }
+      const result = await window.canvas.template.save(next, bound.revision ?? 0)
+      if (result.kind === 'stale') return { kind: 'refused', reason: result.reason }
+      resetDraft(bound.id, result.template)
+      reloadTemplates()
+      return { kind: 'ran', note: `${bound.name} updated to revision ${result.template.revision ?? 0}` }
+    },
+    // M182. ONE door for every editor: the store's `applyDraftOp` over the
+    // saved record (`allTemplates`, so a built-in can be edited into a copy).
+    editWorkflow: (templateId, op) => {
+      if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+      const saved = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+      const r = applyDraftOp(templateId, saved, op)
+      return r.kind === 'ok' ? { kind: 'ok' } : r
+    },
+    beginWorkflowEdit: (templateId, verb) => {
+      const labels = { add: 'add <kind> — terminal, chat, pool, orchestrator or collect', move: 'move <key> <dx> <dy>', set: 'set <key> <field> <value>', remove: 'remove <key>', edge: 'edge <from> <to> <trigger>', unedge: 'unedge <from> <to>' }
+      setInputMode({
+        kind: 'text', label: `${labels[verb]} — on ${allTemplates(templateRowsRef.current).find((t) => t.id === templateId)?.name ?? templateId}`, initial: '',
+        submit: (value) => {
+          const words = value.trim().split(/\s+/).filter((w) => w !== '')
+          // The same plan line the agent door takes, so the two doors cannot differ.
+          void self.runAgentPlan(`workflow-${verb} ${templateId} ${words.join(' ')}`).then((reply) => {
+            if (reply.kind === 'refused') { setInputMode({ kind: 'text', label: reply.reason, initial: '', submit: () => setInputMode(null) }); palette.openPalette() }
+            else setInputMode(null)
+          })
+        }
+      })
+      palette.openPalette()
+    },
     openAsChat: (id) => openAsChat(id),
     openInTerminal: (id) => openInTerminal(id),
     // M76. The ONE answer verb every surface calls; main clears every
@@ -2059,7 +2221,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

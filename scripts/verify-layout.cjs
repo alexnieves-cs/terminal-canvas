@@ -4209,6 +4209,445 @@ const hasStarter = typeof L.parseStarter === 'function' && typeof L.starterKeysT
     JSON.stringify({ ids, i1, warnings: out.warnings }))
 }
 
+// M182 — edit.1–.6, store.edit.1. TEMPLATE EDITING as pure verbs over the
+// record (`src/shared/template-edit.ts`), the record's `revision`/`nextKey`
+// fields, a panel's `templateBinding`, and the store's compare-and-swap
+// save. The edit.1–.4 checks are guarded on the module's presence so a
+// missing module fails BY NAME rather than throwing and taking every later
+// check with it (the verify-suites rule). Every verb answers an EditResult
+// (`ok` with a fresh template, or `refused` with a reason) and never throws;
+// `call` below folds an unexpected throw into a refusal-shaped object so
+// the assertion still reads.
+const EDIT_MISSING = 'src/shared/template-edit.ts does not exist'
+const hasEdit = ['nextNodeKey', 'addNode', 'moveNode', 'configureNode', 'removeNode', 'addEdge', 'removeEdge'].every((f) => typeof L[f] === 'function')
+const call = (f, ...args) => { try { return L[f](...args) } catch (e) { return { kind: 'threw', reason: e.message } } }
+const refusedNaming = (r, word) => Boolean(r) && r.kind === 'refused' && typeof r.reason === 'string' && r.reason.includes(word)
+const tplNode = (key, over = {}) => ({ key, kind: 'terminal', cwd: '~', dx: 0, dy: 0, ...over })
+const tpl = (nodes, edges = [], over = {}) => ({ id: 'e1', name: 'edit me', nodes, edges, ...over })
+
+// edit.1 — nextNodeKey and addNode. A key is `n<N>` where N is one past the
+// highest key EVER minted: derived from the highest `n<digits>` present when
+// a pre-M182 record carries no `nextKey`, read from `nextKey` when it does;
+// a removed node's key is never reused (an edge or a binding saved elsewhere
+// could still name it). addNode never mutates its input, refuses a
+// terminal/chat with no cwd naming `cwd`, and a pool whose width is outside
+// 1..POOL_WIDTH_MAX or not an integer naming `width`.
+{
+  const ID = 'edit.1 nextNodeKey is one past the highest n<digits> key (or nextKey when present, n1 for none); addNode mints it, advances nextKey, never reuses a removed key, leaves the input untouched, and refuses an empty cwd and a bad pool width by name'
+  if (!hasEdit) ok(ID, false, EDIT_MISSING)
+  else {
+    const base = tpl([tplNode('n1'), tplNode('n3', { kind: 'chat' }), tplNode('custom')])
+    const k0 = call('nextNodeKey', base)
+    const k1 = call('nextNodeKey', tpl([tplNode('n1')], [], { nextKey: 7 }))
+    const k2 = call('nextNodeKey', tpl([]))
+    const before = JSON.stringify(base)
+    const added = call('addNode', base, { kind: 'chat', cwd: '/repo', dx: 10, dy: 20, title: 'reviewer' })
+    const untouched = JSON.stringify(base) === before
+    const addedKey = added.kind === 'ok' ? added.template.nodes[added.template.nodes.length - 1].key : undefined
+    const removed = added.kind === 'ok' ? call('removeNode', added.template, addedKey) : added
+    const again = removed.kind === 'ok' ? call('addNode', removed.template, { kind: 'terminal', cwd: '/repo', dx: 0, dy: 0 }) : removed
+    const againKey = again.kind === 'ok' ? again.template.nodes[again.template.nodes.length - 1].key : undefined
+    const noCwd = call('addNode', base, { kind: 'chat', cwd: '', dx: 0, dy: 0 })
+    const wide = call('addNode', base, { kind: 'pool', width: (L.POOL_WIDTH_MAX ?? 24) + 1, list: '/l', prompt: 'p', cwd: '/repo', dx: 0, dy: 0 })
+    const zero = call('addNode', base, { kind: 'pool', width: 0, list: '/l', prompt: 'p', cwd: '/repo', dx: 0, dy: 0 })
+    const frac = call('addNode', base, { kind: 'pool', width: 1.5, list: '/l', prompt: 'p', cwd: '/repo', dx: 0, dy: 0 })
+    const pool = call('addNode', base, { kind: 'pool', width: 3, list: '/l', prompt: 'p', cwd: '/repo', dx: 0, dy: 0 })
+    ok(ID,
+      k0 === 'n4' && k1 === 'n7' && k2 === 'n1' &&
+        added.kind === 'ok' && added.template !== base && added.template.nodes.length === 4 && addedKey === 'n4' && added.template.nextKey === 5 && untouched &&
+        removed.kind === 'ok' && removed.template.nodes.length === 3 &&
+        again.kind === 'ok' && againKey === 'n5' && again.template.nextKey === 6 &&
+        refusedNaming(noCwd, 'cwd') && refusedNaming(wide, 'width') && refusedNaming(zero, 'width') && refusedNaming(frac, 'width') &&
+        pool.kind === 'ok' && pool.template.nodes[3].kind === 'pool' && pool.template.nodes[3].width === 3,
+      JSON.stringify({ k0, k1, k2, added, untouched, addedKey, againKey, again, noCwd, wide, zero, frac, pool }))
+  }
+}
+
+// edit.2 — moveNode sets dx/dy as ABSOLUTE offsets (a second move replaces,
+// never adds), refuses a key the template does not hold naming the key,
+// refuses a non-finite number, and leaves the input untouched.
+{
+  const ID = 'edit.2 moveNode sets absolute dx/dy (a second move replaces), refuses a missing key by name and a non-finite offset, and leaves the input untouched'
+  if (!hasEdit) ok(ID, false, EDIT_MISSING)
+  else {
+    const base = tpl([tplNode('n1'), tplNode('n2', { dx: 5, dy: 5 })])
+    const before = JSON.stringify(base)
+    const once = call('moveNode', base, 'n2', 100, -40)
+    const twice = once.kind === 'ok' ? call('moveNode', once.template, 'n2', 10, 10) : once
+    const n2 = (r) => (r.kind === 'ok' ? r.template.nodes.find((n) => n.key === 'n2') : undefined)
+    const other = once.kind === 'ok' ? once.template.nodes.find((n) => n.key === 'n1') : undefined
+    const missing = call('moveNode', base, 'n9', 0, 0)
+    const nan = call('moveNode', base, 'n1', NaN, 0)
+    const inf = call('moveNode', base, 'n1', 0, Infinity)
+    ok(ID,
+      once.kind === 'ok' && n2(once).dx === 100 && n2(once).dy === -40 && other.dx === 0 && other.dy === 0 &&
+        twice.kind === 'ok' && n2(twice).dx === 10 && n2(twice).dy === 10 &&
+        refusedNaming(missing, 'n9') && nan.kind === 'refused' && inf.kind === 'refused' &&
+        JSON.stringify(base) === before,
+      JSON.stringify({ once, twice, missing, nan, inf }))
+  }
+}
+
+// edit.3 — configureNode patches ONLY the fields the node's kind has:
+// terminal/chat `cwd`/`title`/`command`/`args`/`presetId`/`message`; pool
+// `width`/`list`/`prompt`/`cwd`; orchestrator `prompt`/`cwd`; collect
+// `target`/`cwd`. A field the kind does not have and a value of the wrong
+// type are each refused NAMING the field; `kind` and `key` are never
+// patchable; `width` is re-validated as addNode does and a terminal/chat
+// `cwd` may not become empty.
+{
+  const ID = 'edit.3 configureNode patches the kind\'s own fields only; an unknown field, a wrong type, `kind` and `key` are refused naming the field; width and a terminal cwd are re-validated'
+  if (!hasEdit) ok(ID, false, EDIT_MISSING)
+  else {
+    const base = tpl([
+      tplNode('n1'), tplNode('n2', { kind: 'chat' }),
+      { key: 'n3', kind: 'pool', width: 2, list: '/l', prompt: 'p', cwd: '/r', dx: 0, dy: 0 },
+      { key: 'n4', kind: 'orchestrator', prompt: 'o', cwd: '/r', dx: 0, dy: 0 },
+      { key: 'n5', kind: 'collect', target: 'n3', cwd: '/r', dx: 0, dy: 0 }
+    ])
+    const find = (r, key) => (r.kind === 'ok' ? r.template.nodes.find((n) => n.key === key) : undefined)
+    const term = call('configureNode', base, 'n1', { cwd: '/x', title: 'T', command: '/bin/sh', args: ['-lc', 'ls'], presetId: 'ps', message: 'hi' })
+    const t = find(term, 'n1')
+    const termOk = term.kind === 'ok' && t.cwd === '/x' && t.title === 'T' && t.command === '/bin/sh' && t.args.join(' ') === '-lc ls' && t.presetId === 'ps' && t.message === 'hi' && t.kind === 'terminal' && t.key === 'n1' && t.dx === 0
+    const chat = call('configureNode', base, 'n2', { message: 'first' })
+    const chatOk = chat.kind === 'ok' && find(chat, 'n2').message === 'first'
+    const termWidth = call('configureNode', base, 'n1', { width: 3 })
+    const termTitleNum = call('configureNode', base, 'n1', { title: 7 })
+    const termArgsMixed = call('configureNode', base, 'n1', { args: ['a', 1] })
+    const kind = call('configureNode', base, 'n1', { kind: 'chat' })
+    const key = call('configureNode', base, 'n1', { key: 'n9' })
+    const emptyCwd = call('configureNode', base, 'n2', { cwd: '' })
+    const pool = call('configureNode', base, 'n3', { width: 4, list: '/m', prompt: 'q', cwd: '/s' })
+    const p = find(pool, 'n3')
+    const poolOk = pool.kind === 'ok' && p.width === 4 && p.list === '/m' && p.prompt === 'q' && p.cwd === '/s'
+    const poolWide = call('configureNode', base, 'n3', { width: (L.POOL_WIDTH_MAX ?? 24) + 1 })
+    const poolFrac = call('configureNode', base, 'n3', { width: 2.5 })
+    const poolTitle = call('configureNode', base, 'n3', { title: 'x' })
+    const orch = call('configureNode', base, 'n4', { prompt: 'new', cwd: '/o' })
+    const orchOk = orch.kind === 'ok' && find(orch, 'n4').prompt === 'new' && find(orch, 'n4').cwd === '/o'
+    const orchList = call('configureNode', base, 'n4', { list: '/l' })
+    const coll = call('configureNode', base, 'n5', { target: '/out.md' })
+    const collOk = coll.kind === 'ok' && find(coll, 'n5').target === '/out.md'
+    const collPrompt = call('configureNode', base, 'n5', { prompt: 'p' })
+    const missing = call('configureNode', base, 'n9', { title: 'x' })
+    ok(ID,
+      termOk && chatOk &&
+        refusedNaming(termWidth, 'width') && refusedNaming(termTitleNum, 'title') && refusedNaming(termArgsMixed, 'args') &&
+        refusedNaming(kind, 'kind') && refusedNaming(key, 'key') && refusedNaming(emptyCwd, 'cwd') &&
+        poolOk && refusedNaming(poolWide, 'width') && refusedNaming(poolFrac, 'width') && refusedNaming(poolTitle, 'title') &&
+        orchOk && refusedNaming(orchList, 'list') &&
+        collOk && refusedNaming(collPrompt, 'prompt') &&
+        refusedNaming(missing, 'n9'),
+      JSON.stringify({ term, chat, termWidth, termTitleNum, termArgsMixed, kind, key, emptyCwd, pool, poolWide, poolFrac, poolTitle, orch, orchList, coll, collPrompt, missing }))
+  }
+}
+
+// edit.4 — removeNode takes every edge naming the node with it (an edge
+// with one end missing is a broken template, parseTemplates' own rule);
+// addEdge refuses a missing end naming it, a self-edge, a duplicate pair
+// under any trigger, and an edge that would close a directed CYCLE with the
+// word `cycle` (a 3-node chain a→b→c, closed by c→a) — the same refusal
+// `setLinkAutomation` makes on the live canvas; a forward edge a→c is
+// appended; removeEdge drops it and refuses one that is not there.
+{
+  const ID = 'edit.4 removeNode drops the node\'s edges; addEdge refuses a missing end by name, a self-edge, a duplicate pair and a cycle (naming `cycle`), and appends an acyclic edge; removeEdge drops a present edge and refuses a missing one'
+  if (!hasEdit) ok(ID, false, EDIT_MISSING)
+  else {
+    const chain = tpl([tplNode('a'), tplNode('b'), tplNode('c')], [{ from: 'a', to: 'b', trigger: 'exit' }, { from: 'b', to: 'c', trigger: 'idle' }])
+    const before = JSON.stringify(chain)
+    const gone = call('removeNode', chain, 'b')
+    const goneOk = gone.kind === 'ok' && gone.template.nodes.map((n) => n.key).join(',') === 'a,c' && gone.template.edges.length === 0
+    const missingNode = call('removeNode', chain, 'zz')
+    const badFrom = call('addEdge', chain, 'zz', 'a', 'exit')
+    const badTo = call('addEdge', chain, 'a', 'yy', 'exit')
+    const self = call('addEdge', chain, 'a', 'a', 'exit')
+    const dup = call('addEdge', chain, 'a', 'b', 'always')
+    const cycle = call('addEdge', chain, 'c', 'a', 'exit-ok')
+    const forward = call('addEdge', chain, 'a', 'c', 'exit-ok')
+    const forwardOk = forward.kind === 'ok' && forward.template.edges.length === 3 && forward.template.edges[2].from === 'a' && forward.template.edges[2].to === 'c' && forward.template.edges[2].trigger === 'exit-ok'
+    const dropped = forward.kind === 'ok' ? call('removeEdge', forward.template, 'a', 'c') : forward
+    const droppedOk = dropped.kind === 'ok' && dropped.template.edges.length === 2 && !dropped.template.edges.some((e) => e.from === 'a' && e.to === 'c')
+    const missingEdge = call('removeEdge', chain, 'c', 'a')
+    ok(ID,
+      goneOk && refusedNaming(missingNode, 'zz') &&
+        refusedNaming(badFrom, 'zz') && refusedNaming(badTo, 'yy') && self.kind === 'refused' && dup.kind === 'refused' &&
+        refusedNaming(cycle, 'cycle') && forwardOk && droppedOk && missingEdge.kind === 'refused' &&
+        JSON.stringify(chain) === before,
+      JSON.stringify({ gone, missingNode, badFrom, badTo, self, dup, cycle, forward, dropped, missingEdge }))
+  }
+}
+
+// edit.5 — the record's two new fields through parseTemplates: `revision`
+// and `nextKey` ABSENT stay absent (a pre-M182 file must not read back as
+// `revision: 0` — that is a claim about a save that never happened; the
+// store's compare-and-swap treats absent as 0 on its own); a present
+// integer ≥ 0 is carried; a non-integer, negative or non-number value drops
+// THAT template with a warning naming its id, the rest kept.
+{
+  const node = (key = 'a') => ({ key, kind: 'terminal', cwd: '~', dx: 0, dy: 0 })
+  const t = (id, over = {}) => ({ id, name: id, nodes: [node()], edges: [], ...over })
+  const r = L.parseLayout(file({ templates: [
+    t('plain'),
+    t('rev', { revision: 3, nextKey: 5 }),
+    t('zero', { revision: 0, nextKey: 1 }),
+    t('frac', { revision: 1.5 }),
+    t('neg', { revision: -1 }),
+    t('revstr', { revision: '2' }),
+    t('nkfrac', { nextKey: 2.5 }),
+    t('nkneg', { nextKey: -3 }),
+    t('nkstr', { nextKey: 'n4' }),
+    t('last')
+  ] }))
+  const kept = r.snapshot.templates ?? []
+  const byId = (id) => kept.find((x) => x.id === id)
+  const plain = byId('plain'), rev = byId('rev'), zero = byId('zero')
+  const dropped = ['frac', 'neg', 'revstr', 'nkfrac', 'nkneg', 'nkstr']
+  ok('edit.5 parseTemplates: revision and nextKey absent stay absent; integers ≥ 0 are carried; a non-integer, negative or non-number value drops that template by id with the rest kept',
+    kept.map((x) => x.id).join(',') === 'plain,rev,zero,last' &&
+      plain !== undefined && !('revision' in plain) && !('nextKey' in plain) &&
+      rev !== undefined && rev.revision === 3 && rev.nextKey === 5 &&
+      zero !== undefined && zero.revision === 0 && zero.nextKey === 1 &&
+      dropped.every((id) => byId(id) === undefined && r.warnings.some((m) => m.includes(id))),
+    JSON.stringify({ ids: kept.map((x) => x.id), plain, rev, zero, warnings: r.warnings }))
+}
+
+// edit.6 — a panel's `templateBinding` ({ templateId, key }, both non-empty
+// strings) on disk and through the renderer's copies: parseLayout keeps a
+// good one, DROPS only the binding for a malformed one (a missing key, an
+// empty string, a non-object, a non-string) with a warning naming the PANEL
+// id — the panel survives — and keeps absent absent; carryMarks carries it
+// as a COPY and keeps absent absent (`'templateBinding' in carryMarks(p)`
+// is false — a spread would write `templateBinding: undefined`, which
+// survives IPC and reads as present at every `in` test); fromPanels/
+// toPanels round-trip it, copying rather than sharing the object.
+{
+  const p = (id, over = {}) => ({ id, x: 0, y: 0, w: 520, h: 340, z: 1, cwd: '~', command: 'sh', args: [], ...over })
+  const good = { templateId: 't1', key: 'n2' }
+  const r = L.parseLayout(file({ workspaces: [{ id: 'w1', name: 'Canvas', camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, panels: [
+    p('b0'),
+    p('b1', { templateBinding: good }),
+    p('b2', { templateBinding: { templateId: 't1' } }),
+    p('b3', { templateBinding: { templateId: '', key: 'n1' } }),
+    p('b4', { templateBinding: 'n1' }),
+    p('b5', { templateBinding: { templateId: 't1', key: 4 } })
+  ] }] }))
+  const ps = active(r.snapshot).panels
+  const byId = (id) => ps.find((x) => x.id === id)
+  const parseOk = ps.map((x) => x.id).join(',') === 'b0,b1,b2,b3,b4,b5' &&
+    !('templateBinding' in byId('b0')) &&
+    byId('b1').templateBinding !== undefined && byId('b1').templateBinding.templateId === 't1' && byId('b1').templateBinding.key === 'n2' &&
+    ['b2', 'b3', 'b4', 'b5'].every((id) => !('templateBinding' in byId(id)) && r.warnings.some((m) => m.includes(id)))
+  // carryMarks over a live Panel.
+  const live = L.makePanel('live', { x: 0, y: 0 }, 1)
+  const bare = L.carryMarks(live)
+  const bound = { ...live, templateBinding: { templateId: 't1', key: 'n3' } }
+  const carried = L.carryMarks(bound)
+  const carryOk = !('templateBinding' in bare) &&
+    carried.templateBinding !== undefined && carried.templateBinding !== bound.templateBinding &&
+    carried.templateBinding.templateId === 't1' && carried.templateBinding.key === 'n3'
+  // The adapter's two directions.
+  const up = L.toPanels([p('a0'), p('a1', { templateBinding: good })])
+  const down = L.fromPanels(up)
+  const adaptOk = up.length === 2 && !('templateBinding' in up[0]) &&
+    up[1].templateBinding !== undefined && up[1].templateBinding.templateId === 't1' && up[1].templateBinding.key === 'n2' && up[1].templateBinding !== good &&
+    !('templateBinding' in down[0]) && down[1].templateBinding !== undefined && down[1].templateBinding.templateId === 't1' && down[1].templateBinding.key === 'n2'
+  ok('edit.6 templateBinding: parseLayout keeps a good one, drops only a malformed one with a warning naming the panel (the panel kept), keeps absent absent; carryMarks copies it and keeps absent absent; toPanels/fromPanels round-trip it',
+    parseOk && carryOk && adaptOk,
+    JSON.stringify({ parseOk, ids: ps.map((x) => x.id), b1: byId('b1') && byId('b1').templateBinding, b2keys: Object.keys(byId('b2') || {}), warnings: r.warnings, carryOk, bare: Object.keys(bare), carried, adaptOk, up1: up[1] && up[1].templateBinding, down1: down[1] && down[1].templateBinding }))
+}
+
+// store.edit.1 — saveTemplate's compare-and-swap over the REAL store in a
+// temp file. A NEW record saved with no expectation gets `revision: 0`; an
+// expectation equal to the record's revision writes revision + 1 and
+// answers `saved`; a different expectation writes NOTHING and answers
+// `stale` with the current record (the editor re-reads and re-applies,
+// never overwrites a save it did not see); an EXISTING record saved with no
+// expectation is an unconditional overwrite whose revision is bumped. The
+// disk is re-read after flushSync so the stale arm is proven against the
+// file and not the in-memory snapshot.
+{
+  const path = tmp()
+  const store = L.createLayoutStore({ filePath: path })
+  store.load()
+  store.save(CANVAS)
+  const t = (name, over = {}) => ({ id: 'cas', name, nodes: [{ key: 'n1', kind: 'terminal', cwd: '~', dx: 0, dy: 0 }], edges: [], ...over })
+  const attempt = (...args) => { try { return store.saveTemplate(...args) } catch (e) { return { kind: 'threw', reason: e.message } } }
+  const fresh = attempt(t('first'))
+  const matched = attempt(t('second'), 0)
+  const stale = attempt(t('stale write'), 0)
+  store.flushSync()
+  const onDisk = (L.parseLayout(readFileSync(path, 'utf8')).snapshot.templates ?? []).find((x) => x.id === 'cas')
+  const inMemory = store.templates().find((x) => x.id === 'cas')
+  const forced = attempt(t('forced'))
+  store.flushSync()
+  const afterForce = (L.parseLayout(readFileSync(path, 'utf8')).snapshot.templates ?? []).find((x) => x.id === 'cas')
+  ok('store.edit.1 saveTemplate: a new record answers saved with revision 0; a matching expectation writes revision + 1; a mismatched one answers stale with the current record and writes nothing (re-read from disk); no expectation on an existing record overwrites and bumps',
+    Boolean(fresh) && fresh.kind === 'saved' && fresh.template.revision === 0 && fresh.template.name === 'first' &&
+      Boolean(matched) && matched.kind === 'saved' && matched.template.revision === 1 && matched.template.name === 'second' &&
+      Boolean(stale) && stale.kind === 'stale' && stale.current !== undefined && stale.current.revision === 1 && stale.current.name === 'second' && typeof stale.reason === 'string' && stale.reason.length > 0 &&
+      onDisk !== undefined && onDisk.revision === 1 && onDisk.name === 'second' &&
+      inMemory !== undefined && inMemory.revision === 1 && inMemory.name === 'second' &&
+      Boolean(forced) && forced.kind === 'saved' && forced.template.revision === 2 && forced.template.name === 'forced' &&
+      afterForce !== undefined && afterForce.revision === 2 && afterForce.name === 'forced',
+    JSON.stringify({ fresh, matched, stale, onDisk, inMemory, forced, afterForce }))
+}
+
+// M183 — library.1–.2. THE NODE LIBRARY (`src/shared/template-library.ts`):
+// the pure table the workflow panel's library column, the inspector and the
+// validator share. Guarded on the module's presence the way edit.1–.4 are,
+// so a missing module fails BY NAME rather than throwing and taking the
+// checks below it with it.
+const LIB_MISSING = 'src/shared/template-library.ts does not exist'
+const hasLibrary = Array.isArray(L.LIBRARY) && typeof L.defaultNodeOf === 'function' && typeof L.placementFor === 'function' && typeof L.LIBRARY_GAP === 'number'
+const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect']
+
+// library.1 — LIBRARY holds exactly one entry per kind, in the kind order
+// the diagram draws, and each entry is something a person can READ: a
+// non-empty name no other entry shares, one sentence (ends in `.`, at most
+// 90 characters — the column is narrow) and an example line (at most 60).
+// defaultNodeOf(kind) is what the library's drop and `Add` apply, so
+// addNode must ACCEPT it for every kind — a default the validator refuses
+// is a library entry that can never be added, with nothing on screen to say
+// why; terminal/chat carry `cwd: '~'`, pool carries `width: 2`, offsets are
+// 0. An unknown kind is a programmer error (the table is closed; user input
+// never reaches it) and THROWS a TypeError naming the kind rather than
+// answering a node of no kind.
+{
+  const ID = 'library.1 LIBRARY: one entry per kind in order (terminal, chat, pool, orchestrator, collect), distinct non-empty names, a sentence ending in . of ≤ 90 chars, an example of ≤ 60 chars; defaultNodeOf(kind) is accepted by addNode for every kind (cwd ~ on terminal/chat, width 2 on pool, dx/dy 0); an unknown kind throws a TypeError naming it'
+  if (!hasLibrary || typeof L.addNode !== 'function') ok(ID, false, hasLibrary ? 'addNode (template-edit.ts) is missing' : LIB_MISSING)
+  else {
+    const kinds = L.LIBRARY.map((e) => e.kind)
+    const orderOk = JSON.stringify(kinds) === JSON.stringify(LIBRARY_KINDS)
+    const names = L.LIBRARY.map((e) => e.name)
+    const namesOk = names.every((n) => typeof n === 'string' && n.trim().length > 0) && new Set(names).size === names.length
+    const sentencesOk = L.LIBRARY.every((e) => typeof e.sentence === 'string' && e.sentence.trim().length > 1 && e.sentence.endsWith('.') && e.sentence.length <= 90)
+    const examplesOk = L.LIBRARY.every((e) => typeof e.example === 'string' && e.example.trim().length > 0 && e.example.length <= 60)
+    const empty = { id: 't', name: 't', nodes: [], edges: [] }
+    const defaults = {}
+    const accepted = {}
+    for (const kind of LIBRARY_KINDS) {
+      try {
+        const d = L.defaultNodeOf(kind)
+        defaults[kind] = d
+        const r = L.addNode(empty, d)
+        accepted[kind] = r
+      } catch (e) { accepted[kind] = { kind: 'threw', reason: e.message } }
+    }
+    const acceptedOk = LIBRARY_KINDS.every((k) => accepted[k] && accepted[k].kind === 'ok' && accepted[k].template.nodes.length === 1 && accepted[k].template.nodes[0].kind === k)
+    const shapeOk = LIBRARY_KINDS.every((k) => defaults[k] && defaults[k].kind === k && !('key' in defaults[k]) && defaults[k].dx === 0 && defaults[k].dy === 0) &&
+      defaults.terminal && defaults.terminal.cwd === '~' && defaults.chat && defaults.chat.cwd === '~' && defaults.pool && defaults.pool.width === 2
+    let unknown
+    try { unknown = { returned: L.defaultNodeOf('widget') } } catch (e) { unknown = { threw: e instanceof TypeError, message: e.message } }
+    const unknownOk = unknown.threw === true && typeof unknown.message === 'string' && unknown.message.includes('widget')
+    ok(ID, orderOk && namesOk && sentencesOk && examplesOk && acceptedOk && shapeOk && unknownOk,
+      JSON.stringify({ kinds, names, orderOk, namesOk, sentencesOk, examplesOk, acceptedOk, shapeOk, unknownOk, defaults, accepted, unknown, library: L.LIBRARY }))
+  }
+}
+
+// library.2 — placementFor is where `Add` (the keyboard door) puts a new
+// block: a template with no nodes answers the origin; otherwise one GAP
+// (LIBRARY_GAP = 40) to the right of the RIGHTMOST block's right edge
+// (max over dx + BLOCK_W), at the TOPMOST block's dy. The property the
+// gesture depends on is that the point never lands ON an existing block —
+// asserted geometrically against every node's rect, with three blocks that
+// overlap each other so a "rightmost by dx" or "last node" reading would
+// land inside one. BLOCK_W/BLOCK_H are the diagram's own constants (already
+// in this bundle through workflow-diagram.ts), never restated here.
+{
+  const ID = 'library.2 placementFor: no nodes → {0,0}; nodes at (0,0), (100,20), (150,-10) → dx = 150 + BLOCK_W + LIBRARY_GAP (358), dy = -10, overlapping no block\'s rect; one node at (0,0) → {BLOCK_W + LIBRARY_GAP (208), 0}; LIBRARY_GAP is 40'
+  if (!hasLibrary || typeof L.BLOCK_W !== 'number' || typeof L.BLOCK_H !== 'number') ok(ID, false, hasLibrary ? 'BLOCK_W/BLOCK_H (workflow-diagram.ts) are missing from the bundle' : LIB_MISSING)
+  else {
+    const W = L.BLOCK_W; const H = L.BLOCK_H
+    const node = (key, dx, dy) => ({ key, kind: 'terminal', cwd: '~', dx, dy })
+    const t = (nodes) => ({ id: 'p', name: 'place', nodes, edges: [] })
+    const call = (tpl) => { try { return L.placementFor(tpl) } catch (e) { return { threw: e.message } } }
+    const none = call(t([]))
+    const three = call(t([node('n1', 0, 0), node('n2', 100, 20), node('n3', 150, -10)]))
+    const one = call(t([node('n1', 0, 0)]))
+    const overlaps = (p, n) => p.dx < n.dx + W && p.dx + W > n.dx && p.dy < n.dy + H && p.dy + H > n.dy
+    const threeNodes = [node('n1', 0, 0), node('n2', 100, 20), node('n3', 150, -10)]
+    const noOverlap = three && typeof three.dx === 'number' && threeNodes.every((n) => !overlaps(three, n))
+    ok(ID,
+      L.LIBRARY_GAP === 40 &&
+        Boolean(none) && none.dx === 0 && none.dy === 0 &&
+        Boolean(three) && three.dx === 150 + W + 40 && three.dx === 358 && three.dy === -10 && noOverlap &&
+        Boolean(one) && one.dx === W + 40 && one.dx === 208 && one.dy === 0,
+      JSON.stringify({ gap: L.LIBRARY_GAP, W, H, none, three, one, noOverlap }))
+  }
+}
+
+// M184 — run.def.1. THE RUN'S SNAPSHOT. A run gains `definition` (the
+//      template as it was at the run's start: id, revision, nodes, edges) and
+//      `mapping` (node key → panel id). Both ABSENT on every pre-M184 run and
+//      never normalised in — and absent after serialiseLayout too, because a
+//      written `"definition"` would claim a snapshot the run never took. A
+//      malformed one drops the FIELD with a warning naming the run, never the
+//      run: the run's entries and cost are still true even when its snapshot
+//      is not. Nodes and edges are parsed by the TEMPLATE parser's rules (one
+//      grammar, so a node that would not load as a template cannot load as a
+//      snapshot either), a bad node dropped and the definition kept.
+{
+  const runsLayout = (runs) => L.parseLayout(file({
+    workspaces: [{ id: 'w1', name: 'Canvas', panels: [panel({ id: 'a' }), panel({ id: 'b' }), panel({ id: 'c' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, runs }]
+  }))
+  const base = (id, over = {}) => ({ id, name: `run ${id}`, panelIds: ['a', 'b', 'c'], edges: [], startedAt: 1000, entries: [{ panelId: 'a', startedAt: 1000, endedAt: 1500, outcome: 'exit 0' }], templateId: 't1', ...over })
+  const goodDef = {
+    templateId: 't1', revision: 2,
+    nodes: [
+      { key: 'n1', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-lc', 'true'], title: 'one', dx: -200, dy: 0 },
+      { key: 'n2', kind: 'chat', cwd: '~', message: 'hello', dx: 200, dy: 0 },
+      // A pool needs its `width` and `cwd` too: `parseWorkflowNode` is what a
+      // snapshot's nodes go through, and a pool without them is a shape the app
+      // cannot draw (the fixture, not the rule, was wrong — M184).
+      { key: 'n3', kind: 'pool', width: 4, cwd: '~', list: '/tmp/list.txt', prompt: 'do the item', dx: 0, dy: 200 }
+    ],
+    edges: [{ from: 'n1', to: 'n2', trigger: 'idle' }, { from: 'n2', to: 'n3', trigger: 'exit-ok' }]
+  }
+  const goodMap = { n1: 'a', n2: 'b', n3: 'c' }
+  const r = runsLayout([
+    base('plain'),
+    base('good', { definition: goodDef, mapping: goodMap }),
+    base('badrev', { definition: { ...goodDef, revision: 1.5 }, mapping: goodMap }),
+    base('badnodes', { definition: { ...goodDef, nodes: [goodDef.nodes[0], { key: 'n2', kind: 'nope', cwd: '~' }, { key: '', kind: 'terminal', cwd: '~' }] }, mapping: goodMap }),
+    base('badmapentry', { definition: goodDef, mapping: { n1: 'a', n2: 7, n3: 'c' } }),
+    base('badmap', { definition: goodDef, mapping: 'n1=a' }),
+    // M184 (the critic, 5). `-1` is the UNSAVED mark and is kept; anything
+    // below it is malformed.
+    base('unsaved', { definition: { ...goodDef, revision: -1 }, mapping: goodMap }),
+    base('badneg', { definition: { ...goodDef, revision: -2 }, mapping: goodMap })
+  ])
+  const runs = active(r.snapshot).runs ?? []
+  const byId = (id) => runs.find((x) => x.id === id)
+  const plain = byId('plain'), good = byId('good'), badrev = byId('badrev'), badnodes = byId('badnodes'), badmapentry = byId('badmapentry'), badmap = byId('badmap')
+  const unsaved = byId('unsaved'), badneg = byId('badneg')
+  // The pre-M184 shape written back: no key at all — not `null`, not `{}`.
+  const plainOnly = runsLayout([base('plain')])
+  const plainText = L.serialiseLayout({ ...plainOnly.snapshot })
+  // The round trip: parse → serialise → parse carries both fields intact.
+  const round = active(L.parseLayout(L.serialiseLayout({ ...runsLayout([base('good', { definition: goodDef, mapping: goodMap })]).snapshot })).snapshot).runs ?? []
+  const roundGood = round.find((x) => x.id === 'good')
+  const sameDef = (d) => d !== undefined && d !== null && d.templateId === 't1' && d.revision === 2 &&
+    Array.isArray(d.nodes) && d.nodes.length === 3 && d.nodes.map((n) => n.key).join(',') === 'n1,n2,n3' &&
+    d.nodes[0].kind === 'terminal' && d.nodes[0].command === '/bin/sh' && Array.isArray(d.nodes[0].args) && d.nodes[0].args.join(' ') === '-lc true' && d.nodes[0].dx === -200 &&
+    d.nodes[1].kind === 'chat' && d.nodes[1].message === 'hello' && d.nodes[2].kind === 'pool' &&
+    Array.isArray(d.edges) && d.edges.length === 2 && d.edges[0].from === 'n1' && d.edges[0].to === 'n2' && d.edges[0].trigger === 'idle' && d.edges[1].trigger === 'exit-ok'
+  const sameMap = (m) => m !== undefined && m !== null && JSON.stringify(m) === JSON.stringify(goodMap)
+  const warnsFor = (id, field) => r.warnings.some((w) => w.includes(`run ${id}`) && w.includes(field))
+  ok('run.def.1 parseRuns: definition and mapping absent stay absent (and serialise to no key); a good pair round-trips through serialiseLayout; a definition with a fractional or below -1 revision drops the FIELD with a warning naming the run and the run survives, and revision -1 (the unsaved mark) is kept; a node the template parser would drop is dropped, the definition kept (its edge with it) and the parser\'s OWN warning forwarded under the run; a mapping entry that is not a string is dropped; a mapping that is not an object is dropped whole with a warning; a mapping outlives neither a dropped definition nor a key the snapshot does not hold',
+    runs.length === 8 &&
+      plain !== undefined && !('definition' in plain) && !('mapping' in plain) && !/"definition"|"mapping"/.test(plainText) &&
+      good !== undefined && sameDef(good.definition) && sameMap(good.mapping) &&
+      roundGood !== undefined && sameDef(roundGood.definition) && sameMap(roundGood.mapping) &&
+      badrev !== undefined && !('definition' in badrev) && !('mapping' in badrev) && badrev.entries.length === 1 && badrev.templateId === 't1' && warnsFor('badrev', 'definition') &&
+      badneg !== undefined && !('definition' in badneg) && !('mapping' in badneg) && warnsFor('badneg', 'definition') &&
+      unsaved !== undefined && unsaved.definition !== undefined && unsaved.definition.revision === -1 && sameMap(unsaved.mapping) &&
+      badnodes !== undefined && badnodes.definition !== undefined && badnodes.definition.nodes.length === 1 && badnodes.definition.nodes[0].key === 'n1' && badnodes.definition.edges.length === 0 && badnodes.definition.revision === 2 &&
+      JSON.stringify(badnodes.mapping) === JSON.stringify({ n1: 'a' }) && warnsFor('badnodes', 'mapping named keys') && r.warnings.some((w) => w.startsWith('run badnodes: ') && /node/i.test(w) && !/mapping/.test(w)) &&
+      badmapentry !== undefined && badmapentry.mapping !== undefined && JSON.stringify(badmapentry.mapping) === JSON.stringify({ n1: 'a', n3: 'c' }) && sameDef(badmapentry.definition) &&
+      badmap !== undefined && !('mapping' in badmap) && sameDef(badmap.definition) && warnsFor('badmap', 'mapping'),
+    JSON.stringify({ ids: runs.map((x) => x.id), plain, good, badrev, badneg, unsaved, badnodes, badmapentry, badmap, plainHasKey: /"definition"|"mapping"/.test(plainText), warnings: r.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
