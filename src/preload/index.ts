@@ -382,6 +382,9 @@ const bridge: CanvasBridge = {
     put: (req) => ipcRenderer.invoke(IPC.ASSET_PUT, req),
     choose: () => ipcRenderer.invoke(IPC.ASSET_CHOOSE)
   },
+  node: {
+    fetch: (req) => ipcRenderer.invoke(IPC.NODE_FETCH, req)
+  },
   board: {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),
     laneStatus: (req) => ipcRenderer.invoke(IPC.BOARD_LANE_STATUS, req),

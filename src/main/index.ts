@@ -10,6 +10,7 @@ import { discoverPreview } from './preview-discover'
 import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
+import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -2049,6 +2050,31 @@ app.whenReady().then(async () => {
         })
         return answer.canceled || answer.filePaths[0] === undefined ? null : answer.filePaths[0]
       }
+    },
+    // M188. The fetch node's one GET. The real fetcher lives HERE and is
+    // called by no suite (the `verify:meta update.1` shape): every check
+    // drives an injected one, and no suite in this repo reaches the network.
+    {
+      fetch: (req) => runHttpNode({ url: String(req?.url ?? ''), ...(typeof req?.method === 'string' ? { method: req.method } : {}) }, {
+        now: () => Date.now(),
+        fetch: (url) => new Promise((resolve, reject) => {
+          const done = (status: number, body: string): void => { clearTimeout(deadline); resolve({ status, body }) }
+          const request = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas' } }, (res) => {
+            const chunks: Buffer[] = []
+            let bytes = 0
+            res.on('data', (c: Buffer) => {
+              // The cap is applied HERE too, not only after: a server that
+              // answers a gigabyte would otherwise be held in memory whole
+              // before `runHttpNode` sliced it.
+              bytes += c.length
+              if (bytes <= NODE_FETCH_MAX_BYTES + 1024) chunks.push(c)
+            })
+            res.on('end', () => done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')))
+          })
+          const deadline = setTimeout(() => { request.destroy(new Error(`the server did not answer within ${NODE_FETCH_TIMEOUT_MS / 1000} seconds`)) }, NODE_FETCH_TIMEOUT_MS)
+          request.on('error', (error) => { clearTimeout(deadline); reject(error) })
+        })
+      })
     }
   )
   createWindow()

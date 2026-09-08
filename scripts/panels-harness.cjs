@@ -97,7 +97,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, parseLayout,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parseLayout,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1473,6 +1473,15 @@ app.whenReady().then(async () => {
   {
     put: (req) => putAsset({ dir: join(app.getPath('userData'), 'assets'), ...(req && typeof req.path === 'string' ? { path: req.path } : {}), ...(req && req.bytes !== undefined ? { bytes: req.bytes } : {}) }),
     choose: async () => state.assetChoice ?? null
+  },
+  // M188. The REAL runHttpNode over a FAKE fetcher: no suite reaches the
+  // network (the rule that keeps `verify` fast and offline), and every refusal
+  // arm — which is the part that matters — is the production one.
+  {
+    fetch: (req) => runHttpNode({ url: String((req && req.url) || ''), ...(req && typeof req.method === 'string' ? { method: req.method } : {}) }, {
+      now: () => Date.now(),
+      fetch: async () => { state.nodeFetches = (state.nodeFetches || 0) + 1; return { status: 200, body: 'a harness body' } }
+    })
   })
   ipcMain.handle = realIpcMainHandle
 

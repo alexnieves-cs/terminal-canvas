@@ -128,9 +128,9 @@ import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
 import { NoteNode } from '@renderer/note/NoteNode'
-import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
+import { clearDraft, getDraft, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
-import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
+import { REASON_NOTHING_RUNNING, TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
 import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
@@ -3905,6 +3905,7 @@ export function Canvas({
     const createdChats: string[] = []
     const undoCreated = (): void => { for (const id of createdChats) void window.canvas.agentSession.dispose({ id, drop: true }) }
     const poolNodes: Array<Extract<typeof filled.nodes[number], { kind: 'pool' }>> = []
+    const runNodes: Array<Extract<typeof filled.nodes[number], { kind: 'action' | 'http' }>> = []
     for (const place of places) {
       const node = place.node
       if (node.kind === 'chat') {
@@ -3934,6 +3935,11 @@ export function Canvas({
       // workers hand off into through M78's join, its first message naming
       // the target.
       if (node.kind === 'pool') { poolNodes.push(node); continue }
+      // M188. The two EXECUTABLE kinds mint no panel: they are the workflow's
+      // own hands. They are collected here and run AFTER the shape is
+      // committed, in template order, so an action that names a panel this
+      // instantiation is minting can bind to it.
+      if (node.kind === 'action' || node.kind === 'http') { runNodes.push(node); continue }
       if (node.kind === 'orchestrator' || node.kind === 'collect') {
         const id = `c${nextIdRef.current++}`
         const sessionId = crypto.randomUUID()
@@ -4013,6 +4019,14 @@ export function Canvas({
       const joined = filled.edges.some((e) => e.from === node.key)
       const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node, ...(joined ? { joined: true as const } : {}) })
       if (started.kind === 'refused') applyPoolEvent({ templateId: template.id, key: node.key, event: { kind: 'refused', why: started.reason } })
+    }
+    // M188. The executable nodes, in template order, after every panel exists.
+    // Each answers through the SAME `runNodeNow` the inspector's Test control
+    // and the `node-test` verb take — one executor, so a node cannot behave
+    // one way when a person tests it and another when the workflow runs it.
+    for (const node of runNodes) {
+      const outcome = await runNodeRef.current?.(node)
+      if (outcome !== undefined && outcome.kind === 'failed') sayRef.current(`${node.key}: ${outcome.reason}`)
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
     // The whole shape is the selection: a template is one thing.
@@ -4898,6 +4912,57 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
+   * inspector's Test control and the `node-test` verb all take, so a node
+   * cannot behave one way when a person tests it and another when the
+   * workflow runs it.
+   *
+   * An `action` node runs its verb LINE through `runAgentPlan` — the same
+   * function the agent door takes — so a destructive step still needs its
+   * confirmation, an unbindable line is refused by name, and nothing here is
+   * a second executor. A `http` node's GET is main's.
+   */
+  const runNodeNow = useCallback(async (node: { key?: string; kind: string; line?: string; url?: string; method?: string }): Promise<{ kind: 'ok'; output: string; ms: number } | { kind: 'failed'; reason: string; ms: number }> => {
+    const started = Date.now()
+    if (node.kind === 'action') {
+      const line = node.line ?? ''
+      const reply = await paletteActionsRef.current?.runAgentPlan(line)
+      if (reply === undefined) return { kind: 'failed', reason: 'the canvas is not ready to run a verb', ms: Date.now() - started }
+      return reply.kind === 'ran'
+        ? { kind: 'ok', output: reply.summary, ms: Date.now() - started }
+        : { kind: 'failed', reason: reply.reason, ms: Date.now() - started }
+    }
+    if (node.kind === 'http') {
+      const answer = await window.canvas.node.fetch({ url: node.url ?? '', ...(node.method === undefined ? {} : { method: node.method }) })
+      if (answer.kind === 'refused') return { kind: 'failed', reason: answer.reason, ms: Date.now() - started }
+      return { kind: 'ok', output: `${answer.status} · ${answer.note}${answer.truncated ? ' · cut' : ''}\n${answer.text.slice(0, 2000)}`, ms: answer.ms }
+    }
+    // Three states, never two: a kind with no runtime is not a failure of the
+    // node, and saying "failed" about it would send a person looking for a
+    // fault in a shape that is correct.
+    return { kind: 'failed', reason: `a ${node.kind} node runs as part of the workflow, not on its own — Run the workflow to start it`, ms: Date.now() - started }
+  }, [])
+  const runNodeRef = useRef(runNodeNow)
+  runNodeRef.current = runNodeNow
+  /**
+   * M188. Test this node: ONE node, with its input and its answer, running no
+   * neighbour and recording no run. The subject is the SELECTED block of the
+   * named template's draft — what the person is looking at.
+   */
+  const testNode = useCallback(async (templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const template = getDraft(templateId)?.template ?? allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (template === undefined) return { kind: 'refused', reason: TEMPLATE_GONE }
+    const chosenKey = key ?? selectedOf(templateId) ?? undefined
+    if (chosenKey === undefined) return { kind: 'refused', reason: 'select a node on the diagram, or name one' }
+    const node = template.nodes.find((n) => n.key === chosenKey)
+    if (node === undefined) return { kind: 'refused', reason: `no node is called ${chosenKey}` }
+    const outcome = await runNodeRef.current(node as { key?: string; kind: string; line?: string; url?: string; method?: string })
+    return outcome.kind === 'ok'
+      ? { kind: 'ran', note: `${chosenKey} · ${outcome.ms} ms · ${outcome.output.split('\n')[0]?.slice(0, 120) ?? ''}` }
+      : { kind: 'refused', reason: `${chosenKey} · ${outcome.ms} ms · ${outcome.reason}` }
+  }, [])
+
+  /**
    * M187. THE NOTE'S THREE VERBS. One record, three forms, and one door each:
    * add (the palette's rows and the agent's verb), set the text (the node's
    * own editor commits through here, so the canvas's history has one entry
@@ -5249,6 +5314,7 @@ export function Canvas({
     saveWorkflowCopyDraft: saveWorkflowCopy,
     addImageFromPath,
     replaceImagePanel: replaceImage,
+    testNodeNow: testNode,
     addNote,
     setNoteText,
     setNoteTint,
@@ -6505,6 +6571,7 @@ export function Canvas({
       </div>
       <Inspector
         templateOf={(id) => allTemplates(templateRows).find((t) => t.id === id)}
+        onTestNode={testNode}
         onToggle={chrome.toggleContext}
         tab={chrome.contextTab}
         onSelectTab={chrome.setContextTab}

@@ -4604,7 +4604,7 @@ const tpl = (nodes, edges = [], over = {}) => ({ id: 'e1', name: 'edit me', node
 // checks below it with it.
 const LIB_MISSING = 'src/shared/template-library.ts does not exist'
 const hasLibrary = Array.isArray(L.LIBRARY) && typeof L.defaultNodeOf === 'function' && typeof L.placementFor === 'function' && typeof L.LIBRARY_GAP === 'number'
-const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect']
+const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect', 'action', 'http']
 
 // library.1 — LIBRARY holds exactly one entry per kind, in the kind order
 // the diagram draws, and each entry is something a person can READ: a
@@ -4618,7 +4618,7 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect']
 // never reaches it) and THROWS a TypeError naming the kind rather than
 // answering a node of no kind.
 {
-  const ID = 'library.1 LIBRARY: one entry per kind in order (terminal, chat, pool, orchestrator, collect), distinct non-empty names, a sentence ending in . of ≤ 90 chars, an example of ≤ 60 chars; defaultNodeOf(kind) is accepted by addNode for every kind (cwd ~ on terminal/chat, width 2 on pool, dx/dy 0); an unknown kind throws a TypeError naming it'
+  const ID = 'library.1 LIBRARY: one entry per kind in order (terminal, chat, pool, orchestrator, collect, action, http), distinct non-empty names, a sentence ending in . of ≤ 90 chars, an example of ≤ 60 chars; defaultNodeOf(kind) is accepted by addNode for every kind (cwd ~ on terminal/chat, width 2 on pool, dx/dy 0); an unknown kind throws a TypeError naming it'
   if (!hasLibrary || typeof L.addNode !== 'function') ok(ID, false, hasLibrary ? 'addNode (template-edit.ts) is missing' : LIB_MISSING)
   else {
     const kinds = L.LIBRARY.map((e) => e.kind)

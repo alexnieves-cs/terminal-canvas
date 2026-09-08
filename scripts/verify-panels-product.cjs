@@ -2270,6 +2270,56 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
     }
 
+    // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.
+    //     (a) An `action` node holds a verb LINE, and running the workflow
+    //         runs it through the same executor the palette and the agent door
+    //         take — which is the workflow door every v9 verb's V9_DOORS row
+    //         has owed since M180. Running a template whose action node says
+    //         `note-add sticky` puts a sticky note on the canvas.
+    //     (b) Test this node runs ONE node: the fetch node's POST is refused
+    //         by name (the method as written, not silently rewritten), the
+    //         GET answers with its body through the outward gate, and NEITHER
+    //         starts a neighbour — the panel count is the same before and
+    //         after, and no run is recorded.
+    const NODE_IDS = ['node.1 an action node runs its verb line through the one executor when the workflow runs (the workflow door), and Test this node runs one block on its own: a fetch node\'s POST is refused naming the method, its GET answers through the outward gate, and neither starts a neighbour or records a run']
+    try {
+      const TPL = 'tpl-nodes-1'
+      layoutStore.saveTemplate({ id: TPL, name: 'nodes', nodes: [
+        { key: 'a1', kind: 'action', line: 'note-add sticky', cwd: '/tmp', dx: 0, dy: 0 },
+        { key: 'h1', kind: 'http', url: 'https://example.com/thing', method: 'GET', cwd: '/tmp', dx: 200, dy: 0 },
+        { key: 'h2', kind: 'http', url: 'https://example.com/thing', method: 'POST', cwd: '/tmp', dx: 400, dy: 0 }
+      ], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfn', kind: 'workflow', x: 40, y: 40, w: 760, h: 520, z: 1, title: 'nodes', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfn', focusedId: 'wfn' })
+      flushLayoutStore()
+      const reNd = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reNd
+      await settle()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="a1"]') !== null`), 5000)
+      const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+      // (b) first, so the panel count is unchanged by anything but the run.
+      const post = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} h2` }, null, 5000)
+      const get = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} h1` }, null, 5000)
+      const missing = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} nope` }, null, 5000)
+      await settle()
+      const afterTests = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+      // (a) The workflow door: Run the template and look for the sticky note.
+      const ran = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${TPL}` }, null, 8000)
+      const sticky = await waitUntil(() => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="note"]')].pop(); return n ? { form: n.getAttribute('data-note-form') } : false })()`), 8000)
+      await settle(); flushLayoutStore()
+      const runs = (JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.runs || [])).length
+      ok(NODE_IDS[0],
+        post && post.kind === 'refused' && /POST is a write/.test(String(post.reason)) && /h2/.test(String(post.reason)) &&
+          get && get.kind === 'ran' && /200/.test(String(get.summary)) && /h1/.test(String(get.summary)) &&
+          missing && missing.kind === 'refused' && /no node is called nope/.test(String(missing.reason)) &&
+          afterTests === before &&
+          ran && ran.kind === 'ran' && sticky !== false && sticky.form === 'sticky' &&
+          runs === 0,
+        JSON.stringify({ before, post, get, missing, afterTests, ran, sticky, runs }))
+      layoutStore.deleteTemplate(TPL)
+    } catch (ndErr) {
+      for (const id of NODE_IDS) ok(id, false, 'threw: ' + String(ndErr && ndErr.message || ndErr))
+    }
+
     // M106 — header.1 / flip.1. HEADER DISCIPLINE in the real renderer: a
     // narrow frame with a long title keeps every chrome control inside its
     // box and carries the full title in `title`; FLIP turns every terminal to

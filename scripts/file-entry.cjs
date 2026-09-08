@@ -73,5 +73,7 @@ module.exports = {
   ...((() => { try { return require('../src/main/preview-capture.ts') } catch { return {} } })()),
   // M186. The asset store's pure rules and the store itself.
   ...((() => { try { return require('../src/shared/assets.ts') } catch { return {} } })()),
-  ...((() => { try { return require('../src/main/asset-store.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/main/asset-store.ts') } catch { return {} } })()),
+  // M188. The http node's one request, over an injected fetcher.
+  ...((() => { try { return require('../src/main/node-run.ts') } catch { return {} } })())
 }

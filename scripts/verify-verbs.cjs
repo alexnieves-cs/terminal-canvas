@@ -352,6 +352,7 @@ const FACTS = {
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
     const commandsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+    const librarySrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'template-library.ts'), 'utf8')
     // M186. The fixture holds one panel of every kind a v9 door's example
     // line names, because a verb whose first argument is a PANEL cannot bind
     // against an empty canvas — and "the example does not bind" would then be
@@ -362,15 +363,25 @@ const FACTS = {
       const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
       const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
       const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
-      // M186. The workflow debt is compared against the table's OWN constant
-      // (`WORKFLOW_EXECUTOR_DUE`): a literal here turned a truthful table red
-      // when the plan moved the executor, and a bare /^M\d+$/ would accept a
-      // milestone that has already shipped.
+      // M188. The workflow door is REAL for every verb but one: an `action`
+      // node holds a verb line and runs it through the same executor, so the
+      // door is asserted the way the agent door is — the line the row names
+      // must BIND — plus the kind must exist in the library a person drags
+      // from. `node-test` alone keeps an owed door, and its reason is not the
+      // executor's absence but a loop with no stop.
       // A canvas door is a gesture STRING, or an OWED object naming a later milestone — the debt as data (the M182 critic); never an empty label.
       const canvasDoor = typeof d?.canvas === 'string' ? d.canvas.length > 0 : typeof d?.canvas?.reason === 'string' && /^M\d+$/.test(String(d.canvas.due))
-      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === V.WORKFLOW_EXECUTOR_DUE }
+      // An action node's line is the part after the colon; it must bind
+      // exactly as the agent line does, and `action` must be a kind the
+      // library offers (a door nobody can drag is not a door).
+      const workflowLine = typeof d?.workflow === 'string' && d.workflow.includes(': ') ? d.workflow.slice(d.workflow.indexOf(': ') + 2) : null
+      const workflowBound = workflowLine === null ? null : P.buildPlan(P.parsePlanLine(workflowLine), facts)
+      const workflowDoor = typeof d?.workflow === 'string'
+        ? workflowBound?.kind === 'plan' && workflowBound.plan.steps[0]?.verb === id && librarySrc.includes("kind: 'action'")
+        : typeof d?.workflow?.reason === 'string' && d.workflow.due === V.WORKFLOW_EXECUTOR_DUE
+      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: workflowDoor }
     })
-    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and an owned workflow omission',
+    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and a WORKFLOW door — an action node whose line binds to the same verb, with `action` a kind the library offers — or, for node-test alone, an owned omission with its reason',
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
   }
 

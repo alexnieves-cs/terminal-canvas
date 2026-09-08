@@ -669,6 +669,8 @@ export const IPC = {
   ASSET_PUT: 'asset:put',
   /** M186. The system's own file chooser, for Replace. */
   ASSET_CHOOSE: 'asset:choose',
+  /** M188. A fetch node's one GET, capped and gated in main. */
+  NODE_FETCH: 'node:fetch',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -1323,6 +1325,11 @@ export type AssetPutResult =
   | { kind: 'stored'; id: string; path: string; mediaType: string; bytes: number; wrote: boolean; prunedCount: number }
   | { kind: 'refused'; reason: string }
 
+/** M188. What a fetch node answers: a capped, gated body, or one named refusal. */
+export type NodeFetchResult =
+  | { kind: 'ok'; status: number; text: string; note: string; truncated: boolean; ms: number }
+  | { kind: 'refused'; reason: string }
+
 export interface CanvasBridge {
   pty: {
     create(spec: PanelSpec): Promise<PtyCreateResult>
@@ -1743,6 +1750,14 @@ export interface CanvasBridge {
   asset: {
     put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
     choose(): Promise<string | null>
+  }
+  /**
+   * M188. The fetch node's one request. A GET and only a GET — any other
+   * method is refused by name, because a write belongs on the broker's
+   * approval path and a node has no door onto it. Never rejects.
+   */
+  node: {
+    fetch(req: { url: string; method?: string }): Promise<NodeFetchResult>
   }
   /** M114. The board's main-side verbs. */
   board: {

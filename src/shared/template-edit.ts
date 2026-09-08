@@ -83,7 +83,12 @@ const FIELDS: Record<TemplateNode['kind'], Record<string, 'string' | 'number' | 
   chat: { cwd: 'string', title: 'string', command: 'string', args: 'string[]', presetId: 'string', message: 'string', w: 'number', h: 'number' },
   pool: { width: 'number', list: 'string', prompt: 'string', cwd: 'string' },
   orchestrator: { prompt: 'string', cwd: 'string' },
-  collect: { target: 'string', cwd: 'string' }
+  collect: { target: 'string', cwd: 'string' },
+  // M188. The two EXECUTABLE kinds. `line` is a verb line bound at run time,
+  // never at save; `method` is stored as written so the refusal can name it
+  // rather than silently rewriting the node to GET.
+  action: { line: 'string', cwd: 'string' },
+  http: { url: 'string', method: 'string', cwd: 'string' }
 }
 
 /** The fields a kind's inspector renders, in order (M183 reads this; one registry for the editor and the validator). */

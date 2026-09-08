@@ -1887,6 +1887,49 @@ await (async () => {
   }
 }
 
+// M188 — node.http.1. THE FETCH NODE IS A GET AND ONLY A GET. Every other
+//      method is refused BY NAME, and the refusal names the method the author
+//      WROTE — a node silently rewritten to GET would run something other
+//      than what it says on the diagram. The reason is structural: a write
+//      belongs on the broker's approval path, where M102 asks the teammate's
+//      own chat before a token is read, and a node that could POST without
+//      passing it would be a way around the door this app already built. A
+//      non-http(s) url is its own refusal. The body is capped INSIDE the
+//      module and passes `outward`, so a token a server happens to return is
+//      scrubbed and the note names the host and the count.
+{
+  const has = typeof F.runHttpNode === 'function' && typeof F.httpNodeRefusal === 'function'
+  const NAME = 'node.http.1 runHttpNode refuses every method but GET by name (naming the method as written) and a non-http(s) url, and fetches NOTHING when it refuses; a GET is capped, passed through the outward gate with a planted token scrubbed and the host and count in its note, and reports its duration'
+  if (!has) ok(NAME, false, 'node-run.ts does not export runHttpNode / httpNodeRefusal')
+  else {
+    const asked = []
+    const deps = (body) => ({ fetch: async (url) => { asked.push(url); return { status: 200, body } }, now: (() => { let t = 1000; return () => (t += 25) })() })
+    const post = await F.runHttpNode({ url: 'https://example.com/', method: 'post' }, deps(''))
+    const del = await F.runHttpNode({ url: 'https://example.com/', method: 'DELETE' }, deps(''))
+    const fileUrl = await F.runHttpNode({ url: 'file:///etc/passwd' }, deps(''))
+    const notUrl = await F.runHttpNode({ url: 'nonsense' }, deps(''))
+    const askedBefore = asked.length
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const okDeps = deps(`hello world GITHUB_TOKEN=${token}`)
+    const fetched = await F.runHttpNode({ url: 'https://example.com/thing', method: 'GET' }, okDeps)
+    const bigDeps = deps('x'.repeat(F.NODE_FETCH_MAX_BYTES + 500))
+    const big = await F.runHttpNode({ url: 'https://example.com/big' }, bigDeps)
+    const threw = { fetch: async () => { throw new Error('no route to host') }, now: () => 0 }
+    const failed = await F.runHttpNode({ url: 'https://example.com/' }, threw)
+    ok(NAME,
+      post.kind === 'refused' && /POST is a write/.test(post.reason) && /approval door/.test(post.reason) &&
+        del.kind === 'refused' && /DELETE is a write/.test(del.reason) &&
+        fileUrl.kind === 'refused' && /file:/.test(fileUrl.reason) &&
+        notUrl.kind === 'refused' && /not a URL/.test(notUrl.reason) &&
+        askedBefore === 0 &&
+        fetched.kind === 'ok' && fetched.status === 200 && fetched.text.includes('hello world') && !fetched.text.includes(token) &&
+        /example\.com/.test(fetched.note) && /redacted/.test(fetched.note) && fetched.truncated === false && fetched.ms > 0 &&
+        big.kind === 'ok' && big.truncated === true && big.text.length <= F.NODE_FETCH_MAX_BYTES &&
+        failed.kind === 'refused' && /no route to host/.test(failed.reason),
+      JSON.stringify({ post, del, fileUrl, notUrl, askedBefore, fetched: { ...fetched, text: fetched.text && fetched.text.slice(0, 40) }, bigTruncated: big.truncated, failed }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -1286,3 +1286,51 @@ at (fresh and diff, `out/visual/`) before a golden was written.
   `Add a sticky note`, `Add free text`, `Add a named region`, `Tint this note…`), so the
   filtered list is longer and its scrolled window moves. No existing row changed its words or
   its order relative to its neighbours.
+
+## M188 — node schemas, a bounded executor, and Test this node (Act V)
+
+Spec `docs/superpowers/specs/2026-09-08-m188-nodes.md`.
+
+**What shipped.** Two executable node kinds on the existing template union — `action` (a canvas
+verb line) and `http` (a GET) — with their fields in `template-edit.ts`'s one FIELDS table and
+their entries in `template-library.ts`, so the library, the inspector and the executor read one
+registry; `main/node-run.ts` (the method refusal naming the method as written, the non-http(s)
+refusal, the cap applied inside the module AND at the socket, the body through `outward`);
+`node:fetch` in main with the real fetcher called by no suite; `runNodeNow` in the renderer as
+the ONE executor the workflow's own run, the inspector's Test control and the `node-test` verb
+all take; and `Test this node` in the inspector beside the node's fields.
+
+**The four-door rule is closed.** Every v9 verb's `V9_DOORS` row has carried an OWED workflow
+door since M180 (`{ reason, due: WORKFLOW_EXECUTOR_DUE }`, the debt as data). An `action` node
+holding a verb line IS that door, so every row now names one and `closure.v9.1` asserts it the
+way it asserts the agent door: the line the row names must BIND through `buildPlan` to that
+verb, and `action` must be a kind the library offers — a door nobody can drag is not a door.
+`node-test` alone keeps an owed door, and its reason is not the executor's absence: a node that
+tests a node is a loop with no stop.
+
+**Struck, with reasons.**
+- **A `shell` node** duplicates the terminal node the graph already has, with a second process
+  seam and no approval story of its own.
+- **A `transform` node** needs an expression language this run cannot design and measure
+  honestly in the time it has; a half-designed one becomes a compatibility burden the moment a
+  template holds it.
+- **Slack, email and webhook nodes** need a workspace token, a sender domain, an armed listener
+  whose lifetime crosses a relaunch, or real elapsed minutes with a sleep/wake. This run can
+  prove none of them, and a node shipped untested against its own service is a promise the
+  ledger would be making on a person's behalf. The `http` GET node covers the reachable part of
+  "useful bounded integrations", and GitHub already has its own audited path (`tc api`).
+- **A write from a node** is refused by name rather than built: the broker's approval door
+  (M102 asks the teammate's own chat before a token is read) has no node-side entry, and a node
+  that could POST without passing it would be a way around the door this app already built.
+
+**Green.** `verify:file` 89/89 (`node.http.1`), `verify:layout` 251/251, `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141,
+typecheck 0, `verify:panels:product` 75/75 at 106.2 s (`out/v9-evidence/m188-product.log`,
+exit 0) — including `node.1`, which drives the workflow door end to end (an action node's
+`note-add sticky` puts a sticky note on the canvas) and proves Test this node starts no
+neighbour and records no run.
+
+**Plan renumbering.** With the service nodes struck, the remaining milestones are M189 (portable
+export and import), M190 (the feedback door and the getting-started guide), M191 (the third UX
+audit) and M192 (5.0.0, the DMG, the release notes and the local tag). The extension registry
+and the example plugin are addressed in M189's ledger line.

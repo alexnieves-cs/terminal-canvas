@@ -21,7 +21,10 @@ export const LIBRARY: readonly LibraryEntry[] = [
   { kind: 'chat', name: 'Chat', sentence: 'A conversation with claude or codex; hands off after a turn.', example: 'review the diff' },
   { kind: 'pool', name: 'Pool', sentence: 'Workers over a shared list, bounded by the concurrency ceiling.', example: 'items.txt' },
   { kind: 'orchestrator', name: 'Orchestrator', sentence: 'A chat that leads the others with a prompt on every spawn.', example: 'lead the workers' },
-  { kind: 'collect', name: 'Collect', sentence: 'A chat that joins every result the pool hands it.', example: 'results.md' }
+  { kind: 'collect', name: 'Collect', sentence: 'A chat that joins every result the pool hands it.', example: 'results.md' },
+  // M188. The two executable kinds: the workflow's own hands.
+  { kind: 'action', name: 'Action', sentence: 'Runs one canvas verb line, through the same executor the palette uses.', example: 'note-add sticky' },
+  { kind: 'http', name: 'Fetch', sentence: 'Reads a web page or an API with a GET; a write is refused by name.', example: 'https://example.com/api' }
 ]
 
 export const LIBRARY_GAP = 40
@@ -39,6 +42,8 @@ export function defaultNodeOf(kind: TemplateNode['kind']): Omit<TemplateNode, 'k
       case 'pool': return { key: 'n', kind: 'pool', width: 2, list: 'items.txt', prompt: 'work on the item below', cwd: '~', dx: 0, dy: 0 }
       case 'orchestrator': return { key: 'n', kind: 'orchestrator', prompt: 'lead the workers and keep the plan', cwd: '~', dx: 0, dy: 0 }
       case 'collect': return { key: 'n', kind: 'collect', target: 'results.md', cwd: '~', dx: 0, dy: 0 }
+      case 'action': return { key: 'n', kind: 'action', line: 'note-add sticky', cwd: '~', dx: 0, dy: 0 }
+      case 'http': return { key: 'n', kind: 'http', url: 'https://example.com/', method: 'GET', cwd: '~', dx: 0, dy: 0 }
       default: throw new TypeError(`${String(kind)} is not a node kind`)
     }
   })()
