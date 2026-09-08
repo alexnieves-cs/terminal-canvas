@@ -910,6 +910,26 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ script: script !== null, declared: declared.length, goldens: goldens.length, missing: missing.slice(0, 8), stray: stray.slice(0, 8), channel: channel && channel[1], budget: budget && budget[1] }))
 }
 
+// M190 — guide.1. THE GUIDE IS CHECKED AS A FILE, and the check is about the
+//      two ways a guide goes wrong. It must name the GATEKEEPER step (this
+//      build is unsigned, and without the right-click Open a person's first
+//      experience is a refusal from macOS with no explanation in it), and
+//      every `npm run <script>` it mentions must be one `package.json`
+//      actually has — a guide that names a script that does not exist is
+//      worse than no guide, because it sends a person to a dead end and makes
+//      them doubt the parts that are true.
+{
+  const guidePath = join(__dirname, '..', 'docs', 'getting-started.md')
+  const exists = existsSync(guidePath)
+  const guide = exists ? readFileSync(guidePath, 'utf8') : ''
+  const pkgScripts = Object.keys(JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).scripts ?? {})
+  const named = [...guide.matchAll(/npm run ([a-z:_-]+)/g)].map((m) => m[1])
+  const unknown = [...new Set(named)].filter((n) => !pkgScripts.includes(n))
+  ok('guide.1 docs/getting-started.md exists, names the Gatekeeper right-click step for this unsigned build, and every npm run script it mentions is one package.json has',
+    exists && /right-click/i.test(guide) && /unsigned/i.test(guide) && named.length > 0 && unknown.length === 0,
+    JSON.stringify({ exists, named: [...new Set(named)], unknown }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

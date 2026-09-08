@@ -97,7 +97,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, parseLayout,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1473,6 +1473,33 @@ app.whenReady().then(async () => {
   {
     put: (req) => putAsset({ dir: join(app.getPath('userData'), 'assets'), ...(req && typeof req.path === 'string' ? { path: req.path } : {}), ...(req && req.bytes !== undefined ? { bytes: req.bytes } : {}) }),
     choose: async () => state.assetChoice ?? null
+  },
+  // M188. The REAL runHttpNode over a FAKE fetcher: no suite reaches the
+  // network (the rule that keeps `verify` fast and offline), and every refusal
+  // arm — which is the part that matters — is the production one.
+  {
+    fetch: (req) => runHttpNode({ url: String((req && req.url) || ''), ...(req && typeof req.method === 'string' ? { method: req.method } : {}) }, {
+      now: () => Date.now(),
+      fetch: async () => { state.nodeFetches = (state.nodeFetches || 0) + 1; return { status: 200, body: 'a harness body' } }
+    })
+  },
+  // M189. The REAL write and read, into a path the check plants (no dialog
+  // opens in a suite — `state.portablePath` stands in for the chooser).
+  {
+    write: async (req) => {
+      const path = (req && typeof req.path === 'string' && req.path) || state.portablePath
+      if (!path) return { kind: 'cancelled' }
+      const text = JSON.stringify((req && req.file) || null, null, 2) + '\n'
+      writeFileSync(path, text, 'utf8')
+      return { kind: 'written', path, bytes: Buffer.byteLength(text, 'utf8') }
+    },
+    read: async (req) => {
+      const path = (req && typeof req.path === 'string' && req.path) || state.portablePath
+      if (!path) return { kind: 'cancelled' }
+      let text
+      try { text = readFileSync(path, 'utf8') } catch (error) { return { kind: 'refused', reason: String(error && error.message) } }
+      return { kind: 'read', path, parse: parsePortable(text) }
+    }
   })
   ipcMain.handle = realIpcMainHandle
 

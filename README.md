@@ -398,6 +398,8 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        browser:read
                        preview:discover / preview:capture
                        asset:put / asset:choose
+                       node:fetch
+                       portable:export / portable:import
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        shelf:list / shelf:save
@@ -415,6 +417,7 @@ renderer  <--send---   pty:data (batched ~16ms) / pty:exit                      
                        agent:event (batched ~16ms) / watcher:state / vault:changed
                        routine:fire
                        canvas:tidy / canvas:flip
+                       canvas:feedback
                        board:add
                        pool:mint / pool:event
 main      --send-->    edit:copy / edit:paste / edit:undo / edit:redo              -->  renderer
@@ -980,6 +983,9 @@ price of not killing something.
 | M185 | v9 Act III — the preview reads as the app beside its code: `shared/preview.ts`'s named device widths and four discovery states, `main/preview-discover.ts` asking ONE `lsof` over the panel's process TREE and reading one `package.json` while running nothing, `main/preview-capture.ts` (the scheme on the guest's live url, an empty image and a failed write each refused by name, one PNG under `userData/captures`), `device` on the browser record laid out (never transformed), a capture as an ordinary image object, a loopback-only coalesced reload, Retry on a failed page, and four verbs/rows/doors — `preview.1`, `preview.capture.1`, `preview.device.1`, product `preview.1` | ✅ done |
 | M186 | v9 Act IV — durable images: `main/asset-store.ts` content-addressed by sha-256 (the same picture twice is one file, the extension from the magic number, both caps reported, the oldest pruned), `image.asset` on the record, `asset:put`/`asset:choose`, a drop or paste that lands on NOTHING becoming a picture with every agent target unchanged, and Replace on every arm through the system's own chooser — `asset.1`, `image.asset.1`, product `image.2` | ✅ done |
 | M187 | v9 Act IV — notes, free text and named frames: the sixteenth kind as ONE record with three forms, `shared/notes.ts`'s summary and caps, the four tints declared in both theme blocks, an in-place editor that stops the canvas's keys and serves its own paste, a frame minted behind what it encloses whose interior takes no gesture, and three verbs with five rows — `note.kind.1`, `note.1`, product `note.1` | ✅ done |
+| M188 | v9 Act V — node schemas and a bounded executor: `action` (a canvas verb line through the SAME `runAgentPlan` the agent door takes — the workflow door every v9 verb had owed) and `http` (a GET, and every other method refused by name because a write belongs on the broker's approval path), the response capped and passed through `outward`, `node:fetch` in main with the real fetcher called by no suite, and `Test this node` in the inspector, the palette and `node-test` — one block, its duration and a named failure, no neighbour started and no run recorded — `node.http.1`, `closure.v9.1` (the workflow door asserted, not owed), product `node.1` | ✅ done |
+| M189 | v9 Act VI — one portable file: `shared/portable.ts` built FIELD BY FIELD (no environment, session id, transcript or pid can travel), every string scrubbed with the count on the record, every kind that cannot travel omitted BY NAME with what it would do on the other machine, pictures omitted unless a person asks (never called "redacted"), three parse answers including a future version naming both numbers, and `remapPortable` moving each reference with its target; import makes a SEPARATE workspace with every panel dormant so nothing starts — `portable.1`, `gate.2` (the fifth redactSecrets caller, by name), product `portable.1` | ✅ done |
+| M190 | v9 Act VII — the feedback door and the guide: `shared/feedback.ts` builds an issue draft from facts chosen BY TYPE (version, platform, engine words, panel counts — no path, command or transcript can reach the shape), scrubs it and states the count IN the draft, cuts an over-long body with a line saying so, and opens the repository's `issues/new` through the ONE `link:open` door — this app submits nothing and reads no credential; `docs/getting-started.md` written from the shipped behaviour and checked as a file — `feedback.1`, `guide.1`, `gate.2` (the sixth redactSecrets caller, by name), product `feedback.1` | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

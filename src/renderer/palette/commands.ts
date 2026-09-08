@@ -456,6 +456,10 @@ export interface PaletteActions {
   saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
+  prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteTint(panelId: string, tint: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -2261,9 +2265,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.copy', title: 'Workflow: save a copy', subtitle: 'keep the diagram under a new name', group: 'canvas', searchText: 'workflow template save copy duplicate built-in', run: () => { if (templateId !== undefined) void actions.saveWorkflowCopy(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.run', title: 'Workflow: run', subtitle: 'run the shape on the diagram', group: 'canvas', searchText: 'workflow template run diagram start', run: () => { if (templateId !== undefined) actions.runWorkflowNow(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
+    // M188. Test this node: the selected block, run on its own, with its
+    // duration and a named failure — never its neighbours.
+    out.push(withReason({ id: 'node.test', title: 'Test this node', subtitle: 'run the selected block on its own and report what it answered', group: 'canvas', searchText: 'node test run block try execute action fetch', run: () => { if (templateId !== undefined) void actions.testNode(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
   const imagePanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'image')?.id
+  // M190. Feedback: a DRAFT, opened in the person's own browser. The row says
+  // what the door does, because "Send feedback" would promise a send this app
+  // never makes.
+  out.push({ id: 'feedback.open', title: 'Prepare feedback…', subtitle: 'a scrubbed draft in your browser — you read it and send it, this app does not', group: 'canvas', searchText: 'feedback issue bug report problem help github', run: () => { void actions.prepareFeedback() } })
+  // M189. The portable file's two rows. Export writes what is on this canvas
+  // (pictures only when the person asks, through the verb line); Import makes
+  // a SEPARATE workspace and starts nothing.
+  out.push({ id: 'portable.export', title: 'Export this canvas…', subtitle: 'one file: the objects, the workflows, secrets scrubbed and every omission named', group: 'canvas', searchText: 'export canvas file share portable save send', run: () => { void actions.exportCanvas() } })
+  out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state

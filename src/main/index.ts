@@ -10,6 +10,8 @@ import { discoverPreview } from './preview-discover'
 import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
+import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
+import { parsePortable } from '@shared/portable'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -72,6 +74,7 @@ import { checkForUpdate, repoOf } from './update-check'
 import { readImage } from './image-read'
 import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
+import { get as httpGet } from 'node:http'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate } from '../shared/templates'
 import type { AttentionSink } from './pty-manager'
@@ -540,6 +543,7 @@ function rebuildMenu(): void {
     // M65. The sheet is the renderer's; the menu only asks for it.
     onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
     onTidy: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_TIDY) },
+    onFeedback: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FEEDBACK) },
     onFlip: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FLIP) },
     onSavePreset: () => {
       void savePresetFromFocusedPanel()
@@ -2048,6 +2052,86 @@ app.whenReady().then(async () => {
           filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
         })
         return answer.canceled || answer.filePaths[0] === undefined ? null : answer.filePaths[0]
+      }
+    },
+    // M188. The fetch node's one GET. The real fetcher lives HERE and is
+    // called by no suite (the `verify:meta update.1` shape): every check
+    // drives an injected one, and no suite in this repo reaches the network.
+    {
+      fetch: (req) => runHttpNode({ url: String(req?.url ?? ''), ...(typeof req?.method === 'string' ? { method: req.method } : {}) }, {
+        now: () => Date.now(),
+        fetch: (url) => new Promise((resolve, reject) => {
+          const done = (status: number, body: string): void => { clearTimeout(deadline); resolve({ status, body }) }
+          // M190's critic (4). The GETTER FOLLOWS THE SCHEME: `httpNodeRefusal`
+          // allows http(s), and an `http:` url sent through `https.get` fails
+          // TLS on port 80 and comes back as "the server did not answer" — a
+          // named-refusal system reporting a network fault for a shape this
+          // app decided to allow.
+          const get = url.startsWith('http://') ? httpGet : httpsGet
+          const request = get(url, { headers: { 'User-Agent': 'terminal-canvas' } }, (res) => {
+            const chunks: Buffer[] = []
+            let bytes = 0
+            res.on('data', (c: Buffer) => {
+              // The cap is applied HERE too, not only after: a server that
+              // answers a gigabyte would otherwise be held in memory whole
+              // before `runHttpNode` sliced it — and the request is DESTROYED
+              // at the cap rather than left streaming for the whole deadline
+              // (M190's critic, 6).
+              bytes += c.length
+              if (bytes <= NODE_FETCH_MAX_BYTES) chunks.push(c)
+              else { request.destroy(); done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')) }
+            })
+            res.on('end', () => done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')))
+          })
+          const deadline = setTimeout(() => { request.destroy(new Error(`the server did not answer within ${NODE_FETCH_TIMEOUT_MS / 1000} seconds`)) }, NODE_FETCH_TIMEOUT_MS)
+          request.on('error', (error) => { clearTimeout(deadline); reject(error) })
+        })
+      })
+    },
+    // M189. The portable file on disk. Main writes and reads; the RENDERER
+    // built the record and the renderer decides what to make of a parse —
+    // main never turns a file into a workspace, the same division that keeps
+    // the board's own writes in the renderer (M113).
+    {
+      write: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showSaveDialog(mainWindow, {
+            title: 'Export this canvas',
+            defaultPath: join(app.getPath('downloads'), typeof req?.suggested === 'string' && req.suggested.trim() !== '' ? req.suggested : 'canvas.tccanvas'),
+            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
+          })
+          if (answer.canceled || answer.filePath === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePath
+        }
+        const text = `${JSON.stringify(req?.file ?? null, null, 2)}\n`
+        try {
+          writeFileSync(path, text, 'utf8')
+        } catch (error) {
+          return { kind: 'refused' as const, reason: `that file could not be written: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'written' as const, path, bytes: Buffer.byteLength(text, 'utf8') }
+      },
+      read: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showOpenDialog(mainWindow, {
+            title: 'Import a canvas',
+            properties: ['openFile'],
+            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
+          })
+          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePaths[0]
+        }
+        let text: string
+        try {
+          text = readFileSync(path, 'utf8')
+        } catch (error) {
+          return { kind: 'refused' as const, reason: `that file could not be read: ${error instanceof Error ? error.message : String(error)}` }
+        }
+        return { kind: 'read' as const, path, parse: parsePortable(text) }
       }
     }
   )

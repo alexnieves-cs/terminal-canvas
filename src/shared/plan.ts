@@ -56,7 +56,21 @@ export interface AgentPlanRequest { line: string; caller?: AgentPlanCaller }
  * Places gate refuses at `agent:create`.
  */
 const HUMAN_ANSWER_VERBS = new Set(['type', 'submit', 'interrupt'])
-const TEAMMATE_REFUSED_VERBS = new Set(['new-chat', 'spawn', 'workspace-from-template', 'run-template', 'dispatch', 'restart', 'set-setting', 'workspace', 'reset-canvas'])
+/**
+ * M190 (the Acts V–VII critic, finding 1). The workflow-editing verbs join the
+ * teammate's refused list, and the reason is that M188's ACTION NODE runs a
+ * verb line: without them a place-bounded teammate could write the verb it is
+ * not allowed to run into a template — `workflow-add`, `workflow-set`,
+ * `workflow-save` — and then `workflow-run` it, and every refusal this door
+ * makes would be reachable again one indirection away.
+ */
+const TEAMMATE_REFUSED_VERBS = new Set([
+  'new-chat', 'spawn', 'workspace-from-template', 'run-template', 'dispatch', 'restart', 'set-setting', 'workspace', 'reset-canvas',
+  'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
+  // M189's export writes a FILE at a path the caller names; a teammate's plan
+  // does not choose where this app writes.
+  'export-canvas', 'import-canvas'
+])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {
     const panel = facts.panels.find((p) => p.id === step.args['panel'])

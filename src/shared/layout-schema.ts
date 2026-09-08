@@ -1592,7 +1592,11 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       // M132: the three workflow kinds route through their own parser, which
       // reports its own reason; the arm below stays exactly as it is for
       // whatever comes after these three.
-      if (n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect') {
+      // M188. The two executable kinds join the workflow-node arm; the list
+      // is here because the terminal/chat arm below is the DEFAULT, and a kind
+      // it does not know must reach `parseWorkflowNode` rather than being read
+      // as a terminal with no command.
+      if (n.kind === 'pool' || n.kind === 'orchestrator' || n.kind === 'collect' || n.kind === 'action' || n.kind === 'http') {
         const wfWarnings: string[] = []
         const wf = parseWorkflowNode(n, wfWarnings)
         if (!wf) { warnings.push(`dropped node ${n.key} from template ${entry.id}: ${wfWarnings[0] ?? 'unusable'}`); continue }
@@ -1637,7 +1641,13 @@ export function parseTemplates(raw: unknown, warnings: string[]): PersistedTempl
       edges.push({ from: e.from, to: e.to, trigger: e.trigger as HandoffTrigger })
     }
     seen.add(entry.id)
-    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges, ...(revision.value === undefined ? {} : { revision: revision.value }), ...(nextKey.value === undefined ? {} : { nextKey: nextKey.value }) })
+    // M190. `reviewed: false` is the only value this field takes: absent means
+    // reviewed (every template this canvas made itself, and every pre-M190
+    // record). Anything else present is malformed and costs the FIELD, which
+    // fails SAFE — an unreadable mark reads as "not reviewed".
+    const unreviewed = entry.reviewed === false || (entry.reviewed !== undefined && entry.reviewed !== true)
+    if (entry.reviewed !== undefined && entry.reviewed !== true && entry.reviewed !== false) warnings.push(`template ${entry.id}: reviewed was not a boolean — the template is kept and treated as unreviewed`)
+    out.push({ id: entry.id, name: entry.name, ...(isStr(entry.description) ? { description: entry.description } : {}), nodes, edges, ...(unreviewed ? { reviewed: false as const } : {}), ...(revision.value === undefined ? {} : { revision: revision.value }), ...(nextKey.value === undefined ? {} : { nextKey: nextKey.value }) })
   })
   return out.slice(0, TEMPLATES_MAX)
 }

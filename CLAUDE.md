@@ -301,6 +301,8 @@ renderer --invoke--> snapshot:list / snapshot:restore                           
 renderer --invoke--> browser:read                                                --> main
 renderer --invoke--> preview:discover / preview:capture                          --> main
 renderer --invoke--> asset:put / asset:choose                                    --> main
+renderer --invoke--> node:fetch                                                  --> main
+renderer --invoke--> portable:export / portable:import                           --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer --invoke--> shelf:list / shelf:save                                     --> main
@@ -323,6 +325,7 @@ main     --send-->   agent:event (batched ~16ms)                                
 main     --send-->   watcher:state / vault:changed                                --> renderer
 main     --send-->   routine:fire                                                 --> renderer
 main     --send-->   canvas:tidy / canvas:flip                                    --> renderer
+main     --send-->   canvas:feedback                                              --> renderer
 main     --send-->   board:add                                                    --> renderer
 main     --send-->   pool:mint (ephemeral reply) / pool:event                     --> renderer
 ```

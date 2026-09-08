@@ -128,17 +128,20 @@ import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
 import { NoteNode } from '@renderer/note/NoteNode'
-import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
+import { clearDraft, getDraft, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
-import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
+import { REASON_NOTHING_RUNNING, TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
 import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
+import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
+import type { AgentPlanCaller } from '@shared/plan'
+import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness } from '@shared/onboarding'
+import { onboardingReadiness, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -3905,6 +3908,7 @@ export function Canvas({
     const createdChats: string[] = []
     const undoCreated = (): void => { for (const id of createdChats) void window.canvas.agentSession.dispose({ id, drop: true }) }
     const poolNodes: Array<Extract<typeof filled.nodes[number], { kind: 'pool' }>> = []
+    const runNodes: Array<Extract<typeof filled.nodes[number], { kind: 'action' | 'http' }>> = []
     for (const place of places) {
       const node = place.node
       if (node.kind === 'chat') {
@@ -3934,6 +3938,11 @@ export function Canvas({
       // workers hand off into through M78's join, its first message naming
       // the target.
       if (node.kind === 'pool') { poolNodes.push(node); continue }
+      // M188. The two EXECUTABLE kinds mint no panel: they are the workflow's
+      // own hands. They are collected here and run AFTER the shape is
+      // committed, in template order, so an action that names a panel this
+      // instantiation is minting can bind to it.
+      if (node.kind === 'action' || node.kind === 'http') { runNodes.push(node); continue }
       if (node.kind === 'orchestrator' || node.kind === 'collect') {
         const id = `c${nextIdRef.current++}`
         const sessionId = crypto.randomUUID()
@@ -4013,6 +4022,14 @@ export function Canvas({
       const joined = filled.edges.some((e) => e.from === node.key)
       const started = await window.canvas.agentSession.poolStart({ templateId: template.id, key: node.key, node, ...(joined ? { joined: true as const } : {}) })
       if (started.kind === 'refused') applyPoolEvent({ templateId: template.id, key: node.key, event: { kind: 'refused', why: started.reason } })
+    }
+    // M188. The executable nodes, in template order, after every panel exists.
+    // Each answers through the SAME `runNodeNow` the inspector's Test control
+    // and the `node-test` verb take — one executor, so a node cannot behave
+    // one way when a person tests it and another when the workflow runs it.
+    for (const node of runNodes) {
+      const outcome = await runNodeRef.current?.(node, undefined, template.reviewed !== false)
+      if (outcome !== undefined && outcome.kind === 'failed') sayRef.current(`${node.key}: ${outcome.reason}`)
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
     // The whole shape is the selection: a template is one thing.
@@ -4898,6 +4915,165 @@ export function Canvas({
     selectOnly(browserId)
   }, [commitHistory, selectOnly])
   /**
+   * M190. FEEDBACK — a DRAFT in the person's own browser, never a submission.
+   * The facts are chosen by type (a version, a platform, engine words, panel
+   * counts) and scrubbed; the draft says so; and the only thing that leaves
+   * this app is a link the person opens, through the ONE `link:open` door.
+   */
+  const prepareFeedback = useCallback(async (says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const report = await window.canvas.env.report()
+    const counts = new Map<string, number>()
+    for (const panel of panelsRef.current) counts.set(panel.kind, (counts.get(panel.kind) ?? 0) + 1)
+    const draft = buildFeedback(FEEDBACK_REPO, {
+      version: '5.0.0',
+      platform: 'macOS',
+      engines: onboardingReadiness(report).rows.map((row) => ({ name: FIRST_LAUNCH_ENGINES[row.backend].name, state: row.discovery === 'unknown' ? 'unanswered' : row.discovery })),
+      kinds: [...counts].map(([kind, count]) => ({ kind, count })),
+      says: says ?? ''
+    })
+    const opened = await window.canvas.links.open({ panelId: focusedIdRef.current ?? 'canvas', target: draft.url })
+    if (opened.kind === 'refused') return { kind: 'refused', reason: opened.reason ?? 'that link could not be opened' }
+    return { kind: 'ran', note: `a draft in your browser · ${draft.redacted} secret${draft.redacted === 1 ? '' : 's'} scrubbed${draft.truncated ? ' · cut to fit a link' : ''} · nothing was sent` }
+  }, [])
+
+  /**
+   * M189. EXPORT — the RENDERER builds the record, because the renderer is
+   * the only side that knows what is on this canvas (M113's rule for the
+   * board, reached again); main only writes the bytes. Pictures are omitted
+   * unless the person asked for them, and the sentence says what travelled,
+   * what was scrubbed and what was left out.
+   */
+  const exportCanvas = useCallback(async (path?: string, withPixels?: boolean): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const persisted = fromPanels(panelsRef.current)
+    const images: { id: string; mediaType: string; base64: string }[] = []
+    if (withPixels === true) {
+      for (const panel of panelsRef.current) {
+        if (!isImagePanel(panel) || panel.image.asset === undefined) continue
+        const read = await window.canvas.image.read(panel.image.path)
+        if (read.kind !== 'data') continue
+        const comma = read.dataUrl.indexOf(',')
+        images.push({ id: panel.image.asset, mediaType: read.mediaType, base64: read.dataUrl.slice(comma + 1) })
+      }
+    }
+    const file = buildPortable({
+      kind: 'canvas',
+      workspaceName: (await window.canvas.workspace.list()).find((w) => w.active)?.name ?? 'canvas',
+      panels: persisted,
+      templates: templateRowsRef.current,
+      app: '5.0.0',
+      now: Date.now(),
+      ...(images.length === 0 ? {} : { images }),
+      ...((await window.canvas.routine.list()).length > 0 ? { hasRoutines: true } : {})
+    })
+    const written = await window.canvas.portable.write({ ...(path === undefined ? {} : { path }), file, suggested: `${file.workspace.name.replace(/[^a-zA-Z0-9-_ ]/g, '') || 'canvas'}.tccanvas` })
+    if (written.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
+    if (written.kind === 'refused') return { kind: 'refused', reason: written.reason }
+    return { kind: 'ran', note: `${displayPath(written.path).short} · ${exportSentence(file)}` }
+  }, [])
+  /**
+   * M189. IMPORT — a SEPARATE workspace, every id remapped, and nothing
+   * started: no PTY is spawned, no chat session created, no watcher armed and
+   * no routine scheduled, because the kinds that would do any of those cannot
+   * travel at all (`travels`) and every panel arrives in its not-started
+   * state, which is the state a persisted panel has always had.
+   */
+  const importCanvas = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const answer = await window.canvas.portable.read(path === undefined ? {} : { path })
+    if (answer.kind === 'cancelled') return { kind: 'ran', note: 'nothing imported' }
+    if (answer.kind === 'refused') return { kind: 'refused', reason: answer.reason }
+    const parse = answer.parse as ReturnType<typeof parsePortable>
+    if (parse.kind !== 'file') return { kind: 'refused', reason: parse.reason }
+    const remapped = remapPortable(parse.file, (prefix) => `${prefix}i${nextIdRef.current++}`)
+    const made = await window.canvas.workspace.create(`${remapped.workspace.name} (imported)`)
+    if (made === null || made === undefined || made === '') return { kind: 'refused', reason: 'a new workspace could not be made for the import' }
+    // The templates travel with it, each under its new id; a name collision is
+    // a copy, never an overwrite of a workflow the person already had.
+    // M190 (the critic, 2). An imported template is UNREVIEWED: its action
+    // nodes hold verb lines somebody else wrote, and Run is refused by name
+    // until a person has read them.
+    for (const template of remapped.templates) await window.canvas.template.save({ ...template, reviewed: false })
+    reloadTemplates()
+    const switched = await switchWorkspace(made)
+    reloadWorkspacesRef.current?.()
+    if (!switched) return { kind: 'refused', reason: 'the new workspace could not be opened' }
+    const next = toPanels(remapped.workspace.panels)
+    // M189. EVERY imported panel is DORMANT, exactly as a restored one is
+    // (the boot's own rule at `dormantIds`'s seed). Without this a terminal
+    // panel added to the array is a NEW panel, and the tiering effect asks
+    // `registry.ensure` for it without the dormant flag — which spawns a
+    // process the person only asked to look at. The check counts the PTYs
+    // across the whole import and requires the count not to move.
+    setDormantIds((current) => new Set([...current, ...next.map((p) => p.rect.id)]))
+    setPanels(() => {
+      commitHistory(next)
+      return next
+    })
+    const warned = parse.warnings.length === 0 ? '' : ` · ${parse.warnings.length} warning${parse.warnings.length === 1 ? '' : 's'}`
+    return { kind: 'ran', note: `${remapped.workspace.panels.length} object${remapped.workspace.panels.length === 1 ? '' : 's'} into a new workspace · nothing was started${warned}` }
+  }, [commitHistory, reloadTemplates, switchWorkspace])
+
+  /**
+   * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
+   * inspector's Test control and the `node-test` verb all take, so a node
+   * cannot behave one way when a person tests it and another when the
+   * workflow runs it.
+   *
+   * An `action` node runs its verb LINE through `runAgentPlan` — the same
+   * function the agent door takes — so a destructive step still needs its
+   * confirmation, an unbindable line is refused by name, and nothing here is
+   * a second executor. A `http` node's GET is main's.
+   */
+  const runNodeNow = useCallback(async (node: { key?: string; kind: string; line?: string; url?: string; method?: string }, caller?: AgentPlanCaller, reviewed?: boolean): Promise<{ kind: 'ok'; output: string; ms: number } | { kind: 'failed'; reason: string; ms: number }> => {
+    const started = Date.now()
+    if (node.kind === 'action') {
+      const line = node.line ?? ''
+      // M190 (the critic, finding 2). A template that ARRIVED from a file is
+      // unreviewed: its action nodes hold verb lines somebody else wrote, and
+      // the import is inert only until the first Run. The person opens the
+      // node, sees the line and marks it reviewed; until then it is refused
+      // by name with the line quoted, so the refusal is also the review.
+      if (reviewed === false) {
+        return { kind: 'failed', reason: `this workflow came from a file and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
+      }
+      // The CALLER travels with the line: without it a teammate's plan could
+      // write a verb into a template and run it with its identity erased.
+      const reply = await paletteActionsRef.current?.runAgentPlan(line, caller)
+      if (reply === undefined) return { kind: 'failed', reason: 'the canvas is not ready to run a verb', ms: Date.now() - started }
+      return reply.kind === 'ran'
+        ? { kind: 'ok', output: reply.summary, ms: Date.now() - started }
+        : { kind: 'failed', reason: reply.reason, ms: Date.now() - started }
+    }
+    if (node.kind === 'http') {
+      const answer = await window.canvas.node.fetch({ url: node.url ?? '', ...(node.method === undefined ? {} : { method: node.method }) })
+      if (answer.kind === 'refused') return { kind: 'failed', reason: answer.reason, ms: Date.now() - started }
+      return { kind: 'ok', output: `${answer.status} · ${answer.note}${answer.truncated ? ' · cut' : ''}\n${answer.text.slice(0, 2000)}`, ms: answer.ms }
+    }
+    // Three states, never two: a kind with no runtime is not a failure of the
+    // node, and saying "failed" about it would send a person looking for a
+    // fault in a shape that is correct.
+    return { kind: 'failed', reason: `a ${node.kind} node runs as part of the workflow, not on its own — Run the workflow to start it`, ms: Date.now() - started }
+  }, [])
+  const runNodeRef = useRef(runNodeNow)
+  runNodeRef.current = runNodeNow
+  /**
+   * M188. Test this node: ONE node, with its input and its answer, running no
+   * neighbour and recording no run. The subject is the SELECTED block of the
+   * named template's draft — what the person is looking at.
+   */
+  const testNode = useCallback(async (templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const template = getDraft(templateId)?.template ?? allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (template === undefined) return { kind: 'refused', reason: TEMPLATE_GONE }
+    const chosenKey = key ?? selectedOf(templateId) ?? undefined
+    if (chosenKey === undefined) return { kind: 'refused', reason: 'select a node on the diagram, or name one' }
+    const node = template.nodes.find((n) => n.key === chosenKey)
+    if (node === undefined) return { kind: 'refused', reason: `no node is called ${chosenKey}` }
+    const outcome = await runNodeRef.current(node as { key?: string; kind: string; line?: string; url?: string; method?: string }, undefined, template.reviewed !== false)
+    return outcome.kind === 'ok'
+      ? { kind: 'ran', note: `${chosenKey} · ${outcome.ms} ms · ${outcome.output.split('\n')[0]?.slice(0, 120) ?? ''}` }
+      : { kind: 'refused', reason: `${chosenKey} · ${outcome.ms} ms · ${outcome.reason}` }
+  }, [])
+
+  /**
    * M187. THE NOTE'S THREE VERBS. One record, three forms, and one door each:
    * add (the palette's rows and the agent's verb), set the text (the node's
    * own editor commits through here, so the canvas's history has one entry
@@ -5249,6 +5425,10 @@ export function Canvas({
     saveWorkflowCopyDraft: saveWorkflowCopy,
     addImageFromPath,
     replaceImagePanel: replaceImage,
+    testNodeNow: testNode,
+    exportCanvasFile: exportCanvas,
+    prepareFeedbackNow: prepareFeedback,
+    importCanvasFile: importCanvas,
     addNote,
     setNoteText,
     setNoteTint,
@@ -5379,6 +5559,8 @@ export function Canvas({
   // M180. The agent door: `tc plan` lands on the SAME executor the palette's
   // verb line runs, with the caller main resolved riding beside the line.
   useEffect(() => window.canvas.canvas.onPlan((req) => paletteActions.runAgentPlan(req.line, req.caller)), [paletteActions])
+  // M190. Help ▸ Prepare feedback… — main's menu item, the renderer's draft.
+  useEffect(() => window.canvas.canvas.onFeedback(() => { void prepareFeedback() }), [prepareFeedback])
 
   // The file tree column, lifted into useFileTree.ts. Roots on the SELECTED
   // panel while insertPath pastes into the FOCUSED one — see the hook's doc
@@ -6422,6 +6604,7 @@ export function Canvas({
         {panels.length === 0 && !merged && (
           <Launcher
             presets={presetRows}
+            onImportCanvas={() => { void importCanvas() }}
             recents={launcherRecents}
             onOpenRecent={(dir) => paletteActions.beginSpawnSheet(undefined, undefined, { cwd: dir })}
             tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
@@ -6505,6 +6688,7 @@ export function Canvas({
       </div>
       <Inspector
         templateOf={(id) => allTemplates(templateRows).find((t) => t.id === id)}
+        onTestNode={testNode}
         onToggle={chrome.toggleContext}
         tab={chrome.contextTab}
         onSelectTab={chrome.setContextTab}

@@ -1286,3 +1286,169 @@ at (fresh and diff, `out/visual/`) before a golden was written.
   `Add a sticky note`, `Add free text`, `Add a named region`, `Tint this note…`), so the
   filtered list is longer and its scrolled window moves. No existing row changed its words or
   its order relative to its neighbours.
+
+## M188 — node schemas, a bounded executor, and Test this node (Act V)
+
+Spec `docs/superpowers/specs/2026-09-08-m188-nodes.md`.
+
+**What shipped.** Two executable node kinds on the existing template union — `action` (a canvas
+verb line) and `http` (a GET) — with their fields in `template-edit.ts`'s one FIELDS table and
+their entries in `template-library.ts`, so the library, the inspector and the executor read one
+registry; `main/node-run.ts` (the method refusal naming the method as written, the non-http(s)
+refusal, the cap applied inside the module AND at the socket, the body through `outward`);
+`node:fetch` in main with the real fetcher called by no suite; `runNodeNow` in the renderer as
+the ONE executor the workflow's own run, the inspector's Test control and the `node-test` verb
+all take; and `Test this node` in the inspector beside the node's fields.
+
+**The four-door rule is closed.** Every v9 verb's `V9_DOORS` row has carried an OWED workflow
+door since M180 (`{ reason, due: WORKFLOW_EXECUTOR_DUE }`, the debt as data). An `action` node
+holding a verb line IS that door, so every row now names one and `closure.v9.1` asserts it the
+way it asserts the agent door: the line the row names must BIND through `buildPlan` to that
+verb, and `action` must be a kind the library offers — a door nobody can drag is not a door.
+`node-test` alone keeps an owed door, and its reason is not the executor's absence: a node that
+tests a node is a loop with no stop.
+
+**Struck, with reasons.**
+- **A `shell` node** duplicates the terminal node the graph already has, with a second process
+  seam and no approval story of its own.
+- **A `transform` node** needs an expression language this run cannot design and measure
+  honestly in the time it has; a half-designed one becomes a compatibility burden the moment a
+  template holds it.
+- **Slack, email and webhook nodes** need a workspace token, a sender domain, an armed listener
+  whose lifetime crosses a relaunch, or real elapsed minutes with a sleep/wake. This run can
+  prove none of them, and a node shipped untested against its own service is a promise the
+  ledger would be making on a person's behalf. The `http` GET node covers the reachable part of
+  "useful bounded integrations", and GitHub already has its own audited path (`tc api`).
+- **A write from a node** is refused by name rather than built: the broker's approval door
+  (M102 asks the teammate's own chat before a token is read) has no node-side entry, and a node
+  that could POST without passing it would be a way around the door this app already built.
+
+**Green.** `verify:file` 89/89 (`node.http.1`), `verify:layout` 251/251, `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141,
+typecheck 0, `verify:panels:product` 75/75 at 106.2 s (`out/v9-evidence/m188-product.log`,
+exit 0) — including `node.1`, which drives the workflow door end to end (an action node's
+`note-add sticky` puts a sticky note on the canvas) and proves Test this node starts no
+neighbour and records no run.
+
+**Plan renumbering.** With the service nodes struck, the remaining milestones are M189 (portable
+export and import), M190 (the feedback door and the getting-started guide), M191 (the third UX
+audit) and M192 (5.0.0, the DMG, the release notes and the local tag). The extension registry
+and the example plugin are addressed in M189's ledger line.
+
+## M189 — one portable file, and an import that starts nothing (Act VI)
+
+Spec `docs/superpowers/specs/2026-09-08-m189-portable.md`.
+
+**What shipped.** `shared/portable.ts` — the format, `buildPortable` (field by field, so a
+terminal's environment, a chat's session id and transcript, and a pid have nowhere to go),
+`parsePortable`'s three answers, `remapPortable`, and `exportSentence`; `portable:export` and
+`portable:import` in main (the file is main's; what to MAKE of it is the renderer's, M113's
+division); the two verbs, two palette rows and two door entries.
+
+**Decisions.**
+- *The renderer builds the record.* Only the renderer knows what is on this canvas; main writes
+  bytes and parses text and never turns a file into a workspace.
+- *Pictures are omitted by default and never called redacted.* A picture cannot be scrubbed by
+  machine; the omission says exactly that, and `with-pictures` on the verb line is the human
+  review choice the brief asks for.
+- *Import marks every panel DORMANT.* Found by the product check: a terminal panel added to the
+  array is a NEW panel, and the tiering effect asks `registry.ensure` without the dormant flag —
+  which spawns a process the person only asked to look at. The check counts PTYs across the
+  import and requires the count not to move.
+- *`gate.2` gains its fifth `redactSecrets` caller BY NAME.* An export scrubs field by field and
+  reports its count on the record, which `outward` (one text, one note) cannot express. Widening
+  the allowlist by name is what that check is for.
+
+**Struck, with reasons.** The extension registry and the example plugin (the plan's M195 and
+M196) are not built. A declarative plugin loader is a new trust path into Electron, the
+filesystem and the credential store, and the brief's own acceptance evidence for it is an
+example loaded "from the documented external directory, not from a special fixture-only
+registration" — which needs an external directory, an install consent flow and a person to walk
+it. This run can prove none of that, and a loader nobody has run from outside the repository is
+a trust path shipped on a promise.
+
+**Red first.** `portable.1` (pure) was watched failing with `portable.ts` absent. The product
+check was red four times against real problems: a `listSessions()` called without its
+`wc`; a check that switched workspaces and never switched back (six later checks failed with no
+idea why — the harness's own "checks share state" rule, now restored in a `finally`); a seeded
+watcher record in the wrong shape, which left the renderer with an empty canvas and every
+request timing out; and the import spawning a PTY, which was the product defect above.
+
+**Green.** `verify:file` 90/90, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
+143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
+`verify:panels:product` 76/76 at 106.8 s (`out/v9-evidence/m189-product.log`, exit 0).
+
+## M190 — the feedback door and the getting-started guide (Act VII)
+
+Spec `docs/superpowers/specs/2026-09-08-m190-feedback-guide.md`.
+
+**What shipped.** `shared/feedback.ts` (the draft, built from facts chosen by TYPE, scrubbed
+with the count stated inside the draft, truncated with a line saying so when a URL cannot carry
+it); the `feedback` verb, its palette row (`Prepare feedback…`, whose subtitle says the app does
+not send it) and its door entry; and `docs/getting-started.md`, written from the shipped
+behaviour and checked as a file by `guide.1`.
+
+**Decisions.**
+- *The row says what the door does.* "Send feedback" would promise a send this app never makes;
+  the row and the result sentence both say the draft is the person's to read and submit.
+- *The repository is a CONSTANT, not a runtime read of `package.json`.* The packaged app's
+  `package.json` is inside the asar, and the update check already learned that lesson; a door
+  that silently pointed at nothing would look like it worked.
+- *`guide.1` checks the two ways a guide goes wrong.* It must name the Gatekeeper right-click
+  (this build is unsigned, and without it a person's first experience is a refusal from macOS
+  with no explanation), and every `npm run` script it names must exist — a guide that sends a
+  person to a dead end makes them doubt the parts that are true.
+- *`gate.2` gains its sixth `redactSecrets` caller by name*, with the reason: a feedback draft's
+  count is stated in the draft itself, which is not something `outward`'s one text and one note
+  can express.
+
+**Green.** `verify:file` 91/91, `verify:meta` 39/39, `verify:verbs` 22/22, `verify:palette`
+143/143, typecheck 0, `verify:panels:product` 77/77 at 107.2 s
+(`out/v9-evidence/m190-product.log`, exit 0) — `feedback.1` reads the exact url the door opened
+and asserts the planted token is not in it, encoded or decoded.
+
+### M188–M190 — the fresh-context critic, and what was done about it
+
+A fresh agent read the three diffs and ran every plain-node suite (typecheck 0; file 91/91,
+layout 251/251, verbs 22/22, palette 143/143, styles 56/56, meta 39/39, viewport 141/141) and
+returned eleven ranked findings. Six were security or correctness defects in code this run had
+just written; all eleven are answered below.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | The action node ran its verb line with NO caller, and the workflow-editing verbs were not on the teammate's refused list — so a place-bounded teammate could write `new-chat` into a template and `workflow-run` it, reaching every verb the agent door refuses one indirection away | Fixed: the caller travels into `runNodeNow` and out to `runAgentPlan`, and the editing verbs, the run, `node-test` and both portable verbs join `TEAMMATE_REFUSED_VERBS`. Pinned by a new check, `agent-door.7` |
+| 2 | Import → Run was NOT safe: an imported template's action node holds a verb line somebody else wrote, and `type`/`submit`/`spawn` are not destructive, so the first Run of a shared file could type into and submit to an agent panel | Fixed: a template that arrived from a file is marked `reviewed: false` on the record, and an action node of an unreviewed template is refused BY NAME with its line quoted until a person has read it. `template.reviewed.1` pins the parse (absent means reviewed; a non-boolean fails SAFE to unreviewed), and the product check imports a file carrying an action node and asserts its Run makes nothing |
+| 3 | `export-canvas <path>` skipped the save dialog and overwrote any file, and was marked non-destructive — so a plan or a teammate could replace `~/.zshrc` with canvas JSON | Fixed: the verb is `destructive: true`, so the agent door refuses it outright and the palette confirms. The product check now asserts BOTH: the refusal at the door, and the export through the palette row |
+| 4 | `httpNodeRefusal` allowed `http:` while the fetcher was `https.get`, so an `http://` node failed TLS and reported "the server did not answer" — a named-refusal system reporting a network fault for a shape it had allowed | Fixed: the getter follows the scheme |
+| 5 | No host policy, and a url carrying a name and password sent Basic auth while only the HOST appeared in the note — the credential was neither scrubbed nor visible | Fixed for the credential (refused by name); the host policy is DECLINED and recorded: a fetch node reaching this machine's own network is what a person previewing a local API needs, and the loopback preview is a shipped feature of this same run. The bound that makes it safe is finding 2's review gate — an imported template cannot run without a person reading its nodes |
+| 6 | The cap was not real at either place: the socket allowed 1 KB over and kept streaming, and the module compared a byte constant against a character length | Fixed: the request is destroyed at the cap, and the module measures and slices in bytes |
+| 7 | `travels()` failed OPEN, so a seventeenth panel kind would export by default AND be written by the terminal arm | Fixed: an allowlist, with an unknown kind omitted by name |
+| 8 | A comment claimed a picture's path did not travel; the line below it carried the path | Fixed: the comment says what happens (the path travels as text and will not resolve elsewhere, so the panel arrives `missing` with Replace), and the export's `omitted` list now says plainly that folder and file paths travel |
+| 9 | Three `V9_DOORS` canvas entries named doors nothing had — a Help-menu line and two launcher lines | Fixed by BUILDING two of them (Help ▸ Prepare feedback… in the menu bar; `Import a canvas…` on the launcher, where a person arrives with someone else's file) and by recording export's canvas door as OWED with its reason and milestone, which is what the owed shape is for |
+| 10 | The truncated feedback URL was never re-measured, so a CJK or emoji draft could report `truncated` and still not fit | Fixed: the cut is measured against the built url in a loop |
+| 11 | The two new node kinds had no field labels | Fixed: `verb line`, `address`, `method` |
+
+**A defect the critic's work surfaced indirectly.** `parseTemplates` routed only `pool`,
+`orchestrator` and `collect` to `parseWorkflowNode`, so an `action` or `http` node was dropped
+at the next load with `kind was unusable` — M188's own kinds could not survive a relaunch. Found
+by `template.reviewed.1`'s fixture and fixed in the same line.
+
+**A harness lesson.** The run's own critic must not run while the Electron tier is running: a
+concurrent `npm run typecheck` and seven plain-node suites were enough to blow two measured
+watchdogs (`verify` at 96 s, `verify:visual` at 221 s) in an otherwise green tree. The three
+commands were re-run alone.
+
+### Acts V–VII — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after the critic's fixes exited 1 at 57/59. Two scenes, both looked at
+before a golden was written.
+
+- **launcher** — The empty canvas gains one line, `Import a canvas…`, at the top of the verb
+  list with its own hint ("a file someone exported — into a new workspace, with nothing
+  started"); the lines below it move down by that row. It is here because an empty canvas is
+  exactly where a person arrives holding someone else's file, and because M190's critic found
+  the door claimed in `V9_DOORS` did not exist. The primary start, the readiness sentences and
+  the two cards above are unchanged.
+- **palette-query** — The canvas section gained M188's and M190's rows (`Test this node`,
+  `Prepare feedback…`, `Export this canvas…`, `Import a canvas…`), so the filtered list is
+  longer and its scrolled window moves again. No existing row changed its words.

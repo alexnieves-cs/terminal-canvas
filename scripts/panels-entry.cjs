@@ -188,6 +188,8 @@ module.exports = {
   discoverPreview: require('../src/main/preview-discover').discoverPreview,
   descendantsOf: require('../src/main/machine-cost').descendantsOf,
   putAsset: require('../src/main/asset-store').putAsset,
+  runHttpNode: require('../src/main/node-run').runHttpNode,
+  parsePortable: require('../src/shared/portable').parsePortable,
   capturePreview: require('../src/main/preview-capture').capturePreview,
   // M130. The REAL trail read, so the lane checks and the shot scene drive
   // the same tail production drives — a fixture function written in the

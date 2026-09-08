@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 130000 // measured 2026-09-08 alone in the Electron tier after M185's preview.1 (which serves a page, attaches a guest and takes a real capture), two green runs: 101.5s, 103.3s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 140000 // measured 2026-09-08 alone in the Electron tier after M188-M189 added node.1 and portable.1 (which reloads three times), two green runs: 104.8s, 106.8s wall; 1.25x the slower, rounded up — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -2268,6 +2268,190 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ sticky, freeText, frame, notes, termZ: termRecord && termRecord.z, typed, afterType: afterType && afterType.note, hit }))
     } catch (nErr) {
       for (const id of NOTE_IDS) ok(id, false, 'threw: ' + String(nErr && nErr.message || nErr))
+    }
+
+    // M190 — feedback.1. THE DRAFT DOOR, and the claim that matters: this app
+    //     SUBMITS NOTHING. The `link:open` calls are recorded by the harness,
+    //     so the check reads the exact url the door opened: it is the
+    //     repository's issues/new, it carries a title and a body, and a token
+    //     planted in what the person typed is NOT in it. No credential is
+    //     read and no request is made — the only outward thing is a link.
+    const FB_IDS = ['feedback.1 the feedback door opens the repository\'s issues/new with a title and a body in the person\'s own browser, a planted token scrubbed out of it, and submits nothing itself']
+    try {
+      const opensBefore = linkOpens.length
+      const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      const asked = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `feedback it broke and my token is ${token}` }, null, 6000)
+      await settle()
+      const opened = linkOpens.slice(opensBefore)
+      const url = opened[0] && (opened[0].target || opened[0])
+      ok(FB_IDS[0],
+        asked && asked.kind === 'ran' && /nothing was sent/.test(String(asked.summary)) &&
+          opened.length === 1 && typeof url === 'string' &&
+          url.startsWith('https://github.com/') && url.includes('/issues/new?title=') && url.includes('&body=') &&
+          !url.includes(token) && !decodeURIComponent(url).includes(token) &&
+          /Nothing has been sent/.test(decodeURIComponent(url)),
+        JSON.stringify({ asked, openedCount: opened.length, urlHead: typeof url === 'string' ? url.slice(0, 80) : url, hasToken: typeof url === 'string' && decodeURIComponent(url).includes(token) }))
+    } catch (fbErr) {
+      for (const id of FB_IDS) ok(id, false, 'threw: ' + String(fbErr && fbErr.message || fbErr))
+    }
+
+    // M189 — portable.1. EXPORT AND IMPORT, END TO END IN THE REAL RENDERER.
+    //     The canvas holds a terminal (never started), a sticky note and a
+    //     watcher. Export writes one file: the terminal and the note travel,
+    //     the WATCHER does not (it would arm itself on the other machine) and
+    //     the file says so by name. Import then makes a SEPARATE workspace
+    //     with new ids for everything — and the claim that matters, counted
+    //     across the whole import: NO pty is spawned. An import that started
+    //     what it read would be the one failure this feature cannot have.
+    const PORT_IDS = ['portable.1 export writes one file with the objects that travel, the watcher omitted BY NAME with what it would do, and secrets scrubbed with a count; import makes a separate workspace with every id remapped, every imported template marked UNREVIEWED so its action node is refused until a person reads it, and spawns NO pty at all']
+    try {
+      const { readFileSync: rf2 } = require('node:fs')
+      const filePath = join(mkdtempSync(join(tmpdir(), 'tc-portable-')), 'canvas.tccanvas')
+      let before = null
+      // A template with an ACTION node — the shape that makes an imported file
+      // code somebody else wrote (M190's critic, 2).
+      layoutStore.saveTemplate({ id: 'tpl-portable-1', name: 'theirs', nodes: [{ key: 'a1', kind: 'action', line: 'note-add sticky', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
+      state.portablePath = filePath
+      layoutStore.save({ panels: [
+        { id: 'pt1', x: 200, y: 200, w: 400, h: 300, z: 1, cwd: '~', command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'a terminal ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' },
+        { id: 'pt2', kind: 'note', x: 700, y: 200, w: 320, h: 220, z: 2, note: { form: 'sticky', text: 'remember this' } },
+        // A WATCHER, whose whole point here is that it cannot travel: the file
+        // must name it and say what it would do on the other machine.
+        { id: 'pt3', kind: 'watcher', x: 200, y: 600, w: 400, h: 300, z: 3, watch: { cwd: '~', command: '/usr/bin/true', args: [], trigger: { kind: 'timer', everyMs: 60000 } } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      const onDisk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const diskIds = onDisk.workspaces.map((w) => `${w.id}${w.id === onDisk.activeWorkspaceId ? '*' : ''}:${w.panels.map((p) => p.id).join('|')}`).join(' ; ')
+      const rePt = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await rePt
+      await settle()
+      const spawnsBefore = (await listSessions(wc)).length
+      // The workspace this check leaves the app in is EVERY later check's
+      // problem: the import makes a new one and switches to it, and a suite
+      // that walked on from there would fail six checks with no idea why (it
+      // did, once — the harness's own "checks share state" rule).
+      before = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => (ws.find((w) => w.active) || {}).id || null)`)
+      // WAIT for the seeded canvas: `settle()` is not a mount guarantee, and
+      // a plan sent before the canvas mounts reaches no listener at all — the
+      // request then times out and reads as a refusal that never happened.
+      const seeded = await waitUntil(() => wc.executeJavaScript(`(() => { const ids = [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')); return ids.includes('pt1') ? ids.join(',') : false })()`), 20000)
+      // M190's critic (3). Export is DESTRUCTIVE now — a named path skips the
+      // save dialog and writes it — so the agent door refuses it outright and
+      // the person's door is the palette. Both are asserted: the refusal is
+      // the guarantee, and the palette row is how the export actually happens
+      // (the harness's chooser answers `state.portablePath`).
+      const refusedAtDoor = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `export-canvas ${filePath}` }, null, 8000)
+      const openPalette = async () => {
+        await wc.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true })); true`)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 3000)
+      }
+      const clickRow = async (rowId) => {
+        if ((await openPalette()) !== true) return 'no palette'
+        const r = await wc.executeJavaScript(`(() => { const el = document.querySelector('[data-command-id=' + JSON.stringify(${JSON.stringify('ROW')}) + ']'); if (!el) return 'no row'; el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`.replace('ROW', rowId))
+        await settle()
+        return r
+      }
+      const exported = await clickRow('portable.export')
+      await waitUntil(() => existsSync(filePath), 8000)
+      const written = existsSync(filePath) ? JSON.parse(rf2(filePath, 'utf8')) : null
+      const imported = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `import-canvas ${filePath}` }, null, 10000)
+      await settle()
+      await settle()
+      const spawnsAfter = (await listSessions(wc)).length
+      const shown = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')).join(',')`)
+      // The imported template is UNREVIEWED, and running it is refused by name
+      // with its line quoted — the import is inert, and so is the first Run.
+      flushLayoutStore()
+      const importedTemplate = layoutStore.current().templates.find((t) => t.reviewed === false)
+      const ranImported = importedTemplate === undefined ? null : await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${importedTemplate.id}` }, null, 6000)
+      await settle()
+      const notesAfterRun = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="note"]').length`)
+      ok(PORT_IDS[0],
+        refusedAtDoor && refusedAtDoor.kind === 'refused' && /human confirmation/.test(String(refusedAtDoor.reason)) &&
+          exported === true &&
+          written && written.version === 1 && written.workspace.panels.length === 2 &&
+          written.workspace.panels.map((p) => p.id).join(',') === 'pt1,pt2' &&
+          !JSON.stringify(written).includes('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') && written.redacted >= 1 &&
+          written.omitted.some((o) => /watcher/.test(o.what) && /arm itself/.test(o.why)) &&
+          written.assets.length === 0 &&
+          imported && imported.kind === 'ran' && /nothing was started/.test(String(imported.summary)) &&
+          // Every id is new: neither of the exported ids is on the canvas now.
+          !shown.split(',').includes('pt1') && !shown.split(',').includes('pt2') && shown.split(',').filter((x) => x !== '').length === 2 &&
+          spawnsAfter === spawnsBefore &&
+          // The imported template travelled, is marked unreviewed, and its Run
+          // is refused by name — the sticky note its action node would make is
+          // not on the canvas.
+          importedTemplate !== undefined && importedTemplate.name === 'theirs' && importedTemplate.id !== 'tpl-portable-1' &&
+          ranImported !== null && ranImported.kind === 'ran' && notesAfterRun === 1,
+        JSON.stringify({ refusedAtDoor, importedTemplate: importedTemplate && { id: importedTemplate.id, reviewed: importedTemplate.reviewed }, ranImported, notesAfterRun, diskIds, seeded, exported, written: written && { version: written.version, panels: written.workspace.panels.map((p) => p.id), omitted: written.omitted, redacted: written.redacted }, imported, shown, spawnsBefore, spawnsAfter }))
+      state.portablePath = undefined
+      layoutStore.deleteTemplate('tpl-portable-1')
+    } catch (ptErr) {
+      for (const id of PORT_IDS) ok(id, false, 'threw: ' + String(ptErr && ptErr.stack || ptErr))
+    } finally {
+      // Back to the workspace this check found, and the imported one removed,
+      // whatever happened above.
+      try {
+        const after = await wc.executeJavaScript(`window.canvas.workspace.list().then((ws) => (ws.find((w) => w.active) || {}).id || null)`)
+        if (before && after && after !== before) {
+          await wc.executeJavaScript(`window.canvas.workspace.activate(${JSON.stringify(before)})`)
+          await settle()
+          await wc.executeJavaScript(`window.canvas.workspace.remove(${JSON.stringify(after)})`)
+          const reBack = new Promise((resolve) => wc.once('did-finish-load', resolve))
+          wc.reload(); await reBack
+          await settle()
+        }
+      } catch { /* the checks below will say so */ }
+    }
+
+    // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.
+    //     (a) An `action` node holds a verb LINE, and running the workflow
+    //         runs it through the same executor the palette and the agent door
+    //         take — which is the workflow door every v9 verb's V9_DOORS row
+    //         has owed since M180. Running a template whose action node says
+    //         `note-add sticky` puts a sticky note on the canvas.
+    //     (b) Test this node runs ONE node: the fetch node's POST is refused
+    //         by name (the method as written, not silently rewritten), the
+    //         GET answers with its body through the outward gate, and NEITHER
+    //         starts a neighbour — the panel count is the same before and
+    //         after, and no run is recorded.
+    const NODE_IDS = ['node.1 an action node runs its verb line through the one executor when the workflow runs (the workflow door), and Test this node runs one block on its own: a fetch node\'s POST is refused naming the method, its GET answers through the outward gate, and neither starts a neighbour or records a run']
+    try {
+      const TPL = 'tpl-nodes-1'
+      layoutStore.saveTemplate({ id: TPL, name: 'nodes', nodes: [
+        { key: 'a1', kind: 'action', line: 'note-add sticky', cwd: '/tmp', dx: 0, dy: 0 },
+        { key: 'h1', kind: 'http', url: 'https://example.com/thing', method: 'GET', cwd: '/tmp', dx: 200, dy: 0 },
+        { key: 'h2', kind: 'http', url: 'https://example.com/thing', method: 'POST', cwd: '/tmp', dx: 400, dy: 0 }
+      ], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfn', kind: 'workflow', x: 40, y: 40, w: 760, h: 520, z: 1, title: 'nodes', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfn', focusedId: 'wfn' })
+      flushLayoutStore()
+      const reNd = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await reNd
+      await settle()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="a1"]') !== null`), 5000)
+      const before = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+      // (b) first, so the panel count is unchanged by anything but the run.
+      const post = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} h2` }, null, 5000)
+      const get = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} h1` }, null, 5000)
+      const missing = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `node-test ${TPL} nope` }, null, 5000)
+      await settle()
+      const afterTests = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-id]').length`)
+      // (a) The workflow door: Run the template and look for the sticky note.
+      const ran = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${TPL}` }, null, 8000)
+      const sticky = await waitUntil(() => wc.executeJavaScript(`(() => { const n = [...document.querySelectorAll('.panel[data-panel-kind="note"]')].pop(); return n ? { form: n.getAttribute('data-note-form') } : false })()`), 8000)
+      await settle(); flushLayoutStore()
+      const runs = (JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.runs || [])).length
+      ok(NODE_IDS[0],
+        post && post.kind === 'refused' && /POST is a write/.test(String(post.reason)) && /h2/.test(String(post.reason)) &&
+          get && get.kind === 'ran' && /200/.test(String(get.summary)) && /h1/.test(String(get.summary)) &&
+          missing && missing.kind === 'refused' && /no node is called nope/.test(String(missing.reason)) &&
+          afterTests === before &&
+          ran && ran.kind === 'ran' && sticky !== false && sticky.form === 'sticky' &&
+          runs === 0,
+        JSON.stringify({ before, post, get, missing, afterTests, ran, sticky, runs }))
+      layoutStore.deleteTemplate(TPL)
+    } catch (ndErr) {
+      for (const id of NODE_IDS) ok(id, false, 'threw: ' + String(ndErr && ndErr.message || ndErr))
     }
 
     // M106 — header.1 / flip.1. HEADER DISCIPLINE in the real renderer: a

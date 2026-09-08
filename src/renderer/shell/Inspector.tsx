@@ -71,6 +71,8 @@ export interface InspectorProps {
   onToggle: () => void
   /** M183. The saved template by id — the node editor's record; absent (a fixture) hides the editor. */
   templateOf?: (id: string) => PersistedTemplate | undefined
+  /** M188. Test one node — the same executor the workflow's own run takes. */
+  onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M46. The active tab of the context pane, persisted as shell.contextTab. */
   tab: ContextTab
   onSelectTab: (tab: ContextTab) => void
@@ -410,11 +412,13 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  * hook cannot be called conditionally and `model` is legitimately null.
  */
 function InspectorPanel({
-  tab, onSelectTab, automations, templateOf,
+  tab, onSelectTab, automations, templateOf, onTestNode,
   model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   templateOf?: (id: string) => PersistedTemplate | undefined
+  /** M188. Test one node — the same executor the workflow's own run takes. */
+  onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   tab: ContextTab
   onSelectTab: (tab: ContextTab) => void
   automations: AutomationRow[]
@@ -528,7 +532,7 @@ function InspectorPanel({
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       {/* M183. THE NODE EDITOR: the selected block's fields from its kind's schema, committed through the draft store's one door. */}
-      {model.kind === 'workflow' && model.templateId !== undefined && templateOf !== undefined && <NodeFields templateId={model.templateId} templateOf={templateOf} />}
+      {model.kind === 'workflow' && model.templateId !== undefined && templateOf !== undefined && <NodeFields templateId={model.templateId} templateOf={templateOf} onTestNode={onTestNode} />}
       <dl className="inspector__fields">
         {/* M68. Through the one filter: no pid (the header has it), no
             `asked for` that only repeats `command`. */}
@@ -1027,15 +1031,16 @@ function InspectorPanel({
  * the panel's own fields below are M133's.
  */
 /** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them). */
-const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target' }
+const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target', line: 'verb line', url: 'address', method: 'method' }
 const HIDDEN_NODE_FIELDS = new Set(['dx', 'dy', 'w', 'h'])
 
-function NodeFields({ templateId, templateOf }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined }): JSX.Element | null {
+function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined; onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> }): JSX.Element | null {
   const saved = templateOf(templateId)
   const { template } = useTemplateDraft(templateId, saved)
   const selected = useSelectedOf(templateId)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [reasons, setReasons] = useState<Record<string, string>>({})
+  const [tested, setTested] = useState<string | null>(null)
   // Reset on the TEMPLATE, never on the selection: a blur that refuses sets the
   // reason and then the click that moved the selection wiped both, losing the
   // typed value the refusal promised to keep (the M183 critic).
@@ -1096,6 +1101,14 @@ function NodeFields({ templateId, templateOf }: { templateId: string; templateOf
           {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
         </div>
       ))}
+      {/* M188. Test this node: ONE block, on its own, with its duration and a
+          named failure — its neighbours are not started. Present for every
+          kind and refused BY NAME for the kinds that only run as part of the
+          workflow, rather than hidden (this repo's rule). */}
+      <button type="button" className="pf__verb pf__verb--word" data-inspector-node-test
+        title="Run this block on its own and report what it answered"
+        onClick={() => { void onTestNode?.(templateId, node.key).then((r) => setTested(r.kind === 'ran' ? (r.note ?? 'ran') : r.reason)) }}>Test this node</button>
+      {tested !== null && <p className="inspector__arm" data-inspector-node-tested>{tested}</p>}
       <button type="button" className="pf__verb pf__verb--word" data-inspector-node-deselect onClick={() => select(templateId, null)}>Done</button>
     </section>
   )

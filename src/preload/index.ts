@@ -149,6 +149,7 @@ const bridge: CanvasBridge = {
     },
     onReset: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_RESET, listener),
     onTidy: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_TIDY, () => listener()),
+    onFeedback: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_FEEDBACK, () => listener()),
     onFlip: (listener) => subscribe<void>(IPC_EVENTS.CANVAS_FLIP, () => listener()),
     requestReset: () => ipcRenderer.invoke(IPC.CANVAS_REQUEST_RESET)
   },
@@ -381,6 +382,13 @@ const bridge: CanvasBridge = {
   asset: {
     put: (req) => ipcRenderer.invoke(IPC.ASSET_PUT, req),
     choose: () => ipcRenderer.invoke(IPC.ASSET_CHOOSE)
+  },
+  node: {
+    fetch: (req) => ipcRenderer.invoke(IPC.NODE_FETCH, req)
+  },
+  portable: {
+    write: (req) => ipcRenderer.invoke(IPC.PORTABLE_EXPORT, req),
+    read: (req) => ipcRenderer.invoke(IPC.PORTABLE_IMPORT, req)
   },
   board: {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),

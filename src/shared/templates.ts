@@ -54,6 +54,15 @@ export interface PersistedTemplate {
   nodes: TemplateNode[]
   edges: TemplateEdge[]
   /**
+   * M190 (the Acts V–VII critic). FALSE for a template that arrived from a
+   * portable file and has not been read by the person yet. Absent (and so
+   * true) for everything this canvas made itself, which is every pre-M190
+   * record. M188's action node runs a verb line, so a template somebody else
+   * wrote is code somebody else wrote: an import is inert, and this is what
+   * keeps the FIRST RUN inert too until a person has looked at the line.
+   */
+  reviewed?: false
+  /**
    * M182. The record's revision, bumped by every save that goes through the
    * store: a save that expected another revision is refused as stale, so two
    * editors of one record cannot overwrite each other silently. ABSENT on

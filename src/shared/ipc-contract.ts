@@ -669,6 +669,12 @@ export const IPC = {
   ASSET_PUT: 'asset:put',
   /** M186. The system's own file chooser, for Replace. */
   ASSET_CHOOSE: 'asset:choose',
+  /** M188. A fetch node's one GET, capped and gated in main. */
+  NODE_FETCH: 'node:fetch',
+  /** M189. Write one portable canvas file; the path is chosen by the system's own dialog when none is given. */
+  PORTABLE_EXPORT: 'portable:export',
+  /** M189. Read one portable canvas file, parsed and previewed before anything is made. */
+  PORTABLE_IMPORT: 'portable:import',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -901,6 +907,8 @@ export const IPC_EVENTS = {
   ROUTINE_FIRE: 'routine:fire',
   /** M106. The Workspace menu's two verbs: Tidy Panes and Flip Terminals (a view state, never persisted). */
   CANVAS_TIDY: 'canvas:tidy',
+  /** M190. Help ▸ Prepare feedback… — main asks, the renderer builds the draft and opens it. */
+  CANVAS_FEEDBACK: 'canvas:feedback',
   CANVAS_FLIP: 'canvas:flip',
   /** M113. `tc board` asks the RENDERER over an ephemeral reply channel (canvas:model's shape) — main writes no record itself. */
   BOARD_ADD: 'board:add',
@@ -1323,6 +1331,23 @@ export type AssetPutResult =
   | { kind: 'stored'; id: string; path: string; mediaType: string; bytes: number; wrote: boolean; prunedCount: number }
   | { kind: 'refused'; reason: string }
 
+/** M188. What a fetch node answers: a capped, gated body, or one named refusal. */
+export type NodeFetchResult =
+  | { kind: 'ok'; status: number; text: string; note: string; truncated: boolean; ms: number }
+  | { kind: 'refused'; reason: string }
+
+/** M189. Where the file went, or why it did not — a cancelled dialog is neither. */
+export type PortableWriteResult =
+  | { kind: 'written'; path: string; bytes: number }
+  | { kind: 'cancelled' }
+  | { kind: 'refused'; reason: string }
+
+/** M189. The parse, or a cancelled dialog. What to MAKE of it is the renderer's. */
+export type PortableReadResult =
+  | { kind: 'read'; path: string; parse: unknown }
+  | { kind: 'cancelled' }
+  | { kind: 'refused'; reason: string }
+
 export interface CanvasBridge {
   pty: {
     create(spec: PanelSpec): Promise<PtyCreateResult>
@@ -1369,6 +1394,8 @@ export interface CanvasBridge {
     /** M106. The menu's Tidy Panes and Flip Terminals. */
     onTidy(listener: () => void): () => void
     onFlip(listener: () => void): () => void
+    /** M190. Help ▸ Prepare feedback…; the renderer builds the draft and opens it. */
+    onFeedback(listener: () => void): () => void
     /** Runs main's existing confirm-then-reset flow. */
     requestReset(): Promise<void>
   }
@@ -1743,6 +1770,24 @@ export interface CanvasBridge {
   asset: {
     put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
     choose(): Promise<string | null>
+  }
+  /**
+   * M188. The fetch node's one request. A GET and only a GET — any other
+   * method is refused by name, because a write belongs on the broker's
+   * approval path and a node has no door onto it. Never rejects.
+   */
+  node: {
+    fetch(req: { url: string; method?: string }): Promise<NodeFetchResult>
+  }
+  /**
+   * M189. The portable file's two doors. `write` takes the record the renderer
+   * built (the renderer owns the workspace it renders, M113's rule) and puts
+   * it on disk; `read` answers the parse, never a workspace — what to make of
+   * it is the renderer's. A cancelled dialog is `null`, not a refusal.
+   */
+  portable: {
+    write(req: { path?: string; file: unknown; suggested?: string }): Promise<PortableWriteResult>
+    read(req: { path?: string }): Promise<PortableReadResult>
   }
   /** M114. The board's main-side verbs. */
   board: {

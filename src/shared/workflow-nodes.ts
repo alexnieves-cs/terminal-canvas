@@ -48,7 +48,47 @@ export interface CollectNode {
   dy: number
 }
 
-export type WorkflowNode = PoolNode | OrchestratorNode | CollectNode
+/**
+ * M188. THE ACTION NODE — a canvas verb line, run through the SAME executor
+ * the palette and the agent door take. This is the kind that closes the
+ * four-door rule: every v9 verb's `V9_DOORS` row has carried an OWED workflow
+ * door since M180, and an action node running `note-add sticky` IS that door.
+ *
+ * The line is stored as TEXT and bound at run time, never at save: a plan
+ * naming a panel that does not exist yet is the ordinary case for a template
+ * (the panels are minted by the same instantiation), and binding early would
+ * refuse a shape that is about to be correct.
+ */
+export interface ActionNode {
+  kind: 'action'
+  /** A verb line, exactly as `tc plan` and the palette's verb row take it. */
+  line: string
+  cwd: string
+  dx: number
+  dy: number
+}
+
+/**
+ * M188. THE HTTP NODE — a GET, and only a GET.
+ *
+ * Any other method is refused BY NAME, and the reason is not squeamishness: a
+ * write belongs on the broker's approval path (M102 asks the teammate's own
+ * chat before a token is read), and a node that could POST without passing
+ * that door would be a way around the one this app already built. The
+ * response is capped and passes `outward` — it is a remote server's content
+ * arriving in this app, which is exactly M96's gate.
+ */
+export interface HttpNode {
+  kind: 'http'
+  url: string
+  /** Present for the refusal's sake: a node that says GET and means GET is honest about it. */
+  method?: string
+  cwd: string
+  dx: number
+  dy: number
+}
+
+export type WorkflowNode = PoolNode | OrchestratorNode | CollectNode | ActionNode | HttpNode
 
 export const POOL_WIDTH_MAX = 24
 
@@ -99,6 +139,24 @@ export function parseWorkflowNode(raw: Record<string, unknown>, warnings: string
       return null
     }
     return { ...base, kind: 'collect', target: raw.target }
+  }
+  if (raw.kind === 'action') {
+    if (typeof raw.line !== 'string' || raw.line.trim() === '') {
+      warnings.push('dropped action node: no verb line')
+      return null
+    }
+    return { ...base, kind: 'action', line: raw.line }
+  }
+  if (raw.kind === 'http') {
+    if (typeof raw.url !== 'string' || raw.url.trim() === '') {
+      warnings.push('dropped http node: no url')
+      return null
+    }
+    // The METHOD is kept as written even when it is one this node refuses to
+    // run: the refusal names it at run time, where a person can read it. A
+    // node silently rewritten to GET would run something other than what its
+    // author wrote.
+    return { ...base, kind: 'http', url: raw.url, ...(typeof raw.method === 'string' && raw.method.trim() !== '' ? { method: raw.method.trim().toUpperCase() } : {}) }
   }
   return null
 }

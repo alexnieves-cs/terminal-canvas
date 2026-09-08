@@ -1887,6 +1887,153 @@ await (async () => {
   }
 }
 
+// M188 — node.http.1. THE FETCH NODE IS A GET AND ONLY A GET. Every other
+//      method is refused BY NAME, and the refusal names the method the author
+//      WROTE — a node silently rewritten to GET would run something other
+//      than what it says on the diagram. The reason is structural: a write
+//      belongs on the broker's approval path, where M102 asks the teammate's
+//      own chat before a token is read, and a node that could POST without
+//      passing it would be a way around the door this app already built. A
+//      non-http(s) url is its own refusal. The body is capped INSIDE the
+//      module and passes `outward`, so a token a server happens to return is
+//      scrubbed and the note names the host and the count.
+{
+  const has = typeof F.runHttpNode === 'function' && typeof F.httpNodeRefusal === 'function'
+  const NAME = 'node.http.1 runHttpNode refuses every method but GET by name (naming the method as written), a non-http(s) url and a url carrying a name and password, and fetches NOTHING when it refuses; a GET is capped, passed through the outward gate with a planted token scrubbed and the host and count in its note, and reports its duration'
+  if (!has) ok(NAME, false, 'node-run.ts does not export runHttpNode / httpNodeRefusal')
+  else {
+    const asked = []
+    const deps = (body) => ({ fetch: async (url) => { asked.push(url); return { status: 200, body } }, now: (() => { let t = 1000; return () => (t += 25) })() })
+    const post = await F.runHttpNode({ url: 'https://example.com/', method: 'post' }, deps(''))
+    const del = await F.runHttpNode({ url: 'https://example.com/', method: 'DELETE' }, deps(''))
+    const fileUrl = await F.runHttpNode({ url: 'file:///etc/passwd' }, deps(''))
+    const notUrl = await F.runHttpNode({ url: 'nonsense' }, deps(''))
+    // M190's critic (5). A url carrying a name and password sends Basic auth
+    // on the wire and shows only the HOST in the note — the credential would
+    // be neither scrubbed nor visible anywhere.
+    const withPassword = await F.runHttpNode({ url: 'https://user:secret@example.com/' }, deps(''))
+    const askedBefore = asked.length
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const okDeps = deps(`hello world GITHUB_TOKEN=${token}`)
+    const fetched = await F.runHttpNode({ url: 'https://example.com/thing', method: 'GET' }, okDeps)
+    const bigDeps = deps('x'.repeat(F.NODE_FETCH_MAX_BYTES + 500))
+    const big = await F.runHttpNode({ url: 'https://example.com/big' }, bigDeps)
+    const threw = { fetch: async () => { throw new Error('no route to host') }, now: () => 0 }
+    const failed = await F.runHttpNode({ url: 'https://example.com/' }, threw)
+    ok(NAME,
+      post.kind === 'refused' && /POST is a write/.test(post.reason) && /approval door/.test(post.reason) &&
+        del.kind === 'refused' && /DELETE is a write/.test(del.reason) &&
+        fileUrl.kind === 'refused' && /file:/.test(fileUrl.reason) &&
+        notUrl.kind === 'refused' && /not a URL/.test(notUrl.reason) &&
+        withPassword.kind === 'refused' && /name and password/.test(withPassword.reason) &&
+        askedBefore === 0 &&
+        fetched.kind === 'ok' && fetched.status === 200 && fetched.text.includes('hello world') && !fetched.text.includes(token) &&
+        /example\.com/.test(fetched.note) && /redacted/.test(fetched.note) && fetched.truncated === false && fetched.ms > 0 &&
+        big.kind === 'ok' && big.truncated === true && big.text.length <= F.NODE_FETCH_MAX_BYTES &&
+        failed.kind === 'refused' && /no route to host/.test(failed.reason),
+      JSON.stringify({ post, del, fileUrl, notUrl, withPassword, askedBefore, fetched: { ...fetched, text: fetched.text && fetched.text.slice(0, 40) }, bigTruncated: big.truncated, failed }))
+  }
+}
+
+// M189 — portable.1. THE PORTABLE FILE, and the parts it does not have.
+//      The record is built FIELD BY FIELD, so a terminal's resolved
+//      environment, a chat's session id and transcript, and a live pid have
+//      nowhere to go — the check plants all three on the input and asserts
+//      the file's text does not contain them. A planted token is scrubbed and
+//      COUNTED. A panel kind that cannot travel is dropped with a reason that
+//      says what would happen on the other machine. Pictures are omitted BY
+//      DEFAULT with an entry that says a picture cannot be scrubbed by
+//      machine — never "redacted". `parsePortable` answers three ways, and a
+//      FUTURE version is its own arm naming both numbers. `remapPortable`
+//      mints new ids for everything and moves each reference with its target.
+{
+  const has = typeof F.buildPortable === 'function' && typeof F.parsePortable === 'function' && typeof F.remapPortable === 'function'
+  const NAME = 'portable.1 buildPortable builds field by field (no env, session id, transcript or pid can travel), scrubs and COUNTS secrets, drops a kind that cannot travel with a reason naming what would happen, and omits pictures by default saying a picture cannot be scrubbed by machine; parsePortable answers not-portable / unknown-version (naming both numbers) / file with warnings; remapPortable mints new ids and moves a workflow panel\'s templateId and a panel\'s binding with their target'
+  if (!has) ok(NAME, false, 'portable.ts does not export buildPortable / parsePortable / remapPortable')
+  else {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const panels = [
+      { id: 'p1', x: 0, y: 0, w: 100, h: 100, z: 1, cwd: '/w/repo', command: '/bin/sh', args: ['-lc', `echo ${token}`], title: 'a terminal', env: { SECRET: token }, pid: 4242 },
+      { id: 'p2', kind: 'chat', x: 0, y: 0, w: 100, h: 100, z: 2, chat: { cwd: '/w/repo', sessionId: 'SESSION-UUID-1234', backend: 'codex', transcript: 'every word we said' } },
+      { id: 'p3', kind: 'note', x: 0, y: 0, w: 100, h: 100, z: 3, note: { form: 'sticky', text: `the key is ${token}`, tint: 'blue' } },
+      { id: 'p4', kind: 'image', x: 0, y: 0, w: 100, h: 100, z: 4, image: { path: '/w/pic.png', asset: 'a'.repeat(64) } },
+      { id: 'p5', kind: 'workflow', x: 0, y: 0, w: 100, h: 100, z: 5, workflow: { templateId: 't1' }, templateBinding: { templateId: 't1', key: 'n1' } },
+      { id: 'p6', kind: 'watcher', x: 0, y: 0, w: 100, h: 100, z: 6, watch: { command: 'rm -rf /', trigger: 'timer' } },
+      { id: 'p7', kind: 'review', x: 0, y: 0, w: 100, h: 100, z: 7, subject: { root: '/w/repo' } }
+    ]
+    const templates = [{ id: 't1', name: 'shape', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/w/repo', dx: 0, dy: 0 }], edges: [] }]
+    const file = F.buildPortable({ kind: 'canvas', workspaceName: 'work', panels, templates, app: '5.0.0', now: 1000 })
+    const text = JSON.stringify(file)
+    const withPixels = F.buildPortable({ kind: 'canvas', workspaceName: 'work', panels, templates, app: '5.0.0', now: 1000, images: [{ id: 'a'.repeat(64), mediaType: 'image/png', base64: 'AAAA' }], hasRoutines: true })
+    const parsed = F.parsePortable(text)
+    const notJson = F.parsePortable('<html>')
+    const notOurs = F.parsePortable(JSON.stringify({ hello: 'world' }))
+    const future = F.parsePortable(JSON.stringify({ version: 99, kind: 'canvas' }))
+    let n = 0
+    const remapped = parsed.kind === 'file' ? F.remapPortable(parsed.file, (prefix) => `${prefix}-new-${++n}`) : null
+    const wf = remapped && remapped.workspace.panels.find((p) => p.kind === 'workflow')
+    ok(NAME,
+      // Nothing of this machine travelled.
+      !text.includes('SESSION-UUID-1234') && !text.includes('every word we said') && !text.includes('4242') && !/"env"/.test(text) && !text.includes(token) &&
+        file.redacted >= 2 &&
+        // The shape did: five panels kept, two dropped BY KIND with reasons.
+        file.workspace.panels.length === 5 && file.workspace.panels.map((p) => p.id).join(',') === 'p1,p2,p3,p4,p5' &&
+        file.omitted.some((o) => /watcher/.test(o.what) && /arm itself/.test(o.why)) &&
+        file.omitted.some((o) => /review/.test(o.what) && /repository/.test(o.why)) &&
+        file.omitted.some((o) => /pixels of 1 picture/.test(o.what) && /cannot be scrubbed by machine/.test(o.why) && !/redact/.test(o.why)) &&
+        file.omitted.some((o) => /credential/.test(o.what)) &&
+        file.assets.length === 0 &&
+        // With pixels asked for: they travel and the omission is gone; routines are named.
+        withPixels.assets.length === 1 && !withPixels.omitted.some((o) => /pixels/.test(o.what)) && withPixels.omitted.some((o) => /routine/.test(o.what)) &&
+        // Three parse answers.
+        parsed.kind === 'file' && parsed.file.workspace.name === 'work' &&
+        notJson.kind === 'not-portable' && /not JSON/.test(notJson.reason) &&
+        notOurs.kind === 'not-portable' &&
+        future.kind === 'unknown-version' && future.found === 99 && future.known === F.PORTABLE_VERSION && /99/.test(future.reason) &&
+        // The remap: every id new, and each reference moved with its target.
+        remapped !== null && remapped.workspace.panels.every((p) => p.id.startsWith('p-new-')) &&
+        remapped.templates.every((t) => t.id.startsWith('t-new-')) &&
+        wf && wf.workflow.templateId === remapped.templates[0].id && wf.templateBinding.templateId === remapped.templates[0].id,
+      JSON.stringify({ redacted: file.redacted, kept: file.workspace.panels.map((p) => p.id), omitted: file.omitted, assets: file.assets.length, notJson, notOurs, future, remappedIds: remapped && remapped.workspace.panels.map((p) => p.id), wf }))
+  }
+}
+
+// M190 — feedback.1. THE DRAFT THIS APP NEVER SENDS. What travels is chosen
+//      by TYPE — a version, a platform, engine WORDS and panel COUNTS — so
+//      there is nowhere in the shape for a path, a command, a transcript or a
+//      token, the same structural refusal the diagnostics bundle makes. What
+//      the person typed is scrubbed and the count is IN the draft's own
+//      sentence, so they can see what was taken out before they send
+//      anything. A body too long for a link is cut WITH a line saying so.
+{
+  const has = typeof F.buildFeedback === 'function'
+  const NAME = 'feedback.1 buildFeedback scrubs a planted token out of what the person typed and counts it, states that nothing has been sent, carries only the version, platform, engine words and panel counts (no path, command or transcript can reach it), points at the repository\'s issues/new, and cuts an over-long body WITH a line saying so'
+  if (!has) ok(NAME, false, 'feedback.ts does not export buildFeedback')
+  else {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const facts = {
+      version: '5.0.0', platform: 'darwin arm64',
+      engines: [{ name: 'claude', state: 'installed' }, { name: 'codex', state: 'missing' }],
+      kinds: [{ kind: 'terminal', count: 2 }, { kind: 'note', count: 1 }, { kind: 'image', count: 0 }],
+      says: `it broke when I ran the thing, my token is ${token}`
+    }
+    const draft = F.buildFeedback('acme/canvas', facts)
+    const empty = F.buildFeedback('acme/canvas', { ...facts, says: '' })
+    const huge = F.buildFeedback('acme/canvas', { ...facts, says: 'x'.repeat(20000) })
+    ok(NAME,
+      !draft.body.includes(token) && !draft.url.includes(token) && draft.redacted >= 1 &&
+        /Nothing has been sent/.test(draft.body) &&
+        draft.body.includes('5.0.0') && draft.body.includes('darwin arm64') &&
+        draft.body.includes('claude: installed') && draft.body.includes('codex: missing') &&
+        draft.body.includes('2 terminal') && draft.body.includes('1 note') && !draft.body.includes('0 image') &&
+        draft.url.startsWith('https://github.com/acme/canvas/issues/new?title=') && draft.url.includes('&body=') &&
+        draft.truncated === false && /^Feedback: it broke/.test(draft.title) &&
+        empty.title === 'Feedback' && /Say what happened/.test(empty.body) &&
+        huge.truncated === true && huge.url.length <= F.FEEDBACK_URL_MAX && /cut to fit in a link/.test(huge.body),
+      JSON.stringify({ redacted: draft.redacted, truncated: draft.truncated, title: draft.title, urlHead: draft.url.slice(0, 60), urlLen: draft.url.length, hugeLen: huge.url.length, bodyHead: draft.body.slice(0, 120) }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })

@@ -197,8 +197,15 @@ const FACTS = {
     const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
     const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
     const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
-    ok('gate.2 redactSecrets has exactly four callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, and M122\'s panel search — pane content leaving through main), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/outward.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    // M189 and M190 add the fifth and SIXTH callers by name, which is what
+    // this allowlist is for. `shared/portable.ts` scrubs every string that
+    // travels in an export and reports the count on the record; it cannot go
+    // through `outward`, which answers one text and one note, because an
+    // export is a structure scrubbed field by field whose count is part of the
+    // file. `shared/feedback.ts` scrubs a draft whose count is stated IN the
+    // draft, so the person can see what was taken out before they send it.
+    ok('gate.2 redactSecrets has exactly six callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, and M190\'s feedback draft, whose count is stated in the draft itself), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 
@@ -352,6 +359,7 @@ const FACTS = {
     const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
     const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
     const commandsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+    const librarySrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'template-library.ts'), 'utf8')
     // M186. The fixture holds one panel of every kind a v9 door's example
     // line names, because a verb whose first argument is a PANEL cannot bind
     // against an empty canvas — and "the example does not bind" would then be
@@ -362,19 +370,64 @@ const FACTS = {
       const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
       const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
       const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
-      // M186. The workflow debt is compared against the table's OWN constant
-      // (`WORKFLOW_EXECUTOR_DUE`): a literal here turned a truthful table red
-      // when the plan moved the executor, and a bare /^M\d+$/ would accept a
-      // milestone that has already shipped.
+      // M188. The workflow door is REAL for every verb but one: an `action`
+      // node holds a verb line and runs it through the same executor, so the
+      // door is asserted the way the agent door is — the line the row names
+      // must BIND — plus the kind must exist in the library a person drags
+      // from. `node-test` alone keeps an owed door, and its reason is not the
+      // executor's absence but a loop with no stop.
       // A canvas door is a gesture STRING, or an OWED object naming a later milestone — the debt as data (the M182 critic); never an empty label.
       const canvasDoor = typeof d?.canvas === 'string' ? d.canvas.length > 0 : typeof d?.canvas?.reason === 'string' && /^M\d+$/.test(String(d.canvas.due))
-      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: typeof d?.workflow?.reason === 'string' && d.workflow.due === V.WORKFLOW_EXECUTOR_DUE }
+      // An action node's line is the part after the colon; it must bind
+      // exactly as the agent line does, and `action` must be a kind the
+      // library offers (a door nobody can drag is not a door).
+      const workflowLine = typeof d?.workflow === 'string' && d.workflow.includes(': ') ? d.workflow.slice(d.workflow.indexOf(': ') + 2) : null
+      const workflowBound = workflowLine === null ? null : P.buildPlan(P.parsePlanLine(workflowLine), facts)
+      const workflowDoor = typeof d?.workflow === 'string'
+        ? workflowBound?.kind === 'plan' && workflowBound.plan.steps[0]?.verb === id && librarySrc.includes("kind: 'action'")
+        : typeof d?.workflow?.reason === 'string' && d.workflow.due === V.WORKFLOW_EXECUTOR_DUE
+      return { id, paletteRow, agentBinds: bound?.kind === 'plan' && bound.plan.steps[0]?.verb === id, canvas: canvasDoor, canvasOwed: typeof d?.canvas === 'object' ? d.canvas.due : undefined, workflowOwed: workflowDoor }
     })
-    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and an owned workflow omission',
+    ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and a WORKFLOW door — an action node whose line binds to the same verb, with `action` a kind the library offers — or, for node-test alone, an owned omission with its reason',
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
   }
 
-  const failed = results.filter((r) => !r.pass)
+  // M190 (the Acts V-VII critic, 1 and 3) — agent-door.7. THE ACTION NODE'S
+//      INDIRECTION IS CLOSED. M188's action node runs a verb LINE, so a
+//      teammate that may not `new-chat` could otherwise write it into a
+//      template (`workflow-add`, `workflow-set`, `workflow-save`) and then
+//      `workflow-run` it, with every refusal this door makes reachable one
+//      step away. The editing verbs, the run and the two portable verbs now
+//      refuse a teammate caller by name. And `export-canvas` is DESTRUCTIVE:
+//      a named path skips the save dialog, so `export-canvas ~/.zshrc` would
+//      replace a file nobody meant to lose — the agent door refuses a
+//      destructive plan outright and the palette confirms it.
+{
+  const facts = { panels: [{ id: 'p1', kind: 'terminal' }], templates: [{ id: 't1' }] }
+  const teammate = { panelId: 'p1', teammateId: 'ada' }
+  const refusalOf = (line, caller) => {
+    const built = V.buildPlan ? null : null
+    const plan = P.buildPlan(P.parsePlanLine(line), facts)
+    if (plan.kind !== 'plan') return `unbindable: ${plan.reason}`
+    for (const step of plan.plan.steps) {
+      const r = P.agentDoorRefusal(step, facts, caller)
+      if (r !== null) return r
+    }
+    return null
+  }
+  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x']
+    .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))
+  const exportVerb = V.VERBS.find((verb) => verb.id === 'export-canvas')
+  const destructivePlan = P.buildPlan(P.parsePlanLine('export-canvas /tmp/x'), facts)
+  ok('agent-door.7 a teammate\'s plan is refused BY NAME for every workflow-editing verb, for workflow-run and node-test, and for both portable verbs — the action node\'s indirection cannot reach what the door refuses; the same lines are allowed to a person; and export-canvas is destructive, so it carries a confirmation and the agent door refuses it outright',
+    editRefusals.every((r) => typeof r.teammate === 'string' && /teammate/.test(r.teammate)) &&
+      editRefusals.every((r) => r.person === null) &&
+      exportVerb !== undefined && exportVerb.destructive === true &&
+      destructivePlan.kind === 'plan' && P.planIsDestructive(destructivePlan.plan) === true,
+    JSON.stringify({ editRefusals, destructive: exportVerb && exportVerb.destructive }))
+}
+
+const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)
 })().catch((e) => { console.error(e); process.exit(1) })

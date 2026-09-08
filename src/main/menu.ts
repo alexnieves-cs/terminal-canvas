@@ -6,6 +6,8 @@ import { menuLabel, type PresetAvailability } from './presets'
 export interface AppMenuOptions {
   /** M106. The Workspace menu's two verbs. */
   onTidy: () => void
+  /** M190. Help ▸ Prepare feedback… — the renderer builds and opens the draft. */
+  onFeedback: () => void
   onFlip: () => void
   /** M65. The File menu's New panel… (⌘⇧N): open the spawn sheet. */
   onOpenSheet(): void
@@ -164,7 +166,16 @@ export function buildAppMenu(options: AppMenuOptions): void {
         { role: 'togglefullscreen' }
       ]
     },
-    { role: 'windowMenu' }
+    { role: 'windowMenu' },
+    {
+      // M190. The feedback door in the menu bar, where a person looks for it.
+      // It opens a DRAFT in their own browser; the app submits nothing, and
+      // the label says "Prepare" for exactly that reason.
+      role: 'help',
+      submenu: [
+        { label: 'Prepare feedback…', click: () => options.onFeedback() }
+      ]
+    }
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
