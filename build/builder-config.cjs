@@ -48,7 +48,14 @@ function buildConfig(opts) {
     // dependencies (node-pty) are resolved by electron-builder itself from
     // package.json rather than by these globs.
     files: [
-      'out/**',
+      // M181 (the Act I close). The THREE bundles by name, never `out/**`: the
+      // v9 run keeps its npm cache, a fixed home, tmux sockets and every
+      // evidence log under out/ too, and `out/**` packed all of it — a 206 MB
+      // asar with a socket inside that Electron could not start from
+      // (verify:packaged 3/12, the app exiting 1 before `--version`).
+      'out/main/**',
+      'out/preload/**',
+      'out/renderer/**',
       'package.json',
       '!**/*.tsbuildinfo',
       '!src/**',

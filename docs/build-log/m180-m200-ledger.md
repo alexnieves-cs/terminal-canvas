@@ -643,3 +643,23 @@ and every earlier capture had a commit land in the gap. FIXED: a functional upda
 `current`, which is how every other mint in `Canvas.tsx` commits. The packaged red is the
 environment: `mkdir -p out/cache/npm/_logs` and the same command again; recorded so the next
 session creates it before `verify:packaged`. Both are rerun below on the fixed head.
+
+`verify:packaged` failed the same way with `out/cache/npm/_logs` created beforehand
+(`act1-packaged-2.log`): the npm child electron-builder spawns rotates and reopens its debug
+log under `npm_config_cache` and finds no directory at open time. Decision: `verify:packaged`
+runs with npm's DEFAULT cache (`npm_config_cache` unset) and every other local variable kept;
+the packaged app and its scratch user-data directory are the suite's own temp paths either
+way, and nothing else in the run reads the npm cache. Recorded for the next session.
+
+`verify:packaged` with the default npm cache then BUILT the bundle but the app exited 1
+before `--version` (3/12, `act1-packaged-3.log` to `-5.log`). Diagnosis, in order: not the
+signature (re-signed ad hoc, same exit); not the Electron binary (electron-builder's own
+download and `node_modules/electron/dist` through `electronDist` both failed, the second
+falling through to Electron's usage screen — that guess was reverted); the ASAR. The builder
+packed `out/**`, which in 4.1 held the three bundles and now also holds this run's npm cache,
+fixed home, tmux sockets and evidence logs: a 206 MB archive with a socket inside, whose
+`package.json` read back as bytes. FIXED in `build/builder-config.cjs`: the three bundles by
+name (`out/main/**`, `out/preload/**`, `out/renderer/**`); `verify:package` 13/13. The
+packaged app is 55 MB and `npm run verify:packaged` is 12/12, exit 0
+(`out/v9-evidence/act1-packaged-6.log`, `.exit`). Every temporary directory this run keeps
+under `out/` was invisible to the chain and to the goldens and visible only to the packager.
