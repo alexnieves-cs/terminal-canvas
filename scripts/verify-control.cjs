@@ -476,6 +476,98 @@ const ok = (n, pass, detail = '') => {
         plain && plain.ok === true && calls.length === 2 && calls[1].panelId === 'c-other' && calls[1].teammateId === undefined,
       JSON.stringify({ parsed: parsed.kind, tok: parsed.req && parsed.req.token, honest, refused, plain, calls, callsAfterRefused, c0: calls[0], c1: calls[1] }))
   }
+  // M180. Admission is separate from execution: an agent supplies a bounded
+  // line of data verbs, never a command or its own confirmation. Keep these
+  // checks independent of parser success so a missing arm prints every red.
+  {
+    const parse = (fields) => C.parseControlLine(JSON.stringify(fields))
+    const line = 'focus n1; type n1 Explain the café changes'
+    const admitted = parse({ verb: 'plan', line, acknowledged: true })
+    ok('plan.protocol.1 a plan line enters the socket as exactly verb and line, without an agent-supplied acknowledgement',
+      admitted.kind === 'ok' && admitted.req.verb === 'plan' && admitted.req.line === line &&
+        Object.keys(admitted.req).sort().join(',') === 'line,verb',
+      JSON.stringify(admitted))
+
+    const malformed = [{ verb: 'plan' }, ...[null, 7, [], '', '   '].map((line) => ({ verb: 'plan', line }))].map(parse)
+    ok('plan.protocol.2 an absent, malformed or blank plan line is refused by name',
+      malformed.every((r) => r.kind === 'bad' && /line/i.test(r.error)),
+      JSON.stringify(malformed))
+
+    // A character cap silently admits twice as many UTF-8 bytes here. The
+    // boundary is measured in bytes, including the verb and its arguments.
+    const prefix = 'type n1 '
+    const exactLine = prefix + 'é'.repeat((8192 - Buffer.byteLength(prefix)) / 2)
+    const exact = parse({ verb: 'plan', line: exactLine })
+    const over = parse({ verb: 'plan', line: exactLine + 'x' })
+    ok('plan.protocol.3 the 8192-byte UTF-8 plan boundary is admitted and one byte more is refused by name',
+      exact.kind === 'ok' && exact.req.line === exactLine && over.kind === 'bad' && /8192|byte|long|limit/i.test(over.error),
+      JSON.stringify({ exact: exact.kind, exactBytes: Buffer.byteLength(exactLine), over }))
+
+    const sixteen = parse({ verb: 'plan', line: Array(16).fill('focus n1').join('; ') })
+    const seventeen = parse({ verb: 'plan', line: Array(17).fill('focus n1').join('; ') })
+    ok('plan.protocol.4 sixteen semicolon-separated operations are admitted and a seventeenth is refused by name',
+      sixteen.kind === 'ok' && seventeen.kind === 'bad' && /16|step|operation|limit/i.test(seventeen.error),
+      JSON.stringify({ sixteen: sixteen.kind, seventeen }))
+
+    const controls = ['\n', '\r', '\0', '\x1b', '\x7f'].map((char) => parse({ verb: 'plan', line: `type n1 before${char}after` }))
+    ok('plan.protocol.5 a plan line cannot carry newline, carriage return, NUL, escape or delete control bytes',
+      controls.every((r) => r.kind === 'bad' && /line|control/i.test(r.error)),
+      JSON.stringify(controls))
+
+    const raw = [{ command: 'touch /tmp/not-a-plan' }, { args: [] }].map((field) => parse({ verb: 'plan', line, ...field }))
+    ok('plan.protocol.6 command and args remain refused in the shared parser even beside a valid plan line',
+      raw.every((r) => r.kind === 'bad' && /command|args/i.test(r.error)),
+      JSON.stringify(raw))
+
+    // The host check alone is insufficient: search params used to overwrite
+    // fields.verb after it, turning an open URL into any socket-only verb.
+    const direct = C.parseControlUrl(`terminal-canvas://plan?line=${encodeURIComponent(line)}`)
+    const disguised = C.parseControlUrl(`terminal-canvas://open?verb=plan&line=${encodeURIComponent(line)}`)
+    ok('plan.url.1 URLs refuse a plan host and a plan verb disguised as an open query',
+      direct.kind === 'bad' && /can only open/i.test(direct.error) &&
+        disguised.kind === 'bad' && /open/i.test(disguised.error),
+      JSON.stringify({ direct, disguised }))
+  }
+
+  // Main forwards to the renderer's executor and returns its actual outcome.
+  // No direct control-handler spawn/focus or success-before-answer is allowed;
+  // an absent renderer and a refusing renderer are different named answers.
+  {
+    const sideEffects = []
+    const deps = {
+      presets: () => [], defaultId: () => null, exists: () => true,
+      spawn: () => sideEffects.push('spawn'), list: () => [],
+      focus: () => { sideEffects.push('focus'); return true }
+    }
+    const req = { verb: 'plan', line: 'focus n1' }
+    const calls = []
+    let release
+    const answer = new Promise((resolve) => { release = resolve })
+    const handler = C.createControlHandler({ ...deps, plan: (line) => { calls.push(line); return answer } })
+    let settled = false
+    const pending = handler(req).then((reply) => { settled = true; return reply }, (error) => ({ threw: String(error) }))
+    await Promise.resolve()
+    const settledBeforeAnswer = settled
+    release({ kind: 'ran', summary: 'ran focus n1 · 1 step' })
+    const ran = await pending
+    ok('plan.handler.1 the handler awaits the renderer, passes the exact line once and returns its run summary without spawning or focusing itself',
+      !settledBeforeAnswer && calls.length === 1 && calls[0] === req.line &&
+        ran && ran.ok === true && ran.summary === 'ran focus n1 · 1 step' && sideEffects.length === 0,
+      JSON.stringify({ calls, settledBeforeAnswer, ran, sideEffects }))
+
+    const refusing = C.createControlHandler({ ...deps, plan: async () => ({ kind: 'refused', reason: 'close n1 needs a person to confirm it in the canvas' }) })
+    const refused = await refusing({ verb: 'plan', line: 'close n1' }).catch((error) => ({ threw: String(error) }))
+    ok('plan.handler.2 a renderer refusal reaches the caller as the same named error and never as success',
+      refused && refused.ok === false && refused.error === 'close n1 needs a person to confirm it in the canvas' && sideEffects.length === 0,
+      JSON.stringify({ refused, sideEffects }))
+
+    const absent = await C.createControlHandler(deps)(req).catch((error) => ({ threw: String(error) }))
+    const quiet = await C.createControlHandler({ ...deps, plan: async () => null })(req).catch((error) => ({ threw: String(error) }))
+    const rejected = await C.createControlHandler({ ...deps, plan: async () => { throw new Error('renderer gone') } })(req).catch((error) => ({ threw: String(error) }))
+    ok('plan.handler.3 an unavailable plan bridge, an unanswered renderer and a rejected request all return named refusals',
+      [absent, quiet, rejected].every((r) => r && r.ok === false && typeof r.error === 'string' && /available|canvas|window|answer/i.test(r.error)) && sideEffects.length === 0,
+      JSON.stringify({ absent, quiet, rejected, sideEffects }))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

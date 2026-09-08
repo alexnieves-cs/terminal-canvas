@@ -283,6 +283,37 @@ const FACTS = {
       ids.length > 0 && missing.length === 0, JSON.stringify({ ids: ids.length, missing }))
   }
 
+  // M180. Agent admission checks the entire plan before any operation runs.
+  {
+    const calls = []
+    const facts = { panels: [{ id: 'p1', kind: 'terminal', agent: 'claude' }] }
+    const execute = async (step) => { calls.push(step.verb); return { kind: 'ran' } }
+    const run = P.runAgentPlan
+    const refused = typeof run === 'function' ? await run('focus p1; close p1', facts, execute) : null
+    ok('agent-door.1 a destructive later step prevents every earlier side effect',
+      refused?.kind === 'refused' && calls.length === 0, JSON.stringify({ refused, calls }))
+    const valid = typeof run === 'function' ? await run('focus p1', facts, execute) : null
+    ok('agent-door.2 a validated agent plan executes through the supplied shared executor',
+      valid?.kind === 'ran' && calls.join(',') === 'focus', JSON.stringify({ valid, calls }))
+    calls.length = 0
+    const over = typeof run === 'function' ? await run(Array(17).fill('focus p1').join(';'), facts, execute) : null
+    ok('agent-door.3 the renderer also refuses an oversized plan before executing',
+      over?.kind === 'refused' && calls.length === 0, JSON.stringify({ over, calls }))
+  }
+
+  {
+    const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const reply = typeof P.runAgentPlan === 'function' ? await P.runAgentPlan(`type p1 ${token}`, { panels: [{ id: 'p1', kind: 'chat' }] }, async () => ({ kind: 'ran', note: token })) : null
+    ok('agent-door.4 outgoing summaries and executor notes scrub planted secrets', reply?.kind === 'ran' && !JSON.stringify(reply).includes(token), JSON.stringify(reply))
+    const doors = V.V9_DOORS
+    const legacy = ["focus", "start", "spawn", "type", "submit", "send", "interrupt", "restart", "read", "set-setting", "lock", "unlock", "pin", "unpin", "maximise", "restore", "tidy", "zoom-fit", "workspace-from-template", "zoom-reset", "workspace", "review", "run-template", "close", "reset-canvas", "discard", "remove-worktree", "dispatch", "board"]
+    const ids = V.VERBS.map((verb) => verb.id).filter((id) => !legacy.includes(id))
+    const valid = doors && ids.every((id) => V.VERBS.some((v) => v.id === id) &&
+      ['canvas', 'palette', 'agent'].every((door) => typeof doors[id]?.[door] === 'string' && doors[id][door].length > 0) &&
+      typeof doors[id]?.workflow?.reason === 'string' && doors[id].workflow.due === 'M189')
+    ok('closure.v9.1 onboarding verbs declare every actual door and an expiring workflow exception', Boolean(valid), JSON.stringify(doors))
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length ? 1 : 0)

@@ -35,6 +35,103 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   }
 
   {
+    // M180. A beginner reaches a real composer by the visible primary door,
+    // then types a sentence and presses Send. No test hook mints the chat.
+    // The CLI report and availability preset are fixtures, the runtime is
+    // the harness's real manager, and its fake runner records the user line.
+    const id = 'onboarding.start.1 the first-launch primary opens a conversation and a typed message receives the recorded reply without a terminal'
+    const savedReport = state.harnessEnvReport
+    await settle()
+    flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    let openedId = null
+    const reload = async () => {
+      const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await loaded; await settle()
+    }
+    // Real input plus a hit-test: an off-screen/covered button is not a door.
+    const clickVisible = async (selector) => {
+      const point = await wc.executeJavaScript(`(() => {
+        const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return null
+        const r = node.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2)
+        return node.contains(document.elementFromPoint(x, y)) ? { x, y } : null
+      })()`)
+      if (!point) return false
+      wc.focus()
+      wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
+      wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      return true
+    }
+    try {
+      state.harnessEnvReport = { ...savedReport, clis: [
+        { name: 'claude', path: '/fake/claude' }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }
+      ] }
+      layoutStore.addPreset({ id: 'onboarding-claude', name: 'Claude (first-launch fixture)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const primary = await waitUntil(() => wc.executeJavaScript(`(() => {
+        const b = document.querySelector('[data-onboarding-start]')
+        return b && !b.disabled && b.textContent.includes('Start a conversation') ? true : false
+      })()`), 1500)
+      const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
+      const started = primary === true && await clickVisible('[data-onboarding-start]')
+      if (started) openedId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 4000)
+      let typed = false
+      let sent = false
+      let reply = false
+      let noTerminal = false
+      if (typeof openedId === 'string') {
+        const panelSelector = `.panel[data-panel-id="${openedId}"]`
+        const inputSelector = `${panelSelector} [data-chat-input]`
+        await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(inputSelector)})?.disabled === false`), 3000)
+        typed = await clickVisible(inputSelector)
+        if (typed) {
+          await wc.insertText('Reply with exactly the word: pong')
+          await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(panelSelector + ' [data-chat-send]')})?.disabled === false`), 2000)
+          sent = await clickVisible(panelSelector + ' [data-chat-send]')
+        }
+        if (sent) reply = await waitUntil(() => wc.executeJavaScript(`(() => {
+          const text = [...document.querySelectorAll(${JSON.stringify(panelSelector + ' [data-chat-assistant-text]')})].map((n) => n.textContent).join(' ')
+          return text.includes('pong') ? text : false
+        })()`), 5000)
+        noTerminal = await wc.executeJavaScript(`document.querySelectorAll('.xterm, .panel[data-panel-kind="terminal"]').length === 0`)
+      }
+      const spawn = chatSpawns[before.spawns]
+      const userLine = spawn?.proc.stdin.some((line) => {
+        try { const value = JSON.parse(line); return value.type === 'user' && JSON.stringify(value.message).includes('Reply with exactly the word: pong') } catch { return false }
+      }) === true
+      ok(id, primary === true && started && typed && sent && typeof reply === 'string' && userLine &&
+        noTerminal && ptyManager.list().length === before.ptys && chatSpawns.length === before.spawns + 1,
+      JSON.stringify({ primary, started, openedId, typed, sent, reply, userLine, noTerminal, spawns: [before.spawns, chatSpawns.length] }))
+      const agentId = 'onboarding.agent.1 the agent plan bridge returns readiness through main, preload and the renderer, and refuses a close needing human confirmation with the conversation kept'
+      try {
+        const readinessReply = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, 'check-readiness', null, 3000)
+        const closeReply = typeof openedId === 'string'
+          ? await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, 'close ' + openedId, null, 3000)
+          : null
+        const kept = typeof openedId === 'string' && await wc.executeJavaScript(`document.querySelector(${JSON.stringify('.panel[data-panel-id="' + openedId + '"]')}) !== null`)
+        ok(agentId, readinessReply?.kind === 'ran' && /installed/.test(readinessReply.summary) && /sign-in/.test(readinessReply.summary) &&
+          closeReply?.kind === 'refused' && /human confirmation/.test(closeReply.reason) && kept === true,
+        JSON.stringify({ readinessReply, closeReply, openedId, kept }))
+      } catch (error) {
+        ok(agentId, false, String(error && error.message || error))
+      }
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      if (typeof openedId === 'string') await clickPanelClose(wc, openedId)
+      await settle()
+      state.harnessEnvReport = savedReport
+      layoutStore.deletePreset('onboarding-claude')
+      layoutStore.save(savedWorkspace)
+      flushLayoutStore()
+      await reload()
+    }
+  }
+
+  {
     // M73 — chat.1 / chat.2 / chat.3 / chat.4. THE CHAT PANEL, END TO END, in
     //     a real renderer over a REAL AgentSessionManager and a FAKE process
     //     runner replaying a stream recorded from claude (the harness's
@@ -1114,7 +1211,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await waitUntil(() => wc.executeJavaScript(`document.activeElement && document.activeElement.hasAttribute('data-annotation-editor')`), 3000)
         for (const ch of 'on the panel') wc.sendInputEvent({ type: 'char', keyCode: ch })
         wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
-        const panelNote = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="panel"]'); if (!g) return false; const r = g.querySelector('[data-annotation-label]').getBoundingClientRect(); return { text: g.querySelector('[data-annotation-label]').textContent, x: r.left, y: r.top, leader: g.querySelector('.annotation__leader') !== null } })()`), 3000)
+        // M180. Return is queued input: the annotation group exists while its
+        // editor is still mounted. Wait for the label, not just its group;
+        // throwing here skips history.1 and lets the pending note save replace
+        // the following ink fixture. Keep the first read in the diagnostic.
+        const panelNoteReadiness = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="panel"]'); return { group: !!g, editor: !!g?.querySelector('[data-annotation-editor]'), label: !!g?.querySelector('[data-annotation-label]') } })()`)
+        const panelNote = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-annotation][data-annotation-kind="panel"]'); const label = g?.querySelector('[data-annotation-label]'); if (!label) return false; const r = label.getBoundingClientRect(); return { text: label.textContent, x: r.left, y: r.top, leader: g.querySelector('.annotation__leader') !== null } })()`), 3000)
         // Leave the mode, drag the panel, and the panel note follows.
         await wc.executeJavaScript(`document.querySelector('[data-annotate-done]').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); true`)
         await settle()
@@ -1157,7 +1259,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             stored.length === 2 && stored.some((s) => s.kind === 'world' && s.text === 'first note') && stored.some((s) => s.kind === 'panel' && s.text === 'on the panel') &&
             selected === true && deleted === true && remaining === 1 &&
             typeof mergedRow === 'string' && /disabled/.test(mergedRow) && /merged/.test(mergedRow),
-          JSON.stringify({ entered, strip, editor1, world, panelNote, stripGone, panelNoteAfter, stored, selected, deleted, remaining, mergedRow, log: aLog.slice(-4) }))
+          JSON.stringify({ entered, strip, editor1, world, panelNoteReadiness, panelNote, stripGone, panelNoteAfter, stored, selected, deleted, remaining, mergedRow, log: aLog.slice(-4) }))
 
         // ---- history.1
         // Two distinct saves so the ring holds two snapshots (uncoalesced here).
