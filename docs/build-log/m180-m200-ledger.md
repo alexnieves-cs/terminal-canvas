@@ -1100,3 +1100,26 @@ extended with `absent`, `skipped`, `stopped` and the open/sealed pair), `verify:
 `workflow.door.1` was watched failing against the pre-fix adapter — 70/71, that check the only
 failure (`out/v9-evidence/m184b-door-red.log`, exit 1) — and passes with it
 (`m184b-product.log`, 71/71, exit 0, 101.5 s wall against a 124 s watchdog).
+
+### Act II — the goldens that changed, and the sentence for each
+
+`npm run verify:visual` after M184 exited 1 at 54/59. Five scenes changed; each was looked at
+(fresh and diff, `out/visual/`) before a golden was written, and each changed for the same two
+product reasons: the M183 line that promised saving "arrives with M184" is gone because it has
+arrived, and Stop's disabled reason names the workflow rather than the pool because the
+workflow — its chats included — is what Stop now acts on.
+
+- **workflow** — The resting panel drops one disabled sentence and renames another, so Save now
+  says only that the diagram matches the template and Stop says nothing of this workflow is
+  running; the diagram rises by that one line (16 px) and nothing else on the page moves.
+- **workflow-edit** — The same two lines, in the maximised editor: the library column and the
+  diagram both rise one line together, so the pointer mapping the scene exists to show is
+  unchanged, and the library, the inspector and the rail are untouched.
+- **wide** — The same panel at the wide breakpoint with the context pane resident, the same
+  one-line rise; the pane's own fields do not move, which is the point of keeping this scene.
+- **palette-query** — The canvas section gained M184's copy door (`Workflow: save a copy`), so
+  the scrolled list moves by exactly one row: the panels row leaves the top of the window and
+  `Workflow: run` comes into view above `Clear scrollback logs`. No row changed its words.
+- **starter** — The workflow example wears the same two changes, and a built-in's `Save a copy`
+  is now a live verb rather than a greyed one — it is the only save a built-in has, and gating
+  it on an edit made the primary path unreachable from the example a beginner is looking at.
