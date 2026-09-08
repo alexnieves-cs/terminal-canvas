@@ -252,7 +252,9 @@ export function buildRunRows(runs: readonly PersistedRun[], terminalIds: Readonl
     const panels = run.panelIds.length
     return {
       id: run.id, name: run.name, panels, duration, cost,
-      facts: `${panels} panel${panels === 1 ? '' : 's'} · ${duration} · ${cost}`,
+      // M179 (the Act IV critic): the rail's run row states panels and duration and
+      // never the price — the metrics rule; `cost` stays on the row for the Work tab.
+      facts: `${panels} panel${panels === 1 ? '' : 's'} · ${duration}`,
       outcome: word.word,
       tone: word.tone,
       runAgain

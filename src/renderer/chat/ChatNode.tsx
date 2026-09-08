@@ -20,7 +20,8 @@ import {
   type ComposerTrigger, type FileCompletionRow
 } from './composer-model'
 import { Markdown } from './Markdown'
-import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown } from '@renderer/icons'
+import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown, KIND_GLYPH } from '@renderer/icons'
+import { EmptyState } from '@renderer/shell/EmptyState'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 
 /**
@@ -154,7 +155,8 @@ const ToolRow = memo(function ToolRow({ row, panelId, reveal }: { row: Extract<C
             : diff.diff.kind === 'binary' ? <p className="review-node__hunk-note">binary file</p>
             : diff.diff.kind === 'unavailable' ? <p className="review-node__hunk-note">this diff could not be read</p>
             : <div className="review-node__hunks" data-review-node-hunks>
-                {diff.diff.lines.map((line, i) => <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>)}
+                {/* M178 (F.10): git's own header lines (`diff --git`, `index`, `---`, `+++`) say what the card's header already says — the hunk starts at the first `@@`. */}
+{diff.diff.lines.filter((line) => line.kind !== 'meta').map((line, i) => <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>)}
                 {diff.diff.truncated > 0 && <div className="review-node__hunk-note">+{diff.diff.truncated} more lines</div>}
               </div>}
         </div>
@@ -598,11 +600,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     >
       <div className="pf__body chat__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
         <div className="chat__transcript" data-chat-transcript data-scroll-host ref={bodyRef} onScroll={onScroll}>
-          {rows.length === 0 && chat.refusal === null && (
-            <p className="pf__note chat__empty" data-chat-empty>
-              {props.claudeAvailable ? `No turns yet. Send a message to start ${backend} here.` : `${backend} was not found on the login PATH, so this panel cannot start.`}
-            </p>
-          )}
+          {/* M177. The empty state's one shape; the not-found arm stays a note — it is a fact about the machine, not a place. */}
+          {rows.length === 0 && chat.refusal === null && (props.claudeAvailable
+            ? <div className="chat__empty"><EmptyState id="chat" glyph={<KIND_GLYPH.chat />} fill={{ backend }} attrs={{ 'data-chat-empty': '' }} /></div>
+            : <p className="pf__note chat__empty" data-chat-empty>{`${backend} was not found on the login PATH, so this panel cannot start.`}</p>)}
           {toolGroups(rows).map((row) => {
             switch (row.kind) {
               case 'tools':

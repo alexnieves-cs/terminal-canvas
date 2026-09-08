@@ -4,7 +4,6 @@ import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machi
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import { agentStateLabel, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
-import { shortPath } from '@renderer/palette/panel-name'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
 import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
@@ -528,7 +527,7 @@ function InspectorPanel({
             <dt className="inspector__label">{field.label}</dt>
             {/* M68. A path is left-truncated so its last segments survive the
                 260px column, with the whole path on hover (brief, principle 3). */}
-            <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`} title={PATH_FIELDS.has(field.key) ? field.value : undefined}>{PATH_FIELDS.has(field.key) ? shortPath(field.value, 3) : field.value}</dd>
+            <dd className={`inspector__value${MONO_FIELDS.has(field.key) ? ' inspector__value--mono' : ''}`} title={PATH_FIELDS.has(field.key) ? field.value : undefined}>{field.value}</dd>{/* M178 (F.6): the path rule's bargain — the FULL path lives here, wrapped (`overflow-wrap: anywhere`), never the short form */}
           </div>
         ))}
       {/* M98. The chat's session grants, a field with its own control: four

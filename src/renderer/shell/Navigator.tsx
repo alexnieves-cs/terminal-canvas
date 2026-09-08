@@ -13,8 +13,9 @@ import { TeammatesPane, type TeammatesPaneProps } from './TeammatesPane'
 import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { SkillsPane, type SkillsPaneProps } from './SkillsPane'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Plus, Lanes } from '@renderer/icons'
+import { ChevronLeft, Plus, Lanes, Grid, Layers } from '@renderer/icons'
 import { railGroups } from './rail-rows'
+import { EmptyState } from './EmptyState'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
@@ -159,7 +160,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                 // Reachable: the list is empty at mount until the first
                 // reloadWorkspaces() resolves. A header with a void under it
                 // reads as a broken list.
-                <li className="rail-empty">no workspaces</li>
+                <li className="rail-empty"><EmptyState id="workspaces" glyph={<Layers />} onVerb={props.onCreateWorkspace} /></li>
               ) : (
                 props.workspaces.map((row) => (
                   <RailWorkspaceRow
@@ -190,7 +191,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
               {/* M79. Runs: one execution of a subgraph each, newest first. */}
               <li className="rail-row rail-row--heading" data-rail-runs-heading><span className="shell__region-title">Runs</span></li>
               {props.runs.length === 0 ? (
-                <li className="rail-empty" data-rail-runs-empty>no runs yet — a handoff that fires records one</li>
+                <li className="rail-empty"><EmptyState id="runs" attrs={{ 'data-rail-runs-empty': '' }} /></li>
               ) : props.runs.map((run) => (
                 <li key={run.id} className="rail-row rail-run" data-rail-run={run.id} data-run-outcome={run.outcome}>
                   {/* Two lines: the name owns the first, the facts and the verb the second. */}
@@ -213,7 +214,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
               {props.snapshots === null || props.snapshots === undefined ? (
                 <li className="rail-empty">reading…</li>
               ) : props.snapshots.length === 0 ? (
-                <li className="rail-empty" data-rail-snapshots-empty>no snapshots yet — one is kept a minute after each save</li>
+                <li className="rail-empty"><EmptyState id="snapshots" attrs={{ 'data-rail-snapshots-empty': '' }} /></li>
               ) : props.snapshots.map((snap) => (
                 <li key={snap.at} className="rail-row rail-snapshot" data-rail-snapshot={snap.at}>
                   <span className="rail-row__label" title={new Date(snap.at).toLocaleString()}>{ago(snap.at)} · {snap.workspaces} workspace{snap.workspaces === 1 ? '' : 's'} · {snap.panels} panel{snap.panels === 1 ? '' : 's'}</span>
@@ -230,7 +231,8 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                 // M46 (spec §8.3). The one section that rendered NOTHING when
                 // empty; every unconditionally rendered list owes an empty
                 // state, and this one names the way out.
-                <li className="rail-empty">no panels — ⌘N to start one
+                <li className="rail-empty">
+                  <EmptyState id="panels" glyph={<Grid />} />
                   {/* M173. The hints live here now, one sentence each, each gone for good once its gesture was used (`hints.seen`). */}
                   {(props.hints ?? []).length > 0 && (
                     <ul className="rail-hints" data-rail-hints>

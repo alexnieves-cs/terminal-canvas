@@ -65,6 +65,9 @@
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
   --dur-1: 90ms; --dur-2: 160ms;
+  /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
+  --dur-breath: 1.2s;
+  --dur-stagger: 30ms; /* M179: the ⌘G grid's per-cell delay — motion.2 reads the longhands too */
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -681,8 +684,7 @@ body {
    overflow: hidden clip, making a documented re-read control disappear for
    some users. Scoped to .shell__tree so SideRail's + and rename buttons keep
    their existing behaviour. */
-.shell__tree-root {
-  min-width: 0;
+.shell__tree-root { flex: 0 0 auto; max-width: 60%; /* M178 (F.4): the root's name never shrinks below its own width up to a ceiling; the panel attribution beside it is the span that gives. The first wave wrote a 3ch FLOOR — which is exactly `R…`, the failure it meant to fix — under a pre-M178 min-width: 0 that overrode it anyway; the critic read `R…` on navigator-files twice. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -828,7 +830,7 @@ body {
 .inspector__arm { margin: 0 0 var(--sp-3); color: var(--fg-3); font-size: var(--t-xs); }
 .rail-row--door { margin-top: var(--sp-3); border-top: 1px solid var(--line); padding-top: var(--sp-2); }
 .rail-row--door .rail-row__main[aria-pressed="true"] .rail-row__label { color: var(--iris); }
-.shell__tree-panel { text-transform: none; letter-spacing: 0; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); margin-left: var(--sp-2); }
+.shell__tree-panel { flex: 1 1 0; text-transform: none; letter-spacing: 0; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); margin-left: var(--sp-2); }
 .jira-node__connect { align-self: flex-start; min-height: 24px; padding: 0 var(--sp-3); border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font: inherit; font-size: var(--t-xs); cursor: pointer; }
 .jira-node__connect:hover { background: var(--s-4); }
 .rail-row__go {
@@ -1196,7 +1198,8 @@ body {
 }
 /* Three ranks. Primary keeps the full control; secondary shrinks to a text
    chip; destructive sits at the right and goes red the moment it is armed. */
-.context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; background: var(--s-3); font-weight: 600; }
+/* M178 (F.1). No background here: at (0,2,1) this rule beat the primary's (0,1,0) iris fill, so an ENABLED Restart painted white on white since M46 — a latent 4.0 defect the second audit caught (`restart.paint.1`). */
+.context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; font-weight: 600; }
 .inspector__action--secondary { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); min-width: 0; white-space: nowrap; }
 .inspector__action--destructive { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
 .inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
@@ -1994,6 +1997,13 @@ body {
   min-height: 0;
   flex-direction: column;
 }
+/* M176. A panel ARRIVES: a rise of 8px with its opacity over --dur-2 on the
+   brief's ease. The brief asked for a scale from .98 and M176 tried it: the
+   keyframe runs on `.pf__motion`, an ANCESTOR of `.pf__body`, and a scale
+   there broke the annotation stage (product `annot.1`: the panel's note and
+   the frame stopped agreeing on where the frame was) — the M3/M144 rule that
+   nothing above the body is transformed reaches the arrival too. The rise
+   stays; the scale is declined by name in the ledger. */
 @keyframes panel-enter {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -2055,7 +2065,7 @@ body {
   /* M109. ONE BREATH, not a heartbeat: two cycles over 1.2s, then the static
      ring above. A pulse that never ends on a panel that waits an hour is a
      signal the eye learns to skip (brief, Motion: three moments). */
-  animation: wants-you-pulse 1.2s ease-in-out 2;
+  animation: wants-you-pulse var(--dur-breath) ease-in-out 2;
 }
 .panel--agent-exited { border-color: var(--frame-line); }
 
@@ -3335,7 +3345,7 @@ body {
    quotes the well: mono title and mono hint (brief §5, Type). The hint is
    the path or the matching line, anchored LEFT in its column so ten paths
    line up as a column rather than ragging on their state word's width. */
-.palette__row--mono .palette__title { font-family: var(--font-mono); font-size: var(--t-md); font-weight: 600; }
+.palette__row--mono .palette__title { font-family: var(--font-ui); font-size: var(--t-md); font-weight: 600; } /* M178 (F.3): a panel's NAME is a name; the mono row's hint (its path) stays mono */
 .palette__row--mono .palette__hint { font-family: var(--font-mono) /* M162. A mono row's hint is its cwd: a path, by the face rule */; font-size: var(--t-sm); text-align: left; width: 42%; max-width: 42%; }
 /* The state word: its own column, fixed width, in its tone. */
 .palette__state {
@@ -3499,14 +3509,14 @@ body {
   from { opacity: 0; transform: scale(.96); }
   to   { opacity: 1; transform: scale(1); }
 }
-.navgrid__cell:nth-child(2) { animation-delay: 30ms; }
-.navgrid__cell:nth-child(3) { animation-delay: 60ms; }
-.navgrid__cell:nth-child(4) { animation-delay: 90ms; }
-.navgrid__cell:nth-child(5) { animation-delay: 120ms; }
-.navgrid__cell:nth-child(6) { animation-delay: 150ms; }
-.navgrid__cell:nth-child(7) { animation-delay: 180ms; }
-.navgrid__cell:nth-child(8) { animation-delay: 210ms; }
-.navgrid__cell:nth-child(9) { animation-delay: 240ms; }
+.navgrid__cell:nth-child(2) { animation-delay: calc(var(--dur-stagger) * 1); }
+.navgrid__cell:nth-child(3) { animation-delay: calc(var(--dur-stagger) * 2); }
+.navgrid__cell:nth-child(4) { animation-delay: calc(var(--dur-stagger) * 3); }
+.navgrid__cell:nth-child(5) { animation-delay: calc(var(--dur-stagger) * 4); }
+.navgrid__cell:nth-child(6) { animation-delay: calc(var(--dur-stagger) * 5); }
+.navgrid__cell:nth-child(7) { animation-delay: calc(var(--dur-stagger) * 6); }
+.navgrid__cell:nth-child(8) { animation-delay: calc(var(--dur-stagger) * 7); }
+.navgrid__cell:nth-child(9) { animation-delay: calc(var(--dur-stagger) * 8); }
 .navgrid__cell--empty { background: var(--s-0); border-style: dashed; box-shadow: none; }
 /* --s-4 is the hover fill, and the cursor IS a hover. --s-5 is deliberately
    not used: verify:styles 11 excludes it as a text ground. */
@@ -3783,7 +3793,7 @@ body {
 .chat__when { position: absolute; right: var(--sp-2); top: var(--sp-1); font-size: var(--t-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none; }
 .chat__row:hover .chat__when { opacity: 1; }
 .chat__row--user .chat__text { color: var(--fg-2); }
-.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret 1s steps(2, start) infinite; }
+.chat__row--live .chat__text::after { content: '▍'; color: var(--fg-4); animation: chat-caret var(--dur-breath) steps(2, start) infinite; }
 @keyframes chat-caret { to { visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .chat__row--live .chat__text::after { animation: none; } }
 .chat__row--thinking { }
@@ -4000,9 +4010,7 @@ body {
 /* M121. The chip GIVES before the chrome verbs clip: .pf__title's own rule (min-width 0, an ellipsis) and it may shrink — the verbs are flex 0 0 auto and never do (header.1). */
 .chat__auto { display: inline-flex; align-items: center; gap: var(--sp-1); white-space: nowrap; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .chat__auto-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.chat__auto-ring { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; animation: chat-auto-spin 900ms linear infinite; }
-@keyframes chat-auto-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .chat__auto-ring { animation: none; border-top-color: currentColor; border-style: dashed; } }
+.chat__auto-ring { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; border-top-color: transparent; /* M176: no spinner — the ring's colour is the state (the brief: a soft cursor, never a spinner) */ }
 .chat__auto-dismiss { margin-left: var(--sp-1); }
 
 /* M100. The Teammates pane: the roster as rail rows, one record open beneath
@@ -4083,7 +4091,7 @@ body {
    let it run set the column's width — which is the defect this round fixes. */
 .skill-card__description { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .skill-card__facts, .skill-card__note { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skill-card__facts { font-family: var(--font-mono); } /* M162. Paths and counts stay mono; the note above is a sentence */
+/* M178 (F.15): the facts line (`3 resources · placed`) is words — the M162 opt-in is withdrawn; a path inside it would be its own span. */
 /* M127 critic wave. The resource SENTENCE, on its own line under the
    provenance word. It wraps and clamps at two lines rather than ellipsising
    on one: `no bundled fi…` cut a three-word fact mid-word, which teaches the
@@ -4091,7 +4099,7 @@ body {
 /* The provenance line wraps too: a plugin id is a NAME, and `by plugin ·
    documen…` cuts one exactly the way the resource sentence used to be cut. */
 .skill-card__facts { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
-.skill-card__resources { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.skill-card__resources { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); /* M178 (F.15): a COUNT sentence (`no bundled files`), never a path — the face rule */ font-size: var(--t-xs); color: var(--fg-3); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 /* The heading's provenance word: the dimmest tier, so the title still gives. */
 .skills-pane__origin { margin: 0; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); text-transform: none; letter-spacing: normal; }
 
@@ -4312,7 +4320,7 @@ body {
 .trail-lane__note { padding: var(--sp-2) var(--sp-3); border: 1px dashed var(--line); border-radius: var(--r-sm); background: var(--s-2); color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
 /* The cards take pointer events back one by one, the way LinkLayer opts each
    hit stroke in: the LANE must never swallow a click meant for the ground. */
-.trail-card { pointer-events: auto; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); box-shadow: none; animation: trail-card-in 160ms ease-out 1 both; }
+.trail-card { pointer-events: auto; display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-2); box-shadow: none; animation: trail-card-in var(--dur-2) var(--ease) 1 both; }
 .trail-card--openable { cursor: pointer; }
 .trail-card--openable:hover { border-color: var(--line-strong); background: var(--s-3); }
 /* The NAME is the identity — and `not installed here` is a claim about a
@@ -4381,7 +4389,7 @@ body {
 
 /* M173. The empty state's hints and the launcher's tmux banner: sentences in
    the UI face where a person needs them; the strip that carried them is gone. */
-.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.rail-hints { list-style: none; margin: var(--sp-4) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); text-align: center; /* M179: one alignment under the centred empty state */ }
 .rail-hint { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__banner { display: flex; align-items: center; gap: var(--sp-4); margin: 0 0 var(--sp-5); padding: var(--sp-3) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-sm); }
 .launcher__banner-dismiss { flex: 0 0 auto; margin-left: auto; }
@@ -4406,3 +4414,25 @@ body {
 .palette__state-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); margin-right: var(--sp-3); }
 .palette__state-dot[data-tone="asleep"], .palette__state-dot[data-tone="none"], .palette__state-dot[data-tone="starting"] { background: var(--fg-4); }
 .palette__state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* M177. EMPTY STATES AS PLACES: one shape — the kind's glyph, one sentence
+   saying what the surface is for, one verb where it has a door — centred, in
+   the UI face. A pane's inline `reading…` lines are not empty states. */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-6) var(--sp-5); text-align: center; font-family: var(--font-ui); color: var(--fg-3); }
+.empty-state__glyph { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: var(--r-md); background: var(--iris-dim); color: var(--iris); }
+.empty-state__glyph svg { width: 16px; height: 16px; }
+.empty-state__sentence { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); max-width: var(--measure); color: var(--fg-2); }
+.empty-state__verb { margin-top: var(--sp-1); }
+.empty-state__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); max-width: var(--measure); overflow-wrap: anywhere; }
+.rail-empty .empty-state { padding: var(--sp-4) 0; }
+
+/* M178 (F.8). The rest rule reaches the group frame: its verbs rest at 0 and
+   reveal on the frame's hover or focus-within (the header stays the drag
+   surface; the locked mark is a state and stays). */
+.canvas-group__toggle, .canvas-group__remove { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.canvas-group:hover .canvas-group__toggle, .canvas-group:hover .canvas-group__remove, .canvas-group:focus-within .canvas-group__toggle, .canvas-group:focus-within .canvas-group__remove { opacity: 1; }
+/* M178 (F.16). A place reads left to right, its short form; the full path is on the title. */
+.teammates-pane__path { direction: ltr; }
+/* M178 (F.11). A label is a word; the sentence beside it is a note in the UI face, never caps. */
+.teammates-pane__note { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); margin-left: var(--sp-2); text-transform: none; letter-spacing: 0; }
+.panel__card-sentence { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }

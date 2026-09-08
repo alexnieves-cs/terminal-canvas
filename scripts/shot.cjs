@@ -193,16 +193,16 @@ const term = (id, x, y, w, h, z, extra = {}) => ({ id, x, y, w, h, z, cwd: REPO,
 const SCENES = [
   { name: 'launcher', intent: 'The empty canvas a fresh install sees: the launcher of real verbs, nothing else on the canvas.',
     run: async (k) => { await k.theme('light'); await k.shot('launcher') } },
-  { name: 'kinds', intent: 'One of every panel kind side by side on the light theme: a live terminal, a dormant card with a recorded tail, a review node listing a changed file, a file panel, a note, a toolbox, and a Jira panel with no credential. Each should read as the same family of frame.',
+  { name: 'kinds', intent: 'One of every panel kind side by side on the light theme at 100 %: a live claude terminal, a dormant tests card, a review, a source file, a note, a toolbox, a work card and a chat — every header at rest a glyph, a title and one state; the bodies in the UI face with code and paths in mono.',
     // The subagent scan lands a beat after the layout: wait for the notice
     // (up to 3s) so the scene does not depend on a race. M67's first shots
     // showed the notice in one scene and not the next for exactly this reason.
     run: async (k) => { await k.loadMain(); for (let i = 0; i < 30 && !(await k.js(`!!document.querySelector('[data-subagent-ambiguous]')`)); i++) await sleep(100); await k.shot('kinds') } },
   { name: 'kinds-dark', intent: 'The same panel kinds on the dark theme; the terminal well and every surface should follow the theme with the same hierarchy.',
     run: async (k) => { await k.theme('dark'); await k.shot('kinds-dark'); await k.theme('light') } },
-  { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of the terminal whose agent used them, in the order it used them, each naming the skill and either its own description and shelf column, or `not installed here` for a name this project cannot see (the fourth card). The cards are not panels — they are derived from the transcript and stored nowhere — and the panel\'s chrome carries one capsule reading `hide 4 skills` that folds the lane away. The cards read as DERIVED, not as panels: a dashed hairline tether crosses the gap from the host\'s right edge to the lane, and the cards are flat (no shadow, a dimmer hairline and a smaller radius than the frame). A skill\'s NAME wraps to two lines and never truncates — `superpowers:verification-before-completion` is the fourth card, the `not installed here` one, where the full name is the whole point — while the description takes the single clamped line. The host itself has a restored tail from the session those four skills were used in. Judge the GEOMETRY: does a column of four cards sit beside its host without crowding it, and does the tether say where they came from?',
+  { name: 'trail', intent: 'The live skill trail: a lane of cards to the right of a selected agent panel, each card the skill\'s name and its phase as a sentence, the host\'s `hide 4 skills` capsule in its chrome; the dashed tether on the host\'s edge.',
     run: async (kit) => { await kit.goTo('claude — plan the milestone'); await sleep(1200); await kit.shot('trail') } },
-  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the SELECTED panel\'s own inventory, as a horizontal RACK of columns — the user\'s own placed columns first, then the derived ones, then `Ungrouped` last and always, a real column that can be dropped into and cannot be deleted. Each card carries its name, its own sentence clamped to two lines, and a word saying WHICH authority put it there (`placed` · `by plugin` · `by scope`). Above them: three tabs (Skills · Agents · Commands) over the one inventory, a search box, and the scope filters. A column is a fixed 12rem inside the 300px navigator and its heading follows M106\'s one header rule — the title gives and ellipsises, the count sits beside it, and the two column verbs (Assign to teammate…, Delete) collapse into one `…` menu; a card\'s own assign verb is the same small control at its right. The picture is the rack at rest: the PLACED column whole at the left, the edge of the derived one beside it, and the rack\'s own scrollbar beneath. Every heading carries its provenance word beside the count — `STARTING A MILESTONE 3 · placed by you`, `DOCUMENTS 2 · derived`, `UNGROUPED 0` — and a card states its resources on its OWN line under the provenance word, wrapped rather than cut. The two header doors are both words (New column, New skill); no bare glyph. Judge whether a reader can tell a column they arranged from a column the app derived, and whether anything is still cut mid-word.',
+  { name: 'skills', intent: 'M127. The Skills pane: the navigator over the Skills section with a column per shelf placement, each card the skill\'s name, a note and its facts, the column\'s count beside its `⋯`; the search field above; a card that wraps its name.',
     run: async (k) => {
       await k.selectRail('live'); await k.dock('skills'); await sleep(1200)
       // The rack scrolls horizontally and the navigator is a fixed 300px, so
@@ -250,7 +250,7 @@ const SCENES = [
       await sleep(900)
       await kit.shot('github')
     } },
-  { name: 'across', intent: 'A review of every worktree of one repository, in one node: the main tree first, then each worktree this app created, headed by what the user calls it and its branch, each with its own files and counts — and commit and discard blocked by name, because a commit across worktrees would be N commits pretending to be one. The context pane beside it names the repository on its identity line and says where the branch stands against its tracking ref, from the last fetch.',
+  { name: 'across', intent: 'A review of every worktree of one repository, in one panel: the main tree first, then a section per worktree lane with its branch, each file a card with its counts as pills; Commit and discard are the frame\'s verbs and refuse by name across lanes.',
     run: async (kit) => {
       await kit.goTo('every worktree of repo')
       await sleep(900)
@@ -297,7 +297,7 @@ const SCENES = [
       await k.shot('routine')
       await k.click('[data-dock="panels"]'); await sleep(300)
     } },
-  { name: 'board', intent: 'M116. The Board pane: four columns (todo · working · review · done) over the workspace\'s work items — `acme/canvas#12 Watchdog fires under load` under working with `ada` and its lane `claude — api (chat)` as the trailing phrase, `acme/canvas#31` under todo with `Show on canvas` because it has no card; todo and done are the only columns with a dashed (droppable) edge. On the canvas, the #12 card sits beside the chat it was dispatched to, its state word `working` in the working tone, with the edge between them.',
+  { name: 'board', intent: 'M116. The Board pane: four columns (todo · working · review · done), each with its count, a card under todo with its key and Show on canvas, the dispatched card under working with its teammate and lane, the two empty columns saying what sets them; the drop edge appears on a drag.',
     run: async (k) => {
       // Frame the card first (the harness's own goTo, like every scene), THEN
       // open the pane: the pane's rows are the pane's; the canvas half must
@@ -349,7 +349,7 @@ const SCENES = [
       await kit.js(`(() => { const s = document.querySelector('[data-spawn-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
       await sleep(300)
     } },
-  { name: 'runs', intent: 'A run that already happened: the Workspaces pane lists it — name, `3 panels`, its duration and cost, the word `done`, a `Run again` verb — and on the canvas its three panels wear a read-only frame with the run\'s name as its caps label; the context pane\'s Work tab for the target names the run it belongs to. A record of what the graph did, in the same words the graph uses.',
+  { name: 'runs', intent: 'A run that already happened: the Workspaces pane lists it under RUNS with its panel count, duration and state and a Run again verb; the selected run\'s panels are in frame beneath.',
     run: async (kit) => {
       await kit.goTo('claude — api (2)')
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
@@ -360,7 +360,7 @@ const SCENES = [
       await sleep(700)
       await kit.shot('runs')
     } },
-  { name: 'graph', intent: 'The task graph: two ruled edges into the second terminal — the chat\'s after a turn, worker a\'s on exit 0 — each saying what it does on the line in mono; the edge from the chat is selected (accent stroke, its badge the remove control) and the context pane shows it as an Edge: source → target, the rule as a labelled select, Label… and Remove. An edge is a thing you can pick up.',
+  { name: 'graph', intent: 'The task graph: two ruled edges into the second panel drawn as lines with their rule words, the target\'s inspector open on the edge\'s fields; the chat behind carries the join\'s first arrival.',
     run: async (kit) => {
       await kit.goTo('claude — api (2)')
       await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
@@ -412,7 +412,7 @@ const SCENES = [
       await sleep(700)
       await kit.shot('tool-objects')
     } },
-  { name: 'approval', intent: 'An agent asking permission, seen from afar: the chat card reads `needs you` in amber with the question (tool and argument in mono) and Allow / Deny; the dock badge counts one; the attention popover\'s row for it names the tool on its Allow verb with the argument beneath, while a terminal\'s row (if any) says only jump; the context pane\'s action bar leads with Allow Bash and Deny. The same question, answerable in three places, one vocabulary.',
+  { name: 'approval', intent: 'An agent asking permission, seen from afar: the attention badge on the dock\'s bell and the popover naming the chat with a jump verb; the review node in front, its file cards and pills at rest; the chat\'s own card is behind it.',
     run: async (kit) => {
       await kit.goTo('api (chat)')
       await kit.js(`(() => { const ta = document.querySelector('.panel[data-panel-id="chat"] [data-chat-input]'); if (!ta) return false
@@ -477,8 +477,8 @@ const SCENES = [
     run: async (k) => { await k.press('f', { metaKey: true, code: 'KeyF' }); await sleep(500); await k.type('FAIL'); await sleep(900); await k.shot('search') } },
   { name: 'search-empty', intent: 'The same search with a term nothing said: an empty state that names the term and says there were no matches, not a blank list.',
     run: async (k) => { await k.type('zzqx'); await sleep(900); await k.shot('search-empty'); await k.closePalette() } },
-  { name: 'inspector-detail', intent: 'The context pane open on the live terminal, Detail tab: identity pinned at the top, fields below, an action bar pinned at the bottom.',
-    run: async (k) => { await k.selectRail('live'); await k.context(true); await k.tab('detail'); await k.shot('inspector-detail') } },
+  { name: 'inspector-detail', intent: 'The context pane open on a live terminal whose well may be blank in the fixture (its shell prints nothing): the Detail tab\'s command, the full cwd wrapped, the Machine section\'s figure, the action bar with its one filled Restart.',
+    run: async (k) => { await k.selectRail('live'); await k.context(true); await k.tab('detail'); console.log('[shot] restart paint:', await k.js(`(() => { const b = document.querySelector('[data-inspector-action="restart"]'); if (!b) return 'none'; const cs = getComputedStyle(b); return JSON.stringify({ disabled: b.disabled, text: b.textContent, bg: cs.backgroundColor, color: cs.color, opacity: cs.opacity, classes: b.className }) })()`)); await k.shot('inspector-detail') } },
   { name: 'inspector-work', intent: 'The context pane, Work tab: what the panel has changed, run and cost — every section either answers, says nothing to show, or says it is still asking.',
     run: async (k) => { await k.tab('work'); await sleep(600); await k.shot('inspector-work') } },
   { name: 'inspector-tools', intent: 'The context pane, Tools tab: what this panel\'s agent can do — permissions and commands from its toolbox.',
@@ -497,9 +497,9 @@ const SCENES = [
     run: async (k) => { await k.goTo('the workers'); await k.wake('groupA'); await k.shot('group') } },
   { name: 'group-collapsed', intent: 'The same group carded: its live member is now a card inside a dashed frame, and nothing was closed.',
     run: async (k) => { await k.click('.canvas-group__toggle'); await sleep(500); await k.shot('group-collapsed'); await k.click('.canvas-group__toggle'); await sleep(300) } },
-  { name: 'merged', intent: 'The merged view: every workspace\'s panels at once in labelled lanes, read-only, with the door to leave it visible.',
+  { name: 'merged', intent: 'The merged view: every workspace\'s panels at once, the api lane in frame with its header, the read-only chip in the top bar, the HUD pill at 22 %.',
     run: async (k) => { await k.goTo('the kinds'); await k.click('.shell__merge'); await sleep(900); await k.zoom(0.25); await k.shot('merged'); await k.click('.shell__merge'); await sleep(500); await k.zoom(1) } },
-  { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of its size: cards become summaries whose title and state are still legible; the shell chrome does not shrink.',
+  { name: 'zoomed-out', intent: 'The canvas pulled back to about a fifth of the size: every card is its kind glyph, its name clipped to the frame and its state on a tone wash; the minimap agrees.',
     run: async (k) => { await k.goTo('the kinds'); await k.zoom(0.22); await k.shot('zoomed-out') } },
   { name: 'zoomed-out-dark', intent: 'The zoomed-out canvas on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.shot('zoomed-out-dark'); await k.theme('light'); await k.zoom(1) } },
@@ -508,7 +508,7 @@ const SCENES = [
       if (process.env.SHOT_PROBE) console.log('PROBE compact', await k.js(`(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.top), Math.round(b.bottom), Math.round(b.height), getComputedStyle(e).display, getComputedStyle(e).height] }
         return JSON.stringify([r('.shell'), r('.shell__inspector'), r('.shell__inspector > *'), r('.context'), r('.context__header'), r('.context__tabs'), r('.context__body'), r('.inspector__actions'), r('.context__panel[data-context-panel="tools"]')]) })()`))
       await k.shot('compact'); await k.context(false) } },
-  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram — the scan, the pool of six over a shared list, the judge and the collect, each block naming its kind and the edges naming their triggers — with the header counting the blocks. Every edge carries an ARROWHEAD at its target end and its trigger word sits on a small ground rectangle at the midpoint of its own segment. Every block names its kind first (SCRIPT - SH, POOL - 6 AT A TIME, ORCHESTRATOR - LEADS, COLLECT - JOINS RESULTS). Run is the surface\'s ONE filled primary control, and here it is disabled — so under the verb row two dim sentences name the reasons by verb (Run, because a pool block cannot run yet; Save, because the live canvas is the editor). A PROJECTION of the saved record: the live canvas is still the editor.',
+  { name: 'workflow', intent: 'The workflow panel: a template drawn as a block diagram (scan, workers, judge, report) with the edge words between them; the verb row with Run ENABLED (the pool has its caller since M138), Triggers, Stop (disabled — no pool is running), Save (disabled — the live canvas is the editor), Delete and Build with AI; the Definition tab selected.',
     run: async (k) => { await k.goTo('the workflow'); await sleep(600); await k.shot('workflow') } },
   { name: 'wide', intent: 'The shell at its wide breakpoint (1800px): navigator and context pane both resident, canvas between them.', size: [1800, 1000],
     run: async (k) => { await k.context(true); await sleep(400); await k.shot('wide') } },

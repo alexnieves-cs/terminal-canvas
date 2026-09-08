@@ -34,6 +34,7 @@ import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
 import { ChevronRight } from '@renderer/icons'
+import { EmptyState } from '@renderer/shell/EmptyState'
 import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 
@@ -737,7 +738,7 @@ export function Palette(props: PaletteProps): JSX.Element {
               </Fragment>
             )
           })}
-          {rows.length === 0 && <li className="palette__empty">No matching command</li>}
+          {rows.length === 0 && <li className="palette__empty"><EmptyState id="palette" /></li>}
         </ul>
       )}
 

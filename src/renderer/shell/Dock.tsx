@@ -4,6 +4,7 @@ import type { NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
 import { Bell, Folder, Grid, KindNote, KindToolbox, KindWork, Layers, Link } from '@renderer/icons'
+import { EmptyState } from './EmptyState'
 
 export interface DockProps {
   /** Which pane the navigator shows, when it shows. */
@@ -94,7 +95,7 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
             <div className="shell__region-title">Attention</div>
             <ul className="rail-list rail-list--attention" aria-label="Attention">
               {attention.length === 0 ? (
-                <li className="rail-empty">nothing waiting</li>
+                <li className="rail-empty"><EmptyState id="attention" glyph={<Bell />} /></li>
               ) : (
                 attention.map((row) => (
                   <li key={row.id} className="rail-row rail-attention" data-rail-attention={row.id}>

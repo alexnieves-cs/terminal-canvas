@@ -700,7 +700,7 @@ export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
 import type { AgentBackend } from '@shared/agent-session'
 import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
 import { pinRefusal } from '@renderer/canvas/lod'
-import { displayPath } from '@shared/display-path'
+import { displayPath, displayLabel } from '@shared/display-path' // M178 (F.2): a verb row's target never prints a raw path
 /** M74. The two front-end verbs' refusals, each naming its fix. */
 export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
 export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
@@ -1078,7 +1078,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: 'panel.toolbox',
-          title: target === undefined ? 'Open toolbox' : `Open toolbox for ${target.label}`,
+          title: target === undefined ? 'Open toolbox' : `Open toolbox for ${displayLabel(target.label)}`,
           searchText: 'toolbox skills mcp hooks commands subagents permissions what can this agent do',
           group: 'panel',
           run: () => { if (target !== undefined) actions.openToolbox(target.id) }
@@ -1100,7 +1100,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     withReason(
       {
         id: 'panel.review.across',
-        title: target === undefined ? 'Review every worktree' : `Review every worktree of ${target.label}'s repository`,
+        title: target === undefined ? 'Review every worktree' : `Review every worktree of ${displayLabel(target.label)}'s repository`,
         searchText: 'review worktree worktrees branches across all git',
         group: 'panel',
         run: () => { if (target !== undefined) actions.reviewAcross(target.id) }
@@ -1120,7 +1120,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
       withReason(
         {
           id: 'panel.review',
-          title: target === undefined ? 'Open review' : `Open review of ${target.label}`,
+          title: target === undefined ? 'Open review' : `Open review of ${displayLabel(target.label)}`,
           searchText: 'review changes diff git what changed',
           group: 'panel',
           run: () => { if (target !== undefined) actions.openReview(target.id) }

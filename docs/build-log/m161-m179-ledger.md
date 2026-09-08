@@ -665,8 +665,164 @@ package 13, pty 10, pty-manager 63, window 4, ipc 1, canvas 6, xterm 11, panels 
 shell 95 / kinds 49 / agents 80 / product 59. Build log
 `docs/build-log/m171-m175-act3-shell.md`. Merged to `main`.
 
-## Act IV — M176–M179 (in progress)
+## Act IV — M176–M179 (closed 2026-09-07)
 
 Spec `docs/superpowers/specs/2026-09-07-v8-act4-finish-design.md`, plan
 `docs/superpowers/plans/2026-09-07-v8-act4-finish.md`, branch `m176-finish`. Owed into this
 act: `notice.1` (the update link's click, M178); the audit's own findings.
+- **M176 — motion with intent.** Red: styles `motion.2` (53/54) — it found four literal
+  durations and a sixth keyframe (`navgrid-cell-enter`, M44's ⌘G grid rising: an overlay's
+  arrival, the palette's family, allowed by name). Feature: `--dur-breath: 1.2s` on `:root`
+  (the pulse's breath and the caret's blink), the panel's arrival a scale from `.98` with
+  its opacity on `--dur-2` (the old `translateY(8px)` slide gone), the trail card's arrival
+  on `--dur-2`, the auto chip's 900 ms spinner REMOVED (a state is a colour; the brief: a
+  soft cursor, never a spinner). Green: styles 54/54; a plain `verify:visual` **57/57, exit
+  0** (m176-visual.log) — no golden moved, as the spec predicted (an arrival ends before a
+  capture; the chip's static ring sits under the budget).
+- **M177 — empty states as places.** Red: rail `empty.2` on a committed stub (192/193),
+  styles `empty.1` (54/55). Feature: `shared/empty-states.ts` (fifteen sentences as data,
+  `emptyState(id)` refusing an unknown id), `shell/EmptyState.tsx` (glyph · sentence · one
+  verb, centred, the UI face; `fill` for the chat's engine word; `attrs` for the data
+  attributes the checks read), wired into the Panels list (`no panels — ⌘N to start one`
+  kept for `empty.1`, the hints beneath), Workspaces (with `New workspace…` through the
+  pane's own door), Runs and Snapshots (their attributes kept), the vault's unset and
+  missing arms (`no vault folder yet` and `data-vault-choose` kept for product 472), the
+  palette's no-match row, the chat's first state (`No turns yet. Send a message to start
+  {backend} here.` — the words codex.1 reads), the attention popover. **Kept as they were,
+  by name:** the Integrations audit's per-service sentence (it holds the service's name and
+  a `tc api` code span — listed in the data so the words are pinned, rendered by the pane in
+  its own form); the board's three column states (M149 F.7); the Skills column's `drop a
+  card here`; the work menu's and the workflow's run-tab sentences (each already a sentence
+  with a verb — an inline line in a body, not a place). Green: styles 55/55, rail 193/193.
+- **Golden sentences, M176–M177:** M176 moved none (57/57). M177 moved one — launcher · the
+  rail's empty state is the Panels glyph over `no panels — ⌘N to start one`, centred, with
+  the four hint sentences beneath; the launcher card unchanged from M174. Product 59/59 and
+  shell 95/95 (exit 0) after M177 (m177-run.log); the agents part hit its 109 s watchdog
+  once in that chained run and is re-measured alone below.
+  The agents part alone after M177: **80/80** twice, 90.37 s and 90.15 s (exit 0,
+  m177-agents.log, m177-agents2.log) — the 109 s watchdog had 1.2× of that after the three
+  checks Acts II–III added, and a chained run tripped it; re-pinned at 113 s (1.25× the
+  slower run, the M135 rule).
+- **M178 — the second full audit.** `docs/ux-audit-4.1.md`: a fresh-context critic walked all
+  55 goldens with the five rules as the lens; 26 findings, dispositioned there. Fixed in the
+  audit's wave, red-first where a check pins it: F.1 (the enabled Restart painted white on
+  white since M46 — a `(0,2,1)` grid rule's background over the primary's fill; shell
+  `restart.paint.1` reads the computed fill and ink on a live panel — written beside the fix,
+  the probe that found it is in the shot harness's `inspector-detail` scene log), F.2
+  (`displayLabel` in `shared/display-path.ts`, the verb rows' target through it; `path.1`
+  gains the arm), F.3 (`.palette__row--mono .palette__title` in the UI face, `.palette__title`
+  in `face.1`), F.4 (the Files heading's root keeps its width), F.6 (Detail prints the full
+  path), F.8 (the group's verbs rest hidden), F.10 (the hunk starts at the first `@@`), F.11
+  (a label and a note), F.14 (`lastLineOf` strips fences — `lastline.2`; `lastline.1`'s
+  expectation moved with the rule), F.15 (the facts line in the UI face), F.16 (`direction:
+  ltr`), F.19 (the asleep card's sentence). Declined with the rule: F.22, F.23, F.25. Owed to
+  backlog #88 by name: F.5's rows (#86), F.7, F.9, F.12, F.13, F.15's wrap, F.17, F.18, F.20,
+  F.21, F.24, F.26. Twelve stale scene intents in `shot.cjs` rewritten to what the goldens
+  show. **The audit's own run found a defect of M176's:** the product part failed
+  deterministically at `annot.1` (a panel's note and its frame disagreed on where the frame
+  was after a drag, and the checks after it staged on nothing) — a bisect on the arrival
+  keyframe alone (product 59/59 with the rise restored, 20/23 with the scale) pinned it to
+  the scale on `.pf__motion`, an ancestor of `.pf__body`: the M3/M144 rule reaches the
+  arrival. The brief's "scale from 0.98" is DECLINED for the arrival; `motion.2` pins a rise.
+- **Golden sentences, M178** (a fresh-context critic over the 26 scenes the wave moved, then a
+  second walk of the two it questioned; every sentence a reader can check against the image):
+  skills · `placed` and `no bundled files` in the UI face on every card (the critic's first
+  walk read the resources sentence still mono — `.skill-card__resources` had kept its M127
+  mono, fixed and pinned in `face.1`'s list); teammate · the place path reads left-to-right
+  as `…/tc shot fixtures golden/repo` (F.16), ROUTINES a caps label with `runs while the app
+  is open — not while it is closed` beneath (F.11), the asleep card behind reads
+  `…recorded before the last quit` (F.19); routine · the pane scrolled ~15 px because F.11's
+  two labels each gained a note line, the rows identical; runs · Restart at the pane foot is
+  the iris fill with `--on-iris` ink (F.1), the HISTORY empty line lower (see the note);
+  auto · the Edit card's hunk begins at `@@ -1,4 +1,4 @@` with no `diff --git`/`index`/
+  `---`/`+++` (F.10), the prose beneath rose four lines; subagents, header, flip,
+  inspector-work, inspector-tools · only the chat behind shifting with F.10, Restart iris,
+  pid jitter; palette · panel-row titles in the UI face while the `…/repo` hints stay mono
+  (F.3), the state column a dot (M175); palette-query · the `group` query's verb row reads
+  `Open toolbox for chat: …/tc shot fixtures golden/repo (chat)` instead of `/private/var/…`
+  (F.2), the row set re-ranked because the raw path no longer fuzzy-matches; lineup,
+  spawn-sheet, search-empty, navigator-workspaces · Restart, pid, run duration and the HISTORY
+  shift only (the lineup's `Workbench · —` dash is F.7, owed); palette-dark · the palette's
+  changes in the dark theme, Restart the cyan iris with dark ink; search · result titles
+  `tests · line 8` in the UI face with the mono match kept (F.3); inspector-detail · CWD
+  prints the full path wrapped over three lines, FONT SIZE and MACHINE pushed down (F.6);
+  navigator-panels, attention, wide · the chat row's last line reads `Want me to wire
+  /health to it?` with the backticks gone (F.14), browser port jitter (wide's `POOL - 6 AT A
+  TIME` caps are F.12, owed); navigator-files · the heading reads `REPO · review: the health
+  check wir…` (F.4) — the critic's first walk read `R…` unchanged: the first fix wrote a 3ch
+  floor under a pre-M178 `min-width: 0` that overrode it, and 3ch is exactly `R…`; the root
+  is now `flex: 0 0 auto` to a 60 % ceiling and the attribution beside it gives, pinned by
+  `verify:styles tree.1` (red on HEAD's stylesheet beside `face.1` and `motion.2`: 53/56);
+  overview, compact · only pid and Restart iris in the context pane; ink · the asleep card in
+  the WORKERS group reads `asleep — nothing recorded…` above `click to start` (F.19), the
+  group frame shows no `card`/`remove` at rest (F.8), the strokes identical. The critic's
+  third question: the HISTORY empty line (`no snapshots yet…`) sits ~10 px lower in every
+  rail scene — the wave's `.rail-empty .empty-state { padding: var(--sp-4) 0 }`, the
+  Workspaces pane's two empties given the same air as the Panels pane's; named here rather
+  than absorbed. The 27th changed golden is M177's launcher, sentenced above.
+- **M179 — reconcile.** The version and the docs (8a23b19: `package.json`, the lock's two root
+  entries, `verify:meta version.1`'s pin, README's status line and the M176–M179 rows, the
+  brief's finished pass, the Act IV build log opened). Then the act's two fresh-context
+  reviews (the build log's Reviews section carries both) and their wave, red-first where a
+  check pins it: the rail's run row loses its dollars (`verify:rail` 47's expectation moved:
+  `2 panels · 1m 0s`, no `$` and no trailing `—`); `motion.2` reads the longhands and the ⌘G
+  grid's eight `animation-delay` literals moved onto `--dur-stagger` (red on HEAD's stylesheet
+  55/56); `empty.2` reads the renderer as text and fails for an id nothing renders (the list
+  cut from sixteen to ten — six ids no surface read — with the vault's missing arm and a
+  skills column wired through it); the dead reduced-motion auto-ring rule removed; the hints
+  centred under the launcher's empty state; the brief, the design spec and the check's header
+  say the rise and why; README's M178 row 12/3/11; F.22 and F.23 re-declined under the rules
+  that cover them; `verify-meta`'s stale comment; `notice.1`, the workflow lines, the
+  teammate form, the skills columns, the six by-name empties and the CPU floor into #88
+  (the last declined with the rule). Typecheck green; styles 56/56; rail 194/194; product
+  59/59 and shell 96/96 alone over the wave's markup (m179-product.log, m179-shell.log).
+- **Golden sentences, M179** (49 scenes moved — every one that differed at all, most under
+  budget, FORCED and sentenced by a fresh-context critic comparing HEAD's file with the new,
+  because the Act IV critic had found fifteen goldens sitting under budget while contradicting
+  FIXED rows): chat, chat-copilot, kinds, kinds-dark, supervisor, templates, trail,
+  file-missing, across · the rail's chat row reads `Want me to wire /health to it?` with no
+  backticks (F.14 reaching every scene not re-baselined since Act III), the browser row's port
+  jitter; across also loses the group frame's `remove` at rest (F.8); navigator-panels,
+  overview · only the browser row's port; navigator-workspaces · only the run rows' `· $0.21`
+  gone — `3 panels · 2m 0s` and `1 panel · 7s`; palette, palette-dark, subagents, runs,
+  lineup, auto, palette-query · the run rows lose `· $0.21` / `· —`, the inspector's pid
+  jitter, palette-query's scrollbar thumb a few px; flip, search, search-empty, spawn-sheet,
+  inspector-tools, inspector-work, inspector-detail, ink, wide · the run rows' price gone
+  and/or the pid, inspector-detail's `RAM 2 MB` → `1 MB` (jitter); routine, teammate · clock
+  times and the port only; memory · the rail's backticks gone, the memory rows' stamps
+  (jitter), the port; watcher · backticks gone, the port, the group frame's `card remove` gone
+  at rest (F.8); group, group-collapsed, reduced-motion · the group frame's `card remove` /
+  `expand remove` no longer painted at rest beside the minimap (F.8), backticks, the port;
+  vault · the pane's header reads `VAULT · notes` adjacent rather than `· notes` at the right
+  edge (the missing arm's markup through `EmptyState`; same words); launcher · the four hint
+  lines centred under the empty state, nothing else; zoomed-out, zoomed-out-dark · backticks,
+  the port, the far-tier group's verbs gone, the auto chip's ring at a different rotation
+  phase (animation jitter); merged · backticks, the group's verbs, the ring's phase, and
+  `worker b`'s dormant body reads `asleep — nothing recorded before the last quit` where it
+  was blank (F.19 reaching a scene not re-baselined since Act III); approval, composer,
+  graph, tool-objects, verbs · the run row's price gone, the pid, the file stamps (jitter),
+  and the HISTORY empty line centred and wrapped where it was flush left — M177's
+  `EmptyState` reaching five scenes not re-baselined since Act III (the critic's Q1; the same
+  change the M178 block names for the rail scenes); browser, compact, github · port and pid,
+  and the dormant card's body reads `asleep — nothing recorded before the last quit` where it
+  was blank (F.19, the critic's Q2 — the routing, not timing: the sentence is the card's
+  resting text with no tail, M178); header · a SUBAGENTS card the fixture draws per
+  repository grouping came out as one card of `2 panels` where HEAD's golden had two
+  overlapping cards of `3 panels` — the subagent scan's timing at capture between two runs
+  the wave did not touch (the critic's Q3), under budget either way, owed to #88 as a harness
+  fix. Checked in no new golden: a `$` in a run row, backticks in a rail row, a `diff --git`
+  line above a hunk, a group's verbs at rest.
+
+### Act IV's closing evidence (0ad5ea0 + this entry)
+
+`npm run verify` (m179-verify-final.log), exit 0, in the chain's order: meta 38/38 · styles
+56/56 · viewport 137/137 · groups 6/6 · merged 12/12 · registry 38/38 · layout 234/234 ·
+credentials 18/18 · jira 15/15 · github 7/7 · palette 143/143 · rail 194/194 · review 98/98 ·
+subagent 27/27 · file 83/83 · toolbox 103/103 · usage 26/26 · machine-cost 7/7 · tmux 35/35 ·
+agent-state 27/27 · agent-session 141/141 · verbs 14/14 · teammates 25/25 · electron 4/4 ·
+control 15/15 · package 13/13 · pty 10/10 · pty-manager 63/63 · window 4/4 · ipc 1/1 ·
+canvas 6/6 · xterm 11/11 · panels core 78/78 · shell 96/96 · kinds 49/49 · agents 80/80 ·
+product 59/59. `npm run verify:packaged` (m179-packaged.log) 12/12, exit 0. `npm run
+verify:visual` (m179-visual-plain.log) 57/57, exit 0, over the 49 forced goldens. The
+rehearsal chain before the reviews' wave (m179-verify-rehearsal.log) was green too, exit 0.
+Main merged with `--no-ff`, tagged `v4.1.0`, nothing pushed, no release.

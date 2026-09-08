@@ -248,7 +248,8 @@ export const LAST_LINE_MAX = 96
 
 export function lastLineOf(text: string): string {
   const lines = text.split('\n').map((l) => l.trim()).filter((l) => l !== '')
-  const last = lines[lines.length - 1] ?? ''
+  // M178 (F.14): a sentence in the rail is prose — inline code fences are stripped, the words kept.
+  const last = (lines[lines.length - 1] ?? '').replace(/`([^`]*)`/g, '$1')
   return last.length > LAST_LINE_MAX ? `${last.slice(0, LAST_LINE_MAX - 1)}…` : last
 }
 

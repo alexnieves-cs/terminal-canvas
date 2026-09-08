@@ -8,7 +8,7 @@ An infinite canvas where every node is a live terminal running a coding-agent CL
 Think Figma, but the objects are terminals — and the terminals are running `claude`,
 `codex`, or anything else you would type into a shell.
 
-> **Status: `v4.0.0`.** macOS only, Apple Silicon by default. The app is
+> **Status: `v4.1.0`.** macOS only, Apple Silicon by default. The app is
 > unsigned — signing needs a paid Apple Developer account — so Gatekeeper will
 > object the first time you open it; [Install](#install) says exactly what it
 > will say and what to do. `npm run verify` is the whole verification story and
@@ -965,6 +965,10 @@ price of not killing something.
 | M173 | v8 Act III — the status bar at rest says nothing: the HUD a floating pill with the zoom controls and the update notice alone; the hint strip removed, its gestures the rail's empty-state sentences (`canvas/hints.ts`), the tmux notice a dismissible first-run banner in the launcher — `hints.1`, `hud.2`, agents `firstrun.3` rewritten, `firstrun.4` | ✅ done |
 | M174 | v8 Act III — the launcher as a welcome: the wordmark in the UI face, three soft doors, a recents row, the verbs with the command alone in mono, the environment line one sentence — `launcher.1` | ✅ done |
 | M175 | v8 Act III — palette and sheets: the palette's state a dot with the word clipped; the material the surfaces already had pinned — `material.1` | ✅ done |
+| M176 | v8 Act IV — motion with intent: every duration a token (`--dur-1`, `--dur-2`, `--dur-breath`), the auto chip's spinner gone, the arrival a rise (the brief's scale declined — a scale above `.pf__body` broke the annotation stage) — `motion.2` | ✅ done |
+| M177 | v8 Act IV — empty states as places: `shared/empty-states.ts` and `shell/EmptyState.tsx` (glyph · sentence · one verb) across the panes, the vault, the palette, the chat and the attention popover — `empty.1`, `empty.2` | ✅ done |
+| M178 | v8 Act IV — the second full audit (`docs/ux-audit-4.1.md`): 26 findings, 12 fixed (the enabled Restart painted white on white since M46 — `restart.paint.1`; `displayLabel`; the hunk from the first `@@`; the fences stripped; the Files heading's root, `tree.1`), 3 declined by rule, 11 owed to #88 and #86; twelve scene intents rewritten | ✅ done |
+| M179 | v8 Act IV — 4.1.0: the version, the local tag `v4.1.0`, README / `CLAUDE.md` (the five rules as pinned entries) / the brief's finished pass, the release body as `docs/release-notes/4.1.0.md`, `npm run verify` and `npm run verify:packaged` green and pasted in the run's ledger; nothing pushed, no GitHub release | ✅ done |
 
 The table's order is CLAIM order, not build order. Several rows carry a number
 nobody used while the work was being done, and the reason is the same one

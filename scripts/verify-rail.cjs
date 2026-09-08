@@ -2357,7 +2357,9 @@ const session = (id, over = {}) => ({
   ok('path.1 displayPath shows the repository basename and the path relative to it, the root as its basename, a path outside every root as its last two segments, ~ for home, and the full path beside each',
     a && a.short === 'repo/src/server.ts' && a.full === root + '/src/server.ts' &&
       b && b.short === 'repo' && c && c.short === '…/notes/plan.md' && d && d.short === '~/work/api/src/a.ts' && e && e.short === '~' &&
-      f && f.short === 'repo/src/server.ts' && dp('', root).short !== '',
+      f && f.short === 'repo/src/server.ts' && dp('', root).short !== '' &&
+      // M178 (F.2): a label with a path inside keeps its words and shortens the path.
+      (typeof R.displayLabel === 'function' && R.displayLabel('chat: /Users/ada/work/api (c3)') === 'chat: …/work/api (c3)' && R.displayLabel('Open review of chat: ' + root + '/src (c3)', root) === 'Open review of chat: repo/src (c3)'),
     JSON.stringify({ a, b, c, d, e, f, empty: dp('', root) }))
 }
 
@@ -2479,6 +2481,40 @@ const session = (id, over = {}) => ({
       left(new Set(['palette'])).map((h) => h.id).join(',') === 'pan,zoom,new-panel,tmux' && left(new Set(['nope'])).length === 5 &&
       left(new Set(), 'rail').length === 4 && left(new Set(), 'launcher').map((h) => h.id).join(',') === 'tmux' && hints.every((h) => h.where === 'rail' || h.where === 'launcher'),
     JSON.stringify({ ids }))
+}
+
+// M177 — empty.2. EMPTY STATES AS DATA: one list; every entry names what its
+//     surface is for in a sentence (never a bare zero, an ellipsis or a
+//     dash), a verb where the surface has a door; `emptyState(id)` throws on
+//     an unknown id rather than rendering nothing; the Panels list's sentence
+//     keeps empty.1's words.
+{
+  const list = Array.isArray(R.EMPTY_STATES) ? R.EMPTY_STATES : null
+  const get = typeof R.emptyState === 'function' ? R.emptyState : () => null
+  const bad = list ? list.filter((e) => typeof e.sentence !== 'string' || e.sentence.trim().length < 12 || /^[0—–\-…]+$/.test(e.sentence.trim()) || (e.verb !== undefined && (typeof e.verb !== 'string' || e.verb.trim() === ''))) : null
+  let threw = false
+  try { get('no-such-surface') } catch { threw = true }
+  // M179 (the Act IV critic): a list the UI does not read is the "row that
+  // disappears" failure in reverse — the check stays green while the words
+  // on screen drift. Every id must be RENDERED by name somewhere in the
+  // renderer (`<EmptyState id="…"` or `emptyState('…')`), read as text.
+  const src = require('node:fs').readdirSync(require('node:path').join(__dirname, '..', 'src', 'renderer'), { recursive: true })
+    .filter((f) => /\.tsx?$/.test(String(f)))
+    .map((f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', String(f)), 'utf8')).join('\n')
+  const unrendered = list ? list.map((e) => e.id).filter((id) => !src.includes(`<EmptyState id="${id}"`) && !src.includes(`emptyState('${id}')`)) : null
+  ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused, and every id rendered by name in the renderer',
+    list !== null && list.length >= 9 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined) && unrendered !== null && unrendered.length === 0,
+    JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id), unrendered }))
+}
+
+// M178 — lastline.2 (F.14). The rail's last line is prose: inline code fences
+//     are stripped and the words kept — `Want me to wire `/health` to it?`
+//     reads without backticks in a list a person scans.
+{
+  const f = typeof R.lastLineOf === 'function' ? R.lastLineOf : () => null
+  ok('lastline.2 lastLineOf strips inline code fences and keeps the words',
+    f('a\nWant me to wire `/health` to it?') === 'Want me to wire /health to it?' && f('`x`') === 'x',
+    JSON.stringify([f('Want me to wire `/health` to it?')]))
 }
 
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
@@ -2604,8 +2640,8 @@ const session = (id, over = {}) => ({
   const build = typeof R.buildRunRows === 'function' ? R.buildRunRows : () => []
   const rows = build([run(), run({ id: 'r2', endedAt: undefined, costUsd: undefined }), run({ id: 'r3', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'exit 1' }] })], new Set(['a']), 100000)
   ok('run.1 the Runs rows carry name, ONE facts line (panels · duration · cost or a dash), the outcome in the state vocabulary (idle / working / exited N) with its tone, and Run again with its reason while open or without a terminal root',
-    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s · $0.12' && rows[0].runAgain.enabled === true &&
-      rows[1].outcome === 'working' && rows[1].cost === '—' && /—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
+    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s' /* M179: no dollars in the rail — the metrics rule; the Work tab prints the price */ && rows[0].runAgain.enabled === true &&
+      rows[1].outcome === 'working' && rows[1].cost === '—' && !/\$|—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
       rows[2].outcome === 'exited 1' && rows[2].tone === 'exited' &&
       build([run()], new Set(), 100000)[0]?.runAgain.enabled === false && /terminal/.test(build([run()], new Set(), 100000)[0]?.runAgain.reason ?? ''),
     JSON.stringify(rows))
@@ -2923,7 +2959,7 @@ console.log('\n' + '='.repeat(60))
     { id: 'n1', kind: 'terminal', state: { kind: 'terminal', status: { kind: 'running', pid: 1, command: 'sh', cwd: '/', reattached: false }, dormant: false } }
   ]) : null
   ok('lastline.1 lastLineOf takes the LAST non-empty line of the last answer, ellipsised from the right past the cap, and is empty for nothing; railCapsules counts a streaming chat as live and a ready or asleep one as quiet, and a terminal in neither',
-    has && one === 'Want me to wire `/health` to it?' && typeof long === 'string' && long.length < 120 && /…$/.test(long) && empty === '' &&
+    has && one === 'Want me to wire /health to it?' /* M178 (F.14): the fences are stripped — lastline.2 */ && typeof long === 'string' && long.length < 120 && /…$/.test(long) && empty === '' &&
       caps !== null && caps.live === 1 && caps.quiet === 2 && /1 live/.test(caps.liveWord) && /2 quiet/.test(caps.quietWord),
     JSON.stringify({ one, longLen: long && long.length, empty, caps }))
 }

@@ -225,13 +225,41 @@ and nowhere new.
 
 ## Motion (M176)
 
-Five moments and no others: a panel spawning (scale from `.98`, `--dur-2`, `--ease`); a
-hover reveal (`--dur-1`); the needs-you pulse (once, M109's finite breaths); the palette
-opening (M109's rise); the camera's flight (M56's curve). `prefers-reduced-motion` removes
-every one. `verify:styles motion.2` pins the durations to the two tokens.
+Five moments and no others: a panel spawning (~~scale from `.98`~~ — STRUCK in M178: the
+keyframe runs on `.pf__motion`, an ancestor of `.pf__body`, and a scale there broke the
+annotation stage (product `annot.1`, bisected on the keyframe alone); the arrival is a RISE
+of 8px on `--dur-2`, `--ease`, the M3/M144 rule reaching one more place); a hover reveal
+(`--dur-1`); the needs-you pulse (once, M109's finite breaths); the palette opening (M109's
+rise); the camera's flight (M56's curve). `prefers-reduced-motion` removes every one.
+`verify:styles motion.2` pins every duration — shorthand and longhand — to the tokens
+(`--dur-1`, `--dur-2`, `--dur-breath`, `--dur-stagger`) and the arrival to a rise.
 
 ## Empty states (M177)
 
 Every pane, panel kind and board column with nothing in it: the kind's glyph, one sentence
 saying what the surface is for, one verb. The rail's empty state keeps `no panels` and `⌘N`
 (`empty.1`); the hint strip's four hints land here.
+
+## Finished (M179)
+
+Every principle above, and where it lives now. Implemented means a milestone shipped it and a
+check or a golden's sentence pins it; struck means declined with its reason in the ledger.
+
+| Principle | State |
+|---|---|
+| The face rule | Implemented — M162's sweep, M164's bodies, M174's launcher; `face.1`, `material.1` |
+| The rest rule | Implemented — M163's header, M165's cards, M171's rail, M172's dock; `rest.1`, `diff.1`, `rail.1`, `dock.1`, `reveal.1` |
+| The path rule | Implemented where a root is known (M164's review and memory, M175's palette column); the file and toolbox panels show the last two segments until backlog #86 gives them a root; the sheet's WHERE input keeps the real path (an editable value cannot be a shortened one — struck for that field) |
+| The metrics rule | Implemented — M163's inspector section, M172's dock, M173's HUD pill; `metrics.1`, `hud.2`, `machine.1` |
+| Words, not codes | Implemented — M177's `EmptyState` over one list, M173's hints; `empty.1`, `empty.2`, `hints.1`; the board's three column states kept (F.7) |
+| The measure, the body size, the inset (72ch / 14px / 20px) | Implemented — `--measure`, `--t-base`, `--inset` on the reading bodies and the chat's prose (M164, M167); ~~14px on the palette, sheet and context pane~~ struck: the brief's own ramp says 13px is a row or control |
+| The radii (12 / 8 / 5 / full) | Implemented — the frame, the composer well, the cards, the chips (M163, M165, M169); the tokens were Obsidian's |
+| `--bubble` | Implemented — M167's user turn |
+| BridgeMind One's places | Implemented — M171's groups, M172's named dock; ~~modes as a top-level switch~~ struck (the brief's own reason) |
+| The Claude app's conversation | Implemented — M167–M169; ~~avatars, a model picker, tables and images in the grammar~~ struck (the Act II spec's reasons) |
+| Codex's lists and diff cards | Implemented — M165's cards, M105's last line kept, M169's approval sentence |
+| Motion: five moments and no others | Implemented — M176, with the arrival's scale STRUCK (a rise instead; `annot.1`); `motion.2` (a sixth keyframe, the ⌘G grid's rise, allowed by name as an overlay's arrival; the grid's stagger on `--dur-stagger`) |
+| Empty states as places | Implemented — M177; the Integrations audit's per-service sentence, the Skills column, the work menu and the workflow tab keep their own inline sentences (each already a sentence with a verb) |
+| The golden-sentence rule | Implemented — every changed scene in the ledger; two harness facts recorded (the window's content size, the fixture's fixed name) |
+| What a restyle may not touch | Held — no DOM alias renamed (shell 83 caught the one attempt), `.pf__body` untransformed, the cells untouched, every control named and reachable |
+| The findings 1–22 | 1–12, 14, 16, 17, 19–21 fixed in their milestones; 13, 18, 22 declined in this table; 15's sentence fixed and its caps heading declined (M164) |
