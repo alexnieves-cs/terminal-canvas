@@ -65,6 +65,8 @@ import { importClaudeTranscript } from './claude-transcript-import'
 import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
 import { checkForUpdate, repoOf } from './update-check'
+import { readImage } from './image-read'
+import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
 import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
 import { allTemplates, isBuiltInTemplate, type PersistedTemplate } from '../shared/templates'
@@ -1669,6 +1671,9 @@ app.whenReady().then(async () => {
       snapshotList: () => layoutSnapshots.list(),
       // M142. History on #46's ledger; the renderer prices it.
       ledgerUsage: (since) => runLedger.usage(since),
+      // M181. Both under userData: the picture bytes never cross as a file path the renderer could open.
+      imageRead: (path) => readImage(path),
+      starterPrepare: () => prepareStarter(join(app.getPath('userData'), 'starter')),
       snapshotRestore: (at, afterId) => {
         const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
         let bytes: string

@@ -1,5 +1,5 @@
 import { triggerWord } from '@shared/watch-trigger'
-import { isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
+import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isGithubPanel, isMemoryPanel, isWatcherPanel,
   isFilePanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, type Panel
 } from '@renderer/panels/panels'
 import type { PanelRow, PresetRow, PromptRow } from '@renderer/palette/commands'
@@ -113,6 +113,8 @@ export function panelLabel(panel: Panel): string {
   if (isSkillPanel(panel)) return `skill: ${panel.skill.scope} ${panel.skill.name} (${panel.rect.id})`
   // M133. The fourteenth kind, named by the template it projects.
   if (isWorkflowPanel(panel)) return `workflow: ${panel.title ?? panel.workflow.templateId} (${panel.rect.id})`
+  // M181. The fifteenth kind, named by its file.
+  if (isImagePanel(panel)) return `image: ${panel.title ?? panel.image.path} (${panel.rect.id})`
   const command = panel.spec.command ? panel.spec.command.split('/').pop() : 'login shell'
   // M12's live cwd is deliberately NOT read here. This label carries no
   // present-tense claim — unlike an inspector field labelled "now in", it

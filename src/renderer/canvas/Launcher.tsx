@@ -15,6 +15,17 @@ export interface LauncherProps {
   /** M107. Ask the login shell again; absent hides the control (a fixture). */
   onCheckAgain?: () => void
   onOpenSetup?: (url: string) => void
+  /**
+   * M181. The primary's door. On a FIRST RUN (no starter record on the
+   * workspace) it lays the starter canvas out around the conversation; on a
+   * returning canvas it mints the chat alone. Absent (a fixture): the
+   * primary falls back to onNewChat / onNewCodexChat.
+   */
+  onStart?: (engine: 'claude' | 'codex') => void
+  starterFirstRun?: boolean
+  /** M181. The `Starter canvas…` prompt line; its reason when every key is applied. Absent hides the line. */
+  onOpenStarter?: () => void
+  starterReason?: string | null
   /** M173. The tmux notice as a first-run banner: the backend's reason, or null once seen or when tmux is there. */
   tmux?: string | null
   onDismissTmux?: () => void
@@ -68,7 +79,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, onOpenSetup, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpenRecent, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onNewSandboxChat, sandboxReason, onCheckAgain, onOpenSetup, onStart, starterFirstRun, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   // M180. ONE start. Readiness (the env report's fresh probe) is the one
   // source of truth for the primary: the preset rows' cached `which` and the
   // report disagreed after Check again (the critic), and the mint itself is
@@ -78,6 +89,7 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpen
   const engineName = engine === 'claude' ? 'Claude' : 'Codex'
   const startReason = engine === undefined ? 'Install Claude Code or Codex, then Check again' : null
   const unanswered = readiness.rows.some((row) => row.discovery === 'unknown')
+  const firstRun = starterFirstRun === true && onStart !== undefined
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
     // frame family, a chrome row and a well, its verbs as prompt lines.
@@ -107,11 +119,12 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpen
           again beside the rows it serves. Installed never means signed in:
           the row says so, and the first message is what checks it. */}
       <div className="launcher__onboarding" data-onboarding>
-        <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
+        <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start data-onboarding-starter={firstRun ? 'first-run' : 'chat'}
           disabled={startReason !== null} title={startReason ?? `Start with ${engineName}`}
-          {...shellControl(() => { if (startReason === null) { if (engine === 'claude') onNewChat(); else onNewCodexChat() } })}>
+          {...shellControl(() => { if (startReason === null && engine !== undefined) { if (onStart !== undefined) onStart(engine); else if (engine === 'claude') onNewChat(); else onNewCodexChat() } })}>
           <span className="launcher__verb-name">Start a conversation</span>
-          <span className="launcher__verb-hint">{engine === undefined ? (unanswered ? 'Discovery has not answered yet — Check again asks the login shell once more' : 'Install Claude Code or Codex below, then Check again — no terminal knowledge needed') : `With ${engineName} · write your first message in plain language`}</span>
+          {/* M181. On a first run the hint says what else the click lays out, so five objects are not a surprise. */}
+          <span className="launcher__verb-hint">{engine === undefined ? (unanswered ? 'Discovery has not answered yet — Check again asks the login shell once more' : 'Install Claude Code or Codex below, then Check again — no terminal knowledge needed') : firstRun ? `With ${engineName} · opens your canvas with a captioned example of each kind beside it` : `With ${engineName} · write your first message in plain language`}</span>
         </button>
         <div className="launcher__readiness" aria-label="Conversation engines">
           {readiness.rows.map((row) => <div key={row.backend} className="launcher__engine" data-onboarding-engine={row.backend} data-discovery={row.discovery}>
@@ -161,6 +174,14 @@ export function Launcher({ presets, report, tmux, onDismissTmux, recents, onOpen
         </div>
       )}
       <div className="launcher__verbs">
+        {/* M181. The starter as a prompt line for a RETURNING empty canvas (on a first run the primary is that door — two doors to one thing on one screen, the critic); disabled by name once every key is applied or with no engine. */}
+        {onOpenStarter !== undefined && !firstRun && (
+          <button type="button" className="launcher__verb" data-launcher-starter disabled={(starterReason ?? null) !== null}
+            title={starterReason ?? 'Your agent and one captioned example of each kind of object'} {...shellControl(() => { if ((starterReason ?? null) === null) onOpenStarter() })}>
+            <span className="launcher__verb-name">Starter canvas…</span>
+            <span className="launcher__verb-hint">{starterReason ?? 'your agent and one captioned example of each kind of object'}</span>
+          </button>
+        )}
         {startReason === null && (
           <button type="button" className="launcher__verb" data-launcher-new-chat disabled={chatReason !== null}
             title={chatReason === null ? 'A chat with claude, in your home directory' : chatReason} {...shellControl(() => { if (chatReason === null) onNewChat() })}>

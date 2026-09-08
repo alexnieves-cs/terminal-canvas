@@ -202,7 +202,11 @@ export const CopyIcon = (p: IconProps): JSX.Element => (
 )
 export const TOOL_GLYPH: Record<string, (p: IconProps) => JSX.Element> = { Read: ToolRead, Edit: ToolEdit, Run: ToolRun, Search: ToolSearch }
 
-export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow } as const
+/** M181. The image kind: a frame with a horizon and a sun, the picture glyph every OS draws. */
+export const KindImage = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2.5" y="3.5" width="11" height="9" rx="1.5" /><circle cx="6" cy="7" r="1.2" /><path d="M2.5 11l3.5-3 2.5 2.5 2-1.5 3 2.5" /></Svg>
+)
+export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */
 export const Lock = (

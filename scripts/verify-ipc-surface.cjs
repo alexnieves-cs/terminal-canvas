@@ -241,7 +241,10 @@ app.whenReady().then(() => {
   // userData/attachments, so a terminal can be handed its path.
   // M142 ledger:usage (124) — this week's usage rows from the run ledger,
   // folded and priced in the renderer.
-  const EXPECTED_CHANNELS = 124
+  // M181 image:read (125) — an image panel's bytes as a data URL, by magic
+  // number under the cap; starter:prepare (126) — the starter's two files
+  // under userData/starter, written once.
+  const EXPECTED_CHANNELS = 126
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

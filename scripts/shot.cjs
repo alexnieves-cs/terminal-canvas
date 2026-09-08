@@ -61,7 +61,7 @@ buildSync({
 const {
   registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, whichFromEnv,
   createLayoutStore, credentialStore, FileWatchers, ToolboxCache, createScrollbackLog,
-  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey
+  createReviewEngine, createGitRunner, createBaselineCapture, allTemplates, isBuiltInTemplate, allPresets, templateOf, createMemoryStore, createWatchRunner, readVault, readImage, prepareStarter, listGithubWorkItems, createBrowserHandlers, trailFor, parseShelf, skillKey
 } = require(ENTRY_OUT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -571,7 +571,26 @@ const SCENES = [
       rmSync(join(REPO, 'src', 'server.ts'))
       await k.goTo('server.ts'); await sleep(1500)
       await k.shot('file-missing')
-    } }
+    } },
+  { name: 'starter', intent: 'M181. The starter canvas a first run lands on after `Start a conversation`: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone.',
+    run: async (k) => {
+      // LAST, on an EMPTIED canvas: the chat this scene mints leaves main-side
+      // state (the recent folders the sheet's WHERE reads) that shifted four
+      // later scenes past their budgets when it ran second.
+      await k.emptyCanvas()
+      // A REAL click, at the primary's centre (a dispatched click never reaches
+      // shellControl's mousedown; the product suite's own lesson).
+      const point = await k.js(`(() => { const b = document.querySelector('[data-onboarding-start]'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+      if (point) { k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 }) }
+      for (let i = 0; i < 40 && (await k.js(`document.querySelectorAll('.panel[data-panel-kind]').length`)) < 5; i++) await sleep(100)
+      for (let i = 0; i < 30 && !(await k.js(`document.querySelector('[data-image-node][data-image-arm="data"]') !== null`)); i++) await sleep(100)
+      // LOUD when the arrangement is not there: a capture of the chat alone
+      // would be written as the starter's golden by a blind update (the critic).
+      const kinds = await k.js(`[...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort().join(',')`)
+      if (kinds !== 'chat,file,image,terminal,workflow') throw new Error(`starter scene: the arrangement is not on screen (${kinds})`)
+      await sleep(800)
+      await k.shot('starter')
+    } },
 ]
 
 app.whenReady().then(async () => {
@@ -897,6 +916,9 @@ app.whenReady().then(async () => {
           { number: 31, title: 'Group buttons are mouse-only', body: 'Card and remove on a group frame cannot be reached from the keyboard.', state: 'open', html_url: 'https://github.com/acme/canvas/issues/31', repository: { full_name: 'acme/canvas' }, assignee: { login: 'octocat' } }
         ]) }) } }),
       vaultRead: (root) => readVault(root),
+      // M181. The real readers over the harness's own userData (the M85 rule).
+      imageRead: (path) => readImage(path),
+      starterPrepare: () => prepareStarter(join(app.getPath('userData'), 'starter')),
       memoryList: (root, limit) => shotMemory.list(root, limit),
       memoryAdd: (req) => { const r = shotMemory.add(req); return r.ok ? { ok: true } : { ok: false, reason: r.reason } },
       listTemplates: () => allTemplates(layoutStore.templates()),
@@ -1020,6 +1042,16 @@ app.whenReady().then(async () => {
     theme: async (name) => { await js(`window.canvas.settings.set('appearance.theme', ${JSON.stringify(name)})`); await sleep(700) },
     // The first real layout: the launcher scene runs on an EMPTY store, so
     // the fixture layout is written to disk first and loaded here, once.
+    // M181. An EMPTY canvas with no starter record — the first run the
+    // starter scene begins from. Saved through the store's own path (absent
+    // stays absent), then reloaded the way loadMain reloads.
+    emptyCanvas: async () => {
+      layoutStore.save({ panels: [], groups: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, bookmarks: [], runs: [] })
+      const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve))
+      wc.reload(); await loaded
+      await sleep(1200)
+      await js(`window.__m56ReducedMotion(true)`)
+    },
     loadMain: async () => {
       writeFixtureLayout()
       layoutStore.load()

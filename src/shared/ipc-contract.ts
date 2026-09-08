@@ -1,4 +1,5 @@
 import type { AgentPlanReply, AgentPlanRequest } from './plan'
+import type { ImageResult, StarterFiles } from './starter'
 import type { WatchTrigger } from './watch-trigger'
 import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
@@ -671,7 +672,11 @@ export const IPC = {
    * by name for an unsigned build. Asked by the renderer once at launch only
    * when `update.checkOnLaunch` is on, and by hand from the palette row.
    */
-  UPDATE_CHECK: 'update:check'
+  UPDATE_CHECK: 'update:check',
+  /** M181. An image panel's bytes as a data URL, read in main by magic number under a cap; four arms, never rejects. */
+  IMAGE_READ: 'image:read',
+  /** M181. The starter's two files under userData/starter, written once; answers both paths. */
+  STARTER_PREPARE: 'starter:prepare'
 } as const
 
 /**
@@ -1709,6 +1714,14 @@ export interface CanvasBridge {
   /** M123. See UPDATE_CHECK. Three arms; never rejects. */
   update: {
     check(): Promise<UpdateResult>
+  }
+  /** M181. See IMAGE_READ. */
+  image: {
+    read(path: string): Promise<ImageResult>
+  }
+  /** M181. See STARTER_PREPARE. */
+  starter: {
+    prepare(): Promise<StarterFiles>
   }
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */

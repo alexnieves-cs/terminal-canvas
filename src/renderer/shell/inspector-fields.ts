@@ -12,7 +12,7 @@ import { costOf } from '@shared/pricing'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
-import { isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -459,6 +459,7 @@ const NO_USAGE: UsageFieldModel = Object.freeze({
  * string would have hidden the next one exactly as well; tsc will not.
  */
 export const KIND_NOUN: Record<Exclude<Panel['kind'], 'terminal'>, string> = {
+  image: 'An image panel',
   skill: 'A skill panel',
   workflow: 'A workflow panel',
   work: 'A work card',
@@ -769,6 +770,13 @@ export function buildInspectorModelBare(
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows
   // only while the page is live.
+  // M181. The image panel: a document kind whose identity is its file. The
+  // path is the one field; the bytes are main's at render.
+  if (isImagePanel(panel)) {
+    return { kind: 'image', reviewable: false, state: { kind: 'image', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
+      { key: 'image-path', label: 'file', value: panel.image.path }
+    ] }
+  }
   if (isBrowserPanel(panel)) {
     return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'url', label: 'url', value: panel.url }] }
   }

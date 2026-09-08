@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
 import { parseAnnotations, type Annotation } from './annotations'
+import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
@@ -377,7 +378,20 @@ export interface PersistedWorkflowPanel extends PersistedPanelBase {
   workflow: { templateId: string }
 }
 
+/**
+ * M181. The image panel — the FIFTEENTH kind, sessionless like the file
+ * panel: an ABSOLUTE path and nothing else. The bytes are read by main on
+ * render (`image:read`) and never copied here. A relative path is a
+ * malformed record (it names a different file from every cwd); M187 adds
+ * asset identity beside `path` rather than replacing it.
+ */
+export interface PersistedImagePanel extends PersistedPanelBase {
+  kind: 'image'
+  image: { path: string }
+}
+
 export type PersistedPanel =
+  | PersistedImagePanel
   | PersistedMemoryPanel
   | PersistedTerminalPanel
   | PersistedReviewPanel
@@ -503,6 +517,8 @@ export interface CanvasState {
   annotations?: Annotation[]
   /** M113. The board's records. ABSENT on every pre-M113 file and stays absent, for M93's reason. */
   workItems?: PersistedWorkItem[]
+  /** M181. The starter's applied keys. ABSENT on every pre-M181 file and on a canvas the starter never touched. */
+  starter?: PersistedStarter
 }
 
 /** M56. A place to come back to: three numbers and a name. */
@@ -993,6 +1009,17 @@ function parsePanel(
       return null
     }
     return { ...base, kind: 'workflow', workflow: { templateId: workflow.templateId } }
+  }
+  if (kind === 'image') {
+    // M181. The path is the panel's only identity: absent, not a string or
+    // RELATIVE drops the PANEL by name (a picture panel saying `missing`
+    // about a file the record never named, or a different file per cwd).
+    const image = (raw as Record<string, unknown>).image
+    if (!isRecord(image) || !isStr(image.path) || !image.path.startsWith('/')) {
+      warnings.push(`dropped image panel ${id}: image.path was not an absolute path`)
+      return null
+    }
+    return { ...base, kind: 'image', image: { path: image.path } }
   }
   if (kind !== undefined && kind !== 'terminal') {
     warnings.push(`dropped panel ${id}: unrecognised kind ${JSON.stringify(kind)}`)
@@ -1868,7 +1895,9 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     // M113. Work items are records, not layout: an item naming a panel that
     // did not survive keeps its id (the note says `lane closed`), so the
     // parser takes no panel set — unlike annotations, whose anchor is geometry.
-    ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })()
+    ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })(),
+    // M181. The starter record: absent stays absent; malformed dropped by name.
+    ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })()
   }
 }
 

@@ -4,10 +4,10 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 98000 // measured 2026-09-07 alone in the Electron tier after the M150 and M155 checks, two green runs: 77.9s, 77.7s; 1.25x the slower, to the next second — re-measure when a milestone adds checks
+const WATCHDOG_MS = 104000 // measured 2026-09-08 alone in the Electron tier after the M180/M181 checks (onboarding.*, starter.1, image.1), GREEN runs only: 82.1s, 82.3s, 82.4s, 82.9s wall; 1.25x the slower, to the next second — re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
-  const { harnessAttachmentsDir, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
+  const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
   // M135. In the un-split file, check 26 (now in `core`) installed the
   // window lifecycle — `attachPtyLifecycle(win, () => ptyManager.detachAll())`
   // — and every check after it ran with a renderer reload DETACHING every
@@ -63,6 +63,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
       return true
     }
+    // M181. The renderer's own words while the journey runs: a thrown render
+    // (a blank canvas) explains itself here rather than as `openedId: false`.
+    const journeyLog = []
+    const onJourney = (_e, _level, message) => { journeyLog.push(String(message).slice(0, 200)) }
+    wc.on('console-message', onJourney)
     try {
       state.harnessEnvReport = { ...savedReport, clis: [
         { name: 'claude', path: '/fake/claude' }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }
@@ -77,7 +82,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       })()`), 1500)
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
       const started = primary === true && await clickVisible('[data-onboarding-start]')
-      if (started) openedId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 4000)
+      // M181. 8 s, not 4: the primary now lays the starter out too, and one run
+      // under a slow `browser.1` saw the chat land after the four-second mark.
+      if (started) openedId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 8000)
       let typed = false
       let sent = false
       let reply = false
@@ -88,15 +95,25 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(inputSelector)})?.disabled === false`), 3000)
         typed = await clickVisible(inputSelector)
         if (typed) {
+          // M181. The click is queued native input; insertText lands in the
+          // element that is focused WHEN IT RUNS. Wait for the composer to hold
+          // focus (a real condition, not a delay) — under the starter's render
+          // burst the text went nowhere one run in three and Send stayed disabled.
+          typed = await waitUntil(() => wc.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(inputSelector)})`), 3000)
           await wc.insertText('Reply with exactly the word: pong')
           await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(panelSelector + ' [data-chat-send]')})?.disabled === false`), 2000)
+          // M181. What the Send click would land on, recorded before it: a
+          // `sent: false` alone says nothing about a covering element.
+          journeyLog.push(await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(panelSelector + ' [data-chat-send]')}); if (!b) return 'no send'; const r = b.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); const e = document.elementFromPoint(x, y); const i = document.querySelector(${JSON.stringify(inputSelector)}); return 'send ' + JSON.stringify({ disabled: b.disabled, rect: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], under: e ? e.tagName + '.' + String(e.className).slice(0, 60) : null, value: i ? String(i.value).slice(0, 40) : null, active: document.activeElement ? document.activeElement.tagName + '.' + String(document.activeElement.className).slice(0, 40) : null }) })()`))
           sent = await clickVisible(panelSelector + ' [data-chat-send]')
         }
         if (sent) reply = await waitUntil(() => wc.executeJavaScript(`(() => {
           const text = [...document.querySelectorAll(${JSON.stringify(panelSelector + ' [data-chat-assistant-text]')})].map((n) => n.textContent).join(' ')
           return text.includes('pong') ? text : false
         })()`), 5000)
-        noTerminal = await wc.executeJavaScript(`document.querySelectorAll('.xterm, .panel[data-panel-kind="terminal"]').length === 0`)
+        // M181. The first run lays the starter out too, and its terminal EXAMPLE is a
+        // dormant card: the property is that no LIVE terminal was needed to converse.
+        noTerminal = await wc.executeJavaScript(`document.querySelectorAll('.xterm').length === 0 && document.querySelectorAll('.panel[data-panel-kind="terminal"] .xterm').length === 0`)
       }
       const spawn = chatSpawns[before.spawns]
       const userLine = spawn?.proc.stdin.some((line) => {
@@ -104,7 +121,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }) === true
       ok(id, primary === true && started && typed && sent && typeof reply === 'string' && userLine &&
         noTerminal && ptyManager.list().length === before.ptys && chatSpawns.length === before.spawns + 1,
-      JSON.stringify({ primary, started, openedId, typed, sent, reply, userLine, noTerminal, spawns: [before.spawns, chatSpawns.length] }))
+      JSON.stringify({ primary, started, openedId, typed, sent, reply, userLine, noTerminal, spawns: [before.spawns, chatSpawns.length], renderer: journeyLog.slice(-6) }))
       const agentId = 'onboarding.agent.1 the agent plan bridge returns readiness through main, preload and the renderer, and refuses a close needing human confirmation with the conversation kept'
       try {
         // The envelope main sends: the line and the resolved caller (absent here — a person's own shell).
@@ -122,6 +139,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     } catch (error) {
       ok(id, false, String(error && error.message || error))
     } finally {
+      wc.removeListener('console-message', onJourney)
       if (typeof openedId === 'string') await clickPanelClose(wc, openedId)
       await settle()
       state.harnessEnvReport = savedReport
@@ -129,6 +147,105 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       layoutStore.save(savedWorkspace)
       flushLayoutStore()
       await reload()
+    }
+  }
+
+  {
+    // M181 — starter.1. THE STARTER CANVAS through the visible primary on a
+    // first run: the conversation AND one captioned example of each kind
+    // (a dormant terminal, a note, a workflow, an image) in a named group,
+    // NOTHING spawned (no PTY, no chat process), the record on disk, and a
+    // second application refused by name through the agent door. The
+    // examples are minted through the ordinary paths — a check that found
+    // five panels but a spawned shell would be the fleet the brief forbids.
+    const id = 'starter.1 the first-launch primary lays the starter canvas around the conversation — four captioned examples in a named group, nothing spawned, the record on disk, a second application refused by name'
+    const savedReport = state.harnessEnvReport
+    await settle()
+    flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    let chatId = null
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const clickVisible = async (selector) => {
+      const point = await wc.executeJavaScript(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return null; const r = node.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return node.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
+      if (!point) return false
+      wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      return true
+    }
+    try {
+      state.harnessEnvReport = { ...savedReport, clis: [{ name: 'claude', path: '/fake/claude' }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }] }
+      layoutStore.addPreset({ id: 'starter-claude', name: 'Claude (starter fixture)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+      // A first run: no panels and NO starter record on the workspace.
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
+      const primary = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-onboarding-start]'); return b && !b.disabled ? b.getAttribute('data-onboarding-starter') === 'first-run' : false })()`), 1500)
+      const started = primary === true && await clickVisible('[data-onboarding-start]')
+      const kinds = started ? await waitUntil(() => wc.executeJavaScript(`(() => { const k = [...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort(); return k.length >= 5 ? k.join(',') : false })()`), 6000) : false
+      chatId = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? null`)
+      const captions = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('[data-annotation][data-annotation-kind="panel"] [data-annotation-label]')].map((n) => n.textContent).sort(); return t.length >= 4 ? t : false })()`), 3000)
+      const expected = STARTER_OBJECTS.map((o) => o.caption).sort()
+      const group = await wc.executeJavaScript(`(() => { const g = document.querySelector('[data-group-id]'); return g ? g.textContent : null })()`)
+      // Geometry, not just presence: no example may overlap the conversation
+      // (the M181 critic — a column placed from a guessed origin covered the composer).
+      const overlap = await wc.executeJavaScript(`(() => { const rect = (el) => el.getBoundingClientRect(); const chat = document.querySelector('.panel[data-panel-kind="chat"]'); if (!chat) return 'no chat'; const c = rect(chat); const hits = [...document.querySelectorAll('.panel[data-panel-kind]')].filter((p) => p !== chat).map(rect).filter((r) => r.left < c.right && c.left < r.right && r.top < c.bottom && c.top < r.bottom); return hits.length })()`)
+      const image = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('[data-image-node]'); return n ? n.getAttribute('data-image-arm') : false })()`), 4000)
+      const note = await wc.executeJavaScript(`(() => { const f = document.querySelector('.panel[data-panel-kind="file"]'); return f ? f.textContent.includes('Welcome') : false })()`)
+      await settle(); flushLayoutStore()
+      const after = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws = after.workspaces.find((w) => w.id === after.activeWorkspaceId)
+      const record = ws && ws.starter
+      const again = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'starter' }, null, 3000)
+      const panelsAfterAgain = await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind]').length`)
+      ok(id, primary === true && started && kinds === 'chat,file,image,terminal,workflow' &&
+        Array.isArray(captions) && JSON.stringify(captions) === JSON.stringify(expected) &&
+        typeof group === 'string' && /Examples/.test(group) && image === 'data' && note === true && overlap === 0 &&
+        record && record.version === 1 && [...record.keys].sort().join(',') === 'agent,image,note,terminal,workflow' &&
+        again && again.kind === 'refused' && /already/.test(again.reason) && panelsAfterAgain === 5 &&
+        ptyManager.list().length === before.ptys && chatSpawns.length === before.spawns,
+      JSON.stringify({ primary, started, kinds, captions, expected, group, overlap, image, note, record, again, panelsAfterAgain, ptys: [before.ptys, ptyManager.list().length], spawns: [before.spawns, chatSpawns.length] }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      if (typeof chatId === 'string') await clickPanelClose(wc, chatId)
+      await settle()
+      state.harnessEnvReport = savedReport
+      layoutStore.deletePreset('starter-claude')
+      layoutStore.save(savedWorkspace)
+      flushLayoutStore()
+      await reload()
+    }
+  }
+
+  {
+    // M181 — image.1. THE IMAGE PANEL paints main's pixels (the real PNG the
+    // starter writes, 240x150, through image:read as a data URL) and says
+    // `missing` for a file that is gone — the three-state rule: a blank
+    // picture panel is indistinguishable from a broken one.
+    const id = 'image.1 an image panel paints the real pixels main read (240x150) and a panel whose file is gone says missing by name'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    try {
+      const files = prepareStarter(harnessStarterDir)
+      layoutStore.save({ panels: [
+        { id: 'img1', kind: 'image', x: 100, y: 100, w: 480, h: 360, z: 1, image: { path: files.imagePath } },
+        { id: 'img2', kind: 'image', x: 700, y: 100, w: 480, h: 360, z: 2, image: { path: join(harnessStarterDir, 'gone.png') } }
+      ], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const painted = await waitUntil(() => wc.executeJavaScript(`(() => { const img = document.querySelector('.panel[data-panel-id="img1"] img[data-image-pixels]'); return img && img.naturalWidth > 0 ? { w: img.naturalWidth, h: img.naturalHeight, arm: img.closest('[data-image-node]').getAttribute('data-image-arm') } : false })()`), 4000)
+      const gone = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="img2"][data-image-node]'); const arm = n && n.getAttribute('data-image-arm'); return arm === 'missing' ? { arm, note: n.querySelector('[data-image-note]')?.textContent } : false })()`), 4000)
+      const rail = await wc.executeJavaScript(`[...document.querySelectorAll('[data-rail-row]')].map((r) => r.textContent).filter((t) => /image/.test(t)).length`)
+      ok(id, painted && painted.w === 240 && painted.h === 150 && painted.arm === 'data' &&
+        gone && gone.arm === 'missing' && /not there any more/.test(gone.note || '') && rail >= 2,
+      JSON.stringify({ painted, gone, rail }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
     }
   }
 

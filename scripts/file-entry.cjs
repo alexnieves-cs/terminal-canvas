@@ -61,5 +61,10 @@ module.exports = {
   ...require('../src/main/update-check.ts'),
   /* M145. The clipboard-image file: pure over an injected directory and clock; the real
      clipboard read lives in main/index.ts, which no suite bundles. Absent until it lands. */
-  ...((() => { try { return require('../src/main/clipboard-file.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/main/clipboard-file.ts') } catch { return {} } })()),
+  /* M181. The image read (magic number, cap, three named arms) and the
+     starter's two files, both node:fs against a path passed in — the tier
+     file-read.ts sits in. Absent until they land, the clipboard-file shape. */
+  ...((() => { try { return require('../src/main/image-read.ts') } catch { return {} } })()),
+  ...((() => { try { return require('../src/main/starter-prepare.ts') } catch { return {} } })())
 }

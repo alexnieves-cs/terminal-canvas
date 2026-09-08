@@ -1,5 +1,5 @@
 import { workflowWatchLabel } from '@renderer/workflow/workflow-diagram'
-import { isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
 import { browserHost } from '@shared/browser-panel'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
@@ -71,6 +71,8 @@ export function railLabel(
   if (isSkillPanel(panel)) return panel.title ?? `skill · ${panel.skill.name}`
   // M133. The workflow panel names its template, the work card's own shape.
   if (isWorkflowPanel(panel)) return panel.title === undefined ? 'workflow' : `workflow · ${panel.title}`
+  // M181. The image panel names its file, the work card's own shape.
+  if (isImagePanel(panel)) return panel.title ?? `image · ${panel.image.path.split('/').pop() ?? 'image'}`
   // The user's own title is the first link for BOTH kinds — it is the one
   // link the user chose.
   if (panel.title !== undefined) return panel.title
@@ -309,7 +311,7 @@ export interface RailGroup<R extends { state: { kind: string } }> { id: RailGrou
 
 const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[] = [
   { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat'] },
-  { id: 'files', label: 'Files', kinds: ['file', 'note'] },
+  { id: 'files', label: 'Files', kinds: ['file', 'note', 'image'] },
   { id: 'reviews', label: 'Reviews', kinds: ['review'] },
   { id: 'boards', label: 'Boards', kinds: ['work', 'jira', 'github'] },
   { id: 'integrations', label: 'Integrations', kinds: ['browser', 'watcher', 'memory', 'toolbox', 'skill'] },

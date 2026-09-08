@@ -4124,6 +4124,14 @@ body {
    as an inline list and a verb row. The Assign menu is spanned UNDER the
    verbs inside the body, never off a chrome button: `.panel` clips
    overflow, so a menu hung off the chrome is cut at the frame's edge. */
+/* M181. THE IMAGE PANEL. The body is the picture's ground: the well's dark
+   (a photograph reads on dark, a light ground would halo it), the picture
+   letterboxed at its own aspect ratio and never stretched, no scrollbar; a
+   named arm is one sentence in the UI face at the reading inset. */
+.image-node__body { display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--well); padding: 0; }
+.image-node__img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
+.image-node__note { font-family: var(--font-ui); color: var(--fg-3); padding: var(--sp-5); text-align: center; }
+
 .work-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); position: relative; }
 .work-node__head { display: flex; align-items: baseline; gap: var(--sp-2); }
 .work-node__key { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--iris); text-decoration: underline; cursor: pointer; }

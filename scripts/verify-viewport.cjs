@@ -2161,6 +2161,75 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ straight, bent, exactLen: exact && exact.length, two }))
 }
 
+// M181 — starter.plan.1. THE STARTER MANIFEST as geometry: exactly the four
+// example keys, none of them the agent's, every caption a sentence, every
+// rect positive and no two overlapping — two overlapping rects would mint
+// one example on top of another, which the first run reads as three
+// examples, and nothing else in the app would say why. Guarded so a missing
+// module fails by name rather than throwing before the tally.
+{
+  const objs = Array.isArray(V.STARTER_OBJECTS) ? V.STARTER_OBJECTS : null
+  if (objs === null) ok('starter.plan.1 STARTER_OBJECTS: the keys terminal, note, workflow, image once each, none `agent`, each caption a sentence, each rect positive, no two rects overlapping', false, 'src/shared/starter.ts does not exist')
+  else {
+    const keys = objs.map((o) => o.key)
+    const overlaps = (a, b) => a.dx < b.dx + b.w && b.dx < a.dx + a.w && a.dy < b.dy + b.h && b.dy < a.dy + a.h
+    let overlap = null
+    for (let i = 0; i < objs.length; i += 1) for (let j = i + 1; j < objs.length; j += 1) {
+      if (overlaps(objs[i].rect, objs[j].rect)) overlap = `${objs[i].key}/${objs[j].key}`
+    }
+    const KINDS = ['terminal', 'file', 'workflow', 'image']
+    ok('starter.plan.1 STARTER_OBJECTS: the keys terminal, note, workflow, image once each, none `agent`, each caption a sentence, each rect positive, no two rects overlapping',
+      V.STARTER_VERSION === 1 && V.AGENT_KEY === 'agent' &&
+        [...keys].sort().join(',') === 'image,note,terminal,workflow' && new Set(keys).size === 4 && !keys.includes(V.AGENT_KEY) &&
+        objs.every((o) => KINDS.includes(o.kind) && typeof o.caption === 'string' && o.caption.trim().length > 0 && /\.$/.test(o.caption.trim())) &&
+        objs.every((o) => o.rect && Number.isFinite(o.rect.dx) && Number.isFinite(o.rect.dy) && o.rect.w > 0 && o.rect.h > 0) &&
+        overlap === null,
+      JSON.stringify({ version: V.STARTER_VERSION, keys, kinds: objs.map((o) => o.kind), captions: objs.map((o) => o.caption), overlap }))
+  }
+}
+
+// M181 — image.kind.1. THE FIFTEENTH KIND's partition, check 92's rule from
+// the other side: `isImagePanel` is a POSITIVE partition — true for an
+// image panel and false for EVERY other kind — and every other kind's own
+// partition is false for an image panel. A helper that admitted the image
+// to isTerminalPanel would hand it to assignTiers and registry.ensure with
+// no spec (a WebGL context burnt on a picture); one that admitted it to
+// isFilePanel would open it in the editor as text. makeImagePanel centres
+// on the point the way makeBrowserPanel and makeMemoryPanel do.
+{
+  const has = typeof V.makeImagePanel === 'function' && typeof V.isImagePanel === 'function'
+  if (!has) ok('image.kind.1 makeImagePanel centres on the point and carries path and title; isImagePanel is true for it alone and every other kind\'s partition is false for it', false, 'makeImagePanel / isImagePanel do not exist in src/renderer/panels/panels.ts')
+  else {
+    const c = { x: 1000, y: -250 }
+    const img = V.makeImagePanel('img1', c, 7, '/tmp/welcome.png', 'welcome.png')
+    const centred = img.rect.id === 'img1' && img.rect.w > 0 && img.rect.h > 0 &&
+      Math.abs(img.rect.x + img.rect.w / 2 - c.x) < 1e-9 && Math.abs(img.rect.y + img.rect.h / 2 - c.y) < 1e-9
+    const others = [
+      V.makePanel('n1', c, 1),
+      { rect: { id: 'n9', x: 0, y: 0, w: 1, h: 1 }, z: 1, spec: { panelId: 'n9', cwd: '~', args: [] } },
+      V.makeFilePanel('f1', c, 1, { path: '/tmp/c' }),
+      V.makeReviewPanel('r1', c, 1, { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'x' }),
+      V.makeJiraPanel('j1', c, 1),
+      V.makeGithubPanel('g1', c, 1),
+      V.makeToolboxPanel('t1', c, 1, { cwd: '/r', label: 'r' }),
+      V.makeChatPanel('c1', c, 1, { cwd: '/r', sessionId: 'u' }),
+      V.makeMemoryPanel('m1', c, 1, { root: '/r' }),
+      V.makeWatcherPanel('w1', c, 1, { cwd: '/r', command: 'true', args: [], trigger: { kind: 'timer', everyMs: 60000 } }),
+      V.makeBrowserPanel('b1', c, 1, 'https://example.com'),
+      V.makeWorkPanel('k1', c, 1, 'item', 'work'),
+      V.makeSkillPanel('s1', c, 1, 'user', 'name'),
+      V.makeWorkflowPanel('wf1', c, 1, 'tpl', 'wf')
+    ]
+    const partitions = ['isTerminalPanel', 'isFilePanel', 'isReviewPanel', 'isJiraPanel', 'isGithubPanel', 'isToolboxPanel', 'isChatPanel', 'isMemoryPanel', 'isWatcherPanel', 'isBrowserPanel', 'isWorkPanel', 'isSkillPanel', 'isWorkflowPanel']
+    const admitted = partitions.filter((name) => typeof V[name] !== 'function' || V[name](img) === true)
+    const leaked = others.filter((p) => V.isImagePanel(p) !== false).map((p) => p.rect.id)
+    ok('image.kind.1 makeImagePanel centres on the point and carries path and title; isImagePanel is true for it alone and every other kind\'s partition is false for it',
+      centred && img.kind === 'image' && img.z === 7 && img.image.path === '/tmp/welcome.png' && img.title === 'welcome.png' &&
+        V.isImagePanel(img) === true && admitted.length === 0 && leaked.length === 0 && others.length === 14,
+      JSON.stringify({ rect: img.rect, admitted, leaked }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

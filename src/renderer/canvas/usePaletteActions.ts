@@ -43,7 +43,7 @@ import { clearUsage } from '@renderer/session/usage-store'
 import { clearMachineCost } from '@renderer/session/machine-cost-store'
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import {
-  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel,
+  isWatcherPanel, isGithubPanel, isMemoryPanel, isBrowserPanel, isWorkPanel, isSkillPanel, isImagePanel,
   isChatPanel, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, isWorkflowPanel,
   linksOf, removeLink, setLinkLabel, type Panel
 } from '@renderer/panels/panels'
@@ -65,6 +65,8 @@ import type { NavigatorPane } from '@renderer/shell/useShellChrome'
 
 export interface PaletteActionsDeps {
   recheckEnvironment: () => Promise<import("@shared/env-report").EnvReport>
+  /** M181. Canvas's starter layout: mints through the ordinary paths and records the keys. */
+  applyStarter: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -196,7 +198,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -254,6 +256,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         const a = step.args
         const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
         switch (step.verb) {
+          case 'starter': return applyStarter()
           case 'check-readiness': {
             const readiness = onboardingReadiness(await recheckEnvironment())
             return { kind: 'ran', note: readiness.rows.map((row) => row.sentence).join(' ') }
@@ -704,6 +707,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M128. The skill panel's two fields, by name — the thirteenth arm.
               if (isSkillPanel(p)) {
                 return { kind: p.kind, rect: p.rect, skill: { scope: p.skill.scope, name: p.skill.name }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+              }
+              // M181. The image panel's one field, by name — the fifteenth arm.
+              if (isImagePanel(p)) {
+                return { kind: p.kind, rect: p.rect, image: { path: p.image.path }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
@@ -1832,6 +1839,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     newNote: () => beginNewNote(),
     newChat: (backend) => { void beginNewChat(backend === undefined ? undefined : { backend }) },
     checkReadiness: recheckEnvironment,
+    openStarter: applyStarter,
     openAsChat: (id) => openAsChat(id),
     openInTerminal: (id) => openInTerminal(id),
     // M76. The ONE answer verb every surface calls; main clears every
@@ -2051,7 +2059,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

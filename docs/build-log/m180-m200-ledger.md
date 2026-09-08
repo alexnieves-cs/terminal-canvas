@@ -414,3 +414,214 @@ caller, refused before any step; `verify:verbs` 22/22 exit 0 after
 (`out/v9-evidence/m180-fix-verbs-2.log`). Its stash pop conflicted on one import line in
 `ipc-contract.ts` (an M181 edit beside an M180 one); resolved by keeping both, the index reset
 and re-staged to the M180 set, the stash dropped.
+
+## M181 — the captioned starter canvas
+
+Spec `docs/superpowers/specs/2026-09-08-m181-starter-canvas.md`, plan
+`docs/superpowers/plans/2026-09-08-m181-starter-canvas.md`. Started 2026-09-08 ~05:20 UTC
+on `v9-act1-onboarding` after M180's close at `be586dc`.
+
+Decisions recorded. The starter is DATA (`shared/starter.ts`): a manifest of four examples
+placed relative to the agent, and a workspace record of the keys ever applied, absent on
+every pre-M181 file and on a canvas the starter never touched, a reset clearing it. The
+image kind is the minimal foundation Act IV extends: an absolute path on the record, the
+bytes read in main by magic number under a 5 MB cap (`image:read`), painted as a data URL
+under the CSP's `img-src data:`, four arms. The starter's picture and note are written once
+under `userData/starter` (`starter:prepare`, never overwriting the person's note); the PNG
+is 612 bytes inlined in `main/starter-prepare.ts` rather than a packaged resource. The
+preview object is NOT in the manifest: a browser panel needs an http(s) page and the starter
+has no project to preview — M185 adds it under the same idempotent record. On a first run
+the launcher's primary lays the starter out around the conversation and its hint says so;
+a returning canvas mints the chat alone; without a discovered engine the starter is refused
+by name so the readiness screen stays in front. The examples spawn nothing: the chat on its
+first send, the terminal a dormant card, the workflow a projection, the note and the image
+files.
+
+Red first. The pure checks were delegated to a fresh-context writer in an isolated worktree
+(`docs/build-log/m181-pure-red-evidence.md`): `verify:layout` 234/238 exit 1
+(`starter.1–.3`, `image.record.1`), `verify:viewport` 137/139 exit 1 (`starter.plan.1`,
+`image.kind.1`), `verify:file` 83/85 exit 1 (`image.1`, `starter.prepare.1`), every
+pre-existing check green. Green after the pure modules: layout 238/238, viewport 139/139,
+file 85/85, exit 0 each (`out/v9-evidence/m181-pure-green-*.log`) — after one fix to the
+delegated `starter.1` check itself, which mutated the parsed record and then asserted the
+pre-mutation values (recorded here; the parser was right). The real-renderer checks
+`starter.1` and `image.1` in the product part ran RED against the M180 build before the
+renderer changed (`out/v9-evidence/m181-product-red.log`, exit 1): `primary: false` (no
+`data-onboarding-starter`), `painted: false`, `gone: false`; the two checks' waits then
+tripped the part's 98 s watchdog, which is re-measured below once green (M135's rule, 1.25×
+a measured green run). Plain-node after the implementation: onboarding 14/14, verbs 22/22,
+palette 143/143, meta 38/38, styles 56/56, layout 238/238, viewport 139/139, file 85/85,
+rail 194/194, agent-session 141/141, control 26/26, electron 4/4, exit 0 each
+(`out/v9-evidence/m181-plain-*.log`).
+
+Doors. Canvas: the primary on a first run and the `Starter canvas…` prompt line (disabled
+by name once every key is applied). Palette: `starter.open`. Agent: `tc plan starter`.
+Workflow: the M189 omission, in `V9_DOORS` (`closure.v9.1` binds all three). Two IPC
+channels (`image:read`, `starter:prepare`) in the contract, both diagrams and
+`verify:ipc`'s pin (126).
+
+Green, with what the real renderer taught. The first `npm run verify` with M181 exited 1 at
+`verify:panels:product onboarding.start.1` (62/63; `starter.1` and `image.1` PASS,
+`out/v9-evidence/m181-verify-chain.log`): on a first run the primary now lays the starter out
+too, and the manifest's image sat at dy 520 under a 620-tall chat, so the Examples group's
+frame spanned the composer and swallowed the click on Send; the check's `noTerminal` also saw
+the dormant terminal card. FIXED: the examples are ONE column beside the agent (440 wide, 40 px
+between rows for the captions; the group never encloses the chat), and the check asserts no
+LIVE terminal (`.xterm`), which is the property. Two flake shapes followed, each run to its
+cause: `sent: false` with an empty composer — `insertText` landed before the click's focus
+under the starter's render burst; the check now waits for the composer to HOLD focus (a real
+condition). And `openedId: false` — `applyStarter` read the async env report through a
+closure the palette memo captured while it was still null and refused for "no engine" while
+the launcher beside it showed the primary enabled; FIXED with a ref read at call time, the
+memo dep added, and `applyStarter` now says each decision on the renderer console (the check
+records it). The chat wait is 8 s (one slow run beside the known `browser.1` flake). Product
+part alone after: 63/63 exit 0 three times in a row (82.1–82.4 s wall,
+`m181-product-green-{3,5,6}.log`, `m181-product-diag.log`); the watchdog re-measured to
+105 s (1.25× the slower of 82.3 / 82.4 / 83.7 s). `browser.1` failed once in a slow run
+(`m181-product-green-4.log`), the flake `terminal-canvas-v8-run` memory already names.
+
+Visual. The first comparison (`m181-visual-compare.log`) showed six scenes: `launcher` (the
+first-run hint and the `Starter canvas…` line), `starter` MISSING, and four sheet/palette
+scenes at 1.1–1.7 % — the `starter` scene ran second, on the empty store, and the chat it
+minted left main-side state (the recent folders the sheet's WHERE field lists) for every
+later scene. Moved LAST over a canvas the kit empties for it (`k.emptyCanvas`): the three
+sheet scenes returned under budget (`m181-visual-compare-2.log`, 55/58). `palette-query`
+stays changed on purpose — the new `Open the starter canvas` row matches the query. The
+first starter capture put the chat on the view's right edge with the column off screen
+under the minimap (minted at the view centre); a pan alone left the column under the
+inspector, which opens on the selected chat, so `applyStarter` FITS the arrangement (M146's
+fit knows the visible viewport). Spec amendment, recorded: the spec's "examples inside the
+working view's right edge at 100 %" is struck — with the inspector open the visible canvas
+at 1440 is ~835 px and the agent plus a column is ~1080, so the first view lands at ~65 %
+and one pinch returns the agent to working size; the alternative, hiding the inspector or
+shrinking the examples below legibility, costs more than the zoom.
+
+### M181 — the critic's findings and what was done with each
+
+The fresh-context critic (the working tree against `be586dc`, the spec, plan, brief, rules,
+three captures) refused the first starter capture and returned fourteen findings. By number:
+
+1. The examples were placed relative to a GUESSED origin: `applyStarter` read `panelsRef`
+   synchronously after `await beginNewChat`, whose `setPanels` was only queued. Two fixes
+   were tried and each found wanting by the critic (a `requestAnimationFrame` wait never
+   fired in the shot harness's hidden window and left the chat alone; a timer flush is not a
+   commit guarantee). FIXED wait-free: `beginNewChat` takes an exact `at` point, the starter
+   passes the view's centre and derives the chat's rect from it and `CHAT_W`/`CHAT_H`; the
+   settle-refusal arm is gone; product `starter.1` asserts zero overlap between the chat and
+   every example.
+2. The camera fits at ~65 % rather than the spec's 100 %. DECLINED with the spec amendment
+   above (the inspector open on the selected chat leaves ~835 px; the alternatives cost more).
+3. The workflow example clipped at 160 tall. FIXED: 440x260, the image below it.
+4. Refusals were silent. FIXED: the launcher line and the palette row are disabled by name
+   (every key applied; no engine; a canvas with panels and no record); runtime refusals stay
+   on the console and the door's reply.
+5. A refusal after the chat was minted left no record. FIXED: the chat's key is recorded first.
+6. The palette and agent doors could lay the column over a person's canvas. FIXED: refused
+   by name when the canvas has panels and no starter record.
+7. `m181-pure-red-evidence.md` was cited but missing (the worktree's untracked file was not in
+   its diff). FIXED: copied verbatim.
+8. Stale ledger prose. FIXED above.
+9. The dormant terminal example says "nothing recorded before the last quit" though it never
+   ran. DECLINED: telling a never-run card from one that quit with nothing needs main to say
+   whether a scrollback file exists, an M39 arm; recorded for the backlog.
+10. The image record holds an arbitrary absolute path and `image:read` reads it. RECORDED as
+    M187's debt (asset identity); today the file panel already reads arbitrary paths, the
+    parser and the handler refuse a relative one, and the data URL is bounded by the 5 MB cap.
+11. The `Starter canvas…` line duplicated the primary on a first run. FIXED: the line renders
+    only on a returning empty canvas.
+12. The note opens as a raw mono editor with a path line (M27's rule for a note outside a
+    vault). RECORDED for M188.
+13. The rail said `image · an image`. FIXED: the title alone when set, the file panel's rule.
+14. Annotation ids invented a third scheme. FIXED: the door's own sequence. The `console.info`
+    lines stay (the journey check reads them); the 612-byte inlined PNG stays.
+
+Two further findings from its second pass: the settle-refusal arm was a bad user path
+(gone with 1) and the shot scene captured on a timeout — FIXED: the scene throws when the
+five kinds are not on screen, so a blind update cannot write the chat alone as the golden.
+
+### M181 — the critic's sentences, before the goldens
+
+`starter` (new scene): *the conversation sits at working size on the left with its composer
+clear, and to its right an `EXAMPLES · 4` frame holds one column — dormant terminal, note,
+workflow (verb strip, tabs and the two-block diagram now visible), image with real pixels —
+each with its one-sentence caption beneath, no rect touching the chat, the group never
+enclosing it, nothing running, launcher gone, camera fitted at 65 % per the recorded
+amendment; the residuals are the workflow card's clipped top verb strip and the terminal
+card's "before the last quit" sentence, both recorded, neither a reason to withhold the
+golden.* Accepted.
+
+`launcher` (the golden deleted so the under-budget hint change is written on purpose): *the
+first-run hint alone now reads "With Claude · opens your canvas with a captioned example of
+each kind beside it" and the prompt line's removal on a first run makes the card cleaner,
+not different; accepted.*
+
+`palette-query`: *a new `Open the starter canvas` row appears under CANVAS for the query
+"group" by the same loose subsequence match that already admits `Flip terminals`; nothing
+else moved; accepted.*
+
+Two notes from its last pass, recorded: the chat's `no skills` trail capsule overhangs the
+Examples frame's edge (a derived lane painting into another group's region; for M188's
+frames), and the chat header's `auto` / `to terminal` verbs are the selected panel's focus
+reveal, which the golden pins as the selected state.
+
+### M181 — the chain, green, and the verifier
+
+Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m181-verify-chain-2.log`, `.exit`), every suite printing its tally:
+
+| Suite | Tally |
+|---|---|
+| `verify:onboarding` | 14/14 passed |
+| `verify:meta` | 38/38 passed |
+| `verify:styles` | 56/56 checks passed |
+| `verify:viewport` | 139/139 passed |
+| `verify:groups` | 6/6 passed |
+| `verify:merged` | 12/12 passed |
+| `verify:registry` | 38/38 passed |
+| `verify:layout` | 238/238 passed |
+| `verify:credentials` | 18/18 passed |
+| `verify:jira` | 15/15 passed |
+| `verify:github` | 7/7 passed |
+| `verify:palette` | 143/143 checks passed |
+| `verify:rail` | 194/194 passed |
+| `verify:review` | 98/98 passed |
+| `verify:subagent` | 27/27 passed |
+| `verify:file` | 85/85 passed |
+| `verify:toolbox` | 103/103 passed |
+| `verify:usage` | 26/26 passed |
+| `verify:machine-cost` | 7/7 passed |
+| `verify:tmux` | 35/35 passed |
+| `verify:agent-state` | 27/27 passed |
+| `verify:agent-session` | 141/141 passed |
+| `verify:verbs` | 22/22 passed |
+| `verify:teammates` | 25/25 passed |
+| `verify:electron` | 4/4 passed |
+| `verify:control` | 26/26 passed |
+| `verify:package` | 13/13 passed |
+| `verify:pty` | 10/10 passed |
+| `verify:pty-manager` | 63/63 passed |
+| `verify:window` | 4/4 passed |
+| `verify:ipc` | 1/1 passed |
+| `verify:canvas` | 6/6 passed |
+| `verify:xterm` | 11/11 passed |
+| `verify:panels:core` | 78/78 passed |
+| `verify:panels:shell` | 96/96 passed |
+| `verify:panels:kinds` | 49/49 passed |
+| `verify:panels:agents` | 80/80 passed |
+| `verify:panels:product` | 63/63 passed |
+
+`UPDATE_GOLDENS=1 npm run verify:visual` wrote the three goldens named in the sentences
+above and nothing else — 57/57, exit 0 (`out/v9-evidence/m181-visual-update.log`, `.exit`);
+`verify:meta visual.1` 38/38 after it. This is the evidence line the sentences precede.
+
+The fresh-context verifier (the working tree against `be586dc`; plain node only while the
+chain held the Electron slot) confirmed typecheck 0 and the eleven plain tallies, the red
+evidence (the eight pure ids match the three suites; the product red log with `starter.1`,
+`image.1` and the watchdog), the green logs, the golden set, no weakened assertion, every
+record and security property by line, the doors, the diagrams and pins, and the rules. Its
+five discrepancies, answered: `m181-product-green-8.log` has no `.exit` file — its tally line
+(63/63) and wall time are the evidence, and the chain above supersedes it; the watchdog's
+note had drawn its slowest figure from a failing run — corrected to green walls only (82.1,
+82.3, 82.4, 82.9 s → 104 s), a change of one second that the chain above ran under;
+`onboarding.agent.1` failed in the two runs where `onboarding.start.1`'s chat never appeared
+(it closes that chat), the stale-closure cause fixed above; the README row is now done; the
+narrowed `noTerminal` predicate is the milestone's own change and is documented in the check.

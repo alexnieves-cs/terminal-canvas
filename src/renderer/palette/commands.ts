@@ -73,7 +73,7 @@ export interface PanelRow {
   id: string
   label: string
   /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow'
+  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image'
   /** M49. A per-panel font override, when set. Absent means the global. */
   fontSize?: number
   /** The user's name for it, if set. Shown so the rename row can echo it. */
@@ -443,6 +443,8 @@ export interface PaletteActions {
   /** M73. Mint a chat panel in the focused panel's directory (or home). */
   newChat(backend?: AgentBackend): void
   checkReadiness(): Promise<import("@shared/env-report").EnvReport>
+  /** M181. Lay the starter canvas out: the conversation and one captioned example of each kind, only the keys never applied; refused by name. */
+  openStarter(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M74. A claude terminal's session, rendered and continued as a chat. */
   openAsChat(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
@@ -514,6 +516,8 @@ export interface PaletteContext {
    * Read by buildEnvironmentRows; the launcher reads the same object.
    */
   envReport?: EnvReport | null
+  /** M181. Why the starter cannot be opened now (every key applied, no engine), or null/absent when it can. */
+  starterReason?: string | null
   /**
    * M123. The last update check's answer (update-store.ts), or null/absent
    * when none has been asked. Read by the `update.check` row's subtitle and
@@ -2207,6 +2211,8 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M180. The palette's door for `new-chat` is the existing `panel.new-chat`
   // row (and the codex sandbox rows) — a third row minting the same chat was
   // the critic's finding; only the readiness verb is new here.
+  out.push(withReason({ id: 'starter.open', title: 'Open the starter canvas', subtitle: 'Your agent and one captioned example of each kind of object', group: 'canvas', searchText: 'starter canvas examples onboarding first run welcome', run: () => { void actions.openStarter() } },
+    ctx.starterReason ?? undefined))
   out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })
 
   // --- M96: the verb line ------------------------------------------------------

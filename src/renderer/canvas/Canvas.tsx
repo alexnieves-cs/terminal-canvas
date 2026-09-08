@@ -86,12 +86,12 @@ import type {
   WorkspaceRow, WorktreeListRow } from '@shared/ipc-contract'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
-import { makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
+import { makeImagePanel, isImagePanel, makeWorkflowPanel, isWorkflowPanel, makeSkillPanel, isSkillPanel, makeWorkPanel, isWorkPanel, makeBrowserPanel, isBrowserPanel, makeWatcherPanel, makeGithubPanel, isGithubPanel, makeMemoryPanel, isWatcherPanel, isMemoryPanel,
   cascadeCentre, firstRunPanels, isFilePanel, isJiraPanel, isReviewPanel, isTerminalPanel, isToolboxPanel, makeFilePanel, makeJiraPanel,
   makeToolboxPanel, makeChatPanel, isChatPanel,
   makePanel, makeReviewPanel, maximiseRect, nextZ, raisePanel, removePanel, reviewCentre, setPanelRect,
   addLink, setRestartOnExit, setLinkAutomation, linksOf,
-  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, setLinkLabel, CHAT_W } from '@renderer/panels/panels'
+  type Panel, type TerminalPanel as TerminalPanelModel, type WorkPanel as WorkPanelModel, setLinkLabel, CHAT_W, CHAT_H, type ChatPanel } from '@renderer/panels/panels'
 import { recoverPanels, seedAfter } from '@renderer/panels/recover'
 import { nextCardDetail, type CardDetail } from './card-detail'
 import { shellQuote } from '@renderer/shell/file-tree-model'
@@ -126,6 +126,11 @@ import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
 import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
+import { ImageNode } from '@renderer/image/ImageNode'
+import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
+import { onboardingReadiness } from '@shared/onboarding'
+import { GROUP_COLOURS } from '@shared/groups'
+import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
 import { parseTriggerWords } from '@renderer/watcher/trigger-input'
 import { useRuns } from './useRuns'
@@ -287,6 +292,12 @@ export function Canvas({
   const [runs, setRuns] = useState<PersistedRun[]>(() => sealAbandoned(initial.runs ?? [], Date.now()))
   // M93. Notes in the margins: layout, saved with the workspace, absent on disk when empty.
   const [annotations, setAnnotations] = useState<Annotation[]>(() => initial.annotations ?? [])
+  // M181. The starter record: which manifest keys were ever applied to this
+  // workspace. Absent until the first application; a record, not layout —
+  // never in history, kept across a reset's undo like runs and bookmarks.
+  const [starter, setStarter] = useState<PersistedStarter | undefined>(() => initial.starter)
+  const starterRef = useRef(starter)
+  starterRef.current = starter
   const annotationsRef = useRef(annotations)
   annotationsRef.current = annotations
   // M113. The board's records: saved with the workspace, absent on disk when
@@ -1746,6 +1757,8 @@ export function Canvas({
     setGroups([])
     // M93. A reset is a reset: the notes go with the panels.
     setAnnotations([])
+    // M181. And the starter may lay itself out again: a reset is a first run.
+    setStarter(undefined)
     setSelectedAnnotation(null); setEditingAnnotation(null); setAnnotating(false)
     setDormantIds(new Set())
     selectOnly(null)
@@ -1922,7 +1935,7 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
@@ -2485,9 +2498,10 @@ export function Canvas({
       bookmarks,
       runs,
       ...(annotations.length === 0 ? {} : { annotations }),
-      ...(workItems.length === 0 ? {} : { workItems })
+      ...(workItems.length === 0 ? {} : { workItems }),
+      ...(starter === undefined ? {} : { starter })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, starter])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -2950,6 +2964,13 @@ export function Canvas({
   // report says when. Null until the invoke answers, and the launcher and the
   // palette both render the null honestly rather than as "nothing found".
   const [envReport, setEnvReport] = useState<EnvReport | null>(null)
+  // M181. A ref beside the state: `applyStarter` is installed once (the
+  // palette memo captures it), so it must read the report at CALL time — a
+  // closure over the null the first render held refused the starter for
+  // "no engine" while the launcher beside it showed the primary enabled
+  // (the journey check found it, one run in three).
+  const envReportRef = useRef(envReport)
+  envReportRef.current = envReport
   const recheckEnvironment = useCallback(async (): Promise<EnvReport> => {
     const report = await window.canvas.env.report(true)
     setEnvReport(report)
@@ -4126,7 +4147,7 @@ export function Canvas({
   }, [switchWorkspace, readSnapshots])
   const annotationMarks = useMemo(() => annotations.flatMap((a) => { const p = annotationPoint(a, panels); return p === null ? [] : [p] }), [annotations, panels])
 
-  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true }): Promise<SpawnResult> => {
+  const beginNewChat = useCallback(async (opts?: { cwd?: string; title?: string; agentOptions?: AgentOptions; appendSystemPrompt?: string; message?: string; backend?: AgentBackend; teammateId?: string; sandbox?: true; routine?: true; at?: Point }): Promise<SpawnResult> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const focused = focusedIdRef.current
     const focusedPanel = focused === null ? undefined : panelsRef.current.find((p) => p.rect.id === focused)
@@ -4157,10 +4178,13 @@ export function Canvas({
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
     setPanels((current) => {
-      const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+      // M181. An EXACT placement when the caller asked for one (the starter,
+      // which lays four examples out relative to this rect and so must know it
+      // without waiting for a commit); the cascade otherwise.
+      const centre = opts?.at ?? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
       // M121. A routine's chat is MARKED, the way a lane is: the record is what
       // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
-      const panel = makeChatPanel(id, cascadeCentre(centre, current), nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
+      const panel = makeChatPanel(id, centre, nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
       const next = [...current, title === '' ? panel : { ...panel, title }]
       commitHistory(next)
       return next
@@ -4768,7 +4792,90 @@ export function Canvas({
     })
   }, [])
 
+  /**
+   * M181. THE STARTER CANVAS, laid out around the conversation. Idempotent
+   * through the workspace's record: only keys never applied are minted, so a
+   * canvas the person has edited is never overwritten and a closed example
+   * stays closed. Every object goes through an ordinary path — the chat
+   * through `beginNewChat` (it spawns on its first send), the terminal as a
+   * DORMANT login-shell card (it wakes on the first click, M4b), the note as
+   * a prose file panel over a real Markdown file main wrote once, the
+   * workflow as M133's projection, the image as the fifteenth kind over the
+   * PNG main wrote beside the note. The examples land in ONE history entry
+   * after the chat's own; nothing spawns.
+   */
+  const applyStarter = useCallback(async (): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    // Every arm says what it decided on the console: a starter that quietly did
+    // nothing is indistinguishable from a click that missed (the journey check).
+    const say = (what: string): void => { console.info(`[starter] ${what}`) }
+    if (mergedRef.current) { say('refused: merged'); return { kind: 'refused', reason: 'the merged view is read-only — leave it to open the starter canvas' } }
+    const keys = starterKeysToApply(starterRef.current)
+    if (keys.length === 0) { say('refused: every key applied'); return { kind: 'refused', reason: 'every starter object is already on this canvas — close what you do not need; a reset lays it out again' } }
+    // A canvas with panels and NO record is the person's own arrangement:
+    // the starter lays itself out on an empty canvas only (the primary's
+    // door) and never over what is there (the critic's finding 6).
+    if (starterRef.current === undefined && panelsRef.current.length > 0) { say('refused: canvas not empty'); return { kind: 'refused', reason: 'this canvas already has panels — the starter lays out on an empty canvas; reset the canvas or make a new workspace for it' } }
+    const applied = [...(starterRef.current?.keys ?? [])]
+    let origin: WorldRect | undefined = panelsRef.current.find((p): p is ChatPanel => isChatPanel(p))?.rect
+    if (keys.includes(AGENT_KEY)) {
+      const readiness = onboardingReadiness(envReportRef.current)
+      if (readiness.preferred === undefined) { say('refused: no engine discovered'); return { kind: 'refused', reason: 'no conversation engine has been discovered — the starter canvas begins with an agent; install one and Check again' } }
+      say(`minting the chat with ${readiness.preferred}`)
+      // The chat is placed EXACTLY at the view's centre (`at`), so its rect is
+      // known here without waiting for React to commit `beginNewChat`'s
+      // setPanels: a frame wait never fired in a hidden window (the shot
+      // harness) and a timer is not a commit guarantee (the critic, twice).
+      const centre = worldCentre()
+      const result = await beginNewChat({ backend: readiness.preferred, title: 'your agent', at: centre })
+      if (result.kind === 'refused') { say(`chat refused: ${result.reason}`); return result }
+      say(`chat ${result.id ?? '(no id)'} minted`)
+      applied.push(AGENT_KEY)
+      origin = { id: result.id ?? '', x: centre.x - CHAT_W / 2, y: centre.y - CHAT_H / 2, w: CHAT_W, h: CHAT_H }
+    }
+    const at: WorldRect = origin ?? { id: '', x: worldCentre().x - CHAT_W / 2, y: worldCentre().y - CHAT_H / 2, w: CHAT_W, h: CHAT_H }
+    const wanted = STARTER_OBJECTS.filter((o) => keys.includes(o.key))
+    let files: { notePath: string; imagePath: string } | undefined
+    if (wanted.some((o) => o.kind === 'file' || o.kind === 'image')) {
+      // A refusal after the chat was minted still RECORDS the chat's key: a second click must not mint a second conversation (idempotence, the critic's finding 5).
+      try { files = await window.canvas.starter.prepare() } catch { setStarter({ version: STARTER_VERSION, keys: applied }); say('refused: starter files'); return { kind: 'refused', reason: 'the starter files could not be written under the app\'s own folder' } }
+    }
+    const minted: Panel[] = []
+    const captions: Annotation[] = []
+    const dormant: string[] = []
+    for (const o of wanted) {
+      const centre = { x: at.x + o.rect.dx + o.rect.w / 2, y: at.y + o.rect.dy + o.rect.h / 2 }
+      const size = { w: o.rect.w, h: o.rect.h }
+      const z = nextZ([...panelsRef.current, ...minted])
+      let panel: Panel
+      if (o.kind === 'terminal') { const id = `n${nextIdRef.current++}`; panel = { ...makePanel(id, centre, z, undefined, size), title: 'a terminal' }; dormant.push(id) }
+      else if (o.kind === 'file') { panel = { ...makeFilePanel(`f${nextIdRef.current++}`, centre, z, { path: files!.notePath, prose: true }, size), title: 'a note' } }
+      else if (o.kind === 'workflow') { const t = BUILT_IN_TEMPLATES[0]; const p = makeWorkflowPanel(`wf${nextIdRef.current++}`, centre, z, t.id, t.name); panel = { ...p, rect: { ...p.rect, x: centre.x - size.w / 2, y: centre.y - size.h / 2, w: size.w, h: size.h } } }
+      else { const p = makeImagePanel(`im${nextIdRef.current++}`, centre, z, files!.imagePath, 'an image'); panel = { ...p, rect: { ...p.rect, x: centre.x - size.w / 2, y: centre.y - size.h / 2, w: size.w, h: size.h } } }
+      minted.push(panel)
+      captions.push({ id: `a${Date.now().toString(36)}${(annotationSeq.current++).toString(36)}`, text: o.caption, anchor: { kind: 'panel', panelId: panel.rect.id, dx: 0, dy: panel.rect.h + 22 } })
+      applied.push(o.key)
+    }
+    if (minted.length > 0) {
+      const next = [...panelsRef.current, ...minted]
+      setPanels(next)
+      commitHistory(next)
+      if (dormant.length > 0) setDormantIds((current) => new Set([...current, ...dormant]))
+      setAnnotations((current) => [...current, ...captions].slice(-ANNOTATIONS_MAX))
+      const number = nextGroupIdRef.current++
+      setGroups((current) => [...current, { id: `g${number}`, label: 'Examples', colour: GROUP_COLOURS[(number - 1) % GROUP_COLOURS.length], panelIds: minted.map((p) => p.rect.id) }])
+      // The camera FITS the arrangement (M146's fit, which knows the visible
+      // viewport with the inspector open): minted at the view's centre, the
+      // chat sat on the right edge with every example off screen under the
+      // minimap, and a pan alone left the column under the inspector.
+      fitSelection([at, ...minted.map((p) => p.rect)])
+    }
+    setStarter({ version: STARTER_VERSION, keys: applied })
+    say(`laid out ${minted.map((p) => p.rect.id).join(', ') || 'nothing new'}`)
+    return { kind: 'ran', note: `${keys.length} starter object${keys.length === 1 ? '' : 's'} laid out` }
+  }, [beginNewChat, commitHistory, worldCentre, fitSelection])
+
   const paletteActions = usePaletteActions({
+    applyStarter,
     recheckEnvironment,
     registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
@@ -5634,6 +5741,23 @@ export function Canvas({
                 />
               )
             }
+            // M181. The fifteenth kind: a picture, sessionless like the file panel.
+            if (isImagePanel(panel)) {
+              return (
+                <ImageNode
+                  key={panel.rect.id}
+                  panel={panel}
+                  selected={selectedIds.has(panel.rect.id)}
+                  onSelect={selectAndRaise}
+                  onFocus={onFocusPanel}
+                  onBeginDrag={onBeginDrag}
+                  onClose={onClosePanel}
+                  readOnly={merged}
+                  onBeginLink={onBeginLink}
+                  linkTarget={linkDraw.state?.target === panel.rect.id}
+                />
+              )
+            }
             // M83. The seventh kind, sessionless like the four before it.
             if (isMemoryPanel(panel)) {
               return (
@@ -5899,6 +6023,11 @@ export function Canvas({
             onNewNote={paletteActions.newNote}
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
             onNewChat={paletteActions.newChat}
+            // M181. A first run (no starter record) lays the starter canvas out around the conversation; a returning canvas mints the chat alone.
+            starterFirstRun={starter === undefined}
+            onStart={(engine) => { if (starter === undefined) void paletteActions.openStarter(); else paletteActions.newChat(engine) }}
+            onOpenStarter={() => { void paletteActions.openStarter() }}
+            starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent; install one and Check again' : null}
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => paletteActions.newChat('codex')}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
@@ -5932,6 +6061,7 @@ export function Canvas({
             credentials={credentialRows}
             worktrees={worktreeRows}
             envReport={envReport}
+            starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent' : starter === undefined && panels.length > 0 ? 'the starter lays out on an empty canvas — reset the canvas or make a new workspace for it' : null}
             update={updateState}
             bookmarks={bookmarkRows}
             cameraTrail={trail}

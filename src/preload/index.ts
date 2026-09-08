@@ -383,6 +383,12 @@ const bridge: CanvasBridge = {
   update: {
     check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK)
   },
+  image: {
+    read: (path) => ipcRenderer.invoke(IPC.IMAGE_READ, path)
+  },
+  starter: {
+    prepare: () => ipcRenderer.invoke(IPC.STARTER_PREPARE)
+  },
   platform: process.platform,
   telemetry: { enabled: telemetryEnabled }
 }

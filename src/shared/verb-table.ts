@@ -52,6 +52,7 @@ const panel = (name = 'panel'): VerbArg => ({ name, kind: 'panel' })
 
 export const VERBS: readonly VerbDef[] = [
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
+  { id: 'starter', label: 'Open the starter canvas', args: [], destructive: false, actions: ['openStarter'], target: 'canvas', hint: 'the agent and one captioned example of each kind; only what was never applied' },
   { id: 'new-chat', label: 'Start a conversation', args: [{ name: 'backend', kind: 'key', optional: true }], destructive: false, actions: ['newChat'], target: 'canvas', hint: 'open an available conversation engine; optionally claude or codex' },
   { id: 'focus', label: 'Focus', args: [panel()], destructive: false, actions: ['goToPanel'], target: 'panel', hint: 'go to a panel without waking it' },
   { id: 'start', label: 'Start', args: [panel()], destructive: false, actions: ['startPanel'], target: 'panel', hint: 'wake a dormant panel' },
@@ -206,5 +207,6 @@ export function acceptsTyping(panel: { kind: string; agent?: AgentKind }): boole
 /** Act I exceptions have an owner and deadline; declarations never stand in for execution checks. */
 export const V9_DOORS: Record<string, { canvas: string; palette: string; agent: string; workflow: { reason: string; due: string } }> = {
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
-  'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
+  'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } },
+  starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: { reason: 'canvas-action adapter ships with node execution', due: 'M189' } }
 }
