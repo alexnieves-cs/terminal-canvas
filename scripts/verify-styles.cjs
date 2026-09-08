@@ -969,12 +969,19 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 
 // M176 — motion.2. MOTION WITH INTENT: every transition and animation in the
 // stylesheet runs on a token — --dur-1 (a reveal), --dur-2 (an arrival),
-// --dur-breath (the needs-you pulse and the caret) — never a literal; the
-// panel's arrival keyframe scales from .98 on --dur-2; only the five moments'
-// keyframes are declared (a spawn, the palette's rise, the pulse, the caret,
-// the trail card's arrival); the reduced-motion block exists (check 9).
+// --dur-breath (the needs-you pulse and the caret), --dur-stagger (the ⌘G
+// grid's per-cell delay, M179) — never a literal, in the shorthands AND the
+// longhands (`animation-delay` carried eight literals the first regex could
+// not see; the Act IV verifier); the panel's arrival keyframe is a RISE on
+// --dur-2 — the brief's scale from .98 was DECLINED in M178: `.pf__motion`
+// is an ancestor of `.pf__body`, and a scale there broke the annotation
+// stage (product annot.1); only the moments' keyframes are declared (the
+// arrival, the palette's rise, the pulse, the caret, the trail card's
+// arrival, the ⌘G grid's rise); the reduced-motion block exists (check 9).
 {
-  const literal = [...bare.matchAll(/(?:transition|animation)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
+  // `0ms` and `.01ms` are the reduced-motion block's own values — no motion is
+  // not a duration; every other literal is a duration that escaped the tokens.
+  const literal = [...bare.matchAll(/(?:transition|animation|transition-duration|transition-delay|animation-duration|animation-delay)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].filter((m) => !/^(0m?s|\.01ms)$/.test(m[1])).map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
   // A RISE, not a scale: a scale on .pf__motion (an ancestor of .pf__body) broke product annot.1 — declined in the ledger.
   const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(8px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
   const breath = /--dur-breath:\s*1\.2s/.test(bare)

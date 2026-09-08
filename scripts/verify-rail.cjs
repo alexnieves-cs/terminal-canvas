@@ -2494,9 +2494,17 @@ const session = (id, over = {}) => ({
   const bad = list ? list.filter((e) => typeof e.sentence !== 'string' || e.sentence.trim().length < 12 || /^[0—–\-…]+$/.test(e.sentence.trim()) || (e.verb !== undefined && (typeof e.verb !== 'string' || e.verb.trim() === ''))) : null
   let threw = false
   try { get('no-such-surface') } catch { threw = true }
-  ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused',
-    list !== null && list.length >= 12 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined),
-    JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id) }))
+  // M179 (the Act IV critic): a list the UI does not read is the "row that
+  // disappears" failure in reverse — the check stays green while the words
+  // on screen drift. Every id must be RENDERED by name somewhere in the
+  // renderer (`<EmptyState id="…"` or `emptyState('…')`), read as text.
+  const src = require('node:fs').readdirSync(require('node:path').join(__dirname, '..', 'src', 'renderer'), { recursive: true })
+    .filter((f) => /\.tsx?$/.test(String(f)))
+    .map((f) => require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', String(f)), 'utf8')).join('\n')
+  const unrendered = list ? list.map((e) => e.id).filter((id) => !src.includes(`<EmptyState id="${id}"`) && !src.includes(`emptyState('${id}')`)) : null
+  ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused, and every id rendered by name in the renderer',
+    list !== null && list.length >= 9 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined) && unrendered !== null && unrendered.length === 0,
+    JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id), unrendered }))
 }
 
 // M178 — lastline.2 (F.14). The rail's last line is prose: inline code fences
@@ -2632,8 +2640,8 @@ const session = (id, over = {}) => ({
   const build = typeof R.buildRunRows === 'function' ? R.buildRunRows : () => []
   const rows = build([run(), run({ id: 'r2', endedAt: undefined, costUsd: undefined }), run({ id: 'r3', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'exit 1' }] })], new Set(['a']), 100000)
   ok('run.1 the Runs rows carry name, ONE facts line (panels · duration · cost or a dash), the outcome in the state vocabulary (idle / working / exited N) with its tone, and Run again with its reason while open or without a terminal root',
-    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s · $0.12' && rows[0].runAgain.enabled === true &&
-      rows[1].outcome === 'working' && rows[1].cost === '—' && /—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
+    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s' /* M179: no dollars in the rail — the metrics rule; the Work tab prints the price */ && rows[0].runAgain.enabled === true &&
+      rows[1].outcome === 'working' && rows[1].cost === '—' && !/\$|—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
       rows[2].outcome === 'exited 1' && rows[2].tone === 'exited' &&
       build([run()], new Set(), 100000)[0]?.runAgain.enabled === false && /terminal/.test(build([run()], new Set(), 100000)[0]?.runAgain.reason ?? ''),
     JSON.stringify(rows))
