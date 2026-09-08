@@ -1509,6 +1509,32 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     //     The SECOND clause is the pane's stated reason to exist: the spec link
     //     is shown SEPARATELY, so "why does this say login shell" is answerable.
     //     A merged single-command implementation passes the first clause alone.
+    // M178 — restart.paint.1 (the audit's F.1). The context pane's one filled
+    //     control: an ENABLED Restart on a live terminal paints the iris fill
+    //     with the on-iris ink — from M46 to 4.0 a (0,2,1) grid rule painted
+    //     it white on white, a control with no name at rest, invisible to
+    //     every DOM read. Computed style, on the live panel the machine check
+    //     selects below; the disabled arm is the outlined one.
+    {
+      const sessions = await settledSessionMap(wc)
+      const liveInDom = await wc.executeJavaScript(
+        `[...document.querySelectorAll('.panel[data-panel-id] .xterm')].map((x) => x.closest('.panel').getAttribute('data-panel-id'))`)
+      const liveId = [...sessions.keys()].find((id) => liveInDom.includes(id)) ?? null
+      if (liveId !== null) {
+        await wc.executeJavaScript(`document.querySelector('.rail-row[data-rail-row="' + ${JSON.stringify(liveId)} + '"] .rail-row__main').dispatchEvent(new MouseEvent('click', { bubbles: true }))`)
+        await settle()
+      }
+      const paint = await wc.executeJavaScript(`(() => {
+        const b = document.querySelector('[data-inspector-action="restart"]'); if (!b) return null
+        const cs = getComputedStyle(b)
+        const hex = (v) => { const m = /#([0-9a-f]{6})/i.exec(v); return m ? 'rgb(' + [1, 3, 5].map((i) => parseInt(m[1].slice(i - 1, i + 1), 16)).join(', ') + ')' : v }
+        const iris = getComputedStyle(document.documentElement).getPropertyValue('--iris').trim()
+        return { disabled: b.disabled, bg: cs.backgroundColor, color: cs.color, iris: hex(iris) } })()`)
+      ok('restart.paint.1 an enabled Restart in the context pane paints the iris fill with a different ink (never white on white)',
+        paint !== null && paint.disabled === false && paint.bg === paint.iris && paint.color !== paint.bg,
+        JSON.stringify({ liveId, paint }))
+    }
+
     // M163 — machine.1 (the metrics rule's other half). The inspector's Detail
     //     tab carries a Machine section: for a LIVE panel a CPU · RAM figure or
     //     `no reading yet` (the harness samples no process table — the arm says

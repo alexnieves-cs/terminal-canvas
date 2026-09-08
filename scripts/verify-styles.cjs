@@ -713,7 +713,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     '.annotation__label', '.annotation__editor', '.inspector__link-title', '.inspector__link-label', '.inspector__select',
     '.link-layer__label', '.board-row__note', '.skill-card__note', '.integration__row-meta', '.github-item__body',
     '.workflow-node__block-sub', '.workflow-node__edge-word', '.watcher-node__when', '.file-node__backlink-verb',
-    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.diagnostics-overlay', '.trail-card__name',
+    '.review-node__section-count', '.skills-pane__filter', '.palette__state', '.palette__title', '.skill-card__resources', '.diagnostics-overlay', '.trail-card__name',
     '.panel__card', '.sheet__preview', '.lane-header__name', '.edge-indicator__name', '.inspector__run-name'
   ]
   const ANCESTORS = ['.chat__transcript', '.diagnostics-overlay', '.panel__card', '.subagent-ambiguous', '.pf__body--text' /* M164 */]
@@ -975,13 +975,14 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // the trail card's arrival); the reduced-motion block exists (check 9).
 {
   const literal = [...bare.matchAll(/(?:transition|animation)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
-  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*scale\(\s*\.98\s*\)/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
+  // A RISE, not a scale: a scale on .pf__motion (an ancestor of .pf__body) broke product annot.1 — declined in the ledger.
+  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(8px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
   const breath = /--dur-breath:\s*1\.2s/.test(bare)
   const names = [...bare.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).sort()
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
   const allowed = ['chat-caret', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
   const stray = names.filter((n) => !allowed.includes(n))
-  ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival scales from .98 on --dur-2, and only the five moments are declared',
+  ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
 }
 
@@ -996,6 +997,25 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const monoEmpty = all.filter((r) => /__empty\b|\.rail-empty\b/.test(r.sel) && /--font-mono/.test(r.body)).map((r) => r.sel.trim())
   ok('empty.1', 'one centred .empty-state rule in the UI face with a glyph slot and a verb, and no empty-state rule in mono',
     centred && glyph && verb && monoEmpty.length === 0, JSON.stringify({ centred, glyph, verb, monoEmpty }))
+}
+
+// M178 — tree.1 (F.4). The Files heading keeps the ROOT's name: the
+// `.shell__tree-root` span never shrinks (flex-shrink 0) up to a ceiling,
+// and the panel attribution beside it (`.shell__tree-panel`) is the span
+// that gives (flex-grow, flex-shrink, min-width 0). The first M178 wave
+// wrote a 3ch FLOOR on a shrinking root — and 3ch is exactly `R…`, the
+// failure it meant to fix — under a pre-M178 min-width: 0 that overrode it
+// anyway; the critic read `R…` on navigator-files while the audit said FIXED.
+{
+  const root = all.find((r) => r.sel.trim() === '.shell__tree-root')
+  const panel = all.find((r) => r.sel.trim() === '.shell__tree-panel')
+  const rb = root ? root.body : ''
+  const pb = panel ? panel.body : ''
+  const rootFixed = /flex:\s*0\s+0\s+auto/.test(rb) && !/flex-shrink:\s*[1-9]/.test(rb)
+  const ceiling = /max-width:\s*\d+%/.test(rb)
+  const panelGives = /flex:\s*1\s+1\s+0/.test(pb) && /min-width:\s*0/.test(pb)
+  ok('tree.1', 'the Files heading keeps the root\'s name — .shell__tree-root never shrinks (flex 0 0 auto) up to a ceiling, and .shell__tree-panel beside it is the span that gives (flex 1 1 0, min-width 0)',
+    rootFixed && ceiling && panelGives, JSON.stringify({ rootFixed, ceiling, panelGives }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

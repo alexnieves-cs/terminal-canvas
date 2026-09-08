@@ -2357,7 +2357,9 @@ const session = (id, over = {}) => ({
   ok('path.1 displayPath shows the repository basename and the path relative to it, the root as its basename, a path outside every root as its last two segments, ~ for home, and the full path beside each',
     a && a.short === 'repo/src/server.ts' && a.full === root + '/src/server.ts' &&
       b && b.short === 'repo' && c && c.short === '…/notes/plan.md' && d && d.short === '~/work/api/src/a.ts' && e && e.short === '~' &&
-      f && f.short === 'repo/src/server.ts' && dp('', root).short !== '',
+      f && f.short === 'repo/src/server.ts' && dp('', root).short !== '' &&
+      // M178 (F.2): a label with a path inside keeps its words and shortens the path.
+      (typeof R.displayLabel === 'function' && R.displayLabel('chat: /Users/ada/work/api (c3)') === 'chat: …/work/api (c3)' && R.displayLabel('Open review of chat: ' + root + '/src (c3)', root) === 'Open review of chat: repo/src (c3)'),
     JSON.stringify({ a, b, c, d, e, f, empty: dp('', root) }))
 }
 
@@ -2495,6 +2497,16 @@ const session = (id, over = {}) => ({
   ok('empty.2 the empty states are data: sentences, never a bare zero or ellipsis, a verb where there is a door, the Panels sentence kept, an unknown id refused',
     list !== null && list.length >= 12 && bad !== null && bad.length === 0 && get('panels').sentence === 'no panels — ⌘N to start one' && threw && list.some((e) => e.verb !== undefined),
     JSON.stringify({ n: list && list.length, bad: bad && bad.map((e) => e.id) }))
+}
+
+// M178 — lastline.2 (F.14). The rail's last line is prose: inline code fences
+//     are stripped and the words kept — `Want me to wire `/health` to it?`
+//     reads without backticks in a list a person scans.
+{
+  const f = typeof R.lastLineOf === 'function' ? R.lastLineOf : () => null
+  ok('lastline.2 lastLineOf strips inline code fences and keeps the words',
+    f('a\nWant me to wire `/health` to it?') === 'Want me to wire /health to it?' && f('`x`') === 'x',
+    JSON.stringify([f('Want me to wire `/health` to it?')]))
 }
 
 // M74 — front.1. THE FRONT-END VERB on the inspector model, both kinds, each
@@ -2939,7 +2951,7 @@ console.log('\n' + '='.repeat(60))
     { id: 'n1', kind: 'terminal', state: { kind: 'terminal', status: { kind: 'running', pid: 1, command: 'sh', cwd: '/', reattached: false }, dormant: false } }
   ]) : null
   ok('lastline.1 lastLineOf takes the LAST non-empty line of the last answer, ellipsised from the right past the cap, and is empty for nothing; railCapsules counts a streaming chat as live and a ready or asleep one as quiet, and a terminal in neither',
-    has && one === 'Want me to wire `/health` to it?' && typeof long === 'string' && long.length < 120 && /…$/.test(long) && empty === '' &&
+    has && one === 'Want me to wire /health to it?' /* M178 (F.14): the fences are stripped — lastline.2 */ && typeof long === 'string' && long.length < 120 && /…$/.test(long) && empty === '' &&
       caps !== null && caps.live === 1 && caps.quiet === 2 && /1 live/.test(caps.liveWord) && /2 quiet/.test(caps.quietWord),
     JSON.stringify({ one, longLen: long && long.length, empty, caps }))
 }
