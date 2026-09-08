@@ -7,6 +7,8 @@
  * is dropped and the run kept, a run with no surviving panel is dropped.
  */
 
+import type { TemplateNode, TemplateEdge } from './templates'
+
 export interface RunEntry {
   panelId: string
   startedAt: number
@@ -36,6 +38,15 @@ export interface PersistedRun {
    * attributes somebody else's work to this workflow.
    */
   templateId?: string
+  /**
+   * M184. The template AS IT WAS when this run started — the snapshot every
+   * outcome on the diagram is drawn from, so a later edit of the template can
+   * never rewrite what a finished run says. ABSENT on every pre-M184 run and
+   * on every run of panels nobody instantiated.
+   */
+  definition?: { templateId: string; revision: number; nodes: TemplateNode[]; edges: TemplateEdge[] }
+  /** M184. Node key → the panel id the instantiation minted for it. Absent with `definition`. */
+  mapping?: Record<string, string>
 }
 
 /** The newest kept; a workspace that ran a thousand times is a history, not a layout. */

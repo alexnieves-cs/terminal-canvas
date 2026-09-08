@@ -4576,6 +4576,78 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect']
   }
 }
 
+// M184 — run.def.1. THE RUN'S SNAPSHOT. A run gains `definition` (the
+//      template as it was at the run's start: id, revision, nodes, edges) and
+//      `mapping` (node key → panel id). Both ABSENT on every pre-M184 run and
+//      never normalised in — and absent after serialiseLayout too, because a
+//      written `"definition"` would claim a snapshot the run never took. A
+//      malformed one drops the FIELD with a warning naming the run, never the
+//      run: the run's entries and cost are still true even when its snapshot
+//      is not. Nodes and edges are parsed by the TEMPLATE parser's rules (one
+//      grammar, so a node that would not load as a template cannot load as a
+//      snapshot either), a bad node dropped and the definition kept.
+{
+  const runsLayout = (runs) => L.parseLayout(file({
+    workspaces: [{ id: 'w1', name: 'Canvas', panels: [panel({ id: 'a' }), panel({ id: 'b' }), panel({ id: 'c' })], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null, runs }]
+  }))
+  const base = (id, over = {}) => ({ id, name: `run ${id}`, panelIds: ['a', 'b', 'c'], edges: [], startedAt: 1000, entries: [{ panelId: 'a', startedAt: 1000, endedAt: 1500, outcome: 'exit 0' }], templateId: 't1', ...over })
+  const goodDef = {
+    templateId: 't1', revision: 2,
+    nodes: [
+      { key: 'n1', kind: 'terminal', cwd: '~', command: '/bin/sh', args: ['-lc', 'true'], title: 'one', dx: -200, dy: 0 },
+      { key: 'n2', kind: 'chat', cwd: '~', message: 'hello', dx: 200, dy: 0 },
+      // A pool needs its `width` and `cwd` too: `parseWorkflowNode` is what a
+      // snapshot's nodes go through, and a pool without them is a shape the app
+      // cannot draw (the fixture, not the rule, was wrong — M184).
+      { key: 'n3', kind: 'pool', width: 4, cwd: '~', list: '/tmp/list.txt', prompt: 'do the item', dx: 0, dy: 200 }
+    ],
+    edges: [{ from: 'n1', to: 'n2', trigger: 'idle' }, { from: 'n2', to: 'n3', trigger: 'exit-ok' }]
+  }
+  const goodMap = { n1: 'a', n2: 'b', n3: 'c' }
+  const r = runsLayout([
+    base('plain'),
+    base('good', { definition: goodDef, mapping: goodMap }),
+    base('badrev', { definition: { ...goodDef, revision: 1.5 }, mapping: goodMap }),
+    base('badnodes', { definition: { ...goodDef, nodes: [goodDef.nodes[0], { key: 'n2', kind: 'nope', cwd: '~' }, { key: '', kind: 'terminal', cwd: '~' }] }, mapping: goodMap }),
+    base('badmapentry', { definition: goodDef, mapping: { n1: 'a', n2: 7, n3: 'c' } }),
+    base('badmap', { definition: goodDef, mapping: 'n1=a' }),
+    // M184 (the critic, 5). `-1` is the UNSAVED mark and is kept; anything
+    // below it is malformed.
+    base('unsaved', { definition: { ...goodDef, revision: -1 }, mapping: goodMap }),
+    base('badneg', { definition: { ...goodDef, revision: -2 }, mapping: goodMap })
+  ])
+  const runs = active(r.snapshot).runs ?? []
+  const byId = (id) => runs.find((x) => x.id === id)
+  const plain = byId('plain'), good = byId('good'), badrev = byId('badrev'), badnodes = byId('badnodes'), badmapentry = byId('badmapentry'), badmap = byId('badmap')
+  const unsaved = byId('unsaved'), badneg = byId('badneg')
+  // The pre-M184 shape written back: no key at all — not `null`, not `{}`.
+  const plainOnly = runsLayout([base('plain')])
+  const plainText = L.serialiseLayout({ ...plainOnly.snapshot })
+  // The round trip: parse → serialise → parse carries both fields intact.
+  const round = active(L.parseLayout(L.serialiseLayout({ ...runsLayout([base('good', { definition: goodDef, mapping: goodMap })]).snapshot })).snapshot).runs ?? []
+  const roundGood = round.find((x) => x.id === 'good')
+  const sameDef = (d) => d !== undefined && d !== null && d.templateId === 't1' && d.revision === 2 &&
+    Array.isArray(d.nodes) && d.nodes.length === 3 && d.nodes.map((n) => n.key).join(',') === 'n1,n2,n3' &&
+    d.nodes[0].kind === 'terminal' && d.nodes[0].command === '/bin/sh' && Array.isArray(d.nodes[0].args) && d.nodes[0].args.join(' ') === '-lc true' && d.nodes[0].dx === -200 &&
+    d.nodes[1].kind === 'chat' && d.nodes[1].message === 'hello' && d.nodes[2].kind === 'pool' &&
+    Array.isArray(d.edges) && d.edges.length === 2 && d.edges[0].from === 'n1' && d.edges[0].to === 'n2' && d.edges[0].trigger === 'idle' && d.edges[1].trigger === 'exit-ok'
+  const sameMap = (m) => m !== undefined && m !== null && JSON.stringify(m) === JSON.stringify(goodMap)
+  const warnsFor = (id, field) => r.warnings.some((w) => w.includes(`run ${id}`) && w.includes(field))
+  ok('run.def.1 parseRuns: definition and mapping absent stay absent (and serialise to no key); a good pair round-trips through serialiseLayout; a definition with a fractional or below -1 revision drops the FIELD with a warning naming the run and the run survives, and revision -1 (the unsaved mark) is kept; a node the template parser would drop is dropped, the definition kept (its edge with it) and the parser\'s OWN warning forwarded under the run; a mapping entry that is not a string is dropped; a mapping that is not an object is dropped whole with a warning; a mapping outlives neither a dropped definition nor a key the snapshot does not hold',
+    runs.length === 8 &&
+      plain !== undefined && !('definition' in plain) && !('mapping' in plain) && !/"definition"|"mapping"/.test(plainText) &&
+      good !== undefined && sameDef(good.definition) && sameMap(good.mapping) &&
+      roundGood !== undefined && sameDef(roundGood.definition) && sameMap(roundGood.mapping) &&
+      badrev !== undefined && !('definition' in badrev) && !('mapping' in badrev) && badrev.entries.length === 1 && badrev.templateId === 't1' && warnsFor('badrev', 'definition') &&
+      badneg !== undefined && !('definition' in badneg) && !('mapping' in badneg) && warnsFor('badneg', 'definition') &&
+      unsaved !== undefined && unsaved.definition !== undefined && unsaved.definition.revision === -1 && sameMap(unsaved.mapping) &&
+      badnodes !== undefined && badnodes.definition !== undefined && badnodes.definition.nodes.length === 1 && badnodes.definition.nodes[0].key === 'n1' && badnodes.definition.edges.length === 0 && badnodes.definition.revision === 2 &&
+      JSON.stringify(badnodes.mapping) === JSON.stringify({ n1: 'a' }) && warnsFor('badnodes', 'mapping named keys') && r.warnings.some((w) => w.startsWith('run badnodes: ') && /node/i.test(w) && !/mapping/.test(w)) &&
+      badmapentry !== undefined && badmapentry.mapping !== undefined && JSON.stringify(badmapentry.mapping) === JSON.stringify({ n1: 'a', n3: 'c' }) && sameDef(badmapentry.definition) &&
+      badmap !== undefined && !('mapping' in badmap) && sameDef(badmap.definition) && warnsFor('badmap', 'mapping'),
+    JSON.stringify({ ids: runs.map((x) => x.id), plain, good, badrev, badneg, unsaved, badnodes, badmapentry, badmap, plainHasKey: /"definition"|"mapping"/.test(plainText), warnings: r.warnings }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

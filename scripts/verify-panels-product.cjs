@@ -492,6 +492,123 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   }
 
   {
+    // M184 — workflow.save.1. SAVE ON THE DIAGRAM: an edit makes the panel
+    // dirty and enables Save; Save writes revision + 1 and the panel reads
+    // clean; a record bumped underneath makes the next Save STALE with its
+    // reason and two verbs, the draft kept; Reload takes the record and the
+    // draft is clean again.
+    const id = 'workflow.save.1 an edit enables Save, Save writes revision + 1 and cleans the panel, a bumped record makes the next Save stale with the draft kept, and Reload takes the record as it stands'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-save-1'
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'save me', nodes: [
+        { key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }, { key: 'n2', kind: 'chat', cwd: '/tmp', dx: 300, dy: 0 }
+      ], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfs', kind: 'workflow', x: 40, y: 40, w: 760, h: 560, z: 1, title: 'save me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfs', focusedId: 'wfs' })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="n2"]') !== null`), 4000)
+      // M184 (the critic, finding 9). The REASON is read, not a ternary whose
+      // branches are both '' — the spec's own sentence was asserted nowhere.
+      // The frame writes a disabled verb's reason into `title` and repeats it
+      // under the row (`workflow-node__why-line`), so both are captured.
+      const saveState = () => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-workflow-verb="save"]'); const p = document.querySelector('.panel[data-panel-id="wfs"]'); const lines = [...document.querySelectorAll('.panel[data-panel-id="wfs"] .workflow-node__why-line')].map((n) => n.textContent).join(' | '); return { label: b && b.textContent, reason: b && b.getAttribute('title'), lines, disabled: b ? b.disabled : null, dirty: p && p.getAttribute('data-workflow-dirty') } })()`)
+      const atRest = await saveState()
+      // One edit through the agent door — the same operations the diagram's drag uses.
+      const edited = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-move ${TPL} n2 500 40` }, null, 3000)
+      await settle()
+      const whenDirty = await saveState()
+      const click = async (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel)}); if (!b || b.disabled) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      const pressed = await click('[data-workflow-verb="save"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfs"]')?.getAttribute('data-workflow-dirty') === 'false'`), 3000)
+      flushLayoutStore()
+      const afterSave = layoutStore.current().templates.find((t) => t.id === TPL)
+      const n2 = afterSave && afterSave.nodes.find((n) => n.key === 'n2')
+      // Bump the record underneath the panel, edit again, save: stale.
+      layoutStore.saveTemplate({ ...afterSave, name: 'save me' })
+      await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-move ${TPL} n2 600 60` }, null, 3000)
+      await settle()
+      await click('[data-workflow-verb="save"]')
+      const staleStrip = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-workflow-stale]'); return s ? { text: s.textContent, reload: !!s.querySelector('[data-workflow-verb="reload"]'), copy: !!s.querySelector('[data-workflow-verb="save-copy"]') } : false })()`), 3000)
+      flushLayoutStore()
+      const afterStale = layoutStore.current().templates.find((t) => t.id === TPL)
+      const stillDirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfs"]')?.getAttribute('data-workflow-dirty')`)
+      // Reload takes the record as it stands: the draft is clean and the block is back where the record has it.
+      await click('[data-workflow-verb="reload"]')
+      const afterReload = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="wfs"]'); const g = document.querySelector('[data-workflow-block="n2"] rect'); return p && p.getAttribute('data-workflow-dirty') === 'false' && g ? { dirty: p.getAttribute('data-workflow-dirty') } : false })()`), 3000)
+      ok(id, atRest && atRest.disabled === true && atRest.dirty === 'false' &&
+        /nothing to save — the diagram matches the template/.test(String(atRest.reason)) &&
+        /nothing to save — the diagram matches the template/.test(String(atRest.lines)) &&
+        edited && edited.kind === 'ran' && whenDirty && whenDirty.disabled === false && whenDirty.dirty === 'true' &&
+        pressed === true && afterSave && afterSave.revision === 1 && n2 && n2.dx === 500 && n2.dy === 40 &&
+        staleStrip && /revision/.test(staleStrip.text) && staleStrip.reload && staleStrip.copy &&
+        afterStale && afterStale.revision === 2 && stillDirty === 'true' && afterReload !== false,
+      JSON.stringify({ atRest, edited, whenDirty, pressed, revision1: afterSave && afterSave.revision, n2, staleStrip, revision2: afterStale && afterStale.revision, stillDirty, afterReload }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
+    // M184 (the critic, findings 1 and 15f) — workflow.door.1. THE AGENT DOOR
+    //     ANSWERS THE TRUTH. `runWorkflow` returns `undefined` on success and
+    //     a SENTENCE on refusal; the adapter read those backwards, so the one
+    //     door with nobody watching answered `refused` for every run that
+    //     started and `ran` for every one that did not — a defect no check
+    //     could see, because nothing drove the door. Here a run of a template
+    //     that is not saved is refused IN ITS OWN WORDS, and `workflow-copy`
+    //     (the only save a built-in has) writes a second record through the
+    //     same door and names it.
+    const id = 'workflow.door.1 through tc plan: workflow-run on a template that is not saved is REFUSED with its own sentence (never reported as ran), and workflow-copy writes a second record under a new name and says which'
+    await settle(); flushLayoutStore()
+    const disk = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = disk.workspaces.find((w) => w.id === disk.activeWorkspaceId) || disk.workspaces[0]
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const TPL = 'tpl-door-1'
+    const BAD = 'tpl-door-bad'
+    let copyId
+    try {
+      layoutStore.saveTemplate({ id: TPL, name: 'door me', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
+      // Saved BEFORE the reload: the renderer reads its template rows once at
+      // load, so a record written after it is not bindable and the plan is
+      // refused at the binding — which would pass whichever way round the
+      // adapter read its answer, which is exactly what this check exists for.
+      layoutStore.saveTemplate({ id: BAD, name: 'cannot run', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] })
+      layoutStore.save({ panels: [{ id: 'wfd', kind: 'workflow', x: 40, y: 40, w: 760, h: 560, z: 1, title: 'door me', workflow: { templateId: TPL } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'wfd', focusedId: 'wfd' })
+      flushLayoutStore(); await reload()
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-block="n1"]') !== null`), 4000)
+      // The refusal has to be RUNWORKFLOW'S OWN — a name buildPlan cannot bind
+      // is refused before the adapter is ever called, and would pass whichever
+      // way round the adapter read its answer. This template is saved and
+      // bindable, and cannot run: its node names neither a preset nor a
+      // command, which is the sentence Run's door shows.
+      const gone = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-run ${BAD}` }, null, 3000)
+      const copied = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `workflow-copy ${TPL}` }, null, 3000)
+      await settle(); flushLayoutStore()
+      const all = layoutStore.current().templates
+      const copy = all.find((t) => t.id !== TPL && t.name === 'door me (copy)')
+      copyId = copy && copy.id
+      ok(id,
+        gone && gone.kind === 'refused' && /names neither a preset nor a command/.test(String(gone.reason)) &&
+          copied && copied.kind === 'ran' && /door me \(copy\)/.test(String(copied.summary)) &&
+          copy !== undefined && copy.revision === 0 && copy.nodes.length === 1 && copy.nodes[0].key === 'n1',
+        JSON.stringify({ gone, copied, copy }))
+    } catch (error) {
+      ok(id, false, String(error && error.message || error))
+    } finally {
+      layoutStore.deleteTemplate(TPL)
+      layoutStore.deleteTemplate(BAD)
+      if (copyId) layoutStore.deleteTemplate(copyId)
+      layoutStore.save(savedWorkspace); flushLayoutStore(); await reload()
+    }
+  }
+
+  {
     // M73 — chat.1 / chat.2 / chat.3 / chat.4. THE CHAT PANEL, END TO END, in
     //     a real renderer over a REAL AgentSessionManager and a FAKE process
     //     runner replaying a stream recorded from claude (the harness's
@@ -2938,7 +3055,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             Array.isArray(workerTitles) && workerTitles.some((t) => /alpha/.test(String(t))) &&
             typeof workerTranscript === 'string' && /work an item/.test(workerTranscript) && /alpha|beta|gamma/.test(workerTranscript) &&
             typeof stoppedRow === 'string' && /every item finished/.test(stoppedRow) &&
-            stopAfter !== null && stopAfter.disabled === true && /no pool is running/.test(String(stopAfter.title)),
+            stopAfter !== null && stopAfter.disabled === true && /nothing of this workflow is running/.test(String(stopAfter.title)),
           JSON.stringify({ workers, spawnedForWorkers, poolRows, stopVerb, workerTitles, transcript: workerTranscript, stoppedRow, stopAfter, log: wfLog.slice(-4) }))
 
         // workflow.panel.1g — the same door on a template with NO blocks:

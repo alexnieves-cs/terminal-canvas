@@ -451,6 +451,13 @@ export interface PaletteActions {
   beginWorkflowEdit(templateId: string, verb: 'add' | 'move' | 'set' | 'remove' | 'edge' | 'unedge'): void
   /** M182. The canvas binding's Update: the selected panels' positions and fields back onto the template they came from, through the operations, with the revision check. */
   updateBoundTemplate(panelIds: readonly string[]): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Save a workflow's draft back to its record with the revision it was read at. */
+  saveWorkflow(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  saveWorkflowCopy(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
+  runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M184. Interrupt everything this workflow started; nothing is killed. */
+  stopWorkflow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M74. A claude terminal's session, rendered and continued as a chat. */
   openAsChat(id: string): void
   /** M74. A chat's session, continued in a terminal with `claude --resume`. */
@@ -2236,6 +2243,13 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     out.push(withReason({ id: 'workflow.set', title: 'Workflow: set field…', subtitle: '<key> <field> <value>', group: 'canvas', searchText: 'workflow template edit set field node diagram', run: edit('set') }, reason))
     out.push(withReason({ id: 'workflow.remove', title: 'Workflow: remove node…', subtitle: '<key> — its edges go with it', group: 'canvas', searchText: 'workflow template edit remove node diagram', run: edit('remove') }, reason))
     out.push(withReason({ id: 'workflow.edge', title: 'Workflow: connect…', subtitle: '<from> <to> <trigger>', group: 'canvas', searchText: 'workflow template edit connect edge diagram', run: edit('edge') }, reason))
+    out.push(withReason({ id: 'workflow.save', title: 'Workflow: save', subtitle: 'write the draft back to the template', group: 'canvas', searchText: 'workflow template save draft revision', run: () => { if (templateId !== undefined) void actions.saveWorkflow(templateId) } }, reason))
+    // M184 (the critic, 15f). A built-in's ONLY save is a copy, and it was
+    // reachable from the panel alone: `workflow.save` dead-ended at "a
+    // built-in workflow saves as a copy" with no door the sentence named.
+    out.push(withReason({ id: 'workflow.copy', title: 'Workflow: save a copy', subtitle: 'keep the diagram under a new name', group: 'canvas', searchText: 'workflow template save copy duplicate built-in', run: () => { if (templateId !== undefined) void actions.saveWorkflowCopy(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.run', title: 'Workflow: run', subtitle: 'run the shape on the diagram', group: 'canvas', searchText: 'workflow template run diagram start', run: () => { if (templateId !== undefined) actions.runWorkflowNow(templateId) } }, reason))
+    out.push(withReason({ id: 'workflow.stop', title: 'Workflow: stop', subtitle: 'interrupt what this workflow started', group: 'canvas', searchText: 'workflow template stop interrupt', run: () => { if (templateId !== undefined) actions.stopWorkflow(templateId) } }, reason))
     out.push(withReason({ id: 'workflow.unedge', title: 'Workflow: disconnect…', subtitle: '<from> <to>', group: 'canvas', searchText: 'workflow template edit disconnect edge diagram', run: edit('unedge') }, reason))
   }
   out.push({ id: 'onboarding.readiness', title: 'Check engine readiness', subtitle: 'Ask the login shell again which conversation engines are installed', group: 'canvas', searchText: 'onboarding setup install claude codex environment readiness', run: () => { void actions.checkReadiness() } })

@@ -3,12 +3,14 @@ import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from './templat
 import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
 import { edgeWouldCycle } from '@shared/template-edit'
 import { usePool, usePoolsLive } from './pool-store'
-import { poolStoppedWord, REASON_NO_POOL_LIVE } from './pool-model'
+import { poolStoppedWord } from './pool-model'
 import type { WorkflowPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { blockCount } from '@shared/workflow-nodes'
+import { isBuiltInTemplate } from '@shared/templates'
+import { blockOutcomes, outcomeWord, outcomeTone, type BlockOutcome } from '@shared/run-outcome'
 import type { PersistedTemplate } from '@shared/templates'
 import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
@@ -52,6 +54,12 @@ export interface WorkflowNodeProps {
   linkTarget: boolean
   /** Run it: M80's OWN instantiation, never a second copy of it. */
   onRun: (templateId: string) => void
+  /** M184. Save the draft back to the record with the revision it was read at; `stale` answers with the standing record's reason. */
+  onSave: (templateId: string) => Promise<{ kind: 'saved' } | { kind: 'stale'; reason: string } | { kind: 'refused'; reason: string }>
+  /** M184. Save the draft as a NEW record (a built-in's only save, and the way out of a stale one). */
+  onSaveCopy: (templateId: string) => Promise<{ kind: 'saved' } | { kind: 'refused'; reason: string }>
+  /** M184. Discard the draft and take the record as it stands. */
+  onReload: (templateId: string) => void
   /** Arm a trigger: a WATCHER on this template — `shared/watch-trigger.ts` unchanged. */
   onTrigger: (templateId: string) => void
   /** Delete the template; a built-in refuses, so the reason arrives as a prop. */
@@ -59,7 +67,7 @@ export interface WorkflowNodeProps {
   /** Why Delete cannot act, or null. */
   deleteReason: string | null
   /** M138. Stop a live pool block; main interrupts its workers and kills none. */
-  onStop: (templateId: string, key: string) => void
+  onStopRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /**
    * Fix round 2. Why this shape cannot be run — `templateRefusal`'s sentence,
    * which since M132's blocks includes "<key> is a pool block, which cannot
@@ -78,7 +86,11 @@ export const TEMPLATE_GONE = 'that template is no longer saved'
  * There is no second editor here to save FROM — that is spec §9's whole
  * claim — so the sentence names the door that does work.
  */
-export const REASON_NO_EDITOR = 'the draft is kept on this panel; Save on the diagram arrives with M184 — until then, Save selection as template from the bound panels'
+export const REASON_NOTHING_TO_SAVE = 'nothing to save — the diagram matches the template'
+/** M184. A stale save keeps the draft; these two verbs are the only ways out of it. */
+/** M184. The Stop verb's subject is the run, not the pool — a chat mid-turn is running too. */
+export const REASON_NOTHING_RUNNING = 'nothing of this workflow is running'
+export const STALE_VERBS = 'Reload takes the record as it stands; Save a copy keeps your draft under a new name'
 /**
  * M133, fix round 1. THREE STATES, NOT TWO, and this sentence is the third.
  *
@@ -132,6 +144,10 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const [ghost, setGhost] = useState<{ kind: string; x: number; y: number } | null>(null)
   const [wire, setWire] = useState<{ from: string; x1: number; y1: number; x2: number; y2: number; over: string | null; allowed: boolean } | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
+  // M184. A stale save keeps the draft and offers the two verbs that can end it.
+  const [stale, setStale] = useState<string | null>(null)
+  // M184. The run whose outcome the diagram wears; null is the definition at rest.
+  const [runId, setRunId] = useState<string | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const say = (reason: string): void => { setRefusal(reason); window.setTimeout(() => setRefusal((r) => (r === reason ? null : r)), 4000) }
   /** A client point in the SVG's own units (the diagram's viewBox is 1:1 with its width). */
@@ -271,12 +287,35 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   }, [props.selected, selectedBlock, panel.workflow.templateId, saved])
   const readOnly = props.readOnly === true
   const state = panelState({ kind: 'workflow', status: undefined, dormant: false }, undefined)
-  const diagram = useMemo(() => (template === undefined ? null : buildDiagram(template)), [template])
+  // M184 (the critic, 15d). A run selection outlives its run — a workspace
+  // switch, a rebind, or the run ageing past RUNS_MAX leaves `runId` naming
+  // nothing, and the diagram then wears no outcome with the Runs tab still
+  // showing a selected row. Cleared where the list is known.
   const mine = useMemo(() => (template === undefined ? [] : runsForTemplate(props.runs, template.id)), [props.runs, template])
+  // M184. The selected run's outcome per node key, from the run's OWN snapshot.
+  const selectedRun = runId === null ? undefined : mine.find((r) => r.id === runId)
+  const outcomes = selectedRun === undefined ? {} : blockOutcomes(selectedRun)
+  // M184 (the critic, finding 2). The BLOCKS come from the snapshot too, not
+  // only the words: a node deleted after a run vanished from that run's view
+  // and a node added rendered `queued` in a run that never held it. A run is
+  // a picture of the shape that ran.
+  const drawn = selectedRun?.definition === undefined || template === undefined
+    ? template
+    : { ...template, nodes: selectedRun.definition.nodes, edges: selectedRun.definition.edges }
+  const diagram = useMemo(() => (drawn === undefined ? null : buildDiagram(drawn)), [drawn])
+  useEffect(() => { if (runId !== null && !mine.some((r) => r.id === runId)) setRunId(null) }, [mine, runId])
+  // M184 (the critic, 15e). The stale strip describes ONE refused save. Once
+  // the draft moves under it, its reason describes an older attempt and its
+  // Reload would discard edits the reason never mentioned.
+  useEffect(() => { setStale(null) }, [template])
   // M138. The pool blocks of this template, and which are live — Stop is
   // PRESENT always and disabled by name while none runs, never absent.
   const poolKeys = useMemo(() => (template === undefined ? [] : template.nodes.filter((n) => n.kind === 'pool').map((n) => n.key)), [template])
   const livePools = usePoolsLive(panel.workflow.templateId, poolKeys)
+  // M184 (the critic, finding 3). A workflow of three chats mid-turn IS
+  // running: an open run of this template is the fact, and `no pool is
+  // running` was a true sentence about the wrong subject.
+  const stoppable = livePools.length > 0 || mine.some((r) => r.endedAt === undefined && (runId === null || r.id === runId))
 
   /**
    * M133 critic wave. A disabled verb's reason is ON SCREEN, not in `title`
@@ -296,6 +335,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
     )
   }
   /** The arrowhead's id is per PANEL: two workflow panels on one canvas share a document. */
+  const isBuiltIn = isBuiltInTemplate(panel.workflow.templateId)
   const arrowId = `wf-arrow-${panel.rect.id}`
   const id = template?.id ?? panel.workflow.templateId
 
@@ -332,11 +372,27 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               {verb('run', 'Run', props.runReason, () => props.onRun(id))}
               {/* M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence. */}
               {verb('triggers', 'Triggers', props.runReason, () => props.onTrigger(id))}
-              {verb('stop', 'Stop', livePools.length === 0 ? REASON_NO_POOL_LIVE : null, () => { for (const k of livePools) props.onStop(id, k) })}
-              {verb('save', 'Save', REASON_NO_EDITOR, () => {})}
+              {/* M184. Stop is the SELECTED run's when one is selected, and
+                  every open run of this workflow otherwise: its pools and its
+                  chats, interrupted. Present always, disabled by name. */}
+              {verb('stop', 'Stop', stoppable ? null : REASON_NOTHING_RUNNING, () => { const r = props.onStopRun(id, runId ?? undefined); if (r.kind === 'refused') say(r.reason) })}
+              {/* M184. Save is enabled while the draft is dirty and says so
+                  otherwise; a built-in saves as a COPY (the built-ins are code,
+                  M80's rule), which is also the way out of a stale save. */}
+              {isBuiltIn
+                ? verb('save', 'Save a copy', null, () => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason) }) })
+                : verb('save', 'Save', dirty ? null : REASON_NOTHING_TO_SAVE, () => { void props.onSave(id).then((r) => { if (r.kind === 'stale') setStale(r.reason); else if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
               {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
             </div>
+            {stale !== null && (
+              <div className="workflow-node__stale" data-workflow-stale role="status">
+                <p className="pf__note workflow-node__why-line">{stale}</p>
+                <p className="pf__note workflow-node__why-line">{STALE_VERBS}</p>
+                <button type="button" className="pf__verb pf__verb--word" data-workflow-verb="reload" onMouseDown={press(() => { props.onReload(id); setStale(null) })}>Reload</button>
+                <button type="button" className="pf__verb pf__verb--word" data-workflow-verb="save-copy" onMouseDown={press(() => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}>Save a copy</button>
+              </div>
+            )}
             {disabled.length > 0 && (
               <div className="workflow-node__why" data-workflow-why>
                 {disabled.map((d) => (
@@ -433,12 +489,21 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   return (
                     <g key={b.key} data-workflow-block={b.key} data-workflow-block-selected={selectedBlock === b.key ? 'true' : undefined}
                       data-workflow-block-kind={template.nodes.find((n) => n.key === b.key)?.kind}
+                      data-workflow-outcome={outcomes[b.key]}
+                      data-tone={outcomes[b.key] === undefined ? undefined : outcomeTone(outcomes[b.key] as BlockOutcome)}
                       className={`workflow-node__blockg${selectedBlock === b.key ? ' workflow-node__blockg--selected' : ''}${wire !== null && wire.over === b.key ? (wire.allowed ? ' workflow-node__blockg--target' : ' workflow-node__blockg--refused') : ''}`}
                       transform={off.dx === 0 && off.dy === 0 ? undefined : `translate(${off.dx} ${off.dy})`}
                       onMouseDown={(e) => beginBlockDrag(b.key, e)}>
                       <rect className="workflow-node__block" x={b.x} y={b.y} width={b.w} height={b.h} rx={8} />
                       <text className="workflow-node__block-label" x={b.x + 12} y={b.y + 26}>{b.label}</text>
+                      {/* M184 (the critic, 12). The sublabel STAYS while a run
+                          is selected — the run view must not be less legible
+                          about the shape than the rest view — and the outcome
+                          word sits right-aligned beside it. */}
                       <text className="workflow-node__block-sub" x={b.x + 12} y={b.y + BLOCK_H - 18}>{b.sublabel}</text>
+                      {outcomes[b.key] !== undefined && (
+                        <text className="workflow-node__block-outcome" x={b.x + b.w - 12} y={b.y + BLOCK_H - 18} textAnchor="end">{outcomeWord(outcomes[b.key] as BlockOutcome)}</text>
+                      )}
                       {/* M183. The port on the right edge: a wire starts here. */}
                       {!readOnly && <circle className="workflow-node__port" data-workflow-port cx={b.x + b.w} cy={b.y + b.h / 2} r={5} onMouseDown={(e) => beginWire(b.key, e)} />}
                     </g>
@@ -458,8 +523,9 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               ) : (
                 <ul className="workflow-node__runs" data-workflow-runs>
                   {mine.map((r) => (
-                    <li key={r.id} className="workflow-node__run" data-workflow-run={r.id}>
-                      <span className="workflow-node__run-name">{r.name}</span>
+                    <li key={r.id} className={`workflow-node__run${runId === r.id ? ' workflow-node__run--selected' : ''}`} data-workflow-run={r.id} data-workflow-run-selected={runId === r.id ? 'true' : undefined}
+                      onMouseDown={press(() => { setRunId((v) => (v === r.id ? null : r.id)); setTab('definition') })}>
+                      <span className="workflow-node__run-name">{r.name}{r.definition === undefined ? '' : ` · ${r.definition.revision < 0 ? 'unsaved' : `revision ${r.definition.revision}`}`}</span>
                       <span className="workflow-node__run-facts">{r.panelIds.length} panel{r.panelIds.length === 1 ? '' : 's'} - {durationWord(r)}{r.costUsd === undefined ? '' : ` - $${r.costUsd.toFixed(2)}`}</span>
                     </li>
                   ))}

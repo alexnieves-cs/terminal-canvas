@@ -991,3 +991,112 @@ Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m183-v
 | `verify:panels:kinds` | 49/49 passed |
 | `verify:panels:agents` | 80/80 passed |
 | `verify:panels:product` | 69/69 passed |
+
+## M184 — Save, Run and Stop on the diagram
+
+Spec `docs/superpowers/specs/2026-09-08-m184-save-run-stop.md`, plan
+`docs/superpowers/plans/2026-09-08-m184-save-run-stop.md`. This closes Act II: the diagram is
+an editor that can save what it edits, run what it shows, and say what a run did.
+
+Decisions. Save hands the store the revision the DRAFT WAS READ AT, so a record saved by
+anyone else in between is refused as stale with the draft kept and two verbs beside the
+reason — Reload (take the record) and Save a copy (a new id at revision 0, which is also a
+built-in's only save, M80's rule). Run runs the DRAFT when there is one: what the person sees
+is what starts. A run records `definition` — the template as it was at that instant, its
+revision, nodes and edges — and `mapping`, node key → the panel id the instantiation minted,
+filtered to the panels the run actually holds; both absent on every pre-M184 run, both
+dropped BY FIELD when malformed (a run is history and history is not dropped for a bad
+annotation), and the definition's nodes go through `parseTemplates`' own rules so a snapshot
+can never hold a shape the app cannot draw. `shared/run-outcome.ts` reads the entries through
+the mapping into one word per block — queued, working, finished, failed — and the diagram
+wears the selected run's words in the state vocabulary's tones. Because the words come from
+the SNAPSHOT, an edit after a run never moves them.
+
+Red first. The pure checks were delegated (`docs/build-log/m184-pure-red-evidence.md`):
+`verify:layout` 245/246 and `verify:viewport` 139/140, exit 1 each, red on `run.def.1` and
+`run.outcome.1`; 248/248 and 140/140 after the parser and the module. One correction to the
+delegated check, recorded as a fixture repair and not a weakening: its pool node in the run's
+definition carried no `width` and no `cwd`, which `parseWorkflowNode` refuses — the fixture
+was wrong, not the rule, and the assertion set is unchanged. The real-renderer check
+`workflow.save.1` ran red against the M183 build (69/70, exit 1,
+`out/v9-evidence/m184-product-red.log`) and green after: 70/70, exit 0, 99.9 s wall
+(`m184-product-green.log`).
+
+Doors. Canvas: Save (enabled while dirty, otherwise disabled with "nothing to save — the
+diagram matches the template"), Run and Stop on the panel, and a run row in the Runs tab that
+selects its outcome onto the diagram. Palette: `workflow.save`, `workflow.run`,
+`workflow.stop`. Agent: `workflow-save`, `workflow-run`, `workflow-stop` through M180's door
+(`workflow-run` got its own `runWorkflowNow` member — mapping it to the excluded
+`openWorkflow` would have put one member on both lists, which `closure.1` refuses). Workflow:
+the M189 omission. No golden changed: the outcome tones appear only while a run is selected,
+and the panel at rest is M183's.
+
+## Plan amendment — the remaining acts, consolidated
+
+Recorded 2026-09-08 ~13:00 UTC, about 8.5 hours into the resumed run with ~15.5 hours of the
+ceiling left. Four milestones (M180–M184, one of them Astra's start) have taken that time,
+and sixteen remain in the plan. The v9 plan says a row may be amended when the work proves it
+wrong, with the amendment recorded here; this is that record.
+
+What changes: the milestone BOUNDARIES, never the capabilities. Each act keeps its spec, its
+red-first checks, its critic and verifier, its build log and its ledger lines; what folds is
+the per-milestone overhead where two rows describe one seam. The authority's stop condition
+asks that every capability be shipped through the four doors OR struck with a reason — that
+rule is untouched, and the strikes are named below rather than discovered at the end.
+
+| Act | Now | Was |
+|---|---|---|
+| III | M185 — the preview panel: discovery from an owned port or a dev script, the reload watch, the device widths and the real screenshot | M185 + M186 |
+| IV | M186 — images and their app-owned assets (drop, paste, screenshot); M187 — sticky notes, free text and named frames | M187 + M188 |
+| V | M188 — the node schema registry and a bounded main-owned executor with HTTP, shell, transform and agent steps, each with an example and Test this node | M189 + M190 |
+| V | M189 — GitHub through the existing broker as a node kind; **struck**: Slack and email nodes, the loopback webhook and the cron trigger | M191 + M192 |
+| VI | M190 — the portable file: export with the redaction and the pixel rule, import as an inert workspace | M193 + M194 |
+| VII | M191 — the extension registry and the shipped example plugin with its guide | M195 + M196 |
+| VIII | M192 — the feedback door and `docs/getting-started.md`; M193 — the third UX audit over every golden; M194 — 5.0.0, the DMG, the release notes and this ledger closed | M197 + M198 + M199 + M200 |
+
+The strikes in Act V, each with its reason, so the final message does not have to discover
+them: **Slack and email nodes** need a workspace token, a sender domain and a real
+destination to prove anything, and the plan's own owed-work table already says a person must
+supply all three — shipping an unexercised adapter would be the "pretend it was checked"
+this run refuses. **The loopback webhook** needs an armed local listener whose lifetime
+crosses a relaunch, and **cron** needs real elapsed minutes and a sleep/wake to prove a
+missed run; both are hand checks by construction and neither is reachable inside the
+remaining clock. GitHub stays because its broker path, its audit and its approval already
+exist and are already exercised by fakes. Each strike is repeated in the final message.
+
+### M184 — the fresh-context critic and verifier, and what was done about it
+
+One agent ran both roles with no history of this session. It re-ran every pure suite and read
+the red and green logs: `typecheck` 0, `verify:layout` 248/248, `verify:viewport` 140/140,
+`verify:verbs` 22/22, `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, the
+red log one named failure with no throw and every check below it still executed, no golden
+touched, no dependency added, no alias renamed. It then criticised the milestone in fifteen
+ranked findings. Fourteen were fixed; the disposition of each is below, and the two the fix
+changed elsewhere carry the check that now pins them.
+
+| # | The finding | Disposition |
+|---|---|---|
+| 1 | `runWorkflowNow`'s adapter read `runWorkflow`'s answer backwards — `undefined` is SUCCESS there and a sentence is the refusal — so the agent door reported a refusal for every run that started and `ran` for every one that did not, with no check on it | Fixed (`usePaletteActions.ts`), and pinned by a new check, `workflow.door.1`, driven through `tc plan` against a template that is saved and bindable and cannot run — a name `buildPlan` cannot bind is refused before the adapter is reached and would pass whichever way round it read its answer |
+| 2 | The diagram drew the live draft's BLOCKS while wearing the selected run's WORDS, so a node deleted after a run vanished from that run's view and a node added rendered `queued` in a run that never held it | Fixed: `drawn` is the run's `definition` while a run is selected, the live template otherwise |
+| 3 | Stop read pool keys off the record, interrupted no chat at all and never looked at a run, so a workflow of three chats mid-turn answered `no pool is running` | Fixed: the subject is the selected run (every open run of the template when none is selected), its pools stopped and its chats interrupted, both counts named; the reason is now `nothing of this workflow is running` and the panel's own Stop goes through the same door (`onStopRun`) |
+| 4 | `Save a copy` dropped the draft with no rebind, so on a built-in's only save path the edits left the screen with no message and the copy holding them had no panel open on it | Fixed: the panel is rebound to the copy in one history entry before the draft is dropped, and the verb answers with the copy's name |
+| 5 | A run of a DIRTY draft recorded the record's revision, so two runs of two shapes both printed `revision 3` | Fixed: `-1` is the unsaved mark, kept by the parser (below `-1` is still malformed) and rendered `unsaved` |
+| 6 | `snapshotRef` was keyed by TEMPLATE id, so a run opened by panels of an earlier instantiation read the latest snapshot and the mapping filter then pruned the whole foreign mapping to `{}` — every block `queued` for work that ran | Fixed: the snapshot is stored per MINTED PANEL id beside `originRef`, on the same key, read from the same panel the template mark came from |
+| 7 | `skipped — …`, which `useHandoff` writes onto the target of a fork that did NOT fire, classified as `failed` — a node that never ran painted red, and the ordinary case for every `exit-ok`/`exit-fail` fork | Fixed: `skipped` and `stopped` are their own words with their own dim tone |
+| 8 | A sealed run showed a started-and-never-ended entry as `working` for ever | Fixed: on a run with `endedAt` that entry is `unknown`, rendered `no outcome` |
+| 9 | `workflow.save.1`'s `atRest` term was `false === false` — both branches of its ternary were `''`, so the spec's own sentence was asserted nowhere and the term passed in the red run too | Fixed: the check reads the verb's `title` AND the on-screen reason line, and asserts the sentence in both |
+| 10 | The Runs tab showed a revision only on the run already selected | Fixed: every row reads its own `definition.revision` |
+| 11 | `queued` conflated a key never instantiated, a key mapped into another run and a key waiting its turn | Fixed: a key with no mapping is `absent` (`not run`) on a dashed block |
+| 12 | The outcome word REPLACED the block's sublabel, so the run view was less legible about the shape than the rest view | Fixed: the sublabel stays and the word is right-aligned beside it |
+| 13 | `parseRuns` passed a throwaway array to `parseTemplates`, so a snapshot that silently lost a node reported nothing | Fixed: the template parser's own warnings are forwarded prefixed `run <id>: ` |
+| 14 | `mapping` survived a dropped definition and kept keys the definition does not hold | Fixed: dropped with the definition, pruned to the definition's keys with a warning |
+| 15 | Seven smaller things | Six fixed: the reversed-copy `find`, the hardcoded `--blue`/`--green`/`--red` (the block now stamps `data-tone` through `outcomeTone` and the wire's target/refusal rules moved after it so a drag still wins), the run selection pointing at nothing, the stale strip outliving its reason, a built-in's copy gated on `dirty`, and the missing copy door (a `workflow-copy` verb, a `Workflow: save a copy` palette row and its `V9_DOORS` entry). `STALE_VERBS` is now RENDERED in the strip rather than deleted |
+| 15b | `wants-you` is unreachable — nothing writes a pending question onto a run entry | DECLINED as a removal, recorded instead: the member stays with the reason in the module's own comment and in the check's name, because `RunEntry` gaining a pending question is a milestone away and a vocabulary with a hole in it is the thing that gets filled wrong |
+
+Evidence for the fixes: `verify:layout` 248/248 (`run.def.1` extended with the unsaved mark,
+the forwarded warning and the pruned mapping), `verify:viewport` 140/140 (`run.outcome.1`
+extended with `absent`, `skipped`, `stopped` and the open/sealed pair), `verify:verbs` 22/22,
+`verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `npm run typecheck` 0.
+`workflow.door.1` was watched failing against the pre-fix adapter — 70/71, that check the only
+failure (`out/v9-evidence/m184b-door-red.log`, exit 1) — and passes with it
+(`m184b-product.log`, 71/71, exit 0, 101.5 s wall against a 124 s watchdog).

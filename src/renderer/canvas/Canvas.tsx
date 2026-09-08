@@ -127,7 +127,10 @@ import { blockCount } from '@shared/workflow-nodes'
 import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
-import { clearDraft } from '@renderer/workflow/template-draft-store'
+import { clearDraft, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
+import { getPool } from '@renderer/workflow/pool-store'
+import { REASON_NOTHING_RUNNING } from '@renderer/workflow/WorkflowNode'
+import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
@@ -3960,7 +3963,17 @@ export function Canvas({
     // these panel ids came from this shape of work.
     // (`noteTemplate` is a stable useCallback, so the captured `runsApi` object being
     // one render old cannot matter — the member is the same function.)
-    runsApi.noteTemplate(madePanels.map((p) => p.rect.id), template.id)
+    // M184. The run learns its template AND the shape it ran: the definition as
+    // it was at this instant and the node key → panel id mapping the
+    // instantiation just made.
+    runsApi.noteTemplate(madePanels.map((p) => p.rect.id), template.id, {
+      // M184 (the critic, finding 5). A DIRTY draft's run is not the record's
+      // revision: two runs of two different shapes both printing `revision 3`
+      // is a wrong answer about which shape ran. `-1` is the mark the Runs tab
+      // renders as `unsaved`.
+      definition: { templateId: template.id, revision: getDraft(template.id)?.dirty === true ? -1 : (template.revision ?? 0), nodes: filled.nodes.map((n) => ({ ...n })), edges: filled.edges.map((e) => ({ ...e })) },
+      mapping: Object.fromEntries(minted)
+    })
     // M138. The pools start last, once every target they could hand off into
     // exists; a refusal (no list, a list main cannot read, a block already
     // running) lands in the block's own rows through the same reducer main's
@@ -4551,7 +4564,10 @@ export function Canvas({
   }, [commitHistory, selectOnly])
 
   const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click'): string | undefined => {
-    const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    // M184. The DRAFT is what runs when there is one: what the person sees on
+    // the diagram is what the Run button starts. The snapshot the run records
+    // below is this same shape, so its outcomes never move under a later edit.
+    const template = getDraft(templateId)?.template ?? allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
     if (template === undefined) return 'not run: that template is no longer saved'
     // A template with parameters cannot run unasked. On the CLICK path the
     // sheet is where a person answers them. On the FIRE path there is nobody
@@ -4648,6 +4664,89 @@ export function Canvas({
     })
     return () => setWatcherFiredHandler(null)
   }, [panelsRef])
+
+  /**
+   * M184. SAVE THE DRAFT. The revision the draft was READ at is the
+   * expectation, so a record saved by anyone else in between is refused as
+   * stale with the draft kept — the panel offers Reload and Save a copy.
+   * A built-in never reaches here (the panel offers only the copy).
+   */
+  const saveWorkflowDraft = useCallback(async (templateId: string): Promise<{ kind: 'saved' } | { kind: 'stale'; reason: string } | { kind: 'refused'; reason: string }> => {
+    const draft = getDraft(templateId)
+    if (draft === undefined || !draft.dirty) return { kind: 'refused', reason: 'nothing to save — the diagram matches the template' }
+    if (isBuiltInTemplate(templateId)) return { kind: 'refused', reason: 'a built-in workflow saves as a copy' }
+    const result = await window.canvas.template.save(draft.template, draft.baseRevision)
+    if (result.kind === 'stale') return { kind: 'stale', reason: result.reason }
+    resetDraft(templateId, result.template)
+    reloadTemplates()
+    return { kind: 'saved' }
+  }, [reloadTemplates])
+  /** M184. The draft under a NEW id at revision 0 — a built-in's only save, and the way out of a stale one. */
+  const saveWorkflowCopy = useCallback(async (templateId: string): Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }> => {
+    const draft = getDraft(templateId)
+    const base = draft?.template ?? allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+    if (base === undefined) return { kind: 'refused', reason: `no template is called ${templateId}` }
+    const taken = new Set(allTemplates(templateRowsRef.current).map((t) => t.name))
+    let name = `${base.name} (copy)`
+    for (let n = 2; taken.has(name); n += 1) name = `${base.name} (copy ${n})`
+    const { id: _id, revision: _revision, ...rest } = base
+    const result = await window.canvas.template.save({ ...rest, name })
+    if (result.kind === 'stale') return { kind: 'refused', reason: result.reason }
+    // M184 (the critic, finding 4). REBIND the panel to the copy, and only
+    // then drop the draft: dropping it first snapped the diagram back to the
+    // original record, so the edits left the screen with no message and the
+    // copy holding them had no panel open on it — visible work loss on a
+    // built-in's only save path.
+    setPanels((current) => {
+      const next = current.map((p) => (isWorkflowPanel(p) && p.workflow.templateId === templateId ? { ...p, workflow: { ...p.workflow, templateId: result.template.id }, title: result.template.name } : p))
+      commitHistory(next)
+      return next
+    })
+    resetDraft(templateId)
+    reloadTemplates()
+    return { kind: 'saved', name }
+  }, [reloadTemplates, commitHistory])
+  /**
+   * M184. Stop: every live pool AND every chat of the selected run interrupted
+   * (M138's own pool stop, M71's own interrupt), nothing killed — a budget and
+   * a stop are the same shape, and a killed agent loses its turn.
+   *
+   * M184 (the critic, finding 3). The first cut read pool keys off the RECORD
+   * and interrupted no chat at all, so a workflow of three chats mid-turn
+   * answered `no pool is running`, which was false. The subject is the run:
+   * the named one when the diagram has one selected, otherwise every run of
+   * this template still open. A run's own `definition` names its pool blocks,
+   * so a block deleted from the draft since is still stopped.
+   */
+  const stopWorkflowRun = useCallback((templateId: string, runId?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const runs = runsForTemplate(runsRef.current, templateId)
+    const chosen = runId === undefined ? runs.filter((r) => r.endedAt === undefined) : runs.filter((r) => r.id === runId)
+    const keys = new Set<string>()
+    for (const r of chosen) for (const n of r.definition?.nodes ?? []) if (n.kind === 'pool') keys.add(n.key)
+    // No run to read from (a run of an earlier session is not attributable,
+    // M133's third state) — the record's blocks are the only shape there is.
+    if (chosen.length === 0) {
+      const template = getDraft(templateId)?.template ?? allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
+      for (const n of template?.nodes ?? []) if (n.kind === 'pool') keys.add(n.key)
+    }
+    const live = [...keys].filter((k) => getPool(templateId, k).live)
+    const panelIds = new Set<string>()
+    for (const r of chosen) for (const id of r.panelIds) panelIds.add(id)
+    const chats = panelsRef.current.filter((p) => panelIds.has(p.rect.id) && isChatPanel(p)).map((p) => p.rect.id)
+    if (live.length === 0 && chats.length === 0) return { kind: 'refused', reason: REASON_NOTHING_RUNNING }
+    for (const k of live) stopPool(templateId, k)
+    for (const id of chats) void window.canvas.agentSession.interrupt(id)
+    const parts: string[] = []
+    if (live.length > 0) parts.push(`${live.length} pool${live.length === 1 ? '' : 's'}`)
+    if (chats.length > 0) parts.push(`${chats.length} chat${chats.length === 1 ? '' : 's'}`)
+    return { kind: 'ran', note: `${parts.join(' and ')} interrupted` }
+  }, [stopPool])
+
+  /** M184. Discard the draft: the record as it stands is the truth again. */
+  const reloadWorkflowDraft = useCallback((templateId: string) => {
+    resetDraft(templateId, allTemplates(templateRowsRef.current).find((t) => t.id === templateId))
+    reloadTemplates()
+  }, [reloadTemplates])
 
   const deleteWorkflowTemplate = useCallback((templateId: string) => {
     if (isBuiltInTemplate(templateId)) return
@@ -4887,6 +4986,10 @@ export function Canvas({
 
   const paletteActions = usePaletteActions({
     applyStarter,
+    saveWorkflowDraft,
+    saveWorkflowCopyDraft: saveWorkflowCopy,
+    stopWorkflowRun,
+    runWorkflowNow: runWorkflow,
     templateRowsRef,
     reloadTemplates,
     recheckEnvironment,
@@ -5882,7 +5985,8 @@ export function Canvas({
               const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
               return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate} onStop={stopPool}
+                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
+                onSave={saveWorkflowDraft} onSaveCopy={saveWorkflowCopy} onReload={reloadWorkflowDraft} onStopRun={stopWorkflowRun}
                 deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
                 runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />
             }

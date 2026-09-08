@@ -1780,7 +1780,56 @@ function parseRuns(raw: unknown, panelIds: ReadonlySet<string>, warnings: string
     // tab's "unattributed" arm read as truth about the run rather than the file.
     const templateId = isStr(entry.templateId) && entry.templateId.trim() !== '' ? entry.templateId : undefined
     if (entry.templateId !== undefined && templateId === undefined) warnings.push(`run ${entry.id}: templateId was not a string — the run is kept, its workflow mark dropped`)
-    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }) })
+    // M184. THE RUN'S SNAPSHOT. Both fields absent on every pre-M184 run and
+    // never normalised in; a malformed one costs the FIELD by name, never the
+    // run — a run is history, and history is not dropped for a bad annotation.
+    // The definition's nodes and edges go through the TEMPLATE parser's own
+    // rules (a node it would drop is dropped here, its edges with it), so the
+    // snapshot can never hold a shape the app could not draw.
+    let definition: PersistedRun['definition']
+    if (entry.definition !== undefined) {
+      const d = entry.definition as Record<string, unknown>
+      const rev = isRecord(d) ? d.revision : undefined
+      // `-1` is the UNSAVED mark (M184's critic, finding 5): a run of a dirty
+      // draft ran a shape no record holds, and claiming the record's revision
+      // would print one number over two different shapes. Anything below it
+      // is malformed.
+      if (!isRecord(d) || !isStr(d.templateId) || d.templateId.trim() === '' || typeof rev !== 'number' || !Number.isInteger(rev) || rev < -1 || !Array.isArray(d.nodes) || !Array.isArray(d.edges)) {
+        warnings.push(`run ${entry.id}: definition was not { templateId, revision, nodes[], edges[] } — the run is kept, its snapshot dropped`)
+      } else {
+        // M184 (the critic, 13). The template parser's own warnings are
+        // FORWARDED rather than thrown away: a snapshot that silently lost a
+        // node while the load report said nothing is the exact asymmetry the
+        // absent/malformed/unknown rule exists to prevent.
+        const inner: string[] = []
+        const parsed = parseTemplates([{ id: d.templateId, name: 'snapshot', nodes: d.nodes, edges: d.edges }], inner)
+        for (const w of inner) warnings.push(`run ${entry.id}: ${w}`)
+        const one = parsed[0]
+        if (one === undefined) warnings.push(`run ${entry.id}: definition held no usable node — the run is kept, its snapshot dropped`)
+        else definition = { templateId: d.templateId, revision: rev, nodes: one.nodes, edges: one.edges }
+      }
+    }
+    let mapping: Record<string, string> | undefined
+    if (entry.mapping !== undefined) {
+      if (!isRecord(entry.mapping)) warnings.push(`run ${entry.id}: mapping was not an object — the run is kept, its mapping dropped`)
+      else {
+        const out: Record<string, string> = {}
+        for (const [k, v] of Object.entries(entry.mapping)) if (isStr(v)) out[k] = v
+        mapping = out
+      }
+    }
+    // M184 (the critic, 14). The mapping is the DEFINITION's index and cannot
+    // outlive it: a mapping kept beside a dropped snapshot names keys nothing
+    // will ever look up, and a key the definition does not hold is a block
+    // this run could light that its own shape never had.
+    if (definition === undefined) mapping = undefined
+    else if (mapping !== undefined) {
+      const keys = new Set(definition.nodes.map((n) => n.key))
+      const pruned = Object.fromEntries(Object.entries(mapping).filter(([k]) => keys.has(k)))
+      if (Object.keys(pruned).length !== Object.keys(mapping).length) warnings.push(`run ${entry.id}: mapping named keys the snapshot does not hold — those entries were dropped`)
+      mapping = pruned
+    }
+    runs.push({ id: entry.id, name: entry.name, panelIds: members, edges, startedAt, ...(endedAt === undefined ? {} : { endedAt }), entries, ...(costUsd === undefined ? {} : { costUsd }), ...(templateId === undefined ? {} : { templateId }), ...(definition === undefined ? {} : { definition }), ...(mapping === undefined ? {} : { mapping }) })
   })
   return runs.sort((a, b) => b.startedAt - a.startedAt).slice(0, RUNS_MAX)
 }

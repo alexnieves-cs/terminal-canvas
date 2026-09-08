@@ -76,6 +76,13 @@ export interface PaletteActionsDeps {
   reloadTemplates: () => void
   /** M181. Canvas's starter layout: mints through the ordinary paths and records the keys. */
   applyStarter: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's save of a workflow draft (the revision check lives there). */
+  saveWorkflowDraft: (templateId: string) => Promise<{ kind: 'saved' } | { kind: 'stale'; reason: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's stop: every live pool of this template interrupted, nothing killed. */
+  stopWorkflowRun: (templateId: string, runId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  saveWorkflowCopyDraft: (templateId: string) => Promise<{ kind: 'saved'; name?: string } | { kind: 'refused'; reason: string }>
+  /** M184. Canvas's Run over the draft (the same instantiation the panel's Run calls). */
+  runWorkflowNow: (templateId: string) => string | undefined
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -207,7 +214,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -268,6 +275,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
         switch (step.verb) {
           case 'starter': return applyStarter()
+          case 'workflow-save': return self.saveWorkflow(a.template!)
+          case 'workflow-run': return self.runWorkflowNow(a.template!)
+          case 'workflow-stop': return self.stopWorkflow(a.template!)
+          case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
           // M182. The six editing verbs, each one draft operation through the store's door.
           case 'workflow-add': {
             const kind = String(a.kind ?? '')
@@ -1910,6 +1921,24 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     newChat: (backend) => { void beginNewChat(backend === undefined ? undefined : { backend }) },
     checkReadiness: recheckEnvironment,
     openStarter: applyStarter,
+    saveWorkflow: async (templateId) => {
+      const r = await saveWorkflowDraft(templateId)
+      return r.kind === 'saved' ? { kind: 'ran', note: 'saved' } : { kind: 'refused', reason: r.reason }
+    },
+    stopWorkflow: (templateId) => stopWorkflowRun(templateId),
+    // M184 (the critic, finding 1). `runWorkflow` answers `undefined` on
+    // SUCCESS and a refusal SENTENCE on failure (it is the fire path's own
+    // shape). The first cut read those the other way round, so the one door
+    // with nobody watching reported a refusal for every run that started and
+    // a success for every one that did not.
+    runWorkflowNow: (templateId) => {
+      const refusal = runWorkflowNow(templateId)
+      return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
+    },
+    saveWorkflowCopy: async (templateId) => {
+      const r = await saveWorkflowCopyDraft(templateId)
+      return r.kind === 'refused' ? { kind: 'refused', reason: r.reason } : { kind: 'ran', note: r.name === undefined ? 'saved as a copy' : `saved as ${r.name}` }
+    },
     // M182. The binding's Update as ONE member, so the text mode's submit and
     // a check drive the same path: every selected panel must carry the same
     // template's binding with a key the record holds, once each.
@@ -2192,7 +2221,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

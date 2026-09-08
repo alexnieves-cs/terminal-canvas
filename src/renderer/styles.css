@@ -4229,8 +4229,23 @@ body {
 .workflow-node__port { fill: var(--iris); stroke: var(--s-1); stroke-width: 1.5; cursor: crosshair; }
 .workflow-node__wire { stroke: var(--iris); stroke-width: 2; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
 .workflow-node__ghost { fill: var(--iris-dim); stroke: var(--iris); stroke-dasharray: 4 3; pointer-events: none; }
+/* M184. A selected run's outcome on the diagram, in the state vocabulary's own
+   tones — the block wears its panel's word, drawn from the run's SNAPSHOT so a
+   later edit of the template never moves a finished run's colours.
+   M184 (the critic, 15c). The tone comes from `data-tone` and the ONE tone
+   block above (`outcomeTone` stamps it); binding --blue/--green/--red here
+   made this the one surface a new state would not reach. It sits BEFORE the
+   wire's target/refusal rules so a drag's own signal still wins at equal
+   specificity while a run is selected. */
+.workflow-node__blockg[data-workflow-outcome] .workflow-node__block { stroke: var(--tone); }
+.workflow-node__blockg[data-workflow-outcome="queued"] .workflow-node__block,
+.workflow-node__blockg[data-workflow-outcome="absent"] .workflow-node__block { stroke-dasharray: 4 3; }
+.workflow-node__block-outcome { fill: var(--tone); font-family: var(--font-ui); font-size: var(--t-xs); }
 .workflow-node__blockg--target .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
 .workflow-node__blockg--refused .workflow-node__block { stroke: var(--red); stroke-width: 2; }
+.workflow-node__run { cursor: pointer; }
+.workflow-node__run--selected { outline: 1px solid var(--iris); outline-offset: 2px; border-radius: var(--r-sm); }
+.workflow-node__stale { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: var(--sp-2) 0; }
 .workflow-node__edgeg { cursor: pointer; }
 .workflow-node__edgeg--selected .workflow-node__line { stroke: var(--iris); stroke-width: 2.5; }
 /* Out of the FLOW: a sentence that shows for four seconds must not push the diagram down under the reader's pointer (the M183 verifier). */
