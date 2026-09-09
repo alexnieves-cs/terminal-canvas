@@ -1,5 +1,6 @@
 import { noteFormSentence } from '@shared/notes'
 import type { PersistedWorkItem } from '@shared/work-items'
+import type { StartWorkOutcome } from './start-work'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
 import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
@@ -503,6 +504,14 @@ export interface PaletteActions {
   beginNewWorkItem(): void
   /** M114. The one verb: a lane, a chat as the teammate, an edge meaning dispatched. */
   dispatchWorkItem(itemId: string, teammateId: string, root?: string): void
+  /**
+   * M197 (D05). START WORK — the one action every door routes into. It asks
+   * only for what it cannot derive: with the triple complete it dispatches
+   * with no sheet, and otherwise it opens the sheet on the missing input.
+   */
+  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string }): void
+  /** M197. The executor behind it, ANSWERING — the awaited half the agent's `dispatch` arm needs. */
+  startWork(itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome>
   /** M115. A broker WRITE behind the teammate's spend card — excluded from plans by name. */
   openPr(itemId: string): void
   /** M115. The optional comment on the issue after done — the second card. */
@@ -1510,6 +1519,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'board kanban columns todo working review done dispatch',
     group: 'canvas',
     run: () => actions.openBoard()
+  })
+  // M197 (D05). THE START WORK DOOR. Present always and never disabled: the
+  // flow's own sentences are the answer to every empty case (no teammate
+  // yet, no place, no repository), each naming its fix, and a row that
+  // vanished would read as a feature that was never built. It is the only
+  // door that reaches a start with no board card already in hand.
+  out.push({
+    id: 'start.work',
+    title: 'Start work…',
+    subtitle: 'a task, a teammate and a repository — one conversation in its own lane',
+    searchText: 'start work task issue dispatch teammate repository lane begin new',
+    group: 'canvas',
+    run: () => actions.beginStartWork()
   })
   out.push({
     id: 'board.new',

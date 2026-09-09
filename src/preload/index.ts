@@ -394,7 +394,8 @@ const bridge: CanvasBridge = {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),
     laneStatus: (req) => ipcRenderer.invoke(IPC.BOARD_LANE_STATUS, req),
     openPr: (req) => ipcRenderer.invoke(IPC.BOARD_OPEN_PR, req),
-    commentPr: (req) => ipcRenderer.invoke(IPC.BOARD_COMMENT_PR, req)
+    commentPr: (req) => ipcRenderer.invoke(IPC.BOARD_COMMENT_PR, req),
+    repositories: (req) => ipcRenderer.invoke(IPC.BOARD_REPOSITORIES, req)
   },
   update: {
     check: () => ipcRenderer.invoke(IPC.UPDATE_CHECK)

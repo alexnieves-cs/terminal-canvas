@@ -82,7 +82,7 @@ const {
   createReviewEngine,
   createGitRunner,
   createWorktreeManager,
-  createBoardLane, createPlacesGate,
+  createBoardLane, repositoriesAnswer, createPlacesGate,
   createScrollbackLog,
   createRunLedger,
   createBaselineCapture,
@@ -1365,7 +1365,17 @@ app.whenReady().then(async () => {
     recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
     originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
     subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-  }) },
+  }),
+    // M197. The REAL repository lister over the same readers, so start.door.1
+    // and .2 walk fixture repositories on disk rather than a fake list.
+    repositories: async (req) => repositoriesAnswer(
+      layoutStore.teammates().find((t) => t.id === req.teammateId),
+      {
+        originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch { return null } },
+        subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } },
+        isRepoRoot: (dir) => { try { return existsSync(join(dir, '.git')) } catch { return false } }
+      }
+    ) },
   // M126/M128. The plugin list and the details text, both fixtures: no suite
   // spawns the real CLI. `unknown` while the flag is off is exactly what an
   // uninstalled `claude` produces, so every read before skill.panel.1 sees

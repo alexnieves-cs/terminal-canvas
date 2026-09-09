@@ -60,13 +60,31 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
   const { panel } = props
   const id = panel.rect.id
   const root = panel.source.root
-  const [read, setRead] = useState<{ entries: MemoryEntryRow[]; skipped: number } | null>(null)
+  /**
+   * M196 (D04). The read's OWN root, not the panel's.
+   *
+   * The panel is opened on whatever directory the selected panel had, and main
+   * resolves that to a repository before it reads — so labelling the node from
+   * `panel.source.root` named a folder while listing another one's memories.
+   * With a dispatched chat that gap is the milestone's whole subject: the
+   * folder is a worktree lane and the memories are the repository's.
+   *
+   * `scope` is absent for a directory git does not own (the node then names
+   * the folder, which IS its subject) and carries `lane` only when one got us
+   * there, so the lane line is never a zero-value statement in a row that is
+   * always visible.
+   */
+  const [read, setRead] = useState<{ entries: MemoryEntryRow[]; skipped: number; root: string; scope?: { repository: string; lane?: string; laneBranch?: string }; unresolved?: string } | null>(null)
   const [kind, setKind] = useState<(typeof KINDS)[number]>('decided')
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
 
   const load = useCallback(() => {
-    void window.canvas.memory.list(root, MEMORY_MAX).then((answer) => setRead({ entries: answer.entries, skipped: answer.skipped }))
+    void window.canvas.memory.list(root, MEMORY_MAX).then((answer) => setRead({
+      entries: answer.entries, skipped: answer.skipped, root: answer.root,
+      ...(answer.scope === undefined ? {} : { scope: answer.scope }),
+      ...(answer.unresolved === undefined ? {} : { unresolved: answer.unresolved })
+    }))
   }, [root])
   useEffect(() => { load() }, [load])
 
@@ -114,9 +132,20 @@ function MemoryNodeImpl(props: MemoryNodeProps): JSX.Element {
       onBeginLink={props.onBeginLink}
     >
       <div className="pf__body memory-node__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
-        <p className="memory-node__root" title={root}>{rootLabel(root)}</p>
+        <p className="memory-node__root" title={read === null ? root : read.root} data-memory-root>{rootLabel(read === null ? root : read.root)}</p>
+        {/* The lane line. Contextual density: it appears only when a lane got
+            us to this repository, and it names the branch because that is what
+            a person calls the work — the lane's path is an app-internal
+            directory nobody chose. */}
+        {read !== null && read.scope !== undefined && read.scope.lane !== undefined && (
+          <p className="pf__note memory-node__lane" data-memory-lane>remembered against this repository, reached through the {read.scope.laneBranch ?? 'worktree'} lane</p>
+        )}
         {read === null ? (
           <p className="pf__note" data-memory-arm="reading">reading…</p>
+        ) : read.unresolved !== undefined ? (
+          /* The third state. An empty list here would be a claim that nobody
+             wrote anything, which is a different fact with a different fix. */
+          <p className="pf__note" data-memory-arm="unresolved">{read.unresolved}</p>
         ) : read.entries.length === 0 ? (
           <p className="pf__note" data-memory-arm="empty">nothing remembered about this repository yet — add the first below, or an agent can with tc memory add</p>
         ) : (

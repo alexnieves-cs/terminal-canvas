@@ -20,6 +20,7 @@ import { buildPushArgs } from './git-args'
 import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
 import { searchPanels } from './panel-search'
 import { createBoardLane } from './board-lane'
+import { repositoriesAnswer } from './board-repo'
 import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
 import { skillsForBrief, skillsBriefLine, repoRootForBrief, notVisibleFor } from './skill-assign'
 import { createRoutineRunner } from './routine-runner'
@@ -44,6 +45,8 @@ import { createReviewDiscarder } from './review-discard'
 import { createControlServer, type ControlServer } from './control-server'
 import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
+import { createMemoryScope, createScopeResolver } from './work-scope'
+import { laneOfPath } from '../shared/work-scope'
 import { createBroker } from './broker'
 import { listAssignedWorkItems as listGithubWorkItems, openPullRequest, commentIssue } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
@@ -608,6 +611,40 @@ const sendToRenderer = (channel: string, payload: unknown): void => {
   if (win.isMinimized()) win.restore()
   win.show()
 }
+/**
+ * M196 (D04). THE ONE ANSWER to "is this path in a lane, and of what".
+ *
+ * All three wiring sites used to inline `w.path === path` — EXACT equality —
+ * so a cwd one directory inside a lane translated nowhere and was judged as
+ * its own repository, while the renderer answered the same question with a
+ * segment prefix (`Canvas.tsx`'s project-skill refusal). Two authors of one
+ * fact, disagreeing only below a lane root, which is where a teammate's shell
+ * actually stands.
+ *
+ * The subject it translates to is the lane RECORD's own `root` — the
+ * repository the lane was cut from — and `insidePlace` then judges that root
+ * exactly as it judges the lane root today. A teammate whose places do not
+ * hold that repository is refused before and after.
+ *
+ * **It matches on the REAL path, and that is a security line rather than a
+ * tidiness one.** `PlacesGate.check` REPLACES the candidate with this answer
+ * and never judges the candidate itself, so whatever this matches is what the
+ * gate stops looking at. Under the exact equality this replaces, only a lane
+ * root could take that substitution and a lane root has no symlink component
+ * by construction; with containment the whole subtree can, so a symlink
+ * created INSIDE a lane — `ln -s /etc evil`, which an agent working in the
+ * lane can do — would otherwise be translated to the repository, found inside
+ * a place, and allowed. That is exactly the escape `shared/places.ts`'s own
+ * header and `verify:teammates places.2` exist to fence, and containment
+ * would have unfenced it below a lane. A path that cannot be resolved is
+ * matched as written, which fails CLOSED: no translation, and `insidePlace`
+ * then judges the raw path and refuses it.
+ */
+const laneRootOf = (path: string): string | undefined => {
+  const real = (p: string): string => { try { return fsRealpath(p) } catch { return p } }
+  return laneOfPath(real(path), layoutStore.worktrees().map((w) => ({ ...w, path: real(w.path) })))?.root
+}
+
 const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
 // M100. THE PLACES GATE: asked before any spawn resolves a cwd and before a
 // file verb answers for a request that names a teammate. Main's, never the
@@ -643,17 +680,28 @@ const placesGate = createPlacesGate({
   realpath: fsRealpath,
   teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
   // M114. A lane under userData/worktrees is judged by the repository it forks.
-  worktreeRootOf: (path) => layoutStore.worktrees().find((w) => w.path === path)?.root
+  worktreeRootOf: (path) => laneRootOf(path)
 })
 // M114. The lane a dispatch mints: the repository under the teammate's places
 // (origin read by git, one level deep), the gate on its root, the worktree.
+const originOfDir = (dir: string): string | null => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim() || null } catch { return null } }
+const subdirsOf = (dir: string): string[] => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+/**
+ * M197. Is this directory a repository ROOT? `.git` as a DIRECTORY is a main
+ * worktree and as a FILE is a linked one — both are roots to work in. This
+ * is deliberately not a `git` call: the lister asks it of every immediate
+ * child of every place, and a subprocess each would turn a ~/work of sixty
+ * clones into sixty spawns before a single row is drawn. `originOf` is
+ * spawned only for the directories that pass it.
+ */
+const isRepoRootDir = (dir: string): boolean => { try { return existsSync(join(dir, '.git')) } catch { return false } }
 const boardLane = createBoardLane({
   gate: placesGate,
   worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
   teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
   recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
-  originOf: (dir) => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim() || null } catch { return null } },
-  subdirs: (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
+  originOf: originOfDir,
+  subdirs: subdirsOf
 })
 
 /**
@@ -720,11 +768,17 @@ const broker = createBroker({
 })
 
 /** M83. A directory's repository root, or the directory itself when git does not own it. */
-const memoryRoot = async (path: string): Promise<string> => {
-  if (path === '') return path
-  const answer = await reviewEngine.resolveRepo(path)
-  return answer.kind === 'root' ? answer.root : path
-}
+/**
+ * M196 (D04). THE SCOPE RESOLVER, wired once. `worktrees()` is the record
+ * list; `commonRootOf` is git's own answer for a worktree the app never made.
+ */
+const scopeResolver = createScopeResolver({
+  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
+  commonRootOf: (root) => reviewEngine.commonRootOf(root),
+  worktrees: () => layoutStore.worktrees()
+})
+
+const memoryScope = createMemoryScope(scopeResolver)
 
 const controlHandler = createControlHandler({
   // M87. The one verb that can spend a credential.
@@ -752,8 +806,20 @@ const controlHandler = createControlHandler({
   // non-empty list (M83's verifier).
   memory: {
     // M100. The teammate prefix routes here as it does at the IPC door.
-    list: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
-    add: async (req) => req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+    list: async (root, limit) => {
+      if (root.startsWith(TEAMMATE_ROOT)) return teammateMemory.list(teammateSlug(root), limit)
+      const resolved = await memoryScope(root)
+      // M196. A read that could not be scoped answers EMPTY with its reason on
+      // the row rather than a confident empty list against a stray key.
+      if (!resolved.ok) return { root, entries: [], skipped: 0, unresolved: resolved.reason }
+      return { ...memoryStore.list(resolved.root, limit), ...(resolved.scope === undefined ? {} : { scope: resolved.scope }) }
+    },
+    add: async (req) => {
+      if (req.root.startsWith(TEAMMATE_ROOT)) return teammateMemory.add({ ...req, root: teammateSlug(req.root) })
+      const resolved = await memoryScope(req.root)
+      if (!resolved.ok) return { ok: false as const, reason: resolved.reason }
+      return memoryStore.add({ ...req, root: resolved.root })
+    }
   },
   canvas: async () => {
     const wc = mainWindow?.webContents
@@ -1463,7 +1529,7 @@ app.whenReady().then(async () => {
       // translation `placesGate` already applies via `worktreeRootOf`, so a
       // project skill whose repository IS in this teammate's places is not
       // silently dropped just because the chat runs in a lane of it.
-      const skillsRepoRoot = repoRootForBrief(cwd, (p) => layoutStore.worktrees().find((w) => w.path === p)?.root)
+      const skillsRepoRoot = repoRootForBrief(cwd, laneRootOf)
       const skillsLine = mate === undefined ? '' : skillsBriefLine(skillsForBrief(mate, skillsRepoRoot, fsRealpath).named)
       const mateText = mate !== undefined && (mate.brief.trim() !== '' || skillsLine !== '')
         ? `You are ${mate.name}.${mate.brief.trim() !== '' ? ` ${mate.brief.trim()}` : ''}${skillsLine}`
@@ -1699,9 +1765,20 @@ app.whenReady().then(async () => {
         armVaultWatch(real)
         return readVault(real)
       },
-      memoryList: async (root, limit) => root.startsWith(TEAMMATE_ROOT) ? teammateMemory.list(teammateSlug(root), limit) : memoryStore.list(await memoryRoot(root), limit),
+      memoryList: async (root, limit) => {
+        if (root.startsWith(TEAMMATE_ROOT)) return teammateMemory.list(teammateSlug(root), limit)
+        const resolved = await memoryScope(root)
+        if (!resolved.ok) return { root, entries: [], skipped: 0, unresolved: resolved.reason }
+        return { ...memoryStore.list(resolved.root, limit), ...(resolved.scope === undefined ? {} : { scope: resolved.scope }) }
+      },
       memoryAdd: async (req) => {
-        const r = req.root.startsWith(TEAMMATE_ROOT) ? teammateMemory.add({ ...req, root: teammateSlug(req.root) }) : memoryStore.add({ ...req, root: await memoryRoot(req.root) })
+        if (req.root.startsWith(TEAMMATE_ROOT)) {
+          const t = teammateMemory.add({ ...req, root: teammateSlug(req.root) })
+          return t.ok ? { ok: true } : { ok: false, reason: t.reason }
+        }
+        const resolved = await memoryScope(req.root)
+        if (!resolved.ok) return { ok: false, reason: resolved.reason }
+        const r = memoryStore.add({ ...req, root: resolved.root })
         return r.ok ? { ok: true } : { ok: false, reason: r.reason }
       },
       listTemplates: () => allTemplates(layoutStore.templates()),
@@ -1735,7 +1812,7 @@ app.whenReady().then(async () => {
         // silent drop the pane could show as a plain success.
         const notVisible = cwd === undefined || cwd === ''
           ? []
-          : notVisibleFor(parsed, repoRootForBrief(cwd, (p) => layoutStore.worktrees().find((w) => w.path === p)?.root), fsRealpath)
+          : notVisibleFor(parsed, repoRootForBrief(cwd, laneRootOf), fsRealpath)
         return notVisible.length > 0 ? { teammate: parsed, notVisible } : { teammate: parsed }
       },
       removeTeammate: (id) => layoutStore.deleteTeammate(id),
@@ -1875,6 +1952,15 @@ app.whenReady().then(async () => {
     {
       ...boardLane,
       laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
+      // M197 (D05). The start flow's repository field: the SAME bounded
+      // one-level walk the lane makes to find one clone, asked for all of
+      // them, so the field can never offer a root the lane could not reach.
+      // Read-only; the arm decision is board-repo.ts's, where a check drives
+      // it — no suite bundles this file.
+      repositories: async (req) => repositoriesAnswer(
+        layoutStore.teammates().find((t) => t.id === req.teammateId),
+        { originOf: originOfDir, subdirs: subdirsOf, isRepoRoot: isRepoRootDir }
+      ),
       // M115. The return path, in order: the lane's record (ids in, never a
       // path from the renderer), `git push -u origin <branch>` in the lane
       // with the USER's own git credentials (the app holds none for git),
@@ -1917,6 +2003,33 @@ app.whenReady().then(async () => {
     // recoverable in the Finder rather than gone.
     skillWriteHandlers({
       resolveCwd,
+      /**
+       * M196 (D04). D02's inherited item, closed — and NARROWED to the door it
+       * is about after the critic found the first cut had closed three others.
+       *
+       * A DISPATCHED chat's cwd is a worktree LANE, so a project skill CREATED
+       * from one landed in `userData/worktrees/…/.claude/skills` and went with
+       * the lane, having never been in the repository the person meant. This
+       * names where a NEW project skill goes and nothing else.
+       *
+       * The first cut wrapped `resolveCwd` instead, which also moved
+       * `skillRoots` — the CONTAINMENT list every verb is judged against — so
+       * `write`, `rename` and `remove` were refused for a project skill opened
+       * from a lane, saying it was "outside every skills folder this app may
+       * write" about a file sitting in the repository's own checkout. A door
+       * that worked before the milestone, closed by it, with a sentence that
+       * was actively wrong. `skillRoots` therefore keeps the asking cwd's own
+       * project root as well (`depsFor` below), so nothing that was writable
+       * stopped being writable.
+       *
+       * `existsSync` is the second half of that narrowing. `resolveCwd` falls
+       * back to the HOME directory for a path that does not exist — its own
+       * comment calls that a spawn-safety fallback that must not be reused —
+       * so a lane whose repository has since been moved or deleted (records
+       * outlive their panels by design) would have written a *project* skill
+       * into `~/.claude/skills`, indistinguishable from a user one, silently.
+       */
+      projectRootOf: (cwd) => { const root = laneRootOf(expandTilde(cwd)); return root !== undefined && existsSync(root) ? root : undefined },
       home: resolveToolboxHome,
       realpath: realpathSync,
       plugins: async () => {

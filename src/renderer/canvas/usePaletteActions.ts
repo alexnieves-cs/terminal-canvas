@@ -26,6 +26,8 @@ import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/com
 import { allTemplates } from '@shared/templates'
 import type { SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
+import { repoOfKey } from '@shared/work-items'
+import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
@@ -209,7 +211,7 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>
 }
 
 /**
@@ -467,7 +469,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
             const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
             if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
-            self.dispatchWorkItem(item.id, mate.id); return { kind: 'ran' }
+            // M197. AWAITED. Before this the verb was called and `ran` was
+            // returned in the same breath — every refusal happened after that
+            // return, into the card's note, which the plan's caller never
+            // reads. A verb that cannot fail in the caller's view is a verb
+            // that fails silently.
+            const outcome = await self.startWork(item.id, mate.id)
+            return outcome.kind === 'started' ? { kind: 'ran', note: `started on ${outcome.panelId}` } : { kind: 'refused', reason: outcome.reason }
           }
           case 'board': {
             const what = String(a.what ?? '').trim()
@@ -2222,11 +2230,80 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const id = item.id ?? `wi${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`
       const next = upsertWorkItem(workItemsRef.current ?? [], { ...item, id }, Date.now())
       setWorkItems(next)
+      // M197. The MIRROR is made current here, not left to the next render.
+      // `workItemsRef.current = workItems` is a render-time assignment, so a
+      // caller that adds an item and acts on it in the same tick — which is
+      // exactly what the start flow's submit does, minting the typed task and
+      // then starting it — reads a list the new item is not in yet, and the
+      // start refuses with `no work item is called <id>`. The render-time
+      // assignment then writes this same value again; making it current
+      // sooner cannot make it wrong.
+      workItemsRef.current = next
       // The card's rail label is the panel's title, stamped at mint; an update through the dedupe moves it too, or the rail reads yesterday's title beside today's card.
       setPanels((current) => current.map((p) => { const wid = isWorkPanel(p) ? p.work.itemId : undefined; const rec = wid === undefined ? undefined : next.find((i) => i.id === wid); return rec === undefined || p.title === rec.title ? p : { ...p, title: rec.title } }))
       const identity = item.key === undefined ? undefined : next.find((i) => i.source === item.source && i.key === item.key)
       return identity === undefined ? id : identity.id
     },
+    /**
+     * M197 (D05). START WORK — the ONE action, and every door is a route
+     * into it: the palette row, the card's menu, the Teammates-pane drop and
+     * the agent's `dispatch` verb all land here.
+     *
+     * It asks only for what it cannot derive. `startWorkNeeds` answers which
+     * of the triple is missing, and an EMPTY answer dispatches with NO SHEET
+     * at all — which is what keeps M114's one-gesture drop a one-gesture
+     * drop. The sheet opens only when something is genuinely unknown.
+     *
+     * The task is minted here when there is none (the typed door), through
+     * the SAME `addWorkItem` dedupe every other board door takes, so a start
+     * on an item already on the board updates it rather than minting a twin.
+     */
+    beginStartWork: (opts) => {
+      const openSheet = (title: string, titleFixed: boolean, wanted: string | null, itemId: string | undefined, teammateId: string | undefined): void => {
+        setInputMode({
+          kind: 'start',
+          label: 'Start work',
+          verb: 'start',
+          initial: '',
+          submit: () => undefined,
+          start: {
+            title,
+            titleFixed,
+            wanted,
+            teammates: teammatesRef.current ?? [],
+            ...(teammateId === undefined ? {} : { teammateId }),
+            repositories: (id) => window.canvas.board.repositories({ teammateId: id }),
+            submit: async (choice) => {
+              // The task is minted only once the triple is answered: a sheet
+              // the user escapes must leave no card behind, the same rule
+              // M149 reached for `New workspace from` (an Escape used to
+              // strand the user in an empty workspace).
+              const id = itemId ?? self.addWorkItem({ source: 'typed', title: choice.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+              const outcome = await self.startWork(id, choice.teammateId, choice.root)
+              return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }
+            },
+            openTeammates: () => chooseNavigator('teammates')
+          }
+        })
+        palette.openPalette()
+      }
+      const item = opts?.itemId === undefined ? undefined : (workItemsRef.current ?? []).find((i) => i.id === opts.itemId)
+      const title = item?.title ?? opts?.title ?? ''
+      const wanted = item?.key === undefined ? null : repoOfKey(item.key)
+      const teammateId = opts?.teammateId
+      // With no teammate chosen there is nothing to read and nothing to
+      // derive: the sheet opens on the question it can answer.
+      if (teammateId === undefined || item === undefined) { openSheet(title, item !== undefined, wanted, item?.id, teammateId); return }
+      void window.canvas.board.repositories({ teammateId }).then((answer) => {
+        const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
+        const needs = startWorkNeeds({ title, teammateId }, { teammates: teammatesRef.current ?? [], repos, wanted })
+        if (needs.length > 0) { openSheet(title, true, wanted, item.id, teammateId); return }
+        void self.startWork(item.id, teammateId)
+      })
+    },
+    /** M197. The executor, unchanged in shape: the same `dispatchWorkItem` every door already ran through, now answering. */
+    startWork: async (itemId, teammateId, root): Promise<StartWorkOutcome> =>
+      (await boardVerbsRef.current?.dispatch?.(itemId, teammateId, root)) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     beginNewWorkItem: () => {
       setInputMode({
         kind: 'text',

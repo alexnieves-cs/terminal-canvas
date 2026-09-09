@@ -683,6 +683,15 @@ export const IPC = {
   BOARD_OPEN_PR: 'board:open-pr',
   BOARD_COMMENT_PR: 'board:comment-pr',
   /**
+   * M197 (D05). The repositories under a teammate's places — the SAME
+   * bounded one-level walk `board:lane` already makes to find one clone,
+   * asked for all of them, so the start flow's repository field offers
+   * exactly what the lane could reach. Read-only and privileged: only main
+   * may run `git remote get-url`, and the renderer never decides what is a
+   * repository.
+   */
+  BOARD_REPOSITORIES: 'board:repositories',
+  /**
    * M123. The update NOTICE: one GET of the releases feed in main, three
    * states back. Nothing is downloaded or installed — auto-swap is declined
    * by name for an unsigned build. Asked by the renderer once at launch only
@@ -710,6 +719,24 @@ export type UpdateResult =
 export interface BoardLaneRequest { itemId: string; chatPanelId: string; teammateId: string; repo?: string; root?: string }
 export type BoardLaneResult =
   | { kind: 'lane'; path: string; worktreeId: string; branch: string; root: string }
+  | { kind: 'refused'; reason: string }
+
+/**
+ * M197. One repository the start flow may offer. `repo` is the origin
+ * normalised to `owner/repo`, or null for a repository with no origin —
+ * which is still a repository to work in.
+ */
+export interface BoardRepository { path: string; repo: string | null }
+/**
+ * Three states, never two: an unknown teammate is `refused` by name, a
+ * teammate with no places answers `no-places` (the fix is a grant, in the
+ * Teammates pane), and a real answer — including an EMPTY one, which means
+ * the places hold no repository — is `repos`. Collapsing the last two would
+ * tell the user to add a clone when what they need is a folder.
+ */
+export type BoardRepositoriesResult =
+  | { kind: 'repos'; repos: BoardRepository[] }
+  | { kind: 'no-places'; reason: string }
   | { kind: 'refused'; reason: string }
 
 /** M115. What `Open PR` hands main: ids, never paths — main resolves the worktree record and runs the push itself. */
@@ -1444,7 +1471,23 @@ export interface CanvasBridge {
   }
   /** M83. The project memory: what this repository has decided, tried and failed. */
   memory: {
-    list(root: string, limit: number): Promise<{ root: string; entries: MemoryEntryRow[]; skipped: number }>
+    /**
+     * M196 (D04). `root` is the root main RESOLVED, which is not the directory
+     * asked about: a subdirectory resolves up to its repository and a worktree
+     * LANE resolves to the repository it is a lane of. `scope` says so —
+     * absent for a directory git does not own, and carrying `lane` only when
+     * one got us here, so a surface can name the repository an agent's
+     * memories actually came from instead of the folder it happened to hold.
+     * `unresolved` is the third state: git declined, nothing was read, and the
+     * empty list is not a claim that nobody wrote anything.
+     */
+    list(root: string, limit: number): Promise<{
+      root: string
+      entries: MemoryEntryRow[]
+      skipped: number
+      scope?: { repository: string; lane?: string; laneBranch?: string }
+      unresolved?: string
+    }>
     /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
     add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
   }
@@ -1794,6 +1837,8 @@ export interface CanvasBridge {
     laneStatus(req: { path: string; root: string }): Promise<LaneStatus>
     openPr(req: BoardOpenPrRequest): Promise<BoardOpenPrResult>
     commentPr(req: BoardCommentRequest): Promise<BoardCommentResult>
+    /** M197. See BOARD_REPOSITORIES. Read-only; never rejects. */
+    repositories(req: { teammateId: string }): Promise<BoardRepositoriesResult>
   }
   /** M123. See UPDATE_CHECK. Three arms; never rejects. */
   update: {

@@ -471,6 +471,27 @@ const SCENES = [
     run: async (k) => { await k.flip(); await sleep(400); await k.shot('flip'); await k.flip() } },
   { name: 'spawn-sheet', intent: 'The spawn sheet (New panel…): what, where with its suggestions, title, and for an agent preset its mode, effort and model; a preview line and the keys in the foot.',
     run: async (k) => { await k.click('.shell__spawn'); await sleep(700); await k.js(`(() => { const s = document.querySelector('[data-sheet-what]'); if (!s) return false; s.value = 'claude'; s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`); await sleep(200); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) { w.focus(); w.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })) } return !!w })()`); await sleep(600); await k.shot('spawn-sheet'); await k.js(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`); await sleep(300) } },
+  // M197 (D05). The start sheet is the milestone's whole face and it had no
+  // scene: a surface with no golden is one nobody can see regress.
+  { name: 'start-work', intent: 'M197 (D05). The Start work sheet: one place for the three things a start needs — the task, the agent and the repository — with a teammate chosen so the repository field holds the clones under its places, the triple stated in the foot before anything is minted, and the route to the Teammates pane named rather than a grant widened from inside the flow. A placeless teammate is offered DISABLED by name in the agent field, never dropped.',
+    run: async (k) => { await k.press('k', { metaKey: true }); await sleep(400); await k.type('Start work'); await sleep(400); await k.enter(); await sleep(700)
+      await k.js(`(() => { const t = document.querySelector('[data-start-task]'); if (!t) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(t, 'Fix the flush gate on the api repository'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+      await sleep(200)
+      await k.js(`(() => { const s = document.querySelector('[data-start-agent]'); if (!s) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, 'ada'); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(600)
+      await k.js(`(() => { const s = document.querySelector('[data-start-repo]'); const o = s && s.querySelector('option[data-start-repo-row]'); if (!o) return false
+        const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, o.value); s.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+      await sleep(500); await k.shot('start-work')
+      // Escape on the SHEET, not through `closePalette` — that helper presses
+      // Escape on `.palette__input`, and in a sheet mode there is no input at
+      // all (the sheet replaces the bar), so it does nothing and the overlay
+      // is left standing. The next scene's Cmd+K then TOGGLES it shut and
+      // paints a `palette-dark` with no palette in it. The spawn-sheet scenes
+      // already escape this way; this one now does too.
+      await k.js(`(() => { const s = document.querySelector('[data-start-sheet]'); if (s) s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return !!s })()`)
+      await sleep(400) } },
   { name: 'palette-dark', intent: 'The palette at rest on the dark theme.',
     run: async (k) => { await k.theme('dark'); await k.press('k', { metaKey: true }); await sleep(600); await k.shot('palette-dark'); await k.closePalette(); await k.theme('light') } },
   { name: 'search', intent: 'Search across every panel (Cmd+F) for "FAIL": hits from the durable log, each naming its panel, with the matching line. M122: the scope now reads BOTH durable logs — the scrollback logs and the chat transcript logs — and what the answer left out comes first (the cap line, the redaction count), each only when non-zero.',
@@ -1005,7 +1026,15 @@ app.whenReady().then(async () => {
     // M103. The real read over the real guest.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
     // M114. No scene dispatches; a lane asked for is a named refusal.
-    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }) },
+    { lane: async () => ({ kind: 'refused', reason: 'no lane in the shot harness' }), laneStatus: async () => ({ kind: 'lane', base: 'main', ahead: 2, behind: 0 }), openPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }), commentPr: async () => ({ kind: 'refused', reason: 'no PR door in the shot harness' }),
+      // M197. The start sheet's repository field, answered from the fixture
+      // roster: ada's one place is the fixture repository, and bo has none —
+      // the two arms the sheet's agent field renders. No walk happens here;
+      // the shape is what the real lister would have returned, the rule the
+      // plugin fixture below already follows.
+      repositories: async (req) => (req.teammateId === 'ada'
+        ? { kind: 'repos', repos: [{ path: REPO, repo: 'acme/api' }, { path: join(FIX, 'notes'), repo: null }] }
+        : { kind: 'no-places', reason: 'bo has no places — add a folder in the Teammates pane before it can work anywhere' }) },
     // M127. No scene spawns the real CLI, so this is the ANSWER that CLI
     // would have given for the fixture plugin planted under the fenced home —
     // the shape `listPlugins` returns, never the walk itself, which is still

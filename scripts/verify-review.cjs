@@ -1881,6 +1881,75 @@ if (GIT) {
     JSON.stringify({ status, noUp, across, fromInside: fromInside && { root: fromInside.root, n: fromInside.sections && fromInside.sections.length }, orphan: secOf('tc/orphan'), removed: secOf('tc/p2-x') }))
 }
 
+// M196 (D04) — scope.resolve.1. THE SEVEN ARMS, and the two that were being
+//      answered wrongly with no symptom.
+//      `rev-parse --show-toplevel` inside a linked worktree answers the LANE
+//      (measured against a real repository before this was written), so every
+//      door that asked only that question has been treating a lane as a
+//      repository of its own. Two sources fix it and BOTH are needed: the
+//      app's record, which is the only thing that knows the branch, and
+//      `--git-common-dir`, which is the only thing that knows about a worktree
+//      the app did not make.
+//      The arm with no visible symptom is `unavailable`: git declining is not
+//      "this is its own subject", and collapsing them is what let a transient
+//      git failure key a memory file by the wrong path, silently.
+{
+  const NAME = 'scope.resolve.1 the scope resolver answers a plain repository with NO lane, an app lane through its record (branch carried) from the lane root AND from a subdirectory of it, an externally created worktree through --git-common-dir with no record at all, a non-git folder as no-repository, git declining as unavailable carrying git\'s own line rather than as a repository, a relative path as unavailable rather than resolved against a guess, a common dir that parses to nothing (a submodule\'s shape) as the toplevel rather than an invented parent, and a repository NESTED inside a lane as its OWN repository rather than the lane\'s parent'
+  const has = typeof R.createScopeResolver === 'function'
+  if (!has) ok(NAME, false, 'main/work-scope.ts does not export createScopeResolver')
+  else {
+    const REPO = '/w/api'
+    const LANE = '/u/worktrees/api-ab12/tc-p1'
+    const EXT = '/w/api-hotfix'
+    const records = [{ id: 'w1', path: LANE, root: REPO, branch: 'tc/p1' }]
+    // The toplevel git reports for a directory, and the common dir it reports
+    // for that toplevel. `commonRootOf` already answers its INPUT when git
+    // cannot parse a `/.git` suffix, which is the submodule fall-through.
+    // A repository NESTED inside the lane: an agent's cloned dependency, or a
+    // submodule. git gives it its own toplevel, and `--git-common-dir` names
+    // its own `.git`, so it is a repository of its own — the record covering
+    // the lane must not claim it.
+    const NESTED = `${LANE}/vendor/dep`
+    const tops = { [REPO]: REPO, [`${REPO}/src`]: REPO, [LANE]: LANE, [`${LANE}/src`]: LANE, [EXT]: EXT, '/w/sub': '/w/sub', [NESTED]: NESTED, [`${NESTED}/lib`]: NESTED }
+    const commons = { [REPO]: REPO, [LANE]: REPO, [EXT]: REPO, '/w/sub': '/w/sub', [NESTED]: NESTED }
+    const make = (over) => R.createScopeResolver({
+      resolveRepo: async (cwd) => (over && over.resolveRepo ? over.resolveRepo(cwd) : (tops[cwd] === undefined ? { kind: 'not-a-repo' } : { kind: 'root', root: tops[cwd] })),
+      commonRootOf: async (root) => (over && over.commonRootOf ? over.commonRootOf(root) : (commons[root] ?? root)),
+      worktrees: () => (over && over.worktrees ? over.worktrees : records)
+    })
+    const r = make()
+    const plain = await r.resolve(REPO)
+    const below = await r.resolve(`${REPO}/src`)
+    const lane = await r.resolve(LANE)
+    const laneSub = await r.resolve(`${LANE}/src`)
+    // No record for it at all: only --git-common-dir can say it is a lane.
+    const external = await make({ worktrees: [] }).resolve(EXT)
+    const notRepo = await r.resolve('/tmp/scratch')
+    const declined = await make({ resolveRepo: async () => ({ kind: 'unreadable', detail: 'dubious ownership in repository' }) }).resolve(REPO)
+    const relative = await r.resolve('src')
+    const empty = await r.resolve('')
+    // A submodule: --git-common-dir is `.../.git/modules/sub`, which
+    // parseCommonRoot declines, so commonRootOf answers its input. The
+    // resolver must call it a repository of its own, never invent a parent.
+    const submodule = await r.resolve('/w/sub')
+    const nested = await r.resolve(`${NESTED}/lib`)
+    ok(NAME,
+      plain.kind === 'repository' && plain.repository === REPO && plain.lane === undefined &&
+        below.kind === 'repository' && below.repository === REPO && below.lane === undefined && below.cwd === `${REPO}/src` &&
+        lane.kind === 'repository' && lane.repository === REPO && lane.lane !== undefined && lane.lane.path === LANE && lane.lane.branch === 'tc/p1' && lane.lane.worktreeId === 'w1' &&
+        // The regression main shipped: exact-path record matching left this one
+        // resolving to the lane as its own repository.
+        laneSub.kind === 'repository' && laneSub.repository === REPO && laneSub.lane !== undefined && laneSub.lane.branch === 'tc/p1' &&
+        external.kind === 'repository' && external.repository === REPO && external.lane !== undefined && external.lane.path === EXT && external.lane.branch === undefined &&
+        notRepo.kind === 'no-repository' && notRepo.cwd === '/tmp/scratch' &&
+        declined.kind === 'unavailable' && /dubious ownership/.test(declined.reason) &&
+        relative.kind === 'unavailable' && empty.kind === 'unavailable' && relative.reason !== empty.reason &&
+        submodule.kind === 'repository' && submodule.repository === '/w/sub' && submodule.lane === undefined &&
+        nested.kind === 'repository' && nested.repository === NESTED && nested.lane === undefined,
+      JSON.stringify({ plain, below, lane, laneSub, external, notRepo, declined, relative, empty, submodule, nested }))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
 process.exit(failed.length === 0 ? 0 : 1)

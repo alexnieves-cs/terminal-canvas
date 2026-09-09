@@ -7,5 +7,7 @@ module.exports = {
   places: require('../src/shared/places'),
   gate: require('../src/main/places'),
   skills: require('../src/shared/skills'),
-  assign: require('../src/main/skill-assign')
+  assign: require('../src/main/skill-assign'),
+  /* M196 (D04). The lane rule the gate's `worktreeRootOf` is now built on. */
+  scope: require('../src/shared/work-scope')
 }

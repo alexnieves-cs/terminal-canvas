@@ -138,6 +138,7 @@ import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store
 import { usePreviewReload } from '@renderer/browser/usePreviewReload'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
+import { laneOfPath } from '@shared/work-scope'
 import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
 import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
@@ -175,6 +176,8 @@ import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import type { StartWorkOutcome } from '@renderer/palette/start-work'
+import { sendRefusalSentence } from '@shared/agent-session'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
 import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
@@ -321,7 +324,7 @@ export function Canvas({
   const workItemsRef = useRef(workItems)
   workItemsRef.current = workItems
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => void; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     setWorkItems((current) => current.some((i) => i.panelId === chatId)
       ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
@@ -3492,7 +3495,11 @@ export function Canvas({
     w.__m113 = {
       add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
         paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
-      dispatch: (itemId: string, teammateId: string, root?: string): void => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root),
+      dispatch: (itemId: string, teammateId: string, root?: string): void => { void paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root) },
+      // M197. The START door, through the SAME action every real door takes —
+      // the hook proves the real path rather than a parallel one, the rule
+      // __m13Open established.
+      start: (opts?: { itemId?: string; teammateId?: string; title?: string }): void => paletteActionsRef.current?.beginStartWork(opts),
       items: (): PersistedWorkItem[] => workItemsRef.current,
       close: (id: string): void => onClosePanel(id),
       show: (itemId: string): void => spawnWorkCard(itemId),
@@ -4276,19 +4283,19 @@ export function Canvas({
    * state stays `todo` here: `working` is the runtime's word (the turn-start
    * effect above), never the click's.
    */
-  const dispatchWorkItem = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<void> => {
-    if (mergedRef.current) return
+  const dispatchWorkItem = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const item = workItemsRef.current.find((i) => i.id === itemId)
-    if (item === undefined) return
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
     const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) =>
       setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
     const chatId = `c${nextIdRef.current++}`
     const repo = item.key === undefined ? null : repoOfKey(item.key)
     const lane = await window.canvas.board.lane({ itemId, chatPanelId: chatId, teammateId, ...(repo === null ? {} : { repo }), ...(root === undefined ? {} : { root }) })
-    if (lane.kind === 'refused') { patch({ note: lane.reason }); return }
+    if (lane.kind === 'refused') { patch({ note: lane.reason }); return { kind: 'refused', reason: lane.reason } }
     const sessionId = crypto.randomUUID()
     const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
-    if (created.kind === 'refused') { patch({ note: created.reason }); return }
+    if (created.kind === 'refused') { patch({ note: created.reason }); return { kind: 'refused', reason: created.reason } }
     const GAP = 48
     // The card and the offset are computed HERE, from the ref, not inside the
     // updater: React runs the updater after this function's next line, and
@@ -4312,9 +4319,23 @@ export function Canvas({
     selectOnly(chatId)
     const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
     const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
-    await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
+    // M197 (D05). The first send's answer is READ. `send` has a `{ refused }`
+    // arm — M82's budget ceiling refuses and STORES NOTHING, by that
+    // milestone's own rule — so a dispatch over budget used to leave a chat
+    // panel, a worktree and a card marked `todo` with no message anywhere and
+    // nothing on screen saying why. The card's own state machine then never
+    // reached `working`, because `working` is the runtime's word from a turn
+    // that never started. The lane and the chat are real and are KEPT; the
+    // note says the send did not happen, which is the recoverable state.
+    const sent = await window.canvas.agentSession.send(chatId, `${header}${body}`, [])
+    const notSent = sendRefusalSentence(sent)
+    if (notSent !== null) {
+      patch({ note: `the lane and the conversation are ready, but the first message was refused — ${notSent}` })
+      return { kind: 'refused', reason: notSent }
+    }
+    return { kind: 'started', itemId, panelId: chatId }
   }, [commitHistory, selectOnly])
-  boardVerbsRef.current.dispatch = (itemId, teammateId, root) => { void dispatchWorkItem(itemId, teammateId, root) }
+  boardVerbsRef.current.dispatch = (itemId, teammateId, root) => dispatchWorkItem(itemId, teammateId, root)
   /**
    * M115. THE RETURN PATH. `openPr` refuses by name through `prRefusal` (the
    * one function the card's disabled title also reads) BEFORE main is asked;
@@ -5643,7 +5664,12 @@ export function Canvas({
     ...(workItems.length === 0 ? {} : { workStateOf: (itemId: string) => workItems.find((i) => i.id === itemId)?.state, workItemOf: (itemId: string) => workItems.find((i) => i.id === itemId) }),
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
-    templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name
+    templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
+    // M196 (D04). The lane records, already read for the skills door's own
+    // lane question. ONE source: this is the same list main's `laneRootOf`
+    // asks, so the inspector and the Places gate cannot disagree about which
+    // repository a lane belongs to.
+    lanes: worktreeRows
   })
 
   // M180. The agent door: `tc plan` lands on the SAME executor the palette's
@@ -5956,16 +5982,26 @@ export function Canvas({
       // handed (`skill-write.ts`'s `rootsOf`), so a project skill written from
       // one would land in `userData/worktrees/tc/…/.claude/skills` and vanish
       // with the lane, having never been in the repository the person meant.
-      // REFUSED by name rather than translated: M131 translates a lane through
-      // main's `worktreeRootOf` for the skills brief, and doing the same for a
-      // WRITE is repository-identity work the guide assigns to D04. A refusal
-      // that names the repository is honest now and is not in D04's way.
+      // M196 (D04) closed it. Main translates a lane to its record's root
+      // before deriving the project skill root, the same subject the Places
+      // gate already judges, so a project skill written from a dispatched
+      // conversation lands in the repository the person meant. What was a
+      // REFUSAL is now a statement: the door stays open and says where the
+      // file will go, because a person writing a project skill from a lane
+      // needs to know which repository gets it — the folder in the header is
+      // not that repository.
       projectScopeReason: skillsCwd === null || skillsCwd === ''
         ? 'select a panel with a directory to write a skill into its repository'
-        : (() => {
-            const lane = worktreeRows.find((w) => skillsCwd === w.path || skillsCwd.startsWith(`${w.path}/`))
-            return lane === undefined ? null : `this conversation works in a worktree lane, not ${displayPath(lane.root).short} itself — a project skill written here would go with the lane`
-          })(),
+        : null,
+      // The lane STATEMENT, which is not a refusal: the row stays enabled and
+      // says which repository the write reaches. `laneOfPath` is the one
+      // containment rule main asks too, replacing the prefix test written here
+      // by hand — the same fact answered twice was D04's subject.
+      projectScopeNote: (() => {
+        if (skillsCwd === null || skillsCwd === '') return null
+        const lane = laneOfPath(skillsCwd, worktreeRows)
+        return lane === undefined ? null : `this conversation works in a ${lane.branch} lane — a project skill goes to ${displayPath(lane.root).short}, the repository it was cut from`
+      })(),
       newSkillResult,
       onNewSkill: (scope: 'user' | 'project', name: string) => {
         setNewSkillResult(`creating ${name}…`)
@@ -6049,7 +6085,10 @@ export function Canvas({
     },
     onSave: (t: PersistedTeammate) => { void window.canvas.teammate.save(t).then(reloadTeammates) },
     onDelete: (id: string) => { void window.canvas.teammate.remove(id).then(() => { reloadTeammates(); setSelectedTeammateId(null) }) },
-    onDispatch: (itemId: string, teammateId: string) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId),
+    // M197 (D05). Every door is a route into the ONE start action: the drop
+    // still starts in one gesture when nothing is missing, and opens the
+    // sheet on the missing input when something is.
+    onDispatch: (itemId: string, teammateId: string) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId }),
     onAddPlace: (id: string) => {
       void window.canvas.teammate.choosePlace().then((folder) => {
         if (folder === null) return
@@ -6551,7 +6590,7 @@ export function Canvas({
               return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
-                onDispatch={(itemId, teammateId) => paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId)}
+                onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
                 teammateReason={teammateRefusal}
                 onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
                 prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}

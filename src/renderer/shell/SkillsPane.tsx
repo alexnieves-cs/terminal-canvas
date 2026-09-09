@@ -105,6 +105,14 @@ export interface SkillsPaneProps {
   onNewSkill: (scope: 'user' | 'project', name: string) => void
   /** Non-null disables the project scope with this sentence, never removes it. */
   projectScopeReason: string | null
+  /**
+   * M196 (D04). Where a PROJECT skill will actually land, when that is not the
+   * folder the pane's subject shows — a dispatched conversation works in a
+   * worktree lane and its project skills go to the repository the lane was cut
+   * from. A statement, never a refusal: the scope stays enabled and says which
+   * repository gets the file.
+   */
+  projectScopeNote?: string | null
   /** Main's own answer to the last create, as a sentence. Null when there is nothing to say. */
   newSkillResult: string | null
 }
@@ -239,6 +247,13 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
               setDraftName('')
             })}>Create</button>
         </div>
+      )}
+
+      {/* M196. Shown only while the project scope is the one selected, and
+          only when there is a lane — a note about where a user skill goes
+          would be answering a question nobody asked. */}
+      {drafting && draftScope === 'project' && props.projectScopeNote != null && (
+        <p className="pf__note skills-pane__empty" data-skills-project-scope-note>{props.projectScopeNote}</p>
       )}
 
       {props.newSkillResult !== null && (

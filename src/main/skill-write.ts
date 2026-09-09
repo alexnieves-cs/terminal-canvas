@@ -313,6 +313,24 @@ export async function deleteSkill(dir: string, deps: SkillWriteDeps): Promise<Sk
  */
 export function skillWriteHandlers(deps: {
   resolveCwd: (cwd: string) => string
+  /**
+   * M196 (D04). Where a NEW project skill goes when that is not the asking
+   * cwd — a dispatched conversation works in a worktree lane, and a project
+   * skill created there must land in the repository the lane was cut from
+   * rather than in the app's own worktrees directory, where it would vanish
+   * with the lane.
+   *
+   * It renames the CREATE target ONLY. `skillRoots` below keeps the asking
+   * cwd's own project root beside it, so this can never make a file that was
+   * writable before stop being writable — the failure the first cut of this
+   * had, where a project skill opened from a lane could no longer be saved,
+   * renamed or deleted and the refusal claimed it was outside every skills
+   * folder while it sat in the repository's own checkout.
+   *
+   * OPTIONAL and defaulted: absent means nobody translates, which is every
+   * pre-M196 caller and every check that drives these handlers.
+   */
+  projectRootOf?: (cwd: string) => string | undefined
   home: () => string
   realpath: Realpath
   plugins: () => Promise<readonly { id: string; installPath: string }[]>
@@ -323,21 +341,31 @@ export function skillWriteHandlers(deps: {
   rename(req: { cwd: string; dir: string; name: string }): Promise<SkillWriteResult>
   remove(req: { cwd: string; dir: string }): Promise<SkillWriteResult>
 } {
-  const rootsOf = (cwd: string): { user: string; project: string } => {
+  const rootsOf = (cwd: string): { user: string; project: string; asked: string } => {
     const home = deps.home()
+    // An empty cwd is a panel with no directory: the project root then
+    // resolves to nothing writable rather than to the process's own cwd,
+    // which is the app bundle.
+    const asked = cwd === '' ? '' : join(deps.resolveCwd(cwd), '.claude', 'skills')
+    const translated = cwd === '' ? undefined : deps.projectRootOf?.(cwd)
     return {
       user: join(home, '.claude', 'skills'),
-      // An empty cwd is a panel with no directory: the project root then
-      // resolves to nothing writable rather than to the process's own cwd,
-      // which is the app bundle.
-      project: cwd === '' ? '' : join(deps.resolveCwd(cwd), '.claude', 'skills')
+      project: translated === undefined ? asked : join(translated, '.claude', 'skills'),
+      asked
     }
   }
   const depsFor = async (cwd: string): Promise<SkillWriteDeps> => {
     const roots = rootsOf(cwd)
     return {
       realpath: deps.realpath,
-      skillRoots: [roots.user, roots.project].filter((r) => r !== ''),
+      // BOTH project roots. The translated one is where a new skill goes; the
+      // asked one is where an existing project skill actually sits when the
+      // cwd is a lane, because a lane is a checkout of the same repository and
+      // the file is present in it. Dropping the asked one is what refused
+      // `write`, `rename` and `remove` from a lane in this milestone's first
+      // cut. A duplicate when nothing is translated is harmless — containment
+      // is an ANY test.
+      skillRoots: [roots.user, roots.project, roots.asked].filter((r) => r !== ''),
       pluginPaths: await deps.plugins(),
       trash: deps.trash
     }

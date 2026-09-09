@@ -1631,6 +1631,123 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     }
 
     /* ---------------------------------------------------------------- */
+    /* M197 (D05). Start work — one action, and the typed door reaches a  */
+    /* lane at all for the first time                                     */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = [
+        'start.door.1 the palette\'s Start work… row opens the sheet with nothing pre-filled, the agent field offers every teammate with a placeless one DISABLED by name (a grant, never widened from here), and choosing a teammate reads the repositories under its places from main — the same bounded walk the lane makes',
+        'start.door.2 a TYPED item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — reaches a REAL worktree lane through the sheet\'s repository choice: the record carries the chat and the worktree, and the lane\'s root is the chosen repository',
+        'start.answer.1 a start whose repository the teammate may not touch is REFUSED IN THE SHEET by name and mints nothing, and the agent door\'s dispatch verb answers `refused` with the same sentence rather than reporting `ran` before the work could fail'
+      ]
+      const sLog = []
+      const onS = (_e, _l, m) => { sLog.push(String(m).slice(0, 220)) }
+      wc.on('console-message', onS)
+      const repoS = mkdtempSync(join(tmpdir(), 'tc panels start repo '))
+      const outside = mkdtempSync(join(tmpdir(), 'tc panels start outside '))
+      try {
+        const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+        for (const d of [repoS, outside]) {
+          g(d, 'init', '-q', '.'); g(d, 'config', 'user.email', 'v@e.com'); g(d, 'config', 'user.name', 'v')
+          writeFileSync(join(d, 'a.txt'), 'a\n'); g(d, 'add', '-A'); g(d, 'commit', '-qm', 'init')
+        }
+        layoutStore.saveTeammate({ id: 'tm-sw', name: 'sam', brief: 'You are sam.', places: [repoS], services: [], skills: [], memory: 'sam', chats: [], messaging: false, scheduling: false })
+        layoutStore.saveTeammate({ id: 'tm-none', name: 'nell', brief: '', places: [], services: [], skills: [], memory: 'nell', chats: [], messaging: false, scheduling: false })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const reS = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS
+        await settle()
+
+        // ---- start.door.1: the palette row, the sheet, the agent field ----
+        await wc.executeJavaScript(`window.__m113 ? window.__m113.start() : null`)
+        const sheetUp = await waitUntil(() => wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); if (!s) return false
+          const task = s.querySelector('[data-start-task]'); const agent = s.querySelector('[data-start-agent]')
+          return { task: task ? (task.value !== undefined ? task.value : task.textContent) : null,
+                   fixed: !!s.querySelector('[data-start-task-fixed]'),
+                   rows: [...agent.options].map((o) => ({ v: o.value, t: o.textContent, d: o.disabled })),
+                   repoDisabled: s.querySelector('[data-start-repo]').disabled } })()`), 5000)
+        // Choosing the teammate reads main's answer; the repository field then
+        // offers the clone under its place.
+        await wc.executeJavaScript(`(() => { const sel = document.querySelector('[data-start-agent]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+          set.call(sel, 'tm-sw'); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+        const repoRows = await waitUntil(() => wc.executeJavaScript(`(() => { const o = [...document.querySelectorAll('[data-start-repo] option[data-start-repo-row]')]
+          return o.length > 0 ? o.map((x) => x.getAttribute('data-start-repo-row')) : false })()`), 6000)
+        ok(IDS[0],
+          sheetUp && sheetUp.task === '' && sheetUp.fixed === false && sheetUp.repoDisabled === true &&
+            sheetUp.rows.some((r) => r.v === 'tm-sw' && !r.d) &&
+            sheetUp.rows.some((r) => r.v === 'tm-none' && r.d && /no places/.test(r.t)) &&
+            Array.isArray(repoRows) && repoRows.some((p) => realpathSync(p) === realpathSync(repoS)),
+          JSON.stringify({ sheetUp, repoRows, log: sLog.slice(-3) }))
+
+        // ---- start.door.2: the typed item reaches a lane ----
+        const chatCountS = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-chat-status]').length`)
+        const beforeS = await chatCountS()
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); const t = s.querySelector('[data-start-task]')
+          const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+          set.call(t, 'try the new parser'); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+        const chosen = repoRows && repoRows.find((p) => realpathSync(p) === realpathSync(repoS))
+        await wc.executeJavaScript(`(() => { const sel = document.querySelector('[data-start-repo]'); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set
+          set.call(sel, ${JSON.stringify(chosen)}); sel.dispatchEvent(new Event('change', { bubbles: true })); return true })()`)
+        await wc.executeJavaScript(`(() => { const s = document.querySelector('[data-start-sheet]'); s.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+        const startedChat = await waitUntil(async () => {
+          if ((await chatCountS()) !== beforeS + 1) return false
+          return wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-chat-status]')].pop(); return p ? p.getAttribute('data-panel-id') : false })()`)
+        }, 10000)
+        const typedRec = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.source === 'typed' && i.title === 'try the new parser')
+          return it && it.panelId && it.worktreeId ? it : false
+        }, 8000)
+        const typedLane = typedRec ? layoutStore.worktrees().find((w) => w.id === typedRec.worktreeId) : undefined
+        ok(IDS[1],
+          typeof startedChat === 'string' && typedRec && typedRec.panelId === startedChat && typedRec.teammateId === 'tm-sw' &&
+            typedLane !== undefined && realpathSync(typedLane.root) === realpathSync(repoS),
+          JSON.stringify({ startedChat, typedRec, typedLane: typedLane && { id: typedLane.id, root: typedLane.root, path: typedLane.path }, log: sLog.slice(-4) }))
+
+        // ---- start.answer.1: a refusal is SAID, in the sheet and to the agent ----
+        // The Places gate refuses a root outside every place; the sheet shows
+        // the sentence and nothing is minted, and the agent's own door
+        // answers `refused` rather than `ran`.
+        const beforeRefused = await chatCountS()
+        const sheetRefusal = await wc.executeJavaScript(`(async () => {
+          const r = await window.canvas.board.lane({ itemId: 'x', chatPanelId: 'probe-no-mint', teammateId: 'tm-sw', root: ${JSON.stringify(outside)} })
+          return r })()`)
+        // The AGENT door, through `canvas:plan` — the same executor the
+        // palette takes (M180). Before M197 this arm called the void verb and
+        // answered `ran` in the same breath, so every refusal below happened
+        // after the answer had already been given.
+        // `nell` BINDS (the roster holds her) and then the start FAILS: she
+        // has no places, so a typed item names no repository she could work
+        // it in. That refusal happens inside the awaited executor — which is
+        // precisely the ground the verb used to answer `ran` over, before the
+        // work could fail. A refusal that binding alone could produce would
+        // not test this; `nobody-at-all` was one, and is not what runs here.
+        const startedItemId = typedRec ? typedRec.id : ''
+        const planAnswer = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `dispatch ${startedItemId} nell` }, null, 8000)
+        const afterRefused = await chatCountS()
+        ok(IDS[2],
+          sheetRefusal && sheetRefusal.kind === 'refused' && /may not|place/i.test(sheetRefusal.reason) &&
+            planAnswer && planAnswer.kind === 'refused' && /nell/.test(planAnswer.reason) && /which place|no places/i.test(planAnswer.reason) &&
+            afterRefused === beforeRefused,
+          JSON.stringify({ sheetRefusal, planAnswer, beforeRefused, afterRefused, log: sLog.slice(-4) }))
+
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        try { layoutStore.deleteTeammate('tm-sw') } catch {}
+        try { layoutStore.deleteTeammate('tm-none') } catch {}
+        const reS2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reS2
+        await settle()
+      } catch (sErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(sErr && sErr.message || sErr) + ' | renderer: ' + (sLog.slice(-4).join(' || ') || '(none)'))
+      } finally {
+        wc.removeListener('console-message', onS)
+        for (const d of [repoS, outside]) { try { rmSync(d, { recursive: true, force: true }) } catch {} }
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
     /* M118. The sheet's copilot and acp rows, from the registry          */
     /* ---------------------------------------------------------------- */
     {

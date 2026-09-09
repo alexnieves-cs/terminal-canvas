@@ -48,6 +48,13 @@ export interface RailModelsDeps {
   templateNameOf?: (templateId: string) => string | undefined
   /** M116. The record itself, for the inspector's five facts. */
   workItemOf?: (itemId: string) => PersistedWorkItem | undefined
+  /**
+   * M196 (D04). The app's worktree records, so the inspector can name the
+   * repository behind a dispatched conversation's lane. Optional and this is
+   * its only production caller — omitting it renders no lane field at all,
+   * which is right for a canvas that has no lanes and wrong for one that has.
+   */
+  lanes?: readonly { path: string; root: string; branch?: string }[]
 }
 
 /**
@@ -370,7 +377,9 @@ export function useRailModels(deps: RailModelsDeps) {
         isWorkPanel(selectedPanel) ? deps.workItemOf?.(selectedPanel.work.itemId) : undefined,
         // M133. A workflow trigger's template name, so the `runs` field says
         // the workflow rather than `/usr/bin/true`.
-        deps.templateNameOf
+        deps.templateNameOf,
+        // M196. The lane records, for the chat arm's repository and lane rows.
+        deps.lanes
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

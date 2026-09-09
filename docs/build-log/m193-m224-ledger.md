@@ -21,7 +21,9 @@ milestone did run them; it still did not drive the app by hand, and says so wher
 | D01 | M193 | ✅ done | [m193-d01-reconcile.md](m193-d01-reconcile.md) |
 | D02 | M194 | ✅ done | [m194-d02-selected-chat-context.md](m194-d02-selected-chat-context.md) |
 | D03 | M195 | ✅ done | [m195-d03-preview-ownership.md](m195-d03-preview-ownership.md) |
-| D04–D20 | M196–M224 | not started | — |
+| D04 | M196 | ✅ done | [m196-d04-scope-policy.md](m196-d04-scope-policy.md) |
+| D05 | M197–M198 | ◐ M197 done, M198 open | [m197-d05-start-work.md](m197-d05-start-work.md) |
+| D06–D20 | M199–M224 | not started | — |
 
 The full map, its splits and its reservations are below. A phase's evidence, critic disposition and
 owed hand checks go in that phase's own build log, and its row here is updated when it lands.
@@ -39,8 +41,8 @@ re-recorded before the work starts, never after.
 | D01 | **M193** | — | ✅ done |
 | D02 | **M194** | — | ✅ done |
 | D03 | **M195** | — | ✅ done |
-| D04 | **M196** | — | not started |
-| D05 | **M197–M198** | M197 the one entry door and the task record; M198 the assembly (teammate, place, lane, chat) and its partial-failure recovery | not started |
+| D04 | **M196** | — | ✅ done |
+| D05 | **M197–M198** | **re-recorded at M197** — M197 the FLOW (the one entry door, the three inputs, and the executor made to answer); M198 idempotency and partial-failure recovery. *Was:* M197 the one entry door and the task record; M198 the assembly and its recovery. The seam moved because the assembly (`board:lane` → `agent:create` → the first send) is M114's and needed no rebuilding: what was missing was the *asking*, and what was broken was the *answering*. The task record needed no change at all — `work-items.ts` is untouched. **This was re-recorded during the milestone, not before it**, which is a departure from this table's own rule; it is written down rather than tidied away | ◐ M197 done, M198 open |
 | D06 | **M199–M200** | M199 the run's own truth (a pending question as a run entry; a turn is not a task); M200 the supervision surface that reads it | not started |
 | D07 | **M201–M202** | M201 the review handoff record; M202 local review readiness and the PR/refusal path | not started |
 | D08 | **M203–M204** | M203 `Show this task`; M204 `Show related` and the far view's work groups | not started |
@@ -137,6 +139,143 @@ Every hand check the v9 run left owed is still owed.
 
 ---
 
+## D05 = M197 — one Start work action, and every door a route into it
+
+**◐ M197 done; M198 (idempotency and partial-failure recovery) open.** The full record is
+[m197-d05-start-work.md](m197-d05-start-work.md); this is the row.
+
+**run** `npm run verify` exit 0, no FAIL line · **run** `npm run verify:visual` 60/60 with ONE
+golden ADDED (`start-work`) and none rewritten — `palette-dark` was written once by mistake, the
+capture was looked at, found to hold **no palette at all**, restored with `git checkout`, and now
+passes at `0.012% differ` against its original. Six checks, all scoped ids, each watched failing
+first: `verify:palette start.1a–.1e`, `verify:file lane.repos.1`/`.2`, `verify:panels:product`
+`start.door.1`, `start.door.2`, `start.answer.1`. One channel added (`board:repositories`, 134),
+both IPC diagrams edited together.
+
+**The defect, in one line.** `dispatchWorkItem`'s third argument — the chosen repository root —
+had **no caller in the app**: four call sites, all passing two. `board-lane.ts` therefore refused a
+typed or Jira item with *"choose which place `<name>` should work it in"*, a sentence naming a door
+that did not exist, and only a GitHub item whose clone already sat under a teammate's place could
+start work at all. M113's own typed door minted cards that could never become work.
+
+**What the flow does not do.** It does not always open a sheet: `startWorkNeeds` returning EMPTY
+is the dispatch-without-a-sheet signal, so M114's drag-onto-a-teammate still starts in one gesture.
+It does not widen a grant: a placeless teammate is disabled by name and the Teammates pane is a
+NAMED ROUTE. It does not add a second executor: the sheet's submit runs the same
+`board:lane` → `agent:create` → `send` M114 built, and `work-items.ts` is untouched.
+
+**Three checks caught what reading did not.** `start.door.2` was red on the first implementation
+with `no work item is called wi…` — `workItemsRef.current = workItems` is a **render-time**
+assignment, so a flow that mints a task and starts it in one tick reads a list without it.
+`closure.1` refused both new `PaletteActions` members until each was CHOSEN (one excluded as a
+typist's door, one mapped onto the existing `dispatch` verb). `state.2` refused `'starting…'` in
+the sheet's foot, because that word belongs to `panel-state.ts`.
+
+**Two defects only the golden saw**, both invisible to every assertion over this surface because
+all three read values: the `REPOSITORY` label CLIPPED to `REPOSITOR` at the spawn sheet's shared
+5em column, and the palette's own footer printing `↵ start · esc cancel` directly beneath the
+sheet's `↵ start · esc close` — two answers to one question, differing in the last word.
+
+**What M198 owes, measured now rather than discovered later.** The chat id is minted fresh on every
+attempt while `ensureForPanel` reuses **by panel id and root**, so a retry after any post-lane
+failure creates a second worktree and a second branch, with the first orphaned because
+`worktreeId` is written only after `agent:create` succeeds. There is no in-flight guard: two fast
+clicks are two starts. Separately, **read** `ChatNode.tsx:435` — the composer reads only
+`SendAnswer`'s object arm, so M82's `refused-budget` shows nothing there either;
+`sendRefusalSentence` is the fix and **D06 is its owner**, not a silent widening here.
+
+---
+
+## D04 = M196 — one policy for repository, worktree lane and memory scope
+
+**✅ done.** The full record is
+[m196-d04-scope-policy.md](m196-d04-scope-policy.md); this is the row.
+
+**run** `npm run verify` exit 0, 38 suite tallies, no FAIL line ·
+**run** `npm run verify:visual` exit 0, 59/59 with NO golden rewritten — the milestone's new
+statements are all in the inspector, the memory node's body and the composer's note stack, none of
+which the shot harness's scenes frame · **run** `npm run verify:packaged` exit 0, 12/12.
+Six checks, all scoped ids (`verify:file` 93 → 95, `verify:review` 98 → 99, `verify:teammates`
+25 → 26, `verify:toolbox` 103 → 104, `verify:rail` 202 → 203), each watched RED against the exact
+production behaviour it replaces, with that behaviour restored between each.
+
+**The first green gate was invalid and is recorded as such**: source files were edited while it
+ran, so the tree moved under it. A verification run only means something if it did not. The gate
+also failed once on `verify:meta milestones.1` — the build log, the ledger row and the guide
+checkbox were all written and `README.md`'s milestone table still had no M196 row, which is the
+roadmap contract; and once on `verify:panels:core` 26 with `sessions=[]`, the documented leftover
+`tmux -L terminal-canvas-verify-panels` server, 78/78 after clearing it.
+
+**The mechanism, measured before anything was written.** `git worktree add` against a scratch
+repository, then `rev-parse` from the lane and from a subdirectory of it: `--show-toplevel` answers
+the **lane** both times, and `--git-common-dir` answers the parent's `.git`. Every door that asked
+only the first question was treating a lane as a repository of its own — and each then returned a
+plausible, non-empty answer, which is why none of this was visible.
+
+**The defect as the checks printed it.** With `memoryScope` reverted to the shipped `memoryRoot`,
+`memory.4` printed
+`"files":["tmp-scratch-…","u-worktrees-api-ab12-tc-p1-39d51d2c.jsonl","w-api-6e379464.jsonl"]` —
+the audit's open investigation answered as a filename: a dispatched teammate's memories in a second
+JSONL keyed by the lane, beside the repository's, read by no door of it, orphaned the moment
+`worktree:remove` deleted the lane. Beside it, `"refused":{"ok":true}` — git *declining* reported
+as a successful write to a stray key. With the resolver reduced to the toplevel,
+`scope.resolve.1` printed `"repository":"/u/worktrees/api-ab12/tc-p1"`, a lane wearing a
+repository's name.
+
+**A fresh-context critic found five real defects that three green suites did not, and every one
+was second-order** — not the thing built, but something it moved. The full round is §6 of the build
+log; the two that generalise:
+
+- **The Places gate HAD been widened, and the fence check could not see it.** `PlacesGate.check`
+  REPLACES the candidate with `worktreeRootOf`'s answer and never judges the candidate again, so
+  whatever the lane match consumes is what the gate stops looking at. Exact equality was
+  accidentally safe — a lane root has no symlink component by construction — and containment made
+  the whole subtree eligible, so a symlink an agent creates inside its own lane (`ln -s /etc evil`)
+  was translated to the repository, found inside a place, and ALLOWED. `laneRootOf` now matches on
+  the real path and fails closed. **Widening what a substitution matches also widens what the check
+  after it never sees**, and the fence could not observe it because its own fake `realpath`
+  returned every lane path unchanged.
+- **One line closed three doors it was not about.** Wrapping `resolveCwd` for the skill door also
+  moved `skillRoots`, the containment list EVERY verb is judged against, so `write`, `rename` and
+  `remove` were refused for a project skill opened from a lane — claiming it was outside every
+  writable skills folder while it sat in the repository's own checkout. Red-first testing proves
+  the thing you set out to build works; it says nothing about what else you moved.
+
+**Four things a later milestone should know before it reads this as finished.**
+
+- **The widening fence is the check that nearly did not work.** `dispatch.2`'s third arm proves
+  that segment containment did not loosen the Places gate: under a bare `startsWith`, a directory
+  the app has NO record for translates to the lane's repository, that repository is in the
+  teammate's places, and the gate answers `ok: true` — a permission granted by a string
+  coincidence. The first draft carried a second worktree record, and the longest-match rule then
+  rescued the wrong containment rule so the arm stayed green under the very implementation it
+  names. **A check that cannot go red for the reason in its own title is a claim of coverage, and
+  it looks identical to a passing one.**
+- **`memoryScope` had to be EXTRACTED before it could be checked.** No suite bundles
+  `main/index.ts`, so the memory door's root resolution — four call sites, and this milestone's
+  whole subject — had never been reachable by a check in its own right. Moving it into an injected
+  module was not tidying; it is the difference between a claim and evidence. Anything else in
+  `index.ts` that decides something is in the same position right now.
+- **There is no memory migration, and that is the decision.** A JSONL written from a lane before
+  M196 is no longer read. It is not merged into the repository's: the guide forbids silently
+  merging previously separate histories, and those entries were already unreachable from every
+  repository door and already orphaned by design. Nothing is rewritten and nothing is deleted; the
+  provenance is on screen instead.
+- **The delegation is the anti-drift move and it should be repeated.** `shared/preview.ts`'s two
+  path helpers now call `work-scope.ts` rather than keeping the twin M195 wrote. A preview's root
+  and a repository's root are one question about one kind of string, and the second copy would have
+  differed exactly in the arm nobody tests.
+
+**Owed, and not closed by a green gate:** nothing realpaths a scope, so a symlinked repository
+alias and its real path are one place to the Places gate and two subjects to the memory store
+(M195 recorded the same bound for a preview binding); the inspector's lane rows are RECORD-only, so
+an externally created worktree shows no lane there even though the resolver would name it; the
+skills door's translated write and the composer's repository-named disclosure are covered by no
+real-renderer check; and `verify:visual` / `verify:packaged` are recorded below rather than
+assumed. Every hand check the v9 run left owed is still owed.
+
+---
+
 ## D03 = M195 — previews bound to the work they preview
 
 **✅ done.** The full record is
@@ -161,6 +300,25 @@ stray note.
 first. It differed by 0.139 % against a 0.5 % budget, so the suite PASSED it: a change under the
 budgets that matters is forced by deleting the golden, and this is the milestone's only visible
 surface.
+
+**A fresh-context critic found five real defects that three green suites did not, and every one
+was second-order** — not the thing built, but something it moved. The full round is §6 of the build
+log; the two that generalise:
+
+- **The Places gate HAD been widened, and the fence check could not see it.** `PlacesGate.check`
+  REPLACES the candidate with `worktreeRootOf`'s answer and never judges the candidate again, so
+  whatever the lane match consumes is what the gate stops looking at. Exact equality was
+  accidentally safe — a lane root has no symlink component by construction — and containment made
+  the whole subtree eligible, so a symlink an agent creates inside its own lane (`ln -s /etc evil`)
+  was translated to the repository, found inside a place, and ALLOWED. `laneRootOf` now matches on
+  the real path and fails closed. **Widening what a substitution matches also widens what the check
+  after it never sees**, and the fence could not observe it because its own fake `realpath`
+  returned every lane path unchanged.
+- **One line closed three doors it was not about.** Wrapping `resolveCwd` for the skill door also
+  moved `skillRoots`, the containment list EVERY verb is judged against, so `write`, `rename` and
+  `remove` were refused for a project skill opened from a lane — claiming it was outside every
+  writable skills folder while it sat in the repository's own checkout. Red-first testing proves
+  the thing you set out to build works; it says nothing about what else you moved.
 
 **Four things a later milestone should know before it reads this as finished.**
 

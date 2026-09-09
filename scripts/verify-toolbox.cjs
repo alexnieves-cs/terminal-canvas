@@ -1053,7 +1053,73 @@ const write = (rel, text) => {
 
   /* ------------------------------------------------------- report ----- */
   console.log('')
-  const failed = results.filter((r) => !r.pass)
+  // M196 (D04) — skill.lane.1. THE LANE TRANSLATION, NARROWED TO THE DOOR IT IS
+//      ABOUT. D02 refused a project skill written from a dispatched
+//      conversation by name, because its cwd is a worktree LANE and the file
+//      would have landed in `userData/worktrees/…/.claude/skills` and gone
+//      with the lane. D04 translates it instead — but ONLY the create target.
+//      The first cut wrapped `resolveCwd`, which also moved `skillRoots`, the
+//      containment list EVERY verb is judged against, so `write`, `rename` and
+//      `remove` were refused for a project skill opened from a lane with a
+//      sentence claiming it was outside every writable skills folder — while
+//      it sat in the repository's own checkout, which a lane is. A door that
+//      worked before the milestone, closed by it. Both halves are asserted
+//      here because either alone passes while the other is broken.
+{
+  const NAME = 'skill.lane.1 a NEW project skill created from a worktree lane is written into the repository the lane was cut from, while an existing project skill reached through the LANE\'s own path stays writable — the containment list keeps both roots, so nothing that could be saved, renamed or deleted before the translation stopped being writable; and a translation that names a directory nobody can resolve leaves the asking cwd as the project root rather than laundering it into the home folder'
+  const has = typeof T.skillWriteHandlers === 'function'
+  if (!has) ok(NAME, false, 'main/skill-write.ts does not export skillWriteHandlers')
+  else {
+    const { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } = require('node:fs')
+    const base = mkdtempSync(join(tmpdir(), 'tc skill lane '))
+    try {
+      const REPO = join(base, 'repo')
+      const LANE = join(base, 'worktrees', 'tc-p1')
+      const HOME = join(base, 'home')
+      for (const d of [join(REPO, '.claude', 'skills'), join(LANE, '.claude', 'skills', 'existing'), join(HOME, '.claude', 'skills')]) mkdirSync(d, { recursive: true })
+      // The file as the toolbox reads it FROM THE LANE: a lane is a checkout
+      // of the same repository, so a project skill committed to it is there.
+      const inLane = join(LANE, '.claude', 'skills', 'existing', 'SKILL.md')
+      writeFileSync(inLane, '---\nname: existing\ndescription: d\n---\n\nbody\n')
+      const handlers = T.skillWriteHandlers({
+        resolveCwd: (cwd) => cwd,
+        // main's own wiring: the lane's repository, and undefined when it does
+        // not exist on disk.
+        projectRootOf: (cwd) => (cwd === LANE || cwd.startsWith(`${LANE}/`) ? REPO : undefined),
+        home: () => HOME,
+        realpath: (p) => p,
+        plugins: async () => [],
+        trash: async () => {}
+      })
+      const created = await handlers.create({ cwd: LANE, scope: 'project', name: 'fresh' })
+      const landedInRepo = existsSync(join(REPO, '.claude', 'skills', 'fresh', 'SKILL.md'))
+      const landedInLane = existsSync(join(LANE, '.claude', 'skills', 'fresh', 'SKILL.md'))
+      // The three verbs the first cut closed. `write` needs the file's own
+      // stamp, so it is read through the same door the editor uses.
+      const stamp = { mtimeMs: require('node:fs').statSync(inLane).mtimeMs, size: require('node:fs').statSync(inLane).size }
+      const wrote = await handlers.write({ cwd: LANE, path: inLane, text: '---\nname: existing\ndescription: d\n---\n\nedited\n', stamp })
+      const renamed = await handlers.rename({ cwd: LANE, dir: join(LANE, '.claude', 'skills', 'existing'), name: 'renamed' })
+      const removed = await handlers.remove({ cwd: LANE, dir: join(LANE, '.claude', 'skills', 'renamed') })
+      // No translation available: the project root must stay the asking cwd,
+      // never the home folder `resolveCwd` falls back to for a missing path.
+      const plain = T.skillWriteHandlers({
+        resolveCwd: (cwd) => cwd, projectRootOf: () => undefined, home: () => HOME,
+        realpath: (p) => p, plugins: async () => [], trash: async () => {}
+      })
+      const plainCreated = await plain.create({ cwd: REPO, scope: 'project', name: 'plain' })
+      const plainLanded = existsSync(join(REPO, '.claude', 'skills', 'plain', 'SKILL.md'))
+      const notInHome = !existsSync(join(HOME, '.claude', 'skills', 'plain', 'SKILL.md'))
+      ok(NAME,
+        created.kind === 'created' && landedInRepo === true && landedInLane === false &&
+          // Each of these was `refused` in the first cut.
+          wrote.kind !== 'refused' && renamed.kind !== 'refused' && removed.kind !== 'refused' &&
+          plainCreated.kind === 'created' && plainLanded === true && notInHome === true,
+        JSON.stringify({ created: created.kind, landedInRepo, landedInLane, wrote: wrote.kind, renamed: renamed.kind, removed: removed.kind, plainCreated: plainCreated.kind, plainLanded, notInHome, whyWrote: wrote.why, whyRenamed: renamed.why }))
+    } finally { rmSync(base, { recursive: true, force: true }) }
+  }
+}
+
+const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   rmSync(DIR, { recursive: true, force: true })
   process.exit(failed.length === 0 ? 0 : 1)

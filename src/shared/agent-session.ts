@@ -162,6 +162,30 @@ export type ChatAttachment =
 /** M75. `agent:send`'s answer: the runtime's word, or a refusal naming the attachment that could not go. */
 export type SendAnswer = SendResult | { refused: string }
 
+/**
+ * M197. WHY A SEND DID NOT HAPPEN, in one sentence, or null when it did.
+ *
+ * `SendAnswer` refuses in TWO shapes and a caller that reads only one is
+ * silent for the other: the object arm (`{ refused }`, an attachment that
+ * could not go) and four STRING arms, of which `refused-budget` is M82's
+ * ceiling — a refusal that stores nothing, so there is no turn, no message
+ * and nothing on screen unless the caller says so. `queued` is not a
+ * refusal: the message is stored and will be sent, and calling it one would
+ * report a failure to a user whose work is merely waiting.
+ */
+export function sendRefusalSentence(answer: SendAnswer | undefined): string | null {
+  if (answer === undefined) return null
+  if (typeof answer === 'object' && answer !== null && 'refused' in answer) return answer.refused
+  switch (answer) {
+    case 'refused-budget': return 'the budget ceiling was reached — raise agents.budgetUsd in Settings, then send again'
+    case 'refused-backend': return 'this engine cannot take the message'
+    case 'refused-images': return 'this engine cannot take images'
+    case 'refused-sandbox': return 'this engine has no read-only mode, and the conversation has no folder'
+    case 'no-session': return 'the conversation has no session'
+    default: return null
+  }
+}
+
 /** M75. `agent:clipboard-image`: the pasted image, or null when the clipboard holds none. */
 /**
  * M81. THE SUPERVISOR'S JOB, appended to the CLI's own system prompt. It

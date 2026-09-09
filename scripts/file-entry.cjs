@@ -67,6 +67,12 @@ module.exports = {
      file-read.ts sits in. Absent until they land, the clipboard-file shape. */
   ...((() => { try { return require('../src/main/image-read.ts') } catch { return {} } })()),
   ...((() => { try { return require('../src/main/starter-prepare.ts') } catch { return {} } })()),
+  /* M196. The scope policy's pure half — preview.ts delegates its two path
+     helpers to it, so this must be present for those to resolve. */
+  ...((() => { try { return require('../src/shared/work-scope.ts') } catch { return {} } })()),
+  /* M196. The scope resolver and the memory door built on it, so the store's
+     KEY can be driven end to end against the real JSONL beside it. */
+  ...((() => { try { return require('../src/main/work-scope.ts') } catch { return {} } })()),
   // M185. The preview's pure rules and main's discoverer, which executes nothing.
   ...((() => { try { return require('../src/shared/preview.ts') } catch { return {} } })()),
   ...((() => { try { return require('../src/main/preview-discover.ts') } catch { return {} } })()),

@@ -371,6 +371,51 @@ deleting both masks passes the whole suite. The `generation` ref IS covered — 
 Files half is the only thing in the repository that can see it, because the A→B→A subject string
 is identical and the counter is the sole discriminator.
 
+## The v10 run, D04 (M196)
+
+`verify:file scope.1` and `memory.4` are the pure policy and the memory door driven into the REAL
+store; `verify:review scope.resolve.1` is the resolver's seven arms over the fake `GitRunner` that
+suite already had; `verify:teammates dispatch.2` is the Places gate on the segment rule; and
+`verify:rail scope.fields.1` is the inspector's two new chat rows.
+
+**`memoryScope` was EXTRACTED from `main/index.ts` into `main/work-scope.ts` so that it could be
+checked at all.** No suite bundles `index.ts`, so the memory door's root resolution — four call
+sites and the milestone's whole subject — had never been reachable by a check in its own right. If
+a door's logic matters and it lives in `index.ts`, moving it into an injected module is not
+refactoring for its own sake; it is the difference between a claim and evidence.
+
+**A fence check needs a case only the wrong rule gets wrong.** `dispatch.2`'s widening arm — the
+one that proves segment containment did not loosen the Places gate — was first written with TWO
+worktree records, and the longest-match rule then rescued the bare-`startsWith` regression so the
+arm stayed green under the very implementation it names. Removing the second record made the decoy
+directory unrecorded, so the wrong rule translates it to the lane's repository and the gate answers
+`ok: true`. **A check that cannot go red for the reason in its own title is a claim of coverage,
+not coverage** — and it looks identical to a passing one.
+
+**A new check whose module alias is block-scoped THROWS and takes the rest of the suite with it.**
+`scope.fields.1` was written with `R_`, an alias defined inside the `kind-tail.2` block above it;
+the suite aborted with a `ReferenceError` after 203 checks and reported nothing about the new one.
+This is the first rule of this document arriving by accident: read which aliases are in scope at
+the position you are appending to, not the position you copied from.
+
+**A check whose fixture cannot express the failure is not a fence.** `dispatch.2`'s widening arm
+was written with a fake `realpath` that returned every path under the lane unchanged, which made
+the symlink escape it exists to catch **structurally unobservable** — the arm was green under an
+implementation that allowed `ln -s /etc evil` inside a lane through to a place. Fixtures decide
+what a check can see; write the fixture from the failure, not from the happy path.
+
+**A check that reads a result before asserting the result is OK will THROW rather than fail.**
+`memory.4` called `store.list(readAtRepo.root, …)` before checking `readAtRepo.ok`, and `slugOf`
+throws on `undefined` — so the unresolved regression, which is half of what that check fences,
+aborted the suite and skipped every check below it. `dispatch.2` gets this right by wrapping its
+body and asserting `threw === null`; copy that shape.
+
+**`verify:meta milestones.1` is the documentation gate and it fires late.** The build log, the
+ledger row and the guide checkbox were all written and the suite still failed — `README.md`'s
+milestone table had no M196 row, and that table is the roadmap contract. It is the FIRST check in
+the chain, so a missing row costs a full re-run of everything after it. Write the README row when
+the build log is written, not at the end.
+
 ## The v10 run, D03 (M195)
 
 `verify:file preview.bind.1–.2` and `verify:layout browser.preview.1` are the pure half (the

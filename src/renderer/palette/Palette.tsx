@@ -1,5 +1,6 @@
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import { SpawnSheet, type SpawnSheetModel } from './SpawnSheet'
+import { StartWorkSheet, type StartWorkSheetModel } from './StartWorkSheet'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import {
   Fragment,
@@ -80,7 +81,13 @@ export interface InputMode {
    * with several fields rather than one input. `submit` is unused for it —
    * the sheet submits through its own model — and `label` is its heading.
    */
-  kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet'
+  /**
+   * M197. 'start' is the second sheet: the same overlay, the same keyboard
+   * rules, a different form. It is a KIND rather than a variant of 'sheet'
+   * because the two answer different questions and share no field — folding
+   * them would make every field of each optional on the other's model.
+   */
+  kind: 'text' | 'confirm' | 'number' | 'secret' | 'sheet' | 'start'
   label: string
   /**
    * M96. What Enter DOES in this mode, for the footer: `run` for the verb
@@ -105,6 +112,8 @@ export interface InputMode {
   feedback?: true
   /** M65. Present when kind is 'sheet'. */
   sheet?: SpawnSheetModel
+  /** M197. Present when kind is 'start'. */
+  start?: StartWorkSheetModel
 }
 
 export interface PaletteProps {
@@ -544,6 +553,7 @@ export function Palette(props: PaletteProps): JSX.Element {
 
   const confirming = inputMode?.kind === 'confirm'
   const sheet = inputMode?.kind === 'sheet' ? inputMode.sheet ?? null : null
+  const startSheet = inputMode?.kind === 'start' ? inputMode.start ?? null : null
   const footer = inputMode
     ? confirming
       ? '↵ confirm · esc cancel'
@@ -582,7 +592,11 @@ export function Palette(props: PaletteProps): JSX.Element {
           to one preset. Rendering the bar anyway left the scope chip stranded
           above a border with an empty field beside it, which reads as a
           half-drawn overlay rather than as a question. */}
-      {sheet !== null ? (
+      {startSheet !== null ? (
+        // M197. The start sheet owns the keyboard the way the spawn sheet
+        // does: its first unanswered field takes focus on mount.
+        <StartWorkSheet model={startSheet} onDone={() => controller.closePalette()} onCancel={() => controller.closePalette()} />
+      ) : sheet !== null ? (
         // M65. The sheet owns the keyboard the way the input does: its first
         // field takes focus on mount, so the ghost input is not needed.
         <SpawnSheet model={sheet} onDone={() => controller.closePalette()} onCancel={() => controller.closePalette()} />
@@ -750,7 +764,13 @@ export function Palette(props: PaletteProps): JSX.Element {
 
       {/* M65. The sheet carries its own keys line; the overlay's footer would
           say "save · cancel" under a form whose verb is "start". */}
-      {sheet === null && <div className="palette__footer">{footer}</div>}
+      {/* M197. A SHEET owns its own foot, and both of them do: the palette's
+          footer under the start sheet printed `↵ start · esc cancel` directly
+          beneath the sheet's own `↵ start · esc close`, two answers to one
+          question, differing only in the last word. Caught by the golden —
+          both checks over this surface read values, and a doubled line is not
+          a value. */}
+      {sheet === null && startSheet === null && <div className="palette__footer">{footer}</div>}
     </div>
   )
 }

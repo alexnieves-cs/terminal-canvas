@@ -144,7 +144,7 @@ export const VERBS: readonly VerbDef[] = [
   // nothing itself — the lane is a worktree, the chat is the teammate's, and
   // the one outward write (Open PR) asks its own spend card and is excluded
   // below by name.
-  { id: 'dispatch', label: 'Dispatch', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }], destructive: false, actions: ['dispatchWorkItem'], target: 'canvas', hint: 'hand a work item to a teammate in a fresh worktree lane' },
+  { id: 'dispatch', label: 'Dispatch', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }], destructive: false, actions: ['dispatchWorkItem', 'startWork'], target: 'canvas', hint: 'hand a work item to a teammate in a fresh worktree lane' },
   { id: 'board', label: 'Board', args: [{ name: 'op', kind: 'key' }, { name: 'what', kind: 'text', rest: true }], destructive: false, actions: ['addWorkItem', 'markDone'], target: 'canvas', hint: 'board add <title> · board done <id>' }
 ]
 
@@ -164,6 +164,11 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   checkForUpdates: 'a network call the user makes by hand — never a plan',
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
+  // M197. The start flow's door opens a SHEET — three fields a person
+  // answers. A plan has no typist, and the executor behind it (`startWork`)
+  // is what the `dispatch` verb maps, so the agent reaches the same action
+  // without a form: one action, two doors, and only one of them typed.
+  beginStartWork: 'opens the start sheet — a plan has no typist; the `dispatch` verb runs the same action',
   openBoard: 'opens a navigator pane — a view, not an action on the canvas',
   // M127/M128. STAYS excluded now that it mints a real panel, and the
   // original reason is why: the verb takes a WORLD POINT, which is the

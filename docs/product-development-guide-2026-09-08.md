@@ -27,8 +27,8 @@ All steps start unchecked. Existing implementations may satisfy part of a step; 
 | D01 | M193 ✅ | Reconcile baseline, roadmap, and product language | Foundation | — | One accurate development contract |
 | D02 | M194 ✅ | Selected chat context in Files and Tools | P0 | D01 | An agent's directory works without a terminal proxy |
 | D03 | M195 ✅ | Explicit preview ownership | P0 | D02 | Only the relevant project's changes reload its preview |
-| D04 | M196 | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
-| D05 | M197–M198 | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
+| D04 | M196 ✅ | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
+| D05 | M197 ✅ / M198 | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
 | D06 | M199–M200 | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
 | D07 | M201–M202 | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
 | D08 | M203–M204 | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
@@ -137,7 +137,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D04 — Resolve repository, worktree, and memory scope consistently
 
-- [ ] Complete and record D04.
+- [x] Complete and record D04. **M196** — the record is [docs/build-log/m196-d04-scope-policy.md](build-log/m196-d04-scope-policy.md).
 
 **Problem/evidence:** Working directory, git root, app-created worktree root, and canonical repository identity serve different purposes. The audit flags `memoryRoot` versus existing worktree-parent translation as an investigation, not a proven defect.
 
@@ -160,7 +160,14 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D05 — Start work from an issue or intention
 
-- [ ] Complete and record D05.
+- [x] **M197 — the flow.** The record is [docs/build-log/m197-d05-start-work.md](build-log/m197-d05-start-work.md).
+  Steps 1–4 and the reachable half of 6: one `Start work` action every door routes into, asking only
+  for what it cannot derive (task → agent → repository, an order that is a dependency), the same
+  lane and agent creation rather than a second executor, and the executor made to ANSWER.
+- [ ] **M198 — step 5.** Idempotency and partial-failure recovery: a repeated start, a
+  worktree created with the chat refused, a send failure, and the redispatch of an existing item.
+  Measured in §6 of the M197 record — the chat id is minted fresh per attempt while `ensureForPanel`
+  reuses by panel id and root, so a retry duplicates the lane.
 
 **Problem/evidence:** The existing Board → teammate → worktree → chat → PR path is powerful, but setup and context are spread across surfaces. Reuse `work-items.ts`, board lane/repository resolution, teammate records, and the single dispatch path.
 

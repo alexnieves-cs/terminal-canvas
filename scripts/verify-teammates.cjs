@@ -21,7 +21,7 @@ buildSync({
   alias: { '@shared': join(__dirname, '..', 'src', 'shared'), '@renderer': join(__dirname, '..', 'src', 'renderer') }
 })
 const M = require(OUT)
-const P = M.places, T = M.teammates, G = M.gate, S = M.skills, A = M.assign
+const P = M.places, T = M.teammates, G = M.gate, S = M.skills, A = M.assign, W = M.scope
 const { readFileSync } = require('node:fs')
 
 const results = []
@@ -115,6 +115,63 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
     ok('dispatch.1 a lane whose repository root is inside a place passes; one whose root is not is refused naming the ROOT and never the lane path; a path that is no known lane is judged as itself',
       inside && inside.ok === true && outside && outside.ok === false && /\/home\/u\/work\/api/.test(outside.reason) && !/worktrees/.test(outside.reason) && plain && plain.ok === false && /worktrees\/other/.test(plain.reason),
       JSON.stringify({ inside, outside, plain }))
+  }
+  // M196 (D04) — dispatch.2. THE GATE ON THE SEGMENT RULE, AND THE FENCE THAT
+  //      PROVES IT DID NOT LOOSEN.
+  //      `worktreeRootOf` was exact path equality at all three of main's
+  //      wiring sites, so an agent whose shell had stepped one directory into
+  //      its own lane was judged as standing in its own repository — the lane
+  //      translated for its root and for nothing below it, while the renderer
+  //      answered the same question with a segment prefix.
+  //      The widening fence is the second arm and it is the reason this check
+  //      exists at all: translating a subdirectory must reach the RECORD's
+  //      root and no further, so a teammate whose places do not hold that
+  //      repository is refused below a lane exactly as they are at it. The
+  //      third arm is the prefix decoy: `<lane>x` is NOT in `<lane>`, and a
+  //      bare startsWith would translate an unrecorded directory to the lane's
+  //      repository and then ALLOW it, because that repository is in the
+  //      teammate's places. That is the widening this rule must not have.
+  {
+    const ada = { id: 't1', name: 'ada', brief: 'x', places: ['/home/u/work'], services: [], skills: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+    const bo = { id: 't2', name: 'bo', brief: 'x', places: ['/elsewhere'], services: [], skills: [], memory: 'bo', chats: [], messaging: false, scheduling: false }
+    // ONE record on purpose. `/app/worktrees/lanex` is a directory this app
+    // knows nothing about whose path shares a prefix with the lane's; under a
+    // bare startsWith it translates to the lane's repository, which IS in
+    // ada's places, so the gate would answer ok for a folder no record covers.
+    // A second record for it would let the longest match rescue the wrong rule.
+    const records = [{ id: 'w1', path: '/app/worktrees/lane', root: '/home/u/work/api', branch: 'tc/p1' }]
+    // A symlink an agent working IN the lane can create. `/etc` is outside
+    // every place, and the gate must see that — the lane translation must not
+    // reach it first.
+    const ESCAPE = '/app/worktrees/lane/evil'
+    const rp = (p) => {
+      if (p === ESCAPE || p.startsWith(`${ESCAPE}/`)) return p.replace(ESCAPE, '/etc')
+      if (p.startsWith('/app/worktrees/') || p.startsWith('/home/u/work') || p.startsWith('/elsewhere')) return p
+      return realpath(p)
+    }
+    let below, belowRefused, decoy, escape, threw = null
+    try {
+      // main's own wiring, verbatim: laneOfPath over the records.
+      // main's own wiring, verbatim: the REAL path, matched against records
+      // whose own paths are real too.
+      const laneRootOf = (path) => {
+        const real = (q) => { try { return rp(q) } catch { return q } }
+        const r = W.laneOfPath(real(path), records.map((x) => ({ ...x, path: real(x.path) })))
+        return r === undefined ? undefined : r.root
+      }
+      const gate = G.createPlacesGate({ realpath: rp, teammate: (id) => (id === 't1' ? ada : id === 't2' ? bo : undefined), worktreeRootOf: laneRootOf })
+      below = gate.check('t1', '/app/worktrees/lane/src/api')
+      belowRefused = gate.check('t2', '/app/worktrees/lane/src/api')
+      decoy = gate.check('t1', '/app/worktrees/lanex/src')
+      escape = gate.check('t1', ESCAPE)
+    } catch (e) { threw = String(e) }
+    ok('dispatch.2 a cwd BELOW a lane translates to the lane record\'s repository and passes for a teammate whose places hold it; the SAME cwd is refused for a teammate whose places do not, naming the repository and never the lane path (the no-widening fence); an unrecorded directory sharing a path prefix with the lane translates to NOTHING and is judged as itself; and a SYMLINK inside the lane pointing OUT of every place is refused, because the translation matches on the real path and never on the string the caller wrote',
+      threw === null &&
+        below && below.ok === true &&
+        belowRefused && belowRefused.ok === false && /\/home\/u\/work\/api/.test(belowRefused.reason) && !/worktrees/.test(belowRefused.reason) &&
+        decoy && decoy.ok === false && /worktrees\/lanex/.test(decoy.reason) &&
+        escape && escape.ok === false,
+      JSON.stringify({ threw, below, belowRefused, decoy, escape }))
   }
   // M120 — sandbox.1. A teammate has places; a chat with no folder has none.
   // The refusal is ONE sentence in one place (`sandboxTeammateRefusal`), asked

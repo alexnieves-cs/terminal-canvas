@@ -1062,6 +1062,88 @@ const p = (name) => join(DIR, name)
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 
+// M196 (D04) — memory.4. WHICH REPOSITORY REMEMBERS THIS, driven through the
+//      resolver into the REAL store so the answer is a filename on disk and
+//      not a claim about one.
+//      The audit left this open as an investigation rather than a proven
+//      defect, and the investigation's answer is here: `--show-toplevel`
+//      inside a worktree lane answers the LANE, so a dispatched teammate's
+//      memories keyed a file under the app's own worktrees directory —
+//      separate from the repository's, read by no door of it, and orphaned the
+//      moment the lane was removed. The decision D04 records is that
+//      repository memory is REPOSITORY-wide: a lane is a place work happens,
+//      not a subject that remembers. ONE file is the whole assertion.
+//      The second half is the arm that was being spent. `resolveRepo` has
+//      three arms so that git DECLINING stays distinguishable, and the memory
+//      door collapsed it into "use the path" — a transient failure wrote to a
+//      slug nothing would read again and said nothing. It is now refused by
+//      name, and a refused write must leave NO file behind.
+{
+  const { mkdtempSync, rmSync, readdirSync } = require('node:fs')
+  const { tmpdir } = require('node:os')
+  const has = typeof F.createMemoryScope === 'function' && typeof F.createScopeResolver === 'function'
+  const NAME = 'memory.4 a worktree lane, a subdirectory of that lane and the repository itself all key ONE memory file — the repository\'s — and the read says which repository it reached and through which lane; a directory git does not own still keeps its own path as its subject; and git DECLINING refuses the write by name rather than keying a stray file, leaving nothing on disk'
+  if (!has) ok(NAME, false, 'main/work-scope.ts does not export createMemoryScope / createScopeResolver')
+  else {
+    const dir = mkdtempSync(join(tmpdir(), 'tc memory scope '))
+    try {
+      const REPO = '/w/api'
+      const LANE = '/u/worktrees/api-ab12/tc-p1'
+      const records = [{ id: 'w1', path: LANE, root: REPO, branch: 'tc/p1' }]
+      const tops = { [REPO]: REPO, [`${REPO}/src`]: REPO, [LANE]: LANE, [`${LANE}/src`]: LANE }
+      const resolverFor = (over) => F.createScopeResolver({
+        resolveRepo: async (cwd) => (over ? over(cwd) : (tops[cwd] === undefined ? { kind: 'not-a-repo' } : { kind: 'root', root: tops[cwd] })),
+        commonRootOf: async (root) => root,
+        worktrees: () => records
+      })
+      const scope = F.createMemoryScope(resolverFor())
+      const store = F.createMemoryStore({ dir })
+      const write = async (from, text) => {
+        const r = await scope(from)
+        return r.ok ? store.add({ root: r.root, kind: 'note', text }) : { ok: false, reason: r.reason }
+      }
+      const fromRepo = await write(REPO, 'from the repository')
+      const fromLane = await write(LANE, 'from the lane')
+      const fromLaneSub = await write(`${LANE}/src`, 'from inside the lane')
+      const fromScratch = await write('/tmp/scratch', 'from a plain folder')
+      // Every repository-side write must be readable from the repository, and
+      // the lane must not have a file of its own.
+      const readAtRepo = await scope(REPO)
+      const readAtLane = await scope(LANE)
+      // GUARDED. `readAtRepo.root` is undefined on the failure path and
+      // `slugOf` would throw on it — and a check that THROWS aborts the suite,
+      // so every check below this one would never run and this one's RED would
+      // not be evidence (docs/verify-suites.md's first rule). The regression
+      // that makes scope unresolved is HALF of what this check fences, so the
+      // unguarded form was broken exactly where it matters most.
+      const rows = readAtRepo.ok === true ? store.list(readAtRepo.root, 50) : { entries: [] }
+      const files = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
+      // git declining: refused, and NOTHING written.
+      const declinedScope = F.createMemoryScope(resolverFor(async () => ({ kind: 'unreadable', detail: 'dubious ownership in repository' })))
+      const refused = await (async () => { const r = await declinedScope(REPO); return r.ok ? { ok: true } : { ok: false, reason: r.reason } })()
+      const filesAfter = readdirSync(dir).filter((f) => f.endsWith('.jsonl'))
+      ok(NAME,
+        fromRepo.ok === true && fromLane.ok === true && fromLaneSub.ok === true && fromScratch.ok === true &&
+          readAtRepo.ok === true && readAtRepo.root === REPO && readAtRepo.scope !== undefined && readAtRepo.scope.lane === undefined &&
+          readAtLane.ok === true && readAtLane.root === REPO &&
+          readAtLane.scope !== undefined && readAtLane.scope.repository === REPO && readAtLane.scope.lane === LANE && readAtLane.scope.laneBranch === 'tc/p1' &&
+          // THE assertion: three writes from three directories, one file.
+          rows.entries.length === 3 &&
+          rows.entries.some((e) => e.text === 'from the lane') && rows.entries.some((e) => e.text === 'from inside the lane') &&
+          // The plain folder is its own subject, so exactly two files exist.
+          files.length === 2 &&
+          // The key is the RESOLVED root, which is the point: the lane and the
+          // repository are asked about separately and land on one filename.
+          readAtLane.ok === true && readAtRepo.ok === true &&
+          store.fileOf(readAtLane.root) === store.fileOf(readAtRepo.root) &&
+          store.fileOf(readAtRepo.root) !== store.fileOf('/tmp/scratch') &&
+          refused.ok === false && /could not be resolved/.test(refused.reason) && /dubious ownership/.test(refused.reason) &&
+          filesAfter.length === 2,
+        JSON.stringify({ readAtRepo, readAtLane, entries: rows.entries.map((e) => e.text), files, refused, filesAfter, oneFile: readAtLane.ok === true && readAtRepo.ok === true && store.fileOf(readAtLane.root) === store.fileOf(readAtRepo.root) }))
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  }
+}
+
 // M101 — routine.1. THE RUNNER over injected timers: arm fires on the
 // interval, a save re-arms without a double tick, pause disarms, runNow
 // fires whatever the schedule says and stamps the run, and a routine whose
@@ -1269,6 +1351,68 @@ const p = (name) => join(DIR, name)
         calls.length === 2,
       JSON.stringify({ found, direct, none, key, badKey, good, noPlace, noRepo, gitRefused, gateRefused, unknownMate, typedNoRoot, calls }))
   } catch (e) { ok('lane.1 (threw)', false, String(e)) }
+
+
+  // M197 — lane.repos.1. EVERY repository under a teammate's places, for the
+  // start flow's repository field. The SAME bounded one-level walk
+  // `findRepoUnderPlaces` already makes (a place is typically ~/work holding
+  // many clones, and a walk past one level turns a dispatch into a
+  // filesystem crawl) — asked for all of them rather than the first match.
+  // A repository with NO origin is kept with `repo: null`: it is still a
+  // repository to work in, and dropping it would make a local-only checkout
+  // invisible with nothing on screen to say why.
+  try {
+    const roots = new Set(['/home/u/work/api', '/home/u/work/site', '/home/u/work/local', '/home/u/other'])
+    const origins = { '/home/u/work/api': 'git@github.com:Acme/Canvas.git', '/home/u/work/site': 'https://github.com/acme/site', '/home/u/other': 'https://github.com/acme/other' }
+    const kids = {
+      '/home/u/work': ['/home/u/work/api', '/home/u/work/site', '/home/u/work/local', '/home/u/work/notes'],
+      '/home/u/other': ['/home/u/other/deep'],
+      '/home/u/work/api': ['/home/u/work/api/src']
+    }
+    const deps = { originOf: (d) => origins[d] ?? null, subdirs: (d) => kids[d] ?? [], isRepoRoot: (d) => roots.has(d) }
+    const listed = F.repositoriesUnderPlaces(['/home/u/work', '/home/u/other'], deps)
+    // The same place twice, and a place nested inside another: one entry each, in first-seen order.
+    const deduped = F.repositoriesUnderPlaces(['/home/u/work', '/home/u/work', '/home/u/work/api'], deps)
+    // A place that is ITSELF a repository is listed, and its children are still walked (the existing walk's shape, unchanged).
+    const direct = F.repositoriesUnderPlaces(['/home/u/other'], deps)
+    const noPlaces = F.repositoriesUnderPlaces([], deps)
+    // The cap. A place with more children than the ceiling is truncated, never refused.
+    const many = Array.from({ length: F.REPO_LIST_MAX + 20 }, (_, i) => `/big/r${i}`)
+    const bigDeps = { originOf: () => null, subdirs: (d) => (d === '/big' ? many : []), isRepoRoot: (d) => d.startsWith('/big/r') }
+    const capped = F.repositoriesUnderPlaces(['/big'], bigDeps)
+    ok('lane.repos.1 repositoriesUnderPlaces walks a place and its IMMEDIATE children only (a grandchild of a place is never listed), keeps place order, lists a place that is itself a repository, dedupes by path across repeated and nested places, keeps a repository with no origin as `repo: null` rather than dropping it, and truncates at REPO_LIST_MAX rather than refusing',
+      listed.map((r) => r.path).join(',') === '/home/u/work/api,/home/u/work/site,/home/u/work/local,/home/u/other' &&
+        listed[0].repo === 'acme/canvas' && listed[1].repo === 'acme/site' && listed[2].repo === null &&
+        listed.every((r) => r.path !== '/home/u/work/api/src') && listed.every((r) => r.path !== '/home/u/other/deep') &&
+        deduped.map((r) => r.path).join(',') === listed.slice(0, 3).map((r) => r.path).join(',') &&
+        direct.map((r) => r.path).join(',') === '/home/u/other' &&
+        noPlaces.length === 0 && capped.length === F.REPO_LIST_MAX,
+      JSON.stringify({ listed, deduped: deduped.map((r) => r.path), direct: direct.map((r) => r.path), noPlaces, capped: capped.length, max: F.REPO_LIST_MAX }))
+  } catch (e) { ok('lane.repos.1 (threw)', false, String(e)) }
+
+
+  // M197 — lane.repos.2. THE DOOR'S THREE ARMS. `board:repositories` is
+  // thin wiring in index.ts, which no suite bundles — so the arm decision
+  // lives here, where it is driven (M196's own lesson, reached again). An
+  // unknown teammate, a teammate with no places, and a real answer INCLUDING
+  // an empty one are three renderings: the second's fix is a folder, the
+  // third's is a clone, and collapsing them tells the user the wrong one.
+  try {
+    const deps = { originOf: () => null, subdirs: () => [], isRepoRoot: (d) => d === '/home/u/work/api' }
+    const ada = { id: 't1', name: 'ada', brief: '', places: ['/home/u/work/api'], services: [], memory: 'ada', chats: [], messaging: false, scheduling: false }
+    const bare = { ...ada, id: 't3', name: 'cy', places: ['/home/u/empty'] }
+    const bo = { ...ada, id: 't2', name: 'bo', places: [] }
+    const good = F.repositoriesAnswer(ada, deps)
+    const empty = F.repositoriesAnswer(bare, deps)
+    const noPlaces = F.repositoriesAnswer(bo, deps)
+    const unknown = F.repositoriesAnswer(undefined, deps)
+    ok('lane.repos.2 the board:repositories arm decision is three states — an unknown teammate refused by name, a teammate with NO PLACES named as a grant with the Teammates pane as its fix, and a real answer whose empty case is `repos: []` (the places hold no repository) rather than the no-places sentence',
+      good.kind === 'repos' && good.repos.length === 1 && good.repos[0].path === '/home/u/work/api' && good.repos[0].repo === null &&
+        empty.kind === 'repos' && empty.repos.length === 0 &&
+        noPlaces.kind === 'no-places' && /bo/.test(noPlaces.reason) && /Teammates pane/.test(noPlaces.reason) &&
+        unknown.kind === 'refused' && /teammate/i.test(unknown.reason),
+      JSON.stringify({ good, empty, noPlaces, unknown }))
+  } catch (e) { ok('lane.repos.2 (threw)', false, String(e)) }
 
   /* ---- M126: plugin-list, over a fake runner ---- */
   try {
@@ -1950,6 +2094,67 @@ await (async () => {
         // made the whole clause unfalsifiable for any lowercase-initial line.)
         lines.every((l) => !/^[A-Z]/.test(l) && !l.endsWith('.')),
       JSON.stringify({ live, closed, noSource, unbound }))
+  }
+}
+
+// M196 (D04) — scope.1. THE THREE FACTS THE POLICY KEEPS APART, as arithmetic.
+//      `insideDirectory` is the containment every scope question is answered
+//      with, and its failure is a WRONG ANSWER SHAPED LIKE A RIGHT ONE: a bare
+//      startsWith holds `/w/apiary` inside `/w/api`, so a cwd would translate
+//      to the neighbouring project's repository and every door downstream would
+//      then agree, confidently, about the wrong repository.
+//      `laneOfPath` picks the LONGEST record, because records nest and the
+//      shortest match names a grandparent for work happening in a child.
+{
+  const has = typeof F.insideDirectory === 'function' && typeof F.laneOfPath === 'function' && typeof F.normaliseScopePath === 'function'
+  const NAME = 'scope.1 the pure scope policy: containment on segment boundaries (a sibling sharing a prefix is OUTSIDE), a relative or empty path answering null rather than being resolved against a guess, laneOfPath taking the LONGEST matching record and nothing for a plain directory'
+  if (!has) ok(NAME, false, 'shared/work-scope.ts does not export insideDirectory / laneOfPath / normaliseScopePath')
+  else {
+    const norm = {
+      plain: F.normaliseScopePath('/a/b'),
+      trailing: F.normaliseScopePath('/a/b/'),
+      dots: F.normaliseScopePath('/a/c/../b'),
+      root: F.normaliseScopePath('/'),
+      relative: F.normaliseScopePath('a/b'),
+      tilde: F.normaliseScopePath('~/a'),
+      empty: F.normaliseScopePath('')
+    }
+    const inside = {
+      self: F.insideDirectory('/w/api', '/w/api'),
+      under: F.insideDirectory('/w/api', '/w/api/src/x.ts'),
+      trailing: F.insideDirectory('/w/api/', '/w/api/src'),
+      // The whole reason the rule is not startsWith.
+      sibling: F.insideDirectory('/w/api', '/w/apiary/src'),
+      above: F.insideDirectory('/w/api/src', '/w/api'),
+      root: F.insideDirectory('/', '/w/api'),
+      relative: F.insideDirectory('/w/api', 'src/x.ts')
+    }
+    const records = [
+      { id: 'w1', path: '/u/worktrees/api-ab12/tc-p1', root: '/w/api', branch: 'tc/p1' },
+      // Nested: a record whose PATH is under the first one's. The longest match
+      // has to win or work in the child names the grandparent's repository.
+      { id: 'w2', path: '/u/worktrees/api-ab12/tc-p1/inner', root: '/w/other', branch: 'tc/p2' },
+      { id: 'w3', path: '/u/worktrees/api-ab12x', root: '/w/decoy' }
+    ]
+    const lane = {
+      exact: F.laneOfPath('/u/worktrees/api-ab12/tc-p1', records),
+      below: F.laneOfPath('/u/worktrees/api-ab12/tc-p1/src/server.ts', records),
+      nested: F.laneOfPath('/u/worktrees/api-ab12/tc-p1/inner/src', records),
+      // The decoy shares a prefix with the first record's path and must not match it.
+      decoy: F.laneOfPath('/u/worktrees/api-ab12x/src', records),
+      plain: F.laneOfPath('/w/api/src', records)
+    }
+    ok(NAME,
+      norm.plain === '/a/b' && norm.trailing === '/a/b' && norm.dots === '/a/b' && norm.root === '/' &&
+        norm.relative === null && norm.tilde === null && norm.empty === null &&
+        inside.self === true && inside.under === true && inside.trailing === true && inside.root === true &&
+        inside.sibling === false && inside.above === false && inside.relative === false &&
+        lane.exact !== undefined && lane.exact.id === 'w1' &&
+        lane.below !== undefined && lane.below.id === 'w1' &&
+        lane.nested !== undefined && lane.nested.id === 'w2' &&
+        lane.decoy !== undefined && lane.decoy.id === 'w3' &&
+        lane.plain === undefined &&
+      JSON.stringify({ norm, inside, lane: { exact: lane.exact && lane.exact.id, below: lane.below && lane.below.id, nested: lane.nested && lane.nested.id, decoy: lane.decoy && lane.decoy.id, plain: lane.plain } }))
   }
 }
 

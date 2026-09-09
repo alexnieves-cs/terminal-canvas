@@ -1,3 +1,4 @@
+import { laneOfPath, type LaneRecord } from '@shared/work-scope'
 import type { PersistedWorkItem } from '@shared/work-items'
 import { previewSourceLine } from '@shared/preview'
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
@@ -583,7 +584,24 @@ export function buildInspectorModelBare(
    * the trade every parameter above it made; absent means "nobody asked", and
    * `workflowWatchWord` says so rather than claiming the template is gone.
    */
-  templateNameOf?: (templateId: string) => string | undefined
+  templateNameOf?: (templateId: string) => string | undefined,
+  /**
+   * M196 (D04). The app's worktree records, so the inspector can say which
+   * REPOSITORY a conversation's directory belongs to and which LANE it is
+   * working in — the two facts D04's density model puts in the inspector
+   * (configuration and provenance) rather than at rest.
+   *
+   * Pure and record-only, deliberately. Main resolves scope through git for
+   * the doors that ACT on it; this is a display question, and asking main
+   * would make the inspector's identity block asynchronous for a fact the
+   * renderer already holds. The bound is recorded rather than hidden: an
+   * EXTERNALLY created worktree has no record here, so it shows no lane —
+   * `git:status` is the door that knows about those.
+   *
+   * OPTIONAL and defaulted, the trade every parameter above it made: absent
+   * means nobody asked, and no field appears.
+   */
+  lanes?: readonly LaneRecord[]
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isChatPanel(panel)) {
@@ -622,6 +640,21 @@ export function buildInspectorModelBare(
       usage: buildUsageFields(usage, true),
       fields: [
         { key: 'chat-cwd', label: 'directory', value: cwd },
+        // The lane and the repository are TWO facts and this app had been
+        // merging them: `chat.cwd` for a dispatched conversation is an
+        // app-owned worktree lane, and every surface showed only that folder
+        // while its memories, its skills brief and its Places verdict were all
+        // being judged against the repository the lane was cut from.
+        // Both fields are absent when there is no lane, because a `lane —`
+        // row on an ordinary chat is the zero-value statement the density
+        // contract names.
+        ...((() => {
+          const lane = laneOfPath(cwd, lanes ?? [])
+          return lane === undefined ? [] : [
+            { key: 'chat-repository', label: 'repository', value: lane.root },
+            { key: 'chat-lane', label: 'worktree lane', value: lane.branch ?? lane.path }
+          ]
+        })()),
         { key: 'chat-session', label: 'session', value: panel.chat.sessionId.slice(0, 8) },
         { key: 'chat-model', label: 'model', value: chat?.model ?? 'none yet' },
         { key: 'chat-cost', label: 'cost reported by claude', value: chat?.costUsd === undefined ? '—' : `$${chat.costUsd.toFixed(4)}` },
@@ -1360,9 +1393,26 @@ export function buildInspectorModel(
    * the trade every parameter above it made; absent means "nobody asked", and
    * `workflowWatchWord` says so rather than claiming the template is gone.
    */
-  templateNameOf?: (templateId: string) => string | undefined
+  templateNameOf?: (templateId: string) => string | undefined,
+  /**
+   * M196 (D04). The app's worktree records, so the inspector can say which
+   * REPOSITORY a conversation's directory belongs to and which LANE it is
+   * working in — the two facts D04's density model puts in the inspector
+   * (configuration and provenance) rather than at rest.
+   *
+   * Pure and record-only, deliberately. Main resolves scope through git for
+   * the doors that ACT on it; this is a display question, and asking main
+   * would make the inspector's identity block asynchronous for a fact the
+   * renderer already holds. The bound is recorded rather than hidden: an
+   * EXTERNALLY created worktree has no record here, so it shows no lane —
+   * `git:status` is the door that knows about those.
+   *
+   * OPTIONAL and defaulted, the trade every parameter above it made: absent
+   * means nobody asked, and no field appears.
+   */
+  lanes?: readonly LaneRecord[]
 ): InspectorModel {
-  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem, templateNameOf)
+  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem, templateNameOf, lanes)
   if (panel.locked === true || panel.pinned === true || panel.maximised !== undefined) {
     return { ...model, marks: { locked: panel.locked === true, pinned: panel.pinned === true, maximised: panel.maximised !== undefined } }
   }

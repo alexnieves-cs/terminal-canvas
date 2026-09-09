@@ -104,6 +104,15 @@ export interface ReviewEngine {
   /** M86. The main tree, then one section per worktree record; a worktree's diff is since its FORK. */
   reviewAcross(root: string): Promise<ReviewAcross>
   resolveRepo(cwd: string): Promise<RepoAnswer>
+  /**
+   * M86, exported at M196. The main tree of whatever `root` is inside, from
+   * `--git-common-dir`; `root` itself when git cannot say. It was a closure
+   * for two callers inside this file until D04 made "which repository is this
+   * lane of" a question the whole app asks, and the alternative was a second
+   * implementation of a fact this one already answers correctly for an
+   * EXTERNALLY created worktree, which no record of ours knows about.
+   */
+  commonRootOf(root: string): Promise<string>
   captureBaseline(root: string): Promise<string | null>
   /** The panel-addressed question: resolve this panel's baseline, then ask. */
   review(panelId: string): Promise<ReviewResult>
@@ -433,5 +442,5 @@ export function createReviewEngine(deps: ReviewEngineDeps): ReviewEngine {
     return { kind: 'across', root, sections }
   }
 
-  return { resolveRepo, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus }
+  return { resolveRepo, commonRootOf, captureBaseline, review, reviewAt, fileDiff, status, reviewAcross, laneStatus }
 }

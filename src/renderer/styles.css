@@ -3737,6 +3737,11 @@ body {
 .sheet__field { display: flex; align-items: center; gap: var(--sp-5); position: relative; }
 .sheet__field--where { align-items: flex-start; }
 .sheet__label { flex: none; width: 5em; font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+/* M197. The start sheet's own column: `repository` is ten characters under
+   the caps tracking and was CLIPPED to `REPOSITOR` at the shared 5em — a
+   label a person cannot read, which no DOM assertion can see. Scoped to this
+   sheet so the spawn sheet's three short labels keep their measure. */
+[data-start-sheet] .sheet__label { width: 7.5em; }
 .sheet__input, .sheet__select {
   flex: 1;
   min-width: 0;
@@ -3762,6 +3767,14 @@ body {
 .sheet__preview { flex: 1 1 100%; min-width: 0; font-family: var(--font-ui); white-space: normal; }
 .sheet__refusal { color: var(--red); }
 .sheet__keys { flex: 1 1 100%; }
+/* M197. The start sheet's two additions, both on the existing foot and both
+   its own row: the HINT is what is still missing (a question, so it reads in
+   the accent rather than the refusal's red — a thing left to answer is not a
+   thing that went wrong), and a FIXED task is the item's own title, rendered
+   as text rather than a disabled input because it is not editable at all and
+   a greyed field invites a click that does nothing. */
+.sheet__hint { flex: 1 1 100%; min-width: 0; color: var(--iris); font-family: var(--font-ui); white-space: normal; }
+.sheet__input--fixed { color: var(--fg-2); background: var(--s-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    M66. Every control says what it is.

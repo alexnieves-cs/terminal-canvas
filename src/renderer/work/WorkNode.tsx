@@ -144,7 +144,16 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
             </dl>
             {item.note !== undefined && <p className="pf__note work-node__note" data-work-note>{item.note}</p>}
             <div className="work-node__verbs" data-work-verbs>
-              {verb('assign', 'Assign to…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen })}
+              {/* M197 (D05). The menu's teammate rows are the flow's AGENT
+                  field, inline: choosing one routes into the ONE start action
+                  (`beginStartWork`), which dispatches straight away when
+                  nothing is missing and opens the sheet on the repository
+                  question when the item names none — which is every typed and
+                  every Jira item, and which before M197 was refused by main
+                  with a sentence naming a door that did not exist. The DOM
+                  alias `assign` is unchanged (the restyle rule): the checks
+                  select on it. */}
+              {verb('assign', 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen })}
               {verb('open-pr', 'Open PR', props.prReason, () => props.onOpenPr(item.id))}
               {verb('review', 'Review', item.panelId === undefined ? 'no lane yet — dispatch the item first' : null, () => props.onReview(item.id))}
               {verb('done', 'Done', null, () => props.onDone(item.id))}
@@ -157,7 +166,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                     return (
                       <li key={t.id} role="none">
                         <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-work-assign={t.id} disabled={why !== null}
-                          title={why ?? `Dispatch ${item.key ?? item.title} to ${teammateWord(t)}`}
+                          title={why ?? `Start work on ${item.key ?? item.title} as ${teammateWord(t)}`}
                           {...shellControl(() => { if (why !== null) return; setAssignOpen(false); props.onDispatch(item.id, t.id) })}>{teammateWord(t)}</button>
                       </li>
                     )

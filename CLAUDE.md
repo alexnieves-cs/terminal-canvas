@@ -360,6 +360,7 @@ renderer --invoke--> node:fetch                                                 
 renderer --invoke--> portable:export / portable:import                           --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
+renderer --invoke--> board:repositories                                          --> main
 renderer --invoke--> shelf:list / shelf:save                                     --> main
 renderer --invoke--> plugin:details                                               --> main
 renderer --invoke--> update:check                                                --> main
@@ -1444,3 +1445,62 @@ be" above so the run inherits less, not more.
   renderer cannot bundle — and containment is on SEGMENT boundaries (`/a/b` does not hold
   `/a/bc`). The binding is provenance and **grants nothing**: `preview-bind` (the fifth preview
   verb, four doors) takes NO argument and binds to the same subject rule discovery reads.
+
+- `src/renderer/palette/start-work.ts` / `StartWorkSheet.tsx` / `src/main/board-repo.ts`'s
+  `repositoriesUnderPlaces` — M197 (D05, first half). **ONE Start work action, and every door is a
+  route into it** (the palette row, the card's menu, the Teammates-pane drop, the agent's
+  `dispatch` verb). A start is a TRIPLE — task, agent, repository — and the flow asks only for what
+  it cannot derive. `dispatchWorkItem`'s `root` argument had **no caller in the whole app** (four
+  call sites, all passing two), so `board-lane.ts` refused a typed or Jira item with a sentence
+  naming a choice no surface offered: **only a GitHub item whose clone already sat under a
+  teammate's place could start work at all**. Two rules are load-bearing. **The order is a
+  DEPENDENCY, not a preference** — task, then agent, then repository, because the repositories on
+  offer are the CHOSEN teammate's places' clones and there is nothing to list until the agent is
+  known; asking first would offer a list belonging to nobody, which the Places gate would overrule
+  one question later. **An EMPTY `startWorkNeeds` is the dispatch-without-a-sheet signal**, so
+  M114's drag-onto-a-teammate still starts in one gesture. `resolveRepository` has THREE arms
+  (`auto`, `ambiguous`, `none`) because *derive it*, *ask which* and *ask for any* are three fixes,
+  and an item naming no repository is `none`, never `ambiguous`. `repositoriesUnderPlaces` is the
+  SAME bounded one-level walk `findRepoUnderPlaces` makes, asked for all of them, so the field can
+  never offer a root the lane could not reach; **`isRepoRoot` is a SECOND injected reader rather
+  than a widening of `originOf`**, which answers `null` for two different facts (not a repository /
+  a repository with no origin) — a lister that cannot tell them apart drops a local-only checkout
+  with nothing on screen to say why. `repositoriesAnswer` holds the door's three arms in
+  `board-repo.ts` and not inline in `index.ts`, because **no suite bundles `index.ts`** (M196's own
+  lesson); `no-places` (fix: a folder) stays apart from an empty `repos` (fix: a clone). Nothing
+  here widens a grant: a placeless teammate is offered DISABLED by name and the Teammates pane is a
+  named route. **The verb ANSWERS** — `dispatchWorkItem` returns a `StartWorkOutcome` and the
+  agent's `dispatch` arm AWAITS it, where it used to return `{ kind: 'ran' }` before any refusal
+  could exist; and the first send's refusal reaches the record through
+  `sendRefusalSentence` (`shared/agent-session.ts`), which reads BOTH of `SendAnswer`'s refusing
+  shapes — the object arm and the four STRING arms, of which M82's `refused-budget` stores nothing.
+  `addWorkItem` now makes `workItemsRef.current` current AT THE MINT: the ref is a render-time
+  assignment, so a flow that mints a task and starts it in one tick read a list without it
+  (`verify:panels:product start.door.2` caught this, red). **M198 owes idempotency**: the chat id is
+  minted fresh per attempt while `ensureForPanel` reuses by panel id AND root, so a retry past the
+  lane step mints a second worktree and orphans the first.
+
+- `src/shared/work-scope.ts` / `src/main/work-scope.ts` — M196 (D04). **Working directory, lane
+  and repository are three facts and stay three.** `rev-parse --show-toplevel` inside a linked
+  worktree answers the LANE (measured, from the lane and from a subdirectory of it), so every door
+  that asked only that question treated a lane as a repository of its own — silently, because each
+  one then returned a plausible non-empty answer. `WorkScope` has THREE arms (`repository`,
+  `no-repository`, `unavailable`), and the third is the one `memoryRoot` used to spend: git
+  DECLINING is not "this directory is its own subject", and collapsing them wrote a transient git
+  failure's memories to a stray slug. The resolver asks the app's worktree RECORD first (it is the
+  only source of a branch) and `--git-common-dir` second (it is the only thing that knows about an
+  EXTERNALLY created worktree); `commonRootOf` is M86's, promoted from a closure rather than
+  rewritten. Containment is `insideDirectory`, on SEGMENT boundaries, and `shared/preview.ts`
+  DELEGATES its two path helpers to it — the reload rule and the scope rule are one question about
+  one kind of string, and two copies would differ in the arm nobody tests. `laneOfPath` takes the
+  LONGEST matching record (records nest; the shortest match names a grandparent for work in a
+  child). **`memoryScope` lives in `main/work-scope.ts` and not inline in `index.ts` because no
+  suite bundles `index.ts`** — the extraction is what makes the door checkable. **Repository memory
+  is repository-wide**: a lane is a place work happens, not a subject that remembers; teammate
+  memory keeps its own store behind `teammate:`, there is no task-scoped store, and pre-M196
+  lane-keyed JSONLs are NOT merged (the guide's no-silent-merge rule, and they were already
+  orphaned by `worktree:remove`). `laneRootOf` replaces the exact-path `w.path === path` at main's
+  three `worktreeRootOf` sites; this is **not a widening** — the subject is the record's own
+  `root`, judged by `insidePlace` exactly as the lane root already was, and `verify:teammates
+  dispatch.2`'s decoy arm is the fence: under a bare `startsWith` an unrecorded directory sharing
+  the lane's prefix translated to the lane's repository and the gate answered ALLOWED.

@@ -38,4 +38,9 @@ module.exports = {
   // injected, so verify:review drives it against a real temporary repository
   // and an in-memory record list — no Electron, no real userData.
   ...require('../src/main/worktree-manager'),
+  /* M196 (D04). The scope resolver and its pure half: injected deps, so every
+     arm — including git DECLINING, which the memory door used to swallow —
+     runs here against the fake runner this suite already has. */
+  ...require('../src/shared/work-scope'),
+  ...require('../src/main/work-scope'),
 }

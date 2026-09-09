@@ -2597,6 +2597,82 @@ const WS = [
     JSON.stringify({ row1: row1 && [row1.title, row1.group], row2: row2 && row2.disabledReason, calls: c.actions.calls }))
 }
 
+
+// M197 — start.1a–.1e. THE START WORK MODEL. D05's first half: a start is a
+// TRIPLE (task, agent, repository) and the flow asks only for what it cannot
+// derive. The order is a DEPENDENCY, not a preference — the repositories on
+// offer are the ones under the chosen teammate's places, so there is nothing
+// to list until the agent is known. An EMPTY needs list is the signal that
+// dispatch happens with no sheet at all, which is what keeps the M114 drop a
+// one-gesture start for the case that already worked.
+{
+  const mate = (id, name, places) => ({ id, name, brief: '', places, services: [], memory: id, chats: [], messaging: false, scheduling: false })
+  const ada = mate('t1', 'ada', ['/home/u/work'])
+  const bo = mate('t2', 'bo', [])
+  const repos = [
+    { path: '/home/u/work/api', repo: 'acme/canvas' },
+    { path: '/home/u/work/site', repo: 'acme/site' },
+    { path: '/home/u/work/notes', repo: null }
+  ]
+  const twins = [{ path: '/a/one', repo: 'acme/canvas' }, { path: '/b/two', repo: 'acme/canvas' }]
+  const needs = (choice, ctx) => (typeof P.startWorkNeeds === 'function' ? P.startWorkNeeds(choice, ctx) : null)
+  const fields = (n) => (n === null ? '(absent)' : n.map((x) => x.field).join(','))
+
+  // (a) the order, and the fact that a missing agent hides the repository question.
+  const empty = needs({ title: '' }, { teammates: [ada], repos: undefined, wanted: null })
+  const noAgent = needs({ title: 'ship the thing' }, { teammates: [ada], repos: undefined, wanted: null })
+  ok('start.1a startWorkNeeds asks in the order task → agent → repository, and an unanswered agent hides the repository question entirely: the repositories on offer are the chosen teammate\'s places\' clones, so there is nothing to list until the agent is known',
+    needs !== null && empty !== null && fields(empty) === 'task,agent' && /title/i.test(empty[0].why) &&
+      fields(noAgent) === 'agent' && /teammate|agent/i.test(noAgent[0].why),
+    JSON.stringify({ empty, noAgent }))
+
+  // (b) the auto arm — nothing missing, so no sheet opens. This is the
+  // one-gesture drop the board already had, expressed as data.
+  const auto = needs({ title: 'fix the parser', teammateId: 't1' }, { teammates: [ada], repos, wanted: 'acme/canvas' })
+  const resolvedAuto = typeof P.resolveRepository === 'function' ? P.resolveRepository(repos, 'acme/canvas') : null
+  ok('start.1b a GitHub item whose owner/repo matches exactly one repository under the teammate\'s places needs NOTHING — the empty list is the dispatch-without-a-sheet signal — and resolveRepository names the root it derived',
+    auto !== null && auto.length === 0 && resolvedAuto !== null && resolvedAuto.kind === 'auto' && resolvedAuto.path === '/home/u/work/api' && resolvedAuto.repo === 'acme/canvas',
+    JSON.stringify({ auto, resolvedAuto }))
+
+  // (c) three arms, never two: matched once, matched twice, matched never —
+  // and `wanted: null` (a typed or Jira item, which names no repository at
+  // all) is `none` and NOT `ambiguous`. Collapsing these tells the user the
+  // wrong fix: one asks which clone, the other asks for any.
+  const ambiguous = typeof P.resolveRepository === 'function' ? P.resolveRepository(twins, 'acme/canvas') : null
+  const none = typeof P.resolveRepository === 'function' ? P.resolveRepository(repos, 'acme/other') : null
+  const unnamed = typeof P.resolveRepository === 'function' ? P.resolveRepository(repos, null) : null
+  ok('start.1c resolveRepository has three arms — auto, ambiguous (two clones of one owner/repo under the places) and none — and an item that names no repository at all (typed, Jira) is `none`, never `ambiguous`',
+    ambiguous !== null && ambiguous.kind === 'ambiguous' && ambiguous.paths.length === 2 &&
+      none !== null && none.kind === 'none' && unnamed !== null && unnamed.kind === 'none',
+    JSON.stringify({ ambiguous, none, unnamed }))
+
+  // (d) THE DEFECT OF §1.A, from the model's side. A typed item names no
+  // repository, so before M197 `board:lane` refused it with a sentence
+  // naming a choice no door offered. Here it is one `repository` need, and a
+  // chosen root satisfies it — which is what makes the typed door reach a
+  // lane at all.
+  const typedNeeds = needs({ title: 'try the idea', teammateId: 't1' }, { teammates: [ada], repos, wanted: null })
+  const typedChosen = needs({ title: 'try the idea', teammateId: 't1', root: '/home/u/work/notes' }, { teammates: [ada], repos, wanted: null })
+  const noRepos = needs({ title: 'try the idea', teammateId: 't1' }, { teammates: [ada], repos: [], wanted: null })
+  ok('start.1d a typed or Jira item — which names no repository, and which board:lane refused with a sentence naming a door that did not exist — asks ONE repository question, is satisfied by a chosen root, and distinguishes `the places hold no repository` from `choose which of them`',
+    typedNeeds !== null && fields(typedNeeds) === 'repository' && typedChosen !== null && typedChosen.length === 0 &&
+      noRepos !== null && fields(noRepos) === 'repository' && noRepos[0].why !== typedNeeds[0].why &&
+      /no repositor/i.test(noRepos[0].why) && /Teammates pane/.test(noRepos[0].why),
+    JSON.stringify({ typedNeeds, typedChosen, noRepos }))
+
+  // (e) the refusals a SHEET cannot answer (a teammate with no places is a
+  // grant, and nothing here widens one), and the summary that states the
+  // triple before anything is minted.
+  const noMates = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x' }, { teammates: [], repos: undefined, wanted: null }) : null
+  const placeless = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x', teammateId: 't2' }, { teammates: [bo], repos: undefined, wanted: null }) : null
+  const fine = typeof P.startWorkRefusal === 'function' ? P.startWorkRefusal({ title: 'x', teammateId: 't1' }, { teammates: [ada], repos, wanted: null }) : null
+  const summary = typeof P.startWorkSummary === 'function' ? P.startWorkSummary({ title: 'fix the parser', teammateId: 't1', root: '/home/u/work/api' }, ada) : null
+  ok('start.1e the refusals a sheet cannot answer are named once — no teammate at all, and a teammate with no places (a grant, never widened from here) — and the summary states the task, the repository in the path rule\'s words and the agent before anything is minted',
+    typeof noMates === 'string' && /teammate/i.test(noMates) && typeof placeless === 'string' && /place/i.test(placeless) && /Teammates pane/.test(placeless) &&
+      fine === null && typeof summary === 'string' && /fix the parser/.test(summary) && /work\/api/.test(summary) && /ada/.test(summary),
+    JSON.stringify({ noMates, placeless, fine, summary }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`)
 process.exit(failed.length === 0 ? 0 : 1)

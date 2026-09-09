@@ -307,5 +307,7 @@ module.exports = {
   resolveAttachment: require('../src/main/attachments').resolveAttachment,
   /* M114. The lane and the gate, for dispatch.1. */
   ...require('../src/main/board-lane'),
+  /* M197. The repository lister and its three-arm door decision. */
+  ...require('../src/main/board-repo'),
   ...require('../src/main/places')
 }

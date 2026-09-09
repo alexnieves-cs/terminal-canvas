@@ -11,6 +11,8 @@ module.exports = {
   ...require('../src/renderer/palette/commands'),
   /* M65. The spawn sheet's model — pure. */
   ...require('../src/renderer/palette/spawn-sheet'),
+  /* M197. The start-work model: which of the triple the app cannot derive. */
+  ...require('../src/renderer/palette/start-work'),
   /* M80. The template model: holes, fill, placement, the named refusal. */
   ...require('../src/renderer/palette/template-model'),
   /* M104. The lineups and their preview plan — pure. */

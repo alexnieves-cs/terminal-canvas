@@ -1,3 +1,5 @@
+import { insideDirectory, normaliseScopePath } from './work-scope'
+
 /**
  * M185. THE PREVIEW'S PURE RULES — what a project preview is, before anything
  * runs a process or opens a socket. Shared by main's discoverer, the browser
@@ -205,26 +207,17 @@ export interface PreviewBinding {
  * Absolute, `.` and `..` collapsed, no trailing slash (the root stays `/`);
  * `null` for anything relative, empty or `~`-prefixed.
  *
- * Hand-written, and it must stay that way. `@shared/places.ts` has this
- * function already and imports `node:path` to get it — which the RENDERER
- * cannot bundle (`Canvas.tsx`'s own comment at the skill-assign check records
- * that the hard way), and this rule runs in the renderer. `display-path.ts` is
- * the precedent: forward-slash arithmetic, no `path` module. Reusing
- * `insidePlace` would need a `realpath` the renderer does not have and would
- * put a PERMISSION gate in the way of a display question.
- *
- * A relative path is refused rather than resolved, for `places.ts`'s reason:
- * every root this app could pick is a guess the user did not make.
+ * M196 moved the body to `work-scope.ts` and left this name standing. The rule
+ * it states is now the SCOPE rule too — a preview's root and a repository's
+ * root are the same kind of question about the same kind of string — and two
+ * copies of it would differ exactly in the arm nobody tests. The reason it is
+ * hand-written rather than `@shared/places.ts`'s `normalisePath` is unchanged
+ * and is recorded there: that one reaches `node:path`, which the RENDERER
+ * cannot bundle, and reusing `insidePlace` would put a PERMISSION gate in the
+ * way of a display question.
  */
 export function normalisePreviewPath(path: string): string | null {
-  if (!path.startsWith('/')) return null
-  const out: string[] = []
-  for (const segment of path.split('/')) {
-    if (segment === '' || segment === '.') continue
-    if (segment === '..') { out.pop(); continue }
-    out.push(segment)
-  }
-  return out.length === 0 ? '/' : `/${out.join('/')}`
+  return normaliseScopePath(path)
 }
 
 /**
@@ -233,12 +226,11 @@ export function normalisePreviewPath(path: string): string | null {
  * The boundary is the whole point: a bare `startsWith` answers true for
  * `/w/apiary` against `/w/api`, so a preview would follow the neighbouring
  * project on disk — a wrong reload that looks exactly like a right one.
+ * M196: the body is `work-scope.ts`'s `insideDirectory`, which translates a
+ * cwd to a repository under the identical rule.
  */
 export function pathInsidePreview(root: string, path: string): boolean {
-  const r = normalisePreviewPath(root)
-  const p = normalisePreviewPath(path)
-  if (r === null || p === null) return false
-  return p === r || p.startsWith(r === '/' ? '/' : `${r}/`)
+  return insideDirectory(root, path)
 }
 
 /**

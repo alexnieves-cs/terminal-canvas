@@ -2038,6 +2038,48 @@ const inventory = (over) => ({
     allSelf, JSON.stringify(got))
 }
 
+// M196 (D04) — scope.fields.1. THE TWO FACTS THE CHAT ARM WAS MERGING.
+//      A dispatched conversation's `chat.cwd` is an app-owned worktree LANE,
+//      and the inspector showed only that folder — while its memories, its
+//      skills brief and its Places verdict were every one of them being judged
+//      against the repository the lane was cut from. Directory, repository and
+//      lane are three facts; the pane had one row for all three.
+//      BOTH new rows are absent for an ordinary chat, and that is half the
+//      check: a `worktree lane —` row on a conversation that is not in one is
+//      the zero-value-at-rest statement D01's density contract names.
+//      The lane is matched with the SAME containment main's gate uses, so a
+//      cwd BELOW the lane still resolves and a sibling sharing a path prefix
+//      does not.
+{
+  const mk = (kind, extra) => ({ kind, rect: { id: kind[0] + '1', x: 0, y: 0, w: 100, h: 100 }, z: 1, ...extra })
+  const LANE = '/app/worktrees/api-ab12/tc-p1'
+  const lanes = [{ id: 'w1', path: LANE, root: '/home/u/work/api', branch: 'tc/p1' }]
+  const build = (cwd, records) => R.buildInspectorModel(
+    mk('chat', { chat: { cwd, sessionId: 'u-1' } }),
+    undefined, undefined, [], undefined, undefined, undefined, undefined, undefined, undefined, undefined, records)
+  const keys = (m) => m.fields.map((f) => f.key)
+  const value = (m, key) => (m.fields.find((f) => f.key === key) ?? {}).value
+  const inLane = build(LANE, lanes)
+  const belowLane = build(`${LANE}/src`, lanes)
+  const plain = build('/home/u/work/api', lanes)
+  // The prefix decoy: a directory the records do not cover whose path starts
+  // with the lane's. It must show NO lane rather than the neighbour's.
+  const decoy = build('/app/worktrees/api-ab12/tc-p1x/src', lanes)
+  // Nobody asked: the parameter is optional, and omitting it renders no rows.
+  const unasked = build(LANE, undefined)
+  ok('scope.fields.1 a chat in a worktree lane names its repository AND its lane as two fields beside the directory, from the lane root and from a subdirectory of it alike; an ordinary chat carries neither row rather than an empty one; a directory sharing a path prefix with a lane is not given the lane\'s repository; and a caller that passes no records renders no rows at all',
+    keys(inLane).includes('chat-cwd') &&
+      keys(inLane).includes('chat-repository') && keys(inLane).includes('chat-lane') &&
+      value(inLane, 'chat-cwd') === LANE &&
+      value(inLane, 'chat-repository') === '/home/u/work/api' && value(inLane, 'chat-lane') === 'tc/p1' &&
+      keys(belowLane).includes('chat-repository') && value(belowLane, 'chat-repository') === '/home/u/work/api' &&
+      value(belowLane, 'chat-cwd') === `${LANE}/src` &&
+      !keys(plain).includes('chat-repository') && !keys(plain).includes('chat-lane') &&
+      !keys(decoy).includes('chat-repository') && !keys(decoy).includes('chat-lane') &&
+      !keys(unasked).includes('chat-repository'),
+    JSON.stringify({ inLane: keys(inLane), belowLane: keys(belowLane), plain: keys(plain), decoy: keys(decoy), unasked: keys(unasked), repo: value(inLane, 'chat-repository'), lane: value(inLane, 'chat-lane') }))
+}
+
 // Backlog #75's diagnostics overlay model (buildDiagnosticsSnapshot). A
 // PanelSession as the registry actually holds one, trimmed to the fields the
 // model reads.

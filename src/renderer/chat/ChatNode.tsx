@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ChatPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
+import { displayPath } from '@shared/display-path'
 import type { ChatAttachment } from '@shared/agent-session'
 import type { DirResult } from '@shared/fs-tree'
 import type { ReviewDiff } from '@shared/review'
@@ -486,7 +487,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   // re-reading at send time let the two disagree — a memory added between the
   // two reads went with the message the panel had already described (M83's
   // verifier), which is exactly the failure this note exists to prevent.
-  const [memoryBlock, setMemoryBlock] = useState<{ text: string; count: number } | null>(null)
+  const [memoryBlock, setMemoryBlock] = useState<{ text: string; count: number; repository?: string; unresolved?: string } | null>(null)
   // Whether THIS panel has already carried its memories. Turn counts arrive
   // back over `agent:event`, so two quick sends both see `turnCount === 0`
   // and the block would be prepended twice — the second time unannounced.
@@ -510,7 +511,19 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     ]).then(([repo, own]) => {
       if (!live) return
       const block = memoryContext(repo.entries, own === null ? undefined : { entries: own.entries, who: props.teammateName ?? mate ?? '' })
-      setMemoryBlock(block.count === 0 ? null : block)
+      // M196 (D04). The disclosure names WHICH repository. This chat's cwd is
+      // often a worktree lane (M113's dispatch), so "this repository" was the
+      // one word in the sentence a person could not check — and the repository
+      // it means is not the folder the header shows. `repo.root` is the root
+      // main actually read, so the note and the wire cannot disagree.
+      // THREE states, not two (the critic found this collapsed). An
+      // unresolved read means git declined and NOTHING was read — rendering
+      // that as no note at all says "there is nothing to disclose", which is
+      // the exact collapse this milestone closes one level up. The note is the
+      // only place a person can see it, so it is the one place that must not
+      // stay quiet.
+      if (repo.unresolved !== undefined) { setMemoryBlock({ text: '', count: 0, unresolved: repo.unresolved }); return }
+      setMemoryBlock(block.count === 0 ? null : { ...block, repository: repo.root })
     })
     return () => { live = false }
   }, [panel.chat.cwd, panel.chat.teammateId, props.teammateName, turnCount])
@@ -670,8 +683,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               {chat.granted !== undefined && chat.granted.length > 0 && (
                 <p className="pf__note chat__grant-note" data-chat-grant-note>{chat.granted[chat.granted.length - 1]} ran under a session grant{chat.granted.length > 1 ? ` · ${chat.granted.length} calls this session` : ''} — revoke in the pane's Detail</p>
               )}
-              {memoryBlock !== null && turnCount === 0 && (
-                <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from this repository will go with your first message</p>
+              {memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved !== undefined && (
+                <p className="pf__note chat__memory-note" data-chat-memory-unresolved>no memories can go with this message — {memoryBlock.unresolved}</p>
+              )}
+              {memoryBlock !== null && turnCount === 0 && memoryBlock.unresolved === undefined && (
+                <p className="pf__note chat__memory-note" data-chat-memory-note>{memoryBlock.count} memor{memoryBlock.count === 1 ? 'y' : 'ies'} from {memoryBlock.repository === undefined ? 'this repository' : displayPath(memoryBlock.repository, memoryBlock.repository).short} will go with your first message</p>
               )}
               {attachments.length > 0 && (
                 <div className="chat__attachments" data-chat-attachments>
