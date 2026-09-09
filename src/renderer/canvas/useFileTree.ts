@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
-import { isFilePanel, isReviewPanel, isTerminalPanel, type Panel } from '@renderer/panels/panels'
+import { isChatPanel, isFilePanel, type Panel } from '@renderer/panels/panels'
 import type { SettingRow } from '@shared/ipc-contract'
 import type { DirResult } from '@shared/fs-tree'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { buildFileRows, relativePath, shellQuote, treeSignature } from '../shell/file-tree-model'
 import { EMPTY_ROWS } from './canvas-constants'
+import { insertIntoComposer } from '@renderer/chat/chat-store'
+import { inspectionDirectory } from './inspection-directory'
 
 export interface FileTreeDeps {
   registry: Registry
@@ -20,6 +22,14 @@ export interface FileTreeDeps {
   /** Identity is the change signal; see useShellChrome's settingsSignal. */
   settingRows: SettingRow[]
   focusedIdRef: RefObject<string | null>
+  /**
+   * M194. `insertPath` needs the focused panel's RECORD, not only its id: a
+   * chat's insertion target is its composer and its own cwd, neither of which
+   * the session registry knows about. A ref, never `panels`, for the reason
+   * every other ref in this hook is one — `panels` is a fresh array per
+   * setPanelRect and would re-make the callback at 60Hz through a drag.
+   */
+  panelsRef: RefObject<Panel[]>
   /**
    * Published here, read by `beginNewNote`, which is declared ABOVE this
    * hook's call site — the ref is what carries the value backwards.
@@ -48,7 +58,7 @@ export interface FileTreeDeps {
 export function useFileTree(deps: FileTreeDeps) {
   const {
     registry, selectedPanel, selectedLive, selectedId, settingRows,
-    focusedIdRef, noteRootRef
+    focusedIdRef, panelsRef, noteRootRef
   } = deps
 
   /**
@@ -65,21 +75,12 @@ export function useFileTree(deps: FileTreeDeps) {
    * `panels.find(...)`/`useLiveSession(...)` pair would be a second read of
    * the identical fact.
    */
-  const treeRoot = useMemo(() => {
-    if (!selectedPanel) return null
-    if (isReviewPanel(selectedPanel)) return selectedPanel.subject.repoRoot
-    // isTerminalPanel, the positive predicate, never `!isReviewPanel`: a file
-    // panel and a jira panel both landed in this union after this tree was
-    // designed, and neither carries a `spec.cwd` at all — `!isReviewPanel`
-    // would have let either one straight through into `selectedPanel.spec`,
-    // which does not exist on them, rather than answering "no root" for a
-    // kind that genuinely has none.
-    if (isTerminalPanel(selectedPanel)) return selectedLive?.cwd ?? selectedPanel.spec.cwd
-    return null
-  }, [selectedPanel, selectedLive])
-
-  const [treeDirs, setTreeDirs] = useState<Map<string, DirResult>>(new Map())
-  const [treeExpanded, setTreeExpanded] = useState<Set<string>>(new Set())
+  const directory = inspectionDirectory(selectedPanel, 'files', selectedLive?.cwd)
+  const treeRoot = directory.kind === 'known' ? directory.cwd : null
+  // `no-directory` deliberately carries NO reason, so this stays undefined and
+  // Canvas's own empty line — which NAMES the panel (M48 §5) — survives. Only
+  // the two states that line has never had words for come through here.
+  const treeContextReason = directory.kind === 'absent' || directory.kind === 'unavailable' ? directory.reason : undefined
 
   // Read the same way glowEnabled/pipsEnabled are, and for the same reason:
   // settingRows is loaded only when the palette OPENS, so the tree must know
@@ -95,6 +96,15 @@ export function useFileTree(deps: FileTreeDeps) {
     })
   }, [settingRows])
 
+  // Tag the stored data as well as cancelling writers. Effects run AFTER a
+  // render; clearing only in an effect can paint A's files under B's name.
+  const subject = JSON.stringify([selectedId, treeRoot, showHidden])
+  const [treeState, setTreeState] = useState(() => ({ subject, dirs: new Map<string, DirResult>(), expanded: new Set<string>() }))
+  const current = treeState.subject === subject
+  const treeDirs = useMemo(() => current ? treeState.dirs : new Map<string, DirResult>(), [current, treeState.dirs])
+  const treeExpanded = useMemo(() => current ? treeState.expanded : new Set<string>(), [current, treeState.expanded])
+  const generation = useRef(0)
+
   // A pull, never a push. Three signals and nothing else: the root changed, a
   // directory was expanded, and the refresh control. M9b's standing ruling on
   // review nodes, unchanged — a watcher over a repository this app does not
@@ -102,10 +112,13 @@ export function useFileTree(deps: FileTreeDeps) {
   // run in a terminal elsewhere, and each firing costs a readdir per expanded
   // directory. The signal worth reacting to is a human looking.
   const readDirInto = useCallback((path: string) => {
-    void window.canvas.files.list(path).then((result) => {
-      setTreeDirs((prev) => new Map(prev).set(path, result))
-    })
-  }, [])
+    const requested = generation.current
+    const apply = (result: DirResult): void => {
+      if (requested !== generation.current) return
+      setTreeState((prev) => prev.subject === subject ? { ...prev, dirs: new Map(prev.dirs).set(path, result) } : prev)
+    }
+    void window.canvas.files.list(path).then(apply, () => apply({ kind: 'unreadable', detail: 'the read did not answer' }))
+  }, [subject])
 
   // The root changing DISCARDS the previous root's reads and expansions. Both
   // are keyed by absolute path, so carrying them would be harmless and wrong:
@@ -117,10 +130,11 @@ export function useFileTree(deps: FileTreeDeps) {
   // adding a second read path, so there is still exactly one place the tree
   // decides to re-read itself.
   useEffect(() => {
-    setTreeDirs(new Map())
-    setTreeExpanded(new Set())
+    generation.current++
+    setTreeState({ subject, dirs: new Map(), expanded: new Set() })
     if (treeRoot !== null) readDirInto(treeRoot)
-  }, [treeRoot, showHidden, readDirInto])
+    return () => { generation.current++ }
+  }, [subject, treeRoot, readDirInto])
 
   // True while the ROOT's own read is in flight: every selection change, and
   // every press of refresh (which clears treeDirs first). buildFileRows
@@ -167,8 +181,9 @@ export function useFileTree(deps: FileTreeDeps) {
   const treeRootPending = treeRoot !== null && !treeDirs.has(treeRoot)
 
   const toggleDir = useCallback((path: string) => {
-    setTreeExpanded((prev) => {
-      const next = new Set(prev)
+    setTreeState((prev) => {
+      if (prev.subject !== subject) return prev
+      const next = new Set(prev.expanded)
       if (next.has(path)) {
         next.delete(path)
       } else {
@@ -181,9 +196,9 @@ export function useFileTree(deps: FileTreeDeps) {
         // useShellChrome deliberately keeps outside its own updater.
         if (!treeDirs.has(path)) readDirInto(path)
       }
-      return next
+      return { ...prev, expanded: next }
     })
-  }, [treeDirs, readDirInto])
+  }, [subject, treeDirs, readDirInto])
 
   // Re-read the root and everything currently open, keeping the expansion.
   // Clearing `treeDirs` first is what makes every re-read visible: each
@@ -191,10 +206,11 @@ export function useFileTree(deps: FileTreeDeps) {
   // rather than showing stale rows that may already be wrong.
   const refreshTree = useCallback(() => {
     if (treeRoot === null) return
-    setTreeDirs(new Map())
+    generation.current++
+    setTreeState({ subject, dirs: new Map(), expanded: treeExpanded })
     readDirInto(treeRoot)
     for (const path of treeExpanded) readDirInto(path)
-  }, [treeRoot, treeExpanded, readDirInto])
+  }, [subject, treeRoot, treeExpanded, readDirInto])
 
   const treeBuilt = treeRoot === null ? EMPTY_ROWS : buildFileRows(treeRoot, treeDirs, treeExpanded)
   const treeSig = treeSignature(treeBuilt)
@@ -228,15 +244,35 @@ export function useFileTree(deps: FileTreeDeps) {
   const insertPath = useCallback((path: string) => {
     const target = focusedIdRef.current
     if (!target || treeRoot === null) return
-    const text = target === selectedId ? relativePath(treeRoot, path) : path
-    // paste(), never write(). A filename may legally contain a newline on
-    // macOS, and write() would submit the fragment before it — the same reason
-    // insertPrompt in this file is a paste.
-    registry.get(target)?.handle.paste(shellQuote(text))
-  }, [treeRoot, selectedId])
+    const session = registry.get(target)
+    if (session !== undefined) {
+      const text = target === selectedId ? relativePath(treeRoot, path) : path
+      // paste(), never write(). A filename may legally contain a newline on
+      // macOS, and write() would submit the fragment before it — the same reason
+      // insertPrompt in this file is a paste.
+      session.handle.paste(shellQuote(text))
+      return
+    }
+    // M194. Before this milestone the tree could only root on a terminal or a
+    // review panel, so the focused panel was a terminal in every case a row
+    // existed at all. A chat can now be both, and a chat has NO entry in the
+    // session registry — `registry.get(id)?.handle.paste` was therefore
+    // `undefined?.`, and every row in the pane was a control that did nothing,
+    // with nothing on screen saying why. That is the exact failure
+    // `FileTree.tsx`'s own comment names, and it lands squarely on D02's
+    // acceptance ("inspect its files and tools WITHOUT creating a terminal").
+    //
+    // A chat takes the composer's verb, not the shell's: the `@` reference a
+    // DROP onto a chat has produced since M75, relative to the CHAT's own
+    // directory rather than the tree's root — the two differ whenever
+    // selection and focus do, and `relativePath` already answers ABSOLUTE for
+    // a path outside the root it is given, which is the right answer there.
+    const focused = panelsRef.current?.find((p) => p.rect.id === target)
+    if (focused !== undefined && isChatPanel(focused)) insertIntoComposer(target, `@${relativePath(focused.chat.cwd, path)} `)
+  }, [treeRoot, selectedId, registry, focusedIdRef, panelsRef])
 
   return {
-    treeRoot, treeRootLabel, treeRows, treeRootPending, noteRoot,
+    treeRoot, treeRootLabel, treeRows, treeRootPending, treeContextReason, noteRoot,
     toggleDir, refreshTree, insertPath
   }
 }

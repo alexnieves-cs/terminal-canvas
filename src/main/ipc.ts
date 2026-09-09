@@ -6,6 +6,7 @@ import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
 import { ipcMain, dialog, type WebContents, type BrowserWindow } from 'electron'
+import { statSync } from 'node:fs'
 import type { WatcherCreateRequest, WatcherCreateResult, WatcherStateEvent, GithubListResult } from '@shared/ipc-contract'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentImportRequest, AutoStartRequest, AutoStartResult, AgentImportResult, ChatAttachment, ClipboardImage } from '../shared/agent-session'
 import type { PermissionAnswer } from '../shared/transcript'
@@ -848,12 +849,24 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC.TOOLBOX_READ, (_event, req: ToolboxReadRequest) => {
-    // resolveCwd is pty-manager's — the SAME expansion a spawn gets, so the
-    // toolbox and the agent can never disagree about which directory they are
-    // describing. index.ts already reaches for it this way for prompts.
+    // M194. Inspection must never borrow the spawn resolver's home fallback:
+    // a deleted project would otherwise display HOME's tools as its own.
+    if (req.cwd === '') return { kind: 'no-cwd' }
+    const cwd = expandTilde(req.cwd)
+    // Three facts, three sentences. An earlier round of this had two, and the
+    // one that named non-existence was the arm that never saw it: `statSync`
+    // THROWS on a missing path, so a deleted project always lands in the
+    // catch. Each of these has a different fix, which is why they are not
+    // merged (the DirResult union's own rule, `shared/fs-tree.ts`).
+    if (!cwd.startsWith('/')) return { kind: 'unavailable', reason: `the working directory is not an absolute path (${req.cwd})` }
+    try {
+      if (!statSync(cwd).isDirectory()) return { kind: 'unavailable', reason: 'that path is a file, not a directory' }
+    } catch {
+      return { kind: 'unavailable', reason: 'the directory is no longer there — it may have been moved or deleted' }
+    }
     return toolboxCache.read(
       {
-        cwd: req.cwd === '' ? '' : resolveCwd(req.cwd),
+        cwd,
         home: resolveToolboxHome(),
         spawnStamps: ptyManager.configStampsFor(req.panelId)
       },

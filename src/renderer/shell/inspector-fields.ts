@@ -1159,6 +1159,8 @@ export interface ToolboxFieldRow {
 }
 
 export interface ToolboxFieldModel {
+  /** A visible but unavailable detail door, never an enabled no-op. */
+  openReason?: string
   /** True when the section renders nothing at all. */
   hidden: boolean
   summary: string
@@ -1233,6 +1235,19 @@ export function buildToolboxFields(result: ToolInventoryResult | undefined): Too
   }
   // A panel with no cwd at all. Hidden, never an empty inventory.
   if (result.kind === 'no-cwd') return TOOLBOX_HIDDEN
+  if (result.kind === 'unavailable') return { hidden: false, summary: result.reason, rows: [], more: 0, openReason: result.reason }
+  // M194. A POSITIVE test for the one arm that carries an inventory, never a
+  // fall-through. Two reasons, and the second is the load-bearing one. A
+  // renderer running against an older main can be handed a kind this build
+  // has no arm for, and `result.inventory` is then undefined — the section
+  // would throw inside a render rather than say anything. And a check that
+  // drives this function with a future kind must go RED, not abort its whole
+  // suite on a TypeError (docs/verify-suites.md's first rule); a fall-through
+  // here made `context.tools.1` un-red-first-able, which is how this was
+  // found. SkillTrailLane's `resolve` has said the same sentence since M130.
+  if (result.kind !== 'inventory') {
+    return { hidden: false, summary: 'the inventory came back in a shape this version does not know', rows: [], more: 0, openReason: 'the inventory came back in a shape this version does not know' }
+  }
 
   const inv = result.inventory
   const counts = new Map<string, number>()

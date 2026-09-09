@@ -104,7 +104,7 @@ function ToolboxNodeImpl({
         // MANDATORY. An unhandled rejection leaves the node stuck on
         // "reading…" forever, with nothing in any log — the same permanent
         // in-flight state FileNode's own catch exists to prevent.
-        if (live) applyToolbox(id, { kind: 'no-cwd' })
+        if (live) applyToolbox(id, { kind: 'unavailable', reason: 'the toolbox read did not answer — press Refresh to ask again' })
       })
     return () => {
       live = false

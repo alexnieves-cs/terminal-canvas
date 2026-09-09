@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { getUsage } from '@renderer/session/usage-store'
-import { isTerminalPanel, isToolboxPanel, type Panel } from '@renderer/panels/panels'
+import type { Panel } from '@renderer/panels/panels'
+import { inspectionDirectory } from './inspection-directory'
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { ToolInventoryResult } from '@shared/toolbox'
 import {
@@ -167,15 +168,10 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
    * a drag: `panels` is a fresh array per setPanelRect, so a `selectedPanel`
    * dep would re-fire the query at 60Hz. A string is equal to itself.
    */
-  const selectedToolboxCwd =
-    selectedPanel === undefined
-      ? null
-      : isTerminalPanel(selectedPanel)
-        ? selectedPanel.spec.cwd
-        : isToolboxPanel(selectedPanel)
-          ? selectedPanel.source.cwd
-          : null
-  const [toolbox, setToolbox] = useState<ToolInventoryResult | undefined>(undefined)
+  const directory = inspectionDirectory(selectedPanel, 'tools')
+  const selectedToolboxCwd = directory.kind === 'known' ? directory.cwd : null
+  const toolboxSubject = JSON.stringify([selectedId, selectedToolboxCwd])
+  const [toolbox, setToolbox] = useState<{ subject: string; result: ToolInventoryResult } | undefined>(undefined)
   useEffect(() => {
     // Cleared UNCONDITIONALLY, before the invoke, for the reason the review
     // effect above states: the `live` flag prevents a stale WRITE and nothing
@@ -189,16 +185,28 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
       .then((result) => {
         // Not defensiveness: an invoke issued for panel A can resolve after
         // the user has selected panel B.
-        if (live) setToolbox(result)
+        if (live) setToolbox({ subject: toolboxSubject, result })
       })
       .catch(() => {
-        if (live) setToolbox({ kind: 'no-cwd' })
+        if (live) setToolbox({ subject: toolboxSubject, result: { kind: 'unavailable', reason: 'the toolbox read did not answer' } })
       })
     return () => {
       live = false
     }
-  }, [selectedId, selectedToolboxCwd])
-  const toolboxFields = selectedToolboxCwd === null ? null : buildToolboxFields(toolbox)
+  }, [selectedId, selectedToolboxCwd, toolboxSubject])
+  // M194. Keyed on the POLICY's arm, never on the panel's kind. Gating this on
+  // `isChatPanel` collapsed `unavailable` back into `no-directory` for every
+  // other kind, and the inspector then printed "<kind> has no directory, so
+  // there is no toolbox to read" over a directory that exists and could not be
+  // used — the same false claim about the record that D01's finding 3.1 caught
+  // in the starter golden, one kind over. `no-directory` still answers null on
+  // purpose: the sentence Inspector already has NAMES the kind, which is more
+  // than this reason could.
+  const toolboxFields = selectedToolboxCwd === null
+    ? directory.kind === 'absent' || directory.kind === 'unavailable'
+      ? { hidden: false, summary: directory.reason, rows: [], more: 0, openReason: directory.reason }
+      : null
+    : buildToolboxFields(toolbox?.subject === toolboxSubject ? toolbox.result : undefined)
   // Its own signature and its own memo, never folded into inspectorSignature:
   // this arrives asynchronously on its own clock, exactly as `review` does.
   const toolboxSig = toolboxSignature(toolboxFields)

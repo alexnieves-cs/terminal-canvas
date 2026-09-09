@@ -1,4 +1,5 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
+import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
 import { configureNode, moveNode } from '@shared/template-edit'
 import { LIBRARY, defaultNodeOf, placementFor } from '@shared/template-library'
@@ -1547,13 +1548,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     openToolbox: (panelId) => {
       const panel = panelsRef.current.find((p) => p.rect.id === panelId)
       if (panel === undefined) return
-      const cwd = isTerminalPanel(panel)
-        ? panel.spec.cwd
-        : isToolboxPanel(panel)
-          ? panel.source.cwd
-          : ''
-      if (cwd === '') return
-      openToolboxPanel(cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
+      const directory = inspectionDirectory(panel, 'tools')
+      if (directory.kind !== 'known') return
+      openToolboxPanel(directory.cwd, railLabel(panel, registry.get(panelId)?.status), worldCentre())
     },
     // M61. Pure transitions from groups.ts, the same ones GroupLayer's
     // buttons reach through Canvas — one definition of "collapse".

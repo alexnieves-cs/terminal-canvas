@@ -875,12 +875,19 @@ function InspectorPanel({
           {toolbox.more > 0 && (
             <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
           )}
-          {/* Present and ENABLED whenever the section renders, because a
-              toolbox needs only a DIRECTORY. */}
+          {/* Present whenever the section renders, because a toolbox needs
+              only a DIRECTORY — and, since M194, DISABLED WITH A REASON when
+              that directory cannot be used, rather than a control that opens a
+              panel with nothing in it. Removing it instead would make an
+              unavailable directory indistinguishable from a door this app
+              never built (the repository's standing rule for every
+              administrative affordance). */}
           <button
             type="button"
             className="inspector__action"
             data-toolbox-open
+            disabled={toolbox.openReason !== undefined}
+            title={toolbox.openReason}
             {...shellControl(() => { onOpenToolbox(model.id) })}
           >
             Open toolbox

@@ -105,6 +105,7 @@ function resolve(name: string, inventory: LaneInventory | undefined, shelf: Shel
   if (inventory === undefined) return { kind: 'asking' }
   if (inventory.kind === 'refused') return { kind: 'unknown', why: inventory.why }
   if (inventory.kind === 'no-cwd') return { kind: 'unknown', why: 'this panel has no directory' }
+  if (inventory.kind === 'unavailable') return { kind: 'unknown', why: inventory.reason }
   if (inventory.kind !== 'inventory') return { kind: 'unknown', why: 'the inventory came back in a shape this version does not know' }
   const matches = inventory.inventory.entries.filter((e) => isSkill(e) && (e as NamedToolEntry).name === name) as NamedToolEntry[]
   if (matches.length === 0) return { kind: 'none' }

@@ -55,6 +55,7 @@ export type ShelfState =
   | { kind: 'unavailable'; why: string }
 
 export type SkillsInventoryState =
+  | { kind: 'unavailable'; why: string }
   | { kind: 'no-cwd' }
   | { kind: 'pending' }
   | { kind: 'inventory'; readAt: number }
@@ -258,6 +259,8 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
         <p className="pf__note skills-pane__empty" data-skills-empty>{SKILLS_NO_CWD}</p>
       ) : props.state.kind === 'pending' ? (
         <p className="pf__note skills-pane__empty" data-skills-empty>{SKILLS_PENDING}</p>
+      ) : props.state.kind === 'unavailable' ? (
+        <p className="pf__note skills-pane__empty" data-skills-empty>{props.state.why}</p>
       ) : props.columns.length === 0 ? (
         <p className="pf__note skills-pane__empty" data-skills-empty>
           {noMatchSentence(props.kind, props.query)}

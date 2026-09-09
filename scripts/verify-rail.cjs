@@ -28,10 +28,14 @@ buildSync({
   // which is why the honest way to answer the question is to DELETE the alias
   // and build rather than to read the imports. See CLAUDE.md's "The plain-node
   // verify bundles now configure a @shared alias" for the corrected table.
-  // @shared stays for the original reason: every @shared import reachable
-  // from here is an `import type`, which esbuild erases before bundling —
-  // and needing no alias YET is exactly the state verify-viewport.cjs was in
-  // right up until the day it broke.
+  // @shared is now REQUIRED, and the premise this comment used to record —
+  // "every @shared import reachable from here is an `import type`" — is false
+  // as of M194: `canvas/inspection-directory.ts` value-imports
+  // `panels/panels.ts`, which value-imports `carryChatMarks` and
+  // `carryBackend` from @shared. That is exactly the re-export chain
+  // docs/verify-suites.md warns is easy to miss by eye, and reasoning from the
+  // old sentence would conclude the alias is removable. It is not; deleting it
+  // and building is still the only way to answer the question.
   alias: {
     '@shared': join(__dirname, '..', 'src', 'shared'),
     '@renderer': join(__dirname, '..', 'src', 'renderer')
@@ -3228,6 +3232,79 @@ console.log('\n' + '='.repeat(60))
   ok('board.empty.1 an empty board column carries a sentence — a drop target for a user-set column, the runtime rule for working and review — under data-board-empty',
     /data-board-empty=\{state\}/.test(src) && /drop a card/.test(src) && /set when a dispatched lane starts/.test(src) && /set when a lane opens its pull request/.test(src),
     JSON.stringify({ attr: /data-board-empty/.test(src), words: [/drop a card/.test(src), /dispatched lane/.test(src), /pull request/.test(src)] }))
+}
+
+{
+  const terminal = panel('context-terminal', { spec: { cwd: '/intended', args: [] } })
+  const chat = panel('context-chat', { kind: 'chat', chat: { cwd: '/project', sessionId: 'fixture' } })
+  const review = panel('context-review', { kind: 'review', subject: { repoRoot: '/review' } })
+  const toolbox = panel('context-toolbox', { kind: 'toolbox', source: { cwd: '/tools' } })
+  const dir = R.inspectionDirectory
+  const sandboxed = { ...chat, chat: { ...chat.chat, sandbox: true } }
+  ok('context.policy.1 chat inspection shares a cwd while terminal, review and toolbox policies retain their existing meaning',
+    dir(chat, 'files').cwd === '/project' && dir(chat, 'tools').cwd === '/project' &&
+    dir(terminal, 'files', '/live').cwd === '/live' && dir(terminal, 'files').cwd === '/intended' &&
+    dir(terminal, 'tools', '/live').cwd === '/intended' && dir(review, 'files').cwd === '/review' &&
+    dir(review, 'tools').kind === 'no-directory' && dir(toolbox, 'files').kind === 'no-directory' && dir(toolbox, 'tools').cwd === '/tools')
+  ok('context.policy.2 no subject, sandbox, malformed, relative and missing cwd and non-directory kinds do not become project context',
+    dir(undefined, 'files').kind === 'no-directory' &&
+    dir(sandboxed, 'files').kind === 'absent' && /sandbox/i.test(dir(sandboxed, 'tools').reason) &&
+    ['', '  ', undefined].every((cwd) => dir({ ...chat, chat: { cwd } }, 'files').kind === 'unavailable') &&
+    // Both surfaces must refuse a relative cwd IDENTICALLY. Files used to
+    // answer `known` for one and let main resolve it against ITS working
+    // directory, painting a plausible basename over whatever that hit, while
+    // Tools refused the same string.
+    ['relative/path', './here', '../up'].every((cwd) =>
+      ['files', 'tools'].every((surface) => dir({ ...chat, chat: { cwd } }, surface).kind === 'unavailable')) &&
+    dir({ ...chat, chat: { cwd: '~/project' } }, 'files').cwd === '~/project' &&
+    ['file', 'image', 'note', 'workflow', 'browser'].every((kind) => dir(panel('no-dir', { kind }), 'files').kind === 'no-directory'))
+  // The spec's clause is that the three silences have DISTINCT explanations, so
+  // the check compares the sentences and not only the arm names: collapsing
+  // two of them into one string passed every assertion above.
+  const reasons = [dir(sandboxed, 'files').reason, dir({ ...chat, chat: { cwd: '' } }, 'files').reason, dir({ ...chat, chat: { cwd: 'rel' } }, 'files').reason]
+  ok('context.policy.3 a sandboxed conversation, an unrecorded directory and a relative one each get their own sentence, and a kind with no directory gets none — the surface names it',
+    reasons.every((r) => typeof r === 'string' && r.trim().length > 0) && new Set(reasons).size === 3 &&
+    dir(panel('no-dir', { kind: 'file' }), 'files').reason === undefined && dir(undefined, 'tools').reason === undefined,
+    JSON.stringify(reasons))
+  // M194. The structural claim, read as TEXT — the same shape
+  // `verify:agent-session registry.1` uses for "no consumer switches on the
+  // backend name". The pure policy above can be perfect while a consumer
+  // quietly keeps its own copy, which is exactly what `skillsCwd` was doing
+  // when this milestone started: a fourth hand-written copy that had already
+  // drifted from the three it was supposed to agree with. Nothing else in the
+  // suite can see a fifth one being added.
+  const CONSUMERS = [
+    ['src/renderer/canvas/useFileTree.ts', 'the Files pane'],
+    ['src/renderer/canvas/useInspectorDetail.ts', "the inspector's Tools section"],
+    ['src/renderer/canvas/usePaletteActions.ts', 'the Open toolbox verb'],
+    ['src/renderer/canvas/Canvas.tsx', "the Skills pane's cwd"]
+  ]
+  const asks = CONSUMERS.filter(([f]) => /inspectionDirectory\(/.test(require('node:fs').readFileSync(join(__dirname, '..', ...f.split('/')), 'utf8')))
+  ok('context.policy.4 every inspection consumer ASKS the one policy rather than keeping its own copy of the rule',
+    asks.length === CONSUMERS.length,
+    JSON.stringify({ asking: asks.map(([, w]) => w), missing: CONSUMERS.filter((c) => !asks.includes(c)).map(([, w]) => w) }))
+  const failed = R.buildToolboxFields({ kind: 'unavailable', reason: 'Directory unavailable' })
+  ok('context.tools.1 an unavailable inventory is visible with a named disabled detail action, never empty or loading',
+    !failed.hidden && failed.summary === 'Directory unavailable' && failed.openReason === failed.summary && failed.rows.length === 0)
+  const failedNode = R.buildToolboxNodeModel({ source: { cwd: '/repo', label: 'repo' }, title: undefined, result: { kind: 'unavailable', reason: 'the directory is no longer there' } })
+  ok('context.tools.3 the toolbox NODE says an unavailable directory in main\'s own words, never `no directory` and never an empty inventory',
+    failedNode.summary === 'toolbox unavailable' && failedNode.note === 'the directory is no longer there' && (failedNode.groups ?? []).length === 0,
+    JSON.stringify({ summary: failedNode.summary, note: failedNode.note }))
+  // M194. The arm above is reached by a POSITIVE test for `inventory`, not by
+  // falling through — so a kind this build has no arm for (an older main, a
+  // later arm) says so instead of throwing `undefined.entries` inside a
+  // render. It is also what makes the check above red-first-able: with a
+  // fall-through, deleting the `unavailable` arm ABORTED this suite on a
+  // TypeError and every check below it never ran (docs/verify-suites.md).
+  // CAUGHT, not called bare: without the guard this check exists for, the call
+  // THROWS, and a throw here would abort the suite so that every check below it
+  // never ran and this red would not be evidence (docs/verify-suites.md's first
+  // rule — the same rule that found the defect in the first place).
+  let future
+  try { future = R.buildToolboxFields({ kind: 'not-a-kind-this-build-knows' }) } catch (e) { future = { threw: String(e) } }
+  ok('context.tools.2 an inventory kind this build has no arm for is named, never a throw inside the section or an empty inventory',
+    future.threw === undefined && !future.hidden && /shape this version does not know/.test(future.summary) && future.openReason === future.summary && future.rows.length === 0,
+    JSON.stringify(future))
 }
 
 const failed = results.filter((r) => !r.pass)

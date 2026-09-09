@@ -32,8 +32,8 @@
 export interface ToolboxSource {
   /**
    * The directory whose toolbox this is. UNEXPANDED — main expands it with
-   * `resolveCwd`, the same expansion a spawn gets, so the toolbox and the
-   * agent can never disagree about which directory they describe.
+   * `expandTilde` and checks it exists. Inspection never takes a spawn's
+   * fallback to home when the requested directory is missing.
    */
   cwd: string
   /**
@@ -411,6 +411,7 @@ export interface ToolInventory {
 export type ToolInventoryResult =
   | { kind: 'inventory'; inventory: ToolInventory }
   | { kind: 'no-cwd' }
+  | { kind: 'unavailable'; reason: string }
 
 /* ------------------------------------------------------------------ caps --
  * One rule, from file-panel.ts's two-cap comment: BYTES REFUSE, COUNTS

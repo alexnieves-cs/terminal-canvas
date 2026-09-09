@@ -321,3 +321,52 @@ a REAL drag afterwards — a dispatched mousedown on the chrome moves nothing, t
 the pointer's buttons — Delete, the file, the reload). Two harness facts the check taught:
 `sendInputEvent` mouseMoves sent back to back COALESCE into one (pace them with a frame's
 sleep), and every move needs `modifiers: ['leftButtonDown']` or the DOM sees `buttons` 0.
+
+## The v10 run, D02 (M194)
+
+`verify:rail context.policy.1–.4` and `context.tools.1–.3` are the pure half:
+`inspectionDirectory`'s four arms per surface, and `buildToolboxFields`/`buildToolboxNodeModel`'s
+`unavailable` and unknown-kind renderings. `verify:panels:product context.chat.1–.9` is the real
+renderer — A/B selection, the A→B→A late-reply race, sandbox/absent/unavailable, a real file click
+into a terminal and into a chat's composer, and `Open toolbox` from a conversation.
+
+**Four rules this milestone learned or re-learned, each of which fails silently if unknown.**
+
+**A check that drives a function with a value the function has no arm for is only red-first-able
+if the function tests POSITIVELY for the arm that carries data.** `buildToolboxFields` reached its
+inventory branch by fall-through, so deleting the arm `context.tools.1` exists for did not turn it
+red — it threw `TypeError: Cannot read properties of undefined (reading 'entries')` and killed the
+run, and every check below it never executed. That is this file's first rule arriving as a DESIGN
+signal: the same fall-through is a throw inside a React render for a renderer talking to an older
+or newer main. Both `buildToolboxFields` and `buildToolboxNodeModel` now test
+`kind === 'inventory'` positively, and `context.tools.2` wraps its call in a `try` anyway, so the
+check that exists for the missing guard cannot be defeated by the missing guard.
+
+**`verify:visual` must run under the `TMPDIR` its goldens were baked under — the system one.**
+Running it with `TMPDIR=/private/tmp` failed four scenes; three of them (`chat-copilot`,
+`supervisor`, `inspector-detail`) differed ONLY in painted temp paths, a pid, a port and a CPU/RAM
+reading. Under the system `TMPDIR` the same tree is 58/59 with only the intended scene moving.
+The v9 run recorded the opposite direction of this (a repository-local `TMPDIR` wrapping a long
+path in a 78-column terminal); the rule has no direction — do not override it at all.
+
+**`verify:panels:*` does not consume the build's exit code.** A `npm run build` that fails its
+typecheck leaves the PREVIOUS bundle in `out/`, and the suite then runs against it and prints a
+green tally. A red-first whose build silently failed is not evidence. Read the build's own line.
+
+**A product-suite block that swaps `ipcMain` handlers must restore them in a `finally` that cannot
+itself throw, and must restore FIRST.** M194's block wraps `IPC.FS_LIST` and `IPC.TOOLBOX_READ` to
+hold and to reject replies. Its first version emptied the held queue by RE-RUNNING the real handler
+before restoring anything: one rejection there lost the remaining entries, left the renderer's
+promises pending for ever, and skipped the restore — leaving swapped handlers and a fixture
+workspace installed for every later check in the part, which is a poisoned suite rather than a
+failed check. Restore the handlers and the layout first, touch nothing that can throw until they
+are back, resolve held replies with a static value, and guard each awaited cleanup step on its own.
+
+**One thing the suite deliberately cannot see, recorded so it is not mistaken for coverage.** The
+render-time masks (`useFileTree`'s `subject`/`current` pair, `useInspectorDetail`'s
+`toolbox?.subject === toolboxSubject`) exist because an effect runs AFTER a render, so a `live`
+flag that only cancels a stale WRITE still paints panel A's data under panel B's name for one
+frame. `settle()` is a 300 ms sleep, so every DOM read happens long after React has flushed:
+deleting both masks passes the whole suite. The `generation` ref IS covered — `context.chat.2`'s
+Files half is the only thing in the repository that can see it, because the A→B→A subject string
+is identical and the counter is the sole discriminator.

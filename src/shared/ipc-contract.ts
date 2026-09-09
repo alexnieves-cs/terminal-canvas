@@ -927,9 +927,8 @@ export interface FileReadRequest {
 /** What `toolbox:read` is asked. See TOOLBOX_READ for why it is a cwd. */
 export interface ToolboxReadRequest {
   /**
-   * The panel's cwd, UNEXPANDED — main expands it with `resolveCwd`, the same
-   * expansion a spawn gets, so the toolbox and the agent can never disagree
-   * about which directory they are talking about.
+   * The panel's cwd, UNEXPANDED — main expands tilde and verifies the folder
+   * without a spawn's fallback to home. A missing folder is unavailable.
    */
   cwd: string
   /**

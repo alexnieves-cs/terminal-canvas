@@ -31,6 +31,7 @@ import { useCanvasPointer } from './useCanvasPointer'
 import { panelName } from '@renderer/palette/panel-name'
 import { useRailModels } from './useRailModels'
 import { useFileTree } from './useFileTree'
+import { inspectionDirectory } from './inspection-directory'
 import { useVault } from './useVault'
 import { buildIntegrationRows, INTEGRATION_AUDIT_ROWS } from '@renderer/shell/integration-model'
 import { SERVICES } from '@shared/credential-schema'
@@ -5575,11 +5576,11 @@ export function Canvas({
   // panel while insertPath pastes into the FOCUSED one — see the hook's doc
   // comment for why collapsing those onto one id is a bug, not a cleanup.
   const {
-    treeRoot, treeRootLabel, treeRows, treeRootPending, noteRoot,
+    treeRoot, treeRootLabel, treeRows, treeRootPending, treeContextReason, noteRoot,
     toggleDir, refreshTree, insertPath
   } = useFileTree({
     registry, selectedPanel, selectedLive, selectedId, settingRows,
-    focusedIdRef, noteRootRef
+    focusedIdRef, panelsRef, noteRootRef
   })
 
   /**
@@ -5753,12 +5754,16 @@ export function Canvas({
   // never the renderer's own advisory guess. Absent means nothing to say;
   // it is not persisted and clears on the pane's next assignment.
   const [skillAssignNotice, setSkillAssignNotice] = useState<string | null>(null)
+  // M194. The inspector's Toolbox rule, ASKED rather than copied. This was a
+  // third hand-written copy of it, and the moment the inspector's own rule
+  // learned about chats it began to disagree with this one silently: the
+  // Tools section would list a conversation's commands while the pane one
+  // dock row away said "no directory" about the same folder. `skillsCwd`
+  // also feeds `skill:create` and the assign door, so a sandbox chat — which
+  // the policy answers `absent` for — must not reach either.
   const skillsCwd = (() => {
-    const p = panels.find((x) => x.rect.id === selectedId)
-    if (p === undefined) return null
-    if (isTerminalPanel(p)) return p.spec.cwd
-    if (isToolboxPanel(p)) return p.source.cwd
-    return null
+    const d = inspectionDirectory(panels.find((x) => x.rect.id === selectedId), 'tools')
+    return d.kind === 'known' ? d.cwd : null
   })()
   const [skillsInventory, setSkillsInventory] = useState<ToolInventoryResult | undefined>(undefined)
   // M129 fix. Main's own answer to the last `skill:create`, as a sentence —
@@ -5779,7 +5784,11 @@ export function Canvas({
     let live = true
     void window.canvas.toolbox.read({ panelId: selectedId, cwd: skillsCwd })
       .then((r) => { if (live) setSkillsInventory(r) })
-      .catch(() => { if (live) setSkillsInventory({ kind: 'no-cwd' }) })
+      // M194. A rejected read is NOT a panel without a directory. The pane
+      // grew an `unavailable` arm this milestone and this is the only site
+      // that can produce a rejection; laundering it into `no-cwd` here would
+      // print "no directory" over a folder the user is looking at.
+      .catch(() => { if (live) setSkillsInventory({ kind: 'unavailable', reason: 'the skills read did not answer' }) })
     return () => { live = false }
   }, [selectedId, skillsCwd, skillsReadTick])
   /**
@@ -5803,6 +5812,7 @@ export function Canvas({
       skillsCwd === null ? { kind: 'no-cwd' }
         : skillsInventory === undefined ? { kind: 'pending' }
           : skillsInventory.kind === 'no-cwd' ? { kind: 'no-cwd' }
+            : skillsInventory.kind === 'unavailable' ? { kind: 'unavailable', why: skillsInventory.reason }
             : { kind: 'inventory', readAt: skillsInventory.inventory.readAt }
     const paneColumns = buildSkillColumns(entries, shelf, { kind: skillKindTab, query: skillQuery, scopes: skillScopes, placedOnly: skillPlacedOnly })
     // M131. A project-scoped key's repository, read back out of the
@@ -5858,9 +5868,24 @@ export function Canvas({
       // derives itself from the asking cwd — the renderer sends the word,
       // never a path. The project word stays present and disabled with its
       // reason when no selected panel has a directory.
+      // M194 opened this arm. Before it, `skillsCwd` answered for terminal and
+      // toolbox panels only, and a terminal's record carries the cwd the user
+      // ASKED for — M37 applies the lane at spawn — so a worktree lane could
+      // not reach this door. A DISPATCHED chat's `chat.cwd` IS the lane
+      // (`board-lane.ts`), and main derives the project root from the cwd it is
+      // handed (`skill-write.ts`'s `rootsOf`), so a project skill written from
+      // one would land in `userData/worktrees/tc/…/.claude/skills` and vanish
+      // with the lane, having never been in the repository the person meant.
+      // REFUSED by name rather than translated: M131 translates a lane through
+      // main's `worktreeRootOf` for the skills brief, and doing the same for a
+      // WRITE is repository-identity work the guide assigns to D04. A refusal
+      // that names the repository is honest now and is not in D04's way.
       projectScopeReason: skillsCwd === null || skillsCwd === ''
         ? 'select a panel with a directory to write a skill into its repository'
-        : null,
+        : (() => {
+            const lane = worktreeRows.find((w) => skillsCwd === w.path || skillsCwd.startsWith(`${w.path}/`))
+            return lane === undefined ? null : `this conversation works in a worktree lane, not ${displayPath(lane.root).short} itself — a project skill written here would go with the lane`
+          })(),
       newSkillResult,
       onNewSkill: (scope: 'user' | 'project', name: string) => {
         setNewSkillResult(`creating ${name}…`)
@@ -5925,7 +5950,12 @@ export function Canvas({
         writeShelf({ columns: shelf.columns.filter((c) => c.id !== id).map(carryOneColumn) })
       }
     }
-  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
+  // `worktreeRows` is a useState array (EMPTY_WORKTREES until a read lands),
+  // so its identity is stable between reads and naming it here costs no churn.
+  // Omitting it left the lane refusal frozen at whatever it was when another
+  // dep last changed — the kind of staleness that shows up as a door that is
+  // enabled when it should not be, only sometimes.
+  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, worktreeRows, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
@@ -6069,9 +6099,14 @@ export function Canvas({
         treeRows={treeRows}
         treeRootPending={treeRootPending}
         // M48 (spec §5). Which panel, and why there is nothing to list.
-        treeEmptyReason={!selectedPanel
+        // M194. The policy answers with a reason ONLY for the two states this
+        // line has never had words for — a sandboxed conversation, and a
+        // directory that cannot be used. A kind that simply has none still
+        // falls through to the line that NAMES the panel (M48 §5), which is
+        // more specific than anything the policy could invent.
+        treeEmptyReason={treeContextReason ?? (!selectedPanel
           ? 'select a panel to list its directory'
-          : `${panelLabel(selectedPanel)} has no directory to list`}
+          : `${panelLabel(selectedPanel)} has no directory to list`)}
         onToggleDir={toggleDir}
         onInsertPath={insertPath}
         onRefreshTree={refreshTree}

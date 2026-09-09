@@ -75,7 +75,7 @@ export class ToolboxCache {
       // The cached ENTRIES are still correct; only the freshness verdict is
       // per-panel, so it is recomputed against the sweep already in hand
       // rather than by re-reading nine files.
-      if (hit.result.kind === 'no-cwd') return hit.result
+      if (hit.result.kind !== 'inventory') return hit.result
       const changed = [...now.keys()].filter((k) => input.spawnStamps?.get(k) !== now.get(k))
       const missing = [...input.spawnStamps.keys()].filter((k) => !now.has(k))
       const all = [...new Set([...changed, ...missing])].sort()

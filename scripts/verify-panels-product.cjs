@@ -35,6 +35,195 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   }
 
   {
+    // M194. Selection is inspection, not execution. Real IPC readers with
+    // deliberately held replies expose both stale rendering and A→B→A reuse.
+    await settle(); flushLayoutStore()
+    // current() is the store's live object; a saved reference mutates under
+    // save() and would restore THIS fixture into all the later checks.
+    const snapshot = JSON.parse(JSON.stringify(layoutStore.current()))
+    const preferences = layoutStore.preferences()
+    const saved = snapshot.workspaces.find((w) => w.id === snapshot.activeWorkspaceId)
+    const dir = mkdtempSync(join(tmpdir(), 'tc selected context '))
+    const a = join(dir, 'A'), b = join(dir, 'B'), missing = join(dir, 'missing')
+    for (const [cwd, name] of [[a, 'context-alpha'], [b, 'context-beta']]) {
+      mkdirSync(join(cwd, '.claude', 'commands'), { recursive: true })
+      writeFileSync(join(cwd, '.claude', 'commands', name + '.md'), 'A fixture command.\n')
+      writeFileSync(join(cwd, name + '.txt'), 'A fixture file.\n')
+    }
+    const original = new Map([IPC.FS_LIST, IPC.TOOLBOX_READ].map((c) => [c, registeredHandlers.get(c)]))
+    const held = []
+    let hold = false
+    let refuse = false
+    const install = () => {
+      for (const [channel, handler] of original) {
+        ipcMain.removeHandler(channel)
+        ipcMain.handle(channel, (event, request) => {
+          const cwd = channel === IPC.FS_LIST ? request : request.cwd
+          if (refuse && cwd === a) throw new Error('Fixture inspection read failed')
+          if (hold && (cwd === a || cwd === b)) return new Promise((resolve) => held.push({ channel, cwd, resolve, run: () => handler(event, request) }))
+          return handler(event, request)
+        })
+      }
+    }
+    const reload = async () => { const ready = new Promise((r) => wc.once('did-finish-load', r)); wc.reload(); await ready; await settle() }
+    const select = async (id) => {
+      await dockTo('panels')
+      await clickRail(`[data-rail-row="${id}"] .rail-row__main`)
+      await dockTo('files')
+      await settle()
+    }
+    const read = () => wc.executeJavaScript(`({ root: document.querySelector('.shell__tree-root')?.title,
+      files: document.querySelector('[data-file-tree]')?.textContent ?? '',
+      tools: document.querySelector('[data-context-panel="tools"]')?.textContent ?? '',
+      rows: [...document.querySelectorAll('[data-context-panel="tools"] [data-toolbox-row]')].map((n) => n.getAttribute('data-toolbox-row')) })`)
+    try {
+      install()
+      const chat = (id, cwd, extra = {}) => ({ id, kind: 'chat', x: 40, y: 40, w: 480, h: 360, z: 1,
+        title: id, chat: { cwd, sessionId: '00000000-0000-4000-8000-' + id.slice(-1).charCodeAt(0).toString().padStart(12, '0'), ...extra } })
+      layoutStore.save({ panels: [chat('ctxA', a), chat('ctxB', b), chat('ctxS', a, { sandbox: true }), chat('ctxM', missing),
+        { id: 'ctxF', kind: 'file', x: 40, y: 440, w: 480, h: 300, z: 1, source: { path: join(a, 'context-alpha.txt') } },
+        { id: 'ctxT', x: 560, y: 40, w: 440, h: 300, z: 2, cwd: b, command: '/bin/cat', args: ['-v'], title: 'context paste target' }],
+        camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore(); await reload()
+      const lifecycle = () => ({ chat: chatSpawns.length, sessions: agentSessions.list().map((s) => s.id).sort(), pty: ptyManager.list().map((p) => p.id).sort(), killed: killedPanelIds.length })
+      // `useChatSessions` fires agent:create for every chat on MOUNT. Taken a
+      // fixed sleep after the reload, `before` could miss one and this check
+      // would go red for a reason that has nothing to do with inspection.
+      await waitUntil(() => agentSessions.list().filter((s) => s.id.startsWith('ctx')).length >= 3, 3000)
+      const before = lifecycle()
+      await select('ctxA')
+      const alpha = await waitUntil(async () => { const v = await read(); return v.rows.includes('context-alpha') && v.files.includes('context-alpha.txt') ? v : false }, 2000)
+      ok('context.chat.1 selected repository chat supplies Files and Tools without a terminal proxy', alpha && alpha.root === a, JSON.stringify(alpha))
+
+      hold = true
+      await select('ctxB')
+      const pendingB = await read()
+      // Counted, never a literal. One selection issues one read per CONSUMER —
+      // the tree, the Skills pane and the inspector — and a hard `2` here
+      // resolved the Skills pane's obsolete reply instead of the inspector's,
+      // leaving the inspector's held and its half of this check true by
+      // construction. M194 added the third consumer, which is how that was
+      // found; a fourth would break the literal the same silent way.
+      const perSelection = held.length
+      await select('ctxA')
+      await select('ctxB')
+      const obsolete = held.splice(0, perSelection)
+      for (const reply of obsolete) reply.resolve(reply.channel === IPC.FS_LIST
+        ? { kind: 'ok', entries: [{ name: 'obsolete-context.txt', kind: 'file' }], truncated: 0 }
+        : await reply.run())
+      await settle()
+      const afterLate = await read()
+      ok('context.chat.2 subject changes clear rows immediately and obsolete same-directory replies stay ignored',
+        pendingB.rows.length === 0 && !pendingB.files.includes('context-alpha.txt') &&
+        afterLate.rows.length === 0 && !afterLate.files.includes('obsolete-context.txt') && /reading/.test(afterLate.files) &&
+        perSelection === 3 && obsolete.length === 3,
+        JSON.stringify({ pendingB, afterLate, perSelection, held: held.length }))
+      hold = false
+      for (const reply of held.splice(0)) reply.resolve(await reply.run())
+      await settle()
+      const beta = await read()
+      ok('context.chat.3 current replies land after older selection replies', beta.rows.includes('context-beta') && beta.files.includes('context-beta.txt') && !beta.rows.includes('context-alpha'), JSON.stringify(beta))
+
+      refuse = true
+      await select('ctxA'); const failedRead = await read()
+      refuse = false
+      await select('ctxB'); await select('ctxA'); const retried = await read()
+      ok('context.chat.8 a rejected read says it did not answer — never `no directory`, never a silent empty inventory — and changing selection back retries it',
+        /did not answer/.test(failedRead.files) && /did not answer/.test(failedRead.tools) &&
+        !/no directory/.test(failedRead.files) && !/no directory/.test(failedRead.tools) && failedRead.rows.length === 0 &&
+        retried.files.includes('context-alpha.txt') && retried.rows.includes('context-alpha'), JSON.stringify({ failedRead, retried }))
+
+      await select('ctxS'); const sandbox = await read()
+      await select('ctxF'); const file = await read()
+      await select('ctxM'); const gone = await read()
+      ok('context.chat.4 sandbox, non-directory object and unavailable directory stay distinct, and the object with none is NAMED rather than described generically',
+        /sandbox/i.test(sandbox.files) && /sandbox/i.test(sandbox.tools) && sandbox.rows.length === 0 &&
+        // M48 §5, restored: the pane names the PANEL it is empty about. The
+        // policy answers `no-directory` with no sentence precisely so this
+        // one — which knows the panel's own label — is the one that renders.
+        /no directory/.test(file.files) && file.files.includes('ctxF') && /no directory/.test(file.tools) &&
+        /gone/i.test(gone.files) && /no longer there/i.test(gone.tools) &&
+        // The three silences are three sentences, not one worn three times.
+        new Set([sandbox.tools, file.tools, gone.tools]).size === 3,
+        JSON.stringify({ sandbox, file, gone }))
+      const after = lifecycle()
+      ok('context.chat.5 inspecting subjects changes no execution lifecycle', JSON.stringify(before) === JSON.stringify(after), JSON.stringify({ before, after }))
+
+      await dockTo('panels')
+      await clickRail('[data-rail-row="ctxT"] .rail-row__start')
+      const terminalReady = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="ctxT"] .xterm') !== null`), 4000)
+      if (terminalReady) { wc.focus(); await clickPanelBody('.panel[data-panel-id="ctxT"] .panel__slot') }
+      await select('ctxA')
+      const focusedBefore = await wc.executeJavaScript('window.__m4aFocusedId()')
+      const path = join(a, 'context-alpha.txt')
+      const point = await wc.executeJavaScript(`(() => { const n = document.querySelector('[data-file-path=' + ${JSON.stringify(JSON.stringify(path))} + ']'); if (!n) return null; const r = n.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return n.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
+      if (point) {
+        wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      }
+      const pasted = await waitUntil(async () => (await scrollbackLog.tail('ctxT', 20)).join('\n').includes("'" + path + "'"), 2000)
+      const focusedAfter = await wc.executeJavaScript('window.__m4aFocusedId()')
+      ok('context.chat.7 a real file click with chat selected preserves terminal focus and pastes the absolute shell-quoted path',
+        focusedBefore === 'ctxT' && focusedAfter === 'ctxT' && point !== null && pasted === true,
+        JSON.stringify({ focusedBefore, focusedAfter, point, pasted }))
+      // M194. The same gesture with NO terminal in the picture — D02's own
+      // acceptance sentence. Before the chat arm this was a control that did
+      // nothing: `registry.get(<chat id>)` is undefined, so the paste was
+      // `undefined?.handle.paste` and every row in the pane was inert with
+      // nothing on screen saying why.
+      await dockTo('panels')
+      await clickRail('[data-rail-row="ctxA"] .rail-row__main')
+      // A REAL click on the chat's body — `.chat__body`'s own mousedown is
+      // what calls onFocusPanel, so this is the gesture a person makes.
+      wc.focus(); await clickPanelBody('.panel[data-panel-id="ctxA"] .chat__body')
+      await dockTo('files')
+      await settle()
+      const chatFocused = await wc.executeJavaScript('window.__m4aFocusedId()')
+      const chatPoint = await wc.executeJavaScript(`(() => { const n = document.querySelector('[data-file-path=' + ${JSON.stringify(JSON.stringify(path))} + ']'); if (!n) return null; const r = n.getBoundingClientRect(); const x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return n.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
+      if (chatPoint) {
+        wc.sendInputEvent({ type: 'mouseDown', ...chatPoint, button: 'left', clickCount: 1 })
+        wc.sendInputEvent({ type: 'mouseUp', ...chatPoint, button: 'left', clickCount: 1 })
+      }
+      const composed = await waitUntil(() => wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id="ctxA"] [data-chat-input]')?.value ?? '')`).then((v) => v.includes('@context-alpha.txt') ? v : false), 2000)
+      ok('context.chat.9 a file click with a CHAT focused and no terminal anywhere reaches its composer as an @ reference — never a control that silently does nothing',
+        chatFocused === 'ctxA' && chatPoint !== null && composed !== false,
+        JSON.stringify({ chatFocused, chatPoint, composed }))
+
+      await select('ctxA')
+      await clickRail('[data-context-tab="tools"]')
+      await clickRail('[data-context-panel="tools"] [data-toolbox-open]')
+      const opened = await waitUntil(() => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-kind="toolbox"]'); return p?.querySelector('[data-toolbox-directory]')?.title === ${JSON.stringify(a)} && p.querySelector('[data-toolbox-row="context-alpha"]') !== null })()`), 2000)
+      ok('context.chat.6 Open toolbox from the selected chat reaches its directory inventory', opened === true, String(opened))
+    } finally {
+      // ORDER IS THE POINT. An `executeJavaScript` inside the block can reject,
+      // and then this runs with the wrapper handlers still installed. The two
+      // steps that would poison every later check in this part — the swapped
+      // IPC handlers and the fixture workspace — go FIRST and touch nothing
+      // that can throw, and every awaited step after them is guarded on its
+      // own. An earlier version emptied `held` by re-running the real handler
+      // first: one rejection there lost the remaining entries, left the
+      // renderer's promises pending for ever, and skipped the restore
+      // entirely.
+      hold = false
+      refuse = false
+      for (const [channel, handler] of original) { ipcMain.removeHandler(channel); ipcMain.handle(channel, handler) }
+      for (const key of ['shell.navigator', 'files.treeOpen', 'shell.contextTab', 'shell.railOpen', 'shell.inspectorOpen']) {
+        if (key in preferences) layoutStore.setPreference(key, preferences[key])
+        else layoutStore.clearPreference(key)
+      }
+      // A static answer, never `run()`: this only has to let the renderer's
+      // pending promises settle, and re-reading the real filesystem here is
+      // one more thing that can reject on the path where something already has.
+      for (const reply of held.splice(0)) reply.resolve(reply.channel === IPC.FS_LIST ? { kind: 'gone' } : { kind: 'no-cwd' })
+      try { await clickPanelClose(wc, 'ctxT') } catch { /* the panel may never have opened */ }
+      layoutStore.save(saved); flushLayoutStore()
+      try { await reload() } catch { /* the restore is on disk either way */ }
+      for (const id of ['ctxA', 'ctxB', 'ctxS', 'ctxM']) agentSessions.dispose(id)
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  {
     // M180. A beginner reaches a real composer by the visible primary door,
     // then types a sentence and presses Send. No test hook mints the chat.
     // The CLI report and availability preset are fixtures, the runtime is

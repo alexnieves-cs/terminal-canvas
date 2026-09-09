@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An Electron app for macOS: an infinite canvas of authored objects — agents, terminals, files,
 previews, workflows, pictures and notes — each of which a person arranges, edits and keeps.
-**This is 5.0 (M192).** The tenth run, M180 to M192 (v9), was unattended in goal mode and made
+**This is 5.0 (M192); the v10 run opened at M193.** The tenth run, M180 to M192 (v9), was unattended in goal mode and made
 the canvas a surface a person AUTHORS on rather than one they only start sessions from: Act I
 the first conversation (readiness as a table where installed never means signed in, the bounded
 `tc plan` door, the four-door closure as data) and the captioned starter canvas with the image
@@ -189,6 +189,36 @@ and 5.0 did not spend them.
   which is never transformed (`verify:panels frame.2`). xterm's cell metrics, the pointer
   correction, OSC 133, the PTY flush gate, dormancy tiers and the WebGL budget. The frame gets
   the new material; the cells inside it do not change unless a milestone specs it with a golden.
+
+## The v10 product contract (M193, D01)
+
+The run after 5.0.0 executes [the ordered product development guide](docs/product-development-guide-2026-09-08.md)
+(`D01`–`D20`, mapped to M193–M224). D01's reconcile adopted three things as binding on every
+milestone in it; the evidence and the reasoning are in
+[docs/build-log/m193-m224-ledger.md](docs/build-log/m193-m224-ledger.md).
+
+- **The core job.** Move a meaningful task from intention to reviewed result while the person
+  keeps control and understanding. The mental model is: *a workspace holds your work; tasks
+  connect agents, tools and evidence; the canvas is where you see and act on those connections.*
+  **Project, workspace and task do not merge** — a workspace may hold several tasks and several
+  repositories, and there is still no first-class project record in `LayoutSnapshot`. **A teammate
+  is an identity, a chat is its conversation, a session is its execution**; the code already keeps
+  these apart and the UI must stop blurring them.
+- **The four density layers**, which decide WHERE a fact goes and not merely how it is styled.
+  Rest: name, kind, one meaningful state — a zero-value statement at rest (`no skills used`)
+  violates the rest rule. Contextual: next action, related work, current blocker, revealed at
+  opacity 0 → 1. Inspector: configuration, provenance, detailed outcomes. Deep detail: logs,
+  diagnostics, metrics, history.
+- **A `note` is a Markdown FILE and nothing else is.** M27's prose file panel: a path on disk,
+  indexed by the vault, reachable by `[[links]]`, backlinks and `#tags`, searchable, and alive
+  outside any canvas. M187's sixteenth kind has three forms — a **sticky**, a **text** and a
+  **frame** — which live in the workspace record, have no path and do not survive their canvas;
+  each is called by its own form name and **never** a note (collectively *canvas objects*, never
+  *canvas notes*). `annotations` keeps meaning M93's labels and M155's ink. **Nothing is renamed
+  in code**: the `note` kind, `shared/notes.ts`, `isNotePanel` and the `.note-node__*` aliases are
+  unchanged — this is a copy rule plus one real defect to fix, `RailTailKind`/`StateKind`'s single
+  `'note'` literal now carrying BOTH meanings since M187 gave the kind the name the comment says
+  it should never have (`rail-rows.ts:147-155, 201-202, 317`; `panel-state.ts:24-25`).
 
 ## Commands
 

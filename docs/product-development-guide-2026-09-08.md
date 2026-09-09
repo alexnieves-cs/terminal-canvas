@@ -8,34 +8,42 @@ The implementation details below extend the original diagnosis into a plan. They
 
 Each numbered step is a development phase, not an already assigned repository milestone. Use `D01`–`D20` as stable guide IDs. During D01, map them to the next available milestone numbers and divide larger phases into small coherent milestones. Never reuse M180–M188 or other numbers already assigned in the ledger.
 
+**D01 amendment, 2026-09-08 (M193).** The mapping is done and is in the Milestone(s) column
+below; the reasoning, the splits and the reservations are in
+[the v10 ledger](build-log/m193-m224-ledger.md). The baseline the numbering was assigned against
+is `main` at `d785b7b`, tagged `v5.0.0`, working tree clean: M187–M192 have all shipped since this
+guide was written, so **M193 is the first free number** and the audit's `4.1.0`/`85edd91`
+observations are historical. 5.0.0 is spent — the guide's post-D10 checkpoint is a product
+checkpoint and names no version.
+
 All steps start unchecked. Existing implementations may satisfy part of a step; inspect and verify them, then record the evidence rather than rebuilding them. A phase can be complete only when its acceptance criteria and the repository's required verification are satisfied. Record status, actual milestone number, spec, plan, command results, critic findings, and remaining hand checks in the active build-log ledger.
 
 “Do everything” makes the previously deferred opportunities part of the eventual sequence. It does not make them v5 release blockers or justify a large speculative implementation upfront. P3 capabilities get a bounded implementation and evaluation before expansion. If evidence argues against a proposed design, record the problem and replacement explicitly rather than silently omitting the capability.
 
 ### The order at a glance
 
-| Order | Phase | Priority | Depends on | User-visible result |
-|---|---|---|---|---|
-| D01 | Reconcile baseline, roadmap, and product language | Foundation | — | One accurate development contract |
-| D02 | Selected chat context in Files and Tools | P0 | D01 | An agent's directory works without a terminal proxy |
-| D03 | Explicit preview ownership | P0 | D02 | Only the relevant project's changes reload its preview |
-| D04 | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
-| D05 | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
-| D06 | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
-| D07 | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
-| D08 | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
-| D09 | Intent-led onboarding | P1 | D05–D08 | A new user starts useful work through the same path |
-| D10 | Information hierarchy and contextual UI finish | P1 | D06–D09 | A calmer shell, inspector, graph, and far view |
-| D11 | Retained outcomes and return-to-work | P1 | D07–D10 | Tidying panels does not erase the meaning of the work |
-| D12 | Artifact provenance and decision capture | P2 | D07, D11 | Evidence and accepted knowledge retain their sources |
-| D13 | Honest, broader scoped search | P1 | D11–D12 | Find tasks, conversations, decisions, and artifacts |
-| D14 | Reusable task arrangements and workflows | P2 | D08, D12–D13 | Successful work becomes a reusable way of working |
-| D15 | Workflow nodes and integration depth | P2 | D14 | Concrete recurring jobs gain useful automation |
-| D16 | Portable canvases and workflows | P2 | D12, D14–D15 | Another environment can open work with honest missing-resource states |
-| D17 | Cross-workspace supervision | P3 | D06, D11, D13 | Understand and navigate work across workspaces |
-| D18 | Semantic relationship suggestions | P3 | D08, D12–D13 | Suggested connections are explainable and optional |
-| D19 | Extension ecosystem | P3 | D15–D16 | Extend validated seams without forking the application |
-| D20 | Multiplayer spatial work | P3 | D11–D12, D16–D19 | Shared work has explicit ownership and conflict handling |
+| Order | Milestone(s) | Phase | Priority | Depends on | User-visible result |
+|---|---|---|---|---|---|
+| D01 | M193 ✅ | Reconcile baseline, roadmap, and product language | Foundation | — | One accurate development contract |
+| D02 | M194 ✅ | Selected chat context in Files and Tools | P0 | D01 | An agent's directory works without a terminal proxy |
+| D03 | M195 | Explicit preview ownership | P0 | D02 | Only the relevant project's changes reload its preview |
+| D04 | M196 | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
+| D05 | M197–M198 | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
+| D06 | M199–M200 | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
+| D07 | M201–M202 | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
+| D08 | M203–M204 | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
+| D09 | M205 | Intent-led onboarding | P1 | D05–D08 | A new user starts useful work through the same path |
+| D10 | M206–M208 | Information hierarchy and contextual UI finish | P1 | D06–D09 | A calmer shell, inspector, graph, and far view |
+| D11 | M209–M210 | Retained outcomes and return-to-work | P1 | D07–D10 | Tidying panels does not erase the meaning of the work |
+| D12 | M211–M212 | Artifact provenance and decision capture | P2 | D07, D11 | Evidence and accepted knowledge retain their sources |
+| D13 | M213–M214 | Honest, broader scoped search | P1 | D11–D12 | Find tasks, conversations, decisions, and artifacts |
+| D14 | M215–M216 | Reusable task arrangements and workflows | P2 | D08, D12–D13 | Successful work becomes a reusable way of working |
+| D15 | M217–M218 | Workflow nodes and integration depth | P2 | D14 | Concrete recurring jobs gain useful automation |
+| D16 | M219 | Portable canvases and workflows | P2 | D12, D14–D15 | Another environment can open work with honest missing-resource states |
+| D17 | M220 | Cross-workspace supervision | P3 | D06, D11, D13 | Understand and navigate work across workspaces |
+| D18 | M221 | Semantic relationship suggestions | P3 | D08, D12–D13 | Suggested connections are explainable and optional |
+| D19 | M222 | Extension ecosystem | P3 | D15–D16 | Extend validated seams without forking the application |
+| D20 | M223–M224 | Multiplayer spatial work | P3 | D11–D12, D16–D19 | Shared work has explicit ownership and conflict handling |
 
 Priority describes importance, not a strict topological sort. For example, the full P1 search experience follows the P2 provenance phase so it can search meaningful decisions and artifacts. Its existing error-reporting defect can be fixed in a small independent milestone earlier if it blocks an active journey.
 
@@ -64,7 +72,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D01 — Reconcile the baseline and development contract
 
-- [ ] Complete and record D01.
+- [x] Complete and record D01. **M193** — the record is [docs/build-log/m193-m224-ledger.md](build-log/m193-m224-ledger.md).
 
 **Why first:** The audit's M187 state has already aged. Starting from its historical snapshot could duplicate work or overwrite another milestone's intent.
 
@@ -84,7 +92,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D02 — Make selected agent context work in Files and Tools
 
-- [ ] Complete and record D02.
+- [x] Complete and record D02. **M194** — the record is [docs/build-log/m194-d02-selected-chat-context.md](build-log/m194-d02-selected-chat-context.md).
 
 **Problem/evidence:** `ChatSource.cwd` exists in `src/shared/chat-panel.ts`, while the audited `useFileTree.ts` and `useInspectorDetail.ts` exclude chats from directory resolution. The starter golden exposes the contradiction.
 
@@ -594,7 +602,7 @@ For each phase, record:
 
 | Guide ID | Assigned milestone(s) | Status | Spec/plan | Verification evidence | Critic disposition | Manual checks |
 |---|---|---|---|---|---|---|
-| D01–D20, one row per phase in the active ledger | Assign during D01 | Not started / in progress / verified | Repository links | Commands, tallies, exit codes | Fixed or reasoned disposition | Owed or actually exercised |
+| D01–D20, one row per phase in the active ledger | Assigned in [the v10 ledger](build-log/m193-m224-ledger.md) §5 | Not started / in progress / verified | Repository links | Commands, tallies, exit codes | Fixed or reasoned disposition | Owed or actually exercised |
 
 No phase is marked implemented by the creation of this document. Do not automatically execute the product roadmap while handling a documentation-only request.
 

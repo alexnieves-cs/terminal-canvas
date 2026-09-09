@@ -174,6 +174,15 @@ export function buildToolboxNodeModel(input: {
   if (input.result.kind === 'no-cwd') {
     return { ...base, summary: 'no directory', note: 'this panel has no directory to read' }
   }
+  if (input.result.kind === 'unavailable') return { ...base, summary: 'toolbox unavailable', note: input.result.reason }
+  // M194. POSITIVE, never a fall-through — `buildToolboxFields`' own rule and
+  // for the same two reasons: a renderer running against a main that answers a
+  // kind this build has no arm for would read `undefined.entries` and throw
+  // inside a render, and a check driving this with a future kind must go RED
+  // rather than abort its suite on a TypeError.
+  if (input.result.kind !== 'inventory') {
+    return { ...base, summary: 'toolbox unreadable', note: 'the inventory came back in a shape this version does not know' }
+  }
 
   const inv = input.result.inventory
   const groups: ToolboxNodeGroup[] = []
