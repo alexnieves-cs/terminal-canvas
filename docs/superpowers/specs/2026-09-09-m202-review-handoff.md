@@ -25,6 +25,12 @@ not have otherwise:
   real exit code and reads *this canvas ran it and read its exit code*; a command from the
   conversation reads *the agent ran it and its CLI reported the result*, with no code, because
   there is none to show. Failures first; the overflow counted, never hidden;
+- **any unresolved question** — M199's blocker, carried through unchanged so the card, the workflow
+  diagram and this section name the same one. Stated here and deliberately not answerable here: a
+  permission prompt is answered where the person can see what they are agreeing to;
+- **the agent's own account** of what it did, labelled *"the agent's own account, not evidence"* and
+  set apart from the evidence list, because painting a claim as a finding is the collapse this
+  phase exists to prevent;
 - `Mark reviewed`, and once marked, when it was and whether the lane has moved since.
 
 **There is a direct route back to the agent.** `Continue the conversation` focuses the lane's
@@ -44,15 +50,17 @@ remove, and a workflow node that marked its own output reviewed would make the m
 It sits beside `Commit`, which is a review-node control with no palette row for the same family
 of reason. This is a recorded omission with its reason, not an oversight.
 
-**`Locate the lane…` routes to `Start work…` rather than rebinding to a chosen directory.** The
+**A lost lane routes to `Start work again…` rather than rebinding to a chosen directory, and there
+is no `locate` action at all.** The
 guide's step 6 asks for locate/rebind for missing or moved **files**, and that is already honest:
 a rename is carried as `renamedFrom`, and a file whose diff cannot be read answers `unavailable`
 rather than substituting another. A *lane* whose worktree record is gone is a different thing —
 re-pointing a task at an arbitrary directory would need main to re-judge that root through the
 Places gate and mint a record for it, which is a new grant-adjacent door, and the existing honest
 recovery (start work again, which mints a lane through the gate that already exists) is one
-click away. The action keeps the word `Locate` and says what it will do. If a real need for
-rebinding appears, it gets its own milestone and its own gate checks.
+click away. The first cut kept the word `Locate` in four sentences and shipped no such
+affordance; that was a dangling promise, and the action is now the one that exists. If a real need
+for rebinding appears, it gets its own milestone and its own gate checks.
 
 ## The one new verb
 

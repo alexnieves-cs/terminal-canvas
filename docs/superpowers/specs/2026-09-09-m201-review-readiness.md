@@ -60,7 +60,20 @@ Two axes, kept apart, because they answer different questions and a single word 
 | `blocked` | the linked conversation has a live blocker | `answer` |
 | `working` | the linked conversation is running or queued | `resume` |
 | `empty` | the lane's diff is clean | `resume` |
+| `shared` | two or more panels have run in this repository | `review` |
 | `ready` | the lane holds changes and nothing is in flight | `review` |
+
+**Amended after the critic round.** The first cut folded `shared` into `changes`, so a repository
+where several panels have run read as `ready to review · N files` and let a review be recorded over
+work this task cannot claim. `shared` means, by `review.ts`'s own definition, that no per-panel diff
+is attributable; it is the fourth claim D07 step 3 asks to keep distinguishable, beside observed,
+reported and unavailable, and folding it in was the exact failure this module's header forbids one
+paragraph earlier. It is now its own state, with its own sentence, still reviewable — a person can
+read a shared diff, and is told what they are reading.
+
+**There is no `locate` action.** The first cut had one, whose sentences told the person to locate
+the lane — an affordance no surface offers. Naming a door that does not exist is worse than naming
+a smaller one that does, so a lost lane routes to `start`.
 
 Execution outranks the diff: an agent still writing means the diff under it is a moving target.
 `no-lane` outranks everything because there is nothing else to say.
@@ -90,7 +103,12 @@ with **different epistemic standing**. They are never merged.
   whose input carries a string `command`, paired by `toolUseId` with its `tool_result`'s
   `isError`. The app watched the agent *request* the command; the outcome is the agent's CLI's
   claim. This app did not run it and cannot verify it.
-- **unavailable** — neither exists, said in a sentence, never as an empty list or a zero.
+- **unavailable** — neither exists, said in a sentence, never as an empty list or a zero. **And
+  the sentence says WHICH kind of nothing it is.** "Nothing ran", "the lane's conversation is
+  closed so its commands were never looked for", and "this canvas could not read its own record"
+  are three different facts, and the first cut said the first one in all three cases — an overclaim
+  in the module whose whole job is to stop overclaiming. A closed lane is the common case, not a
+  corner.
 
 **No command is classified as a "test" or a "check" by pattern, and this is deliberate.** A
 regex deciding that `npm test` is a check while `make ci` is not would put a confident

@@ -956,14 +956,20 @@ src/renderer/groups/
   (D07). **The board's `review` state keeps meaning A PULL REQUEST EXISTS** — one line in the app
   sets it, `USER_SET_STATES` still excludes it, `emptyColumnWord` is untouched — and local review
   readiness is a SEPARATE fact, D04's rule from the other side. **Two axes, never one word**:
-  `ReviewHandoffState` (no-lane · lane-missing · unreadable · blocked · working · empty · ready) is
-  what is true now, `ReviewStanding` (none · current · stale) is what the person already did, and a
+  `ReviewHandoffState` (no-lane · lane-missing · unreadable · blocked · working · empty · shared ·
+  ready) is what is true now, `ReviewStanding` (none · current · stale) is what the person already did, and a
   task can be `working` AND `stale` at once — fold them together and the agent going back to work
   silently erases the fact that your review is out of date. Execution outranks the diff (an agent
   still writing means the diff under it is a moving target); a clean lane is `empty`, never a green
-  completion. **Evidence is attributed by WHO WATCHED THE EXIT, and the two are never merged**: a run
+  completion, and **`shared` is its own state**: `review.ts` defines it as two or more panels having
+  run in the repository, so no per-panel diff is attributable, and folding it into `changes` — the
+  first cut did — let a review be recorded over work the task cannot claim. It is the fourth claim
+  D07 asks to keep apart, beside observed, reported and unavailable. **Evidence is attributed by WHO
+  WATCHED THE EXIT, and the two are never merged**: a run
   ledger row main read off the PTY is `observed`; a transcript tool call is `reported` and carries no
-  exit code, because there is none. **Nothing is classified as a "test" by pattern** — a rule saying
+  exit code, because there is none; and the EMPTY arm names which kind of nothing it is — nothing
+  ran, the lane's conversation is closed so nobody looked, or this app could not read its own
+  ledger, which are three facts and were one sentence in the first cut. **Nothing is classified as a "test" by pattern** — a rule saying
   `npm test` is a check and `make ci` is not puts a confident badge on a guess — and a block
   qualifies by NAMING a command, never by its tool being `Bash` (M99's no-literal rule reached from
   the other side). One persisted fact, `PersistedWorkItem.reviewed = { at, signature, files }`,
@@ -978,7 +984,13 @@ src/renderer/groups/
   is the whole point. `useTaskHandoffs` reads git ONCE PER REPOSITORY on a turn ending — never per
   card, never on a timer — and owns its own `worktree:list` read, because the canvas's list loads
   only when ⌘K opens and a card reading it said `not started` about a real lane until somebody
-  pressed it; `null` is a real third state there, or every launch flashes `lane missing`.
+  pressed it; `null` is a real third state there, or every launch flashes `lane missing` — and a
+  FAILED read must leave it `null` rather than `[]`, which turned one bad IPC call into `lane
+  missing` on every card with no retry. The signature and the changed paths come from that ONE read
+  and are handed to the review node, never recomputed there: two reads refreshing on different
+  triggers would let `Mark reviewed` record a fingerprint for a diff the card never judged.
+  **There is no `locate` action** — the first cut had one whose sentences named an affordance the
+  product does not have; a lost lane routes to `Start work again…`.
   **`Mark reviewed` has no verb, no palette row and no agent line, on purpose** — an agent line
   asserting a person reviewed something is the false claim this phase removes; it sits beside
   `Commit`. `Continue the conversation` INSERTS and never sends (M80), and requires a CHAT:

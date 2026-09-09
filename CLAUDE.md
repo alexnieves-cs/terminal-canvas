@@ -1,9 +1,7 @@
 # CLAUDE.md
 
-An index, not an encyclopedia. Every rule in this repository exists because the obvious
-version fails **silently** — a panel that renders nothing with no error, an exit code of `0`
-printed as a failure, a diagram that quietly stopped matching the contract. The reasoning
-lives in the docs below; this file says what they are and when to open them.
+An index. Every rule in this repository exists because the obvious version fails
+**silently**; the reasoning lives in the docs below, and this file says when to open them.
 
 | Doc | Open it when |
 |---|---|
@@ -29,19 +27,16 @@ evidence; the canvas is where you see and act on those connections.*
 Four rules the whole product rests on — the long form of each is in
 [docs/product-rules.md](docs/product-rules.md):
 
-- **An object is authored, not only started.** A note, a picture, a workflow and a region take
-  the same selection, drag, resize, marks, grouping, undo, tiering and export rules as
-  everything else, and each joins `isTerminalPanel`'s exclusion list rather than getting a
-  partition of its own.
+- **An object is authored, not only started.** A note, picture, workflow or region takes the
+  same selection, drag, marks, undo, tiering and export rules as everything else, and joins
+  `isTerminalPanel`'s exclusion list rather than getting a partition of its own.
 - **Four doors, and the fourth is real.** Every verb reaches a canvas gesture, a palette row,
   an agent line AND a workflow node (`V9_DOORS`, `verify:verbs closure.v9.1`). A door that is
   only declared is not a door.
 - **What arrives from outside is inert until a person looks.** An imported canvas starts no
-  process; imported action nodes are refused by name until read (`reviewed: false`); a fetch
-  node GETs and refuses every write.
+  process; imported action nodes are refused by name until read (`reviewed: false`).
 - **Nothing leaves without passing the gate.** `outward` and `redactSecrets` have a named,
-  checked caller list; an export scrubs field by field and reports its count; pixels travel
-  only when asked, and are never called redacted.
+  checked caller list; an export scrubs field by field and reports its count.
 
 **Project, workspace and task do not merge** (there is still no project record in
 `LayoutSnapshot`), and **a teammate is an identity, a chat is its conversation, a session is
@@ -54,20 +49,13 @@ never a zero-value statement), *contextual* (next action, blocker; opacity 0 →
 
 ## Commands
 
-```sh
-npm run dev            # electron-vite dev (unsets ELECTRON_RUN_AS_NODE first)
-npm run build          # typecheck + electron-vite build
-npm run package        # electron-builder: the unsigned .app and .dmg, into release/
-npm run typecheck      # both projects; or typecheck:node / typecheck:web
-npm run verify         # every suite, then a build, then the suites that need the build
-```
+`package.json` lists the scripts; what it cannot tell you: **`npm run verify` is the whole
+verification story** — there is no unit-test runner and no linter — and it must be green
+before claiming work is done. It chains typecheck and build in the middle. No suite needs a
+display, none has a test-name filter, and each exits non-zero on any failure; to add a check,
+append an `ok(...)` in the IIFE. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first.
 
-There is no unit-test runner and no linter: `npm run verify` is the whole verification story,
-and it must be green before claiming work is done. None of the suites need a display; the
-real-Electron ones open a window with `show: false`. There is no test-name filter — each runs
-everything and exits non-zero on any failure. To add a check, append an `ok(...)` in the IIFE.
-
-Not in `npm run verify`, all real Electron: `npm run shot` (23 PNGs of the real renderer for a
+Outside the chain, all real Electron: `npm run shot` (23 PNGs of the real renderer for a
 fresh-context critic), `verify:visual` (those scenes against committed goldens;
 `UPDATE_GOLDENS=1` only after LOOKING), `verify:packaged` (a pre-release gate).
 
@@ -137,9 +125,6 @@ the life of an effect, silently. Each takes one `Deps` object, destructures on e
 names the DESTRUCTURED members in dependency arrays — never `deps`, which the caller rebuilds
 every render.
 
-Everything else — what each module owns and what a change to it breaks — is
-[docs/architecture-map.md](docs/architecture-map.md).
-
 ## The rules that generalise beyond one module
 
 - **Two lifetimes, not one.** A panel's *session* (its xterm `Terminal` and PTY) is created
@@ -171,9 +156,8 @@ Everything else — what each module owns and what a change to it breaks — is
   `ELECTRON_RUN_AS_NODE=1` (VS Code's extension host does). `dev`/`start` unset it; you only
   hit this invoking `electron-vite` directly. **`Error: Electron uninstall`** — run
   `node node_modules/electron/install.js`.
-- The renderer has a strict CSP (`default-src 'self'`): no CDN scripts, no remote assets.
-  `tsconfig.node.json` / `tsconfig.web.json` set `noUnusedLocals`/`noUnusedParameters` —
-  prefix intentionally-unused params with `_`.
+- The renderer's CSP is `default-src 'self'`: no CDN scripts, no remote assets, and an
+  iframe is refused — a browser pane is a `<webview>` guest for that reason.
 - A trackpad pinch arrives as a wheel event with **`ctrlKey: true`** and no key held — the only
   signal separating pinch from scroll. `deltaMode` is not always pixels: trackpads report `0`,
   mouse wheels report lines (`1`) and need roughly a 16x multiplier.
@@ -181,10 +165,9 @@ Everything else — what each module owns and what a change to it breaks — is
   the latter subtracts a translation that should have cancelled, so the panel drifts off the
   cursor whenever the viewport isn't at the origin (`verify:viewport` 27).
 - **`applyDrag` recomputes from the gesture's ORIGIN rect every frame, never from the previous
-  frame's result.** Accumulating deltas drifts and breaks outright on a mid-drag zoom. Both
-  bugs are caller-side. `verify:panels` check 10 is the discriminator, and its own header
-  records the limit: a variant advancing both origin fields together is indistinguishable by
-  any assertion on the final rect — don't rediscover that by tightening the check.
+  frame's result.** Accumulating deltas drifts and breaks outright on a mid-drag zoom; both
+  bugs are caller-side. `verify:panels` check 10 is the discriminator, and its header records
+  the limit — don't rediscover it by tightening the check.
 - **A dispatched event on `.panel__slot` never reaches xterm's listeners** — xterm binds on
   `.xterm`, one level below the slot, and capture does not visit a target's descendants.
   Dispatch on `.xterm-screen`, the node a real cursor would be over.
@@ -192,9 +175,8 @@ Everything else — what each module owns and what a change to it breaks — is
   separately, firing fragments at the agent before the description arrives.
 - **`Cmd+V`/`Cmd+C`/`Cmd+Z` over an open text draft still reach the focused TERMINAL** — a
   paste aimed at a comment box goes into the running agent, and `Cmd+Z` can dispose a session.
-  Documented, not fixed; both obvious fixes are blocked (see `docs/load-bearing.md`). A new
-  text surface inherits it and must subscribe to `edit:copy`/`edit:paste` itself, as
-  `Palette.tsx` does.
+  Documented, not fixed (`docs/load-bearing.md`). A new text surface inherits it and must
+  subscribe to `edit:copy`/`edit:paste` itself, as `Palette.tsx` does.
 
 ## Working on this repo
 
@@ -207,10 +189,9 @@ Every milestone ends with a fresh-context critic and a ledger line carrying its 
 - Comments explain *why*. Match that density; a non-obvious line without a reason attached
   will be "fixed" by someone later.
 - **A new verify check takes a SCOPED id, never the next global integer.** Write
-  `ok('kind-tail.1 …')`, not `ok('186 …')`. Nothing parses the string, and it removes the one
-  thing that has forced seven-plus `renumber` commits: two branches both appending from their
-  own view of the last number. Existing numeric ids stay as they are; `verify:meta` 22 fails
-  the build if two COMPUTED checks in one suite share an id.
+  `ok('kind-tail.1 …')`, not `ok('186 …')` — nothing parses the string, and it ends the
+  seven-plus `renumber` commits two branches appending from their own view of the last number
+  have forced. Existing numeric ids stay; `verify:meta` 22 fails a collision.
 - **Don't restate a count in prose in more than one place.** Record the rule, not the tally
   (`verify:meta` 23). Where a count must be written down, `verify:meta` is where it gets
   pinned so it cannot drift silently.
