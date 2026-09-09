@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 155000 // measured (re-measured) 2026-09-08 alone in the Electron tier after M195 added preview.bind.1 (four servers, four file panels, three fenced phases) and preview.bind.2 (a reload plus a real press), two green runs: 121.7s, 121.1s wall; 1.25x the slower, rounded up. Was 140000 for 104.8s/106.8s after M188-M189 — re-measure when a milestone adds checks, because a watchdog kill reads as a HANG and not as a red check (M135)
+const WATCHDOG_MS = 190000 // measured (re-measured) 2026-09-09 alone in the Electron tier after M202 added work.action.1 and review.task.2 (two real git worktrees and two reloads): 125 s green, was 155000 against a ~110 s run after M195. Headroom above 1.25x on purpose — a watchdog kill reads as a HANG and not as a red check (M135), so the cheap error is a slow suite and the expensive one is a false hang. Re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -1878,7 +1878,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         const card = await tabWalk2('[data-work-verb="assign"]', identity, 10)
         const enabledVerbs = await wc.executeJavaScript(`[...document.querySelectorAll('[data-work-verb]')].filter((b) => !b.disabled).map((b) => 'verb:' + b.getAttribute('data-work-verb'))`)
         ok(IDS[0], pane.started === true && pane.visited[0] === 'row:wi-r2' && pane.visited.includes('show:wi-r2') && pane.visited.includes('row:wi-r1') && pane.visited.indexOf('show:wi-r2') < pane.visited.indexOf('row:wi-r1') &&
-          card.started === true && Array.isArray(enabledVerbs) && enabledVerbs.length >= 3 && enabledVerbs.every((v) => card.visited.includes(v)) && enabledVerbs.map((v) => card.visited.indexOf(v)).every((idx, i, arr) => i === 0 || idx > arr[i - 1]),
+          // The floor moved from 3 to 2 at M202 (D07), deliberately: `Review`
+          // used to be enabled whenever the item had a lane, and is now
+          // enabled only when there is something SETTLED to review — this
+          // fixture's card has no worktree, so it reads `not started` and
+          // refuses by name. The subject of this check is the TAB ORDER,
+          // which is unchanged and still asserted in full below.
+          card.started === true && Array.isArray(enabledVerbs) && enabledVerbs.length >= 2 && enabledVerbs.every((v) => card.visited.includes(v)) && enabledVerbs.map((v) => card.visited.indexOf(v)).every((idx, i, arr) => i === 0 || idx > arr[i - 1]),
           JSON.stringify({ pane, card, enabledVerbs }))
         layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         flushLayoutStore()
@@ -3258,11 +3264,200 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             pane.drops.join(',') === 'true,false,false,true' && pane.columns[0] === TODO && pane.columns[1] === WORKING &&
             pane.aColumn === WORKING && pane.bColumn === TODO && pane.aLabel === 'Fix the flush gate' && /acme\/canvas#7/.test(pane.aTail ?? '') && /lane/.test(pane.aTail ?? '') &&
             pane.aShow === false && pane.bShow === true &&
-            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 4 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            // M202 (D07) added a FIFTH verb, `resume`, beside the four — an addition,
+            // never a rename: the DOM aliases the other four wear are what roughly
+            // two hundred checks select on. The count is asserted rather than
+            // loosened so a sixth cannot arrive unnoticed.
+            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 5 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(bdErr && bdErr.message || bdErr))
+      }
+    }
+
+    /* ========== M201–M202 (D07): the review handoff ===================== */
+    // The card answers "what should I do with this result?" from FACTS — a
+    // real fork diff in a real linked worktree — and the review it opens
+    // carries the task beside the diff. Every failure this guards is silent:
+    // a card reading `ready to review` while its agent is still writing, a
+    // review mark that never goes stale so a second look is never offered,
+    // or a task section over a lane that is not there.
+    {
+      const IDS = [
+        'work.action.1 a card with a real lane reads its readiness from the lane\'s FORK diff — `ready to review` with the review verb enabled and the board disposition pill unchanged beside it — and a card with no lane says `not started` and refuses Review by name',
+        'review.task.2 the card\'s Review opens a review carrying the task id and paints the handoff word; the evidence list renders one row per command run IN THE LANE, failures first, each with the exit code this canvas read and the words saying who watched it exit, with a command from outside the lane excluded; marking writes the signature to the item and the word becomes `reviewed`; a change in the lane makes it `changed since you reviewed`; and the route back to the agent is refused BY NAME over a lane that is not a conversation'
+      ]
+      const repoD = mkdtempSync(join(tmpdir(), 'tc panels d07 repo '))
+      const laneD = mkdtempSync(join(tmpdir(), 'tc panels d07 lane '))
+      try {
+        const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+        g(repoD, 'init', '-q', '.'); g(repoD, 'config', 'user.email', 'v@e.com'); g(repoD, 'config', 'user.name', 'v')
+        writeFileSync(join(repoD, 'a.txt'), 'a\n'); g(repoD, 'add', '-A'); g(repoD, 'commit', '-qm', 'init')
+        // A REAL linked worktree, so `review:across` computes a real fork
+        // point. A fake directory would answer `baseline-lost` and the check
+        // would pass for the wrong reason.
+        const lanePath = join(laneD, 'work')
+        g(repoD, 'worktree', 'add', '-q', '-b', 'tc/d07', lanePath)
+        // One uncommitted change in the lane: the diff the card must see.
+        writeFileSync(join(lanePath, 'b.txt'), 'b\n')
+        // A REAL run-ledger row for a command that ran IN THE LANE and
+        // exited non-zero, so the evidence list has an `observed` row to
+        // render — the half of the attribution only this app can produce, and
+        // the half no pure check can reach. Written through the harness's own
+        // ledger, which is the same writer PtyManager appends through.
+        await runLedger.append({ panelId: 'd07T', command: 'npm run verify', cwd: realpathSync(lanePath), startedAt: 1, endedAt: 2, exitCode: 1 })
+        await runLedger.append({ panelId: 'd07T', command: 'echo hello', cwd: realpathSync(lanePath), startedAt: 3, endedAt: 4, exitCode: 0 })
+        // A row from OUTSIDE the lane, which must not appear.
+        await runLedger.append({ panelId: 'd07T', command: 'ls /elsewhere', cwd: realpathSync(repoD), startedAt: 5, endedAt: 6, exitCode: 0 })
+
+        layoutStore.addWorktree({ id: 'wt-d07', root: realpathSync(repoD), path: realpathSync(lanePath), branch: 'tc/d07', createdAt: 1, panelId: 'd07T' })
+        layoutStore.save({
+          panels: [
+            { id: 'd07T', x: 100, y: 100, w: 400, h: 240, z: 1, cwd: realpathSync(lanePath), command: '/bin/sh', args: ['-c', 'sleep 600'], title: 'lane' },
+            { id: 'd07A', kind: 'work', x: 900, y: 100, w: 640, h: 220, z: 2, title: 'Fix the flush gate', work: { itemId: 'wi-d07' } },
+            { id: 'd07B', kind: 'work', x: 900, y: 500, w: 640, h: 220, z: 3, title: 'Not started yet', work: { itemId: 'wi-none' } }
+          ],
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+          workItems: [
+            { id: 'wi-d07', source: 'typed', title: 'Fix the flush gate', state: 'working', teammateId: 'nobody', panelId: 'd07T', worktreeId: 'wt-d07', createdAt: 10, updatedAt: 20 },
+            { id: 'wi-none', source: 'typed', title: 'Not started yet', state: 'todo', createdAt: 5, updatedAt: 6 }
+          ]
+        })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+
+        const cardState = (id) => wc.executeJavaScript(`(() => {
+          const n = document.querySelector('.panel[data-panel-id="${id}"]'); if (!n) return false
+          const r = n.querySelector('[data-work-readiness]')
+          const verb = n.querySelector('[data-work-verb="review"]')
+          if (!r) return false
+          return {
+            readiness: r.getAttribute('data-work-readiness'), standing: r.getAttribute('data-work-standing'), word: r.textContent,
+            disposition: n.getAttribute('data-work-state'), pill: n.querySelector('[data-work-word]') ? n.querySelector('[data-work-word]').textContent : null,
+            verbLabel: verb ? verb.textContent : null, verbDisabled: verb ? verb.disabled : null, verbTitle: verb ? verb.getAttribute('title') : null,
+            resume: !!n.querySelector('[data-work-verb="resume"]')
+          }
+        })()`)
+        // The readiness line appears only once the fork diff has been read —
+        // the third state: before that the card says nothing about review.
+        const ready = await waitUntil(async () => { const c = await cardState('d07A'); return c && c.readiness === 'ready' ? c : false }, 15000)
+        const none = await waitUntil(async () => { const c = await cardState('d07B'); return c && c.readiness === 'no-lane' ? c : false }, 8000)
+
+        // ---- review.task.2: the card's Review, pressed as a person does ----
+        // mousedown and click in SEPARATE tasks (M195's lesson: a handler
+        // that focuses on mousedown and then refuses cannot be seen by a
+        // check that dispatches both in one task).
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="d07A"] [data-work-verb="review"]'); if (!b) return false
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="d07A"] [data-work-verb="review"]'); if (!b) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+
+        const taskSection = () => wc.executeJavaScript(`(() => {
+          const t = document.querySelector('[data-review-task]'); if (!t) return false
+          const w = t.querySelector('[data-review-task-word]')
+          const ev = t.querySelector('[data-review-evidence]')
+          const mark = t.querySelector('[data-review-task-verb="mark"]')
+          const cont = t.querySelector('[data-review-task-verb="continue"]')
+          return {
+            itemId: t.getAttribute('data-review-task'),
+            state: w ? w.getAttribute('data-review-task-word') : null, standing: w ? w.getAttribute('data-review-task-standing') : null, word: w ? w.textContent : null,
+            detail: (t.querySelector('[data-review-task-detail]') || {}).textContent || null,
+            evidence: ev ? ev.getAttribute('data-review-evidence') : null, evidenceText: ev ? ev.textContent : null,
+            rows: [...t.querySelectorAll('[data-review-evidence-row]')].map((r) => ({
+              who: r.getAttribute('data-review-evidence-row'), outcome: r.getAttribute('data-review-evidence-outcome'),
+              label: (r.querySelector('.review-node__evidence-outcome') || {}).textContent || null,
+              command: (r.querySelector('.review-node__evidence-command') || {}).textContent || null,
+              says: (r.querySelector('.review-node__evidence-who') || {}).textContent || null
+            })),
+            markDisabled: mark ? mark.disabled : null, markLabel: mark ? mark.textContent : null,
+            contDisabled: cont ? cont.disabled : null, contTitle: cont ? cont.getAttribute('title') : null,
+            panelId: t.closest('.panel').getAttribute('data-panel-id')
+          }
+        })()`)
+        const opened = await waitUntil(async () => { const t = await taskSection(); return t && t.state === 'ready' && t.evidence !== 'reading' && t.rows.length > 0 ? t : false }, 15000)
+        const subjectSaved = await waitUntil(() => {
+          layoutStore.flushSync()
+          const p = (layoutStore.initial().panels || []).find((q) => q.kind === 'review')
+          return p && p.subject && p.subject.workItemId === 'wi-d07' ? p.subject : false
+        }, 6000)
+
+        // ---- Mark reviewed: the one persisted fact ----
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-review-task-verb="mark"]'); if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const marked = await waitUntil(() => {
+          layoutStore.flushSync()
+          const it = (layoutStore.initial().workItems || []).find((i) => i.id === 'wi-d07')
+          return it && it.reviewed ? it.reviewed : false
+        }, 8000)
+        const afterMark = await waitUntil(async () => { const c = await cardState('d07A'); return c && c.standing === 'current' ? c : false }, 8000)
+
+        // ---- and it goes STALE when the lane moves ----
+        writeFileSync(join(lanePath, 'c.txt'), 'c\n')
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.review-node__refresh'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        // The card reads on a chat turn ending or a root-set change, so the
+        // refresh here is the node's; the card is re-read by remounting it.
+        const reD2 = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD2
+        await settle()
+        const stale = await waitUntil(async () => { const c = await cardState('d07A'); return c && c.standing === 'stale' ? c : false }, 15000)
+
+        // ---- Continue the conversation INSERTS and sends nothing ----
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="d07A"] [data-work-verb="review"]'); if (!b) return false
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await settle()
+        await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="d07A"] [data-work-verb="review"]'); if (!b) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const reopened = await waitUntil(async () => { const t = await taskSection(); return t && t.evidence !== 'reading' ? t : false }, 15000)
+        // The lane here is a TERMINAL, not a chat, so the route back is
+        // refused BY NAME rather than silently absent — the honest arm, and
+        // the one the card's own `resume` refusal shares.
+        ok(IDS[0],
+          ready !== false && none !== false &&
+            ready.readiness === 'ready' && ready.standing === 'none' && /ready to review/.test(ready.word) &&
+            ready.verbDisabled === false && /Review/.test(ready.verbLabel) &&
+            // The board disposition is untouched by any of it.
+            ready.disposition === 'working' && (ready.pill || '').indexOf('working') === 0 &&
+            ready.resume === true &&
+            none.readiness === 'no-lane' && none.verbDisabled === true && (none.verbTitle || '').length > 20 &&
+            none.disposition === 'todo',
+          JSON.stringify({ ready, none }))
+        ok(IDS[1],
+          opened !== false && subjectSaved !== false && marked !== false && afterMark !== false && stale !== false && reopened !== false &&
+            opened.itemId === 'wi-d07' && opened.state === 'ready' && opened.standing === 'none' &&
+            (opened.detail || '').length > 20 &&
+            // The evidence rows, rendered. Two commands ran in the lane and a
+            // third ran outside it; only the two are here, the FAILURE sorts
+            // first, each row carries its exit code and says in words who
+            // watched it exit. This is the DOM half that no pure check can
+            // reach, and it is the whole point of the attribution.
+            opened.evidence === '2' && opened.rows.length === 2 &&
+            opened.rows.every((r) => r.who === 'observed' && /this canvas ran it/.test(r.says || '')) &&
+            opened.rows[0].outcome === 'failed' && opened.rows[0].command === 'npm run verify' && opened.rows[0].label === 'exit 1' &&
+            opened.rows[1].outcome === 'passed' && opened.rows[1].command === 'echo hello' && opened.rows[1].label === 'exit 0' &&
+            opened.rows.every((r) => r.command !== 'ls /elsewhere') &&
+            opened.markDisabled === false && /Mark reviewed/.test(opened.markLabel) &&
+            // The lane here is a TERMINAL. `insertIntoComposer` is a no-op
+            // for anything but a chat, so the route back is refused BY NAME
+            // rather than left enabled and silently doing nothing — which is
+            // what it did until this check was written.
+            opened.contDisabled === true && (opened.contTitle || '').length > 20 &&
+            typeof marked.signature === 'string' && marked.signature.length === 8 && marked.files === 1 && typeof marked.at === 'number' &&
+            afterMark.standing === 'current' && /reviewed/.test(afterMark.word) &&
+            stale.standing === 'stale' && /changed since/.test(stale.word) &&
+            reopened.standing === 'stale' && /Mark reviewed again/.test(reopened.markLabel) &&
+            reopened.rows.length === 2,
+          JSON.stringify({ opened, subjectSaved, marked, afterMark, stale, reopened }))
+      } catch (d07Err) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(d07Err && d07Err.message || d07Err))
+      } finally {
+        try { layoutStore.dropWorktree('wt-d07') } catch { /* nothing recorded */ }
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const d of [repoD, laneD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
 

@@ -10,6 +10,50 @@ import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
+import {
+  observedCommands, reportedCommands, reviewEvidence,
+  type CommandEvidence, type ReviewEvidence, type ReviewHandoff
+} from '@shared/review-readiness'
+import type { RunRow } from '@shared/run-ledger'
+
+/**
+ * Everything the task section needs, resolved by the canvas rather than
+ * re-derived here: the node holds a subject, and a subject is a repository
+ * and a baseline — it has no way to reach the board, the worktree records or
+ * the run ledger, and giving it one would make a review panel a second author
+ * of facts the canvas already owns.
+ */
+export interface ReviewTaskContext {
+  itemId: string
+  title: string
+  /** The lane's worktree path — which section of the across answer is this task's. */
+  lanePath: string
+  handoff: ReviewHandoff
+  /**
+   * The changed paths AND the signature the handoff was judged against, from
+   * the canvas's one read. The node does not recompute them from its own
+   * fetch: the two refresh on different triggers, so a second computation
+   * could hand `Mark reviewed` a fingerprint for a diff the card never
+   * judged — two authors of one fact.
+   */
+  paths: readonly string[]
+  reviewed?: { at: number; signature: string; files: number }
+  /** The agent's own last words, when the lane's conversation is open. Its ACCOUNT, never evidence. */
+  account?: string
+  /** Ask the canvas to re-read the lane's diff, so the card and this node move together. */
+  onRefresh: () => void
+  /**
+   * The panels whose run-ledger rows may hold commands run in this lane. Only
+   * the canvas knows which panels exist; the node filters what comes back by
+   * the lane path, so a panel that has since moved contributes nothing.
+   */
+  ledgerPanelIds: readonly string[]
+  /** The lane's conversation, for the agent's own reported commands. Absent when it is closed. */
+  chatPanelId?: string
+  onMarkReviewed: (itemId: string, signature: string, files: number) => void
+  /** Focus the lane's chat and INSERT a message — never send it. */
+  onContinue: (itemId: string, paths: readonly string[]) => void
+}
 
 export interface ReviewNodeProps {
   panel: ReviewPanel
@@ -43,6 +87,13 @@ export interface ReviewNodeProps {
   onCommitted: (nodeId: string, sha: string) => void
   /** M86. What the canvas calls a section's panel (the honest chain), for a cross-worktree node's headings. */
   sectionLabel?: (panelId: string) => string | undefined
+  /**
+   * M202 (D07). THE TASK this review belongs to, when it was opened from a
+   * work card. Absent for every review opened by any other door, and the
+   * whole task section is absent with it — a review of a panel's own changes
+   * has no task, and inventing one would be worse than saying nothing.
+   */
+  task?: ReviewTaskContext
   /**
    * SessionHandle.focus() on a panel id — Canvas's own `restoreFocus`, the one
    * the palette already uses. The commit input is the second surface in this
@@ -166,9 +217,142 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
   )
 }
 
+/**
+ * stopPropagation so a press on a control inside the header does not start a
+ * DRAG; preventDefault so DOM focus stays where the person left it —
+ * shellControl's rule, which every control in this app obeys. Same shape as
+ * `WorkNode`'s, spelled here rather than shared because a control helper that
+ * travelled between files would be one more thing to keep in step.
+ */
+const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
+
+/** How many commands the section shows before it starts counting instead. */
+const EVIDENCE_CAP = 8
+/**
+ * How far back each panel's ledger is read. A bound, and a recorded one: the
+ * overflow `more` is counted over what was READ, so a lane with more than
+ * this many commands in one panel understates it. Raising it costs a bigger
+ * IPC reply on every task review; the number a reviewer needs is the recent
+ * one, and the failures sort to the top of what is read.
+ */
+const LEDGER_ROWS_PER_PANEL = 40
+
+/**
+ * M202 (D07). THE TASK SECTION — the answer to "what should I do with this
+ * result?", beside the diff that is the result.
+ *
+ * Three things, in the order a person asks for them: what state the task is
+ * in, what was actually RUN and who says so, and the two things to do next.
+ *
+ * The evidence list is the part with the sharp edge. A command this canvas
+ * spawned carries the exit code MAIN read off the PTY; a command from the
+ * conversation carries the agent's CLI's word for it and NO code, because
+ * there is none to show. They are two different kinds of knowledge and they
+ * are labelled as two, every row, every time — a single "checks passed" line
+ * over both would be putting this application's name on somebody else's
+ * answer. Nothing here decides that a command was a "test": see
+ * `review-readiness.ts`'s header for why that guess is not made.
+ */
+function renderTask(
+  task: ReviewTaskContext,
+  evidence: ReviewEvidence | undefined,
+  paths: readonly string[],
+  signature: string | undefined,
+  readOnly: boolean,
+  press: (run: () => void) => (e: ReactMouseEvent) => void
+): JSX.Element {
+  const h = task.handoff
+  const markable = signature !== undefined && h.state === 'ready' && !readOnly
+  return (
+    <section className="review-node__task" data-review-task={task.itemId}>
+      <h4 className="review-node__section-head">
+        <span className="review-node__section-label">{task.title}</span>
+        <span className="review-node__section-count" data-review-task-word={h.state} data-review-task-standing={h.standing} data-tone={h.tone}>{h.word}</span>
+      </h4>
+      <p className="pf__note review-node__note" data-review-task-detail>{h.detail}</p>
+
+      {/* D07 step 2's "unresolved questions". The blocker is M199's, projected
+          by the same table the card and the workflow diagram read, so all
+          three name the same question. It is stated and NOT answerable here:
+          a permission prompt is answered at the conversation or in Attention,
+          which is where the person can see what they are agreeing to. */}
+      {h.blocker !== undefined && (
+        <p className="pf__note review-node__note" data-review-task-blocker={h.blocker.kind} role="status">
+          unresolved: {h.blocker.kind === 'approval' ? `the lane is waiting on you about ${h.blocker.subject}` : `the lane is waiting for you at its keyboard — ${h.blocker.subject}`} — answer it in the conversation, then review
+        </p>
+      )}
+
+      {/* D07 step 2's "agent explanation", labelled as what it is. It is the
+          agent's ACCOUNT of its own work and sits apart from the evidence
+          list on purpose: attributing it as a finding would be the exact
+          collapse this phase exists to prevent. */}
+      {task.account !== undefined && task.account !== '' && (
+        <div className="review-node__account" data-review-task-account>
+          <span className="review-node__evidence-who">the agent&#39;s own account, not evidence</span>
+          <p className="pf__note review-node__note">{task.account}</p>
+        </div>
+      )}
+
+      {/* Three states, never two: not read yet, read and empty, and a list. */}
+      {evidence === undefined ? (
+        <p className="pf__note review-node__note" data-review-evidence="reading">reading what was run in this lane…</p>
+      ) : evidence.none !== undefined ? (
+        <p className="pf__note review-node__note" data-review-evidence="none">{evidence.none}</p>
+      ) : (
+        <ul className="review-node__evidence" data-review-evidence={String(evidence.commands.length)}>
+          {evidence.commands.map((c: CommandEvidence, i) => (
+            <li key={`${c.attribution}:${c.command}:${c.at}:${i}`} className="review-node__evidence-row"
+              data-review-evidence-row={c.attribution} data-review-evidence-outcome={c.outcome} title={c.source}>
+              <span className="review-node__evidence-outcome" data-tone={c.outcome === 'failed' ? 'needs-you' : c.outcome === 'unknown' ? 'none' : 'idle'}>
+                {c.outcome === 'failed' ? (c.exitCode === undefined ? 'failed' : `exit ${String(c.exitCode)}`) : c.outcome === 'unknown' ? 'no result' : c.exitCode === undefined ? 'reported ok' : 'exit 0'}
+              </span>
+              <span className="review-node__evidence-command">{c.command}</span>
+              {/* The attribution is on every row, never once at the top: a
+                  heading over a mixed list is read once and forgotten. */}
+              <span className="review-node__evidence-who">{c.attribution === 'observed' ? 'this canvas ran it' : 'the agent reported it'}</span>
+            </li>
+          ))}
+          {evidence.more > 0 && <li className="review-node__evidence-more" data-review-evidence-more={String(evidence.more)}>{evidence.more} more</li>}
+        </ul>
+      )}
+
+      {task.reviewed !== undefined && (
+        <p className="pf__note review-node__note" data-review-task-mark={h.standing}>
+          {h.standing === 'stale'
+            ? `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here, and the lane has changed since`
+            : `you reviewed ${task.reviewed.files} file${task.reviewed.files === 1 ? '' : 's'} here`}
+        </p>
+      )}
+
+      <div className="review-node__task-verbs">
+        {/* Marking a review done is a PERSON's act and has no verb, no palette
+            row and no agent line, on purpose: a plan asserting that somebody
+            reviewed something is the false claim this whole phase removes. It
+            sits beside Commit, which is a node control for the same family of
+            reason. Present at rest and disabled by name, never absent. */}
+        <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="mark"
+          disabled={!markable}
+          title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : h.state === 'ready' ? 'the changes are still being read' : h.detail}
+          onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length); task.onRefresh() }) : undefined}>
+          {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
+        </button>
+        {/* INSERTED into the composer, never sent — M80's rule for every
+            template message, and the only version that leaves the person in
+            charge of what their agent is told. */}
+        <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="continue"
+          disabled={readOnly || task.chatPanelId === undefined}
+          title={readOnly ? 'leave merged view to act on this review' : task.chatPanelId === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : 'focus the lane\'s conversation and draft a message about these files; nothing is sent'}
+          onMouseDown={readOnly || task.chatPanelId === undefined ? undefined : press(() => task.onContinue(task.itemId, paths))}>
+          Continue the conversation
+        </button>
+      </div>
+    </section>
+  )
+}
+
 function ReviewNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, onCommitted,
-  restoreFocus, focusedId, readOnly = false, onBeginLink, linkTarget, sectionLabel = () => undefined
+  restoreFocus, focusedId, readOnly = false, onBeginLink, linkTarget, sectionLabel = () => undefined, task
 }: ReviewNodeProps): JSX.Element {
   const { subject } = panel
   const [result, setResult] = useState<ReviewResult | undefined>(undefined)
@@ -192,6 +376,15 @@ function ReviewNodeImpl({
   // disclosure and two disclosures on screen at once read as a list.
   const [armedPath, setArmedPath] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
+  // M202. The run-ledger rows for the panels the canvas named, or `null` for
+  // "not asked yet" — the third state again, so the evidence list can say
+  // `reading…` rather than showing an empty list it has not earned.
+  const [ledgerRows, setLedgerRows] = useState<RunRow[] | null>(null)
+  // A read that FAILED, kept apart from a read that came back empty: "this
+  // canvas could not read its own record of what it ran" and "nothing ran"
+  // are different facts and lead to different conclusions about the lane.
+  // A frozen sentinel array, so the identity test below is exact.
+  const [ledgerUnreadable, setLedgerUnreadable] = useState(false)
   // Captured when the draft opens, exactly as usePalette captures `focusedId`
   // rather than clearing it — and used on BOTH exits below.
   const capturedFocusRef = useRef<string | null>(null)
@@ -321,6 +514,50 @@ function ReviewNodeImpl({
   // and reads as empty). Re-derived as turns land; keyed the way a review row
   // spells a path.
   const subjectChat = useChat(subject.subjectId)
+
+  /* ── M202 (D07). The task section's evidence ────────────────────────────
+     Read on the same token the diff is read on, so a refresh refreshes both
+     and the two can never describe different moments. The panel ids come
+     from the canvas; the rows are then filtered by the LANE PATH here, so a
+     terminal that has since been moved to another folder contributes
+     nothing — and the filter is `insideDirectory`'s, reached through
+     `observedCommands`, rather than a prefix test that would let a
+     neighbouring lane's commands in.                                       */
+  const taskPanelIds = task?.ledgerPanelIds
+  const taskPanelKey = taskPanelIds === undefined ? '' : [...taskPanelIds].join(' ')
+  useEffect(() => {
+    if (task === undefined) { setLedgerRows(null); setLedgerUnreadable(false); return }
+    let live = true
+    const ids = taskPanelIds ?? []
+    setLedgerUnreadable(false)
+    if (ids.length === 0) { setLedgerRows([]); return }
+    setLedgerRows(null)
+    void Promise.all(ids.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL)))
+      .then((lists) => { if (live) setLedgerRows(lists.flat()) })
+      // A ledger this app could not read is NOT evidence that nothing ran,
+      // and the section says which of the two it is. The first cut resolved
+      // to an empty list with a comment claiming the distinction did not
+      // matter; it does, and this is the module that says so about
+      // everything else.
+      .catch(() => { if (live) { setLedgerRows([]); setLedgerUnreadable(true) } })
+    return () => { live = false }
+  }, [taskPanelKey, refreshToken, task === undefined]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const laneChat = useChat(task?.chatPanelId ?? '')
+  // The signature comes from the handoff the canvas built, never from a
+  // second read here — see ReviewTaskContext.paths.
+  const taskSignature = task?.handoff.changes?.signature
+  const taskEvidence = useMemo<ReviewEvidence | undefined>(() => {
+    if (task === undefined || ledgerRows === null) return undefined
+    return reviewEvidence(
+      observedCommands(ledgerRows, task.lanePath),
+      task.chatPanelId === undefined ? [] : reportedCommands(laneChat.turns),
+      EVIDENCE_CAP,
+      // What was actually LOOKED AT, so the empty arm cannot claim nothing
+      // ran when the truth is that nobody could look.
+      { ledgerRead: !ledgerUnreadable, transcriptRead: task.chatPanelId !== undefined }
+    )
+  }, [task, ledgerRows, ledgerUnreadable, laneChat.turns])
   const rowPaths = useMemo(() => (result !== undefined && (result.kind === 'changes' || result.kind === 'shared') ? result.files.map((f) => f.path) : []), [result])
   const touchMap = useMemo(() => touchesByPath(indexToolFiles(subjectChat.turns), subject.repoRoot, rowPaths), [subjectChat.turns, subject.repoRoot, rowPaths])
   const touchCounts = useMemo(() => { const out: Record<string, number> = {}; for (const [k, v] of touchMap) out[k] = v.length; return out }, [touchMap])
@@ -545,6 +782,11 @@ function ReviewNodeImpl({
         {outcome !== null && (
           <p className="review-node__commit-outcome" data-review-node-commit-outcome>{outcome}</p>
         )}
+        {/* M202 (D07). The task first, then the diff it is about: the
+            question a person came with is "what should I do with this?", and
+            the file list is the evidence for the answer rather than the
+            answer. Absent entirely for a review opened by any other door. */}
+        {task !== undefined && renderTask(task, taskEvidence, task.paths, taskSignature, readOnly, press)}
         {subject.across === true ? renderAcross(across, sectionLabel) : (<>
         <p className="pf__summary review-node__summary" data-review-node-summary>{model.summary}</p>
         {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}

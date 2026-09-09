@@ -119,7 +119,10 @@ import { chatStateInput } from '@renderer/chat/chat-model'
 import { costOf } from '@shared/pricing'
 import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
-import { WorkNode } from '@renderer/work/WorkNode'
+import { WorkNode, WORK_ITEM_GONE } from '@renderer/work/WorkNode'
+import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
+/** M202. How much of the agent's own account the task section carries. Its last words, not its transcript. */
+const ACCOUNT_MAX = 400
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
@@ -177,6 +180,8 @@ import { ROUTINE_PROMPT, type PersistedRoutine } from '@shared/routines'
 import { pinCount, pinRefusal } from '@renderer/canvas/lod'
 import { ANNOTATIONS_MAX, annotationPoint, resolveAnchor, type Annotation, INK_WIDTH } from '@shared/annotations'
 import { WORK_ITEM_STATES, USER_SET_STATES, carryWorkItem, prRefusal, prRefusalSync, teammateRefusal, repoOfKey, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { ACROSS_BASELINE } from '@shared/review'
+import { useTaskHandoffs } from '@renderer/canvas/useTaskHandoffs'
 import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { sendRefusalSentence } from '@shared/agent-session'
 import { AnnotationLayer } from './AnnotationLayer'
@@ -325,7 +330,7 @@ export function Canvas({
   const workItemsRef = useRef(workItems)
   workItemsRef.current = workItems
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     setWorkItems((current) => current.some((i) => i.panelId === chatId)
       ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
@@ -3165,6 +3170,12 @@ export function Canvas({
     }
     return out
   }, [panels, pendingApprovals, waitingIds, chatsVersion])
+
+  // M202 (D07). Local review readiness per card. It reads git ONCE PER
+  // REPOSITORY on a chat turn ending — never per card and never on a timer —
+  // and answers `undefined` until the first read lands, so a card says
+  // nothing about review rather than guessing.
+  const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
@@ -3264,6 +3275,59 @@ export function Canvas({
       selectOnly(id)
     })
   }, [commitHistory])
+
+  /**
+   * M202 (D07). THE TASK REVIEW — the one implementation all four doors reach
+   * (the card's verb, the palette row, `tc plan review-task` and an action
+   * node), the way M197 made every Start work door land on one.
+   *
+   * It is deliberately NOT `openReviewAcross` with an extra field. That one
+   * starts from the SUBJECT PANEL and asks main for its baseline, so it needs
+   * the lane's conversation to still be open — and a task whose chat has been
+   * closed is exactly the case this milestone exists for: the item keeps its
+   * `panelId` and notes `lane closed`, and the work is still sitting in the
+   * worktree. This one starts from the WORKTREE RECORD instead, which carries
+   * the repository `root` and outlives the panel that made it (a worktree
+   * record OUTLIVES its panel — M37's rule), so the review opens on a lane
+   * whose agent was dismissed hours ago.
+   *
+   * Every refusal is BY NAME, because the card's button is always present.
+   */
+  const reviewTaskLane = useCallback((itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return { kind: 'refused', reason: WORK_ITEM_GONE }
+    if (item.worktreeId === undefined) return { kind: 'refused', reason: 'no lane yet — start work on this item first' }
+    // The SAME records the card's readiness was judged against, read by the
+    // handoff hook rather than by the palette's list — which loads only when
+    // ⌘K opens, and would refuse this verb on a real lane until it did.
+    const record = taskLaneOf(itemId)
+    // The worktree was removed outside this app, or its record was pruned.
+    // Never fall back to another root: reviewing a different repository under
+    // this task's name is the substitution the guide forbids by name.
+    if (record === undefined) return { kind: 'refused', reason: 'the worktree this task was started in is not listed any more — start work again to give it a fresh lane' }
+    const id = `r${nextIdRef.current++}`
+    setPanels((existing) => {
+      const anchorPanel = existing.find((p) => p.rect.id === item.panelId) ?? existing.find((p) => isWorkPanel(p) && p.work.itemId === itemId)
+      const centre = cascadeCentre(anchorPanel === undefined ? { x: 0, y: 0 } : reviewCentre(anchorPanel.rect), existing)
+      const next = [
+        ...existing,
+        makeReviewPanel(id, centre, nextZ(existing), {
+          subjectId: item.panelId ?? itemId,
+          repoRoot: record.root,
+          // Never sent to git: an across node asks `review:across` with its
+          // root alone and each section compares against its own fork.
+          baselineSha: ACROSS_BASELINE,
+          label: item.title,
+          across: true,
+          workItemId: itemId
+        })
+      ]
+      commitHistory(next)
+      return next
+    })
+    selectOnly(id)
+    return { kind: 'ran' }
+  }, [commitHistory, taskLaneOf])
 
   /**
    * M86. A review of EVERY worktree of the subject's repository: the same mint
@@ -4406,6 +4470,71 @@ export function Canvas({
   const patchWorkItem = useCallback((itemId: string, fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) => {
     setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
   }, [])
+  /**
+   * M202 (D07). Everything the review node's task section needs, resolved
+   * where the facts live. `undefined` — and so no task section at all — when
+   * the review was opened by another door, when the item has left the board,
+   * or when its worktree record is gone: a task section over a lane that is
+   * not there would describe a diff belonging to nobody.
+   *
+   * `ledgerPanelIds` is every TERMINAL on this canvas. It is deliberately not
+   * narrowed to the lane here: a terminal's live cwd can differ from the one
+   * a command ran in, and the ledger row carries the cwd that is actually
+   * true. The node filters on that, through `observedCommands`.
+   */
+  const taskContextFor = useCallback((itemId: string | undefined): ReviewTaskContext | undefined => {
+    if (itemId === undefined) return undefined
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined || item.worktreeId === undefined) return undefined
+    // The SAME records the handoff was judged against, never a second list.
+    const record = taskLaneOf(itemId)
+    if (record === undefined) return undefined
+    const handoff = taskHandoffOf(itemId)
+    if (handoff === undefined) return undefined
+    // A CHAT, not merely a panel that exists. `insertIntoComposer` is a
+    // no-op for anything else, so a lane that is a terminal would leave
+    // `Continue the conversation` enabled and doing nothing at all — the
+    // silent failure this repository's refusal-by-name rule exists for. The
+    // panels check caught it; nothing on screen would have.
+    const chatAlive = item.panelId !== undefined && panelsRef.current.some((p) => p.rect.id === item.panelId && isChatPanel(p))
+    return {
+      itemId,
+      title: item.title,
+      lanePath: record.path,
+      handoff,
+      // The SAME read the handoff was judged against — never a second one.
+      paths: taskPathsOf(itemId) ?? [],
+      // A lane whose conversation is open contributes the agent's own last
+      // words. Labelled in the section as an ACCOUNT and never as evidence:
+      // an agent saying it fixed something is a claim, and this phase exists
+      // to stop claims being painted as findings.
+      ...(chatAlive ? { account: lastAssistantText(item.panelId as string).trim().slice(0, ACCOUNT_MAX) } : {}),
+      // The review node's own Refresh and its Mark reviewed move the CARD
+      // too. Without this the card's readiness has exactly one trigger — a
+      // chat turn ending — so a lane driven by a terminal could sit on
+      // `reviewed` over a diff that had moved, with nothing on screen saying
+      // the reading was old.
+      onRefresh: refreshTaskHandoffs,
+      ...(item.reviewed === undefined ? {} : { reviewed: item.reviewed }),
+      ledgerPanelIds: panelsRef.current.filter(isTerminalPanel).map((p) => p.rect.id),
+      ...(chatAlive ? { chatPanelId: item.panelId as string } : {}),
+      onMarkReviewed: (id, signature, files) => patchWorkItem(id, { reviewed: { at: Date.now(), signature, files } }),
+      // FOCUS and INSERT — never send. M80's rule for every message this app
+      // puts in a composer: the person decides what their agent is told.
+      onContinue: (id, paths) => {
+        const it = workItemsRef.current.find((i) => i.id === id)
+        if (it?.panelId === undefined) return
+        selectOnly(it.panelId)
+        onFocusPanel(it.panelId)
+        const named = paths.slice(0, 10)
+        const rest = paths.length - named.length
+        void deliverToComposer(it.panelId, paths.length === 0
+          ? 'I have looked at the lane and it holds no changes. '
+          : `I have reviewed these changes:\n${named.map((path) => `- ${path}`).join('\n')}${rest > 0 ? `\n- and ${rest} more` : ''}\n\n`)
+      }
+    }
+  }, [taskHandoffOf, taskLaneOf, taskPathsOf, refreshTaskHandoffs, patchWorkItem, selectOnly, onFocusPanel])
+
   const openPr = useCallback(async (itemId: string): Promise<void> => {
     if (mergedRef.current) return
     const item = workItemsRef.current.find((i) => i.id === itemId)
@@ -4456,6 +4585,9 @@ export function Canvas({
   boardVerbsRef.current.openPr = (itemId) => { void openPr(itemId) }
   boardVerbsRef.current.commentPr = (itemId) => { void commentPr(itemId) }
   boardVerbsRef.current.markDone = markDone
+  // M202 (D07). The fourth door's landing point: the palette row, the agent
+  // line and an action node all reach the card's own Review through here.
+  boardVerbsRef.current.review = reviewTaskLane
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -6455,6 +6587,15 @@ export function Canvas({
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                                   // M86. A section's heading is the honest chain's label for its panel.
                   sectionLabel={(panelId) => { const p = panelsRef.current.find((q) => q.rect.id === panelId); return p === undefined ? undefined : railLabel(p, isTerminalPanel(p) ? registry.get(panelId)?.status : undefined) }}
+                  // M202 (D07). The task, when this review was opened from a
+                  // card. Every piece is resolved HERE — the canvas owns the
+                  // board, the worktree records and the panel list, and a
+                  // review node reaching for any of them would be a second
+                  // author of facts that already have one. Absent (and the
+                  // whole section with it) for a review opened any other way,
+                  // and absent too when the item or its worktree is gone,
+                  // because a task section with no task is worse than none.
+                  task={taskContextFor(panel.subject.workItemId)}
                   />
               )
             }
@@ -6654,12 +6795,21 @@ export function Canvas({
                 teammateReason={teammateRefusal}
                 onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
                 prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}
-                onReview={(itemId) => {
+                // M202 (D07). ONE action for all four doors. It replaces the
+                // M116 handler that required the lane's CHAT to still be open
+                // and otherwise only left a note — a task whose agent was
+                // dismissed is exactly the one a person comes back to review.
+                onReview={(itemId) => { const r = reviewTaskLane(itemId); if (r.kind === 'refused') patchWorkItem(itemId, { note: r.reason }) }}
+                handoff={item === undefined ? undefined : taskHandoffOf(item.id)}
+                // M202 (D07). Resume is a CAMERA and FOCUS move onto the
+                // lane's conversation, never a send: the person decides what
+                // their agent is told next.
+                onResume={(itemId) => {
                   const it = workItemsRef.current.find((i) => i.id === itemId)
                   if (it?.panelId === undefined) return
-                  // A closed lane keeps its panel id (the note says so); the review of its worktree is one door over.
-                  if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still listed under Review every worktree' }); return }
-                  openReviewAcross(it.panelId)
+                  if (!panelsRef.current.some((p) => p.rect.id === it.panelId)) { patchWorkItem(itemId, { note: 'the lane chat is closed — its worktree is still there to review' }); return }
+                  selectOnly(it.panelId)
+                  onFocusPanel(it.panelId)
                 }}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
             }

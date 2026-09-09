@@ -30,7 +30,7 @@ All steps start unchecked. Existing implementations may satisfy part of a step; 
 | D04 | M196 ✅ | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
 | D05 | M197–M198 ✅ | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
 | D06 | M199–M200 ✅ | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
-| D07 | M201–M202 | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
+| D07 | M201–M202 ✅ | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
 | D08 | M203–M204 | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
 | D09 | M205 | Intent-led onboarding | P1 | D05–D08 | A new user starts useful work through the same path |
 | D10 | M206–M208 | Information hierarchy and contextual UI finish | P1 | D06–D09 | A calmer shell, inspector, graph, and far view |
@@ -213,7 +213,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D07 — Build the review handoff
 
-- [ ] Complete and record D07.
+- [x] Complete and record D07. **M201–M202** — the record is [docs/build-log/m201-m202-d07-review-handoff.md](build-log/m201-m202-d07-review-handoff.md).
 
 **Problem/evidence:** The existing work-item `review` state means PR opened. Local review readiness needs its own explicit meaning. Review, tool attribution, git status, and run outcomes already supply much of the evidence.
 

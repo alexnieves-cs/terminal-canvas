@@ -3129,6 +3129,35 @@ const filePanelOnDisk = (id, over = {}) => ({
     JSON.stringify({ subjects: panels.map((p) => p.subject), warnings: out.warnings }))
 }
 
+// M201 (D07) — review.task.1. THE TASK A REVIEW BELONGS TO. Provenance only:
+//      it grants nothing and changes no query, so an unusable value costs the
+//      FIELD and never the node — a review that lost the name of its task
+//      still reviews the right diff, because `repoRoot` and `across` are what
+//      decide that. Absence is how a review opened by any other door says it
+//      has no task; an empty string would read as a task whose id is blank.
+{
+  const subject = { subjectId: 'n1', repoRoot: '/r', baselineSha: 'abc', label: 'agent' }
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'r1', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 1, subject: { ...subject, across: true, workItemId: 'wk7' } },
+      { id: 'r2', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 2, subject },
+      { id: 'r3', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 3, subject: { ...subject, workItemId: 42 } },
+      { id: 'r4', kind: 'review', x: 0, y: 0, w: 480, h: 320, z: 4, subject: { ...subject, across: 'yes', workItemId: 'wk9' } }
+    ] }],
+    activeWorkspaceId: 'w1'
+  }))
+  const panels = out.snapshot.workspaces[0].panels
+  ok('review.task.1 a review subject carries its work item id when present, keeps it ABSENT on every node opened outside a task, drops an unusable id by name while keeping the node, and keeps the id even when the across flag beside it is dropped',
+    panels.length === 4 &&
+      panels[0].subject.workItemId === 'wk7' && panels[0].subject.across === true &&
+      !('workItemId' in panels[1].subject) &&
+      !('workItemId' in panels[2].subject) && out.warnings.some((w) => /r3/.test(w) && /work item id/.test(w)) &&
+      // The two fields are independent: a malformed `across` returns early,
+      // and that early return must still carry the task.
+      panels[3].subject.workItemId === 'wk9' && !('across' in panels[3].subject),
+    JSON.stringify({ subjects: panels.map((p) => p.subject), warnings: out.warnings }))
+}
+
 // M48 — firstrun.1. `hints.seen` is a LIST setting — the second customer of
 //      a non-boolean type after M45's enum: a string list, default empty,
 //      persisted as the user's gestures are first seen, and a non-list (or a
@@ -3923,6 +3952,37 @@ console.log('\n' + '='.repeat(60))
       !('workItems' in wsA) && Array.isArray(wsB.workItems) && wsB.workItems.length === 1 && wsB.workItems[0].key === 'acme/canvas#7' && parsedWith.warnings.some((t) => /dropped work item/.test(t)),
       JSON.stringify({ wsAKeys: Object.keys(wsA), wsB: wsB.workItems, warnings: parsedWith.warnings }))
   } catch (e) { ok('work.1.b (threw)', false, String(e)) }
+  // M201 (D07). THE RECORDED REVIEW. It is the USER's fact, not the
+  // provider's, so a re-add from GitHub must not erase it — re-reading an
+  // issue says nothing about whether anybody looked at the lane. A malformed
+  // mark costs the FIELD (the anchor's precedent): a card that lost the
+  // memory of being reviewed is still a card, and the safe direction is also
+  // the honest one, since no mark reads as `none` and OFFERS a review rather
+  // than claiming one happened.
+  try {
+    const base = { id: 'r1', source: 'github', key: 'acme/canvas#9', title: 't', state: 'todo', createdAt: 1, updatedAt: 1 }
+    const mark = { at: 99, signature: 'deadbeef', files: 3 }
+    const carried = W.carryWorkItem({ ...base, reviewed: mark })
+    const bare = W.carryWorkItem(base)
+    const upserted = W.upsertWorkItem([W.carryWorkItem({ ...base, reviewed: mark })], { ...base, title: 'renamed upstream', remoteState: 'closed' }, 500)
+    const parsed = W.parseWorkItems([
+      { ...base, id: 'good', reviewed: mark },
+      { ...base, id: 'bad-mark', reviewed: { at: 'soon', signature: 5 } },
+      { ...base, id: 'no-mark' }
+    ], [])
+    const good = parsed.find((i) => i.id === 'good')
+    const badMark = parsed.find((i) => i.id === 'bad-mark')
+    const roundTrip = W.parseLayout(JSON.stringify({ version: 1, workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, workItems: [{ ...base, reviewed: mark }] }], activeWorkspaceId: 'w1' }))
+    ok('work.readiness.1 the recorded review is absent on every pre-M201 item and stays absent through carryWorkItem; it survives a provider re-add, because re-reading an issue says nothing about whether anybody reviewed the lane; and a malformed mark costs the FIELD and not the entry',
+      !('reviewed' in bare) &&
+        JSON.stringify(carried.reviewed) === JSON.stringify(mark) && carried.reviewed !== mark &&
+        upserted.length === 1 && upserted[0].title === 'renamed upstream' && JSON.stringify(upserted[0].reviewed) === JSON.stringify(mark) &&
+        parsed.length === 3 &&
+        JSON.stringify(good.reviewed) === JSON.stringify(mark) &&
+        badMark !== undefined && !('reviewed' in badMark) &&
+        JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed) === JSON.stringify(mark),
+      JSON.stringify({ bareKeys: Object.keys(bare), carried: carried.reviewed, upserted: upserted[0] && upserted[0].reviewed, parsedIds: parsed.map((i) => i.id), badMark, roundTrip: roundTrip.snapshot.workspaces[0].workItems[0] }))
+  } catch (e) { ok('work.readiness.1 (threw)', false, String(e)) }
 }
 
 // M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE

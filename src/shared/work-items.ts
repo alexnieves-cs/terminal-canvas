@@ -60,6 +60,23 @@ export interface PersistedWorkItem {
   pr?: { number: number; url: string }
   /** M114. `lane closed`, or a dispatch's refusal. Cleared by a new dispatch. */
   note?: string
+  /**
+   * M201 (D07). THE RECORDED REVIEW — the only fact a local review leaves
+   * behind, and deliberately the smallest one that makes a review able to go
+   * STALE. Absent until a person reviews.
+   *
+   * No diff and no path list is copied into the layout (the guide's rule):
+   * `signature` is `reviewSignature`'s eight-character fingerprint of the
+   * diff's SHAPE, which the review that was already run has in hand, so
+   * detecting drift costs nothing extra. Its recorded bound — a change
+   * leaving every path and both counts identical is not detected — is in
+   * `review-readiness.ts`'s header and pinned by `readiness.3`.
+   *
+   * It is the USER's, like `state` and `anchor`: `upsertWorkItem` keeps it
+   * when a provider re-adds the item, because re-reading an issue from GitHub
+   * says nothing about whether somebody looked at the lane.
+   */
+  reviewed?: { at: number; signature: string; files: number }
   anchor?: WorkItemAnchor
   createdAt: number
   updatedAt: number
@@ -98,6 +115,7 @@ export function carryWorkItem(item: PersistedWorkItem): PersistedWorkItem {
     ...(item.worktreeId === undefined ? {} : { worktreeId: item.worktreeId }),
     ...(item.pr === undefined ? {} : { pr: { number: item.pr.number, url: item.pr.url } }),
     ...(item.note === undefined ? {} : { note: item.note }),
+    ...(item.reviewed === undefined ? {} : { reviewed: { at: item.reviewed.at, signature: item.reviewed.signature, files: item.reviewed.files } }),
     ...(item.anchor === undefined ? {} : { anchor: { panelId: item.anchor.panelId, dx: item.anchor.dx, dy: item.anchor.dy } })
   }
 }
@@ -115,6 +133,15 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
     if (!isRecord(raw.pr) || !Number.isInteger(raw.pr.number) || !isStr(raw.pr.url)) return { reason: 'malformed pr' }
     pr = { number: raw.pr.number as number, url: raw.pr.url }
   }
+  // M201. A malformed `reviewed` costs the FIELD and not the entry, the same
+  // way the anchor below does: a card that lost the memory of being reviewed
+  // is still a card, and dropping the whole item would lose the lane with it.
+  // The safe direction is also the honest one — no mark reads as `none`,
+  // which offers a review rather than claiming one happened.
+  const rv = raw.reviewed
+  const reviewed = isRecord(rv) && isNum(rv.at) && isStr(rv.signature) && isNum(rv.files)
+    ? { at: rv.at, signature: rv.signature, files: rv.files }
+    : undefined
   const a = raw.anchor
   const anchor = isRecord(a) && isStr(a.panelId) && isNum(a.dx) && isNum(a.dy) ? { panelId: a.panelId, dx: a.dx, dy: a.dy } : undefined
   const opt = (v: unknown): string | undefined => (isStr(v) ? v : undefined)
@@ -135,6 +162,7 @@ function parseOne(raw: unknown): { item: PersistedWorkItem } | { reason: string 
       worktreeId: opt(raw.worktreeId),
       pr,
       note: opt(raw.note),
+      reviewed,
       anchor
     })
   }

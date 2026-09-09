@@ -31,6 +31,27 @@ export interface ReviewBaseline {
  * honest chain's answer at creation time for the same reason: the panel it
  * names may not exist any more.
  */
+/**
+ * M202 (D07). The `baselineSha` an ACROSS node carries when it was opened
+ * from a task whose conversation is gone.
+ *
+ * An across node never sends `baselineSha` to git: `review:across` takes the
+ * ROOT alone and each section's own comparison is its fork point
+ * (`merge-base`), which is exactly why M86 chose fork points over baselines —
+ * main drops a panel's baseline when the panel is killed, and reviewing
+ * finished work is what a cross-worktree node is for. So for this one node
+ * shape the field has nothing true to hold, and the choice is between
+ * weakening the parser's "all four or drop the node" rule for every subject
+ * and naming the absence once.
+ *
+ * It is NAMED rather than left as an empty string (which `isStr` would drop,
+ * taking the node with it) or a plausible-looking fake sha (which would be
+ * shown to a person as a commit they could go and look at). Every surface
+ * that prints a baseline checks for it and says what it means; no code path
+ * passes it to git. `verify:review across-baseline.1`.
+ */
+export const ACROSS_BASELINE = 'across'
+
 export interface ReviewSubject {
   /** The panel this reviews. Kept for peer attribution, NOT as a live pointer. */
   subjectId: PanelId
@@ -46,6 +67,19 @@ export interface ReviewSubject {
    * copy site.
    */
   across?: true
+  /**
+   * M201 (D07). The TASK this review belongs to, when it was opened from one.
+   * Provenance and nothing else: it grants no access, changes no query, and
+   * every diff this node asks for is the one `repoRoot` and `across` already
+   * decided. It exists so the review can name the task beside it and record
+   * that a person looked; a node opened by any other door has no task and
+   * says so by ABSENCE, never by an empty string.
+   *
+   * Absent for every node before M201 and for every review opened outside a
+   * task, and absence must stay absent through every copy site — the rule
+   * `across` above states, for the same reason.
+   */
+  workItemId?: string
 }
 
 export interface ReviewFile {

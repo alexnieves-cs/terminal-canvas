@@ -100,6 +100,12 @@ export const VERBS: readonly VerbDef[] = [
   // the panel discovery itself reads — is the one this whole feature is built
   // on, so the verb binds to that and refuses by name when there is none.
   { id: 'preview-bind', label: 'Preview: bind the source', args: [], destructive: false, actions: ['bindPreview'], target: 'canvas', hint: 'the selected panel\'s folder becomes the work this preview reloads for' },
+  // M201/M202 (D07). Opening a review is a READ: it mints a panel and asks
+  // git a question. It is deliberately NOT on TEAMMATE_REFUSED_VERBS — a
+  // teammate pointing a person at what it changed is doing the right thing,
+  // and nothing here starts a session or changes a setting. Marking a review
+  // DONE has no verb at all, on purpose; see V9_DOORS below.
+  { id: 'review-task', label: 'Task: review the lane', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['reviewTask'], target: 'panel', hint: 'open the review for a work card\'s lane, beside the task and its conversation' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
   { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram — the draft when there is one' },
@@ -311,6 +317,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-width': { canvas: 'the four width chips on the preview pane', palette: 'preview.width', agent: 'tc plan preview-width phone', workflow: 'an action node whose line is: preview-width phone' },
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
+  'review-task': { canvas: 'Review on a work card', palette: 'work.review', agent: 'tc plan review-task wk1', workflow: 'an action node whose line is: review-task wk1' },
   'preview-dev': { canvas: 'Start dev server in the preview pane\'s discovery list', palette: 'preview.dev', agent: 'tc plan preview-dev dev', workflow: 'an action node whose line is: preview-dev dev' },
   'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: 'an action node whose line is: workflow-copy t1' },
   'workflow-run': { canvas: 'Run on the workflow panel', palette: 'workflow.run', agent: 'tc plan workflow-run t1', workflow: 'an action node whose line is: workflow-run t1' },

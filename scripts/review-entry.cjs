@@ -43,4 +43,13 @@ module.exports = {
      runs here against the fake runner this suite already has. */
   ...require('../src/shared/work-scope'),
   ...require('../src/main/work-scope'),
+  /* M201 (D07). Local review readiness: a pure projection over the work item,
+     the lane's fork diff, the linked conversation's supervision and the two
+     evidence sources. Nothing injected — it asks for nothing. */
+  ...require('../src/shared/review-readiness'),
+  /* M202. `ACROSS_BASELINE` — the one VALUE shared/review.ts exports. It was
+     types only until now, which is exactly the case the alias comment above
+     warns about: a module that starts exporting a value where it exported
+     only types breaks a bundle that never carried it. */
+  ...require('../src/shared/review'),
 }

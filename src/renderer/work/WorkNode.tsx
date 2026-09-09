@@ -7,6 +7,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 import type { RunNodeSupervision } from '@shared/run-outcome'
+import type { ReviewHandoff } from '@shared/review-readiness'
 
 /**
  * M116. THE WORK CARD — the board's row in the world, the twelfth kind,
@@ -43,6 +44,16 @@ export interface WorkNodeProps {
   laneLabel: string | undefined
   /** Live execution is separate from the board item's human disposition. */
   execution?: RunNodeSupervision
+  /**
+   * M202 (D07). LOCAL REVIEW READINESS — a THIRD line, beside the board
+   * disposition pill and the M200 execution word, and never a re-labelling of
+   * either. The pill says what the person decided, `execution` says what the
+   * runtime is doing, and this says what there is to review. Absent until the
+   * lane's diff has been read, so the card never guesses.
+   */
+  handoff?: ReviewHandoff
+  /** Focus the lane's conversation. The `resume` half of Start / Resume / Review. */
+  onResume: (itemId: string) => void
   onAnswer: (panelId: string, requestId: string, allow: boolean) => void
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
@@ -146,6 +157,10 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   onClick={(e) => { e.preventDefault(); openLink((item.pr as { url: string }).url) }}>#{item.pr.number}</a></dd></div>
               )}
               {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
+              {/* M202. Absent, never a zero-value word: a card whose lane has
+                  not been read yet says nothing about review rather than
+                  saying `unknown`, which the rest rule forbids. */}
+              {props.handoff !== undefined && <div><dt>review</dt><dd data-work-readiness={props.handoff.state} data-work-standing={props.handoff.standing} data-tone={props.handoff.tone}>{props.handoff.word}</dd></div>}
             </dl>
             {props.execution?.blocker !== undefined && (
               <div className="work-node__blocker" data-work-blocker={props.execution.blocker.kind} role="status">
@@ -169,9 +184,34 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   with a sentence naming a door that did not exist. The DOM
                   alias `assign` is unchanged (the restyle rule): the checks
                   select on it. */}
-              {verb('assign', 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen })}
+              {/* M202 (D07). The handoff picks WHICH of these reads as the
+                  next thing to do, through `data-work-next` — the one action
+                  chosen by the facts. The others stay present and disabled by
+                  name: a row that disappears is indistinguishable from a
+                  feature that was never built, and every one of these is
+                  sometimes the right thing to press. `assign` also carries
+                  the `start` arm's own label, so a lost lane says `Start work
+                  again…` and never names a door that does not exist. */}
+              {verb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen, ...(props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : {}) })}
+              {/* M202 (D07). Start / Resume / Review, the three the guide asks
+                  the card to offer. `resume` is a new alias beside the four
+                  that existed, never a rename of one: roughly two hundred
+                  checks select on those. Its refusal is by name, like every
+                  other — the lane's chat can be closed while the worktree it
+                  wrote is still there to review, which is precisely why
+                  `review` below does NOT share this reason. */}
+              {verb('resume', props.handoff?.action === 'answer' ? 'Answer' : 'Resume', item.panelId === undefined ? 'no lane yet — start work on this item first' : props.laneLabel === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : null, () => props.onResume(item.id))}
               {verb('open-pr', 'Open PR', props.prReason, () => props.onOpenPr(item.id))}
-              {verb('review', 'Review', item.panelId === undefined ? 'no lane yet — dispatch the item first' : null, () => props.onReview(item.id))}
+              {/* The label and the reason are the handoff's when one has been
+                  read: `Review again` after a review, and the state's own
+                  sentence when there is nothing settled to look at. Falling
+                  back to the pre-M202 reason while the diff is still being
+                  read keeps the button honest in the gap. */}
+              {verb('review', props.handoff?.action === 'review' ? props.handoff.actionLabel : 'Review',
+                props.handoff === undefined
+                  ? (item.panelId === undefined ? 'no lane yet — start work on this item first' : null)
+                  : props.handoff.action === 'review' ? null : props.handoff.detail,
+                () => props.onReview(item.id), props.handoff?.action === 'review' ? { 'data-work-next': 'review' } : undefined)}
               {verb('done', 'Done', null, () => props.onDone(item.id))}
               {assignOpen && (
                 <ul className="work-node__menu" role="menu" data-work-assign-menu onMouseDown={(e) => e.stopPropagation()}>

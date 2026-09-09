@@ -718,12 +718,21 @@ function parseReviewSubject(raw: unknown, id: string, warnings: string[]): Revie
   // is anything else is malformed: it warns and the FLAG is dropped, never
   // the node — a review node that lost its flag is an ordinary review of the
   // same subject, which is a smaller wrong than a node that vanished.
+  // M201. The task this review belongs to, on the same terms: a present but
+  // unusable value costs the FIELD and never the node. A review that lost the
+  // name of its task still reviews the right diff — `repoRoot` and `across`
+  // decide that — whereas a node that vanished takes the diff with it.
+  const workItemId = isStr(raw.workItemId) ? raw.workItemId : undefined
+  if (raw.workItemId !== undefined && workItemId === undefined) {
+    warnings.push(`dropped review panel ${id}'s work item id: expected a string, got ${JSON.stringify(raw.workItemId)}`)
+  }
+  const task = workItemId === undefined ? {} : { workItemId }
   const { across } = raw
   if (across !== undefined && across !== true) {
     warnings.push(`dropped review panel ${id}'s across flag: expected true, got ${JSON.stringify(across)}`)
-    return { subjectId, repoRoot, baselineSha, label }
+    return { subjectId, repoRoot, baselineSha, label, ...task }
   }
-  return { subjectId, repoRoot, baselineSha, label, ...(across === true ? { across: true as const } : {}) }
+  return { subjectId, repoRoot, baselineSha, label, ...task, ...(across === true ? { across: true as const } : {}) }
 }
 
 /**

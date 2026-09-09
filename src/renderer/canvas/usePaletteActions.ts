@@ -211,7 +211,7 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void }>
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
 }
 
 /**
@@ -317,6 +317,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'image-replace': return self.replaceImage(a.panel!, a.path)
           case 'preview-open': return self.openPreview(a.url)
           case 'preview-bind': return self.bindPreview()
+          case 'review-task': return self.reviewTask(step.args.panel as string)
           case 'preview-width': return self.setPreviewWidth(a.device!)
           case 'preview-capture': return self.capturePreview()
           case 'preview-dev': return self.startDevServer(a.script)
@@ -2005,6 +2006,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     replaceImage: (panelId, path) => replaceImagePanel(panelId, path),
     openPreview: (url) => openPreviewNow(url),
     bindPreview: () => bindPreviewNow(),
+    // M202 (D07). ONE action, four doors — the card's verb, the palette row,
+    // the agent line and an action node all land here, the way M197 made
+    // every Start work door land on one. The panel is resolved to its ITEM
+    // here rather than by each door, so a card whose item left the board
+    // refuses in one sentence instead of four.
+    reviewTask: (panelId) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+      if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+      if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a task review needs one` }
+      return boardVerbsRef.current?.review?.(panel.work.itemId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' }
+    },
     setPreviewWidth: (device) => setPreviewWidthNow(device),
     capturePreview: () => capturePreviewNow(),
     startDevServer: (script) => startDevServerNow(script),

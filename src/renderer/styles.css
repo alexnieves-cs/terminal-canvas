@@ -904,6 +904,26 @@ body {
 .review-node__section-count { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
 .review-node__path { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-node__counts { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+/* M202 (D07). The task section on a review opened from a work card. It sits
+   ABOVE the diff, so it is bordered on the bottom rather than the top like
+   the worktree sections below it. Every value here is an existing token: this
+   milestone declares no new name, so `verify:styles theme.1`'s parity rule
+   has nothing new to keep in step. */
+.review-node__task { margin: 0 0 var(--sp-2); border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+.review-node__evidence { list-style: none; margin: var(--sp-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.review-node__evidence-row { display: flex; align-items: baseline; gap: var(--sp-2); }
+/* The outcome leads, because a non-zero exit is the fact a reviewer came for. */
+.review-node__evidence-outcome { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; min-width: 5.5em; }
+.review-node__evidence-outcome[data-tone='needs-you'] { color: var(--amber); }
+/* A command is code, so it is mono; the attribution beside it is a sentence,
+   so it is not — the face rule, decided per leaf. */
+.review-node__evidence-command { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-node__evidence-who { margin-left: auto; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.review-node__evidence-more { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+.review-node__task-verbs { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
+/* The agent's own account, set apart from the evidence above it so the two
+   are never read as one claim. */
+.review-node__account { margin-top: var(--sp-2); }
 .inspector__branch-line { margin: 0 0 var(--sp-1); font-size: var(--t-xs); color: var(--fg-3); }
 .inspector__repository { font-weight: 400; color: var(--fg-3); }
 /* M85. The vault: the navigator's fourth pane, and a note's links. */

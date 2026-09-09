@@ -469,7 +469,7 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
    taken in whatever directory a user keeps code in, and this repo has already
    shipped one total, silent failure from a space-free fixture. */
 const { execFileSync } = require('node:child_process')
-const { mkdtempSync, writeFileSync, appendFileSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, appendFileSync, readFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 // M37 — a git worktree per panel: the pure half. Scoped ids.
@@ -1949,6 +1949,262 @@ if (GIT) {
       JSON.stringify({ plain, below, lane, laneSub, external, notRepo, declined, relative, empty, submodule, nested }))
   }
 }
+
+/* ── M201 (D07). Local review readiness ──────────────────────────────────────
+   Every check here guards a failure that is SILENT: a card that says "ready to
+   review" while its agent is still writing, a review mark that never goes
+   stale so a second look is never offered, or an agent's own claim about a
+   command it ran shown beside an exit code this app actually read, with
+   nothing to tell them apart. */
+{
+  const LANE = '/w/lanes/tc-p1'
+  const file = (path, added, removed, extra) => ({ path, added, removed, binary: false, untracked: false, ...(extra || {}) })
+  const section = (result) => ({ path: LANE, branch: 'tc/p1', label: 'lane', result })
+  const changes = (files) => ({ kind: 'changes', root: LANE, files, added: files.reduce((n, f) => n + f.added, 0), removed: files.reduce((n, f) => n + f.removed, 0) })
+  const item = (extra) => ({ id: 'w1', source: 'typed', title: 'a task', state: 'todo', createdAt: 1, updatedAt: 1, ...(extra || {}) })
+  const laned = (extra) => item({ panelId: 'ch1', worktreeId: 'wt1', ...(extra || {}) })
+  const ended = { execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'idle', detail: 'a turn ended' }
+  const running = { execution: 'running', result: 'none', word: 'working', tone: 'working', detail: 'streaming' }
+  const queued = { execution: 'queued', result: 'none', word: 'queued', tone: 'idle', detail: 'behind the current turn', queueReason: 'in-flight' }
+  const blocked = { execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', detail: 'asking about Bash', blocker: { kind: 'approval', subject: 'Bash' } }
+
+  {
+    const NAME = 'readiness.1 the eight handoff states each come from their own input and the priority holds — no lane outranks everything, execution outranks the diff, a clean lane is `empty` rather than a green completion, a SHARED repository is its own state and is never called `ready to review`, and no arm names a door that does not exist'
+    try {
+      const noLane = R.reviewHandoff({ item: item(), section: section(changes([file('a.ts', 3, 1)])), supervision: ended })
+      const missing = R.reviewHandoff({ item: laned(), section: undefined, supervision: ended })
+      const gone = R.reviewHandoff({ item: laned(), section: { ...section({ kind: 'baseline-lost', root: LANE }), note: 'no longer a worktree — it was removed outside this app' }, supervision: ended })
+      const noGit = R.reviewHandoff({ item: laned(), section: section({ kind: 'git-missing' }), supervision: ended })
+      const unreadable = R.reviewHandoff({ item: laned(), section: section({ kind: 'repo-unreadable', detail: 'dubious ownership' }), supervision: ended })
+      const isBlocked = R.reviewHandoff({ item: laned(), section: section(changes([file('a.ts', 3, 1)])), supervision: blocked })
+      const isWorking = R.reviewHandoff({ item: laned(), section: section(changes([file('a.ts', 3, 1)])), supervision: running })
+      const isQueued = R.reviewHandoff({ item: laned(), section: section(changes([file('a.ts', 3, 1)])), supervision: queued })
+      const clean = R.reviewHandoff({ item: laned(), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+    // The fourth attribution D07 names: two panels have run here, so the diff
+    // is not this task's alone and must not be worded as if it were.
+    const shared = R.reviewHandoff({ item: laned(), section: section({ kind: 'shared', root: LANE, panelCount: 2, files: [file('a.ts', 3, 1)] }), supervision: ended })
+      const ready = R.reviewHandoff({ item: laned(), section: section(changes([file('a.ts', 3, 1)])), supervision: ended })
+      const neverRan = R.reviewHandoff({ item: laned(), section: section(changes([file('a.ts', 3, 1)])), supervision: undefined })
+      ok(NAME,
+        noLane.state === 'no-lane' && noLane.action === 'start' &&
+          // Every recovery routes to a door that EXISTS. `locate` was removed
+          // for exactly this: it told the person to locate a lane, and no
+          // surface in the product offers that.
+          missing.state === 'lane-missing' && missing.action === 'start' &&
+          gone.state === 'lane-missing' && gone.action === 'start' &&
+          noGit.state === 'unreadable' && noGit.action === 'start' &&
+          unreadable.state === 'unreadable' && /dubious ownership/.test(unreadable.detail) &&
+          isBlocked.state === 'blocked' && isBlocked.action === 'answer' &&
+          isWorking.state === 'working' && isWorking.action === 'resume' &&
+          isQueued.state === 'working' &&
+          clean.state === 'empty' && clean.action === 'resume' && clean.changes === undefined &&
+          ready.state === 'ready' && ready.action === 'review' && ready.changes !== undefined && ready.changes.files === 1 && ready.changes.shared === undefined &&
+        // Shared: its own state, its own sentence, still reviewable — and the
+        // words `ready to review` appear nowhere in it.
+        shared.state === 'shared' && shared.action === 'review' && shared.changes !== undefined && shared.changes.shared === true &&
+        !/ready to review/.test(shared.word) && /not attributable to this task alone/.test(shared.detail) &&
+        // The blocker rides through unchanged, so this surface names the same
+        // question M199's projection gave the card and the diagram.
+        isBlocked.blocker !== undefined && isBlocked.blocker.kind === 'approval' && isBlocked.blocker.subject === 'Bash' &&
+        ready.blocker === undefined &&
+        // No arm anywhere offers an action the product does not have.
+        [noLane, missing, gone, noGit, unreadable, isBlocked, isWorking, clean, shared, ready].every((h) => ['start', 'resume', 'answer', 'review'].includes(h.action)) &&
+          // A conversation with no live session at all has nothing in flight,
+          // so the diff under it is settled and `ready` is the right word.
+          neverRan.state === 'ready' &&
+          // Every arm says something; none is a bare word.
+          [noLane, missing, gone, noGit, unreadable, isBlocked, isWorking, clean, shared, ready].every((h) => typeof h.word === 'string' && h.word.length > 2 && typeof h.detail === 'string' && h.detail.length > 10 && typeof h.tone === 'string'),
+        JSON.stringify({ noLane, missing, gone, noGit, unreadable, isBlocked, isWorking, isQueued, clean, shared, ready, neverRan }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+  {
+    const NAME = 'readiness.2 standing is a SECOND axis and never folds into the state — a task can be working AND stale at once, and a review recorded against a different diff is `stale`, never silently `current`'
+    try {
+      const files = [file('a.ts', 3, 1), file('b.ts', 0, 2)]
+      const sig = R.reviewSignature(files)
+      const other = R.reviewSignature([file('a.ts', 4, 1)])
+      const readyCurrent = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: sig, files: 2 } }), section: section(changes(files)), supervision: ended })
+      const readyStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: ended })
+      const workingStale = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section(changes(files)), supervision: running })
+      const none = R.reviewHandoff({ item: laned(), section: section(changes(files)), supervision: ended })
+      const cleanAfterReview = R.reviewHandoff({ item: laned({ reviewed: { at: 5, signature: other, files: 1 } }), section: section({ kind: 'clean', root: LANE }), supervision: ended })
+      ok(NAME,
+        readyCurrent.standing === 'current' && readyCurrent.state === 'ready' &&
+          readyStale.standing === 'stale' && readyStale.state === 'ready' &&
+          // The one this axis exists for: both facts survive.
+          workingStale.standing === 'stale' && workingStale.state === 'working' &&
+          none.standing === 'none' &&
+          // A lane that went clean after a review is not "current": there is no diff to still be current about.
+          cleanAfterReview.standing === 'stale' && cleanAfterReview.state === 'empty' &&
+          R.reviewStanding(undefined, sig) === 'none' &&
+          R.reviewStanding({ at: 1, signature: sig, files: 2 }, sig) === 'current' &&
+          R.reviewStanding({ at: 1, signature: other, files: 1 }, sig) === 'stale',
+        JSON.stringify({ sig, other, readyCurrent, readyStale, workingStale, none, cleanAfterReview }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+  {
+    const NAME = 'readiness.3 the signature is order-independent and moves with a count, a path, a rename and an untracked flag — and its RECORDED BOUND holds: identical paths and counts are identical signatures, which is the limit written in the header, asserted so a later "fix" fails here first'
+    try {
+      const a = [file('a.ts', 3, 1), file('b.ts', 0, 2)]
+      const reordered = [file('b.ts', 0, 2), file('a.ts', 3, 1)]
+      const count = [file('a.ts', 4, 1), file('b.ts', 0, 2)]
+      const path = [file('a.ts', 3, 1), file('c.ts', 0, 2)]
+      const untracked = [file('a.ts', 3, 1), { ...file('b.ts', 0, 2), untracked: true }]
+      const renamed = [file('a.ts', 3, 1), { ...file('b.ts', 0, 2), renamedFrom: 'old.ts' }]
+      const sig = R.reviewSignature(a)
+      ok(NAME,
+        typeof sig === 'string' && /^[0-9a-f]{8}$/.test(sig) &&
+          R.reviewSignature(reordered) === sig &&
+          R.reviewSignature(count) !== sig &&
+          R.reviewSignature(path) !== sig &&
+          R.reviewSignature(untracked) !== sig &&
+          R.reviewSignature(renamed) !== sig &&
+          R.reviewSignature([]) === R.reviewSignature([]) &&
+          // THE BOUND. One line edited and another reverted in the same file
+          // leaves every path and both counts identical, and is NOT detected.
+          // The signature is a fingerprint of the diff's SHAPE, not a hash of
+          // its content; hashing content would mean reading every hunk on every
+          // card render. Stated in the header and pinned here.
+          R.reviewSignature([file('a.ts', 3, 1)]) === R.reviewSignature([file('a.ts', 3, 1)]),
+        JSON.stringify({ sig, reordered: R.reviewSignature(reordered), count: R.reviewSignature(count), path: R.reviewSignature(path), untracked: R.reviewSignature(untracked), renamed: R.reviewSignature(renamed) }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+  {
+    const NAME = 'readiness.4 the two evidence sources stay apart — a command this app watched exit is `observed`, the same command in a transcript is `reported`, and the two are never merged into one row; a null exit code and an unanswered tool call are `unknown`, never passed'
+    try {
+      const rows = [
+        { panelId: 'n1', command: 'npm test', cwd: `${LANE}/pkg`, startedAt: 10, endedAt: 20, exitCode: 0 },
+        { panelId: 'n1', command: 'npm run lint', cwd: LANE, startedAt: 30, endedAt: 40, exitCode: 1 },
+        { panelId: 'n2', command: 'npm test', cwd: '/w/elsewhere', startedAt: 50, endedAt: 60, exitCode: 0 },
+        { panelId: 'n1', command: 'npm run dev', cwd: LANE, startedAt: 70, endedAt: 0, exitCode: null }
+      ]
+      const observed = R.observedCommands(rows, LANE)
+      const turns = [
+        { id: 't1', role: 'assistant', at: 100, blocks: [{ type: 'tool_use', id: 'u1', name: 'Bash', input: { command: 'npm test' } }] },
+        { id: 't2', role: 'user', at: 101, blocks: [{ type: 'tool_result', toolUseId: 'u1', content: 'ok', isError: false }] },
+        { id: 't3', role: 'assistant', at: 102, blocks: [{ type: 'tool_use', id: 'u2', name: 'Bash', input: { command: 'npm run build' } }] },
+        { id: 't4', role: 'user', at: 103, blocks: [{ type: 'tool_result', toolUseId: 'u2', content: 'boom', isError: true }] },
+        { id: 't5', role: 'assistant', at: 104, blocks: [{ type: 'tool_use', id: 'u3', name: 'Bash', input: { command: 'npm run slow' } }] },
+        { id: 't6', role: 'assistant', at: 105, blocks: [{ type: 'tool_use', id: 'u4', name: 'Read', input: { file_path: '/w/a.ts' } }] }
+      ]
+      const reported = R.reportedCommands(turns)
+      const merged = R.reviewEvidence(observed, reported, 10)
+      const same = merged.commands.filter((c) => c.command === 'npm test')
+      ok(NAME,
+        // Outside the lane is excluded; a still-running row is unknown, not passed.
+        observed.length === 3 && observed.every((c) => c.attribution === 'observed') &&
+          observed.find((c) => c.command === 'npm test').outcome === 'passed' &&
+          observed.find((c) => c.command === 'npm run lint').outcome === 'failed' &&
+          observed.find((c) => c.command === 'npm run dev').outcome === 'unknown' &&
+          observed.every((c) => c.command !== 'npm test' || c.exitCode === 0) &&
+          // A Read tool names no command; an unanswered Bash is unknown.
+          reported.length === 3 && reported.every((c) => c.attribution === 'reported') &&
+          reported.every((c) => c.exitCode === undefined) &&
+          reported.find((c) => c.command === 'npm test').outcome === 'passed' &&
+          reported.find((c) => c.command === 'npm run build').outcome === 'failed' &&
+          reported.find((c) => c.command === 'npm run slow').outcome === 'unknown' &&
+          // The whole point: one command, two witnesses, two rows.
+          same.length === 2 && same[0].attribution !== same[1].attribution &&
+          // Failures first, so the fact a reviewer wants is not below a cap.
+          merged.commands[0].outcome === 'failed' && merged.commands[1].outcome === 'failed' &&
+          merged.none === undefined && merged.more === 0,
+        JSON.stringify({ observed, reported, merged }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+  {
+    const NAME = 'readiness.5 no evidence is a SENTENCE naming WHICH kind of nothing it is — nothing ran, or nobody could look — because a closed lane and an unreadable ledger are not evidence that nothing ran; and the cap COUNTS its overflow rather than pre-slicing it, so `more` stays structurally reachable'
+    try {
+      const empty = R.reviewEvidence([], [], 10)
+      // The two overclaims the first cut made. A closed conversation and a
+      // ledger this app could not read both produced "the conversation asked
+      // for none" — an assertion about something nobody had looked at.
+      const noChat = R.reviewEvidence([], [], 10, { ledgerRead: true, transcriptRead: false })
+      const noLedger = R.reviewEvidence([], [], 10, { ledgerRead: false, transcriptRead: true })
+      const neither = R.reviewEvidence([], [], 10, { ledgerRead: false, transcriptRead: false })
+      const many = R.reviewEvidence(
+        Array.from({ length: 8 }, (_, i) => ({ attribution: 'observed', command: `c${i}`, outcome: 'passed', exitCode: 0, at: i, source: 'this canvas ran it' })),
+        Array.from({ length: 8 }, (_, i) => ({ attribution: 'reported', command: `r${i}`, outcome: 'passed', at: i, source: 'the agent reported it' })),
+        5
+      )
+      ok(NAME,
+        typeof empty.none === 'string' && empty.none.length > 20 && empty.commands.length === 0 && empty.more === 0 &&
+          // Only the arm where BOTH sources were read may say nothing ran.
+          /asked for none/.test(empty.none) &&
+          !/asked for none/.test(noChat.none) && /conversation is closed/.test(noChat.none) &&
+          !/asked for none/.test(noLedger.none) && /could not read/.test(noLedger.none) &&
+          /could not read/.test(neither.none) && /conversation is closed/.test(neither.none) &&
+          // Different silences get different sentences.
+          new Set([empty.none, noChat.none, noLedger.none, neither.none]).size === 4 &&
+          many.commands.length === 5 && many.more === 11 && many.none === undefined,
+        JSON.stringify({ empty, noChat, noLedger, neither, manyLen: many.commands.length, more: many.more }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+}
+
+{
+    const NAME = 'readiness.6 the task\'s section is picked out of the across result by its lane path on segment boundaries and the LONGEST match wins — the main tree is never mistaken for the lane, a neighbouring lane sharing a prefix is never the task\'s, and no match at all is undefined so the handoff reads `lane missing` rather than reviewing the wrong diff'
+    try {
+      const clean = { kind: 'clean', root: '/x' }
+      const across = { sections: [
+        { path: '/w/repo', branch: 'main', label: 'main tree', result: clean },
+        { path: '/w/lanes/tc-p1', branch: 'tc/p1', label: 'ada', result: clean },
+        { path: '/w/lanes/tc-p1-old', branch: 'tc/p1-old', label: 'stale', result: clean },
+        { path: '/w/lanes/tc-p1/nested', branch: 'tc/p1-nested', label: 'nested', result: clean }
+      ] }
+      const exact = R.laneSection(across.sections, '/w/lanes/tc-p1')
+      const nested = R.laneSection(across.sections, '/w/lanes/tc-p1/nested')
+      // The bare-startsWith failure this reuses insideDirectory to avoid.
+      const neighbour = R.laneSection(across.sections, '/w/lanes/tc-p1-old')
+      const belowLane = R.laneSection(across.sections, '/w/lanes/tc-p1/src')
+      const gone = R.laneSection(across.sections, '/w/lanes/tc-p9')
+      const noPath = R.laneSection(across.sections, undefined)
+      ok(NAME,
+        exact !== undefined && exact.branch === 'tc/p1' &&
+          nested !== undefined && nested.branch === 'tc/p1-nested' &&
+          neighbour !== undefined && neighbour.branch === 'tc/p1-old' &&
+          // A path INSIDE the lane resolves to the lane, and to the longest
+          // record holding it — never to the main tree that also holds it.
+          belowLane !== undefined && belowLane.branch === 'tc/p1' &&
+          gone === undefined && noPath === undefined &&
+          R.laneSection([], '/w/lanes/tc-p1') === undefined,
+        JSON.stringify({ exact, nested, neighbour, belowLane, gone, noPath }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
+
+{
+    const NAME = 'across-baseline.1 the named across baseline is not a sha, is never passed to git, and every arm that could reach a git call with it is fenced — an across node asks review:across with its ROOT alone, and each section compares against its own fork'
+    try {
+      const marker = R.ACROSS_BASELINE
+      // It must not look like an object name: a fake sha would be shown to a
+      // person as a commit they could go and look at.
+      const looksLikeSha = /^[0-9a-f]{7,40}$/.test(marker)
+      // The two builders that take a baseline sha. Neither is reachable from
+      // an across node (its body renders sections, and its commit and discard
+      // are blocked by name) — asserted as TEXT because no fake runner can
+      // prove a call was never made, the same argument `git.1` makes about
+      // the absence of a fetch.
+      const engineSrc = readFileSync(join(__dirname, '..', 'src', 'main', 'review-engine.ts'), 'utf8')
+      const sharedSrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'review.ts'), 'utf8')
+      const decls = (sharedSrc.match(/export const ACROSS_BASELINE/g) || []).length
+      const acrossStart = engineSrc.indexOf('const reviewAcross = async')
+      const acrossFn = acrossStart === -1 ? '' : engineSrc.slice(acrossStart, engineSrc.indexOf('\n  }', acrossStart))
+      ok(NAME,
+        typeof marker === 'string' && marker.length > 0 && !looksLikeSha &&
+          // reviewAcross builds no argv from a caller-supplied baseline.
+          acrossStart !== -1 && acrossFn.length > 200 && !acrossFn.includes('baselineSha') &&
+          // A real export with one spelling: the constant lives in
+          // shared/review.ts and every reader imports it. Asserted by
+          // counting the DECLARATIONS in src/ — two files spelling their own
+          // copy is the drift this guards, and the engine never naming it at
+          // all is asserted separately above.
+          decls === 1 && engineSrc.indexOf('ACROSS_BASELINE') === -1,
+        JSON.stringify({ marker, looksLikeSha, decls, acrossMentionsBaseline: acrossFn.includes('baselineSha') }))
+    } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
+  }
 
 const failed = results.filter((r) => !r.pass)
 console.log(`\n${results.length - failed.length}/${results.length} passed`)
