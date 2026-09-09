@@ -1480,6 +1480,23 @@ be" above so the run inherits less, not more.
   minted fresh per attempt while `ensureForPanel` reuses by panel id AND root, so a retry past the
   lane step mints a second worktree and orphans the first.
 
+- `src/renderer/canvas/Canvas.tsx`'s `dispatchAttemptsRef` — M198 (D05 close). A start reserves the
+  chat id and writes `panelId` + `worktreeId` immediately after `board:lane`, BEFORE `agent:create`.
+  That item record is the recovery journal: refused create and refused first send retry the missing
+  stage through the same id, while concurrent clicks join one promise. A standing conversation is
+  never accepted merely by renderer identity: the retry asks `board:lane` again first, so main's
+  teammate Places gate still rejects a changed teammate or root.
+
+- `src/shared/run-outcome.ts` / `WorkflowNode.tsx` / `WorkNode.tsx` — M199–M200 (D06). The run
+  definition and entries are immutable history; session status, queue reason, attention and the
+  oldest pending approval are a LIVE overlay. Never put an approval request id in a run or work
+  item record: after answer or exit it would look actionable while main no longer holds it. The
+  projection separates execution, queue reason, blocker, execution result and task disposition.
+  `a turn`, `exit 0` and the aggregate `run ended` use neutral tone and never advance the task.
+  Workflow and work-card Allow/Deny call `answerApproval`, the same main-owned door used by chat
+  and Attention. A backend with only keyboard attention keeps that distinct arm and offers no
+  invented approval control.
+
 - `src/shared/work-scope.ts` / `src/main/work-scope.ts` — M196 (D04). **Working directory, lane
   and repository are three facts and stay three.** `rev-parse --show-toplevel` inside a linked
   worktree answers the LANE (measured, from the lane and from a subdirectory of it), so every door

@@ -1204,7 +1204,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         // The Workspaces pane lists the run.
         await wc.executeJavaScript(`window.canvas.settings.set('shell.railOpen', true)`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="workspaces"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
-        const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-run]'); if (!r) return false; const o = r.getAttribute('data-run-outcome'); return o === 'idle' ? { id: r.getAttribute('data-rail-run'), outcome: o, text: r.textContent, again: !document.querySelector('[data-rail-run-again]')?.disabled } : false })()`), 10000)
+        const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-rail-run]'); if (!r) return false; const o = r.getAttribute('data-run-outcome'); return o === 'run ended' ? { id: r.getAttribute('data-rail-run'), outcome: o, text: r.textContent, again: !document.querySelector('[data-rail-run-again]')?.disabled } : false })()`), 10000)
         // The ACTIVE workspace's state as the store would hand a fresh renderer (check 17's door).
         const stored = await waitUntil(async () => { layoutStore.flushSync(); const runs = (layoutStore.initial().runs) || []; const run = runs.find((r) => r.panelIds.includes('rA')); return run && run.endedAt !== undefined && run.entries.length === 2 ? run : false }, 6000)
         // The frame must WRAP both panels, not merely exist: its rect contains theirs.
@@ -1245,7 +1245,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[0],
           seeded === true && bUp && aUp && delivered === true && row && /2 panels/.test(row.text) && row.again === true &&
             stored && stored.entries.every((e) => e.outcome !== undefined) && stored.costUsd === 0 &&
-            frame && frame.wraps === true && typeof workLine === 'string' && /idle/.test(workLine) && /2 panels/.test(workLine) &&
+            frame && frame.wraps === true && typeof workLine === 'string' && /run ended/.test(workLine) && /2 panels/.test(workLine) &&
             clickedAgain === true && /1 root restarted/.test(String(note)) && typeof pidAfter === 'number' &&
             Array.isArray(secondRun) && secondRun.length >= 2 && secondRun.includes(row.id) && secondRun.some((id) => id !== row.id),
           JSON.stringify({ seeded, bUp, aUp, delivered, token2, exited2, row, stored: stored && { entries: stored.entries, cost: stored.costUsd, name: stored.name }, frame, workLine, clickedAgain, note, pidBefore, pidAfter, secondRun, log: rLog.slice(-3) }))

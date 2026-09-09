@@ -10,7 +10,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { blockCount } from '@shared/workflow-nodes'
 import { isBuiltInTemplate } from '@shared/templates'
-import { blockOutcomes, outcomeWord, outcomeTone, type BlockOutcome } from '@shared/run-outcome'
+import { projectRun, type RunLiveFact, type RunNodeSupervision } from '@shared/run-outcome'
 import type { PersistedTemplate } from '@shared/templates'
 import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
@@ -44,6 +44,9 @@ export interface WorkflowNodeProps {
   template: PersistedTemplate | undefined
   /** The workspace's runs — filtered here to this template alone. */
   runs: readonly PersistedRun[]
+  /** Main-owned live session and approval facts, projected onto the selected run only. */
+  liveFacts: Readonly<Record<string, RunLiveFact>>
+  onAnswer: (panelId: string, requestId: string, allow: boolean) => void
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
@@ -294,7 +297,9 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const mine = useMemo(() => (template === undefined ? [] : runsForTemplate(props.runs, template.id)), [props.runs, template])
   // M184. The selected run's outcome per node key, from the run's OWN snapshot.
   const selectedRun = runId === null ? undefined : mine.find((r) => r.id === runId)
-  const outcomes = selectedRun === undefined ? {} : blockOutcomes(selectedRun)
+  const outcomes: Record<string, RunNodeSupervision> = selectedRun === undefined ? {} : projectRun(selectedRun, props.liveFacts)
+  const blocker = Object.entries(outcomes).find(([, value]) => value.blocker !== undefined)
+  const runNotice = blocker ?? Object.entries(outcomes).find(([, value]) => value.execution === 'queued')
   // M184 (the critic, finding 2). The BLOCKS come from the snapshot too, not
   // only the words: a node deleted after a run vanished from that run's view
   // and a node added rendered `queued` in a run that never held it. A run is
@@ -502,8 +507,8 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                   return (
                     <g key={b.key} data-workflow-block={b.key} data-workflow-block-selected={selectedBlock === b.key ? 'true' : undefined}
                       data-workflow-block-kind={template.nodes.find((n) => n.key === b.key)?.kind}
-                      data-workflow-outcome={outcomes[b.key]}
-                      data-tone={outcomes[b.key] === undefined ? undefined : outcomeTone(outcomes[b.key] as BlockOutcome)}
+                      data-workflow-outcome={outcomes[b.key]?.word}
+                      data-tone={outcomes[b.key]?.tone}
                       className={`workflow-node__blockg${selectedBlock === b.key ? ' workflow-node__blockg--selected' : ''}${wire !== null && wire.over === b.key ? (wire.allowed ? ' workflow-node__blockg--target' : ' workflow-node__blockg--refused') : ''}`}
                       transform={off.dx === 0 && off.dy === 0 ? undefined : `translate(${off.dx} ${off.dy})`}
                       onMouseDown={(e) => beginBlockDrag(b.key, e)}>
@@ -515,7 +520,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                           word sits right-aligned beside it. */}
                       <text className="workflow-node__block-sub" x={b.x + 12} y={b.y + BLOCK_H - 18}>{b.sublabel}</text>
                       {outcomes[b.key] !== undefined && (
-                        <text className="workflow-node__block-outcome" x={b.x + b.w - 12} y={b.y + BLOCK_H - 18} textAnchor="end">{outcomeWord(outcomes[b.key] as BlockOutcome)}</text>
+                        <text className="workflow-node__block-outcome" x={b.x + b.w - 12} y={b.y + BLOCK_H - 18} textAnchor="end">{outcomes[b.key].word}</text>
                       )}
                       {/* M183. The port on the right edge: a wire starts here. */}
                       {!readOnly && <circle className="workflow-node__port" data-workflow-port cx={b.x + b.w} cy={b.y + b.h / 2} r={5} onMouseDown={(e) => beginWire(b.key, e)} />}
@@ -525,6 +530,21 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 {wire !== null && <line className="workflow-node__wire" data-workflow-wire x1={wire.x1} y1={wire.y1} x2={wire.x2} y2={wire.y2} />}
                 {ghost !== null && <rect className="workflow-node__ghost" data-workflow-ghost x={ghost.x - BLOCK_W / 2} y={ghost.y - BLOCK_H / 2} width={BLOCK_W} height={BLOCK_H} rx={8} />}
               </svg>
+              {runNotice !== undefined && (() => {
+                const [key, supervision] = runNotice
+                const label = diagram.blocks.find((b) => b.key === key)?.label ?? key
+                return (
+                  <div className="workflow-node__blocker" data-workflow-run-state={key} data-workflow-run-blocker={supervision.blocker === undefined ? undefined : key} data-tone={supervision.tone} role="status">
+                    <p className="pf__note"><strong>{label}</strong> — {supervision.detail}</p>
+                    {supervision.approval !== undefined && supervision.panelId !== undefined && !readOnly && (
+                      <div className="workflow-node__blocker-verbs">
+                        <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="allow" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, true))}>Allow</button>
+                        <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="deny" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, false))}>Deny</button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </section>
             <section className="workflow-node__pane" data-workflow-panel="runs" role="tabpanel" hidden={tab !== 'runs'}>
               {/* Three states, never two: nothing recorded yet is a SENTENCE,

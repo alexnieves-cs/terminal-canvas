@@ -1,4 +1,5 @@
 import type { PersistedRun } from './runs'
+import type { AgentSessionStatus } from './agent-session'
 
 /**
  * M184. A RUN'S OUTCOME ON THE DIAGRAM, pure over the run's own record: one
@@ -29,6 +30,125 @@ export type BlockOutcome =
   | 'absent' | 'queued' | 'working' | 'unknown'
   | 'finished' | 'failed' | 'skipped' | 'stopped' | 'wants-you'
 
+export type RunExecution = 'not-run' | 'queued' | 'running' | 'ended' | 'unknown'
+export type RunQueueReason = 'upstream' | 'in-flight' | 'concurrency'
+export type RunExecutionResult = 'none' | 'turn-complete' | 'passed' | 'failed' | 'skipped' | 'stopped' | 'unknown'
+
+/**
+ * Live facts are a projection of main-owned session/approval state. They are
+ * deliberately not a persisted shape: a request id written into a run would
+ * become an actionable-looking stale permission after its process exited.
+ */
+export interface RunLiveApproval {
+  requestId: string
+  toolName: string
+  argument: string
+}
+
+export interface RunLiveFact {
+  status?: AgentSessionStatus
+  turns?: number
+  exitCode?: number | null
+  exitSignal?: string
+  queued?: number
+  queuedReason?: 'in-flight' | 'concurrency'
+  attention?: boolean
+  /** Arrival order; the first is the question every other attention surface shows. */
+  approvals?: readonly RunLiveApproval[]
+}
+
+/** M200. The same live table for a task's linked conversation. */
+export function projectSession(panelId: string, fact: RunLiveFact): RunNodeSupervision {
+  const approval = fact.approvals?.[0]
+  if (fact.attention === true) {
+    if (approval !== undefined) return {
+      panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', approval,
+      blocker: { kind: 'approval', subject: approval.toolName }, detail: `${approval.toolName} asks to use ${approval.argument}`
+    }
+    return { panelId, execution: 'running', result: 'none', word: 'needs you', tone: 'needs-you', blocker: { kind: 'keyboard', subject: panelId }, detail: 'this session needs you at its keyboard — open it to answer' }
+  }
+  if ((fact.queued ?? 0) > 0) {
+    const reason = fact.queuedReason ?? 'in-flight'
+    return { panelId, execution: 'queued', result: 'none', word: 'queued', tone: 'starting', queueReason: reason,
+      detail: reason === 'concurrency'
+        ? `queued — ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the canvas concurrency ceiling`
+        : `queued — ${fact.queued} message${fact.queued === 1 ? '' : 's'} waiting for the current turn to end` }
+  }
+  if (fact.status === 'disposed') return { panelId, execution: 'ended', result: 'stopped', word: 'stopped', tone: 'asleep', detail: 'execution stopped; the task disposition is unchanged' }
+  if (fact.status === 'exited') {
+    if (fact.exitCode === 0) return { panelId, execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result — the process exited 0; the task disposition is unchanged' }
+    return { panelId, execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution failed${fact.exitCode == null ? '' : ` — exit ${fact.exitCode}`}${fact.exitSignal === undefined ? '' : ` (${fact.exitSignal})`}; the task disposition is unchanged` }
+  }
+  if (fact.status === 'ready' && (fact.turns ?? 0) > 0) return { panelId, execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result — one agent turn completed; the task disposition is unchanged' }
+  if (fact.status === 'ready') return { panelId, execution: 'running', result: 'none', word: 'ready', tone: 'idle', detail: 'the conversation is ready; no task result has been reviewed' }
+  if (fact.status === 'starting') return { panelId, execution: 'running', result: 'none', word: 'starting', tone: 'starting', detail: 'the conversation is starting' }
+  if (fact.status === 'streaming') return { panelId, execution: 'running', result: 'none', word: 'working', tone: 'working', detail: 'execution is in progress' }
+  return { panelId, execution: 'not-run', result: 'none', word: 'not started', tone: 'none', detail: 'the conversation has not started execution' }
+}
+
+export interface RunNodeSupervision {
+  panelId?: string
+  execution: RunExecution
+  result: RunExecutionResult
+  word: string
+  tone: string
+  detail: string
+  queueReason?: RunQueueReason
+  blocker?: { kind: 'approval' | 'keyboard'; subject: string }
+  /** Present only for a live structured request, never reconstructed from history. */
+  approval?: RunLiveApproval
+}
+
+function historical(outcome: string): Pick<RunNodeSupervision, 'execution' | 'result' | 'word' | 'tone' | 'detail'> {
+  if (outcome === 'a turn') return { execution: 'ended', result: 'turn-complete', word: 'turn complete', tone: 'none', detail: 'execution result — one agent turn completed; the task disposition is unchanged' }
+  if (outcome === 'exit 0') return { execution: 'ended', result: 'passed', word: 'exit 0', tone: 'none', detail: 'execution result — the process exited 0; the task disposition is unchanged' }
+  if (outcome === 'passed' || outcome.startsWith('handed off')) return { execution: 'ended', result: 'passed', word: outcome === 'passed' ? 'passed' : 'handed off', tone: 'none', detail: `execution result — ${outcome}; the task disposition is unchanged` }
+  if (outcome.startsWith('skipped')) return { execution: 'ended', result: 'skipped', word: 'skipped', tone: 'asleep', detail: outcome }
+  if (outcome.startsWith('stopped')) return { execution: 'ended', result: 'stopped', word: 'stopped', tone: 'asleep', detail: outcome }
+  return { execution: 'ended', result: 'failed', word: 'failed', tone: 'exited', detail: `execution result — ${outcome}` }
+}
+
+/**
+ * M199. One run-node table. The immutable record says what ran and ended;
+ * the optional live map says why an OPEN entry is blocked now. Live facts
+ * never override a recorded outcome and never mutate the run.
+ */
+export function projectRun(run: PersistedRun, live: Readonly<Record<string, RunLiveFact>> = {}): Record<string, RunNodeSupervision> {
+  const out: Record<string, RunNodeSupervision> = {}
+  if (run.definition === undefined) return out
+  for (const node of run.definition.nodes) {
+    const panelId = run.mapping?.[node.key]
+    if (panelId === undefined) {
+      out[node.key] = { execution: 'not-run', result: 'none', word: 'not run', tone: 'none', detail: 'this node was not instantiated for the run' }
+      continue
+    }
+    const entry = run.entries.find((e) => e.panelId === panelId)
+    if (entry === undefined) {
+      out[node.key] = { panelId, execution: 'queued', result: 'none', word: 'queued', tone: 'starting', queueReason: 'upstream', detail: 'queued — waiting for upstream work to reach this node' }
+      continue
+    }
+    if (entry.outcome !== undefined) {
+      out[node.key] = { panelId, ...historical(entry.outcome) }
+      continue
+    }
+    if (run.endedAt !== undefined) {
+      out[node.key] = { panelId, execution: 'unknown', result: 'unknown', word: 'no outcome', tone: 'none', detail: 'the run ended without an execution outcome for this node' }
+      continue
+    }
+    const fact = live[panelId]
+    if (fact === undefined) {
+      out[node.key] = { panelId, execution: 'running', result: 'none', word: 'working', tone: 'working', detail: 'the run entry is open; this backend has no live queue or approval detail to show' }
+      continue
+    }
+    if (fact?.status === 'exited' || fact?.status === 'disposed') {
+      out[node.key] = { panelId, execution: 'unknown', result: 'unknown', word: 'no outcome', tone: 'none', detail: 'the session ended before the run recorded an execution outcome' }
+      continue
+    }
+    out[node.key] = projectSession(panelId, fact)
+  }
+  return out
+}
+
 export function classifyOutcome(outcome: string | undefined): BlockOutcome {
   if (outcome === undefined) return 'working'
   if (outcome === 'exit 0' || outcome === 'a turn' || outcome === 'passed') return 'finished'
@@ -36,6 +156,15 @@ export function classifyOutcome(outcome: string | undefined): BlockOutcome {
   if (outcome.startsWith('skipped')) return 'skipped'
   if (outcome.startsWith('stopped')) return 'stopped'
   return 'failed'
+}
+
+/** Aggregate wording for a Runs row; deliberately names execution only. */
+export function runOutcomeSummary(open: boolean, outcomes: readonly (string | undefined)[]): { word: string; tone: 'working' | 'exited' | 'asleep' | 'none' } {
+  if (open) return { word: 'working', tone: 'working' }
+  const classified = outcomes.map(classifyOutcome)
+  if (classified.includes('failed')) return { word: 'failed', tone: 'exited' }
+  if (classified.includes('stopped')) return { word: 'stopped', tone: 'asleep' }
+  return { word: 'run ended', tone: 'none' }
 }
 
 export function blockOutcomes(run: PersistedRun): Record<string, BlockOutcome> {

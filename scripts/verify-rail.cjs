@@ -2684,13 +2684,28 @@ const session = (id, over = {}) => ({
 {
   const run = (over = {}) => ({ id: 'r1', name: 'a → b · 10:00', panelIds: ['a', 'b'], edges: [{ from: 'a', to: 'b' }], startedAt: 1000, endedAt: 61000, entries: [{ panelId: 'a', startedAt: 1000, endedAt: 2000, outcome: 'exit 0' }, { panelId: 'b', startedAt: 2000, endedAt: 61000, outcome: 'exit 0' }], costUsd: 0.1234, ...over })
   const build = typeof R.buildRunRows === 'function' ? R.buildRunRows : () => []
-  const rows = build([run(), run({ id: 'r2', endedAt: undefined, costUsd: undefined }), run({ id: 'r3', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'exit 1' }] })], new Set(['a']), 100000)
-  ok('run.1 the Runs rows carry name, ONE facts line (panels · duration · cost or a dash), the outcome in the state vocabulary (idle / working / exited N) with its tone, and Run again with its reason while open or without a terminal root',
-    rows.length === 3 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'idle' && rows[0].tone === 'idle' && rows[0].facts === '2 panels · 1m 0s' /* M179: no dollars in the rail — the metrics rule; the Work tab prints the price */ && rows[0].runAgain.enabled === true &&
+  const rows = build([run(), run({ id: 'r2', endedAt: undefined, costUsd: undefined }), run({ id: 'r3', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'exit 1' }] }), run({ id: 'r4', entries: [{ panelId: 'a', startedAt: 1, endedAt: 2, outcome: 'stopped by person' }] })], new Set(['a']), 100000)
+  ok('run.1 the Runs rows carry name, ONE facts line, and report run ended / working / failed / stopped without calling an unreviewed task done; Run again keeps its named reasons',
+    rows.length === 4 && rows[0].name === 'a → b · 10:00' && rows[0].panels === 2 && rows[0].duration === '1m 0s' && rows[0].cost === '$0.12' && rows[0].outcome === 'run ended' && rows[0].tone === 'none' && rows[0].facts === '2 panels · 1m 0s' /* M179: no dollars in the rail — the metrics rule; the Work tab prints the price */ && rows[0].runAgain.enabled === true &&
       rows[1].outcome === 'working' && rows[1].cost === '—' && !/\$|—$/.test(rows[1].facts) && rows[1].runAgain.enabled === false && /still running/.test(rows[1].runAgain.reason) &&
-      rows[2].outcome === 'exited 1' && rows[2].tone === 'exited' &&
+      rows[2].outcome === 'failed' && rows[2].tone === 'exited' && rows[3].outcome === 'stopped' && rows[3].tone === 'asleep' &&
       build([run()], new Set(), 100000)[0]?.runAgain.enabled === false && /terminal/.test(build([run()], new Set(), 100000)[0]?.runAgain.reason ?? ''),
     JSON.stringify(rows))
+}
+
+// M78 — graph.1. describeAutomation names the five triggers, each distinct.
+// M200 — the two supervision surfaces consume the shared projection and
+// expose the exact live request through the standing approval door.
+{
+  const read = (file) => require('node:fs').readFileSync(join(__dirname, '..', file), 'utf8')
+  const workflow = read('src/renderer/workflow/WorkflowNode.tsx')
+  const work = read('src/renderer/work/WorkNode.tsx')
+  const canvas = read('src/renderer/canvas/Canvas.tsx')
+  ok('run.surface.1 workflow and task cards consume the shared live projection, name the blocking node/question, and answer through the same approval action Canvas gives chat and Attention',
+    /projectRun\(selectedRun, props\.liveFacts\)/.test(workflow) && /data-workflow-run-blocker/.test(workflow) && /data-workflow-approval="allow"/.test(workflow) &&
+      /data-work-execution/.test(work) && /data-work-blocker/.test(work) && /data-work-approval="allow"/.test(work) &&
+      /liveFacts=\{liveRunFacts\} onAnswer=\{paletteActions\.answerApproval\}/.test(canvas) && /execution=\{execution\} onAnswer=\{paletteActions\.answerApproval\}/.test(canvas),
+    JSON.stringify({ workflow: workflow.includes('projectRun'), work: work.includes('data-work-execution'), canvas: canvas.includes('liveRunFacts') }))
 }
 
 // M78 — graph.1. describeAutomation names the five triggers, each distinct.

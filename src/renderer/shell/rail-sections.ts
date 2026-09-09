@@ -1,7 +1,8 @@
 import type { WorkspaceRow } from '@shared/ipc-contract'
 import type { RailRow } from './rail-rows'
 import type { PersistedRun } from '@shared/runs'
-import { agentWord, panelState, type Tone } from '@renderer/panels/panel-state'
+import type { Tone } from '@renderer/panels/panel-state'
+import { runOutcomeSummary } from '@shared/run-outcome'
 
 /**
  * The rail's Workspaces and Attention sections, as plain data.
@@ -237,16 +238,12 @@ function durationText(ms: number): string {
 export function buildRunRows(runs: readonly PersistedRun[], terminalIds: ReadonlySet<string>, now: number): RailRun[] {
   return runs.map((run) => {
     const open = run.endedAt === undefined
-    const failing = run.entries.find((e) => e.outcome !== undefined && /^exit (?!0\b)/.test(e.outcome))
-    const failed = failing !== undefined
     const roots = run.panelIds.filter((id) => !run.edges.some((e) => e.to === id))
     const runAgain: RailRun['runAgain'] = open ? { enabled: false, reason: REASON_RUN_OPEN }
       : roots.some((id) => terminalIds.has(id)) ? { enabled: true } : { enabled: false, reason: REASON_RUN_NO_TERMINAL_ROOT }
     // The vocabulary, never a fourth set of words: an open run is what a busy
     // agent is; a finished one is idle; a failed entry's exit is the run's.
-    const word = open ? agentWord('busy')
-      : failed ? panelState({ kind: 'terminal', status: { kind: 'exited', code: Number((failing!.outcome as string).slice(5)) }, dormant: false }, 'exited')
-        : agentWord('idle')
+    const word = runOutcomeSummary(open, run.entries.map((e) => e.outcome))
     const duration = durationText((run.endedAt ?? now) - run.startedAt)
     const cost = run.costUsd === undefined ? '—' : `$${run.costUsd.toFixed(2)}`
     const panels = run.panelIds.length

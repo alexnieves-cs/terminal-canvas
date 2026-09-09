@@ -2296,6 +2296,51 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M199 — run.supervision.1. ONE table keeps execution, queue reason,
+//      blocker and execution result separate. Live facts overlay only an
+//      OPEN entry; an answered approval disappears with main's pending set,
+//      and no actionable request is written into the run record.
+{
+  const NAME = 'run.supervision.1 projectRun separates not-run/upstream queue/current-turn queue/concurrency queue/running/approval/terminal attention from turn-complete/exit-0/failed/skipped/stopped/sealed-unknown, uses the oldest structured request, and stores no live approval in the run'
+  if (typeof V.projectRun !== 'function') ok(NAME, false, 'projectRun does not exist in src/shared/run-outcome.ts')
+  else {
+    const definition = { templateId: 't', revision: 1, nodes: ['absent', 'upstream', 'turnq', 'capq', 'approval', 'keyboard', 'running', 'turn', 'ok', 'failed', 'skipped', 'stopped', 'unknown'].map((key, i) => ({ key, kind: 'chat', cwd: '/r', dx: i, dy: 0 })), edges: [] }
+    const mapping = Object.fromEntries(definition.nodes.filter((n) => n.key !== 'absent').map((n) => [n.key, `p-${n.key}`]))
+    const entries = definition.nodes.filter((n) => !['absent', 'upstream'].includes(n.key)).map((n) => ({ panelId: `p-${n.key}`, startedAt: 1,
+      ...({ turn: { endedAt: 2, outcome: 'a turn' }, ok: { endedAt: 2, outcome: 'exit 0' }, failed: { endedAt: 2, outcome: 'exit 2' }, skipped: { endedAt: 2, outcome: 'skipped — condition did not fire' }, stopped: { endedAt: 2, outcome: 'stopped by person' }, unknown: {} }[n.key] ?? {}) }))
+    const run = { id: 'r', name: 'run', panelIds: Object.values(mapping), edges: [], startedAt: 1, definition, mapping, entries }
+    const live = {
+      'p-turnq': { status: 'streaming', queued: 1, queuedReason: 'in-flight' },
+      'p-capq': { status: 'not-started', queued: 2, queuedReason: 'concurrency' },
+      'p-approval': { status: 'streaming', attention: true, approvals: [{ requestId: 'old', toolName: 'Bash', argument: 'npm test' }, { requestId: 'new', toolName: 'Edit', argument: 'a.ts' }] },
+      'p-keyboard': { status: 'streaming', attention: true },
+      'p-running': { status: 'streaming', queued: 0 }
+    }
+    const p = V.projectRun(run, live)
+    const sealed = V.projectRun({ ...run, endedAt: 9 }, {})
+    const taskBefore = { id: 'i1', state: 'review' }
+    const taskApproval = V.projectSession('p-task', { status: 'streaming', attention: true, approvals: [{ requestId: 'task-q', toolName: 'Bash', argument: 'npm run verify' }] })
+    const taskAfter = V.projectSession('p-task', { status: 'streaming', attention: false, approvals: [] })
+    const taskTurn = V.projectSession('p-task', { status: 'ready', turns: 1 })
+    const compact = Object.fromEntries(Object.entries(p).map(([k, v]) => [k, { execution: v.execution, result: v.result, word: v.word, queueReason: v.queueReason, blocker: v.blocker?.kind, request: v.approval?.requestId }]))
+    ok(NAME,
+      p.absent.execution === 'not-run' && p.upstream.execution === 'queued' && p.upstream.queueReason === 'upstream' &&
+      p.turnq.execution === 'queued' && p.turnq.queueReason === 'in-flight' && /current turn/.test(p.turnq.detail) &&
+      p.capq.execution === 'queued' && p.capq.queueReason === 'concurrency' && /concurrency ceiling/.test(p.capq.detail) &&
+      p.approval.word === 'needs you' && p.approval.blocker?.kind === 'approval' && p.approval.approval?.requestId === 'old' && /Bash/.test(p.approval.detail) && /npm test/.test(p.approval.detail) &&
+      p.keyboard.word === 'needs you' && p.keyboard.blocker?.kind === 'keyboard' && p.keyboard.approval === undefined && /keyboard/.test(p.keyboard.detail) &&
+      p.running.execution === 'running' && p.turn.result === 'turn-complete' && p.turn.word === 'turn complete' &&
+      p.ok.result === 'passed' && p.ok.word === 'exit 0' && p.failed.result === 'failed' && p.skipped.result === 'skipped' && p.stopped.result === 'stopped' &&
+      p.unknown.execution === 'running' && p.unknown.word === 'working' && /backend has no live/.test(p.unknown.detail) &&
+      sealed.unknown.execution === 'unknown' && sealed.unknown.result === 'unknown' && sealed.unknown.word === 'no outcome' &&
+      taskApproval.word === 'needs you' && taskApproval.approval?.requestId === 'task-q' && /npm run verify/.test(taskApproval.detail) &&
+      taskAfter.word === 'working' && taskAfter.approval === undefined && taskTurn.word === 'turn complete' && taskTurn.tone === 'none' && taskBefore.state === 'review' &&
+      p.turn.tone === 'none' && p.ok.tone === 'none' &&
+      JSON.stringify(run).includes('requestId') === false,
+      JSON.stringify({ compact, sealedUnknown: sealed.unknown, taskApproval, taskAfter, taskTurn, taskBefore }))
+  }
+}
+
 // M187 — note.kind.1. THE SIXTEENTH KIND, one record and three FORMS.
 //      `makeNotePanel` centres on the point and a FRAME is minted larger,
 //      because a region that encloses nothing is a region a person has to

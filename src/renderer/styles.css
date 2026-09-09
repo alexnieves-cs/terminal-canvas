@@ -4194,6 +4194,9 @@ body {
 .work-node__facts dd { display: inline; margin: 0; color: var(--fg-2); }
 .work-node__facts a { color: var(--iris); text-decoration: underline; }
 .work-node__note { margin: 0; }
+.work-node__blocker, .workflow-node__blocker { padding: var(--sp-2); border: 1px solid var(--tone, var(--line)); border-radius: var(--r-sm); }
+.work-node__blocker p, .workflow-node__blocker p { margin: 0; }
+.work-node__blocker-verbs, .workflow-node__blocker-verbs { display: flex; gap: var(--sp-2); margin-top: var(--sp-2); }
 .work-node__verbs { display: flex; align-items: center; gap: var(--sp-2); position: relative; }
 .work-node__menu { position: absolute; top: 100%; left: 0; z-index: 30; margin: var(--sp-1) 0 0; padding: var(--sp-2); list-style: none; min-width: 160px; display: flex; flex-direction: column; gap: var(--sp-1); background: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-sm); }
 .work-node__menu-empty { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }

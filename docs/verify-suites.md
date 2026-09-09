@@ -491,3 +491,16 @@ the cause. The suite handles a non-zero child exit; it cannot handle a child tha
 **Fixture directories must be `realpathSync`'d when a live session's cwd is part of the
 evidence** (macOS's `/var` is a symlink to `/private/var`; a live session answers the resolved form
 and a file panel answers whichever form it was opened with).
+
+## The v10 run, D05 close and D06 (M198–M200)
+
+`verify:panels:product start.recovery.1–.3` owns concurrent Start-work clicks and the two partial
+failure seams. These are real Git repositories because `board:lane` and `ensureForPanel` are the
+behavior under test; cleanup must remove the registered worktrees before deleting the roots or a
+later Places check sees a plausible orphan.
+
+`verify:viewport run.supervision.1` owns the pure run/task projection table, including oldest
+approval, both queue reasons, stopped/failed/unknown, neutral turn/exit results, and the absence of
+live request ids from history. `verify:rail run.1` owns aggregate run wording; `run.surface.1` pins
+WorkflowNode and WorkNode to the shared projection and existing approval action. A completed
+execution must never be asserted as a completed work item.

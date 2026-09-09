@@ -6,6 +6,7 @@ import { panelState } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
+import type { RunNodeSupervision } from '@shared/run-outcome'
 
 /**
  * M116. THE WORK CARD — the board's row in the world, the twelfth kind,
@@ -40,6 +41,9 @@ export interface WorkNodeProps {
   teammates: readonly PersistedTeammate[]
   /** The lane chat's rail label, when the item has one and it is still on this canvas. */
   laneLabel: string | undefined
+  /** Live execution is separate from the board item's human disposition. */
+  execution?: RunNodeSupervision
+  onAnswer: (panelId: string, requestId: string, allow: boolean) => void
   selected: boolean
   onSelect: (id: string, additive?: boolean) => void
   onFocus: (id: string) => void
@@ -141,7 +145,19 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                 <div><dt>pr</dt><dd><a href={item.pr.url} data-work-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
                   onClick={(e) => { e.preventDefault(); openLink((item.pr as { url: string }).url) }}>#{item.pr.number}</a></dd></div>
               )}
+              {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
             </dl>
+            {props.execution?.blocker !== undefined && (
+              <div className="work-node__blocker" data-work-blocker={props.execution.blocker.kind} role="status">
+                <p className="pf__note">{props.execution.detail}</p>
+                {props.execution.approval !== undefined && props.execution.panelId !== undefined && !readOnly && (
+                  <div className="work-node__blocker-verbs">
+                    <button type="button" className="pf__verb pf__verb--word" data-work-approval="allow" onMouseDown={press(() => props.onAnswer(props.execution?.panelId as string, props.execution?.approval?.requestId as string, true))}>Allow</button>
+                    <button type="button" className="pf__verb pf__verb--word" data-work-approval="deny" onMouseDown={press(() => props.onAnswer(props.execution?.panelId as string, props.execution?.approval?.requestId as string, false))}>Deny</button>
+                  </div>
+                )}
+              </div>
+            )}
             {item.note !== undefined && <p className="pf__note work-node__note" data-work-note>{item.note}</p>}
             <div className="work-node__verbs" data-work-verbs>
               {/* M197 (D05). The menu's teammate rows are the flow's AGENT

@@ -22,8 +22,9 @@ milestone did run them; it still did not drive the app by hand, and says so wher
 | D02 | M194 | ✅ done | [m194-d02-selected-chat-context.md](m194-d02-selected-chat-context.md) |
 | D03 | M195 | ✅ done | [m195-d03-preview-ownership.md](m195-d03-preview-ownership.md) |
 | D04 | M196 | ✅ done | [m196-d04-scope-policy.md](m196-d04-scope-policy.md) |
-| D05 | M197–M198 | ◐ M197 done, M198 open | [m197-d05-start-work.md](m197-d05-start-work.md) |
-| D06–D20 | M199–M224 | not started | — |
+| D05 | M197–M198 | ✅ done | [M197](m197-d05-start-work.md), [M198](m198-d05-start-recovery.md) |
+| D06 | M199–M200 | ✅ done | [m199-m200-d06-supervision.md](m199-m200-d06-supervision.md) |
+| D07–D20 | M201–M224 | not started | — |
 
 The full map, its splits and its reservations are below. A phase's evidence, critic disposition and
 owed hand checks go in that phase's own build log, and its row here is updated when it lands.
@@ -42,8 +43,8 @@ re-recorded before the work starts, never after.
 | D02 | **M194** | — | ✅ done |
 | D03 | **M195** | — | ✅ done |
 | D04 | **M196** | — | ✅ done |
-| D05 | **M197–M198** | **re-recorded at M197** — M197 the FLOW (the one entry door, the three inputs, and the executor made to answer); M198 idempotency and partial-failure recovery. *Was:* M197 the one entry door and the task record; M198 the assembly and its recovery. The seam moved because the assembly (`board:lane` → `agent:create` → the first send) is M114's and needed no rebuilding: what was missing was the *asking*, and what was broken was the *answering*. The task record needed no change at all — `work-items.ts` is untouched. **This was re-recorded during the milestone, not before it**, which is a departure from this table's own rule; it is written down rather than tidied away | ◐ M197 done, M198 open |
-| D06 | **M199–M200** | M199 the run's own truth (a pending question as a run entry; a turn is not a task); M200 the supervision surface that reads it | not started |
+| D05 | **M197–M198** | **re-recorded at M197** — M197 the FLOW (the one entry door, the three inputs, and the executor made to answer); M198 idempotency and partial-failure recovery. *Was:* M197 the one entry door and the task record; M198 the assembly and its recovery. The seam moved because the assembly (`board:lane` → `agent:create` → the first send) is M114's and needed no rebuilding: what was missing was the *asking*, and what was broken was the *answering*. The task record needed no change at all — `work-items.ts` is untouched. **This was re-recorded during the milestone, not before it**, which is a departure from this table's own rule; it is written down rather than tidied away | ✅ done |
+| D06 | **M199–M200** | M199 the run's own truth (a pending question as a run entry; a turn is not a task); M200 the supervision surface that reads it | ✅ done |
 | D07 | **M201–M202** | M201 the review handoff record; M202 local review readiness and the PR/refusal path | not started |
 | D08 | **M203–M204** | M203 `Show this task`; M204 `Show related` and the far view's work groups | not started |
 | D09 | **M205** | — | not started |
@@ -136,6 +137,33 @@ by that conversation's real inventory. Nothing else in the frame moved.
 generation, main's two other validation arms, and terminal/review/toolbox Files/Tools compatibility
 at the DOM level are each unchecked; they are listed with their reasons in §8 of the build log.
 Every hand check the v9 run left owed is still owed.
+
+---
+
+## D06 = M199–M200 — honest run and task supervision
+
+**✅ done.** The full record is
+[m199-m200-d06-supervision.md](m199-m200-d06-supervision.md). M199 introduced the pure state table;
+M200 projected the existing live stores onto workflow and task surfaces. No IPC or persisted schema
+changed. Completed turns, successful exits and ended runs are neutral execution results; only the
+work item's user-set state says `done`. The exact live approval is temporary and all answer controls
+reuse main's standing authority.
+
+**red** `verify:viewport run.supervision.1` with `projectRun does not exist` · **red** `verify:rail
+run.1` on the former `idle`/`exited N` aggregate words · **green** `verify:viewport` 142/142 ·
+**green** `verify:rail` 204/204 · **green** `verify:panels:product` 94/94 · **green** `npm run
+verify` exit 0 with every suite tally · **green** `verify:visual` 60/60, no golden rewritten — the
+critic expected no resting scene to move because the new detail is conditional · **green**
+`verify:packaged` 12/12.
+
+---
+
+## D05 = M198 — repeated starts and partial failures recover in place
+
+**✅ done.** The full record is [m198-d05-start-recovery.md](m198-d05-start-recovery.md).
+`start.recovery.1–.3` were each watched red against duplicate lanes/chats or missing recovery
+associations, then green through the real Electron and Git path. The retry still revalidates Places
+authority in main; the existing D05 `start.answer.1` fences that boundary.
 
 ---
 
