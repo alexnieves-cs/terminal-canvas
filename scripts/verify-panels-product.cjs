@@ -1474,6 +1474,80 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     }
 
     /* ---------------------------------------------------------------- */
+    /* M198. Start work recovery — one item, one lane, one conversation  */
+    /* ---------------------------------------------------------------- */
+    {
+      const IDS = [
+        'start.recovery.1 simultaneous starts join one attempt, and starting the completed item again returns the same conversation without a second lane, chat or first send',
+        'start.recovery.2 a worktree-created/chat-refused attempt records its reserved conversation and lane; retry reuses both and creates the missing conversation',
+        'start.recovery.3 a refused first send keeps one visible conversation and lane; retry sends through that conversation and creates no duplicate'
+      ]
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels recovery repo '))
+      const originalCreate = registeredHandlers.get(IPC.AGENT_CREATE)
+      const originalSend = registeredHandlers.get(IPC.AGENT_SEND)
+      let refuseCreate = false, refuseSend = false, createCalls = 0, sendCalls = 0
+      const restore = () => {
+        ipcMain.removeHandler(IPC.AGENT_CREATE); ipcMain.handle(IPC.AGENT_CREATE, originalCreate)
+        ipcMain.removeHandler(IPC.AGENT_SEND); ipcMain.handle(IPC.AGENT_SEND, originalSend)
+      }
+      try {
+        const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+        g('init', '-q', '.'); g('config', 'user.email', 'v@e.com'); g('config', 'user.name', 'v')
+        writeFileSync(join(repo, 'a.txt'), 'a\n'); g('add', '-A'); g('commit', '-qm', 'init')
+        layoutStore.saveTeammate({ id: 'tm-recovery', name: 'recovery', brief: '', places: [repo], services: [], skills: [], memory: 'recovery', chats: [], messaging: false, scheduling: false })
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        const ready = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await ready; await settle()
+        ipcMain.removeHandler(IPC.AGENT_CREATE)
+        ipcMain.handle(IPC.AGENT_CREATE, (event, request) => { createCalls += 1; return refuseCreate ? { kind: 'refused', reason: 'fixture refused conversation' } : originalCreate(event, request) })
+        ipcMain.removeHandler(IPC.AGENT_SEND)
+        ipcMain.handle(IPC.AGENT_SEND, (event, request) => { sendCalls += 1; if (refuseSend) { refuseSend = false; return 'refused-budget' } return originalSend(event, request) })
+        const add = (title) => wc.executeJavaScript(`window.__m113.add({ source: 'typed', title: ${JSON.stringify(title)} })`)
+        const dispatch = (id) => wc.executeJavaScript(`window.__m113.dispatch(${JSON.stringify(id)}, 'tm-recovery', ${JSON.stringify(repo)})`)
+        const item = (id) => wc.executeJavaScript(`window.__m113.items().find((i) => i.id === ${JSON.stringify(id)})`)
+        const counts = () => ({ lanes: layoutStore.worktrees().filter((w) => realpathSync(w.root) === realpathSync(repo)).length, createCalls, sendCalls })
+
+        const firstId = await add('simultaneous recovery')
+        const beforeFirst = counts()
+        const simultaneous = await wc.executeJavaScript(`Promise.all([window.__m113.dispatch(${JSON.stringify(firstId)}, 'tm-recovery', ${JSON.stringify(repo)}), window.__m113.dispatch(${JSON.stringify(firstId)}, 'tm-recovery', ${JSON.stringify(repo)})])`)
+        const firstRecord = await item(firstId)
+        const afterPair = counts()
+        const repeated = await dispatch(firstId)
+        const afterRepeated = counts()
+        ok(IDS[0], simultaneous[0]?.kind === 'started' && simultaneous[1]?.kind === 'started' && simultaneous[0].panelId === simultaneous[1].panelId && repeated?.kind === 'started' && repeated.panelId === firstRecord?.panelId && afterPair.lanes - beforeFirst.lanes === 1 && afterPair.createCalls - beforeFirst.createCalls === 2 && afterPair.sendCalls - beforeFirst.sendCalls === 1 && JSON.stringify(afterRepeated) === JSON.stringify(afterPair), JSON.stringify({ simultaneous, firstRecord, beforeFirst, afterPair, repeated, afterRepeated }))
+
+        const createId = await add('create recovery')
+        refuseCreate = true
+        const createRefused = await dispatch(createId)
+        refuseCreate = false
+        const afterCreateRefusal = await item(createId)
+        const laneAfterCreateRefusal = afterCreateRefusal?.worktreeId
+        const createRetried = await dispatch(createId)
+        const afterCreateRetry = await item(createId)
+        ok(IDS[1], createRefused?.kind === 'refused' && /fixture refused/.test(createRefused.reason) && typeof afterCreateRefusal?.panelId === 'string' && typeof laneAfterCreateRefusal === 'string' && createRetried?.kind === 'started' && createRetried.panelId === afterCreateRefusal.panelId && afterCreateRetry?.worktreeId === laneAfterCreateRefusal && layoutStore.worktrees().filter((w) => w.panelId === afterCreateRefusal.panelId).length === 1, JSON.stringify({ createRefused, afterCreateRefusal, createRetried, afterCreateRetry }))
+
+        const sendId = await add('send recovery')
+        refuseSend = true
+        const sendRefused = await dispatch(sendId)
+        const afterSendRefusal = await item(sendId)
+        const beforeSendRetry = counts()
+        const sendRetried = await dispatch(sendId)
+        const afterSendRetry = await item(sendId)
+        const afterSendCounts = counts()
+        ok(IDS[2], sendRefused?.kind === 'refused' && typeof afterSendRefusal?.panelId === 'string' && typeof afterSendRefusal?.worktreeId === 'string' && /first message was refused/.test(afterSendRefusal?.note ?? '') && sendRetried?.kind === 'started' && sendRetried.panelId === afterSendRefusal.panelId && afterSendRetry?.worktreeId === afterSendRefusal.worktreeId && afterSendCounts.lanes === beforeSendRetry.lanes && afterSendCounts.createCalls === beforeSendRetry.createCalls && afterSendCounts.sendCalls === beforeSendRetry.sendCalls + 1, JSON.stringify({ sendRefused, afterSendRefusal, sendRetried, afterSendRetry, beforeSendRetry, afterSendCounts }))
+      } catch (e) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e))
+      } finally {
+        restore()
+        for (const lane of layoutStore.worktrees().filter((w) => realpathSync(w.root) === realpathSync(repo))) { try { await worktreeManager.remove(lane.id) } catch {} }
+        layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+        flushLayoutStore()
+        try { layoutStore.deleteTeammate('tm-recovery') } catch {}
+        try { rmSync(repo, { recursive: true, force: true }) } catch {}
+      }
+    }
+
+    /* ---------------------------------------------------------------- */
     /* M90. The second headless backend: the sheet's row and the panel   */
     /* ---------------------------------------------------------------- */
     {

@@ -105,7 +105,7 @@ import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
 import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY, REASON_NOT_STARTED } from '@renderer/palette/commands'
-import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart } from '@renderer/chat/chat-store'
+import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, useChatsVersion } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
 import type { AgentOptions } from '@shared/cost'
@@ -121,6 +121,7 @@ import { MemoryNode } from '@renderer/memory/MemoryNode'
 import { GithubNode } from '@renderer/github/GithubNode'
 import { WorkNode } from '@renderer/work/WorkNode'
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
+import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
 import { setDisarmed, clearDisarmed } from '@renderer/watcher/watcher-store'
 import { setWatcherFiredHandler } from '@renderer/watcher/useWatchers'
@@ -3148,6 +3149,22 @@ export function Canvas({
   // M76. The pending requests with the panel's label, for the palette's
   // Allow/Deny rows. The label is the same one the rail row shows.
   const pendingApprovals = useApprovals()
+  const chatsVersion = useChatsVersion()
+  const liveRunFacts = useMemo<Readonly<Record<string, RunLiveFact>>>(() => {
+    const out: Record<string, RunLiveFact> = {}
+    for (const panel of panels) {
+      const id = panel.rect.id
+      const approvals = pendingApprovals.filter((a) => a.id === id).map(({ requestId, toolName, argument }) => ({ requestId, toolName, argument }))
+      if (isChatPanel(panel)) {
+        const snapshot = getChat(id).snapshot
+        out[id] = {
+          ...(snapshot === null ? {} : { status: snapshot.status, turns: snapshot.turns, exitCode: snapshot.exitCode, exitSignal: snapshot.exitSignal, queued: snapshot.queued, queuedReason: snapshot.queuedReason }),
+          attention: waitingIds.includes(id), approvals
+        }
+      } else if (waitingIds.includes(id)) out[id] = { attention: true }
+    }
+    return out
+  }, [panels, pendingApprovals, waitingIds, chatsVersion])
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
@@ -3495,7 +3512,8 @@ export function Canvas({
     w.__m113 = {
       add: (item: Omit<PersistedWorkItem, 'id' | 'createdAt' | 'updatedAt' | 'state'> & { state?: PersistedWorkItem['state'] }): string | null =>
         paletteActionsRef.current?.addWorkItem({ ...item, state: item.state ?? (WORK_ITEM_STATES[0] as PersistedWorkItem['state']) }) ?? null,
-      dispatch: (itemId: string, teammateId: string, root?: string): void => { void paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root) },
+      dispatch: (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> =>
+        paletteActionsRef.current?.dispatchWorkItem(itemId, teammateId, root) ?? Promise.resolve({ kind: 'refused', reason: 'not ready' }),
       // M197. The START door, through the SAME action every real door takes —
       // the hook proves the real path rather than a parallel one, the rule
       // __m13Open established.
@@ -4283,40 +4301,70 @@ export function Canvas({
    * state stays `todo` here: `working` is the runtime's word (the turn-start
    * effect above), never the click's.
    */
-  const dispatchWorkItem = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
+  const dispatchAttemptsRef = useRef<Map<string, Promise<StartWorkOutcome>>>(new Map())
+  const dispatchWorkItemAttempt = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
-    const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }) =>
-      setWorkItems((current) => current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i)))
-    const chatId = `c${nextIdRef.current++}`
+    const patch = (fields: Partial<PersistedWorkItem> & { anchor?: PersistedWorkItem['anchor']; note?: string }): PersistedWorkItem | undefined => {
+      // Recovery reads the association again before React is obliged to
+      // render. Keep the mirror current at the write, the same rule M197's
+      // addWorkItem learned when a typed item was minted and started in one
+      // tick.
+      const next = workItemsRef.current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...fields, updatedAt: Date.now() }) : i))
+      workItemsRef.current = next
+      setWorkItems(next)
+      return next.find((i) => i.id === itemId)
+    }
+    const chatId = item.panelId ?? `c${nextIdRef.current++}`
+    // A reserved id can outlive a refused create without joining the panel
+    // roster. Re-seed from it before any other mint can reuse the number.
+    nextIdRef.current = seedAfter([chatId], nextIdRef.current)
+    const standingPanel = panelsRef.current.find((p) => p.rect.id === chatId)
+    if (standingPanel !== undefined && !isChatPanel(standingPanel)) {
+      const reason = `${chatId} now belongs to a ${standingPanel.kind} panel — choose a new task or close the conflicting panel`
+      patch({ note: reason })
+      return { kind: 'refused', reason }
+    }
+    // A completed dispatch is idempotent. Only the named refused-send stage
+    // retries a message through an existing conversation.
+    const retryingSend = item.note?.startsWith('the lane and the conversation are ready, but the first message was refused — ') === true ||
+      item.note === 'the lane and the conversation are ready, but the first message has not been sent yet'
     const repo = item.key === undefined ? null : repoOfKey(item.key)
     const lane = await window.canvas.board.lane({ itemId, chatPanelId: chatId, teammateId, ...(repo === null ? {} : { repo }), ...(root === undefined ? {} : { root }) })
     if (lane.kind === 'refused') { patch({ note: lane.reason }); return { kind: 'refused', reason: lane.reason } }
-    const sessionId = crypto.randomUUID()
-    const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
-    if (created.kind === 'refused') { patch({ note: created.reason }); return { kind: 'refused', reason: created.reason } }
-    const GAP = 48
-    // The card and the offset are computed HERE, from the ref, not inside the
-    // updater: React runs the updater after this function's next line, and
-    // the first cut assigned the anchor inside it — the record was patched
-    // with no anchor every time, and the check said so.
-    const before = panelsRef.current
-    const card = before.find((p) => workCardItemId(p) === itemId)
-    const centre = card === undefined
-      ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
-      : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
-    const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true }), title: item.key ?? item.title }
-    const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
-    setPanels((current) => {
-      let next: Panel[] = [...current, { ...chatPanel, z: nextZ(current) }]
+    // Revalidate the requested teammate/root through main before calling a
+    // standing dispatch complete. A different teammate may not inherit this
+    // lane merely because the conversation already exists.
+    if (standingPanel !== undefined && !retryingSend) return { kind: 'started', itemId, panelId: chatId }
+    // The lane association lands BEFORE agent:create. A refusal or a relaunch
+    // can therefore resume it by the same panel id; `ensureForPanel` sees the
+    // same id/root pair and returns the standing worktree.
+    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: 'the lane is ready, but the conversation has not been created yet', state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+    let panel = standingPanel
+    if (panel === undefined) {
+      const sessionId = crypto.randomUUID()
+      const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
+      if (created.kind === 'refused') { patch({ note: `the lane is ready, but the conversation was refused — ${created.reason}` }); return { kind: 'refused', reason: created.reason } }
+      const GAP = 48
+      // The card and the offset are computed HERE, from the ref, not inside
+      // the updater: React runs an updater later, while the recovery record
+      // must already name the exact panel it will anchor to.
+      const before = panelsRef.current
+      const card = before.find((p) => workCardItemId(p) === itemId)
+      const centre = card === undefined
+        ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
+        : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
+      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true }), title: item.key ?? item.title }
+      const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
+      let next: Panel[] = [...before, chatPanel]
       if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
-      commitHistory(next)
-      return next
-    })
-    // A re-dispatch of a done or review item starts over: todo now, working when the lane's first turn says so.
-    patch({ teammateId, panelId: chatId, worktreeId: lane.worktreeId, note: undefined, anchor, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
-    selectOnly(chatId)
+      panelsRef.current = next
+      setPanels(() => { commitHistory(next); return next })
+      panel = chatPanel
+      patch({ anchor, note: 'the lane and the conversation are ready, but the first message has not been sent yet' })
+      selectOnly(chatId)
+    }
     const header = ['Dispatched work item', item.key ?? '(typed)', item.title, item.url ?? ''].filter((l) => l !== '').join('\n')
     const body = item.description === undefined || item.description === '' ? '' : `\n\n${item.description}`
     // M197 (D05). The first send's answer is READ. `send` has a `{ refused }`
@@ -4333,8 +4381,19 @@ export function Canvas({
       patch({ note: `the lane and the conversation are ready, but the first message was refused — ${notSent}` })
       return { kind: 'refused', reason: notSent }
     }
+    patch({ note: undefined })
     return { kind: 'started', itemId, panelId: chatId }
   }, [commitHistory, selectOnly])
+  const dispatchWorkItem = useCallback((itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
+    const standing = dispatchAttemptsRef.current.get(itemId)
+    if (standing !== undefined) return standing
+    const attempt = dispatchWorkItemAttempt(itemId, teammateId, root)
+    dispatchAttemptsRef.current.set(itemId, attempt)
+    void attempt.finally(() => {
+      if (dispatchAttemptsRef.current.get(itemId) === attempt) dispatchAttemptsRef.current.delete(itemId)
+    })
+    return attempt
+  }, [dispatchWorkItemAttempt])
   boardVerbsRef.current.dispatch = (itemId, teammateId, root) => dispatchWorkItem(itemId, teammateId, root)
   /**
    * M115. THE RETURN PATH. `openPr` refuses by name through `prRefusal` (the
@@ -6587,7 +6646,8 @@ export function Canvas({
             // render disabled by name.
             if (isWorkPanel(panel)) {
               const item = workItems.find((i) => i.id === panel.work.itemId)
-              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label}
+              const execution = item?.panelId === undefined || liveRunFacts[item.panelId] === undefined ? undefined : projectSession(item.panelId, liveRunFacts[item.panelId])
+              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
@@ -6625,7 +6685,7 @@ export function Canvas({
             // existed. Delete refuses a built-in by name.
             if (isWorkflowPanel(panel)) {
               const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
-              return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs}
+              return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs} liveFacts={liveRunFacts} onAnswer={paletteActions.answerApproval}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
                 onSave={saveWorkflowDraft} onSaveCopy={saveWorkflowCopy} onReload={reloadWorkflowDraft} onStopRun={stopWorkflowRun}
