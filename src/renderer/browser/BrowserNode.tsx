@@ -5,8 +5,9 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { shellControl } from '@renderer/shell/shell-control'
 import { browserHost, normaliseTypedUrl } from '@shared/browser-panel'
 import { clearBrowser, registerBrowser } from './browser-store'
-import { DEVICE_WIDTHS, deviceWidth, type Discovery as PreviewDiscovery, type DeviceWidthId } from '@shared/preview'
+import { DEVICE_WIDTHS, deviceWidth, previewSourceLine, type Discovery as PreviewDiscovery, type DeviceWidthId } from '@shared/preview'
 import { ChevronLeft, ChevronRight, RotateCw } from '@renderer/icons'
+import { displayPath } from '@shared/display-path'
 
 /**
  * M103. THE BROWSER PANE — the eleventh kind: a live page in its own guest
@@ -59,6 +60,19 @@ export interface BrowserNodeProps {
   onSetDevice: (id: string, device: DeviceWidthId) => void
   onCapture: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   onStartDev: (script: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /**
+   * M195 (D03). Bind this pane to the work it previews — the selected panel's
+   * own folder. One control for both meanings (bind, and change a binding),
+   * because they are one act: a pane has one source or none.
+   */
+  onBindSource: (paneId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /**
+   * M195. Why binding is not available, when it is not — the subject rule is
+   * the CANVAS's to answer, so the reason arrives as a prop and the control is
+   * present-and-disabled with it rather than answering a refusal after a press
+   * (this repo's rule for an administrative affordance).
+   */
+  bindReason?: string
 }
 
 /** The webview tag's surface this node touches, structurally — no electron types in the renderer. */
@@ -129,6 +143,9 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       registerBrowser(id, {
         webContentsId: wc,
         reload: () => { try { el.reload() } catch { /* gone */ } },
+        // M195. The guest's own address, for the reload rule that decides
+        // whether a file change belongs to this pane (`usePreviewReload.ts`).
+        liveUrl: () => { try { const u = el.getURL(); return u === '' ? null : u } catch { return null } },
         navigate: (url) => { try { void el.loadURL(url).catch(() => { /* did-fail-load names it */ }) } catch { /* gone */ } }
       })
     }
@@ -159,30 +176,14 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
     }
   }, [id])
 
-  // M185. A file change reloads the page it is a preview OF, coalesced: an
-  // editor's save fires several `file:changed` events in a few milliseconds
-  // (write, rename, chmod) and a reload per event is a flashing pane and
-  // three page loads. The GUEST is reloaded through the element it already
-  // has — never rebuilt — so the pane's identity, its history and its
-  // webContents id all survive, which is what `browser:read` and
-  // `preview:capture` resolve against.
-  useEffect(() => {
-    let timer = 0
-    const off = window.canvas.file.onChanged(() => {
-      // M186 (M185's critic, finding 7). ONLY a pane showing a LOOPBACK page
-      // is a preview of this machine's work. Without this every browser pane
-      // reloaded on any watched file's change: a person filling a form or
-      // scrolled deep into remote documentation lost it because an agent
-      // wrote an unrelated note.
-      let host: string
-      try { host = new URL(guestRef.current?.getURL() ?? '').hostname } catch { return }
-      if (host !== '127.0.0.1' && host !== 'localhost' && host !== '[::1]' && host !== '::1') return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => { try { guestRef.current?.reload() } catch { /* gone */ } }, 300)
-    })
-    return () => { window.clearTimeout(timer); off() }
-  }, [])
-
+  // M195 (D03). THE RELOAD EFFECT IS NOT HERE ANY MORE, and it must not come
+  // back. It lived on this node from M185 to M192 and subscribed per pane with
+  // a callback that took no parameter, so every loopback pane reloaded on every
+  // open file panel's change — two projects on one canvas reloaded each other.
+  // Deciding which pane a change belongs to needs the panel array (the event
+  // names a file PANEL, not a path), which a node does not have:
+  // `usePreviewReload.ts` owns it now, one subscription for the canvas, and it
+  // reaches this guest through the store's `reload` above.
   const submitAddress = (): void => {
     const normalised = normaliseTypedUrl(draft)
     if (normalised.kind === 'refused') { setFailure(normalised.reason); return }
@@ -232,7 +233,22 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       onBeginDrag={props.onBeginDrag}
       onBeginLink={props.onBeginLink}
     >
-      <div className="pf__body browser-node__body" onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}>
+      {/* M195 (D03). A CONTROL'S PRESS MUST NOT MOVE FOCUS TO THIS PANE, and
+          `event.defaultPrevented` is how that is known: `shellControl`'s
+          mousedown calls preventDefault (its whole mechanism — "This also
+          protects `focusedId`"), and React hands the SAME synthetic event up
+          here, so a press from any shell control is exactly the set of events
+          this must not focus on.
+          Without this, every verb on this pane that reads the SUBJECT panel —
+          `Find the project`, `Start dev`, a candidate in the list, and M195's
+          own `Bind source` — focused the pane on mousedown and then, one flush
+          later, asked which panel the project runs in and was answered "this
+          browser pane": neither a terminal nor a chat, so `previewSubject`
+          skipped it and the verb refused with `select the terminal your
+          project runs in`. Dead controls, present and enabled, since M185.
+          `verify:panels:product preview.bind.2` presses with REAL input in two
+          tasks, which is the only way a check can see it. */}
+      <div className="pf__body browser-node__body" onMouseDown={(e) => { e.stopPropagation(); if (e.defaultPrevented) return; props.onFocus(id) }}>
         <div className="browser-node__bar">
           {/* M164 (finding 19): three icon controls, each NAMED (aria-label and
               title); every one always here, disabled with its reason rather than
@@ -281,6 +297,26 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
           <button type="button" className="pf__verb pf__verb--word" data-preview-discover disabled={readOnly || busy}
             title="Ask the selected panel what project it is running and whether anything is listening"
             {...shellControl(() => { setBusy(true); void props.onDiscover().then((r) => { setFound(r); setBusy(false) }) })}>{busy ? 'looking…' : 'Find the project'}</button>
+          {/* M195 (D03). WHAT THIS PANE IS A PREVIEW OF. Contextual density: the
+              folder's own name here, the full provenance in the inspector.
+              A pane bound to nothing shows NO readout — the state is carried by
+              the control beside it, which reads `Bind source` rather than
+              `Change source`. A rendered `not bound` was the first cut and it
+              is a zero-value statement in a row that is always visible, which
+              D01's density contract calls a rest-rule violation by name; the
+              sentence that explains it lives on the control's title and in the
+              inspector, which are the layers for it. */}
+          <span className="browser-node__source" data-preview-source={panel.preview === undefined ? 'none' : panel.preview.root}
+            title={panel.preview === undefined ? previewSourceLine(undefined, undefined) : `a change under ${panel.preview.root} reloads this pane, and a change anywhere else does not`}>
+            {panel.preview === undefined ? '' : `source · ${displayPath(panel.preview.root, panel.preview.root).short}`}
+          </span>
+          <button type="button" className="pf__verb pf__verb--word" data-preview-bind disabled={readOnly || props.bindReason !== undefined}
+            title={props.bindReason !== undefined
+              ? props.bindReason
+              : panel.preview === undefined
+                ? 'The selected panel\'s folder becomes the work this preview reloads for'
+                : `Point this preview at a different folder — it reloads for ${panel.preview.root} now`}
+            {...shellControl(() => { const r = props.onBindSource(id); say(r.kind === 'refused' ? r.reason : (r.note ?? 'bound')) })}>{panel.preview === undefined ? 'Bind source' : 'Change source'}</button>
         </div>
         {said !== null && <p className="pf__note browser-node__said" data-preview-said role="status">{said}</p>}
         {found !== null && (

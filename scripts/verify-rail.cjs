@@ -3307,6 +3307,52 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify(future))
 }
 
+// M195 (D03) — preview.source.1. THE PREVIEW'S PROVENANCE, at the inspector's
+//      own density layer. The pane says which FOLDER at the contextual layer;
+//      the inspector is where the whole of it lives, and it is FOUR states
+//      rather than two. A binding whose source panel is still open names it; a
+//      binding whose source panel has been CLOSED keeps working and says the
+//      panel is gone, which is the difference between a preview a person
+//      trusts and one they think is broken; a binding with NO source panel (a
+//      lineup's preview seat is born that way — a folder and no panel to name)
+//      still gets words rather than a bare path; and a pane bound to nothing
+//      says that NOTHING RELOADS IT, which is the claim the first cut of this
+//      milestone got backwards (it said a change "reloads this pane for
+//      nothing", which describes the behaviour M195 REMOVED — an unbound pane
+//      does not reload at all, so binding turns reloading ON).
+//      The url row is untouched: this ADDS provenance and replaces no identity.
+//      Wrapped, because these three calls sit above the tally and a throw here
+//      would print no tally at all (`docs/verify-suites.md` rule 1).
+{
+  const NAME = 'preview.source.1 the inspector\'s browser panel keeps its url and gains its preview source in four states, each a different sentence: bound with the source panel open (which it names), bound with the source panel closed (the folder still bound, and it says so), bound with no source panel at all (words, not a bare path), and not bound (which says nothing reloads this pane rather than claiming it reloads for nothing)'
+  try {
+    const bound = { rect: { id: 'bv1', x: 0, y: 0, w: 640, h: 480 }, z: 1, kind: 'browser', url: 'http://127.0.0.1:5173/', preview: { root: '/w/api', sourcePanelId: 'n1' } }
+    const orphan = { ...bound, rect: { ...bound.rect, id: 'bv2' }, preview: { root: '/w/api', sourcePanelId: 'gone' } }
+    const rootOnly = { ...bound, rect: { ...bound.rect, id: 'bv4' }, preview: { root: '/w/api' } }
+    const unbound = { rect: { id: 'bv3', x: 0, y: 0, w: 640, h: 480 }, z: 1, kind: 'browser', url: 'http://127.0.0.1:5173/' }
+    const source = panel('n1', { title: 'the api' })
+    const field = (m, key) => m.fields.find((f) => f.key === key)
+    const mBound = R.buildInspectorModel(bound, undefined, undefined, [bound, source])
+    const mOrphan = R.buildInspectorModel(orphan, undefined, undefined, [orphan, source])
+    const mRootOnly = R.buildInspectorModel(rootOnly, undefined, undefined, [rootOnly, source])
+    const mUnbound = R.buildInspectorModel(unbound, undefined, undefined, [unbound, source])
+    const lines = [field(mBound, 'preview-source'), field(mOrphan, 'preview-source'), field(mRootOnly, 'preview-source'), field(mUnbound, 'preview-source')]
+    ok(NAME,
+      lines.every((f) => f !== undefined && typeof f.value === 'string' && f.value.length > 0) &&
+        new Set(lines.map((f) => f.value)).size === 4 &&
+        field(mBound, 'url') !== undefined && field(mBound, 'url').value === 'http://127.0.0.1:5173/' &&
+        /\/w\/api/.test(lines[0].value) && /the api/.test(lines[0].value) &&
+        /\/w\/api/.test(lines[1].value) && /closed/.test(lines[1].value) &&
+        /\/w\/api/.test(lines[2].value) && !/closed/.test(lines[2].value) && /[a-z]{3}/.test(lines[2].value.replace('/w/api', '')) &&
+        /not bound/.test(lines[3].value) && /nothing reloads/.test(lines[3].value) && !/reloads this pane for nothing/.test(lines[3].value) &&
+        // The pane's register: lowercase, no full stops (M194's C5).
+        lines.every((f) => !/^[A-Z]/.test(f.value) && !f.value.endsWith('.')),
+      JSON.stringify({ bound: lines[0], orphan: lines[1], rootOnly: lines[2], unbound: lines[3], url: field(mBound, 'url') }))
+  } catch (e) {
+    ok(NAME, false, 'threw: ' + String(e && e.message || e))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

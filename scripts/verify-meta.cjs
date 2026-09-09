@@ -448,6 +448,60 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
       : `directCall=${directCall} aliasedRead=${aliasedRead}`)
 }
 
+// M195 (D03) — preview-readers.1. A PREVIEW BINDING IS PROVENANCE, AND THE
+//      READER SET IS PINNED AS A LIST — `readers.1`'s shape for a different
+//      kind of leak. `PreviewBinding.root` decides ONE thing (does this file
+//      change belong to this pane) and explains itself; it is not an authority
+//      over the filesystem, and nothing may ask it whether something is
+//      allowed. Two claims, each of which fails the build by name:
+//      (a) MAIN never sees it. Main owns the Places gate, the spawn resolver,
+//          the credential store and every filesystem read, so a binding
+//          reaching `src/main` is the shape of the failure this pins: a folder
+//          the renderer derived being used to widen what main will do.
+//      (b) In the renderer it has a CLOSED consumer list. A new one is a new
+//          meaning for the field and must be chosen deliberately rather than
+//          joining quietly — which is what let `no-cwd` wear a failed read's
+//          costume at six sites one milestone ago.
+{
+  const { readdirSync } = require('node:fs')
+  const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(`${dir}/${e.name}`) : (/\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : []))
+  // The pattern must catch a FIELD ACCESS, not only the type's name: the leak
+  // this pins is a folder the renderer derived being handed to something that
+  // decides, and `(p as { preview?: { root: string } }).preview?.root` names
+  // neither `PreviewBinding` nor the rule. `\.preview\b` is what closes that,
+  // and it is why the renderer list below holds the two rendering files too.
+  const names = (root) => walk(root)
+    .filter((f) => /\.preview\b|\bPreviewBinding\b|previewReloadDecision|pathInsidePreview|normalisePreviewPath|previewSourceLine/.test(stripComments(read(f) ?? '')))
+    .map((f) => f.slice(root.length + 1))
+    .sort()
+  const inMain = names('src/main')
+  // ONE main file may name it, and only to REWRITE it: a snapshot restore
+  // re-mints every panel id, so every reference to a panel id must follow or
+  // the restored canvas holds a preview pointing at a panel id that no longer
+  // exists (or, in the merged view, at the original workspace's panel). It
+  // reads the field to rename it and never to decide anything.
+  const expectedMain = ['layout-snapshots.ts']
+  const inShared = names('src/shared')
+  const inRenderer = names('src/renderer')
+  // shared: the rule itself, and the parser that reads one off disk.
+  const expectedShared = ['layout-schema.ts', 'preview.ts']
+  // renderer: the record and its two copy sites, the two doors that WRITE one,
+  // the rule's caller, and the two surfaces that RENDER one.
+  const expectedRenderer = [
+    'browser/BrowserNode.tsx',
+    'browser/usePreviewReload.ts',
+    'canvas/Canvas.tsx',
+    'canvas/usePaletteActions.ts',
+    'panels/layout-adapt.ts',
+    'panels/panels.ts',
+    'shell/inspector-fields.ts'
+  ]
+  ok('preview-readers.1 a preview binding reaches ONE file in src/main — the snapshot restore, which re-mints panel ids and rewrites it, never a gate, a spawn resolver or a filesystem read — and elsewhere its consumers are a closed list: the rule and the parser in shared, the record, the two doors that write one and the rule\'s caller in the renderer. It is provenance, and a new consumer is a new meaning that must be chosen by name',
+    JSON.stringify(inMain) === JSON.stringify(expectedMain) && JSON.stringify(inShared) === JSON.stringify(expectedShared) && JSON.stringify(inRenderer) === JSON.stringify(expectedRenderer),
+    JSON.stringify({ inMain, inShared, inRenderer }))
+}
+
 // 22. NO TWO CHECKS IN ONE SUITE SHARE AN ID. This is the rule that stops the
 //     renumbering tax, and like 20 and 21 it is asserted as SOURCE TEXT because
 //     it has no runtime symptom: the suite still runs, still counts, and prints

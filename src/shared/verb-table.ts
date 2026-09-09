@@ -94,6 +94,12 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'preview-open', label: 'Preview: open the project', args: [{ name: 'url', kind: 'text', optional: true }], destructive: false, actions: ['openPreview'], target: 'canvas', hint: 'open the page a process of the selected panel is serving, or the url you name' },
   { id: 'preview-width', label: 'Preview: set the width', args: [{ name: 'device', kind: 'value' }], destructive: false, actions: ['setPreviewWidth'], target: 'canvas', hint: 'phone, tablet, laptop or full — the named widths, never a number' },
   { id: 'preview-capture', label: 'Preview: capture the page', args: [], destructive: false, actions: ['capturePreview'], target: 'canvas', hint: 'a real picture of the pane, written under this app\'s own directory and placed as an image' },
+  // M195 (D03). The fifth preview verb: which WORK this pane is a preview of.
+  // It takes NO argument on purpose. A path from an agent would be a folder
+  // this app never resolved and never showed anybody, and the subject rule —
+  // the panel discovery itself reads — is the one this whole feature is built
+  // on, so the verb binds to that and refuses by name when there is none.
+  { id: 'preview-bind', label: 'Preview: bind the source', args: [], destructive: false, actions: ['bindPreview'], target: 'canvas', hint: 'the selected panel\'s folder becomes the work this preview reloads for' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
   { id: 'workflow-run', label: 'Workflow: run', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['runWorkflowNow'], target: 'canvas', hint: 'run the shape on the diagram — the draft when there is one' },
@@ -299,6 +305,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-open': { canvas: 'Find the project on the preview pane, and a candidate in its list', palette: 'preview.open', agent: 'tc plan preview-open', workflow: 'an action node whose line is: preview-open' },
   'preview-width': { canvas: 'the four width chips on the preview pane', palette: 'preview.width', agent: 'tc plan preview-width phone', workflow: 'an action node whose line is: preview-width phone' },
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
+  'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
   'preview-dev': { canvas: 'Start dev server in the preview pane\'s discovery list', palette: 'preview.dev', agent: 'tc plan preview-dev dev', workflow: 'an action node whose line is: preview-dev dev' },
   'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: 'an action node whose line is: workflow-copy t1' },
   'workflow-run': { canvas: 'Run on the workflow panel', palette: 'workflow.run', agent: 'tc plan workflow-run t1', workflow: 'an action node whose line is: workflow-run t1' },

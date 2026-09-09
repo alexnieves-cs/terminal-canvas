@@ -1,4 +1,5 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
+import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
 import { configureNode, moveNode } from '@shared/template-edit'
@@ -99,6 +100,7 @@ export interface PaletteActionsDeps {
   replaceImagePanel: (panelId: string, path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M185. The preview's four verbs and the discovery the pane's own control asks. */
   openPreviewNow: (url?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  bindPreviewNow: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setPreviewWidthNow: (device: string, paneId?: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   capturePreviewNow: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   startDevServerNow: (script?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -153,7 +155,8 @@ export interface PaletteActionsDeps {
   beginWatcher: () => void
   beginNewNote: () => void
   /** M103. Mint a browser panel at the world centre, opening to an http(s) url the caller already normalised. */
-  openBrowserPanel: (url: string) => void
+  /** M195. The optional binding is what the pane is a preview OF; absent is a pane bound to nothing. */
+  openBrowserPanel: (url: string, preview?: PreviewBinding) => void
   /** M128. Mint a skill panel at a world point. */
   openSkillPanel: (scope: ToolScope, name: string, world: { x: number; y: number }) => void
   /** M73. Mint a chat panel; resolves the sheet's answer (a refusal is main's named reason). */
@@ -236,7 +239,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -311,6 +314,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'image-add': return self.addImage(a.path!)
           case 'image-replace': return self.replaceImage(a.panel!, a.path)
           case 'preview-open': return self.openPreview(a.url)
+          case 'preview-bind': return self.bindPreview()
           case 'preview-width': return self.setPreviewWidth(a.device!)
           case 'preview-capture': return self.capturePreview()
           case 'preview-dev': return self.startDevServer(a.script)
@@ -1713,7 +1717,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     // Refused BEFORE any seat is minted: a refusal mid-loop leaves half a lineup.
                     if (agentPreset === undefined && plan.seats.some((s) => s.kind === 'agent')) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
                     for (const seat of plan.seats) {
-                      if (seat.kind === 'browser') { openBrowserPanel(seat.url ?? 'http://localhost:3000/'); continue }
+                      if (seat.kind === 'browser') {
+                        // M195 (D03). A lineup's preview seat is a preview of the
+                        // lineup's OWN folder by construction, so it is born bound
+                        // — the one place the app mints a pane already knowing the
+                        // project. A cwd that is not absolute binds nothing (there
+                        // is no panel yet to take a source id from either, which is
+                        // why the binding is a root alone).
+                        const lineupRoot = normalisePreviewPath(values.cwd)
+                        openBrowserPanel(seat.url ?? 'http://localhost:3000/', lineupRoot === null ? undefined : { root: lineupRoot })
+                        continue
+                      }
                       if (seat.kind === 'agent') {
                         if (agentPreset === undefined) return { kind: 'refused', reason: 'no agent CLI is on the PATH — install claude or codex, or check the environment report' }
                         const r = await window.canvas.spawn.sheet({ presetId: agentPreset.id, cwd: values.cwd, title: seat.role, ...(seat.lane ? { worktree: true } : {}) })
@@ -1982,6 +1996,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     addImage: (path) => addImageFromPath(path),
     replaceImage: (panelId, path) => replaceImagePanel(panelId, path),
     openPreview: (url) => openPreviewNow(url),
+    bindPreview: () => bindPreviewNow(),
     setPreviewWidth: (device) => setPreviewWidthNow(device),
     capturePreview: () => capturePreviewNow(),
     startDevServer: (script) => startDevServerNow(script),
@@ -2271,7 +2286,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

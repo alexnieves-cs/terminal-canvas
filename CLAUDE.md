@@ -1415,3 +1415,32 @@ be" above so the run inherits less, not more.
   this file repeated two of the wrong ones. Record the rule, not the tally. Where a
   count genuinely has to be written down, `verify:meta` is where it gets pinned so it
   cannot drift silently — that is what rules 19 and 22 already do.
+
+- `src/shared/preview.ts`'s `PreviewBinding` / `previewReloadDecision` /
+  `src/renderer/browser/usePreviewReload.ts` — M195 (D03). A browser pane is a preview OF
+  something, and the association is on the RECORD (`preview: { root, sourcePanelId? }`, absent
+  on every pre-M195 pane, malformed costing the field and never the panel). The reload rule is
+  pure and has five arms with a `why` each — `unbound`, `not-local` (M186's loopback finding,
+  now named), `no-path`, `outside`, reload — because a preview that stopped reloading for a
+  reason nobody can name is the defect this closes: the effect it replaces subscribed with a
+  callback that took NO PARAMETER, so every loopback pane reloaded on every open file panel's
+  change and two local projects reloaded one another (`verify:panels:product preview.bind.1`
+  counts the loads at four real servers, one of them a SENTINEL that fences every negative).
+  An UNBOUND pane reloads for nothing at all — the milestone's one intended regression, carried
+  by the control reading `Bind source` and never by a `not bound` label, which would be a
+  zero-value statement in a row that is always visible.
+  **A control inside the pane's body must not take focus** (`if (e.defaultPrevented) return` on
+  `.browser-node__body`'s handler): `shellControl` does not stopPropagation, so every verb here
+  that reads the SUBJECT panel — `Find the project` and `Start dev` since M185, and this
+  milestone's `Bind source` — focused the pane on mousedown and then refused, because a browser
+  pane is neither a terminal nor a chat. A check that dispatches mousedown and click in ONE task
+  cannot see it; `preview.bind.2` presses in two. **No IPC change**: `FileChangedEvent` carries no
+  path, but it carries `panelId` and the renderer already holds that file panel's
+  `source.path`. The subscription is ONE for the canvas, reads `displayPanelsRef` (a reload
+  acts on what is on SCREEN, so a merged-view preview still reloads) and reaches the guest
+  through the store's `reloadBrowser`; the coalesce is 300 ms PER PANE, because one shared
+  timer would let two projects reloading at once cancel each other. `normalisePreviewPath` is
+  hand-written and must stay so — `@shared/places.ts`'s copy imports `node:path`, which the
+  renderer cannot bundle — and containment is on SEGMENT boundaries (`/a/b` does not hold
+  `/a/bc`). The binding is provenance and **grants nothing**: `preview-bind` (the fifth preview
+  verb, four doors) takes NO argument and binds to the same subject rule discovery reads.

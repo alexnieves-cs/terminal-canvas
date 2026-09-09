@@ -3710,6 +3710,67 @@ console.log('\n' + '='.repeat(60))
     JSON.stringify({ ids: panels.map((p) => p.id), d1: by('d1'), d2: by('d2'), d3: by('d3'), d4: by('d4'), warnings: out.warnings }))
 }
 
+// M195 (D03) — browser.preview.1. THE PREVIEW'S SOURCE ON DISK. The binding
+// is what makes a browser pane a preview OF something, and it is the one fact
+// about it that cannot be reconstructed: the url is `http://127.0.0.1:5173/`
+// and nothing on disk relates that to a project. Absent is every pre-M195
+// record and warns nothing (and serialises back to NO key). A malformed
+// binding costs the FIELD and never the panel — `preview.device.1`'s rule, for
+// its reason: a preview that vanished because its source was misspelled reads
+// as a panel the app deleted. `root` must be ABSOLUTE, because a relative one
+// would be resolved against a root nobody chose (`shared/places.ts`), and
+// `sourcePanelId` is optional provenance whose malformation costs that KEY
+// alone — the folder is the half that does the work.
+// WRAPPED, because a reparse that lost its workspace would otherwise abort the
+// ~250 checks below this one rather than fail this one (`docs/verify-suites.md`
+// rule 1).
+{
+  const NAME = 'browser.preview.1 a browser panel\'s preview binding: absent stays absent and serialises to no key; a root and its source panel round-trip with the root normalised; a non-object, a null, an array, a non-string root, a relative root, an empty root and a `~` root each cost the FIELD with a warning naming the panel, and their panels survive unbound; a malformed or empty sourcePanelId costs that KEY alone and the root is kept'
+  try {
+    const out = L.parseLayout(JSON.stringify({
+      workspaces: [{ id: 'w1', name: 'Main', panels: [
+        { id: 'q1', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 1, url: 'http://127.0.0.1:5173/' },
+        { id: 'q2', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 2, url: 'http://127.0.0.1:5173/', preview: { root: '/w/api', sourcePanelId: 'p1' } },
+        { id: 'q3', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 3, url: 'http://127.0.0.1:5173/', preview: { root: '/w/api/' } },
+        { id: 'q4', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 4, url: 'http://127.0.0.1:5173/', preview: { root: 'w/api' } },
+        { id: 'q5', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 5, url: 'http://127.0.0.1:5173/', preview: { root: 42 } },
+        { id: 'q6', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 6, url: 'http://127.0.0.1:5173/', preview: 'the api' },
+        { id: 'q7', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 7, url: 'http://127.0.0.1:5173/', preview: { root: '/w/api', sourcePanelId: 7 } },
+        { id: 'q8', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 8, url: 'http://127.0.0.1:5173/', preview: null },
+        { id: 'q9', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 9, url: 'http://127.0.0.1:5173/', preview: [] },
+        { id: 'q10', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 10, url: 'http://127.0.0.1:5173/', preview: { root: '' } },
+        { id: 'q11', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 11, url: 'http://127.0.0.1:5173/', preview: { root: '~/work' } },
+        { id: 'q12', kind: 'browser', x: 0, y: 0, w: 640, h: 480, z: 12, url: 'http://127.0.0.1:5173/', preview: { root: '/w/api', sourcePanelId: '' } }
+      ] }],
+      activeWorkspaceId: 'w1'
+    }))
+    const panels = out.snapshot.workspaces[0].panels
+    const by = (id) => panels.find((p) => p.id === id)
+    const text = L.serialiseLayout({ ...out.snapshot })
+    const reparsed = L.parseLayout(text).snapshot.workspaces[0]
+    const round = reparsed === undefined ? undefined : reparsed.panels.find((p) => p.id === 'q2')
+    // `panel <id>:`, not a bare `includes(id)`: with twelve panels the bare
+    // form makes `named('q1')` true because q10, q11 and q12's own warnings
+    // contain the substring — which reported this check's negative arm as
+    // broken while every arm was in fact correct.
+    const named = (id) => out.warnings.some((w) => w.includes(`panel ${id}:`) && w.includes('preview'))
+    const fieldGone = ['q4', 'q5', 'q6', 'q8', 'q9', 'q10', 'q11']
+    const keyGone = ['q7', 'q12']
+    ok(NAME,
+      panels.length === 12 &&
+        by('q1') && !('preview' in by('q1')) && !/"preview"/.test(text.split('"q1"')[1].split('}')[0] || '') &&
+        by('q2') && by('q2').preview && by('q2').preview.root === '/w/api' && by('q2').preview.sourcePanelId === 'p1' &&
+        round && round.preview && round.preview.root === '/w/api' && round.preview.sourcePanelId === 'p1' &&
+        by('q3') && by('q3').preview && by('q3').preview.root === '/w/api' && !('sourcePanelId' in by('q3').preview) &&
+        fieldGone.every((id) => by(id) && !('preview' in by(id)) && named(id)) &&
+        keyGone.every((id) => by(id) && by(id).preview && by(id).preview.root === '/w/api' && !('sourcePanelId' in by(id).preview) && named(id)) &&
+        !named('q1') && !named('q2') && !named('q3'),
+      JSON.stringify({ previews: panels.map((p) => ({ id: p.id, preview: p.preview })), fieldGone: fieldGone.filter((id) => !(by(id) && !('preview' in by(id)) && named(id))), keyGone: keyGone.filter((id) => !(by(id) && by(id).preview && !('sourcePanelId' in by(id).preview) && named(id))), warnings: out.warnings }))
+  } catch (e) {
+    ok(NAME, false, 'threw: ' + String(e && e.message || e))
+  }
+}
+
 // M186 — image.asset.1. THE ASSET IDENTITY ON DISK. `image.asset` is a
 // sha-256 of the picture's own bytes: absent on every pre-M186 record and on
 // any picture the person pointed at in place (and it serialises to NO key),

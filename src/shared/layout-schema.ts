@@ -1,6 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { isReadableUrl } from './browser-panel'
-import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId } from './preview'
+import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteForm, type NoteTint } from './notes'
 import { parseAnnotations, type Annotation } from './annotations'
@@ -349,6 +349,18 @@ export interface PersistedBrowserPanel extends PersistedPanelBase {
    * because a width was misspelled is a worse answer than one at full width.
    */
   device?: DeviceWidthId
+  /**
+   * M195 (D03). WHAT THIS PANE IS A PREVIEW OF — the directory whose changes
+   * reload it, and (when there was one) the panel that directory was taken
+   * from. ABSENT is every pre-M195 record and every pane a person typed an
+   * address into; it warns nothing and means NOTHING reloads the pane, which
+   * its own control says by reading `Bind source`.
+   *
+   * Persisted because it cannot be reconstructed: the url is a port on this
+   * machine and nothing on disk relates it to a project. A malformed value
+   * costs the FIELD and never the panel — `device`'s rule, for its reason.
+   */
+  preview?: PreviewBinding
 }
 
 /**
@@ -883,6 +895,43 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   return raw.prose === true ? { path, prose: true } : { path }
 }
 
+
+/**
+ * M195 (D03). A preview's source, off disk. Three answers, and the middle one
+ * is the milestone's rule: absent is unbound (every pre-M195 record, warning
+ * nothing); a usable binding is kept with its root NORMALISED, so the on-disk
+ * form and the form the reload rule compares against are the same string; and
+ * anything else costs the FIELD with a warning naming the panel, never the
+ * panel itself — a preview that vanished because its source was misspelled
+ * reads as one the app deleted, which is `device`'s reason a milestone earlier.
+ *
+ * `root` must be ABSOLUTE. A relative one would have to be resolved against a
+ * root nobody chose (`shared/places.ts`'s rule), and the pane would then follow
+ * whatever that guess happened to hit. `sourcePanelId` is provenance that may
+ * dangle, so a malformed one costs that KEY alone: the folder is the half that
+ * does the work, and dropping it over a bad id would be the field-for-a-field
+ * trade this parser exists to refuse.
+ */
+function parsePreviewBinding(value: unknown, id: string, warnings: string[]): PreviewBinding | undefined {
+  if (value === undefined) return undefined
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    warnings.push(`browser panel ${id}: preview ${JSON.stringify(value)} is not a source binding — the pane is kept, bound to nothing`)
+    return undefined
+  }
+  const record = value as Record<string, unknown>
+  const root = typeof record.root === 'string' ? normalisePreviewPath(record.root) : null
+  if (root === null) {
+    warnings.push(`browser panel ${id}: preview root ${JSON.stringify(record.root)} is not an absolute folder — the pane is kept, bound to nothing`)
+    return undefined
+  }
+  const rawSource = record.sourcePanelId
+  if (rawSource !== undefined && (typeof rawSource !== 'string' || rawSource === '')) {
+    warnings.push(`browser panel ${id}: preview sourcePanelId ${JSON.stringify(rawSource)} is not a panel id — the folder ${root} is still bound`)
+    return { root }
+  }
+  return { root, ...(rawSource === undefined ? {} : { sourcePanelId: rawSource }) }
+}
+
 function parsePanel(
   raw: unknown,
   seen: Set<string>,
@@ -1009,7 +1058,8 @@ function parsePanel(
       if (isDeviceWidthId(deviceRaw)) device = deviceRaw
       else warnings.push(`browser panel ${id}: device ${JSON.stringify(deviceRaw)} is not one of ${DEVICE_WIDTHS.map((d) => d.id).join(', ')} — the panel is kept at full width`)
     }
-    return { ...base, kind: 'browser', url, ...(device === undefined ? {} : { device }) }
+    const preview = parsePreviewBinding((raw as Record<string, unknown>).preview, id, warnings)
+    return { ...base, kind: 'browser', url, ...(device === undefined ? {} : { device }), ...(preview === undefined ? {} : { preview }) }
   }
   if (kind === 'work') {
     // M116. The item id is the card's only identity, so an unusable one

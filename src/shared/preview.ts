@@ -174,3 +174,149 @@ export function captureRefusal(reason: 'no-guest' | 'not-web' | 'empty', detail?
   if (reason === 'empty') return 'the page answered no pixels — it may still be loading; try again once it has painted'
   return detail === undefined ? 'only an http(s) page can be captured' : detail
 }
+
+/**
+ * M195 (D03). WHICH WORK A PREVIEW IS A PREVIEW OF.
+ *
+ * Before this, `BrowserNode.tsx` subscribed to `file:changed` with a callback
+ * that took NO PARAMETER: the event was never read, and the only filter was
+ * that the guest's own page was loopback. Every local pane therefore reloaded
+ * on every open file panel's change — two projects on one canvas reloaded one
+ * another, and an unrelated note reloaded both.
+ *
+ * A binding is PROVENANCE and nothing else. It answers one question — does
+ * this change belong to this pane — and explains itself; it is never asked
+ * whether something is allowed. Nothing may read `root` as a grant: it reaches
+ * no Places gate, no spawn, no credential and no read.
+ */
+export interface PreviewBinding {
+  /** The directory whose changes reload this pane. Absolute and normalised. */
+  root: string
+  /**
+   * The panel the binding was taken from, when there was one. It may DANGLE —
+   * a source panel can be closed — and that is rendered rather than repaired:
+   * the root outlives it and stays valid (D03's "preserve a still-valid
+   * directory association when the view closes").
+   */
+  sourcePanelId?: string
+}
+
+/**
+ * Absolute, `.` and `..` collapsed, no trailing slash (the root stays `/`);
+ * `null` for anything relative, empty or `~`-prefixed.
+ *
+ * Hand-written, and it must stay that way. `@shared/places.ts` has this
+ * function already and imports `node:path` to get it — which the RENDERER
+ * cannot bundle (`Canvas.tsx`'s own comment at the skill-assign check records
+ * that the hard way), and this rule runs in the renderer. `display-path.ts` is
+ * the precedent: forward-slash arithmetic, no `path` module. Reusing
+ * `insidePlace` would need a `realpath` the renderer does not have and would
+ * put a PERMISSION gate in the way of a display question.
+ *
+ * A relative path is refused rather than resolved, for `places.ts`'s reason:
+ * every root this app could pick is a guess the user did not make.
+ */
+export function normalisePreviewPath(path: string): string | null {
+  if (!path.startsWith('/')) return null
+  const out: string[] = []
+  for (const segment of path.split('/')) {
+    if (segment === '' || segment === '.') continue
+    if (segment === '..') { out.pop(); continue }
+    out.push(segment)
+  }
+  return out.length === 0 ? '/' : `/${out.join('/')}`
+}
+
+/**
+ * True when `path` IS the root or lies under it, on SEGMENT boundaries.
+ *
+ * The boundary is the whole point: a bare `startsWith` answers true for
+ * `/w/apiary` against `/w/api`, so a preview would follow the neighbouring
+ * project on disk — a wrong reload that looks exactly like a right one.
+ */
+export function pathInsidePreview(root: string, path: string): boolean {
+  const r = normalisePreviewPath(root)
+  const p = normalisePreviewPath(path)
+  if (r === null || p === null) return false
+  return p === r || p.startsWith(r === '/' ? '/' : `${r}/`)
+}
+
+/**
+ * The hosts that are this machine's own work, and the only pages a file change
+ * may reload. `[::1]` is BRACKETED because that is what `URL.hostname` answers
+ * for an IPv6 literal; a bare `'::1'` member (which the effect this replaced
+ * carried) matches nothing the parser can produce and is left out rather than
+ * kept as a spelling no input reaches.
+ */
+const LOOPBACK_HOSTS: readonly string[] = ['127.0.0.1', 'localhost', '[::1]']
+
+/**
+ * Whether a file change reloads this pane, and — when it does not — WHY, in a
+ * word. A skip with no `why` is a preview that stopped reloading for a reason
+ * nobody can name, which is the failure this milestone exists to end.
+ *
+ * `not-local` covers both a remote page and a pane with no page yet: for THIS
+ * decision they are one fact — the pane is not showing this machine's work.
+ * (M186's finding 7 is the loopback half, unchanged and now named: a person
+ * filling in a form on a remote page must not lose it because an agent wrote a
+ * note.)
+ *
+ * `no-path` and `unknown-source` are two facts and not one. `no-path` is a
+ * panel that is GONE (it closed between the write and the event). `unknown-
+ * source` is a panel that is still there and whose file path this canvas does
+ * not hold: a SKILL panel is the case — it registers the same `file:read`
+ * watch (`SkillNode.tsx`) but its record carries `{scope, name}` and no path
+ * on purpose (M128: the file is the authority), so a `SKILL.md` edited under a
+ * bound root does NOT reload the preview. Collapsing it into `no-path` would
+ * report a live panel as a closed one, which is the wrong fix in a log and the
+ * wrong sentence in a report.
+ */
+export type PreviewReloadDecision =
+  | { kind: 'reload' }
+  | { kind: 'skip'; why: 'unbound' | 'outside' | 'not-local' | 'no-path' | 'unknown-source' }
+
+export function previewReloadDecision(input: {
+  binding: PreviewBinding | undefined
+  /** The changed file's path, or undefined when the changed panel could not be resolved to one. */
+  changedPath: string | undefined
+  /**
+   * Whether the panel the event named is still on the canvas. It separates
+   * `unknown-source` (a live panel whose path this canvas does not hold — a
+   * skill panel) from `no-path` (a panel that is gone). Absent reads as gone.
+   */
+  changedPanelExists?: boolean
+  /** The guest's own live url, or null before it has navigated. */
+  liveUrl: string | null | undefined
+}): PreviewReloadDecision {
+  if (input.binding === undefined) return { kind: 'skip', why: 'unbound' }
+  let host: string
+  try { host = new URL(input.liveUrl ?? '').hostname } catch { return { kind: 'skip', why: 'not-local' } }
+  if (!LOOPBACK_HOSTS.includes(host)) return { kind: 'skip', why: 'not-local' }
+  if (input.changedPath === undefined || input.changedPath === '') return { kind: 'skip', why: input.changedPanelExists === true ? 'unknown-source' : 'no-path' }
+  return pathInsidePreview(input.binding.root, input.changedPath) ? { kind: 'reload' } : { kind: 'skip', why: 'outside' }
+}
+
+/**
+ * The sentence the inspector explains a pane's source with. FOUR states, and
+ * each one leads somewhere different: bound with its source panel still open;
+ * bound with that panel closed (the folder is STILL bound, and saying so is
+ * the difference between a preview that works and one a person thinks is
+ * broken); bound with no source panel at all (a lineup's preview seat is born
+ * this way — a folder and no panel to name), which still needs words rather
+ * than a bare path; and not bound, which says what that MEANS.
+ *
+ * The unbound sentence says NOTHING RELOADS IT, and getting this right is not
+ * a wording choice. The first cut read *"a file change reloads this pane for
+ * nothing"* — which describes the behaviour this milestone REMOVED (M185 to
+ * M192, when an unbound loopback pane reloaded on every open file panel's
+ * change). Under this rule an unbound pane does not reload at all, so the
+ * reason to bind is that binding turns reloading ON. Told the opposite, a
+ * person would read the control as a way to reduce noise rather than as the
+ * thing that makes the preview follow their work.
+ */
+export function previewSourceLine(binding: PreviewBinding | undefined, sourceLabel: string | undefined): string {
+  if (binding === undefined) return 'not bound to a folder — nothing reloads this pane; bind it to the work it previews and its own changes will'
+  if (sourceLabel !== undefined) return `${binding.root} — from ${sourceLabel}`
+  if (binding.sourcePanelId === undefined) return `${binding.root} — bound to the folder, with no source panel to name`
+  return `${binding.root} — the panel it was opened from is closed, and the folder is still bound`
+}

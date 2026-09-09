@@ -26,7 +26,7 @@ All steps start unchecked. Existing implementations may satisfy part of a step; 
 |---|---|---|---|---|---|
 | D01 | M193 ✅ | Reconcile baseline, roadmap, and product language | Foundation | — | One accurate development contract |
 | D02 | M194 ✅ | Selected chat context in Files and Tools | P0 | D01 | An agent's directory works without a terminal proxy |
-| D03 | M195 | Explicit preview ownership | P0 | D02 | Only the relevant project's changes reload its preview |
+| D03 | M195 ✅ | Explicit preview ownership | P0 | D02 | Only the relevant project's changes reload its preview |
 | D04 | M196 | Repository, worktree, and memory context policy | P0 | D02–D03 | Scope remains understandable across worktree lanes |
 | D05 | M197–M198 | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
 | D06 | M199–M200 | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
@@ -114,7 +114,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D03 — Bind previews to the work they preview
 
-- [ ] Complete and record D03.
+- [x] Complete and record D03. **M195** — the record is [docs/build-log/m195-d03-preview-ownership.md](build-log/m195-d03-preview-ownership.md).
 
 **Problem/evidence:** The audited `BrowserNode.tsx` checks whether a URL is loopback but ignores the changed file's project. Two local projects can reload one another's previews.
 

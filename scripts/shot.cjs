@@ -278,7 +278,7 @@ const SCENES = [
       await sleep(900)
       await kit.shot('watcher')
     } },
-  { name: 'browser', intent: 'The browser pane beside the terminal that started its dev server: a live page painted INSIDE the panel frame, panned and clipped with the world like every other node. The chrome reads the page\'s real address (`http://127.0.0.1:…`, from the guest itself — never the page\'s title) beside one labelled verb, `Open in browser`; below it the app\'s own bar — `Back`, `Forward`, `Reload` as words, disabled with their reasons, and the address input — and then the page. A ruled edge from the dev server says `on exit 0`: the page reloads when the server comes back. The kind word `browser` sits in the rail and on the frame; no state is invented for a document.',
+  { name: 'browser', intent: 'The browser pane beside the terminal that started its dev server: a live page painted INSIDE the panel frame, panned and clipped with the world like every other node. The chrome reads the page\'s real address (`http://127.0.0.1:…`, from the guest itself — never the page\'s title) beside one labelled verb, `Open in browser`; below it the app\'s own bar — `Back`, `Forward`, `Reload` as words, disabled with their reasons, and the address input — and then the page. A ruled edge from the dev server says `on exit 0`: the page reloads when the server comes back. Beside the width chips and Capture, the pane says which work it is a preview OF — `source · repo`, with `Change source` next to it (M195): a file change under that folder reloads THIS pane and no other project\'s. The kind word `browser` sits in the rail and on the frame; no state is invented for a document.',
     run: async (kit) => {
       await kit.goTo('browser · 127.0.0.1')
       await sleep(1800)
@@ -703,7 +703,12 @@ app.whenReady().then(async () => {
         // M103. A dev server beside the browser pane that shows it, with a
         // ruled edge from the one into the other: on exit 0, reload.
         term('dev', 1550, 120, 360, 250, 16, { title: 'dev server', args: ['-c', 'echo "$ npm run dev"; echo "listening on http://127.0.0.1:3000"; sleep 600'], links: [{ to: 'browser', automation: { kind: 'handoff', enabled: true, trigger: 'exit-ok' } }] }),
-        { id: 'browser', kind: 'browser', x: 1950, y: 120, w: 560, h: 420, z: 17, url: shotHttpUrl() },
+        // M195 (D03). BOUND to the repository the dev server beside it runs in:
+        // that is what a preview opened through discovery is, and the pane says
+        // whose changes reload it. An unbound pane is a real state too (it
+        // reloads for nothing and reads `not bound`), and the fixture shows the
+        // ordinary one.
+        { id: 'browser', kind: 'browser', x: 1950, y: 120, w: 560, h: 420, z: 17, url: shotHttpUrl(), preview: { root: REPO, sourcePanelId: 'dev' } },
         // M86. One review over every worktree of the fixture repository.
         { id: 'across', kind: 'review', x: 1200, y: 1300, w: 560, h: 420, z: 14,
           subject: { subjectId: 'live', repoRoot: REPO_ROOT, baselineSha: REPO_HEAD, label: 'every worktree of repo', across: true } },

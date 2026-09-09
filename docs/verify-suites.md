@@ -370,3 +370,79 @@ frame. `settle()` is a 300 ms sleep, so every DOM read happens long after React 
 deleting both masks passes the whole suite. The `generation` ref IS covered — `context.chat.2`'s
 Files half is the only thing in the repository that can see it, because the A→B→A subject string
 is identical and the counter is the sole discriminator.
+
+## The v10 run, D03 (M195)
+
+`verify:file preview.bind.1–.2` and `verify:layout browser.preview.1` are the pure half (the
+containment arithmetic, the reload decision's five arms, and the binding's five parse arms);
+`verify:rail preview.source.1` is the inspector's three sentences. The two real-renderer checks
+are `verify:panels:product preview.bind.1` (the filter) and `.2` (the canvas door).
+
+**A reload can only be counted at the SERVER.** The guest reloads in its own process; the host
+renderer has nothing to observe. `preview.bind.1` runs three real `http` servers, one per pane,
+and counts requests — and counts only `/`, because a guest also fetches `/favicon.ico` and a pane
+that merely painted a tab icon would read as a pane that reloaded. This is also what makes the
+check able to prove a NEGATIVE (pane B did not reload), which no DOM read can.
+
+**Fixture directories under `tmpdir()` must be `realpathSync`'d when a LIVE SESSION's cwd is part
+of the evidence.** macOS's `/var` is a symlink to `/private/var`: `mkdtempSync(tmpdir())` answers
+the unresolved form, a live session answers the resolved one, and a file panel answers whichever
+form it was opened with. `preview.bind.2` binds from a terminal's own folder, so without the
+realpath the check would be measuring which of the two this machine happened to produce. (The
+mismatch itself is a real bound of the feature and is recorded in the milestone's log, not hidden
+by the fixture: the renderer has no `realpath`, and a binding is provenance rather than a gate.)
+
+**A control's press must be TWO TASKS, or a whole class of defect is invisible.** This is the most
+transferable thing M195 learned. `preview.bind.2` presses `Bind source` by dispatching `mousedown`,
+sleeping, and then dispatching `click` in a SEPARATE `executeJavaScript`. From one script both
+handlers run inside a single task, before React flushes — and `selectedIdsRef` is assigned EAGERLY
+(`Canvas.tsx`'s `selectOnly`) while `focusedIdRef` is assigned during RENDER, so a control whose
+press steals focus still reads the correct subject and the check passes. A person's mousedown and
+click are separate tasks. Pressed properly, the same check reports `focusAfterDown: "pvC"`,
+`disabled: true` and `pressed: false`: the control disables itself mid-press. Four controls on the
+preview pane had been dead since M185 behind exactly this blind spot, and M185's own check never
+saw it because it drove `window.canvas.preview.discover(...)` over the bridge instead of pressing
+the button.
+
+**`sendInputEvent` down+up does not deliver a `click`.** It was tried first here: the selection
+moved (so the input arrived) but no shell control ran — `said` empty, the record untouched. Use it
+for focus (`clickPanelBody`, whose effect is a mousedown one) and dispatch the click.
+
+**Selecting a panel and focusing one are two different gestures, and a check that needs both must
+use both.** `preview.bind.2` binds a pane to the focused panel's folder while the PANE is selected:
+the subject's `.pf__body` is clicked (which focuses) and the pane's `.pf__chrome` is mousedowned
+(which selects and starts a move that never moves — `PanelFrame.beginMove`).
+
+**Three fixture facts that each cost a run.** A terminal other than `s01` boots DORMANT
+(`LIVE_AT_BOOT = ['s01']`), so it renders a card with no `.panel__slot` and the click helper
+reports "no element matched" — use a CHAT as a subject when the check is about a folder rather than
+a process. A chat record without a `sessionId` is DROPPED by `parseChatSource`, which surfaces the
+same way. And a `null` node inside `executeJavaScript` comes back as "Script failed to execute"
+with the cause only in the renderer's own console, which this harness does not forward — make every
+renderer read answer data.
+
+**A negative is FENCED, never slept on.** `preview.bind.1`'s claim that an unbound pane and a
+second project do not reload is meaningless if the event never fired. It writes to a fourth
+SENTINEL pane's own root and waits for THAT pane to reload, which proves fs.watch, main's debounce,
+the event and the renderer's coalesce all drained past the writes under test. Both fixed sleeps
+were removed with it.
+
+**`main/file-watch.ts` is a RESETTING debounce at 100 ms with a hash dedupe, so a burst written
+faster than that is ONE event before the renderer sees it.** M195's burst claim was written with
+60 ms spacing and could not be made red — deleting the renderer's whole coalesce kept it green.
+Space a burst past `WATCH_DEBOUNCE_MS`, and change the content each time or the dedupe swallows it.
+
+**A bare `includes(id)` over warnings is a substring trap.** `named('q1')` was true because q10,
+q11 and q12's own warnings contain the substring, which reported a correct check as broken. Match
+`panel <id>:`. (`preview.device.1` one milestone earlier has the same bare form and the same
+latent trap.)
+
+**A shot harness that fails to LOAD hangs `verify:visual` instead of failing it.** An unescaped
+apostrophe in a scene's intent string made `scripts/shot.cjs` a syntax error; the child never
+exited, so the suite reported `watchdog — run did not finish within 221000ms` and nothing about
+the cause. The suite handles a non-zero child exit; it cannot handle a child that never exits.
+`node --check scripts/shot.cjs` before believing a visual watchdog.
+
+**Fixture directories must be `realpathSync`'d when a live session's cwd is part of the
+evidence** (macOS's `/var` is a symlink to `/private/var`; a live session answers the resolved form
+and a file panel answers whichever form it was opened with).

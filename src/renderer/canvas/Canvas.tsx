@@ -133,8 +133,9 @@ import { clearDraft, getDraft, resetDraft, selectedOf } from '@renderer/workflow
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING, TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
-import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, type Discovery as PreviewDiscovery } from '@shared/preview'
+import { DEVICE_WIDTHS, deviceWidth, isDeviceWidthId, normalisePreviewPath, type Discovery as PreviewDiscovery, type PreviewBinding } from '@shared/preview'
 import { navigateBrowser, browserGuestId } from '@renderer/browser/browser-store'
+import { usePreviewReload } from '@renderer/browser/usePreviewReload'
 import { normaliseTypedUrl } from '@shared/browser-panel'
 import { displayPath } from '@shared/display-path'
 import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
@@ -4905,11 +4906,11 @@ export function Canvas({
    * where the page OPENS, and every later navigation is written back onto it
    * through `onBrowserNavigated` so a relaunch returns to the last page.
    */
-  const openBrowserPanel = useCallback((url: string): void => {
+  const openBrowserPanel = useCallback((url: string, preview?: PreviewBinding): void => {
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const browserId = `b${nextIdRef.current++}`
     setPanels((current) => {
-      const next = [...current, makeBrowserPanel(browserId, cascadeCentre(centre, current), nextZ(current), url)]
+      const next = [...current, makeBrowserPanel(browserId, cascadeCentre(centre, current), nextZ(current), url, preview)]
       commitHistory(next)
       return next
     })
@@ -5198,6 +5199,9 @@ export function Canvas({
     }
     return undefined
   }, [registry])
+  // M195 (D03). One subscription for every preview on the canvas: a file
+  // change reloads the pane BOUND to the folder it happened in, and no other.
+  usePreviewReload({ onScreenPanelsRef: displayPanelsRef })
   const REASON_NO_PREVIEW_SUBJECT = 'select the terminal your project runs in — discovery reads that panel\'s own directory and processes'
   const discoverProject = useCallback(async (): Promise<PreviewDiscovery | { kind: 'refused'; reason: string }> => {
     const subject = previewSubject()
@@ -5213,6 +5217,53 @@ export function Canvas({
     }
     return undefined
   }, [])
+  /**
+   * M195 (D03). THE BINDING, taken from the SAME subject rule discovery reads.
+   *
+   * That sameness is what makes it honest rather than a guess: the folder a
+   * preview reloads for is the folder its candidate list was answered from. A
+   * cwd that is not absolute (a preset's `~`, a spec never resolved) binds
+   * NOTHING — `shared/places.ts`'s rule reached from the display side: a
+   * relative root would have to be resolved against a root nobody chose, and
+   * the pane would then follow whatever that guess hit.
+   */
+  const previewBindingFor = useCallback((subject: { id: string; cwd: string } | undefined): PreviewBinding | undefined => {
+    if (subject === undefined) return undefined
+    const root = normalisePreviewPath(subject.cwd)
+    return root === null ? undefined : { root, sourcePanelId: subject.id }
+  }, [])
+  const bindPreview = useCallback((paneId?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    // NAMED by the pane's own control, found by the verb's subject rule
+    // otherwise — `setPreviewWidth`'s rule, and for its reason: with two panes
+    // selected, a control that did not name itself bound the OTHER one and
+    // then rendered the success note on the pane that had not changed.
+    const named = paneId === undefined ? undefined : panelsRef.current.find((p) => p.rect.id === paneId)
+    const pane = named !== undefined && isBrowserPanel(named) ? named : previewPane()
+    if (pane === undefined) return { kind: 'refused', reason: 'select a preview pane first' }
+    const subject = previewSubject()
+    if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
+    const binding = previewBindingFor(subject)
+    if (binding === undefined) {
+      return { kind: 'refused', reason: `that panel's folder is not an absolute path (${subject.cwd === '' ? 'it has none' : subject.cwd}) — there is nothing to bind this preview to` }
+    }
+    // The filesystem root is refused BY NAME rather than accepted: a pane bound
+    // to `/` reloads for every change anywhere, which is the behaviour this
+    // milestone exists to end, arrived at by a different road.
+    if (binding.root === '/') return { kind: 'refused', reason: 'that panel sits at the filesystem root, so binding to it would reload this preview for every change on the machine — point the panel at a project first' }
+    setPanels((current) => {
+      const next = current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, preview: binding } : p))
+      commitHistory(next)
+      return next
+    })
+    return { kind: 'ran', note: `${pane.title ?? 'the preview'} reloads for ${displayPath(binding.root, binding.root).short}` }
+  }, [commitHistory, previewBindingFor, previewPane, previewSubject])
+  /**
+   * M195. Why the pane's Bind control is not available, computed at RENDER so
+   * the control can be present-and-disabled with its reason rather than
+   * answering a refusal after a press. Safe to call here: `focusedIdRef` and
+   * `selectedIdsRef` are both assigned during this render, above.
+   */
+  const previewSubjectReason = previewSubject() === undefined ? REASON_NO_PREVIEW_SUBJECT : undefined
   const openPreview = useCallback(async (url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
     if (url !== undefined) {
       const normalised = normaliseTypedUrl(url)
@@ -5222,28 +5273,56 @@ export function Canvas({
       // record is written and the guest reloaded through the store's own door,
       // which is what the node listens to — never a second guest.
       const pane = previewPane()
+      // M195. The pane is BOUND to the same subject discovery reads, and the
+      // note says which folder — so a binding is never made silently, and a
+      // pane opened against no subject says it is bound to nothing rather
+      // than quietly reloading for everything (which is what it used to do).
+      const binding = previewBindingFor(previewSubject())
+      // What the note says about the source, for whichever binding the pane
+      // ends up with — the new one, the one it already had, or none.
+      const sourceNote = (bound: PreviewBinding | undefined): string =>
+        bound === undefined ? 'not bound to a folder yet' : `reloads for ${displayPath(bound.root, bound.root).short}`
       // The guest is NAVIGATED (M185's critic, finding 2) — a reload reloads
       // the page it already has, and the record's new url would then be
       // written back to the old one by the guest's own did-navigate.
       if (pane !== undefined && navigateBrowser(pane.rect.id, normalised.url)) {
-        setPanels((current) => current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p) ? { ...p, url: normalised.url } : p)))
-        return { kind: 'ran', note: `${pane.title ?? 'the preview'} now shows ${normalised.url}` }
+        // A navigation writes the url with NO history entry (M186's rule — the
+        // guest's own did-navigate writes it back constantly). A BINDING is a
+        // deliberate change to what this pane is a preview of, so when this
+        // open changes one it takes a history entry, the same as the bind door:
+        // otherwise the two doors would disagree about whether binding can be
+        // undone, and an accidental rebind here could not be.
+        const rebinds = binding !== undefined && binding.root !== pane.preview?.root
+        setPanels((current) => {
+          const next = current.map((p) => (p.rect.id === pane.rect.id && isBrowserPanel(p)
+            // An existing binding is KEPT when this open knows no better one: a
+            // person navigating a bound preview to another page of the same
+            // project has not unbound it.
+            ? { ...p, url: normalised.url, ...(binding === undefined ? {} : { preview: binding }) }
+            : p))
+          if (rebinds) commitHistory(next)
+          return next
+        })
+        return { kind: 'ran', note: `${pane.title ?? 'the preview'} now shows ${normalised.url} · ${sourceNote(binding ?? pane.preview)}` }
       }
-      openBrowserPanel(normalised.url)
-      return { kind: 'ran', note: `opened ${normalised.url}` }
+      openBrowserPanel(normalised.url, binding)
+      return { kind: 'ran', note: `opened ${normalised.url} · ${sourceNote(binding)}` }
     }
     const found = await discoverProject()
     if (found.kind === 'refused') return found
     if (found.kind === 'one') {
       const one = found.candidates[0]
       if (one === undefined) return { kind: 'refused', reason: found.note }
-      openBrowserPanel(one.url)
+      // M195. Discovery answered ABOUT the subject, so the pane it opens is
+      // bound to that subject's own folder — the binding and the candidate
+      // come from one question.
+      openBrowserPanel(one.url, previewBindingFor(previewSubject()))
       return { kind: 'ran', note: found.note }
     }
     // `many` and `none` are two different next actions and neither is an open:
     // the note says which, and the pane's own list is where a person picks.
     return { kind: 'refused', reason: found.note }
-  }, [discoverProject, openBrowserPanel, previewPane])
+  }, [discoverProject, openBrowserPanel, previewBindingFor, previewPane, previewSubject])
   /**
    * The pane is NAMED by the pane's own control and found by the verb's
    * subject rule otherwise. The first cut had the control `selectOnly` the
@@ -5443,6 +5522,7 @@ export function Canvas({
     setNoteText,
     setNoteTint,
     openPreviewNow: openPreview,
+    bindPreviewNow: bindPreview,
     setPreviewWidthNow: setPreviewWidth,
     capturePreviewNow,
     startDevServerNow: startDevServer,
@@ -6345,6 +6425,8 @@ export function Canvas({
                   onSetDevice={(paneId, device) => { setPreviewWidth(device, paneId) }}
                   onCapture={capturePreviewNow}
                   onStartDev={startDevServer}
+                  onBindSource={bindPreview}
+                  {...(previewSubjectReason === undefined ? {} : { bindReason: previewSubjectReason })}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}

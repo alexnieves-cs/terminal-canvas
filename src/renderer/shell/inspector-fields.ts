@@ -1,4 +1,5 @@
 import type { PersistedWorkItem } from '@shared/work-items'
+import { previewSourceLine } from '@shared/preview'
 import { agentWord, panelState, type StateInput, type ChatStateInput } from '@renderer/panels/panel-state'
 import { REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_CHAT_NO_BASELINE, REASON_NOT_CLAUDE_SESSION, REASON_NOT_STARTED, REASON_TERMINAL_LIVE } from '@renderer/palette/commands'
 import { describeTrigger } from '@shared/watch-trigger'
@@ -786,7 +787,21 @@ export function buildInspectorModelBare(
     ] }
   }
   if (isBrowserPanel(panel)) {
-    return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'url', label: 'url', value: panel.url }] }
+    // M195 (D03). The url is what this pane IS; the source is what it is a
+    // preview OF, and the inspector is where the whole of that lives (the pane
+    // itself carries the folder's name alone — the density layers). The source
+    // panel is resolved from the canvas rather than stored on the record: a
+    // stored label would be wrong the moment the panel was renamed, and a
+    // panel that has since been CLOSED is a real state with its own sentence
+    // — the folder stays bound, and saying so is the difference between a
+    // preview a person trusts and one they think has broken.
+    const sourcePanel = panel.preview?.sourcePanelId === undefined
+      ? undefined
+      : (panels ?? []).find((p) => p.rect.id === panel.preview?.sourcePanelId)
+    return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
+      { key: 'url', label: 'url', value: panel.url },
+      { key: 'preview-source', label: 'preview source', value: previewSourceLine(panel.preview, sourcePanel === undefined ? undefined : railLabel(sourcePanel, undefined)) }
+    ] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its
   // own text and (a sticky's) tint. No process metrics: a note has no process,

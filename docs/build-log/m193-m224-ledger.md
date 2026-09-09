@@ -20,7 +20,8 @@ milestone did run them; it still did not drive the app by hand, and says so wher
 |---|---|---|---|
 | D01 | M193 | ✅ done | [m193-d01-reconcile.md](m193-d01-reconcile.md) |
 | D02 | M194 | ✅ done | [m194-d02-selected-chat-context.md](m194-d02-selected-chat-context.md) |
-| D03–D20 | M195–M224 | not started | — |
+| D03 | M195 | ✅ done | [m195-d03-preview-ownership.md](m195-d03-preview-ownership.md) |
+| D04–D20 | M196–M224 | not started | — |
 
 The full map, its splits and its reservations are below. A phase's evidence, critic disposition and
 owed hand checks go in that phase's own build log, and its row here is updated when it lands.
@@ -37,7 +38,7 @@ re-recorded before the work starts, never after.
 |---|---|---|---|
 | D01 | **M193** | — | ✅ done |
 | D02 | **M194** | — | ✅ done |
-| D03 | **M195** | — | not started |
+| D03 | **M195** | — | ✅ done |
 | D04 | **M196** | — | not started |
 | D05 | **M197–M198** | M197 the one entry door and the task record; M198 the assembly (teammate, place, lane, chat) and its partial-failure recovery | not started |
 | D06 | **M199–M200** | M199 the run's own truth (a pending question as a run entry; a turn is not a task); M200 the supervision surface that reads it | not started |
@@ -133,3 +134,65 @@ by that conversation's real inventory. Nothing else in the frame moved.
 generation, main's two other validation arms, and terminal/review/toolbox Files/Tools compatibility
 at the DOM level are each unchecked; they are listed with their reasons in §8 of the build log.
 Every hand check the v9 run left owed is still owed.
+
+---
+
+## D03 = M195 — previews bound to the work they preview
+
+**✅ done.** The full record is
+[m195-d03-preview-ownership.md](m195-d03-preview-ownership.md); this is the row.
+
+**run** `npm run verify` exit 0, 38 suite tallies, no FAIL line ·
+**run** `npm run verify:visual` exit 0, 59/59 with one golden rewritten ·
+**run** `npm run verify:packaged` exit 0, 12/12.
+Seven checks, all scoped ids (`verify:file` 91 → 93, `verify:layout` 252 → 253, `verify:rail`
+201 → 202, `verify:meta` 39 → 40, `verify:panels:product` 86 → 88), each watched RED against the
+exact regression it claims to catch. `verify:verbs` stayed 23/23 with no edit to `closure.v9.1` —
+the fifth preview verb's four doors bound themselves, which is the door check doing its job.
+
+**The defect, measured rather than described.** The first run of the product check printed
+`afterA: {A:2, B:2, U:2}` — a change under project A's root reloaded all three loopback panes —
+and `afterOut: {A:3, B:3, U:3}`, an unrelated Markdown note reloading them again (that second one
+was not in the audit). After the fix, and after the verifier's fences: `A+1, B+0, U+0` for a
+burst under A, `A+1, B+1` for two projects changing in one window, and nothing at all for the
+stray note.
+
+**observed** `verify/visual/goldens/browser.png` — rewritten with the critic's sentence recorded
+first. It differed by 0.139 % against a 0.5 % budget, so the suite PASSED it: a change under the
+budgets that matters is forced by deleting the golden, and this is the milestone's only visible
+surface.
+
+**Four things a later milestone should know before it reads this as finished.**
+
+- **The canvas door was DEAD, and not only this milestone's.** `shellControl` does not
+  stopPropagation on mousedown, and the pane's body focuses on mousedown, so every verb on the
+  preview pane that reads the SUBJECT panel — `Find the project` and `Start dev` since **M185**,
+  plus a candidate in the discovery list — focused the pane and then refused, because a browser
+  pane is neither a terminal nor a chat. One line fixes all four
+  (`if (e.defaultPrevented) return`, keyed on the `preventDefault` `shellControl` already calls
+  "to protect `focusedId`"). **A check that dispatches mousedown and click from one
+  `executeJavaScript` cannot see this class of defect** — both handlers run before React flushes,
+  so the eagerly-assigned selection ref and the render-assigned focus ref both read correctly.
+  Press in two tasks. Any later milestone adding a control inside a panel body that reads focus
+  inherits this.
+- **An unbound pane no longer auto-reloads. That is the one intended regression**, and it is the
+  point: the old rule IS the defect. It is carried by the control reading `Bind source`, never by
+  a `not bound` label — a zero-value statement in an always-visible row is what D01's density
+  contract names.
+- **The trigger is still narrow and D03 did not widen it.** `FILE_CHANGED` is sent from exactly
+  one place, the watch `FILE_READ` registers per open FILE PANEL, so a repository an agent edits
+  with no file panel open on the edited file reloads nothing — before this milestone and after
+  it. The binding is exactly what a repository watch would need; adding one is a later
+  milestone's, not a gap in this one.
+- **No IPC change was needed, and the reason generalises.** The event carries no path but it
+  carries `panelId`, and the renderer already holds that file panel's `source.path`. Before
+  extending a shared contract, check whether the renderer can already resolve the fact
+  transitively.
+
+**Owed, and not closed by three green gates:** the merged view and the hook's teardown are
+unchecked; `bindPreview`'s three refusals, `openPreview`'s binding behaviour, the lineup seat's
+binding, undo and a workspace move are covered at no level; a binding is not realpath-resolved, so
+a root taken from a live session's cwd and a file panel's own path can disagree through a symlink;
+and a `SKILL.md` under a bound root does not reload the preview (`unknown-source`, by name). They
+are listed with their reasons in §9 of the build log. Every hand check the v9 run left owed is
+still owed.

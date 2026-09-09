@@ -32,6 +32,15 @@ interface LiveGuest {
    * the person looked at the old page.
    */
   navigate: (url: string) => void
+  /**
+   * M195 (D03). The guest's OWN live url, or null before it has navigated.
+   * The reload rule asks the guest and never the panel record: the record is
+   * written from `did-navigate` one render later, so a pane a person has just
+   * navigated to a remote page would still read as loopback and would be
+   * reloaded out from under them. It is `getURL()` — the same source M103's
+   * readout has, and never anything the page can write.
+   */
+  liveUrl: () => string | null
 }
 
 const guests = new Map<string, LiveGuest>()
@@ -59,6 +68,12 @@ export function navigateBrowser(id: string, url: string): boolean {
 /** The guest's webContents id, or undefined before `did-attach` and after the node unmounted. */
 export function browserGuestId(id: string): number | undefined {
   return guests.get(id)?.webContentsId
+}
+
+/** The guest's own live url, or null before `did-attach` / after the node unmounted. */
+export function liveBrowserUrl(id: string): string | null {
+  const guest = guests.get(id)
+  return guest === undefined ? null : guest.liveUrl()
 }
 
 /** Reload the live page; false when there is no live guest to reload. */

@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 140000 // measured 2026-09-08 alone in the Electron tier after M188-M189 added node.1 and portable.1 (which reloads three times), two green runs: 104.8s, 106.8s wall; 1.25x the slower, rounded up — re-measure when a milestone adds checks
+const WATCHDOG_MS = 155000 // measured (re-measured) 2026-09-08 alone in the Electron tier after M195 added preview.bind.1 (four servers, four file panels, three fenced phases) and preview.bind.2 (a reload plus a real press), two green runs: 121.7s, 121.1s wall; 1.25x the slower, rounded up. Was 140000 for 104.8s/106.8s after M188-M189 — re-measure when a milestone adds checks, because a watchdog kill reads as a HANG and not as a red check (M135)
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -2322,6 +2322,271 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         for (const id of IDS) ok(id, false, 'threw: ' + String(pErr && pErr.message || pErr))
       } finally {
         if (server) server.close()
+      }
+    }
+
+    // M195 (D03) — preview.bind.1. WHICH PREVIEW A CHANGE BELONGS TO, in the
+    //     real renderer, over four real servers. Before this, the reload
+    //     effect's callback took no parameter: every loopback pane reloaded on
+    //     every open file panel's change, so two local projects reloaded one
+    //     another and a person mid-form on the second one lost it.
+    //     A RELOAD IS COUNTED AT THE SERVER, never inferred from the DOM: the
+    //     guest reloads in its own process and the host has nothing to observe
+    //     but the request that arrives. Only `/` is counted — a guest also asks
+    //     for `/favicon.ico`, and counting that would make a pane look reloaded
+    //     because it painted a tab icon.
+    //     A NEGATIVE IS FENCED, never slept on. `fence()` writes to a fourth
+    //     pane's own root and waits for THAT pane to reload, which proves the
+    //     whole pipeline — fs.watch, main's 100 ms debounce, the event, the
+    //     renderer's own coalesce — has drained past the writes under test. A
+    //     fixed sleep would be a guessed clock, and a late reload arriving
+    //     after the read would turn a red into a green.
+    //     Four claims: (a) a change under root A reloads only pane A; (b) two
+    //     projects changing in ONE window reload BOTH — the coalesce is per
+    //     pane, and one shared timer would drop one of them; (c) a burst under
+    //     one root is ONE reload (spaced past main's own debounce, which
+    //     otherwise collapses the burst before the renderer ever sees it and
+    //     would make this claim untestable); (d) a change under a folder no
+    //     pane is bound to reloads nothing, while the fence proves an event
+    //     for a file panel opened the same way does fire.
+    {
+      const IDS = ['preview.bind.1 a file change under a preview\'s bound root reloads THAT pane and no other: a second project\'s pane and an unbound pane are untouched; two bound projects changing in one window BOTH reload (the coalesce is per pane); a burst of writes under one root is a single reload; and a change under a folder no pane is bound to reloads nothing, fenced by a sentinel pane that does']
+      const servers = []
+      const dirs = []
+      try {
+        const http = require('node:http')
+        const mkServer = async () => {
+          const state = { loads: 0 }
+          const server = http.createServer((req, res) => {
+            if ((req.url || '/').split('?')[0] === '/') state.loads += 1
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+            res.end('<!doctype html><html><head><title>p</title></head><body>a page</body></html>')
+          })
+          await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+          servers.push(server)
+          return { state, url: `http://127.0.0.1:${server.address().port}/` }
+        }
+        const A = await mkServer(); const B = await mkServer(); const U = await mkServer(); const S = await mkServer()
+        // realpathSync so a fixture path is the same string a live session and a
+        // file panel would each produce (macOS's /var is a symlink); see the
+        // note in preview.bind.2.
+        const mkDir = (name) => { const d = realpathSync(mkdtempSync(join(tmpdir(), name))); dirs.push(d); return d }
+        const rootA = mkDir('tc preview A '); const rootB = mkDir('tc preview B ')
+        const rootS = mkDir('tc preview S '); const stray = mkDir('tc preview stray ')
+        const fileA = join(rootA, 'a.txt'); const fileB = join(rootB, 'b.txt')
+        const fileS = join(rootS, 's.txt'); const fileStray = join(stray, 'notes.md')
+        for (const f of [fileA, fileB, fileS, fileStray]) writeFileSync(f, 'v0\n')
+        layoutStore.save({ panels: [
+          { id: 'pvA', kind: 'browser', x: 40, y: 40, w: 420, h: 300, z: 1, url: A.url, preview: { root: rootA } },
+          { id: 'pvB', kind: 'browser', x: 500, y: 40, w: 420, h: 300, z: 2, url: B.url, preview: { root: rootB } },
+          { id: 'pvU', kind: 'browser', x: 40, y: 380, w: 420, h: 300, z: 3, url: U.url },
+          { id: 'pvS', kind: 'browser', x: 500, y: 380, w: 420, h: 300, z: 4, url: S.url, preview: { root: rootS } }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'pvA', focusedId: 'pvA' })
+        flushLayoutStore()
+        const reB = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reB
+        await settle()
+        const live = await waitUntil(() => wc.executeJavaScript(`(() => ['pvA','pvB','pvU','pvS'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]')?.getAttribute('data-browser-live') === 'yes'))()`), 20000)
+        const opened = { A: A.state.loads, B: B.state.loads, U: U.state.loads, S: S.state.loads }
+        // The event main sends names the FILE PANEL; the renderer resolves that
+        // id to its path against the panel array, which is the whole reason no
+        // IPC channel changed here.
+        for (const f of [fileA, fileB, fileS, fileStray]) {
+          const had = await wc.executeJavaScript(`document.querySelectorAll('[data-panel-kind="file"]').length`)
+          await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(f)})`)
+          await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('[data-panel-kind="file"]').length > ${had}`), 8000)
+        }
+        await settle()
+        let fenceN = 0
+        // The fence: a write the SENTINEL pane must reload for. Its content
+        // changes every time, because main dedupes on a hash of the read and an
+        // identical write is not an event.
+        const fence = async () => {
+          const was = S.state.loads
+          fenceN += 1
+          writeFileSync(fileS, `fence ${fenceN}\n`)
+          return waitUntil(() => (S.state.loads > was ? S.state.loads : false), 10000)
+        }
+        const counts = () => ({ A: A.state.loads, B: B.state.loads, U: U.state.loads })
+        // (a) + (c). A burst under A alone. The writes are spaced past main's
+        // own WATCH_DEBOUNCE_MS (100 ms) on purpose: closer together, main
+        // collapses them into one event and the renderer's coalesce — the thing
+        // this claim is about — is never exercised at all.
+        const beforeBurst = counts()
+        writeFileSync(fileA, 'v1\n'); await sleep(170)
+        writeFileSync(fileA, 'v2\n'); await sleep(170)
+        writeFileSync(fileA, 'v3\n')
+        const burstFence = await fence()
+        const afterBurst = counts()
+        // (b) Two projects in ONE window. A shared timer would let the second
+        // write cancel the first pane's reload; per-pane timers reload both.
+        const beforeBoth = counts()
+        writeFileSync(fileA, 'both A\n'); writeFileSync(fileB, 'both B\n')
+        const bothFence = await fence()
+        const afterBoth = counts()
+        // (d) A change under a folder no pane is bound to — an ordinary note.
+        const beforeStray = counts()
+        writeFileSync(fileStray, 'edited\n')
+        const strayFence = await fence()
+        const afterStray = counts()
+        ok(IDS[0],
+          live !== false &&
+            opened.A === 1 && opened.B === 1 && opened.U === 1 && opened.S === 1 &&
+            burstFence !== false && bothFence !== false && strayFence !== false &&
+            afterBurst.A === beforeBurst.A + 1 && afterBurst.B === beforeBurst.B && afterBurst.U === beforeBurst.U &&
+            afterBoth.A === beforeBoth.A + 1 && afterBoth.B === beforeBoth.B + 1 && afterBoth.U === beforeBoth.U &&
+            afterStray.A === beforeStray.A && afterStray.B === beforeStray.B && afterStray.U === beforeStray.U,
+          JSON.stringify({ live, opened, beforeBurst, afterBurst, beforeBoth, afterBoth, beforeStray, afterStray, fences: { burstFence, bothFence, strayFence } }))
+      } catch (bErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(bErr && bErr.message || bErr))
+      } finally {
+        // The file panels' watches live in MAIN and outlive this check, so the
+        // layout goes back to empty FIRST (which unmounts them and closes each
+        // watch through the ordinary door) before the fixtures are removed —
+        // otherwise every later check in the part runs with four watchers armed
+        // on directories that no longer exist.
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const server of servers) { try { server.close(); server.closeAllConnections?.() } catch { /* already closed */ } }
+        for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
+      }
+    }
+
+    // M195 (D03) — preview.bind.2. THE CANVAS DOOR, PRESSED WITH REAL INPUT.
+    //     Binding needs TWO panels at once — the pane it acts on and the panel
+    //     whose folder it takes — so this drives the real division: the
+    //     terminal's own slot is clicked (which focuses it), the pane's chrome
+    //     is mousedowned (which selects and never focuses), and then the
+    //     control is pressed.
+    //     THE PRESS IS TWO TASKS, never one, and that is the whole reason
+    //     this check has teeth. A mousedown and a click dispatched from ONE
+    //     `executeJavaScript`
+    //     runs both handlers inside a single task, so React has not flushed
+    //     the state update the mousedown queued — and `focusedIdRef` (assigned
+    //     during RENDER) still holds the terminal while `selectedIdsRef`
+    //     (assigned EAGERLY) already holds the pane. Both refs read correctly
+    //     and the check passes. A real user's mousedown and click are separate
+    //     tasks with a flush between them, so a control whose press moves focus
+    //     to its own pane reads a subject that is the pane itself — which is
+    //     neither a terminal nor a chat — and refuses. That defect was live in
+    //     this pane's `Find the project` and `Start dev` controls from M185
+    //     until this milestone; the fix is one line in the body's own focus
+    //     handler (`event.defaultPrevented`) and this is the check that can
+    //     see it: with the line removed, the press focuses the pane and the
+    //     verb refuses with `select the terminal your project runs in`.
+    {
+      const IDS = ['preview.bind.2 Bind source, pressed as a person presses it (mousedown and click in separate tasks) on a pane whose own body focuses on mousedown, takes the subject panel\'s folder and writes it with the source panel onto the record, leaves the pane selected and reads Change source afterwards — and the pane, which ignored the same file before, now reloads for a change under that folder']
+      const servers = []
+      const dirs = []
+      try {
+        const http = require('node:http')
+        const state = { loads: 0 }
+        const server = http.createServer((req, res) => {
+          if ((req.url || '/').split('?')[0] === '/') state.loads += 1
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end('<!doctype html><html><body>bind</body></html>')
+        })
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+        servers.push(server)
+        const url = `http://127.0.0.1:${server.address().port}/`
+        // realpathSync, because macOS's /var is a symlink to /private/var: the
+        // live session answers the resolved form and a file panel answers the
+        // form it was opened with, and the fixture must not spend its evidence
+        // on which of the two this machine happened to produce. (That mismatch
+        // is real and is recorded as a bound of the feature, not hidden here:
+        // the renderer has no realpath, and this is provenance, not a gate.)
+        const rootC = realpathSync(mkdtempSync(join(tmpdir(), 'tc preview C ')))
+        dirs.push(rootC)
+        const fileC = join(rootC, 'c.txt')
+        writeFileSync(fileC, 'v0\n')
+        // The subject is a CHAT, not a terminal, and the reason is the
+        // harness's own rule: `LIVE_AT_BOOT` promotes exactly `s01`, so any
+        // other terminal boots DORMANT and renders a card with no
+        // `.panel__slot` to click (the second cut of this check threw on
+        // exactly that). A conversation needs no process to have a folder —
+        // `previewSubject` accepts one by name — so it is the honest subject
+        // for a check about binding rather than about spawning.
+        layoutStore.save({ panels: [
+          // `sessionId` is REQUIRED — `parseChatSource` drops a chat record
+          // without one, and a dropped panel is a missing `.pf__body` the
+          // click helper reports as "no element matched" rather than as a
+          // malformed fixture (this cost a run).
+          { id: 'ch1', kind: 'chat', x: 40, y: 40, w: 520, h: 320, z: 1, chat: { cwd: rootC, sessionId: 'm195-bind-session' } },
+          { id: 'pvC', x: 620, y: 40, w: 520, h: 380, z: 2, kind: 'browser', url }
+        ], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'ch1', focusedId: null })
+        flushLayoutStore()
+        const reC = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reC
+        await settle()
+        const live = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="pvC"]')?.getAttribute('data-browser-live') === 'yes'`), 20000)
+        // Every renderer read answers DATA rather than throwing: a null node
+        // inside `executeJavaScript` comes back as "Script failed to execute"
+        // with the actual cause only in the renderer's own console, which this
+        // harness does not forward — so the check would report a mystery.
+        const readPane = () => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="pvC"]')
+          if (n === null) return { missing: true, panels: [...document.querySelectorAll('.panel[data-panel-id]')].map((p) => p.getAttribute('data-panel-id')) }
+          return { readout: n.querySelector('[data-preview-source]')?.textContent ?? '', attr: n.querySelector('[data-preview-source]')?.getAttribute('data-preview-source'), verb: n.querySelector('[data-preview-bind]')?.textContent ?? '', disabled: n.querySelector('[data-preview-bind]')?.disabled === true, selected: n.classList.contains('panel--selected') } })()`)
+        const before = await readPane()
+        // The conversation is FOCUSED by a click in its body, which is where
+        // `ChatNode`'s focus handler lives.
+        await clickPanelBody('.panel[data-panel-id="ch1"] .pf__body')
+        // The pane is SELECTED by a mousedown on its chrome, which selects and
+        // starts a move that never moves. Both are what a person does.
+        const selectedPane = await wc.executeJavaScript(`(() => { const c = document.querySelector('.panel[data-panel-id="pvC"] .pf__chrome'); if (c === null) return false
+          c.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await settle()
+        const focus = await wc.executeJavaScript(`typeof window.__m4aFocusedId === 'function' ? window.__m4aFocusedId() : 'no hook'`)
+        // THE PRESS IS TWO TASKS WITH A FLUSH BETWEEN THEM, and that is the
+        // whole reason this check has teeth. A `mousedown` and a `click`
+        // dispatched from ONE `executeJavaScript` run inside a single task, so
+        // React has not flushed the state update the mousedown queued: at
+        // click time `focusedIdRef` (assigned during RENDER) still holds the
+        // conversation while `selectedIdsRef` (assigned EAGERLY) already holds
+        // the pane, both refs read correctly, and a control whose press steals
+        // focus passes anyway. A person's mousedown and click are separate
+        // tasks, so the flush has happened and the subject rule reads whatever
+        // the mousedown focused.
+        // (`sendInputEvent` down+up was tried first and is NOT usable here: it
+        // moved the selection, so the input arrived, but no `click` reached the
+        // control and the handler never ran — `said` empty, the record
+        // untouched. A shell control acts on CLICK, `preview.1`'s own note.)
+        const box = await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="pvC"] [data-preview-bind]'); if (!b || b.disabled) return null
+          b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }))
+          return true })()`)
+        await sleep(120)
+        const focusAfterDown = await wc.executeJavaScript(`typeof window.__m4aFocusedId === 'function' ? window.__m4aFocusedId() : 'no hook'`)
+        const pressed = await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="pvC"] [data-preview-bind]'); if (!b || b.disabled) return false
+          b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        await settle(); flushLayoutStore()
+        const saved = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8')).workspaces.flatMap((w) => w.panels).find((p) => p.id === 'pvC')
+        const after = await readPane()
+        const said = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="pvC"] [data-preview-said]')?.textContent ?? ''`)
+        // The effect. A file panel inside the bound folder, then a write.
+        await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(fileC)})`)
+        await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-panel-kind="file"]')`), 8000)
+        await settle()
+        const loadsBefore = state.loads
+        writeFileSync(fileC, 'v1\n')
+        const reloaded = await waitUntil(() => (state.loads > loadsBefore ? state.loads : false), 10000)
+        ok(IDS[0],
+          live !== false && selectedPane === true &&
+            before.attr === 'none' && before.disabled === false && /Bind source/.test(before.verb) &&
+            focus === 'ch1' && box === true && pressed === true &&
+            // The press did not move focus off the subject — the one line that
+            // makes this control (and M185's three beside it) work at all.
+            focusAfterDown === 'ch1' &&
+            saved && saved.preview && saved.preview.root === rootC && saved.preview.sourcePanelId === 'ch1' &&
+            after.attr === rootC && /source · /.test(after.readout) && /Change source/.test(after.verb) &&
+            after.selected === true &&
+            reloaded !== false,
+          JSON.stringify({ live, selectedPane, before, focus, focusAfterDown, box, pressed, saved: saved && saved.preview, after, said, rootC, loadsBefore, loads: state.loads }))
+      } catch (cErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(cErr && cErr.message || cErr))
+      } finally {
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const server of servers) { try { server.close(); server.closeAllConnections?.() } catch { /* already closed */ } }
+        for (const d of dirs) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
 

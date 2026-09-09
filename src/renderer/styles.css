@@ -4322,6 +4322,11 @@ body {
    is the one". The found list is prose plus verbs, never a table. */
 .browser-node__preview { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap; padding: 0 var(--sp-2) var(--sp-1); font-family: var(--font-ui); }
 .browser-node__chip.is-on { color: var(--iris); border-color: var(--iris); }
+/* M195. The preview's source, at the contextual layer: quiet, and pushed to the
+   far end of the row so that what this pane IS a preview of reads apart from
+   the controls that act on the page — the first cut sat it between Capture and
+   a button, where a plain readout reads as a third chip. */
+.browser-node__source { color: var(--fg-2); font-size: var(--t-sm); margin-left: auto; }
 .browser-node__found { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); padding: 0 var(--sp-2) var(--sp-2); font-family: var(--font-ui); }
 .browser-node__said { padding: 0 var(--sp-2); font-family: var(--font-ui); }
 /* M186. A picture that cannot be painted is still an object: its two sentences stack, and Replace sits on the chrome above them. */

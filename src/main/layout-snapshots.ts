@@ -107,7 +107,8 @@ export type RestoreResult = { kind: 'restored'; layout: LayoutSnapshot; workspac
  * workspaces as a NEW one, named by its source and the time, every panel id
  * re-minted through `mint` (ids are one sequence — a restored `n3` beside a
  * live `n3` would be two panels with one registry entry) with links, groups,
- * runs and annotations following the rename; activates it. The current
+ * runs, annotations and a preview's source panel following the rename;
+ * activates it. The current
  * workspaces are handed back untouched, by reference.
  */
 export function restoreFromSnapshot(current: LayoutSnapshot, bytes: string, at: number, mint: (n: number) => string, afterId?: number): RestoreResult {
@@ -158,7 +159,19 @@ export function restoreFromSnapshot(current: LayoutSnapshot, bytes: string, at: 
     panels: source.panels.map((p) => ({
       ...p,
       id: re(p.id),
-      ...(p.links === undefined ? {} : { links: p.links.filter((l) => { const ok = known(l.to); if (!ok) dropped += 1; return ok }).map((l) => ({ ...l, to: re(l.to) })) })
+      ...(p.links === undefined ? {} : { links: p.links.filter((l) => { const ok = known(l.to); if (!ok) dropped += 1; return ok }).map((l) => ({ ...l, to: re(l.to) })) }),
+      // M195 (D03). A preview's source panel is the FIFTH reference to a panel
+      // id in this record, and it follows the rename like the other four. Its
+      // ROOT is untouched and stays bound either way (a folder is not a panel);
+      // it is the id that would otherwise name a panel the restore did not
+      // create — and in the merged view could resolve to the ORIGINAL
+      // workspace's panel, so the pane would name a panel in another workspace
+      // as its own source. A source panel the snapshot did not hold is dropped
+      // and counted, and the pane keeps its folder: exactly what a closed
+      // source panel already means (`previewSourceLine`).
+      ...(p.kind !== 'browser' || p.preview?.sourcePanelId === undefined ? {} : known(p.preview.sourcePanelId)
+        ? { preview: { ...p.preview, sourcePanelId: re(p.preview.sourcePanelId) } }
+        : (() => { dropped += 1; return { preview: { root: p.preview.root } } })())
     })),
     groups: source.groups.map((g) => ({ ...g, panelIds: g.panelIds.filter((id) => { const ok = known(id); if (!ok) dropped += 1; return ok }).map(re) })).filter((g) => g.panelIds.length > 0),
     selectedId: source.selectedId === null ? null : re(source.selectedId),

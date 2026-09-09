@@ -1830,6 +1830,129 @@ await (async () => {
   }
 }
 
+// M195 (D03) — preview.bind.1. WHICH CHANGES BELONG TO WHICH PREVIEW.
+//      The defect this closes is a callback that took no parameter
+//      (`BrowserNode.tsx`, `onChanged(() => …)`): every loopback pane reloaded
+//      on every open file panel's change, so two local projects reloaded one
+//      another. The rule is pure so all of its arms are drivable, and the arms
+//      are the point — a `skip` with no `why` is a preview that stopped
+//      reloading for a reason nobody can name.
+//      Containment is on SEGMENT boundaries: `/a/b` holds `/a/b/c` and itself
+//      and does NOT hold `/a/bc`, which a `startsWith` would answer yes to and
+//      would bind a preview to its neighbour on disk. A relative path is
+//      refused on either side rather than resolved against a root nobody chose
+//      (`shared/places.ts`'s rule, reached from the display side).
+{
+  const has = typeof F.normalisePreviewPath === 'function' && typeof F.pathInsidePreview === 'function' && typeof F.previewReloadDecision === 'function'
+  const NAME = 'preview.bind.1 normalisePreviewPath collapses . and .. and trailing slashes and refuses a relative path; pathInsidePreview holds the root itself and anything under it, and refuses a sibling whose name merely starts with it; previewReloadDecision answers reload only for a bound pane, a loopback live url and a changed path inside the root, every refusal names a DIFFERENT why (unbound, not-local, no-path, unknown-source, outside), an input tripping three guards at once names the one that wins, and a live panel with no readable path is unknown-source rather than no-path'
+  if (!has) ok(NAME, false, 'shared/preview.ts does not export normalisePreviewPath / pathInsidePreview / previewReloadDecision')
+  else {
+    const norm = {
+      plain: F.normalisePreviewPath('/a/b'),
+      trailing: F.normalisePreviewPath('/a/b///'),
+      dots: F.normalisePreviewPath('/a/./b/c/../'),
+      out: F.normalisePreviewPath('/a/b/../../..'),
+      root: F.normalisePreviewPath('/'),
+      relative: F.normalisePreviewPath('a/b'),
+      tilde: F.normalisePreviewPath('~/work'),
+      empty: F.normalisePreviewPath('')
+    }
+    const inside = {
+      self: F.pathInsidePreview('/w/api', '/w/api'),
+      under: F.pathInsidePreview('/w/api', '/w/api/src/index.ts'),
+      trailingRoot: F.pathInsidePreview('/w/api/', '/w/api/src/index.ts'),
+      sibling: F.pathInsidePreview('/w/api', '/w/apiary/src/index.ts'),
+      above: F.pathInsidePreview('/w/api', '/w/index.ts'),
+      escaped: F.pathInsidePreview('/w/api', '/w/api/../other/x.ts'),
+      relativePath: F.pathInsidePreview('/w/api', 'src/index.ts'),
+      relativeRoot: F.pathInsidePreview('w/api', '/w/api/src/index.ts')
+    }
+    const bound = { root: '/w/api' }
+    const local = 'http://127.0.0.1:5173/app'
+    const d = {
+      // PRECEDENCE. Every other input below trips exactly one guard, so the
+      // order of the guards is unpinned by them: reordering the rule (asking
+      // about the path before the host, say) would pass. These two inputs trip
+      // three guards at once, and the answer says which one wins.
+      unboundFirst: F.previewReloadDecision({ binding: undefined, changedPath: undefined, liveUrl: 'https://example.com/' }),
+      localBeforePath: F.previewReloadDecision({ binding: bound, changedPath: undefined, liveUrl: 'https://example.com/' }),
+      // A LIVE panel with no path this canvas can read (a skill panel, whose
+      // record carries {scope, name} and no path) is a different fact from a
+      // panel that is gone.
+      unknownSource: F.previewReloadDecision({ binding: bound, changedPath: undefined, liveUrl: local, changedPanelExists: true }),
+      // A binding to the filesystem root holds every path — arithmetic, not a
+      // policy; the bind door is what refuses it.
+      wholeDisk: F.previewReloadDecision({ binding: { root: '/' }, changedPath: '/anywhere/at/all.ts', liveUrl: local }),
+      reload: F.previewReloadDecision({ binding: bound, changedPath: '/w/api/src/a.ts', liveUrl: local }),
+      reloadLocalhost: F.previewReloadDecision({ binding: bound, changedPath: '/w/api/src/a.ts', liveUrl: 'http://localhost:3000/' }),
+      reloadV6: F.previewReloadDecision({ binding: bound, changedPath: '/w/api/src/a.ts', liveUrl: 'http://[::1]:3000/' }),
+      unbound: F.previewReloadDecision({ binding: undefined, changedPath: '/w/api/src/a.ts', liveUrl: local }),
+      outside: F.previewReloadDecision({ binding: bound, changedPath: '/w/site/src/a.ts', liveUrl: local }),
+      sibling: F.previewReloadDecision({ binding: bound, changedPath: '/w/apiary/src/a.ts', liveUrl: local }),
+      notLocal: F.previewReloadDecision({ binding: bound, changedPath: '/w/api/src/a.ts', liveUrl: 'https://docs.example.com/guide' }),
+      noPath: F.previewReloadDecision({ binding: bound, changedPath: undefined, liveUrl: local }),
+      noUrl: F.previewReloadDecision({ binding: bound, changedPath: '/w/api/src/a.ts', liveUrl: null })
+    }
+    const whys = [d.unbound, d.outside, d.notLocal, d.noPath, d.unknownSource].map((x) => x.why)
+    ok(NAME,
+      norm.plain === '/a/b' && norm.trailing === '/a/b' && norm.dots === '/a/b' && norm.out === '/' && norm.root === '/' &&
+        norm.relative === null && norm.tilde === null && norm.empty === null &&
+        inside.self === true && inside.under === true && inside.trailingRoot === true &&
+        inside.sibling === false && inside.above === false && inside.escaped === false &&
+        inside.relativePath === false && inside.relativeRoot === false &&
+        d.reload.kind === 'reload' && d.reloadLocalhost.kind === 'reload' && d.reloadV6.kind === 'reload' &&
+        d.unbound.kind === 'skip' && d.unbound.why === 'unbound' &&
+        d.outside.kind === 'skip' && d.outside.why === 'outside' &&
+        d.sibling.kind === 'skip' && d.sibling.why === 'outside' &&
+        d.notLocal.kind === 'skip' && d.notLocal.why === 'not-local' &&
+        d.noPath.kind === 'skip' && d.noPath.why === 'no-path' &&
+        d.noUrl.kind === 'skip' && d.noUrl.why === 'not-local' &&
+        d.unboundFirst.why === 'unbound' && d.localBeforePath.why === 'not-local' &&
+        d.unknownSource.kind === 'skip' && d.unknownSource.why === 'unknown-source' &&
+        d.wholeDisk.kind === 'reload' &&
+        new Set(whys).size === 5,
+      JSON.stringify({ norm, inside, d }))
+  }
+}
+
+// M195 (D03) — preview.bind.2. THE THREE SENTENCES A SOURCE IS EXPLAINED WITH.
+//      Three states, never two (this repo's rule): bound to a folder whose
+//      panel is still open, bound to a folder whose panel has closed — the
+//      binding is STILL VALID and the guide says to keep it — and not bound at
+//      all, which must say what that MEANS rather than print a bare zero. A
+//      collapsed pair here is a person looking at a preview that stopped
+//      reloading with nothing on screen that says why.
+{
+  const has = typeof F.previewSourceLine === 'function'
+  const NAME = 'preview.bind.2 previewSourceLine answers FOUR different sentences — bound with a live source, bound with a closed source, bound with no source panel at all, and not bound — each naming the folder when there is one, the root-only one carrying words rather than a bare path, the unbound one saying that NOTHING reloads the pane (never that it reloads for nothing, which is the behaviour this milestone removed), and every one in the pane\'s own register'
+  if (!has) ok(NAME, false, 'shared/preview.ts does not export previewSourceLine')
+  else {
+    const live = F.previewSourceLine({ root: '/w/api', sourcePanelId: 'p1' }, 'the api terminal')
+    const closed = F.previewSourceLine({ root: '/w/api', sourcePanelId: 'p1' }, undefined)
+    const noSource = F.previewSourceLine({ root: '/w/api' }, undefined)
+    const unbound = F.previewSourceLine(undefined, undefined)
+    const lines = [live, closed, noSource, unbound]
+    ok(NAME,
+      lines.every((l) => typeof l === 'string' && l.length > 0) &&
+        new Set(lines).size === 4 &&
+        /the api terminal/.test(live) && /\/w\/api/.test(live) &&
+        /closed/.test(closed) && /\/w\/api/.test(closed) &&
+        // The root-only arm carries WORDS, not a bare path: it is what a
+        // lineup's preview seat is born with, and a naked absolute path in a
+        // field is the bare-value rendering this repo's rule forbids.
+        /\/w\/api/.test(noSource) && !/closed/.test(noSource) && noSource.replace('/w/api', '').trim().length > 8 &&
+        // The unbound sentence must say NOTHING RELOADS IT. Saying it "reloads
+        // for nothing" describes the behaviour M195 removed and tells a person
+        // that binding narrows reloading when in fact it turns it on.
+        /not bound/.test(unbound) && /nothing reloads/.test(unbound) && !/reloads this pane for nothing/.test(unbound) &&
+        // Register: the pane's own — no leading capital, no full stop. (The
+        // first cut wrote `l === l.toLowerCase() || !/^[A-Z]/…`, whose `||`
+        // made the whole clause unfalsifiable for any lowercase-initial line.)
+        lines.every((l) => !/^[A-Z]/.test(l) && !l.endsWith('.')),
+      JSON.stringify({ live, closed, noSource, unbound }))
+  }
+}
+
 // M186 — asset.1. THE CONTENT-ADDRESSED STORE, over a real fixture directory.
 //      The id is a digest of the BYTES, so the same picture taken in twice is
 //      ONE file and the second write is skipped — which is what makes an id a

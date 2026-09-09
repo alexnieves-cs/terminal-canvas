@@ -3,7 +3,7 @@ import { carryBackend } from '@shared/agent-backends'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
-import type { DeviceWidthId } from '@shared/preview'
+import type { DeviceWidthId, PreviewBinding } from '@shared/preview'
 import type { NoteForm, NoteTint } from '@shared/notes'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
@@ -208,6 +208,13 @@ export interface BrowserPanel extends PanelBase {
   url: string
   /** M185. The named device width the guest is laid out at; absent is full width. */
   device?: DeviceWidthId
+  /**
+   * M195 (D03). The work this pane is a preview OF: the folder whose changes
+   * reload it. Absent is unbound: NOTHING reloads the pane, and its own
+   * control says so by reading `Bind source` rather than `Change source`.
+   * Layout, like `device`: it undoes, persists and moves with the panel.
+   */
+  preview?: PreviewBinding
 }
 
 /**
@@ -902,12 +909,16 @@ export const BROWSER_W = 640
 export const BROWSER_H = 480
 
 /** M103. A browser panel at the cascade centre, opening to `url` (already http(s) by the caller's rule). */
-export function makeBrowserPanel(id: string, centre: Point, z: number, url: string): BrowserPanel {
+export function makeBrowserPanel(id: string, centre: Point, z: number, url: string, preview?: PreviewBinding): BrowserPanel {
   return {
     kind: 'browser',
     rect: { id, x: centre.x - BROWSER_W / 2, y: centre.y - BROWSER_H / 2, w: BROWSER_W, h: BROWSER_H },
     z,
-    url
+    url,
+    // M195. Absent stays ABSENT — a pane a person typed an address into is
+    // bound to nothing, and writing `preview: undefined` would put the key in
+    // layout.json where `'preview' in panel` reads true.
+    ...(preview === undefined ? {} : { preview })
   }
 }
 
