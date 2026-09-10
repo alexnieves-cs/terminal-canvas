@@ -24,6 +24,8 @@
  */
 export interface FileSource {
   path: string
+  /** M244. Structured Markdown note view; absent accepted content requires human review. */
+  checklist?: import('./checklist').ChecklistView
   /**
    * M27. Render this file as PROSE — wrapped, no line-number gutter — and open
    * it in edit mode on first mount. A note IS a file: same path, same read,

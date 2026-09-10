@@ -2,6 +2,9 @@ import {
   useCallback, useEffect, useMemo, useRef, useState,
   type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
+import { NewObjectRow } from './NewObjectRow'
+import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
+import type { ChecklistView } from '@shared/checklist'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
@@ -61,6 +64,8 @@ import { TerminalPanel } from '@renderer/components/TerminalPanel'
 import { PORT_MIN_SCALE } from '@renderer/components/PanelPorts'
 import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
+import { ChecklistNode } from '@renderer/file/ChecklistNode'
+import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -608,7 +613,7 @@ export function Canvas({
   // here and selected once the panel exists in state (the effect below).
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null)
   const onSpawn = useCallback(
-    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true }) => {
+    (centre: Point, template?: PresetTemplate, opening?: { title?: string; context?: string; focus?: true; exact?: true }) => {
       const chosen = template ?? defaultTemplateRef.current
       const id = `n${nextIdRef.current++}`
       if (opening?.focus) setPendingFocusId(id)
@@ -629,7 +634,7 @@ export function Canvas({
         // hazard the note above describes: called twice with the same
         // `current` it returns the same point, so a StrictMode double-invoke
         // could not place the panel somewhere else.
-        const placed = cascadeCentre(centre, current)
+        const placed = opening?.exact ? centre : cascadeCentre(centre, current)
         const next = [
           ...current,
           { ...makePanel(
@@ -947,7 +952,12 @@ export function Canvas({
         clearScrollbackTail(panel.rect.id)
       }
     }
-    setPanels(next.present)
+    // File acceptance and handoff links are facts, not canvas geometry history.
+    setPanels((current) => next.present.map((panel) => {
+      const live = current.find((p) => p.rect.id === panel.rect.id)
+      return isFilePanel(panel) && live && isFilePanel(live) && live.source.checklist !== undefined
+        ? { ...panel, source: live.source } : panel
+    }))
     setGroups((current) => pruneGroups(current, ids))
     setDormantIds((current) => {
       const merged = new Set([...current].filter((id) => ids.has(id)))
@@ -1256,7 +1266,7 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused(),
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused(),
     [palette.isOpen]
   )
 
@@ -3243,7 +3253,7 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; exact?: true }) => {
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3261,14 +3271,15 @@ export function Canvas({
       // panel while holding two.
       const next = [
         ...existing,
-        makeFilePanel(id, cascadeCentre(centre, existing), nextZ(existing), {
+        makeFilePanel(id, opts?.exact ? centre : cascadeCentre(centre, existing), nextZ(existing), {
           path,
           // Conditional, never `...opts`. A spread writes `prose: undefined`,
           // which `'prose' in source` reads as PRESENT — the absent-stays-
           // absent trap this field's own doc comment records. ONE mint
           // function for both, so a note and an opened file cannot drift
           // apart in id minting, cascading, z-order or selection.
-          ...(opts?.prose === true ? { prose: true as const } : {})
+          ...(opts?.prose === true ? { prose: true as const } : {}),
+          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist })
         })
       ]
       commitHistory(next)
@@ -4898,13 +4909,13 @@ export function Canvas({
    *  - build : §4.1's chat door, pointed at a template file. The message is
    *            INSERTED into the composer, never sent.
    */
-  const openWorkflowPanel = useCallback((templateId: string) => {
+  const openWorkflowPanel = useCallback((templateId: string, at?: Point) => {
     if (mergedRef.current) return
     const template = allTemplates(templateRowsRef.current).find((t) => t.id === templateId)
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const id = `wf${nextIdRef.current++}`
     setPanels((current) => {
-      const next = [...current, makeWorkflowPanel(id, cascadeCentre(centre, current), nextZ(current), templateId, template?.name ?? templateId)]
+      const next = [...current, makeWorkflowPanel(id, at ?? cascadeCentre(centre, current), nextZ(current), templateId, template?.name ?? templateId)]
       commitHistory(next)
       return next
     })
@@ -5205,11 +5216,11 @@ export function Canvas({
    * where the page OPENS, and every later navigation is written back onto it
    * through `onBrowserNavigated` so a relaunch returns to the last page.
    */
-  const openBrowserPanel = useCallback((url: string, preview?: PreviewBinding): void => {
+  const openBrowserPanel = useCallback((url: string, preview?: PreviewBinding, at?: Point): void => {
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const browserId = `b${nextIdRef.current++}`
     setPanels((current) => {
-      const next = [...current, makeBrowserPanel(browserId, cascadeCentre(centre, current), nextZ(current), url, preview)]
+      const next = [...current, makeBrowserPanel(browserId, at ?? cascadeCentre(centre, current), nextZ(current), url, preview)]
       commitHistory(next)
       return next
     })
@@ -5807,7 +5818,74 @@ export function Canvas({
     return { kind: 'ran', note: `${keys.length} starter object${keys.length === 1 ? '' : 's'} laid out` }
   }, [beginNewChat, commitHistory, worldCentre, fitSelection])
 
+  const setChecklistView = useCallback((id: string, view: ChecklistView) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
+      ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
+  }, [])
+  const creationWorkspaceRef = useRef<string | undefined>(undefined)
+  creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
+  const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
+    const entry = CREATABLE_OBJECTS.find((item) => item.id === kind)
+    if (!entry) return { kind: 'refused', reason: `unknown object kind: ${kind}` }
+    const reason = creationReason(entry, { merged: mergedRef.current, noteRoot: noteRootRef.current })
+    if (reason) return { kind: 'refused', reason }
+    // Capture the workspace as well as the camera before an asynchronous chooser.
+    // A late answer must not mint into another workspace after a switch.
+    const workspace = creationWorkspaceRef.current
+    const at = worldCentre()
+    const current = (): boolean => creationWorkspaceRef.current === workspace && !mergedRef.current && !transitionRef.current
+    const refused = (): CreationResult => ({ kind: 'refused', reason: 'the workspace changed — create the object again here' })
+    const host: CreationHost = {
+      terminal: async () => { onSpawn(at, { cwd: noteRootRef.current ?? '~', args: [] }, { exact: true, focus: true }); return { kind: 'ran' } },
+      agent: async () => {
+        const readiness = onboardingReadiness(await window.canvas.env.report())
+        if (!current()) return refused()
+        if (!readiness.preferred) return { kind: 'refused', reason: 'no conversation engine is available — check readiness' }
+        const result = await beginNewChat({ backend: readiness.preferred, at })
+        return result.kind === 'refused' ? result : { kind: 'ran' }
+      },
+      document: async (checklist, name) => {
+        const root = noteRootRef.current
+        if (!root) return { kind: 'refused', reason: 'select a panel with a workspace folder first' }
+        const filename = name?.trim() || `notes/${checklist ? 'checklist' : 'note'}-${Date.now()}.md`
+        if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
+        const seed = `# ${checklist ? 'Checklist' : 'Note'}\n\n`
+        const result = await window.canvas.file.create({ root, name: filename, seed })
+        if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
+        if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
+        openFilePanel(result.path, at, { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
+        return { kind: 'ran' }
+      },
+      image: async (path) => {
+        const chosen = path ?? await window.canvas.asset.choose()
+        if (!current()) return refused()
+        if (!chosen) return { kind: 'refused', reason: 'no image chosen' }
+        return addImageFromPath(chosen, at)
+      },
+      workflow: async () => {
+        const result = await window.canvas.template.save({ name: 'New workflow', nodes: [], edges: [] })
+        if (result.kind !== 'saved') return { kind: 'refused', reason: result.reason }
+        if (!current()) return refused()
+        const rows = await window.canvas.template.list()
+        if (!current()) return refused()
+        templateRowsRef.current = rows
+        setTemplateRows(rows)
+        openWorkflowPanel(result.template.id, at)
+        return { kind: 'ran' }
+      },
+      browser: async (url) => {
+        const parsed = normaliseTypedUrl(url ?? 'http://localhost:3000')
+        if (parsed.kind === 'refused') return { kind: 'refused', reason: 'use an http(s) URL' }
+        openBrowserPanel(parsed.url, undefined, at)
+        return { kind: 'ran' }
+      }
+    }
+    try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
+    catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
+  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel])
+
   const paletteActions = usePaletteActions({
+    createObjectNow: createObject,
     applyStarter,
     saveWorkflowDraft,
     saveWorkflowCopyDraft: saveWorkflowCopy,
@@ -6557,6 +6635,8 @@ export function Canvas({
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
+        <NewObjectRow actions={paletteActions} merged={merged} noteRoot={noteRoot}
+          agentReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined} />
         {/* M69. The far-view tier, provided once for every kind's frame. */}
         <CardDetailContext.Provider value={cardDetail}>
         {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}
@@ -6704,6 +6784,11 @@ export function Canvas({
             // onSelectPanel's clear-dormant and registry.wake would be the
             // app's spawn gesture aimed at something that can never spawn.
             if (isFilePanel(panel)) {
+              if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
+                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
+                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setChecklistView}
+                agents={panels.filter(isChatPanel).map((p) => ({ id: p.rect.id, label: railLabel(p, undefined) }))} />
               return (
                 <FileNode
                   key={panel.rect.id}

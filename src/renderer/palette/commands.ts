@@ -1,4 +1,5 @@
 import { noteFormSentence } from '@shared/notes'
+import { CREATABLE_OBJECTS, creationReason, type CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
 import type { ToolScope } from '@shared/toolbox'
@@ -145,6 +146,9 @@ export interface PanelRow {
 }
 
 export interface PaletteActions {
+  createObject(kind: string, value?: string): Promise<CreationResult>
+  editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
+  handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -900,9 +904,19 @@ export function buildCredentialRows(
  * out what the palette looks like is a reader who will put a row in the wrong
  * section.
  */
+export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObject'>; merged?: boolean; noteRoot: string | null; agentReason?: string }): Command[] {
+  return CREATABLE_OBJECTS.map((entry) => withReason({
+    id: entry.palette, title: `New ${entry.label}`, searchText: `create add new object ${entry.label}`,
+    group: 'spawn', run: () => { void ctx.actions.createObject(entry.id) }
+  }, creationReason(entry, ctx)))
+}
+
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
+  out.push(...creationCommands(ctx))
+  out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
+  out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
 
   // --- Panels --------------------------------------------------------------
 

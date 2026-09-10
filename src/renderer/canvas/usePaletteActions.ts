@@ -1,4 +1,6 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
+import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
+import { checklistController } from '@renderer/file/checklist-controllers'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -74,6 +76,7 @@ import type { NavigatorPane } from '@renderer/shell/useShellChrome'
 import type { Discovery as PreviewDiscovery } from '@shared/preview'
 
 export interface PaletteActionsDeps {
+  createObjectNow: (kind: string, value?: string) => Promise<CreationResult>
   recheckEnvironment: () => Promise<import("@shared/env-report").EnvReport>
   /** M182. Every saved template, through a ref: the editing verbs bind and edit against the live list. */
   templateRowsRef: RefObject<PersistedTemplate[]>
@@ -241,6 +244,7 @@ export interface PaletteActionsDeps {
  */
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
+    createObjectNow,
     recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
@@ -299,8 +303,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       })
       const execute = async (step: PlanStep): Promise<StepOutcome> => {
         const a = step.args
+        const creation = CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)
+        if (creation) return self.createObject(creation.id, a.value)
         const panelOf = (id: string): Panel | undefined => panelsRef.current.find((p) => p.rect.id === id)
         switch (step.verb) {
+          case 'checklist-edit': return self.editChecklist(a.panel!, a.operation!, a.value)
+          case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
           case 'workflow-run': return self.runWorkflowNow(a.template!)
@@ -519,6 +527,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       }
 
     const self: PaletteActions = ({
+    createObject: createObjectNow,
+    editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
+    handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -2394,5 +2405,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow])
 }

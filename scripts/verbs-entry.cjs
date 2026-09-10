@@ -4,6 +4,7 @@
    read it back through the same path a plan's read takes. No electron, no
    node-pty, no React. */
 module.exports = {
+  commands: require('../src/renderer/palette/commands'),
   verbs: require('../src/shared/verb-table'),
   plan: require('../src/shared/plan'),
   outward: require('../src/shared/outward'),

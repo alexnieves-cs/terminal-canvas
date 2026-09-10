@@ -50,7 +50,43 @@ export interface VerbDef {
 
 const panel = (name = 'panel'): VerbArg => ({ name, kind: 'panel' })
 
+export type CreationResult = { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+export interface CreationHost {
+  terminal(): Promise<CreationResult>
+  agent(): Promise<CreationResult>
+  document(checklist: boolean, name?: string): Promise<CreationResult>
+  image(path?: string): Promise<CreationResult>
+  workflow(): Promise<CreationResult>
+  browser(url?: string): Promise<CreationResult>
+}
+export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
+const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
+  id, label, icon, create, requires, verb: `create-${id}`, palette: `object.create.${id}`,
+  doors: { canvas: `New object row: ${label}`, palette: `object.create.${id}`, agent: `tc plan create-${id}`, workflow: `an action node whose line is: create-${id}` }
+})
+
+/** M244. The only creatable-kind list. New doors are derived here, beside V9_DOORS. */
+export const CREATABLE_OBJECTS = [
+  creation('terminal', 'Terminal', 'terminal', (h) => h.terminal()),
+  creation('agent', 'Agent', 'agent', (h) => h.agent(), 'agent'),
+  creation('note', 'Note', 'note', (h, value) => h.document(false, value), 'folder'),
+  creation('image', 'Image', 'image', (h, value) => h.image(value)),
+  creation('workflow', 'Workflow', 'workflow', (h) => h.workflow()),
+  creation('browser', 'Browser/Preview', 'browser', (h, value) => h.browser(value)),
+  creation('checklist', 'Checklist', 'checklist', (h, value) => h.document(true, value), 'folder')
+] as const
+
+export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {
+  if (context.merged) return 'leave merged view to create an object'
+  if (entry.requires === 'folder' && context.noteRoot === null) return 'select a panel with a workspace folder first'
+  if (entry.requires === 'agent') return context.agentReason
+  return undefined
+}
+
 export const VERBS: readonly VerbDef[] = [
+  { id: 'checklist-edit', label: 'Checklist: edit item', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['editChecklist'], target: 'panel', hint: 'add text, toggle/delete a zero-based line, move line to-line, undo or redo' },
+  { id: 'checklist-hand', label: 'Checklist: hand to agent', args: [panel(), { name: 'line', kind: 'value' }, panel('agent')], destructive: false, actions: ['handChecklist'], target: 'panel', hint: 'send a task line to an idle conversation, through the ordinary send gate' },
+  ...CREATABLE_OBJECTS.map((entry): VerbDef => ({ id: entry.verb, label: `New ${entry.label}`, args: [{ name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['createObject'], target: 'canvas', hint: `create ${entry.label.toLowerCase()} at the viewport centre` })),
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
   // M182. The template editor's operations as verbs — the same six functions the diagram's drag calls.
   { id: 'workflow-add', label: 'Workflow: add node', args: [{ name: 'template', kind: 'key' }, { name: 'kind', kind: 'value' }], destructive: false, actions: ['editWorkflow'], target: 'canvas', hint: 'add a terminal, chat, pool, orchestrator or collect node to the draft' },
@@ -300,6 +336,9 @@ export const WORKFLOW_EXECUTOR_DUE = 'M188'
  * reason: a node that tests a node is a loop with no stop.
  */
 export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agent: string; workflow: DoorEntry }> = {
+  'checklist-edit': { canvas: 'checklist Add, check, drag/Up/Down, Delete and Undo controls', palette: 'checklist.edit', agent: 'tc plan checklist-edit f1 add hello', workflow: 'an action node whose line is: checklist-edit f1 add hello' },
+  'checklist-hand': { canvas: 'Hand to agent on a checklist item', palette: 'checklist.hand', agent: 'tc plan checklist-hand f1 2 ch1', workflow: 'an action node whose line is: checklist-hand f1 2 ch1' },
+  ...Object.fromEntries(CREATABLE_OBJECTS.map((entry) => [entry.verb, entry.doors])),
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: 'an action node whose line is: check-readiness' },
   'new-chat': { canvas: 'launcher Start a conversation', palette: 'panel.new-chat', agent: 'tc plan new-chat', workflow: 'an action node whose line is: new-chat' },
   starter: { canvas: 'launcher Start a conversation on a first run; the Starter canvas… line', palette: 'starter.open', agent: 'tc plan starter', workflow: 'an action node whose line is: starter' },

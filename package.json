@@ -47,6 +47,7 @@
     "verify:review": "node scripts/verify-review.cjs",
     "verify:subagent": "node scripts/verify-subagent.cjs",
     "verify:file": "node scripts/verify-file.cjs",
+    "verify:checklist": "node scripts/verify-checklist.cjs",
     "verify:toolbox": "node scripts/verify-toolbox.cjs",
     "verify:usage": "node scripts/verify-usage.cjs",
     "verify:machine-cost": "node scripts/verify-machine-cost.cjs",

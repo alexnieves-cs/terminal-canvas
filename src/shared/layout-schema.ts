@@ -1,4 +1,5 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
+import { parseChecklistView } from './checklist'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -901,7 +902,9 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // declared `prose?: true`, so absent is the other half of a two-state fact
   // rather than a third state, and coercing `"yes"` would carry a value the
   // type says cannot exist.
-  return raw.prose === true ? { path, prose: true } : { path }
+  const checklist = parseChecklistView(raw.checklist)
+  if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
 }
 
 

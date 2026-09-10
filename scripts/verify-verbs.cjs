@@ -48,6 +48,9 @@ const FACTS = {
 }
 
 ;(async () => {
+  ok('creation.registry.1 one registry describes every creation pill and its executable four doors',
+    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist'].every((id) =>
+      V.CREATABLE_OBJECTS.some((entry) => entry.id === id && typeof entry.create === 'function' && entry.icon && V.V9_DOORS[entry.verb])))
   // closure.1 — THE one that matters long-term. The PaletteActions interface
   // (commands.ts) is the authority for what the app can do; every member is
   // either mapped by a verb or named on the excluded list with a reason.
@@ -281,8 +284,9 @@ const FACTS = {
   {
     const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', 'canvas', 'usePaletteActions.ts'), 'utf8')
     const ids = V.VERBS.map((v) => v.id)
-    const missing = ids.filter((id) => !src.includes(`case '${id}'`))
-    ok('executor.1 every verb in the table has a `case` in beginRunVerb (read as text) — no verb advertised without an arm',
+    const registryDispatch = src.includes('CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)') && src.includes('self.createObject(creation.id, a.value)')
+    const missing = ids.filter((id) => !src.includes(`case '${id}'`) && !(registryDispatch && V.CREATABLE_OBJECTS.some((entry) => entry.verb === id && typeof entry.create === 'function')))
+    ok('executor.1 every verb has an executor case or an executable creation registry entry routed by the shared dispatcher',
       ids.length > 0 && missing.length === 0, JSON.stringify({ ids: ids.length, missing }))
   }
 
@@ -360,10 +364,16 @@ const FACTS = {
     // line names, because a verb whose first argument is a PANEL cannot bind
     // against an empty canvas — and "the example does not bind" would then be
     // reported for a door that works.
-    const facts = { panels: [{ id: 'img1', kind: 'image' }, { id: 'nt1', kind: 'note' }, { id: 'wk1', kind: 'work' }], templates: [{ id: 't1' }] }
+    const facts = { panels: [{ id: 'img1', kind: 'image' }, { id: 'nt1', kind: 'note' }, { id: 'wk1', kind: 'work' }, { id: 'f1', kind: 'file' }, { id: 'ch1', kind: 'chat' }], templates: [{ id: 't1' }] }
+    const created = []
+    const creationRows = M.commands.creationCommands({ noteRoot: '/tmp', actions: { createObject: async (id) => { created.push(id); return { kind: 'ran' } } } })
+    for (const row of creationRows) row.run()
+    ok('creation.registry.2 real palette rows execute every registry creation in registry order',
+      JSON.stringify(created) === JSON.stringify(V.CREATABLE_OBJECTS.map((entry) => entry.id)) &&
+      creationRows.every((row, i) => row.id === V.CREATABLE_OBJECTS[i].palette))
     const verdicts = ids.map((id) => {
       const d = doors?.[id]
-      const paletteRow = typeof d?.palette === 'string' && commandsSrc.includes(`id: '${d.palette}'`)
+      const paletteRow = typeof d?.palette === 'string' && (commandsSrc.includes(`id: '${d.palette}'`) || creationRows.some((row) => row.id === d.palette && typeof row.run === 'function'))
       const agentLine = typeof d?.agent === 'string' && d.agent.startsWith('tc plan ') ? d.agent.slice('tc plan '.length) : null
       const bound = agentLine !== null ? P.buildPlan(P.parsePlanLine(agentLine), facts) : null
       // M188. The workflow door is REAL for every verb but one: an `action`

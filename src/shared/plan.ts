@@ -69,14 +69,14 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.
-  'export-canvas', 'import-canvas'
+  'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand'
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {
     const panel = facts.panels.find((p) => p.id === step.args['panel'])
     if (panel?.state === 'wants-you') return `${panel.id} is waiting for a person — a permission prompt is answered at the keyboard, never by a plan`
   }
-  if (caller?.teammateId !== undefined && TEAMMATE_REFUSED_VERBS.has(step.verb)) {
+  if (caller?.teammateId !== undefined && (TEAMMATE_REFUSED_VERBS.has(step.verb) || step.verb.startsWith('create-'))) {
     return `a teammate's plan cannot ${step.verb} — sessions and settings are the person's to open and change`
   }
   return null

@@ -74,7 +74,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
       return {
         ...base,
         kind: 'file' as const,
-        source: { path: p.source.path, ...(p.source.prose === true ? { prose: true as const } : {}) }
+        source: { path: p.source.path, ...(p.source.prose === true ? { prose: true as const } : {}), ...(p.source.checklist === undefined ? {} : { checklist: p.source.checklist }) }
       }
     }
     if (p.kind === 'jira') return { ...base, kind: 'jira' as const }
@@ -183,7 +183,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
       return {
         ...base,
         kind: 'file' as const,
-        source: { path: panel.source.path, ...(panel.source.prose === true ? { prose: true as const } : {}) }
+        source: { path: panel.source.path, ...(panel.source.prose === true ? { prose: true as const } : {}), ...(panel.source.checklist === undefined ? {} : { checklist: panel.source.checklist }) }
       }
     }
     if (isJiraPanel(panel)) return { ...base, kind: 'jira' as const }
