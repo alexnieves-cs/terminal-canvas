@@ -1069,6 +1069,41 @@ console.log('\n' + '='.repeat(60))
     /\bok\(\s*`headroom\.1 |\bok\(\s*'headroom\.1 /.test(harness), '')
 }
 
+// load-bearing.recovered.1. docs/load-bearing-recovered.md was admitted in M91
+// on SYMBOL PRESENCE alone — every code name it cites still existed — and not
+// re-verified line by line, which is why it was never merged into the main
+// file. That admission test is re-run here, every verify: a code-shaped name in
+// backticks (a source file, `Type.member`, a camelCase or snake identifier)
+// must still occur in src/, scripts/ or build/. A name that has left the code
+// means its entry can no longer be trusted even as a pointer; the fix is to
+// delete or re-verify the entry, never to add the name to KNOWN_STALE. That
+// list holds the two found when the check was written, named so they are not
+// silently absorbed: `verify-panels.cjs` (split into parts) and
+// `configStampedAt`. TC_META_RECOVERED points the check at a fixture so it can
+// be watched red.
+{
+  const { readdirSync, statSync } = require('node:fs')
+  const KNOWN_STALE = ['verify-panels.cjs', 'scripts/verify-panels.cjs', 'configStampedAt']
+  const walk = (d) => readdirSync(d).flatMap((e) => {
+    const p = join(d, e)
+    return statSync(p).isDirectory() ? walk(p) : [p]
+  })
+  const files = ['src', 'scripts', 'build'].filter((d) => existsSync(join(ROOT, d))).flatMap((d) => walk(join(ROOT, d)))
+  const names = new Set(files.map((f) => f.split('/').pop()))
+  const hay = files.map((f) => readFileSync(f, 'utf8')).join('\n')
+  const text = (process.env.TC_META_RECOVERED ? readFileSync(process.env.TC_META_RECOVERED, 'utf8') : read('docs/load-bearing-recovered.md')) ?? ''
+  const cited = [...new Set([...text.matchAll(/`([^`\n]{3,80})`/g)].map((m) => m[1].replace(/\(\)$/, '')))]
+    // Code-shaped only: prose in backticks, doc paths, JSON files and paths
+    // outside the source tree (out/, origin/…) are not claims about the code.
+    .filter((s) => /^[A-Za-z_$][\w$./-]*$/.test(s) && (/[._/]/.test(s) || /[a-z][A-Z]/.test(s)))
+    .filter((s) => !/\.(md|json)$/.test(s) && !/^(out|origin|commands|docs)\//.test(s))
+  const live = (s) => /\.(tsx?|cjs|js|css)$/.test(s) ? names.has(s.split('/').pop())
+    : /^\w+\.\w+$/.test(s) ? s.split('.').every((p) => hay.includes(p)) : hay.includes(s)
+  const stale = cited.filter((s) => !live(s) && !KNOWN_STALE.includes(s))
+  ok('load-bearing.recovered.1 every code name docs/load-bearing-recovered.md cites still exists in src/, scripts/ or build/',
+    cited.length > 100 && stale.length === 0, JSON.stringify({ cited: cited.length, stale }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
