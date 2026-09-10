@@ -160,3 +160,30 @@ The integrator takes the union.
   `.md` as a deck; plan-line text is whitespace-collapsed, so indented Markdown cannot be proposed
   through `tc plan` (the verb hint names `\n`). Declined: an electronegativity ACCEPTED row — none
   was raised for the second window.
+
+## Integration — `m248-m250` (all three merged, NOT merged to main)
+
+- Merged pill → notes → deck. Unions at every registry, plus two reconciliations recorded in the
+  deck merge commit (cb7adf3e): M244's palette order kept with M249's re-pinned `sheet.1` (M248's
+  row move broke `panels:agents search.1` seeding per M250's measurement), and `deck.deps.1` no
+  longer forbids `mammoth` (M250's audited .docx converter; the deck modules still import no package).
+- Gate: `TC_VERIFY_SUFFIX=integ npm run verify` under the lock, 628.6s, **38/43 suites**, no foreign
+  test Electron at start or end (only other apps' crashpad handlers). Every plain suite green,
+  typecheck and build green; `verify:deck` 44/44, `verify:pill` 7/7, `verify:notes` green,
+  `verify:ipc` at 136 channels.
+- The reds, classified:
+  - `verify:canvas` 2/4 (wheel, zoom anchor): contention. The suite alone is 7/7, `deck.pdf.1`
+    included (a 4-slide deck prints to 4 pages).
+  - `panels:shell` 77/98/98b/106, `panels:kinds` `broadcast.1`+watchdog, `panels:agents`
+    `search.1`/`attention.1`, `panels:product` `work.action.1`/`review.task.2`+watchdog: all in the
+    7a3323d0 baseline set recorded above.
+  - `panels:product` hit its 230s watchdog BEFORE the pill checks. Re-run twice with
+    `TC_WATCHDOG_SCALE=2`: `pill.focus.1`, `.rects.1`, `.paste.1`, `.jump.1`, `.send.1` all PASS
+    both times, and `work.action.1`/`review.task.2` passed. `browser.1` failed once and passed on
+    the re-run; no merged change touches browser code, and it passes in every baseline log.
+    `onboarding.start.1` failed both times; it is a known base flake (red on base at 18:18).
+- Owed: the goldens (the pill is in every scene, and M244's tokens shift the new-object row and
+  checklist) need a critic's sentence before `UPDATE_GOLDENS=1`. Also the manual `npm run dev` pass
+  (deck present/filmstrip/PDF, pill send/jump, Rich/Source toggle, a docx import). Separately,
+  another session's `m246-deck-tools` (2396dc67) has an independent `FileSource.deck`/`deck.ts`, and
+  its M246/M247 numbers collide with `m245-sheet`. Reconcile it with M248 before either reaches main.
