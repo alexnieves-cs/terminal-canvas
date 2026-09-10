@@ -46,11 +46,7 @@ const IMP = M.importer || {}
 const { mkdtempSync, rmSync, readdirSync, existsSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const FIX = join(__dirname, 'fixtures', 'agent-session')
 const fixture = (name) =>

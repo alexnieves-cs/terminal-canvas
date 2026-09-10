@@ -30,11 +30,7 @@ buildSync({
 const M = require(OUT)
 const V = M.verbs, P = M.plan, O = M.outward, A = M.auto, S = M.settings
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /* The facts every plan below is built against: a shell, a claude terminal, a
    chat, a review node, a file — the kinds a `type` must tell apart. */

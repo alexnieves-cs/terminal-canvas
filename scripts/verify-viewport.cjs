@@ -28,11 +28,7 @@ buildSync({
 })
 const V = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const EPS = 1e-9
 const near = (a, b) => Math.abs(a - b) < EPS
 

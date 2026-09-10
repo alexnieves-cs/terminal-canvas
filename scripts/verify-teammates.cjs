@@ -24,11 +24,7 @@ const M = require(OUT)
 const P = M.places, T = M.teammates, G = M.gate, S = M.skills, A = M.assign, W = M.scope
 const { readFileSync } = require('node:fs')
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /* A fake filesystem: realpath resolves the one symlink and collapses `..`;
    anything under /nowhere does not exist. */

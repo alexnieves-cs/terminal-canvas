@@ -68,8 +68,12 @@ named in the runner's `HAND_RUN` (`verify:meta` 19 pins all of that, and that `v
 points at the runner). Three waves: the plain-node tier **concurrently**, then `npm run build`,
 then the Electron tier **serially** — the build is early so a type error costs seconds
 instead of minutes, but still ahead of `verify:canvas`/`xterm`/`panels`, the only suites that
-read `out/renderer`. No suite needs a display, none has a test-name filter, and each exits
-non-zero on any failure; to add a check, append an `ok(...)` in the IIFE. **Never add a suite
+read `out/renderer`. No suite needs a display, and each exits non-zero on any failure; to add
+a check, append an `ok(...)` in the IIFE. `TC_ONLY=<id>` narrows what a suite *reports*, never
+what it runs (checks share state in-process; a filter matching nothing is red).
+`TC_VERIFY_ELECTRON_JOBS=N` runs the Electron tier N-wide — measured NOT yet reliable (fixed
+`settle()` windows overrun under contention), so never the gate. A panels part's `headroom.1` goes red at 90% of its watchdog — re-pin it then, not after a
+hang. All three in [docs/verify-suites.md](docs/verify-suites.md). **Never add a suite
 to the `verify` script** — there is no list there to add it to. `npm run dev` unsets
 `ELECTRON_RUN_AS_NODE` first.
 

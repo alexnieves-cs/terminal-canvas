@@ -168,11 +168,7 @@ buildSync({
   external: ['node-pty', 'electron']
 })
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /* One full idleness tick plus margin. Check 17 counts `busy` sends only after
@@ -346,7 +342,12 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
   {
     const { manager, exits } = makeHarness()
     await manager.create(spec('panel-d', '/bin/sh', ['-c', 'exit 7']))
-    await sleep(600)
+    // Polled, not slept: the predicate IS what 4 and 4b assert and waitFor's
+    // 4s outlasts the 600ms this replaced, so a pass can arrive sooner but
+    // never on less evidence. Only ARRIVALS are polled in this file — a wait
+    // that proves something did NOT happen stays a sleep, since waitFor has
+    // nothing to wait for and the check would go vacuous.
+    await waitFor(() => exits().length > 0 && manager.list().length === 0)
     const e = exits()
     ok(
       '4 unrequested exit reported exactly once with its code',
@@ -361,7 +362,10 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
   {
     const { manager, events } = makeHarness()
     await manager.create(spec('panel-e', '/bin/sh', ['-c', 'echo LAST-LINE-42; exit 1']))
-    await sleep(600)
+    // Read the moment the exit is announced. The order 5 asserts is fixed when
+    // the events are emitted, so reading earlier cannot turn a late flush into
+    // a pass: the data is simply absent (-1) and 5 is red.
+    await waitFor(() => events.some((e) => e.channel === 'pty:exit'))
     const dataIdx = events.findIndex((e) => e.channel === 'pty:data' && e.payload.data.includes('LAST-LINE-42'))
     const exitIdx = events.findIndex((e) => e.channel === 'pty:exit')
     ok('5 final output flushes before exit is announced', dataIdx !== -1 && exitIdx !== -1 && dataIdx < exitIdx,
@@ -778,6 +782,18 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     const tmuxCli = (args) => {
       try { return execFileSync(TMUX, args, { encoding: 'utf8' }) } catch { return '' }
     }
+    // Arrival predicates for the waits below that POLL rather than sleep.
+    // tmuxCli never throws — a server that is not up yet reads as '' — so
+    // polling before a session exists is safe. Whole-line matches, so 't1'
+    // never answers for 't10'. Only an arrival or a disappearance that the
+    // next line asserts is polled; a wait that proves something did NOT
+    // happen (a session SURVIVING a detach, a stranger's kill leaving n10
+    // alive, exactly one client after a reattach) stays a sleep, because
+    // polling it would return at once and leave the check vacuous.
+    const tmuxSessionsNow = () => tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
+    const tmuxPanesNow = () => tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
+    const tmuxHasSession = (id) => tmuxSessionsNow().split('\n').includes(id)
+    const tmuxHasPane = (id) => tmuxPanesNow().split('\n').some((l) => l.startsWith(id + ' '))
 
     // h1 is deliberately hoisted out of check 11's block: check 12 must detach
     // THE MANAGER THAT OWNS THE SESSION. Calling detachAll() on a freshly made
@@ -791,7 +807,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       h1 = makeHarness(tmuxBackend)
       await h1.manager.create(spec('t1'))
-      await sleep(700)
+      await waitFor(() => tmuxHasSession('t1'), 4000, 50)
       const listed = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('11 a panel becomes a tmux session on the private socket',
         listed.includes('t1'), JSON.stringify(listed.trim()))
@@ -858,7 +874,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const h = makeHarness(tmuxBackend)
       await h.manager.create(spec('t2', '/bin/sh', ['-c', 'exit 7']))
-      await sleep(1500)
+      await waitFor(() => h.exits().length > 0) // an arrival; see check 4's note
       const exits = h.exits()
       const code = exits.length ? exits[exits.length - 1].payload.exitCode : null
       ok('14 a command exiting 7 is reported as 7, not the client\'s 1',
@@ -891,13 +907,13 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const owner = makeHarness(tmuxBackend)
       await owner.manager.create(spec('t4'))
-      await sleep(700)
+      await waitFor(() => tmuxHasSession('t4'), 4000, 50)
       owner.manager.detachAll()
       await sleep(400)
       const stranger = makeHarness(tmuxBackend)
       const beforeKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       stranger.manager.kill('t4')
-      await sleep(500)
+      await waitFor(() => !tmuxSessionsNow().includes('t4'), 4000, 50)
       const afterKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('14c killing a panel with no local session still ends its surviving tmux session',
         beforeKill.includes('t4') && !afterKill.includes('t4'),
@@ -918,7 +934,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const owner = makeHarness(tmuxBackend)
       await owner.manager.create(spec('n10'))
-      await sleep(700)
+      await waitFor(() => tmuxHasSession('n10'), 4000, 50)
       const before = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       // A manager that has never heard of n1, exactly like the post-reload
       // shape 14c builds — kill() therefore goes straight to destroy(), and
@@ -943,7 +959,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const h1 = makeHarness(tmuxBackend)
       const first = await h1.manager.create(spec('n-reattach'))
-      await sleep(700)
+      await waitFor(() => tmuxHasSession('n-reattach'), 4000, 50)
       ok('16 a fresh session reports reattached false', first.reattached === false,
         `reattached=${first.reattached}`)
       h1.manager.detachAll()
@@ -974,7 +990,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
       const Q = typeof runQuit === 'function' ? runQuit : null
       const h = makeHarness(tmuxBackend)
       const made = await h.manager.create(spec('q1'))
-      await sleep(700)
+      await waitFor(() => tmuxHasPane('q1'), 4000, 50)
       const pidBefore = h.manager.list().find((r) => r.panelId === 'q1')?.pid
       const calls = []
       const spyBackend = { ...tmuxBackend, kind: tmuxBackend.kind, shutdown: () => { calls.push('shutdown'); tmuxBackend.shutdown() } }
@@ -1006,7 +1022,7 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
           flush: () => { calls2.push('flush') }
         })
       }
-      await sleep(500)
+      await waitFor(() => tmuxSessionsNow().trim() === '', 4000, 50)
       const listedAfterEnd = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('keep-on-quit.2 end: killAll, then flush, then shutdown — and the session and server are gone',
         Q !== null && JSON.stringify(calls2) === JSON.stringify(['killAll', 'flush', 'shutdown']) && listedAfterEnd.trim() === '',
@@ -1036,12 +1052,14 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const h = makeHarness(tmuxBackend)
       await h.manager.create(spec('t3'))
-      await sleep(700)
+      // Existence confirmed first, which the old sleep only assumed: 15's
+      // "gone after kill" means nothing against a session that never arrived.
+      await waitFor(() => tmuxHasSession('t3'), 4000, 50)
       h.manager.kill('t3')
-      await sleep(500)
+      await waitFor(() => !tmuxSessionsNow().includes('t3'), 4000, 50)
       const afterKill = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       tmuxBackend.shutdown()
-      await sleep(500)
+      await waitFor(() => tmuxSessionsNow().trim() === '', 4000, 50)
       const afterShutdown = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
       ok('15 closing a panel ends its session and shutdown ends the server',
         !afterKill.includes('t3') && afterShutdown.trim() === '',
@@ -1074,16 +1092,17 @@ const spec = (panelId, command = '/bin/sh', args = ['-c', 'sleep 30'], agent = u
     {
       const h = makeHarness(tmuxBackend)
       await h.manager.create(spec('r1'))
-      await sleep(700)
+      await waitFor(() => tmuxHasPane('r1'), 4000, 50)
       const before = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const beforePid = (/r1 (\d+)/.exec(before) ?? [])[1]
 
       h.manager.kill('r1')
-      await sleep(500)
+      await waitFor(() => !tmuxSessionsNow().includes('r1'), 4000, 50)
       const between = tmuxCli(['-L', VERIFY_SOCKET, 'list-sessions', '-F', '#{session_name}'])
 
       await h.manager.create(spec('r1'))
-      await sleep(700)
+      // The old r1 is proven gone just above, so any r1 pane now is the new one.
+      await waitFor(() => tmuxHasPane('r1'), 4000, 50)
       const after = tmuxCli(['-L', VERIFY_SOCKET, 'list-panes', '-a', '-F', '#{session_name} #{pane_pid}'])
       const afterPid = (/r1 (\d+)/.exec(after) ?? [])[1]
 

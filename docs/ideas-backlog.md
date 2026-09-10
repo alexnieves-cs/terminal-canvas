@@ -1906,6 +1906,15 @@ against the suite table.
   product-facing. Closest in spirit is the settings-schema rule at the top of this file:
   one structure decided once keeps toggle number ten cheap. This is that argument applied
   to check number two hundred.
+- **Half of it landed on 2026-09-10: the shared `ok()` and the filter, not the manifest.**
+  `scripts/lib/checks.cjs` replaced the byte-identical copies, and `TC_ONLY=<id>` is the
+  `--only` asked for above — but it narrows what a suite REPORTS, never what it runs,
+  because checks share state in-process and skipping one changes what the next observes
+  (`verify:meta only.1`; a filter matching nothing is red). Still open: stable one-line
+  names, generated numbering, and the manifest a `verify:manifest` would diff against the
+  suite table. Not migrated, because their output differs: credentials, jira and github
+  record a `label`, and control prints detail only on failure. The two hand-run gates
+  (packaged, visual) were left for a change someone runs them against.
 
 ## 72. One versioned automation surface, replacing the `__m4a*` / `__m5a*` hooks
 

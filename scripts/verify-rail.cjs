@@ -43,11 +43,7 @@ buildSync({
 })
 const R = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 // A panel as panels.ts builds one, trimmed to the fields rail-rows reads.
 // `rect` is carried in full BECAUSE it is what check 10 moves: a signature

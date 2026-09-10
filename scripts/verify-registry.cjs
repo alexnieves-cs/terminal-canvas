@@ -25,11 +25,7 @@ buildSync({
 })
 const { createRegistry } = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /** Records every bridge call so assertions can be made about what was NOT called. */
 function fakeBridge() {

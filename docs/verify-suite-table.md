@@ -61,8 +61,9 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 | `verify:xterm` | real Electron | 11 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a te |
 | `verify:panels` | real Electron | M135: FIVE parts over one harness (`scripts/panels-harness.cjs`), each `verify:panels:<part>` its own script with a watchdog pinned at 1.25× its own measured green run — `core` (tiering, input, undo, presets, palette, settings, attention), `shell` (workspaces, merged, rail, inspector, dock, groups, links), `kinds` (usage, file, review, toolbox, jira, link drawing, worktrees, scrollback, broadcast), `agents` (handoff, search, keyboard, theme, the M46–M52 shell, composer, templates, runs, graph, tools, approvals, budget, memory, the M61–M74 surfaces), `product` (chat, watchers, vault, github, integrations, verbs, browser, header, board, engines, sandbox, skills, workflow). Every check id the un-split file held is still here (`verify:meta panels-split.2` compares the set against `pre-v7-run`); `npm run verify:panels` is the chain of the five |
 
-None need a display; the real-Electron ones open a window with `show: false`. There is no
-test-name filter in any of them — each runs everything and exits non-zero on any failure.
+None need a display; the real-Electron ones open a window with `show: false`. Each runs
+everything and exits non-zero on any failure. `TC_ONLY`, `TC_VERIFY_ELECTRON_JOBS` and the
+panels parts' `headroom.1` are described once, in [verify-suites.md](verify-suites.md).
 To add a check, append an `ok(...)` assertion in the IIFE.
 
 **Before adding or debugging a check, read [docs/verify-suites.md](docs/verify-suites.md).**

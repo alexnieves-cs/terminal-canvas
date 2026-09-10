@@ -36,11 +36,7 @@ mkdirSync(OUT_DIR, { recursive: true })
    SARIF names, which is what the CSV's `sample` column would have printed. */
 const SARIF = join(OUT_DIR, 'electronegativity.sarif')
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /* The accepted findings. Each `why` is the reason the pattern is deliberate,
    in this repository's own words; a reader of a red eneg.3 should be able to
