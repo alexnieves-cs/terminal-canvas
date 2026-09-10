@@ -764,6 +764,53 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ declared, registered, crossfades, answers, states: states.length, overspend, extraLayers }))
 }
 
+// M232/M233 — edge.flow.css.1. THE FLOW GRAMMAR, AS RULES. Five arms, and
+// the last two are the ones that make the design honest rather than pretty:
+//
+//   * each of the five non-rest states has a rule, and `rest` has NONE — an
+//     ordinary canvas must cost exactly what it cost before M232, and the
+//     way that is guaranteed is that `rest` writes no attribute at all;
+//   * `blocked` holds --amber and declares no animation. A packet crossing
+//     into a panel that is asking a person a question would be a lie about
+//     what the app is doing, and the reducer ranks blocked above a live fire
+//     for that reason; this is the other half of the same decision;
+//   * the waiting breath is FINITE and rests on a static stroke of its own.
+//     M111's pulse.1 settled that nothing here animates forever; this is
+//     that rule applied to an edge, and the static value is what a
+//     reduced-motion user is left with;
+//   * REDUCED MOTION REMOVES THE TRAVEL, NOT THE REPORT. The packet is
+//     hidden and the breath stands down, while every state's STROKE
+//     survives. The event is never lost, only the animation — which is the
+//     entire argument for a discrete flow grammar over a continuous
+//     "health" tint, and it is worth a check rather than a comment;
+//   * and the packet carries no transition of its own. Its position is set
+//     per frame by the layer's one rAF; a CSS transition would fight the
+//     frame it is already being given and smear the dot behind its own
+//     position.
+{
+  const STATES = ['armed', 'firing', 'arrived', 'waiting', 'blocked']
+  const ruleFor = (st) => bodyRules.find((r) => r.sel.includes(`[data-edge-activity="${st}"]`) && !/prefers-reduced-motion/.test(r.sel))
+  const missing = STATES.filter((st) => ruleFor(st) === undefined)
+  const restRule = bodyRules.some((r) => /\[data-edge-activity="rest"\]/.test(r.sel))
+  const blocked = ruleFor('blocked')
+  const blockedHolds = blocked !== undefined && /stroke:\s*var\(--amber\)/.test(blocked.body) && !/animation/.test(blocked.body)
+  const waiting = ruleFor('waiting')
+  const finite = waiting !== undefined && /animation:\s*edge-waiting[^;]*var\(--dur-breath\)[^;]*\b[1-4]\s*;/.test(waiting.body) && !/infinite/.test(waiting.body)
+  const waitingRests = waiting !== undefined && /stroke:\s*var\(--iris\)/.test(waiting.body)
+  const packet = bodyRules.find((r) => r.sel === '.link-layer__packet')
+  const packetStill = packet !== undefined && !/transition|animation/.test(packet.body)
+  // The reduced-motion arm: the packet goes, the breath stands down, and the
+  // strokes stay. Read inside the media block, which `rules()` flattens.
+  const rm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?\.link-layer__packet[\s\S]*?)\n\}/.exec(bare)
+  const rmBody = rm === null ? '' : rm[1]
+  const reports = /\.link-layer__packet\s*\{[^}]*display:\s*none/.test(rmBody) &&
+    /\[data-edge-activity="waiting"\]\s*\{[^}]*animation:\s*none/.test(rmBody) &&
+    !/stroke:\s*none/.test(rmBody)
+  ok('edge.flow.css.1', 'the five non-rest states are rules and rest is not one; blocked holds --amber with no animation; the waiting breath is finite and rests on its own stroke; the packet carries no transition; and reduced motion removes the TRAVEL while every stroke survives',
+    missing.length === 0 && !restRule && blockedHolds && finite && waitingRests && packetStill && reports,
+    JSON.stringify({ missing, restRule, blockedHolds, finite, waitingRests, packetStill, reports }))
+}
+
 // M110 — far.1. ONE STATUS WALL. The block tier and the minimap draw the
 // same fact and must draw it with the same fill — one color-mix of the tone
 // over the surface — or the map and the canvas disagree about what a
@@ -1115,7 +1162,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const breath = /--dur-breath:\s*1\.2s/.test(bare)
   const names = [...bare.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).sort()
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
-  const allowed = ['chat-caret', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  // edge-waiting: M232's join breath — a MOMENT like the others, three breaths
+  // and then rest, never a heartbeat (pulse.1's rule, applied to an edge).
+  const allowed = ['chat-caret', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))

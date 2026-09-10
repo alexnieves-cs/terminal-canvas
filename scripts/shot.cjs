@@ -385,6 +385,63 @@ const SCENES = [
       await sleep(700)
       await kit.shot('graph')
     } },
+  { name: 'edge-firing', intent: 'M233. An edge in flight: the worker\'s ruled edge into `claude — api (2)` FIRING — the line and its arrowhead lifted to the accent, with a bright packet part-way along it placed by the same analytic Bézier the label uses. An edge animates ONLY when something crosses it; at rest it is the quiet grey line every other edge on this canvas is showing. (Two disclosures. The harness freezes the clock at a chosen instant so the packet lands in the same place every capture — that is the one thing faked, and the real reducer computes the real t. And the join\'s SECOND edge, from the chat, is not in this frame: the fixture stacks three panels over its short path, and moving them to expose it would move five other goldens. The lit/quiet contrast is therefore carried by this scene against `graph`, and the regression guarantee is `edge.paint.1`, not this image.)',
+    run: async (kit) => {
+      // Pulled back so BOTH ends of the firing edge are in frame. At 100% the
+      // camera centres the target and the source sits off the left edge, so
+      // Framed from `worker a` at half size, with the inspector closed so the
+      // canvas keeps its 360px. Two earlier framings failed: centring on the
+      // target at 100% put the source off the left edge (an arrowhead and no
+      // journey), and a `the join` BOOKMARK added to the fixture silently
+      // rewrote palette, search and every other scene that lists bookmarks —
+      // a scene must not change the fixture other scenes are shot against.
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.goTo('worker a')
+      await kit.zoom(0.5)
+      await sleep(400)
+      // Fire, then freeze 80% of the way across (720 of EDGE_FIRE_MS's 900).
+      // Order matters: the freeze must land after the fire's timestamp or the
+      // packet sits at t = 0. And 80%, not the more natural 40%: this edge
+      // runs up from the worker at the bottom-left, and at 40% the packet's
+      // painted rect was at client x = 268 — behind the navigator rail, off
+      // the canvas entirely. The dot was correct and invisible, which a
+      // DOM check would have called a pass.
+      // groupA -> twin, not chat -> twin. Links paint BENEATH the panels (M13:
+      // a line over a terminal hides the agent output the app exists to show),
+      // and the chat edge's whole path runs under three of them — the first
+      // capture had a packet in the DOM and nothing visible in the image. The
+      // worker's edge crosses bare ground, so the journey can be seen.
+      await kit.js(`(() => { const now = Date.now(); window.__m233Flow('fired', 'groupA', 'twin'); window.__m233Freeze(now + 720); return true })()`)
+      await sleep(500)
+      // The packet's PAINTED RECT, not just its presence. Twice in this
+      // milestone a packet was in the DOM, correctly positioned by the real
+      // arithmetic, and nowhere in the image — once behind three panels and
+      // once behind the navigator rail. A query check would have passed both
+      // times, which is M149's lesson arriving from a new direction.
+      console.log('[shot] edge-firing:', await kit.js(`JSON.stringify({ packets: [...document.querySelectorAll('.link-layer__packet')].map((c) => { const r = c.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), fill: getComputedStyle(c).fill } }), lines: [...document.querySelectorAll('.link-layer__line')].map((l) => [l.getAttribute('data-link'), l.getAttribute('data-edge-activity')]).filter((e) => e[1]) })`))
+      await kit.shot('edge-firing')
+      await kit.js(`window.__m233Flow('thaw', '', '')`)
+      await kit.zoom(1)
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await sleep(200)
+    } },
+  { name: 'edge-waiting', intent: 'M233. A join that is waiting: the worker\'s edge has DELIVERED into `claude — api (2)` and rests at the accent with no packet — the travel is over, the join is not. Captured after the breath has finished: the waiting edge breathes three times and then rests, because nothing on this canvas animates forever (M111\'s rule, applied to an edge), and the resting value is what a person who waits a minute actually sees — and what a reduced-motion user sees from the start. It differs from `edge-firing` by the absence of the packet, which is deliberate and is the point: the two states differ by whether something is CROSSING, not by how the edge is coloured.',
+    run: async (kit) => {
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', false)`)
+      await kit.goTo('worker a')
+      await kit.zoom(0.5)
+      await sleep(400)
+      await kit.js(`(() => { window.__m233Flow('arrived', 'groupA', 'twin'); window.__m233Flow('waiting', '', 'twin', ['chat']); return true })()`)
+      // Past the arrival flash (EDGE_ARRIVE_MS) and past three breaths of
+      // --dur-breath, so the capture is of the RESTING waiting state and does
+      // not depend on when the shutter happened to fall.
+      await sleep(4200)
+      await kit.shot('edge-waiting')
+      await kit.js(`(() => { window.__m233Flow('waiting', '', 'twin', []); return true })()`)
+      await kit.zoom(1)
+      await kit.js(`window.canvas.settings.set('shell.inspectorOpen', true)`)
+      await sleep(200)
+    } },
   // The composer scene runs BEFORE tool-objects on purpose: tool-objects opens
   // the chat's review node OVER the chat, and a drop at the chat's centre then
   // hits the node (the hit test is topmost-first) and mints a file panel.

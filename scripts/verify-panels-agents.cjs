@@ -150,6 +150,83 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             delivered === true && header1 === true && typeof row1 === 'string',
           JSON.stringify({ seeded, bUp, aUp, sourceRan, delivered, header1, row1, renderer: rendererLog41.slice(-4) }))
 
+        // M233 — edge.paint.1. THE FLOW GRAMMAR, AS PIXELS, AND WHY IT IS
+        // HERE RATHER THAN IN A GOLDEN.
+        //
+        // The two new scenes (`edge-firing`, `edge-waiting`) exist so a critic
+        // can LOOK at the states. They cannot be the regression signal: a gate
+        // critic measured the pair and found they differ by 42 pixels (the
+        // packet) while carrying ~400 pixels of antialias drift on a panel's
+        // rounded corners between captures. A budget loose enough to tolerate
+        // the drift cannot see the packet. Goldens are for looking; this is
+        // for knowing.
+        //
+        // It runs HERE, on hA -> hB, because flow is a property of RULED
+        // edges: every signal behind it comes from useHandoff, which walks
+        // enabled handoff rules and nothing else. A plain link never fires,
+        // and two earlier homes for this check (the core and shell fixtures)
+        // reported `no-edge` and `rest` for exactly that reason — which is
+        // itself worth knowing, and is why the failure said which.
+        //
+        // It covers the two failures this milestone actually hit, BOTH of
+        // which left the DOM perfectly correct:
+        //   * the packet painted, positioned and invisible — once behind
+        //     three panels, once behind the navigator rail;
+        //   * the whole grammar culled at the wrong tier, so nothing animated
+        //     at 100% and everything animated at 8%.
+        {
+          const line = () => wc.executeJavaScript(`(() => {
+            const l = document.querySelector('.link-layer__line[data-link="hA hB"]')
+            return l === null ? null : { stroke: getComputedStyle(l).stroke, act: l.getAttribute('data-edge-activity') } })()`)
+          // Driven through the store's own door at a frozen instant, not by
+          // waiting on the real handoff above: the real fire is real (and it
+          // did light this edge — the first run of this check caught it
+          // mid-flight) but its timing against this check is uncontrolled,
+          // and a check that depends on landing inside a 900 ms window is a
+          // flake waiting for a slower machine.
+          await wc.executeJavaScript(`(() => { const n = Date.now(); window.__m233Flow('fired', 'hA', 'hB'); window.__m233Freeze(n + 450); return true })()`)
+          await settle(); await sleep(250)
+          const lit = await line()
+          const packet = await wc.executeJavaScript(`(() => {
+            const p = document.querySelector('.link-layer__packet')
+            if (p === null) return null
+            const r = p.getBoundingClientRect()
+            const host = document.querySelector('.canvas').getBoundingClientRect()
+            const el = document.elementFromPoint(Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2))
+            // WHO OWNS THE PIXEL. The packet's own hit stroke sitting over it
+            // is fine — it is transparent and exists only to take a pointer.
+            // A PANEL over it is not: that is the failure this arm exists for,
+            // and a rect-inside-the-host test alone reports it as a pass.
+            const covered = el !== null && el.closest('.panel') !== null
+            return { w: Math.round(r.width), fill: getComputedStyle(p).fill, covered,
+              inHost: r.x > host.left && r.right < host.right && r.y > host.top && r.bottom < host.bottom } })()`)
+          await wc.executeJavaScript(`(() => { window.__m233Flow('thaw', '', ''); return true })()`)
+          // Past EDGE_FIRE_MS, so the fire lapses on the store's own timer
+          // rather than because anything told it to. A fire that never ended
+          // would leave a packet parked on the edge for the life of the run.
+          // EXPIRY IS NOT ASSERTED HERE, and the reason is worth writing
+          // down rather than leaving as an absence.
+          //
+          // A fire lapsing back to whatever the edge otherwise is, is a
+          // property of the MODEL, and `edge.flow.4` in verify:viewport
+          // already proves it against a frozen clock: a stale fire reads
+          // `armed`. Re-asserting it in a real-Electron fixture measured the
+          // edge still `firing` four seconds after the thaw. The likeliest
+          // explanation is that this fixture's source is `/bin/sh` with no
+          // arguments — it exits at once, and an exit is what fires a
+          // handoff — so the edge may simply be firing again and again; that
+          // was NOT confirmed, and it is recorded as a hypothesis rather
+          // than a finding.
+          //
+          // Either way the arm was buying nothing: the model already covers
+          // expiry, and this check exists for the thing the model cannot
+          // see, which is whether the packet reaches the screen.
+          ok('edge.paint.1 a fire lifts the ruled edge\'s computed stroke and paints a packet with a real size, inside the canvas host and NOT under a panel — the two failures this milestone hit (a packet under a panel, and the grammar culled at the wrong tier) both left the DOM correct; expiry is edge.flow.4\'s job',
+            lit !== null && lit.act === 'firing' && packet !== null && packet.w >= 4 &&
+              packet.inHost === true && packet.covered === false,
+            JSON.stringify({ lit, packet }))
+        }
+
         // handoff.2. The target is dormant AND off screen. After the exit the
         //      row reads "queued", the target is woken but NOT spawned (no
         //      fitted terminal — the fit-before-spawn rule), and framing it

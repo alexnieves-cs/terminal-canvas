@@ -113,6 +113,7 @@ import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/u
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
 import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
+import { activityNow, forgetAllEdges, forgetEdgesFor, freezeEdgeClock, noteEdgeArrived, noteEdgeFired, noteEdgeWaiting, setEdgeContext } from './useEdgeActivity'
 import { DISPATCH_PROMPT, SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
@@ -158,7 +159,7 @@ import { allTemplates, isBuiltInTemplate, type PersistedTemplate, type TemplateE
 import { applyPoolEvent } from '@renderer/workflow/pool-store'
 import type { PoolMintReply, PoolMintRequest } from '@shared/ipc-contract'
 import { fillTemplate, templateHoles, templatePanels, templateRefusal, workflowBlockRefusal } from '@renderer/palette/template-model'
-import { sealAbandoned } from './run-model'
+import { enabledEdges, sealAbandoned } from './run-model'
 import { buildRunRows, runSignature } from '@renderer/shell/rail-sections'
 import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
@@ -365,7 +366,12 @@ export function Canvas({
   // verbs above it reach its `forgetOpen` through a ref, the same indirection
   // every other late-declared verb here uses.
   const forgetOpenRunsRef = useRef<() => void>(() => {})
-  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current() }, [])
+  // M231. A workspace switch replaces every panel, so every edge signal it
+  // held is about panels that are no longer on this canvas. Cleared here,
+  // beside the runs it belongs with, rather than left to the per-panel
+  // forgetEdgesFor calls — those fire on CLOSE, and a workspace switch closes
+  // nothing.
+  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges() }, [])
   // M80. The sheet is opened by usePaletteActions, which is created above the
   // instantiate verb; the ref is the same indirection every late verb uses.
   const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
@@ -925,6 +931,10 @@ export function Canvas({
         // Without this the agent-state map grows for the life of the
         // renderer and a recycled id inherits a dead panel's border.
         clearAgentState(panel.rect.id)
+        // M231. Beside every other per-panel store cleared here: without it the
+        // edge maps grow for the life of the renderer and a recycled panel id
+        // inherits a dead edge's fire.
+        forgetEdgesFor(panel.rect.id)
         clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
@@ -1779,6 +1789,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
+      forgetEdgesFor(panel.rect.id)
       clearLastLine(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
@@ -2240,6 +2251,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
+    forgetEdgesFor(id)
     clearLastLine(id)
     clearLiveSession(id)
     clearSubagents(id)
@@ -3170,6 +3182,22 @@ export function Canvas({
   const canvasActivity: Tone | undefined = waitingIds.length > 0
     ? TONE_NEEDS_YOU
     : runs.some((r) => r.endedAt === undefined) ? TONE_WORKING : undefined
+  // M231. The three facts the edge store cannot observe for itself, pushed in
+  // from the component that already holds all three. The store grows no
+  // subscriptions of its own, and this rides no counter: it re-runs when the
+  // panels, the runs or the wants-you queue actually change, which is exactly
+  // when an edge's answer can change. registry.version() is deliberately not
+  // in the dependency list — that counter carries tier/status/focus/exit and
+  // nothing higher-frequency, and edge activity is the high-frequency thing
+  // that rule exists to keep off it.
+  const openRunPanels = useMemo(() => {
+    const live = new Set<string>()
+    for (const r of runs) if (r.endedAt === undefined) for (const id of r.panelIds) live.add(id)
+    return live
+  }, [runs])
+  useEffect(() => {
+    setEdgeContext({ edges: enabledEdges(panels), armed: openRunPanels, blocked: new Set(waitingIds) })
+  }, [panels, openRunPanels, waitingIds])
   // M76. The pending requests with the panel's label, for the palette's
   // Allow/Deny rows. The label is the same one the rail row shows.
   const pendingApprovals = useApprovals()
@@ -3606,6 +3634,31 @@ export function Canvas({
       show: (itemId: string): void => spawnWorkCard(itemId),
       done: (itemId: string): void => paletteActionsRef.current?.markDone(itemId)
     }
+    // M233. The flow door, for the shot harness and the panels suite.
+    //
+    // It calls the SAME store functions useHandoff calls — noteEdgeFired,
+    // noteEdgeArrived, noteEdgeWaiting — rather than reaching into the
+    // layer or setting an attribute, which is the rule __m13Open and
+    // __m59Drop already obey: a hook that reconstructs the behaviour proves
+    // the reconstruction, not the app. A scene painted through this is
+    // therefore a scene of the real grammar with only the TRIGGER faked.
+    //
+    // A state with no golden is a state no critic ever sees, and `firing`
+    // and `waiting` cannot be reached from a fixture without a real agent
+    // exiting on cue — which is the whole reason this exists.
+    w.__m233Flow = (op: string, from: string, to: string, owed?: string[]): void => {
+      if (op === 'fired') noteEdgeFired(from, to)
+      else if (op === 'arrived') noteEdgeArrived(from, to)
+      else if (op === 'waiting') noteEdgeWaiting(to, owed ?? [])
+      else if (op === 'thaw') freezeEdgeClock(null)
+    }
+    // A read-only window onto the store, so a scene or a check can say WHY a
+    // state did not render instead of guessing from an absent attribute.
+    w.__m233Dump = (): string => JSON.stringify([...activityNow()])
+    // The clock freeze, so a golden of a moving packet is not a flaky golden.
+    // See freezeEdgeClock: it fakes WHEN it is and nothing else — the real
+    // reducer computes the real t and the real bez() places the real dot.
+    w.__m233Freeze = (at: number): void => freezeEdgeClock(at)
     // M59. The drop door, by screen point — see dropPath.
     // M91. The hook takes CLIENT coordinates (what a check reads off a rect)
     // and subtracts the host's origin, exactly as the real onDrop does — the
@@ -3688,6 +3741,7 @@ export function Canvas({
     (id: string, nextSpec: PanelSpecTemplate) => {
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
+      forgetEdgesFor(id)
       clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
@@ -6581,6 +6635,7 @@ export function Canvas({
             edgeLabels={edgeLabels}
             selectedKey={selectedLink === null ? null : `${selectedLink.from}:${selectedLink.to}`}
             onSelect={merged ? undefined : selectLink}
+            cardDetail={cardDetail}
           />
           {/* M130. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
               written back: one column per host at a fixed offset to its

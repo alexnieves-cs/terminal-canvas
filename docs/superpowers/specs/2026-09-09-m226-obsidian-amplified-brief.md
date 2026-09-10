@@ -101,8 +101,16 @@ across every edge contradicts the rest rule and has no honest reduced-motion deg
 `LinkLayer` already places its label at `t = 0.5` via `(P0 + 3C1 + 3C2 + P3) / 8` with no
 `getPointAtLength` and no laid-out DOM. A packet is that same `bez()` at an animated `t`.
 **One shared `requestAnimationFrame` for the whole layer**, never one per edge, and no rAF at
-all while nothing is armed. Culled at `cardDetail === 'tail'`: a far-view canvas draws quiet
-lines and animates nothing nobody can resolve.
+all while nothing is armed. Culled at the FAR tiers — `summary` and `block` — so a far-view
+canvas draws quiet lines and animates nothing nobody can resolve.
+
+> **CORRECTED in M233.** This section first said "culled at `cardDetail === 'tail'`". `tail` is
+> the NEAREST tier in `card-detail.ts` — the tier names say what a card SHOWS (its scrollback
+> tail), not how far away it is. Implemented literally, it disabled the entire flow grammar at
+> 100% and left it animating across a hundred cards at 8%: the exact opposite of the budget the
+> rule protects, and silent, because a feature that never animates looks identical to one that
+> is merely idle. It was caught by looking at the new `edge-firing` scene and finding nothing
+> in it — which is the argument for having the scene.
 
 Three-state discipline applies: an edge with **no signal** is `rest`, which is a different fact
 from an edge whose **source has exited** and a different fact again from an edge whose target

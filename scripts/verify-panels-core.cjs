@@ -4239,5 +4239,6 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         spot !== null && victim !== null && warm >= 2 && attr === null,
         JSON.stringify({ spot, victim, idle, waiting, warm, attrAfterRelease: attr }))
     }
+
   }
 })

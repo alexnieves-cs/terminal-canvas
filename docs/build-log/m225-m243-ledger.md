@@ -411,3 +411,204 @@ jitter of up to ~48 levels on glyph and high-contrast antialiased edges. Every m
 this ledger from here on is averaged over an area (270 px of x for an edge profile, 13x13 for a
 point) which swamps it. A single-pixel reading in this repository is not evidence.
 
+### M228 + M229 · goldens touched — the gate's sentences
+
+Seven scenes, rebaselined together at the close of Act I. A **fresh-context critic** compared
+each before/after with **both sides captured by `verify:visual`** (the corrected procedure
+above), measuring averaged strips rather than sampling pixels.
+
+> `kinds` — two terminal wells gained a soft 6-row inset shadow peaking at −35 and the lit line
+> is a measured no-op, and that is correct because the light theme's inner top row already sat
+> at 253 against a 247 fill, and the shadow returns to full paper 11 rows before the first glyph.
+
+> `kinds-dark` — three panel rows gained a +3–5/255 lit hairline and one well gained an 11→5
+> inset shadow, and that is correct because the line is clipped exactly to panel widths and
+> properly occluded by the minimap and the group ribbon, and the shadow only dims the first
+> output line's top 2 antialias rows while the glyph body holds CR 13.40.
+
+> `subagents` — the well gained the standard −34 inset shadow and the ground cooled ~3/255
+> toward blue, and that is correct because the shadow falls off monotonically to zero before the
+> `$ claude` glyph body and the blue tint is a diffuse gradient with no edge.
+
+> `inspector-work` — both terminal wells gained identical −34 inset shadows and the ground cooled
+> ~3/255 toward blue, and that is correct because the two shadows are pixel-identical in profile,
+> **proving one shared token rather than a per-panel reimplementation**.
+
+> `runs` — one well gained the −34 inset shadow and the ground did not change at all, and that is
+> correct because the scene's run has ended, so an unchanged idle aura is the specified behaviour.
+
+> `launcher` — the launcher's well gained the same −39 inset shadow with an 11px clearance to its
+> first text row, and that is correct because the launcher well now recesses identically to a
+> terminal well.
+
+> `zoomed-out-dark` — the ground warmed by up to +30 in R−B across two lobes with a smooth trough
+> between them, and that is correct because a 3px-step derivative scan finds no hard edge
+> anywhere in the canvas that is not also in the before image, so **the earlier seam is gone**,
+> and the amber `needs you` card is pixel-identical while the ground beside it stays blue-leaning
+> at R−B = −9.4, so it remains unambiguously the loudest thing in the frame.
+
+**Two caveats the critic raised, kept rather than smoothed away:**
+
+- **These goldens do not exercise "every panel frame".** Every panel in all seven scenes has a
+  header bar, so the frame's own lit edge is occluded in each of them. It is measurable in dark
+  (the chrome is 82% opaque) and a measured **no-op** in light. This is the same fact
+  `rim.paint.1` records as an invariant rather than a delta, and **Act III is where it starts
+  mattering** — a chromeless terminal has no header to supply the light.
+- **In dark, the well shadow reaches 2–3 rows into the first output line's antialiasing** (top
+  glyph row CR 3.02 → 2.63) while the glyph BODY is untouched at CR 13.40. Named, not hidden.
+
+### M228 · a THIRD stale golden set, from M199/M200
+
+The critic found a **fourth change** riding along in three of the seven scenes that is not this
+run's: a green `idle` chip replaced by grey `run ended` text in `runs`, `subagents` and
+`inspector-work`.
+
+`git log -S "run ended" -- src/` names it: **`1776905 feat(m199-m200): make run supervision
+honest`**, the v10 work that landed on `main` before this run opened. Like M202's work-card
+change, it shipped without regenerating the goldens it altered — and unlike M202's, it sat
+**under both budgets**, so the M225 zero-diff proof could not see it either.
+
+> `runs`, `subagents`, `inspector-work` — a green `idle` state chip became grey `run ended`
+> text, and that is correct because `run-outcome.ts:167` returns `{ word: 'run ended', tone:
+> 'none' }` for a sealed run, which is M199's own decision that a finished run is not a state a
+> panel is IN; it is attributed to **M199/M200**, not to this run.
+
+**The pattern is the finding.** The v10 run shipped at least two UI changes without regenerating
+their goldens, and one of them was invisible to the gate by arithmetic. `git log --
+verify/visual/goldens` has therefore been an incomplete record of what this app looks like.
+Recorded for M242's audit; not this run's to fix beyond baselining what it touched.
+
+### M228 · a second nondeterministic region, recorded not fixed
+
+`runs.png` bakes a live `pid 74607`. Same class as the ephemeral port M225 fixed, but harder:
+the port was the harness's own server and could be pinned, whereas the pid belongs to a real
+spawned process. It is under both budgets, so it never fails — it simply means one more region
+of one golden carries a number that means nothing. **DECLINED for this run**, recorded for M242.
+
+---
+
+## Act II — reactive edges (M230–M233)
+
+### M230 · the pure model
+
+Spec/evidence: [`m230-pure-red-evidence.md`](m230-pure-red-evidence.md). `shared/edge-activity.ts`
+— six states keyed `from:to`, each a PROJECTION of a fact the renderer already computes. Six
+checks watched failing with **142/148 still passing**, which the try-wrapper in
+`viewport-entry.cjs` is what makes possible.
+
+Red-first found **two bugs in the checks rather than the model** (a fixture that seeded a 50 ms
+arrival and expected breathing; one that expected an edge to be armed with its endpoint outside
+the armed set), and then a real ambiguity in the brief, resolved and recorded: "unarrived edges
+stay at rest" is read as **stay STILL**, so an undelivered edge inside a live run is `armed` —
+lifted and static. Three readings kept apart where the literal one offered two.
+
+### M231 · the store
+
+`renderer/canvas/useEdgeActivity.ts`, modelled on `agent-state-store.ts`. Module-level,
+subscribed per edge, snapshot objects cached, and **cleared at all four panel-removing call
+sites** beside `clearAgentState`, plus `forgetAllEdges` on a workspace switch (which closes
+nothing, so the per-panel path would never fire).
+
+**It does not ride `registry.version()`**, and the store's header says why at length: that
+counter carries tier/status/focus/exit and deliberately nothing higher-frequency.
+
+**The store holds the state; the layer owns the animation.** A firing packet's `t` changes every
+frame, so pushing it through the store would notify sixty times a second per edge — the exact
+fan-out the module exists to avoid. `same()` deliberately does not compare `t`.
+
+### M232 · the layer
+
+One shared rAF for the whole layer, none at all while `edgesAnimateNow()` is false — which is a
+canvas's normal condition even mid-run, so the common case pays nothing. Five of the six states
+are pure CSS on the line that already existed; only `firing` adds an element.
+
+**Three defects found by LOOKING at the new scene, none by a check:**
+
+1. **The far-tier cull was inverted.** The run prompt says "culled at `cardDetail === 'tail'`",
+   and `tail` is the **nearest** tier in `card-detail.ts` — the tier names say what a card SHOWS
+   (its scrollback tail), not how far away it is. Implemented literally it disabled the whole
+   grammar at 100% and left it animating across a hundred cards at 8%: the exact opposite of the
+   budget the rule protects. **Silent**, because a feature that never animates is
+   indistinguishable from one that is idle. The brief is corrected with the reason.
+2. **The arrowhead stayed grey on a lit line.** An SVG marker does not inherit its path's stroke
+   — the same fact that forced `link-arrow-selected` to exist in M78. A third marker,
+   `link-arrow-flow`, rather than reusing the selected one: `selected` means "the user is
+   pointing at this" and `flow` means "something is crossing it".
+3. **The packet was painted, correct, and invisible — twice.** Once behind three panels (links
+   paint BENEATH panels by design, M13), once behind the navigator rail at `client x = 268`. Both
+   times the DOM was right. The scene's diagnostic now logs the packet's **painted rect**, not
+   its presence.
+
+### M233 · arrival, blocking, reduced motion, and two new scenes
+
+- The arrival flash reuses `.pf::before` — M109's state-edge glow — so it inherits that
+  pseudo-element's clipping and `pointer-events: none`, and one element cannot contradict itself
+  about what an edge of the frame means. `--iris`, not the tone: an arrival is the INTERFACE
+  reporting that something crossed, not a change in what the panel's agent is doing.
+- **The waiting breath is FINITE.** The first cut was `infinite` and `verify:styles motion.2`
+  stopped it — rightly: M111's `pulse.1` settled that nothing here animates forever. It is the
+  wants-you pulse's exact shape reused: three breaths, then rest on a static stroke brighter
+  than `armed`'s, so a join waiting all afternoon still reads differently from a live edge that
+  never delivered, with nothing moving.
+- **Reduced motion removes the TRAVEL, not the REPORT.** The packet is hidden (not frozen — a
+  dot parked mid-edge says "something is stuck here", a different and wrong statement) and the
+  breath stands down, while every state's stroke survives. `edge.flow.css.1` checks this arm
+  specifically, and it is the whole argument for a discrete grammar over a continuous tint.
+- **Two new scenes**, because a state with no golden is a state no critic ever sees.
+
+**The `edge-firing` scene freezes the clock, and that is disclosed.** A packet's position is a
+function of elapsed time, so a live capture would place the dot tens of pixels apart between
+runs — a permanently flaky golden, which is exactly what M225 spent effort removing. The scene
+freezes the clock at a chosen instant; what that fakes is **when it is** and nothing else. The
+real reducer computes the real `t` and the real `bez()` places the real dot on the real curve.
+`edge-waiting` needs no freeze: it is captured after the finite breath has ended, so the resting
+state is what any capture would find.
+
+
+### M233 · goldens touched, and the gate's rejection
+
+A fresh-context critic **REJECTED both new scenes** on their first framing, and it was right:
+the frame contained one lit edge and no resting one, so "the lit/quiet contrast" — the only
+thing the pair exists to show — was not in the picture. The subject occupied about 2% of the
+frame and the two images differed by a single 6px dot.
+
+**What was fixed:** the scenes are reframed from `worker a` at half size with the inspector
+closed, so the journey is in the shot rather than an arrowhead arriving from nowhere.
+
+**What was NOT fixed, and why.** The join's second edge (from the chat) has three panels stacked
+over its short path in this fixture. Exposing it means moving panels that five other goldens are
+shot against. **DECLINED**, and both scene intents now say so rather than claiming a contrast
+they do not show.
+
+**What the rejection changed structurally.** The critic's strongest point was technical: the two
+goldens differ by 42 px (the packet) while carrying ~400 px of antialias drift on a panel's
+rounded corners between captures, so **no whole-image budget can tell them apart**. Goldens are
+for LOOKING; the regression guarantee is `edge.paint.1` in `verify:panels:agents`, which drives
+a fire through the store's own door and reads the compositor.
+
+> `edge-firing` — the worker's ruled edge into `claude — api (2)` is lit with a matching
+> arrowhead and an 8px packet sitting exactly on the curve, and that is correct because the
+> packet is placed by the real reducer's `t` through the real `bez()`, the clock freeze fakes
+> only WHEN it is, and every other edge on the canvas stays the quiet grey line.
+
+> `edge-waiting` — the same edge rests lit with the packet absent, and that is correct because
+> the travel is over while the join is not: it is captured after the finite breath has ended, so
+> it shows the state a person who waits a minute actually sees, and the one a reduced-motion
+> user sees from the start.
+
+### M233 · the near-miss worth recording: a fixture leak laundered by UPDATE_GOLDENS
+
+The first rebaseline of the two new scenes **rewrote 28 goldens**, and the suite reported
+`61/61 passed` — because in UPDATE mode "passed" means "written", not "correct".
+
+The cause was a `the join` **bookmark** added to the shot fixture to frame the scenes. A bookmark
+appears in the palette's Go-to rows, so every scene that lists them changed. A scene must not
+change the fixture other scenes are shot against.
+
+Reverted with `git checkout verify/visual/goldens`, the bookmark removed, and the framing done
+with an existing panel plus a zoom. The rebaseline then wrote **exactly the two new files**.
+
+**Nothing caught this but counting the writes.** Not a check, not a critic — reading the output
+and noticing the number was 28 when it should have been 2. This repo's own rule ("a golden
+changes on purpose or not at all") is exactly this, and the tooling's happy path is silent about
+it, so the count is now part of the procedure recorded above.

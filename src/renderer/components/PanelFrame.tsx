@@ -10,6 +10,7 @@ import { PanelPorts } from './PanelPorts'
 import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
+import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -120,6 +121,10 @@ export function PanelFrame({
   id, kind, rect, z, selected, linkTarget, readOnly, className, rootAttrs, title, chrome, agentGlyph, agentState,
   close, motion, onSelect, onBeginDrag, onBeginLink, children, kindWord, state, far, onMore
 }: PanelFrameProps): JSX.Element {
+  // M233. Subscribed per panel id, so a frame re-renders for its OWN
+  // arrivals and nobody else's — the same per-id discipline agent-state-store
+  // uses, and the reason edge activity does not ride registry.version().
+  const arriving = useEdgeArriving(id)
   const [menuOpen, setMenuOpen] = useState(false)
   // M121. The outside click. Installed only while the menu is open, on the
   // DOCUMENT in the capture phase — the canvas host's own mousedown starts a
@@ -300,6 +305,12 @@ export function PanelFrame({
       // M63. The state edge reads this: a terminal supplies its tone through
       // rootAttrs; every other kind is its kind.
       data-tone={tone}
+      // M233. A join arrival landed HERE. It flashes `.pf::before` — M109's
+      // state-edge glow — rather than adding a second mechanism for
+      // "something reached me": the flash inherits that pseudo-element's
+      // clipping and its pointer-events: none for free, and one element
+      // cannot contradict itself about which edge of the frame means what.
+      data-edge-arriving={arriving ? '' : undefined}
       {...(rootAttrs ?? {})}
     >
       {motion ? (

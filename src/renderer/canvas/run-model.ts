@@ -15,7 +15,14 @@ export interface RunComponent {
   edges: Array<{ from: string; to: string }>
 }
 
-function enabledEdges(panels: readonly Panel[]): Array<{ from: string; to: string }> {
+/**
+ * M231. Exported: `useEdgeActivity`'s context needs the same list this module
+ * already walks, and a second copy of "which edges count" would be a second
+ * place to keep the disabled-edge rule in step. An edge that is not an
+ * ENABLED handoff is not a path, and neither a run nor the flow layer may
+ * treat it as one.
+ */
+export function enabledEdges(panels: readonly Panel[]): Array<{ from: string; to: string }> {
   const out: Array<{ from: string; to: string }> = []
   for (const p of panels) for (const l of linksOf(p)) if (l.automation?.kind === 'handoff' && l.automation.enabled) out.push({ from: p.rect.id, to: l.to })
   return out

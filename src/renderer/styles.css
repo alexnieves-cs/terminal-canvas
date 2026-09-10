@@ -1933,6 +1933,86 @@ body {
 }
 /* M78. A selected edge: the accent stroke, the badge the remove control. */
 .link-layer__line--selected { stroke: var(--iris); stroke-width: 3px; }
+
+/* ------------------------------------------------------------------ M232 --
+   EDGES MEAN FLOW. An edge animates ONLY when something crosses it; at rest
+   it is the quiet line above, with no motion at all.
+
+   That was chosen over a continuously-tinted "health" grammar deliberately.
+   Ambient motion on every edge contradicts the rest rule — at rest a surface
+   states its name, its kind and one meaningful state, and nothing else — and
+   a continuous animation has no honest reduced-motion degradation: you can
+   only switch it off, which deletes the information along with the movement.
+   A discrete event can still REPORT with the motion removed, and does below.
+
+   Six states, one data attribute, and five of the six are pure CSS on the
+   line that already exists. Only `firing` needs an element, because only it
+   has something to place. `rest` writes no attribute at all, so an ordinary
+   canvas's stylesheet cost is exactly what it was before M232. */
+.link-layer__line[data-edge-activity="armed"] { stroke: var(--iris-dim); }
+/* blocked: the target is asking a person a question. The edge HOLDS amber and
+   nothing travels — a packet crossing into a panel that is waiting on a human
+   would be a lie about what the app is doing, which is why the reducer ranks
+   blocked above a live fire rather than below it. */
+.link-layer__line[data-edge-activity="blocked"] { stroke: var(--amber); }
+/* waiting: this edge delivered into a join that has not run. It BREATHES at
+   --dur-breath, the same slow rhythm the wants-you pulse uses, because it is
+   the same kind of fact: something is owed. An edge in the same run that has
+   NOT delivered stays armed — lifted and still — so the two are legible
+   apart at a glance (M230's edge.flow.3). */
+@keyframes edge-waiting {
+  0%, 100% { stroke: var(--iris); }
+  50%      { stroke: var(--iris-dim); }
+}
+.link-layer__line[data-edge-activity="waiting"] {
+  /* FINITE, and it rests on a value of its own. The first cut breathed
+     `infinite` and verify:styles motion.2 stopped it — rightly: M111's
+     pulse.1 settled that nothing on this canvas animates forever, because a
+     signal that never ends on something that waits an hour is one the eye
+     learns to skip. This is the wants-you pulse's exact shape, reused rather
+     than re-argued: three breaths, then REST on a static stroke that is
+     brighter than armed's --iris-dim, so a join that has been waiting all
+     afternoon still reads differently from a live edge that never delivered,
+     with nothing moving. The static value is not redundant with the
+     keyframes and must not be deleted as such — the reduced-motion block
+     forces every animation to .01ms, and without it a waiting edge would
+     fall back to the plain line for exactly the users who asked for less
+     motion. */
+  stroke: var(--iris);
+  animation: edge-waiting var(--dur-breath) ease-in-out 3;
+}
+/* firing / arrived: the line lifts while the packet is on it, so the eye is
+   led to the moving thing rather than hunting for it. */
+.link-layer__line[data-edge-activity="firing"],
+.link-layer__line[data-edge-activity="arrived"] { stroke: var(--iris); }
+/* The packet. No transition and no animation of its own: its POSITION is set
+   per frame by the layer's one rAF from the reducer's t, so a CSS transition
+   here would fight the frame it is already being given and smear it. */
+.link-layer__packet {
+  fill: var(--iris);
+  stroke: none;
+}
+/* The flow arrowhead. A marker does not inherit the referencing path's
+   stroke, so a lit line kept a --line-strong head until M232 gave it one of
+   its own — a grey head on an accented line is the half-applied material
+   this run exists to remove. */
+.link-layer__head--flow { fill: var(--iris); }
+
+/* THE REDUCED-MOTION ARM, and it is the whole reason this grammar was chosen.
+   With motion off a fire still REPORTS — the line holds the accent for the
+   fire's duration and releases — it simply does not TRAVEL. The event is
+   never lost, only the animation.
+
+   The packet is removed rather than frozen: a dot parked mid-edge is not a
+   quieter version of a moving one, it is a different and wrong statement
+   ("something is stuck here"). The waiting breath stands down to the static
+   armed value for the same reason the global block stands every animation
+   down, and `waiting` keeps its own stroke so the state is still visible.
+   The `reduced-motion` golden is the proof. */
+@media (prefers-reduced-motion: reduce) {
+  .link-layer__packet { display: none; }
+  .link-layer__line[data-edge-activity="waiting"] { animation: none; }
+}
 .link-layer__badge--selected circle { stroke: var(--iris); }
 .link-layer__label--rule { fill: var(--fg-2); font-family: var(--font-mono); }
 .link-layer__head--selected { fill: var(--iris); }
@@ -2099,6 +2179,24 @@ body {
   width: 1px;
   pointer-events: none;
   box-shadow: 0 0 14px 3px var(--tone-dim);
+}
+/* M233. THE ARRIVAL FLASH. A join landed here, and the frame says so on the
+   glow it already has rather than on a second element: `.pf::before` is
+   M109's state edge, already clipped by the frame's overflow and already
+   inert to the pointer, so the flash inherits both and one element cannot
+   contradict itself about what an edge of the frame means.
+
+   --iris, not the tone: an arrival is the INTERFACE reporting that something
+   crossed, not a change in what the panel's agent is doing. The panel's own
+   state is unaffected by being handed something, and painting the tone here
+   would say it was.
+
+   A finite transition rather than a keyframe (pulse.1's rule): it lifts, and
+   the state's own expiry after EDGE_ARRIVE_MS takes the attribute away
+   again, so the release is the store's and not a second timer's. */
+.pf[data-edge-arriving]::before {
+  box-shadow: 0 0 20px 5px var(--iris);
+  transition: box-shadow var(--dur-2) var(--ease);
 }
 /* At the far tiers the glow doubles, so a wall of blocks reads as lights. */
 .world[data-detail="summary"] .pf::before,

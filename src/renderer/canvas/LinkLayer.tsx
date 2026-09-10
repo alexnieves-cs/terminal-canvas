@@ -1,7 +1,52 @@
-import { memo, useMemo, useState, type JSX } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { buildLinkSegments, linkAnchors, linkPath } from './link-geometry'
 import type { Panel } from '@renderer/panels/panels'
 import type { LinkDrawState } from './useLinkDraw'
+import { activityNow, edgesAnimateNow, useEdgeActivityVersion } from './useEdgeActivity'
+import type { EdgeActivity } from '@shared/edge-activity'
+
+/**
+ * M232. ONE shared requestAnimationFrame for the whole layer, and none at all
+ * while nothing is moving.
+ *
+ * Not one per edge: forty edges would mean forty callbacks competing for the
+ * same frame, and the work each does is a handful of multiplications — the
+ * scheduling would cost more than the arithmetic. And not an always-on loop:
+ * `edgesAnimateNow()` is false whenever every edge is rest, armed or blocked,
+ * which is a canvas's normal condition even mid-run, so the common case pays
+ * NOTHING. The store notifies this hook when any edge changes KIND, which is
+ * the moment the answer to "should we be animating" can change.
+ *
+ * The returned value is a frame counter used only to re-render; the positions
+ * are read from `activityNow()` during the render that follows, so no packet
+ * position is ever held in React state (which would be a setState per edge
+ * per frame).
+ */
+function useEdgeFrames(): number {
+  const version = useEdgeActivityVersion()
+  const [frame, setFrame] = useState(0)
+  const running = useRef(false)
+  useEffect(() => {
+    if (!edgesAnimateNow()) return
+    if (running.current) return
+    running.current = true
+    let raf = 0
+    const tick = (): void => {
+      if (!edgesAnimateNow()) { running.current = false; return }
+      setFrame((f) => f + 1)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => { cancelAnimationFrame(raf); running.current = false }
+  }, [version])
+  return frame
+}
+
+/** A cubic Bézier coordinate at t — the same arithmetic the label already uses. */
+function bez(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const u = 1 - t
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
+}
 
 /**
  * Every link on the canvas, as one SVG inside `.world`.
@@ -51,11 +96,8 @@ import type { LinkDrawState } from './useLinkDraw'
  * Nobody has measured a canvas with two hundred links; if that is ever slow,
  * the fix is a viewport intersection test here, and this is where it goes.
  */
-/** A cubic Bézier coordinate at t. */
-function bez(t: number, p0: number, p1: number, p2: number, p3: number): number {
-  const u = 1 - t
-  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3
-}
+const EMPTY_ACTIVITY: ReadonlyMap<string, EdgeActivity> = new Map()
+const REST_ACTIVITY: EdgeActivity = { kind: 'rest' }
 
 function LinkLayerImpl({
   panels,
@@ -63,7 +105,8 @@ function LinkLayerImpl({
   onRemove,
   edgeLabels,
   selectedKey,
-  onSelect
+  onSelect,
+  cardDetail
 }: {
   panels: Panel[]
   draw?: LinkDrawState | null
@@ -74,8 +117,30 @@ function LinkLayerImpl({
   selectedKey?: string | null
   /** M78. A click on an edge's midpoint badge selects it (the panels deselect). */
   onSelect?: (from: string, to: string) => void
+  /**
+   * M232. The world's card tier. FLOW IS CULLED AT THE FAR TIERS — `summary`
+   * and `block` — and animates only at `tail`.
+   *
+   * READ card-detail.ts BEFORE CHANGING THIS. `tail` is the NEAREST tier (a
+   * panel is showing its scrollback tail), `summary` is mid, `block` is
+   * farthest; the names describe what a card SHOWS, not how far away it is.
+   * The first cut of this milestone culled at `tail` — the plain-English
+   * reading, and precisely backwards. It disabled the whole grammar at 100%
+   * while leaving it running across a hundred cards at 8%: the exact opposite
+   * of the budget the rule exists to protect, and silent, because a feature
+   * that never animates looks identical to a feature that is merely idle. It
+   * was caught by LOOKING at the golden scene, not by any check.
+   */
+  cardDetail?: string
 }): JSX.Element | null {
   const [hovered, setHovered] = useState<string | null>(null)
+  // M232. One frame counter for the layer; positions are read below, never
+  // stored. See useEdgeFrames.
+  useEdgeFrames()
+  const far = cardDetail === 'summary' || cardDetail === 'block'
+  // Read ONCE per render, not once per edge: activityNow() rebuilds the whole
+  // map, and calling it inside the segment loop would rebuild it per edge.
+  const activity: ReadonlyMap<string, EdgeActivity> = far ? EMPTY_ACTIVITY : activityNow()
   // Rebuilt whenever the panel array's identity changes — which includes every
   // frame of a drag, correctly, because a link's endpoint is moving. That is
   // the same cost EdgeIndicators already pays. The memo is what stops a Canvas
@@ -132,6 +197,17 @@ function LinkLayerImpl({
         <marker id="link-arrow-selected" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__head--selected" />
         </marker>
+        {/* M232. THE FLOW HEAD. A marker does not inherit its path's stroke —
+            the same fact that forced `link-arrow-selected` to exist — so an
+            edge whose line is lit would otherwise keep a --line-strong
+            arrowhead, which is precisely the half-applied material this run
+            exists to remove. A third marker, not a reuse of the selected
+            one: `selected` means "the user is pointing at this" and `flow`
+            means "something is crossing it", and one id standing for both
+            would make the DOM lie about which. */}
+        <marker id="link-arrow-flow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" className="link-layer__head--flow" />
+        </marker>
         <marker
           id="link-arrow-ghost"
           viewBox="0 0 10 10"
@@ -149,6 +225,7 @@ function LinkLayerImpl({
         // automation key every surface shares); the segment's own key is
         // `from to` (M13's, with a space) and stays on `data-link`.
         const ek = `${s.from}:${s.to}`
+        const act = activity.get(ek) ?? REST_ACTIVITY
         return (
         <g key={s.key}>
           {/* The hit stroke. Wide and transparent, and it takes pointer events
@@ -206,13 +283,37 @@ function LinkLayerImpl({
               the one moment the rule needs to match. The badge renders AFTER
               the line instead, which also gives it the correct paint order
               (on top of the line, at its own location) for free. */}
+          {/* M232. The edge's STATE rides on the visible line as a data
+              attribute, so every one of the six is a CSS rule rather than a
+              second element: rest draws exactly what it drew before, armed
+              lifts the stroke, waiting breathes it, blocked holds amber.
+              Only `firing` needs a node of its own, below, because only it
+              has something to place. */}
           <path
             className={`link-layer__line${selectedKey === ek ? ' link-layer__line--selected' : ''}`}
             data-link={s.key}
             data-link-selected={selectedKey === ek ? 'true' : undefined}
+            data-edge-activity={act.kind === 'rest' ? undefined : act.kind}
             d={s.d}
-            markerEnd={selectedKey === ek ? 'url(#link-arrow-selected)' : 'url(#link-arrow)'}
+            markerEnd={selectedKey === ek
+              ? 'url(#link-arrow-selected)'
+              : act.kind === 'rest' || act.kind === 'armed' || act.kind === 'blocked'
+                ? 'url(#link-arrow)'
+                : 'url(#link-arrow-flow)'}
           />
+          {act.kind === 'firing' && (
+            /* The packet, at the analytic point on the SAME cubic the label
+               uses — `bez()` at the reducer's t. No getPointAtLength, no
+               laid-out DOM, and no clock in this component: the reducer owns
+               the time and this owns the arithmetic. */
+            <circle
+              className="link-layer__packet"
+              data-link-packet={ek}
+              r="4"
+              cx={bez(act.t, s.x1, s.c1x, s.c2x, s.x2)}
+              cy={bez(act.t, s.y1, s.c1y, s.c2y, s.y2)}
+            />
+          )}
           {(hovered === s.key || selectedKey === ek) && onRemove !== undefined && (
             <g
               className={`link-layer__badge${selectedKey === ek ? ' link-layer__badge--selected' : ''}`}

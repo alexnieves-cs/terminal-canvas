@@ -15,6 +15,7 @@ import { incomingHandoffs, joinAdvance } from './handoff-rules'
 import { fireWatchersFor } from '@renderer/watcher/useWatchers'
 import type { RunEvent } from './run-model'
 import { onChatTurnEnd, lastAssistantText } from '@renderer/chat/chat-store'
+import { noteEdgeArrived, noteEdgeFired, noteEdgeWaiting } from './useEdgeActivity'
 
 /**
  * M41 — handoff edges. When a source "completes" (its process exits, or its
@@ -165,6 +166,12 @@ export function useHandoff(deps: HandoffDeps): void {
       for (const [id, a] of [...arrived]) if (!expected.includes(id) || now - a.at > HANDOFF_QUEUE_MS) arrived.delete(id)
       arrived.set(sourceId, { payload, at: now })
       const state = joinAdvance(expected, new Map([...arrived].map(([id, a]) => [id, a.payload])))
+      // M231. This edge has DELIVERED into the join, whether or not the join
+      // is ready. `waitingFor` is the join's own answer about who is still
+      // owed — the same list the sentence below prints — so the edges and the
+      // words can never disagree about which source is holding it up.
+      noteEdgeArrived(sourceId, targetId)
+      noteEdgeWaiting(targetId, state.ready ? [] : state.waitingFor)
       if (!state.ready) {
         const owed = state.waitingFor.map((id) => { const p = panelsRef.current.find((x) => x.rect.id === id); return p ? railLabel(p, undefined) : id })
         setResult(`${sourceId}:${targetId}`, `waiting for ${owed.join(', ')}`)
@@ -197,6 +204,13 @@ export function useHandoff(deps: HandoffDeps): void {
           continue
         }
         const trigger = event.kind === 'idle' ? 'idle' : 'exit'
+        // M231. The edge is CROSSING now — the rule matched and the payload is
+        // being gathered. Marked here rather than in deliver(), because the
+        // travel is the journey and deliver() is the arrival; a packet that
+        // only appeared once the target had it would animate the wrong half
+        // of the event. The store is told, and nothing else changes: this
+        // adds no subscription and no state to this hook.
+        noteEdgeFired(sourceId, link.to)
         if (isChatPanel(source)) {
           // A chat source's payload is its last answer, from the store.
           // M96. A handoff is one agent's context reaching another: through the
