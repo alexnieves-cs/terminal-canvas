@@ -469,7 +469,7 @@ ok('21 never-started', (await engineWith({}, { baseline: null }).review('p1')).k
    taken in whatever directory a user keeps code in, and this repo has already
    shipped one total, silent failure from a space-free fixture. */
 const { execFileSync } = require('node:child_process')
-const { mkdtempSync, writeFileSync, appendFileSync, readFileSync } = require('node:fs')
+const { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 // M37 — a git worktree per panel: the pure half. Scoped ids.
@@ -2061,13 +2061,24 @@ if (GIT) {
           R.reviewSignature(path) !== sig &&
           R.reviewSignature(untracked) !== sig &&
           R.reviewSignature(renamed) !== sig &&
-          R.reviewSignature([]) === R.reviewSignature([]) &&
-          // THE BOUND. One line edited and another reverted in the same file
-          // leaves every path and both counts identical, and is NOT detected.
-          // The signature is a fingerprint of the diff's SHAPE, not a hash of
-          // its content; hashing content would mean reading every hunk on every
-          // card render. Stated in the header and pinned here.
-          R.reviewSignature([file('a.ts', 3, 1)]) === R.reviewSignature([file('a.ts', 3, 1)]),
+          // An empty diff has a signature of its own and is not the same as
+          // a one-file diff — a lane that went clean must go STALE against a
+          // review recorded when it held files.
+          R.reviewSignature([]) !== sig &&
+          // THE BOUND, pinned by its CAUSE. The signature reads exactly five
+          // named fields and NOTHING else, which is why one line edited and
+          // another reverted in the same file — every path and both counts
+          // unchanged — is not detected. Two rows carrying different content
+          // under any other key are one signature. A content-hashing "fix"
+          // would have to read outside those five fields and would fail this
+          // line first. (Feeding the function the same input twice, which is
+          // what this assertion was in its first cut, cannot fail for any
+          // deterministic implementation and pinned nothing at all.)
+          R.reviewSignature([Object.assign(file('a.ts', 3, 1), { hunks: ['-x', '+y'], blob: 'aaa' })]) ===
+            R.reviewSignature([Object.assign(file('a.ts', 3, 1), { hunks: ['-p', '+q'], blob: 'zzz' })]) &&
+          // …and the five that ARE read each move it, asserted above for
+          // four of them and here for the fifth.
+          R.reviewSignature([{ ...file('a.ts', 3, 1), binary: true }]) !== R.reviewSignature([file('a.ts', 3, 1)]),
         JSON.stringify({ sig, reordered: R.reviewSignature(reordered), count: R.reviewSignature(count), path: R.reviewSignature(path), untracked: R.reviewSignature(untracked), renamed: R.reviewSignature(renamed) }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }
   }
@@ -2188,19 +2199,26 @@ if (GIT) {
       // prove a call was never made, the same argument `git.1` makes about
       // the absence of a fetch.
       const engineSrc = readFileSync(join(__dirname, '..', 'src', 'main', 'review-engine.ts'), 'utf8')
-      const sharedSrc = readFileSync(join(__dirname, '..', 'src', 'shared', 'review.ts'), 'utf8')
-      const decls = (sharedSrc.match(/export const ACROSS_BASELINE/g) || []).length
+      // Counted over the WHOLE tree, not over the one file that declares it:
+      // a count taken from `shared/review.ts` alone cannot detect a second
+      // file spelling its own copy, which is the drift being guarded.
+      const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.ts') || e.name.endsWith('.tsx') ? [join(dir, e.name)] : [])
+      const decls = walk(join(__dirname, '..', 'src'))
+        .reduce((n, f) => n + (readFileSync(f, 'utf8').match(/(?:export )?const ACROSS_BASELINE\s*=/g) || []).length, 0)
       const acrossStart = engineSrc.indexOf('const reviewAcross = async')
       const acrossFn = acrossStart === -1 ? '' : engineSrc.slice(acrossStart, engineSrc.indexOf('\n  }', acrossStart))
       ok(NAME,
         typeof marker === 'string' && marker.length > 0 && !looksLikeSha &&
           // reviewAcross builds no argv from a caller-supplied baseline.
           acrossStart !== -1 && acrossFn.length > 200 && !acrossFn.includes('baselineSha') &&
-          // A real export with one spelling: the constant lives in
-          // shared/review.ts and every reader imports it. Asserted by
-          // counting the DECLARATIONS in src/ — two files spelling their own
-          // copy is the drift this guards, and the engine never naming it at
-          // all is asserted separately above.
+          // A real export with ONE declaration anywhere in src/: two files
+          // spelling their own copy is the drift this guards, and counting
+          // over the whole tree is what makes that true — counting over the
+          // one file that declares it could not fail. And the engine never
+          // names it at all, which is the second half: the marker reaches no
+          // git call because the module that builds git's argv has never
+          // heard of it.
           decls === 1 && engineSrc.indexOf('ACROSS_BASELINE') === -1,
         JSON.stringify({ marker, looksLikeSha, decls, acrossMentionsBaseline: acrossFn.includes('baselineSha') }))
     } catch (cErr) { ok(NAME, false, 'threw: ' + String((cErr && cErr.message) || cErr)) }

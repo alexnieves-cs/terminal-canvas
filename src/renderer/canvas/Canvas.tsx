@@ -4482,6 +4482,20 @@ export function Canvas({
    * a command ran in, and the ledger row carries the cwd that is actually
    * true. The node filters on that, through `observedCommands`.
    */
+  /*
+   * The terminal ids the ledger is read from, FROZEN on their own signature.
+   *
+   * `taskContextFor` runs on every render of a task-bearing review node, and
+   * a fresh array here would be a fresh prop, which defeats `ReviewNode`'s
+   * memo — the 60Hz cascade that memo exists to prevent, and the reason the
+   * rail and inspector models are frozen the same way (`useRailModels`).
+   */
+  const terminalIds = useMemo(() => panels.filter(isTerminalPanel).map((p) => p.rect.id), [panels])
+  const terminalIdsKey = terminalIds.join(' ')
+  const terminalIdsRef = useRef<readonly string[]>(terminalIds)
+  const frozenTerminalIds = useMemo(() => terminalIds, [terminalIdsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  terminalIdsRef.current = frozenTerminalIds
+
   const taskContextFor = useCallback((itemId: string | undefined): ReviewTaskContext | undefined => {
     if (itemId === undefined) return undefined
     const item = workItemsRef.current.find((i) => i.id === itemId)
@@ -4516,7 +4530,7 @@ export function Canvas({
       // the reading was old.
       onRefresh: refreshTaskHandoffs,
       ...(item.reviewed === undefined ? {} : { reviewed: item.reviewed }),
-      ledgerPanelIds: panelsRef.current.filter(isTerminalPanel).map((p) => p.rect.id),
+      ledgerPanelIds: terminalIdsRef.current,
       ...(chatAlive ? { chatPanelId: item.panelId as string } : {}),
       onMarkReviewed: (id, signature, files) => patchWorkItem(id, { reviewed: { at: Date.now(), signature, files } }),
       // FOCUS and INSERT — never send. M80's rule for every message this app

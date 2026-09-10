@@ -200,7 +200,8 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   other — the lane's chat can be closed while the worktree it
                   wrote is still there to review, which is precisely why
                   `review` below does NOT share this reason. */}
-              {verb('resume', props.handoff?.action === 'answer' ? 'Answer' : 'Resume', item.panelId === undefined ? 'no lane yet — start work on this item first' : props.laneLabel === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : null, () => props.onResume(item.id))}
+              {verb('resume', props.handoff?.action === 'answer' ? 'Answer' : 'Resume', item.panelId === undefined ? 'no lane yet — start work on this item first' : props.laneLabel === undefined ? 'the lane\'s conversation is closed — start work again to open a new one' : null, () => props.onResume(item.id),
+                props.handoff?.action === 'resume' || props.handoff?.action === 'answer' ? { 'data-work-next': props.handoff.action } : undefined)}
               {verb('open-pr', 'Open PR', props.prReason, () => props.onOpenPr(item.id))}
               {/* The label and the reason are the handoff's when one has been
                   read: `Review again` after a review, and the state's own

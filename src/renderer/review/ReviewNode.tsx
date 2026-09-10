@@ -262,7 +262,11 @@ function renderTask(
   press: (run: () => void) => (e: ReactMouseEvent) => void
 ): JSX.Element {
   const h = task.handoff
-  const markable = signature !== undefined && h.state === 'ready' && !readOnly
+  // `shared` is markable too: a person CAN read a shared diff, and the
+  // section's own sentence tells them what they are reading. Excluding it
+  // would make the module's promise ("still reviewable") false at the
+  // surface, which is where it matters.
+  const markable = signature !== undefined && (h.state === 'ready' || h.state === 'shared') && !readOnly
   return (
     <section className="review-node__task" data-review-task={task.itemId}>
       <h4 className="review-node__section-head">
@@ -332,7 +336,7 @@ function renderTask(
             reason. Present at rest and disabled by name, never absent. */}
         <button type="button" className="pf__verb pf__verb--word" data-review-task-verb="mark"
           disabled={!markable}
-          title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : h.state === 'ready' ? 'the changes are still being read' : h.detail}
+          title={markable ? 'record that you have read these changes' : readOnly ? 'leave merged view to act on this review' : (h.state === 'ready' || h.state === 'shared') ? 'the changes are still being read' : h.detail}
           onMouseDown={markable ? press(() => { task.onMarkReviewed(task.itemId, signature as string, paths.length); task.onRefresh() }) : undefined}>
           {task.reviewed === undefined ? 'Mark reviewed' : 'Mark reviewed again'}
         </button>
@@ -380,10 +384,11 @@ function ReviewNodeImpl({
   // "not asked yet" — the third state again, so the evidence list can say
   // `reading…` rather than showing an empty list it has not earned.
   const [ledgerRows, setLedgerRows] = useState<RunRow[] | null>(null)
-  // A read that FAILED, kept apart from a read that came back empty: "this
-  // canvas could not read its own record of what it ran" and "nothing ran"
-  // are different facts and lead to different conclusions about the lane.
-  // A frozen sentinel array, so the identity test below is exact.
+  // True when the ledger was not actually consulted — the read failed, or
+  // there was no panel on this canvas to read one from. Kept apart from a
+  // read that came back empty, because "this canvas could not read its own
+  // record of what it ran" and "nothing ran" are different facts that lead to
+  // different conclusions about the lane.
   const [ledgerUnreadable, setLedgerUnreadable] = useState(false)
   // Captured when the draft opens, exactly as usePalette captures `focusedId`
   // rather than clearing it — and used on BOTH exits below.
@@ -530,10 +535,21 @@ function ReviewNodeImpl({
     let live = true
     const ids = taskPanelIds ?? []
     setLedgerUnreadable(false)
-    if (ids.length === 0) { setLedgerRows([]); return }
+    // No terminal on this canvas is NOWHERE TO READ FROM, not a ledger read
+    // that came back empty. The lane's terminal being closed is the ordinary
+    // case, and saying "this canvas ran none in it" over a record nobody
+    // consulted is the same overclaim the failed-read arm below fixes.
+    if (ids.length === 0) { setLedgerRows([]); setLedgerUnreadable(true); return }
     setLedgerRows(null)
-    void Promise.all(ids.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL)))
-      .then((lists) => { if (live) setLedgerRows(lists.flat()) })
+    // allSettled, not all: one panel's ledger rejecting must not discard
+    // every other panel's rows. A partial read is still evidence; it is
+    // flagged as incomplete rather than thrown away.
+    void Promise.allSettled(ids.map((id) => window.canvas.ledger.list(id, LEDGER_ROWS_PER_PANEL)))
+      .then((settled) => {
+        if (!live) return
+        setLedgerRows(settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])))
+        setLedgerUnreadable(settled.some((r) => r.status === 'rejected'))
+      })
       // A ledger this app could not read is NOT evidence that nothing ran,
       // and the section says which of the two it is. The first cut resolved
       // to an empty list with a comment claiming the distinction did not
@@ -698,6 +714,11 @@ function ReviewNodeImpl({
             event.stopPropagation()
             event.preventDefault()
             setRefreshToken((n) => n + 1)
+            // …and the CARD with it. Without this the node could show a moved
+            // diff while the card still judged the old one, and `Mark
+            // reviewed` — which takes the CARD's signature, deliberately, so
+            // there is one author — would record the stale fingerprint.
+            task?.onRefresh()
           }}
         >
           <Refresh />

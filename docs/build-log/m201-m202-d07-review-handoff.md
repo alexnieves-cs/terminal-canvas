@@ -137,6 +137,40 @@ the tab order, which is unchanged and still asserted in full).
 `verify:panels:product`'s watchdog re-measured: 125 s green, set to 190000 with headroom above
 1.25×, because a watchdog kill reads as a HANG and not as a red check.
 
+**Final gate**, after the critic and verifier rounds: `npm run verify` exit 0, every one of its 38
+suites printing its tally, no failure. The eleven checks this phase added or changed are all in it:
+`readiness.1`–`readiness.6`, `across-baseline.1`, `work.readiness.1`, `review.task.1`,
+`work.action.1`, `review.task.2`. `npm run verify:packaged` is an act-close gate and was not run for this
+milestone.
+
+**`npm run verify:visual` WAS run, and the expectation it was about to be given turned out to be
+wrong** — which is why it was run rather than asserted. 55/60, with five scenes failing: `kinds`,
+`kinds-dark`, `chat-copilot`, `supervisor`, `inspector-detail`. The same suite was then run against
+**HEAD, with this milestone's `src/` and `scripts/` stashed and the renderer rebuilt**, and it
+failed *the same five scenes with the same figures* (kinds 40 %, kinds-dark 37 %, supervisor 41 %,
+inspector-detail 47 %, chat-copilot 0.739 % against this milestone's 0.738 %). **D07 broke none of
+them.** Two facts came out of looking rather than assuming:
+
+- **The goldens have been stale since M197/M200.** The `kinds` diff shows `Assign to...` under
+  `Start work...` (M197's label) and an `execution` line (M200's), neither of which is in the
+  committed golden: those milestones did not regenerate their scenes. D07's own intended change --
+  the card's third line (`review - not started`) and its fifth verb (`Resume`) -- lands in the SAME
+  32 px tile, which was already over budget, so it is invisible in the tally. **The critic's
+  sentence for it, owed before any `UPDATE_GOLDENS=1`, is written here now:** *the work card gains
+  a third state line reading `review` and a fifth verb reading `Resume`, both at rest; the
+  disposition pill and the execution line above them are unchanged, and the verb row is wider by
+  one control.*
+- **`inspector-detail` cannot be stable by construction.** Its failing tile contains a
+  `/private/var/folders/...` temp path, a pid, a font-size line and live `CPU - RAM` readings, all
+  of which change every run. That is a harness defect rather than a rendering one, and it deserves
+  its own fix rather than a re-baseline that would pass once and fail on the next machine.
+
+**No golden was rewritten.** Re-baselining here would silently adopt two other milestones'
+unrecorded visual changes plus one scene that will fail again tomorrow -- the blind re-baseline the
+golden-sentence rule exists to prevent. Regenerating `kinds`/`kinds-dark` belongs with whoever also
+writes M197's and M200's sentences; `chat-copilot`, `supervisor` and `inspector-detail` are
+pre-existing and are recorded here as found.
+
 ## The critic round
 
 A fresh-context critic read the guide's D07, both specs, the implementation and every check, and
@@ -187,12 +221,19 @@ signature now come from the hook's single read.
 terminal produces no chat turns, so a card could sit on `reviewed` over a diff that had moved. The
 review node's `Mark reviewed` now refreshes the card through `onRefresh`.
 
-**Three checks were weak — fixed.** `readiness.3`'s headline assertion compared the same input
+**Three checks were weak — two of the three fixes did not land on the first attempt, and a
+verifier caught that.** `readiness.3`'s replacement and `across-baseline.1`'s were written and
+silently failed to apply (an indentation mismatch in the edit), so the build log claimed two fixes
+that were not in the file — the verifier read the code rather than the claim and said so. Both are
+now really done: `readiness.3`'s headline assertion compared the same input
 twice through a pure function and could not fail for any implementation, including the
-content-hashing one it claimed to guard against; it now pins the bound by its CAUSE (the signature
-reads five named fields and nothing else). `across-baseline.1` asserted the constant's absence from
-`review-engine.ts` under a comment claiming it proved a single shared export; it now counts the
-declarations. One comment in `readiness.1` said the opposite of the line it sat above.
+content-hashing one it claimed to guard against. It now pins the bound by its CAUSE — two rows
+carrying different content under keys the signature does not read are one signature, which a
+content-hashing "fix" would fail first — and asserts the fifth read field (`binary`) alongside the
+four already covered, and that an empty diff is not the same signature as a one-file diff. `across-baseline.1` asserted the constant's absence from
+`review-engine.ts` under a comment claiming it proved a single shared export. It now walks `src/`
+and counts the declarations across the whole tree — the first attempt counted them in the one file
+that declares it, which could not fail and would not have caught the drift the comment names. One comment in `readiness.1` said the opposite of the line it sat above.
 
 **`review.task.2` now renders real evidence.** The first cut asserted only the honest-empty
 sentence, so the evidence-row DOM — the exit-code labels, the per-row attribution — was never
@@ -200,6 +241,32 @@ rendered by any check and a broken list would have passed. The fixture now write
 rows for two commands run in the lane and one run outside it, and the check asserts the failure
 sorts first, each row carries the code this app read, the words name who watched it exit, and the
 outside command is absent.
+
+## The verifier round
+
+A second fresh-context agent verified each claim above against the code. It confirmed eight and
+rejected two (the check fixes that had not applied, above). It also found seven new problems, of
+which six are fixed:
+
+- **The empty-evidence overclaim survived in its commonest case.** The fix had covered a ledger
+  read that FAILED and missed *nowhere to read from*: with no terminal on the canvas the node set
+  `ledgerRows = []` with `ledgerRead` still true, so a lane whose terminal had been closed — the
+  ordinary case — printed "this canvas ran none in it" over a record nobody consulted. Fixed at
+  the source of the flag.
+- **A comment claimed wiring that did not exist.** `Canvas.tsx` said the review node's Refresh
+  moved the card too; it did not, and `review.task.2` worked around the gap with a reload rather
+  than catching it. Press Refresh, see a moved diff, press Mark reviewed, and the recorded
+  signature was the card's older one. The node's Refresh now calls `onRefresh`.
+- **`shared` could not actually be marked reviewed**, though the module comment and this log both
+  said it could. `markable` gated on `state === 'ready'` alone. Fixed.
+- **`data-work-next` was emitted for two of the four actions** — `resume` and `answer` marked
+  nothing — so "the card marks the fact-chosen action" was true for half the fact space. Fixed.
+- **A partial ledger failure was treated as total**: `Promise.all` discarded every other panel's
+  rows when one rejected. Now `allSettled`, keeping what was read and flagging it incomplete.
+- **`no-lane` carried a `changes` block** built before its early return, so a task with no lane
+  could report files that were not its own. It now returns without one, and without writing an
+  `undefined` key.
+- **A stale comment** described a frozen sentinel array that had been replaced by a boolean.
 
 **Recorded, not fixed.** `laneSection`'s precondition (the caller must pass a worktree root; a
 strict-ancestor match is possible if a lane's own section is absent) is in the module header with

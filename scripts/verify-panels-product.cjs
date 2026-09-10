@@ -3285,7 +3285,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // or a task section over a lane that is not there.
     {
       const IDS = [
-        'work.action.1 a card with a real lane reads its readiness from the lane\'s FORK diff — `ready to review` with the review verb enabled and the board disposition pill unchanged beside it — and a card with no lane says `not started` and refuses Review by name',
+        'work.action.1 a card with a real lane reads its readiness from the lane\'s FORK diff — `ready to review`, the review verb enabled, the board disposition pill unchanged beside it, and the fact-chosen next action marked on exactly one verb — while a card with no lane says `not started`, refuses Review by name, and points at Start work instead',
         'review.task.2 the card\'s Review opens a review carrying the task id and paints the handoff word; the evidence list renders one row per command run IN THE LANE, failures first, each with the exit code this canvas read and the words saying who watched it exit, with a command from outside the lane excluded; marking writes the signature to the item and the word becomes `reviewed`; a change in the lane makes it `changed since you reviewed`; and the route back to the agent is refused BY NAME over a lane that is not a conversation'
       ]
       const repoD = mkdtempSync(join(tmpdir(), 'tc panels d07 repo '))
@@ -3338,7 +3338,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             readiness: r.getAttribute('data-work-readiness'), standing: r.getAttribute('data-work-standing'), word: r.textContent,
             disposition: n.getAttribute('data-work-state'), pill: n.querySelector('[data-work-word]') ? n.querySelector('[data-work-word]').textContent : null,
             verbLabel: verb ? verb.textContent : null, verbDisabled: verb ? verb.disabled : null, verbTitle: verb ? verb.getAttribute('title') : null,
-            resume: !!n.querySelector('[data-work-verb="resume"]')
+            resume: !!n.querySelector('[data-work-verb="resume"]'),
+            next: (n.querySelector('[data-work-next]') || {}).getAttribute ? n.querySelector('[data-work-next]').getAttribute('data-work-next') : null,
+            nextVerb: (n.querySelector('[data-work-next]') || {}).getAttribute ? n.querySelector('[data-work-next]').getAttribute('data-work-verb') : null,
+            nextCount: n.querySelectorAll('[data-work-next]').length
           }
         })()`)
         // The readiness line appears only once the fork diff has been read —
@@ -3422,8 +3425,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // The board disposition is untouched by any of it.
             ready.disposition === 'working' && (ready.pill || '').indexOf('working') === 0 &&
             ready.resume === true &&
+            // The one action the facts chose, marked on the verb that
+            // performs it — and marked exactly once, so "the card offers one
+            // action" is a property of the DOM and not of the prose.
+            ready.next === 'review' && ready.nextVerb === 'review' && ready.nextCount === 1 &&
             none.readiness === 'no-lane' && none.verbDisabled === true && (none.verbTitle || '').length > 20 &&
-            none.disposition === 'todo',
+            none.disposition === 'todo' &&
+            none.next === 'start' && none.nextVerb === 'assign' && none.nextCount === 1,
           JSON.stringify({ ready, none }))
         ok(IDS[1],
           opened !== false && subjectSaved !== false && marked !== false && afterMark !== false && stale !== false && reopened !== false &&

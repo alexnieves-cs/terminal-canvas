@@ -219,9 +219,12 @@ export function reviewHandoff(input: ReviewHandoffInput): ReviewHandoff {
     ...(changes === undefined ? {} : { changes })
   })
 
-  // Nothing else can be said about a task that has never been started.
+  // Nothing else can be said about a task that has never been started — and
+  // it carries no `changes`, whatever section it was handed: a task with no
+  // lane has no diff of its own, and a projection that reported one would be
+  // attributing somebody else's files to it.
   if (item.panelId === undefined || item.worktreeId === undefined) {
-    return carry({ state: 'no-lane', word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start work…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' })
+    return { state: 'no-lane', standing, word: 'not started', tone: 'none', action: 'start', actionLabel: 'Start work…', detail: 'this task has no lane yet — starting work gives it a worktree and a conversation' }
   }
 
   // The lane is gone, or was never readable. Never review a DIFFERENT
