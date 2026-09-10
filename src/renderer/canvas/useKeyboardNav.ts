@@ -35,6 +35,12 @@ export interface KeyboardNavDeps {
   focusPanel: (id: string) => void
   /** setFocusedId(null): the background-click release. */
   releaseFocus: () => void
+  /**
+   * M249. Cmd+Shift+Space: expand the command pill and give its input the
+   * keyboard. Cmd-scoped like every chord here, so a terminal's bare keys
+   * never reach it; the ONLY path besides a click that may move focus there.
+   */
+  openPill?: () => void
 }
 
 const ARROWS: Record<string, Direction> = {
@@ -47,11 +53,20 @@ const ARROWS: Record<string, Direction> = {
 export function useKeyboardNav(deps: KeyboardNavDeps): void {
   const {
     shouldIgnoreKeys, rectsRef, selectedIdRef, focusedIdRef, viewportRef,
-    lastFocusedAtRef, hostRef, goToPanel, focusPanel, releaseFocus
+    lastFocusedAtRef, hostRef, goToPanel, focusPanel, releaseFocus, openPill
   } = deps
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      // M249. The one Shift chord here, tested BEFORE the no-Shift gate below.
+      // `code`, not `key`: with Shift held `key` is still ' ', but a layout
+      // may remap it, and the palette's Cmd+K rule reads the physical key too.
+      if (openPill !== undefined && event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey && event.code === 'Space') {
+        if (shouldIgnoreKeys()) return
+        event.preventDefault()
+        if (!event.repeat) openPill()
+        return
+      }
       if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
       const dir = ARROWS[event.code]
       const isEnter = event.code === 'Enter'
@@ -95,5 +110,5 @@ export function useKeyboardNav(deps: KeyboardNavDeps): void {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [shouldIgnoreKeys, rectsRef, selectedIdRef, focusedIdRef, viewportRef, lastFocusedAtRef, hostRef, goToPanel, focusPanel, releaseFocus])
+  }, [shouldIgnoreKeys, rectsRef, selectedIdRef, focusedIdRef, viewportRef, lastFocusedAtRef, hostRef, goToPanel, focusPanel, releaseFocus, openPill])
 }

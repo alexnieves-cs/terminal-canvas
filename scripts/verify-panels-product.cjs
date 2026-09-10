@@ -4865,4 +4865,191 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       }
     }
   }
+
+  // M249 — THE BOTTOM COMMAND PILL. Five checks over the real renderer, in
+  // the order that lets each reuse the last one's live shell:
+  //   pill.focus.1  real keys into a focused terminal reach its PTY and the
+  //                 pill neither expands nor takes the keyboard;
+  //   pill.rects.1  expand/collapse moves no panel and refits no terminal —
+  //                 the M234 SIGWINCH guard, applied to the pill;
+  //   pill.paste.1  Cmd+Shift+Space gives the input the keyboard, edit:paste
+  //                 lands IN the input and the PTY receives nothing, Escape
+  //                 hands the keyboard back to the terminal;
+  //   pill.jump.1   the rest state names the waiting panel and Jump centres it;
+  //   pill.send.1   no orchestrator → the first send makes a supervisor with
+  //                 the text UNSENT in its composer; the next send reaches
+  //                 that chat's process through agent:send.
+  // Red first against a CommandPill that rendered nothing. One try block with
+  // every unrecorded id failed on a throw, so a throw is never a silent skip.
+  {
+    const PILL_IDS = {
+      focus: 'pill.focus.1 keys typed into a focused terminal reach its PTY; the pill never expands, never takes focus and its input stays empty',
+      rects: 'pill.rects.1 expanding and collapsing the pill leaves every panel rect and the terminal\'s cols/rows unchanged',
+      paste: 'pill.paste.1 Cmd+Shift+Space focuses the pill input, edit:paste lands in it and never reaches the PTY, and Escape returns the keyboard to the terminal',
+      jump: 'pill.jump.1 the rest state names the waiting panel, and Jump centres it on screen',
+      send: 'pill.send.1 with no orchestrator the first send makes a supervisor chat holding the text unsent; the next send reaches that chat through agent:send'
+    }
+    const done = new Set()
+    const record = (key, pass, detail) => { done.add(key); ok(PILL_IDS[key], pass, detail) }
+    const pillLog = []
+    const onPillLog = (_e, level, m) => { if (level >= 2) pillLog.push(String(m).slice(0, 240)) }
+    wc.on('console-message', onPillLog)
+    const origWrite = ptyManager.write.bind(ptyManager)
+    const writes = []
+    let termId = null
+    try {
+      await settle()
+      const q = (sel) => JSON.stringify(sel)
+      // A live shell of our own at the camera centre — /bin/sh, so a bell
+      // below is a real 0x07 the shell prints (70b's reason).
+      const before = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: require('node:os').tmpdir(), command: '/bin/sh', args: [] })
+      termId = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : [])`)
+        const fresh = rows.find((r) => !before.includes(r.id) && r.spawned)
+        return fresh ? fresh.id : false
+      }, 8000) || null
+      if (!termId) throw new Error('no live shell for the pill checks')
+      const screenSel = `.panel[data-panel-id="${termId}"] .xterm-screen`
+      if (await waitUntil(() => wc.executeJavaScript(`document.querySelector(${q(screenSel)}) !== null`), 6000) !== true) throw new Error('the shell never rendered an .xterm-screen')
+      ptyManager.write = (id, data) => { if (id === termId) writes.push(String(data)); return origWrite(id, data) }
+      // Focus the terminal the way a user does: a press on .xterm-screen
+      // (never .panel__slot — xterm binds one level below it).
+      const focusTerminal = () => wc.executeJavaScript(`(() => {
+        const el = document.querySelector(${q(screenSel)}); if (!el) return false
+        const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2
+        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1 }))
+        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }))
+        return true })()`)
+      const pillState = () => wc.executeJavaScript(`(() => {
+        const root = document.querySelector('[data-command-pill]'), input = document.querySelector('[data-command-pill-input]'), rest = document.querySelector('[data-pill-rest]')
+        return { present: root !== null, expanded: root !== null && root.hasAttribute('data-pill-expanded'), state: rest ? rest.getAttribute('data-pill-state') : null, text: rest ? rest.textContent : null,
+          input: input !== null, focused: input !== null && document.activeElement === input, value: input ? input.value : null,
+          activePanel: document.activeElement && document.activeElement.closest ? (document.activeElement.closest('.panel') || { dataset: {} }).dataset.panelId || null : null }
+      })()`)
+      // A shell control is pressed with mousedown (preventDefault — no focus
+      // move) then click, exactly what a real press delivers.
+      const press = (sel) => wc.executeJavaScript(`(() => { const b = document.querySelector(${q(sel)}); if (!b || b.disabled) return false
+        b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await focusTerminal(); await settle()
+
+      // pill.focus.1 — REAL key events (sendInputEvent lands on whatever
+      // holds DOM focus, like a keyboard), plus a keydown dispatched on
+      // .xterm-screen, the node a cursor would be over.
+      for (const ch of 'pillkeys') wc.sendInputEvent({ type: 'char', keyCode: ch })
+      await wc.executeJavaScript(`document.querySelector(${q(screenSel)}).dispatchEvent(new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', bubbles: true })), true`)
+      const typed = await waitUntil(() => writes.join('').includes('pillkeys'), 4000)
+      const afterKeys = await pillState()
+      record('focus', afterKeys.present === true && typed === true && afterKeys.expanded === false && afterKeys.focused === false && (afterKeys.value === null || afterKeys.value === ''),
+        JSON.stringify({ typed, tail: writes.join('').slice(-30), afterKeys }))
+      origWrite(termId, '\u0015') // ^U: clear the typed line so the shell is quiet again
+
+      // pill.rects.1 — every panel's box and the focused terminal's grid,
+      // before, expanded (running list open too, the tallest state), collapsed.
+      // The HOST's own box and the world transform too (the critic): a pill
+      // that shrank .canvas from the bottom would move no panel rect — the
+      // world origin is the host's top-left — yet still resize the canvas.
+      const geometry = () => wc.executeJavaScript(`JSON.stringify({ host: (() => { const r = document.querySelector('.canvas').getBoundingClientRect(); return [r.left, r.top, r.width, r.height].join(':') })(), world: document.querySelector('.world').style.transform, rects: [...document.querySelectorAll('.panel')].map((p) => { const r = p.getBoundingClientRect(); return [p.dataset.panelId, r.left, r.top, r.width, r.height].join(':') }), grid: window.__m4aGrid ? window.__m4aGrid() : null })`)
+      const placed = await wc.executeJavaScript(`(() => { const p = document.querySelector('[data-command-pill]'); return p !== null && p.parentElement === document.querySelector('.canvas') && p.closest('.world') === null && getComputedStyle(p).position === 'absolute' })()`)
+      const g0 = await geometry()
+      const opened = await press('[data-pill-rest]'); await settle()
+      const runningOpened = await press('[data-pill-action="running"]'); await settle()
+      const g1 = await geometry()
+      const expandedNow = (await pillState()).expanded
+      await press('[data-pill-rest]'); await settle()
+      const g2 = await geometry()
+      const collapsedNow = (await pillState()).expanded === false
+      record('rects', placed === true && opened === true && expandedNow === true && collapsedNow === true && JSON.parse(g0).grid !== null && g0 === g1 && g1 === g2,
+        JSON.stringify({ placed, opened, runningOpened, expandedNow, collapsedNow, same01: g0 === g1, same12: g1 === g2, g0: g0.slice(0, 300), g1: g0 === g1 ? '=' : g1.slice(0, 300) }))
+
+      // pill.paste.1 — the shortcut, the menu paste, Escape.
+      await focusTerminal(); await settle()
+      // A REAL chord (the critic): sendInputEvent lands on xterm's focused
+      // textarea first, exactly as a keyboard does, so a Cmd+Shift+Space
+      // that leaked bytes into the PTY on its way is counted — writesBefore
+      // is taken BEFORE the chord for that reason.
+      const writesBefore = writes.length
+      wc.sendInputEvent({ type: 'keyDown', keyCode: 'Space', modifiers: ['meta', 'shift'] })
+      wc.sendInputEvent({ type: 'keyUp', keyCode: 'Space', modifiers: ['meta', 'shift'] })
+      await settle()
+      const viaShortcut = await pillState()
+      wc.send(IPC_EVENTS.EDIT_PASTE, 'PILL_PASTE_77')
+      const landed = await waitUntil(async () => ((await pillState()).value || '').includes('PILL_PASTE_77'), 3000)
+      await settle()
+      const leaked = writes.slice(writesBefore).join('').includes('PILL_PASTE_77')
+      await wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); return true })()`)
+      await settle()
+      const afterEscape = await pillState()
+      record('paste', viaShortcut.expanded === true && viaShortcut.focused === true && landed === true && leaked === false && afterEscape.expanded === false && afterEscape.activePanel === termId,
+        JSON.stringify({ viaShortcut, landed, leaked, afterEscape }))
+
+      // pill.jump.1 — a real bell puts the shell in wants-you; the camera is
+      // panned well away; Jump brings the panel to the centre of the host.
+      // The bell rings in a SECOND, never-focused /bin/sh spawned exactly as
+      // shell 70b spawns its (PRESET_SPAWN, then BELL_LINE): ringing the
+      // shell the checks above had typed into and focused never reached
+      // wants-you in two runs, and this is also the stronger claim — Jump
+      // travels to a panel other than the one the person is in.
+      await pressChord(wc, 'Escape', { code: 'Escape' }); await settle()
+      const beforeBell = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : []).map((s) => s.id)`)
+      wc.send(IPC_EVENTS.PRESET_SPAWN, { cwd: '/tmp', command: '/bin/sh', args: [] })
+      const bellId = await waitUntil(async () => {
+        const rows = await wc.executeJavaScript(`(window.__m4aSessions ? window.__m4aSessions() : [])`)
+        const fresh = rows.find((r) => !beforeBell.includes(r.id) && r.spawned)
+        return fresh ? fresh.id : false
+      }, 8000) || null
+      if (!bellId) throw new Error('pill.jump.1: the bell shell never spawned')
+      if (await waitUntil(async () => (await sessionMap(wc)).has(bellId), 8000) !== true) throw new Error('pill.jump.1: the bell shell never got a PTY')
+      origWrite(bellId, "printf '\\007'\n")
+      const rang = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${q(bellId)}]')?.dataset.agentState`).then((s) => s === 'wants-you'), 6000)
+      const bellState = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${q(bellId)}]')?.dataset.agentState ?? null`)
+      const restAttention = await waitUntil(async () => ((await pillState()).state === 'attention'), 3000)
+      const restText = (await pillState()).text
+      const offset = () => wc.executeJavaScript(`(() => { const host = document.querySelector('.canvas').getBoundingClientRect(), p = document.querySelector('.panel[data-panel-id=${q(bellId)}]'); if (!p) return null; const r = p.getBoundingClientRect()
+        return Math.hypot((r.left + r.width / 2) - (host.left + host.width / 2), (r.top + r.height / 2) - (host.top + host.height / 2)) })()`)
+      await wc.executeJavaScript(`document.querySelector('.canvas').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 700, deltaY: 500, deltaMode: 0 })), true`)
+      await settle()
+      const away = await offset()
+      await press('[data-pill-rest]'); await settle()
+      const jumped = await press('[data-pill-action="jump"]')
+      const centred = await waitUntil(async () => { const d = await offset(); return d !== null && d < 6 }, 4000)
+      record('jump', rang === true && restAttention === true && /1 agent needs you/.test(restText || '') && away !== null && away > 150 && jumped === true && centred === true,
+        JSON.stringify({ bellId, rang, bellState, restAttention, restText, away, jumped, centred, final: await offset() }))
+      await press('[data-pill-rest]'); await settle()
+
+      // pill.send.1 — the orchestrator door, both arms.
+      const offeredBefore = await wc.executeJavaScript(`window.__m81SupervisorOffered ? window.__m81SupervisorOffered() : 'no hook'`)
+      const chatsBefore = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.dataset.panelId)`)
+      const placeholder = async () => { if (!(await pillState()).expanded) { await press('[data-pill-rest]'); await settle() } return wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); return i ? i.getAttribute('placeholder') : null })()`) }
+      const typeAndSend = (text) => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-command-pill-input]'); if (!i) return false; i.focus()
+        const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set; set.call(i, ${q(text)}); i.dispatchEvent(new Event('input', { bubbles: true }))
+        i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })); return true })()`)
+      const firstHint = await placeholder()
+      const firstTyped = await typeAndSend('PILL_FIRST_41')
+      const supervisorId = await waitUntil(async () => {
+        const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-kind="chat"]')].map((p) => p.dataset.panelId)`)
+        return now.find((id) => !chatsBefore.includes(id)) || false
+      }, 8000) || null
+      const offeredAfter = await wc.executeJavaScript(`window.__m81SupervisorOffered ? window.__m81SupervisorOffered() : 'no hook'`)
+      const inComposer = supervisorId ? await waitUntil(() => wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id=${q(supervisorId)}] textarea')].some((t) => t.value.includes('PILL_FIRST_41'))`), 4000) : false
+      const sentFirst = chatSpawns.some((s) => s.proc.stdin.some((l) => l.includes('PILL_FIRST_41')))
+      // The outcome is said IN the pill and the keyboard is not taken: no
+      // palette opened over the terminal the send handed focus back to.
+      const afterFirst = await wc.executeJavaScript(`({ palette: document.querySelector('.palette') !== null, note: (document.querySelector('[data-pill-note]') || {}).textContent || null })`)
+      const secondHint = await placeholder()
+      const secondTyped = await typeAndSend('PILL_SECOND_42')
+      const delivered = await waitUntil(() => chatSpawns.some((s) => s.proc.stdin.some((l) => l.includes('PILL_SECOND_42'))), 8000)
+      const collapsedAfterSend = (await pillState()).expanded === false
+      // Re-read AFTER the second send landed: a late first-send leak counts.
+      const sentFirstLate = chatSpawns.some((s) => s.proc.stdin.some((l) => l.includes('PILL_FIRST_41')))
+      record('send', offeredBefore === true && afterFirst.palette === false && /supervisor/.test(afterFirst.note || '') && sentFirstLate === false && /no orchestrator yet/.test(firstHint || '') && firstTyped === true && typeof supervisorId === 'string' && offeredAfter === false &&
+        inComposer === true && sentFirst === false && !/no orchestrator yet/.test(secondHint || '') && secondTyped === true && delivered === true && collapsedAfterSend === true,
+        JSON.stringify({ afterFirst, sentFirstLate, offeredBefore, firstHint, firstTyped, supervisorId, offeredAfter, inComposer, sentFirst, secondHint, secondTyped, delivered, collapsedAfterSend }))
+    } catch (pillErr) {
+      for (const key of Object.keys(PILL_IDS)) if (!done.has(key)) ok(PILL_IDS[key], false, 'threw: ' + String(pillErr && pillErr.message || pillErr) + ' | renderer: ' + (pillLog.slice(-4).join(' || ') || '(nothing)'))
+    } finally {
+      ptyManager.write = origWrite
+      wc.removeListener('console-message', onPillLog)
+    }
+  }
 })
