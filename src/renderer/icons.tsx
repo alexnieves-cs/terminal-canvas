@@ -206,6 +206,10 @@ export const TOOL_GLYPH: Record<string, (p: IconProps) => JSX.Element> = { Read:
 export const KindImage = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2.5" y="3.5" width="11" height="9" rx="1.5" /><circle cx="6" cy="7" r="1.2" /><path d="M2.5 11l3.5-3 2.5 2.5 2-1.5 3 2.5" /></Svg>
 )
+/** M248. A deck: a slide on its easel — a 16:9 frame over a short stand. */
+export const KindDeck = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="2" y="3" width="12" height="7.5" rx="1" /><path d="M8 10.5V13M5.5 14h5" /><path d="M4.5 6h5" strokeWidth="1" /></Svg>
+)
 export const KIND_GLYPH = { review: KindReview, file: KindFile, note: KindNote, toolbox: KindToolbox, jira: KindJira, github: KindGithub, chat: KindChat, memory: KindMemory, watcher: KindWatcher, browser: KindBrowser, work: KindWork, skill: KindSkill, workflow: KindWorkflow, image: KindImage } as const
 
 /** M92. A lock: the closed padlock, a state mark on a frame. */

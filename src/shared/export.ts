@@ -25,3 +25,12 @@ export type CanvasPngExportResult =
   | { kind: 'written'; path: string }
   | { kind: 'cancelled' }
   | { kind: 'failed'; reason: string }
+
+/** M248. A deck's file, by path — main reads it itself, never a renderer's copy. */
+export interface DeckPdfExportRequest { path: string }
+
+/** M248. `pages` is one per slide; `redacted` is the outward gate's count across every slide. */
+export type DeckPdfExportResult =
+  | { kind: 'written'; path: string; pages: number; redacted: number }
+  | { kind: 'cancelled' }
+  | { kind: 'failed'; reason: string }

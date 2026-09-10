@@ -12,13 +12,28 @@ import { CopyIcon } from '@renderer/icons'
  * TEXT with the URL on its title — a transcript is not a page, and `link:open`
  * is a verb, not a click on prose.
  */
-export function Markdown({ text }: { text: string }): JSX.Element {
-  const blocks = useMemo(() => parseMarkdown(text), [text])
-  return <>{blocks.map((b, i) => <BlockView key={i} block={b} />)}</>
+export function Markdown({ text, slides = false, image }: {
+  text: string
+  /** M248. The slide grammar (image and table blocks); the chat never passes it, so md.1's grammar holds there. */
+  slides?: boolean
+  /** M248. How an image block paints — the deck resolves a path through `image:read`; absent paints its alt text. */
+  image?: (alt: string, src: string) => JSX.Element
+}): JSX.Element {
+  const blocks = useMemo(() => parseMarkdown(text, { slides }), [text, slides])
+  return <>{blocks.map((b, i) => <BlockView key={i} block={b} image={image} />)}</>
 }
 
-function BlockView({ block }: { block: Block }): JSX.Element {
+function BlockView({ block, image }: { block: Block; image?: (alt: string, src: string) => JSX.Element }): JSX.Element {
   switch (block.kind) {
+    case 'image':
+      return image ? image(block.alt, block.src) : <p className="md__p">{block.alt}</p>
+    case 'table':
+      return (
+        <table className="md__table">
+          <thead><tr>{block.header.map((c, i) => <th key={i} style={block.align[i] ? { textAlign: block.align[i]! } : undefined}><Runs runs={c} /></th>)}</tr></thead>
+          <tbody>{block.rows.map((row, r) => <tr key={r}>{row.map((c, i) => <td key={i} style={block.align[i] ? { textAlign: block.align[i]! } : undefined}><Runs runs={c} /></td>)}</tr>)}</tbody>
+        </table>
+      )
     case 'heading': {
       const Tag = (`h${block.level + 2}`) as 'h3' | 'h4' | 'h5'
       return <Tag className={`md__h md__h--${block.level}`}><Runs runs={block.children} /></Tag>

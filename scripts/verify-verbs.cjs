@@ -49,7 +49,7 @@ const FACTS = {
 
 ;(async () => {
   ok('creation.registry.1 one registry describes every creation pill and its executable four doors',
-    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist'].every((id) =>
+    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist', 'deck'].every((id) =>
       V.CREATABLE_OBJECTS.some((entry) => entry.id === id && typeof entry.create === 'function' && entry.icon && V.V9_DOORS[entry.verb])))
   // closure.1 — THE one that matters long-term. The PaletteActions interface
   // (commands.ts) is the authority for what the app can do; every member is
