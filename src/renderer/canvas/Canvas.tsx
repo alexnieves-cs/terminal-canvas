@@ -68,6 +68,8 @@ import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
+import { noteEditorFocused } from '@renderer/file/rich-note-focus'
+import type { ImportedNote } from '@shared/imported-note'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -1275,7 +1277,8 @@ export function Canvas({
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
     // M249. The command pill's input is the same situation again (pill.paste.1).
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused(),
+    // M250. A rich note editor is a text surface too; its own edit:* subscriptions act on it.
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused(),
     [palette.isOpen]
   )
 
@@ -3284,7 +3287,7 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; exact?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; exact?: true }) => {
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3310,7 +3313,8 @@ export function Canvas({
           // function for both, so a note and an opened file cannot drift
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
-          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist })
+          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
+          ...(opts?.imported === undefined ? {} : { imported: opts.imported })
         })
       ]
       commitHistory(next)
@@ -3387,6 +3391,7 @@ export function Canvas({
     return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
   }
   const addImageRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
+  const importDocxRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
   const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
     if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
     const world = screenToWorld(screen, viewportRef.current)
@@ -3417,6 +3422,13 @@ export function Canvas({
     // (the same reason `openFilePanel`'s own test hook sits in its own effect).
     if (attachmentKind(path) === 'image') {
       void addImageRef.current?.(path, world)
+      return 'opened'
+    }
+    // M250. A WORD DOCUMENT dropped on nothing becomes a note — the canvas
+    // door of `import-docx`, through a ref for addImageRef's TDZ reason. A
+    // .docx opened as a file panel would be a "binary" arm nobody can use.
+    if (/\.docx$/i.test(path)) {
+      void importDocxRef.current?.(path, world)
       return 'opened'
     }
     openFilePanel(path, world)
@@ -5494,6 +5506,23 @@ export function Canvas({
   }, [commitHistory, selectOnly])
   addImageRef.current = addImageFromPath
   /**
+   * M250. A .docx into a NEW note, the one door all four gestures take (the
+   * drop, the palette row, the agent's verb, an action node). Main converts
+   * and writes; this only opens what main answered, as a note behind the
+   * import gate (`imported` without `reviewed`). The loss report is the
+   * result's note, so every door says what was dropped in the same words.
+   */
+  const importDocxFile = useCallback(async (path?: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const result = await window.canvas.docx.import(path === undefined ? {} : { path })
+    if (result.kind === 'cancelled') return { kind: 'refused', reason: 'no document chosen' }
+    if (result.kind === 'exists') return { kind: 'refused', reason: `${displayPath(result.path).short} already exists — rename or move it, then import again` }
+    if (result.kind === 'refused') return result
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    openFilePanel(result.path, at, { prose: true, exact: true, imported: { from: result.source, dropped: result.dropped } })
+    return { kind: 'ran', note: `${displayPath(result.path).short} — ${result.dropped || 'nothing was dropped'}` }
+  }, [openFilePanel])
+  importDocxRef.current = importDocxFile
+  /**
    * M186. Replace: the SAME store door, pointed at an existing panel. A
    * picture whose bytes are gone is an object a person can repair — the arm
    * that says `missing` keeps the panel, and this is the verb beside it.
@@ -5853,6 +5882,11 @@ export function Canvas({
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
   }, [])
+  // M250. The ONE writer of `reviewed: true` — a person's click on the note.
+  const setImportReviewed = useCallback((id: string) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id && panel.source.imported !== undefined
+      ? { ...panel, source: { ...panel.source, imported: { ...panel.source.imported, reviewed: true as const } } } : panel))
+  }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
@@ -5926,6 +5960,7 @@ export function Canvas({
     exportCanvasFile: exportCanvas,
     prepareFeedbackNow: prepareFeedback,
     importCanvasFile: importCanvas,
+    importDocxFile,
     addNote,
     setNoteText,
     setNoteTint,
@@ -6871,6 +6906,7 @@ export function Canvas({
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   vaultReady={vaultReady}
+                  onImportReviewed={setImportReviewed}
                   {...(noteVault !== null && panel.source.path.startsWith(`${noteVault.root}/`) ? { vault: noteVault } : {})}
                 />
               )

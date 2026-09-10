@@ -40,6 +40,14 @@ export interface FileSource {
    * file panel that was never a note.
    */
   prose?: true
+  /**
+   * M250. This note was converted from a file that arrived from outside (a
+   * .docx). While `reviewed` is unset the note is INERT: it does not enter its
+   * editor and no agent reads it — see shared/imported-note.ts. Absent on
+   * every note a person wrote here, and absent must stay absent through every
+   * copy site (the `prose` rule above).
+   */
+  imported?: import('./imported-note').ImportedNote
 }
 
 /**

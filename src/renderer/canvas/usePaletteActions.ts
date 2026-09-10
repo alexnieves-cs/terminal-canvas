@@ -20,6 +20,7 @@ import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } f
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
+import { importedNoteReason } from '@shared/imported-note'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
@@ -94,6 +95,8 @@ export interface PaletteActionsDeps {
   /** M189. The portable file's two verbs — the renderer builds it and decides what to make of one. */
   exportCanvasFile: (path?: string, withPixels?: boolean) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvasFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M250. A .docx into a new, unreviewed note — main converts, the canvas opens the result. */
+  importDocxFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M188. Test one node: the same executor the workflow's own run takes. */
   testNodeNow: (templateId: string, key?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M187. The note's three verbs — one record, three forms. */
@@ -245,7 +248,7 @@ export interface PaletteActionsDeps {
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     createObjectNow,
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -318,6 +321,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'feedback': return self.prepareFeedback(a.says)
           case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
           case 'import-canvas': return self.importCanvas(a.path)
+          // A plan must NAME the document: with no path the import opens the
+          // system's chooser, and a modal nobody asked for in front of the
+          // person is not a plan's to open. The chooser is the palette row's.
+          case 'import-docx': return a.path ? self.importDocx(a.path) : { kind: 'refused', reason: 'name the .docx to import — import-docx <path>; choosing one is the palette row\'s' }
           case 'note-add': return self.addNote(a.form!, a.text)
           case 'note-set': return self.setNoteText(a.panel!, a.text ?? '')
           case 'note-tint': return self.setNoteTint(a.panel!, a.tint!)
@@ -428,6 +435,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (page.kind === 'refused') return { kind: 'refused', reason: `${a.panel}: ${page.reason}` }
               return { kind: 'ran', note: `${page.note}: ${page.text.slice(0, 160).replace(/\s+/g, ' ')}` }
             }
+            // M250. An imported note nobody has read yet is inert at the APP's
+            // doors: the canvas `read` verb refuses it, by the same sentence its
+            // banner shows. This is not a filesystem boundary — an agent with a
+            // shell can still `cat` the .md; the gate is what this app hands over.
+            const importGate = p && isFilePanel(p) ? importedNoteReason(p.source) : undefined
+            if (importGate !== undefined) return { kind: 'refused', reason: `${a.panel}: ${importGate}` }
             const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
             const gate = outward(raw, `panel ${a.panel}`)
             return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
@@ -2013,6 +2026,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     prepareFeedback: (says) => prepareFeedbackNow(says),
     exportCanvas: (path, withPixels) => exportCanvasFile(path, withPixels === 'with-pictures'),
     importCanvas: (path) => importCanvasFile(path),
+    importDocx: (path) => importDocxFile(path),
     addNote: (form, text) => addNote(form, text),
     setNoteText: (panelId, text) => setNoteText(panelId, text),
     setNoteTint: (panelId, tint) => setNoteTint(panelId, tint),
@@ -2396,7 +2410,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

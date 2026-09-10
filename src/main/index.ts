@@ -10,6 +10,8 @@ import { discoverPreview } from './preview-discover'
 import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
+import { importDocx } from './docx-import'
+import { createFile } from './file-create'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
 import { parsePortable } from '@shared/portable'
 import { buildAppMenu } from './menu'
@@ -2245,6 +2247,29 @@ app.whenReady().then(async () => {
           return { kind: 'refused' as const, reason: `that file could not be read: ${error instanceof Error ? error.message : String(error)}` }
         }
         return { kind: 'read' as const, path, parse: parsePortable(text) }
+      }
+    },
+    // M250. A .docx into a NEW note beside it. The chooser is the system's own
+    // (a cancel is `cancelled`, never a refusal); pictures go through the SAME
+    // store and caps a dropped picture does; the note through createFile's
+    // `wx`. The docx itself is only read — see main/docx-import.ts.
+    {
+      import: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path.trim() : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showOpenDialog(mainWindow, {
+            title: 'Import a Word document',
+            properties: ['openFile'],
+            filters: [{ name: 'Word document', extensions: ['docx'] }]
+          })
+          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePaths[0]
+        }
+        return importDocx({ path }, {
+          putAsset: (bytes) => putAsset({ dir: join(app.getPath('userData'), 'assets'), bytes }),
+          createFile
+        })
       }
     }
   )

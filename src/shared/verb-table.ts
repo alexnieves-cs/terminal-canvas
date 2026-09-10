@@ -109,6 +109,12 @@ export const VERBS: readonly VerbDef[] = [
   // palette and is refused outright at the agent door (M190's critic, 3).
   { id: 'export-canvas', label: 'Canvas: export', args: [{ name: 'path', kind: 'text', optional: true }, { name: 'pictures', kind: 'value', optional: true }], destructive: true, actions: ['exportCanvas'], target: 'canvas', hint: 'write this canvas as one portable file; add with-pictures to include the pixels' },
   { id: 'import-canvas', label: 'Canvas: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importCanvas'], target: 'canvas', hint: 'read a portable file into a NEW workspace; nothing in it is started' },
+  // M250. A .docx becomes a NEW note beside it, unreviewed until a person reads
+  // it. Not destructive: the docx is only read and the note is created with
+  // `wx`, so nothing is overwritten. The path takes the REST of the line — a
+  // Word file's name has spaces far more often than not. Refused to teammates
+  // (plan.ts): a teammate's plan does not choose which files this app reads.
+  { id: 'import-docx', label: 'Note: import a Word document', args: [{ name: 'path', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['importDocx'], target: 'canvas', hint: 'convert a .docx into a new Markdown note beside it; what was dropped is named, and the note waits to be read' },
   // M188. Test one node, by template and (optionally) key: with no key it is
   // the block the person has selected on the diagram.
   { id: 'node-test', label: 'Node: test', args: [{ name: 'template', kind: 'key' }, { name: 'node', kind: 'value', optional: true }], destructive: false, actions: ['testNode'], target: 'canvas', hint: 'run one block on its own — its neighbours are not started' },
@@ -356,6 +362,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   feedback: { canvas: 'Help ▸ Prepare feedback… in the menu bar', palette: 'feedback.open', agent: 'tc plan feedback', workflow: 'an action node whose line is: feedback' },
   'export-canvas': { canvas: { reason: 'export needs a canvas with something on it, so the launcher (an empty canvas) is the wrong home for it and the frame has no room at rest', due: 'M191' }, palette: 'portable.export', agent: 'tc plan export-canvas', workflow: 'an action node whose line is: export-canvas' },
   'import-canvas': { canvas: 'the launcher\'s Import a canvas… line', palette: 'portable.import', agent: 'tc plan import-canvas', workflow: 'an action node whose line is: import-canvas' },
+  'import-docx': { canvas: 'drop a .docx on the canvas', palette: 'note.import-docx', agent: 'tc plan import-docx /tmp/Plan.docx', workflow: 'an action node whose line is: import-docx /tmp/Plan.docx' },
   'node-test': { canvas: 'Test this node on the workflow panel\'s selected block', palette: 'node.test', agent: 'tc plan node-test t1 n1', workflow: { reason: 'a node that tests a node is a loop with no stop', due: WORKFLOW_EXECUTOR_DUE } },
   'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: 'an action node whose line is: note-add sticky' },
   'note-set': { canvas: "the note's own editor, committed on blur or Escape", palette: 'note.tint', agent: 'tc plan note-set nt1 hello', workflow: 'an action node whose line is: note-set nt1 hello' },

@@ -270,6 +270,15 @@ const INERT_ASSETS: AssetHandlers = {
   choose: async () => null
 }
 
+/** M250. The .docx import's one door; see main/docx-import.ts. */
+export interface DocxHandlers {
+  import(req: { path?: string }): Promise<import('../shared/imported-note').DocxImportResult>
+}
+
+const INERT_DOCX: DocxHandlers = {
+  import: async () => ({ kind: 'refused', reason: 'importing a .docx is not available here' })
+}
+
 /** M188. The fetch node's one door; see main/node-run.ts. */
 export interface NodeHandlers {
   fetch(req: { url: string; method?: string }): Promise<NodeFetchResult>
@@ -480,9 +489,14 @@ export function registerIpcHandlers(
   /** M188. Appended last, like every collaborator before it. */
   nodes: NodeHandlers = INERT_NODES,
   /** M189. Appended last, like every collaborator before it. */
-  portable: PortableHandlers = INERT_PORTABLE
+  portable: PortableHandlers = INERT_PORTABLE,
+  /** M250. Appended last, like every collaborator before it. */
+  docx: DocxHandlers = INERT_DOCX
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
+  // M250. The renderer names a path (or none, for the chooser) and nothing
+  // else; a non-string is treated as absent rather than trusted.
+  ipcMain.handle(IPC.DOCX_IMPORT, (_event, req: { path?: unknown }) => docx.import(typeof req?.path === 'string' ? { path: req.path } : {}))
   // M181. A relative path is refused as `missing` before the read: the record
   // parser already drops one, and a read resolved against main's cwd would
   // name a file nobody meant.

@@ -410,6 +410,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        agent:pool-start / agent:pool-stop
                        update:check
                        image:read / starter:prepare
+                       docx:import
 renderer  <--send---   pty:data (batched ~16ms) / pty:exit                         <--  main
                        agent:state / session:live / subagent:state
                        file:changed / usage:panel / attention:jump
