@@ -181,7 +181,23 @@ const SHOT_HTTP = require('node:http').createServer((_req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
   res.end(`<!doctype html><html><head><title>api — preview</title><style>body{margin:0;padding:24px 28px;font:15px/1.5 -apple-system,Helvetica,Arial,sans-serif;color:#1d2433;background:#fff}h1{font-size:22px;margin:0 0 4px}p{margin:0 0 14px;color:#5b6472}code{background:#f1f3f6;padding:2px 6px;border-radius:4px}ul{margin:0;padding-left:18px}li{margin:4px 0}.ok{color:#1a7f37}</style></head><body><h1>api — preview</h1><p>served by <code>npm run dev</code> · <span class="ok">listening</span></p><ul><li>GET /health → <code>200 ok</code></li><li>GET /users → <code>200</code> (3 rows)</li><li>POST /users → <code>201</code></li></ul></body></html>`)
 })
-const shotHttpReady = new Promise((resolve) => SHOT_HTTP.listen(0, '127.0.0.1', resolve))
+// M225. A PREFERRED port, not an ephemeral one. `listen(0)` stamped a fresh
+// random port into every golden that paints the rail's `browser · 127.0.0.1:…`
+// row, so every capture differed there and every re-baseline froze a new
+// meaningless number — noise inside the one artefact the visual gate compares
+// against. The M225 golden walk's critic found it; the gate itself never
+// could, because ~171 differing pixels sit under BOTH budgets, which is
+// exactly the blind spot verify-visual.cjs's own header declares.
+//
+// It falls back to an ephemeral port rather than failing: a machine where
+// 31789 is taken must still be able to paint the scenes, and a four- or
+// five-digit port there is still under both budgets. Deterministic where it
+// can be, degrading where it cannot — never the other way round.
+const SHOT_HTTP_PORT = 31789
+const shotHttpReady = new Promise((resolve) => {
+  SHOT_HTTP.once('error', () => { SHOT_HTTP.listen(0, '127.0.0.1', resolve) })
+  SHOT_HTTP.listen(SHOT_HTTP_PORT, '127.0.0.1', resolve)
+})
 const shotHttpUrl = () => `http://127.0.0.1:${SHOT_HTTP.address().port}/`
 
 const term = (id, x, y, w, h, z, extra = {}) => ({ id, x, y, w, h, z, cwd: REPO, command: '/bin/sh', args: ['-c', 'echo "$ claude"; echo "Reading src/server.ts"; echo "Editing src/server.ts"; sleep 600'], ...extra })

@@ -53,8 +53,41 @@ verify:tmux          35/35
 a real signed-shape build, the scratch socket, a PTY in the packaged app, the single-instance
 refusal and the incumbent's survival).
 
-**Harness stability at zero change.** `npm run build && npm run verify:visual` was run with
-nothing changed — see "M225 · zero-diff proof" below.
+### M225 · the zero-diff proof, and what it caught
+
+`npm run build && npm run verify:visual` was run with **nothing changed**, to prove the harness
+is stable before a single golden is allowed to move. It was not stable — and the instability was
+not the harness:
+
+```
+58/60 passed
+FAILED: kinds     FAIL — a 32px tile at 672,736 is 40% different (budget 35%)
+        kinds-dark FAIL — a 32px tile at 672,736 is 37% different (budget 35%)
+[verify:visual] 177.5s wall
+```
+
+**The other 56 scenes reproduced under both budgets**, so the harness itself is stable — the
+`shot` fixture, the window size, the theme switches and the real-Electron paint all repeat. The
+two failures are one real change in one place: the tile at `672,736` in both themes is inside the
+`Watchdog fires under load` work card, and comparing the golden with the fresh capture shows the
+card's verb row changed from `Assign to… / Open PR / Review / Done` to `Start work… / Resume`,
+with a new `review: not started` line above it.
+
+**That is M202's change, not this run's.** `13b84be` ("review handoff and readiness") touched
+`src/renderer/work/WorkNode.tsx` — the v10 D07 work that landed on `main` days before this run
+opened — and did not regenerate the two goldens that paint a work card. `git log --oneline --
+verify/visual/goldens/kinds.png` last moves at `0ad5ea0` (M179).
+
+**Disposition.** The two goldens are rebaselined HERE, at M225, through the full golden gate — a
+fresh-context critic looked at before/after/diff for each scene and wrote the sentence recorded
+below. The alternative was to carry two permanent reds on the two most information-dense scenes
+in the suite for the whole of Acts I–V, which would mask exactly the drift the gate exists to
+catch. The sentences attribute the change to **M202**; nothing in this run caused it, and the
+final message says so.
+
+This is also the answer to a question the run prompt asks implicitly: a golden that changed
+without a critic's sentence fails the goal condition, and two of them were already in that state
+on `main` when the run started.
 
 ### M225 · the golden walk — what is flat, per scene
 
@@ -190,4 +223,45 @@ DECLINE-with-a-reason; nothing is left without one.
 | 8 | `integrations` runs a code fragment inline with prose with no code styling | **FIX — M238**, where the context/integration surfaces get the material pass; a mono leaf inside prose is already the M164 idiom. |
 | 9 | `workflow-edit` is rendered larger than its neighbours and clips two nodes | **DECLINE** — the scene declares `size: [1800, 1000]` deliberately (it is the wide-editor scene). The clipping is the fixture's framing. |
 | 10 | panels clipped mid-word at the viewport edge | **DECLINE** — the fixtures' deliberate framing in every case checked. |
+
+### M225 · goldens touched — the two M202 rebaselines, and their critic sentences
+
+A **fresh-context critic** (no prompt, no ledger, no spec — the three images per scene, plus
+`WorkNode.tsx` to confirm what a control does) walked before / after / diff for both scenes.
+It computed the changed regions from the diff bitmaps rather than trusting the gate's summary,
+and found the real changed area is **two clusters totalling ~336x80 px**, not the single 32px
+tile the gate reports — the gate names only the WORST tile.
+
+> **`kinds`** — the work card gained `execution: not started` and `review: not started` facts, a
+> new enabled `Resume` verb, an `Assign to…` → `Start work…` relabel and a now-disabled
+> `Review`, **and that is correct because** each is the rendered consequence of the
+> handoff/execution props in `WorkNode.tsx` (the label from `handoff.actionLabel`, `Review`
+> disabled with `handoff.detail` as its reason, refusals shown by name rather than removed), and
+> the card still reads complete and unclipped.
+
+> **`kinds-dark`** — the identical change appears with correct dark-theme tokens and no other
+> structural difference, **and that is correct because** the two scenes render the same fixture
+> through the same component, so the dark golden must move in lockstep with the light one.
+
+**Both sentences describe M202's change, not this run's.** Nothing in M225 touched a component.
+
+### M225 · the second finding — the goldens baked an ephemeral port
+
+The same critic found something the gate structurally cannot: the rail's
+`browser · 127.0.0.1:<port>` row differs on EVERY capture, because `scripts/shot.cjs` opened its
+harness dev server with `listen(0)`. About 171 differing pixels — under both budgets, so the
+suite never says a word, which is precisely the blind spot `verify-visual.cjs`'s own header
+declares ("a change under both is under this suite's sight").
+
+That is noise inside the one artefact this whole run's gate compares against, and every
+`UPDATE_GOLDENS=1` froze a fresh meaningless number into it.
+
+**FIXED in M225**: the harness now prefers port `31789` and **falls back** to an ephemeral port
+if it is taken. Deterministic where it can be, degrading where it cannot — a machine where the
+port is busy must still be able to paint the scenes, and a differently-sized port number there
+is still under both budgets. Failing loudly instead would have traded a cosmetic gain for a
+harness that cannot run on a busy machine.
+
+This is in scope for M225 rather than deferred: the milestone's stated job is to prove the
+harness stable at zero diff, and this is a harness-stability defect that proving it uncovered.
 
