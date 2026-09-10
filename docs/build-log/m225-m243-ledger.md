@@ -806,3 +806,85 @@ marked "unchanged". Forced by deleting the golden — a MISSING golden is always
 its sentence above. There is no per-scene force flag, and adding one is filed rather than built:
 the deletion is explicit, it is visible in `git status`, and a flag would make forcing easy,
 which is the last thing it should be.
+
+### M234 · the rest-inert chrome reached the HARNESS, and two more checks fell
+
+Closing the act green needed one more pass, because the chromeless contract has a consequence
+nobody had followed all the way out: **`.pf__chrome` takes no pointer events, and only its
+CHILDREN come back on hover.** Every harness check that reaches for a panel by its chrome is
+therefore reaching for something that is not there until a cursor arrives.
+
+`verify:panels:kinds` died on `broadcast.1`, and the detail was widened until it named the cause
+rather than the symptom:
+
+```
+running=true aChrome=null bChrome=null selected=[] armed=false
+```
+
+The panels were running; no point on either terminal's bar was hit-testable. `144b` said the same
+thing in the other vocabulary — `hits: ["xterm-link-layer@n5", ...]` at all four sample points,
+i.e. `elementFromPoint` fell straight through the bar into the terminal underneath.
+
+**The product is right and the harness was unreal**, which took establishing rather than
+assuming. `beginMove` is bound to the chrome `<header>`, so the tempting fix is to make the bar
+live whenever it is visible — and that is exactly the invisible-bar bug `type.1` caught, because
+hovering a CELL is what makes the bar visible. There is no version of "the bar is a drag surface
+while shown" that does not eat the click that showed it. What a person actually does is arrive
+before pressing, and the harness was pressing from wherever the cursor had been left.
+
+Three changes, all in the harness, all of them the same sentence:
+
+1. `pointIn` and `chromePoint` **hover the panel before probing**. Arriving is the first half of
+   the click the check goes on to perform, not a workaround for the rule.
+2. `realClick` **moves to the point before pressing it**. The two probes run back to back, so
+   without this the cursor sat over B while the press meant for A was sent — measured as
+   `selected=["n20"]` where two were expected, an off-by-one-panel that would have read as a
+   selection bug.
+3. Both probes gained **left-biased sample fractions**. `.pf__chrome` itself is never hittable,
+   so the only graspable part of a chromeless bar is the title — whose box now hugs its text
+   (`flex: 0 1 auto`, the `type.1` fix). On a 300px shell panel a two-character name ends well
+   before 0.3 of the width, so every fraction the lists carried missed it.
+
+**The fact worth keeping, and it is a product fact, not a harness one: a live terminal's drag
+handle at rest is its NAME, not its bar.** That is the price of the frame rule, it is paid
+knowingly, and it is why the palette and `Cmd+Arrow` doors matter more for a terminal than for
+any other kind. Filed for M242: whether the title deserves a wider grab box that still leaves the
+cells to its right clickable.
+
+### M234 · `image.2` — a check that passed once and could never pass again
+
+The last red in the chain was `image.2`, which has nothing to do with this act and everything to
+do with a class this run keeps meeting: **state that outlives the run.**
+
+The picture store is content-addressed under `userData/assets`, and the check's fixture is a
+fixed 1×1 PNG — so its hash is the same on every run this repository will ever perform. Two of
+the check's arms are about a FIRST write: the note reads `(already in this canvas's pictures)`
+only on the second add, and `stored.length === 1`. Both are true exactly once, on the first run
+after a clean userData. **Every run after that failed**, with the check's own leftovers as the
+cause.
+
+Proven both ways rather than argued: with the two cached assets moved aside, `96/96`; with them
+put back, `95/96` and the same red; with the fix in place and the store deliberately left dirty,
+`96/96` again.
+
+The evidence read like an `image-add` regression — two panels carrying one asset id — and it is
+not one. `one.png` and `two.png` are the same bytes on purpose (that is the dedupe arm), so one
+id for both is the feature working. **The only wrong thing in that output was the word
+`already` on the FIRST add**, and it was telling the truth about a store the check had filled on
+a previous run.
+
+Fixed by emptying its own scratch store before the first add, with the dependency written down
+instead of assumed. A check that is green only on a machine that has never run it is a check
+that says nothing on every machine that has.
+
+### Act III — the closing evidence
+
+- **`npm run verify` — exit 0, 2066 PASS, 0 FAIL.** Every suite whole: the five panels suites at
+  `core 82/82 · shell 96/96 · kinds 49/49 · agents 81/81 · product 96/96`, and thirty-one others
+  from `14/14` to `255/255` with no partial tally anywhere.
+- **`npm run verify:visual` — exit 0, 62/62**, against five goldens rebaselined in this act — four
+  written by the updater and `compact` forced — each with its sentence above.
+- The act's three reds each turned out to be a **check** rather than an implementation, which is
+  the shape of a milestone whose implementation was watched failing first: `chromeless.paint.1`
+  contradicted its own milestone's fix, `broadcast.1`/`144b` pressed without a pointer ever
+  arriving, and `image.2` had depended since it was written on a store no run cleans.

@@ -430,7 +430,21 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // sample points along the chrome, and the detail records what
       // elementFromPoint actually hit when none is usable, so a red here says
       // which element was in the way rather than merely "null".
-      const chromePoint = async (id) => wc.executeJavaScript(`(() => {
+      //
+      // M234 — HOVER FIRST. A live terminal's chrome takes no pointer events
+      // until its panel is hovered, so probing from wherever the cursor
+      // happens to be finds the xterm link layer at all four points and the
+      // detail above reads `xterm-link-layer@n5` four times. Arriving before
+      // probing is the first half of the drag this check then performs.
+      const chromePoint = async (id) => {
+        const centre = await wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']')
+          const c = p && p.querySelector('.panel__chrome')
+          if (!c) return null
+          const r = c.getBoundingClientRect()
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (centre !== null) { wc.sendInputEvent({ type: 'mouseMove', x: centre.x, y: centre.y }); await sleep(200) }
+        return wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas')
         const panel = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + ']')
         const chrome = panel && panel.querySelector('.panel__chrome')
@@ -438,7 +452,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         const b = host.getBoundingClientRect()
         const r = chrome.getBoundingClientRect()
         const hits = []
-        for (const fx of [0.15, 0.35, 0.65, 0.85]) {
+        for (const fx of [0.15, 0.35, 0.65, 0.85, 0.08]) {
           const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height / 2)
           if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) { hits.push('offscreen'); continue }
           const hit = document.elementFromPoint(x, y)
@@ -449,6 +463,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         }
         return { id: ${JSON.stringify(id)}, hits }
       })()`)
+      }
       // cascadeCentre steps down-right only while a slot is free and WRAPS
       // otherwise, so on a crowded canvas the second panel can land up-left
       // of the first, covering its chrome. The second panel is topmost and
@@ -3404,12 +3419,37 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       const [A, B] = pair || [null, null]
       const running = A && B ? await waitUntil(async () => { const m = await sessionMap(wc); return m.has(A) && m.has(B) }, 8000) : false
       // Chrome points by id (144b's shape), and a body point for focus.
-      const pointIn = async (id, part) => wc.executeJavaScript(`(() => {
+      //
+      // M234 — A REAL POINTER IS OVER A THING BEFORE IT PRESSES IT, and this
+      // helper has to do the same or it measures a sequence no person can
+      // perform. A live terminal's chrome is inert until the panel is
+      // hovered (that is the chromeless contract: an unseen control must not
+      // eat the cell under it), so probing with `elementFromPoint` while the
+      // cursor is somewhere else finds the terminal BODY at every point and
+      // returns null — which is what happened here, measured as
+      // `running=true aChrome=null bChrome=null`. Moving the cursor onto the
+      // panel first is not a workaround for the rule, it is the first half of
+      // the click the rest of this check goes on to perform.
+      //
+      // The LEFT-BIASED fractions matter for the same reason. `.pf__chrome`
+      // itself never takes pointer events — only its children do — so on a
+      // chromeless terminal the only hittable part of the bar is the title,
+      // whose box now hugs its text (`flex: 0 1 auto`, the type.1 fix). On a
+      // 300px shell panel a two-character name ends well before 0.3 of the
+      // width, so every fraction this list used to carry missed it.
+      const pointIn = async (id, part) => {
+        const centre = await wc.executeJavaScript(`(() => {
+          const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] ' + ${JSON.stringify(part)})
+          if (!p) return null
+          const r = p.getBoundingClientRect()
+          return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (centre !== null) { wc.sendInputEvent({ type: 'mouseMove', x: centre.x, y: centre.y }); await sleep(200) }
+        return wc.executeJavaScript(`(() => {
         const host = document.querySelector('.canvas'); const b = host.getBoundingClientRect()
         const p = document.querySelector('.panel[data-panel-id=' + ${JSON.stringify(JSON.stringify(id))} + '] ' + ${JSON.stringify(part)})
         if (!p) return null
         const r = p.getBoundingClientRect()
-        for (const f of [[0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.85, 0.5]]) {
+        for (const f of [[0.5, 0.5], [0.3, 0.5], [0.7, 0.5], [0.85, 0.5], [0.15, 0.5], [0.08, 0.5]]) {
           const x = Math.round(r.left + r.width * f[0]), y = Math.round(r.top + r.height * f[1])
           if (x < b.left + 2 || x > b.right - 2 || y < b.top + 2 || y > b.bottom - 2) continue
           const hit = document.elementFromPoint(x, y)
@@ -3417,7 +3457,16 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         }
         return null
       })()`)
+      }
       const realClick = async (pt, modifiers = []) => {
+        // ARRIVE, THEN PRESS. Same rule as `pointIn` above, and it bites here
+        // even harder: the two probes run back to back, so without this the
+        // cursor is still parked over B when the press meant for A is sent,
+        // A is not hovered, its chrome is inert, and the press falls into the
+        // terminal body instead — measured as `selected=["n20"]` where two
+        // panels were expected.
+        wc.sendInputEvent({ type: 'mouseMove', x: pt.x, y: pt.y })
+        await sleep(120)
         wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1, modifiers })
         wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1, modifiers })
         await sleep(200)
@@ -3479,7 +3528,8 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       ok('broadcast.1 armed from the palette a keystroke reaches both logs; the banner\'s Stop ends the mode and the next reaches one',
         running === true && selected.length === 2 && typeof armed === 'string' && both !== false &&
           stopPt !== null && stopped === true && oneA === true && two.a === true && two.b === false,
-        `selected=${JSON.stringify(selected)} armed=${JSON.stringify(armed)} both=${JSON.stringify(both)} stop=${JSON.stringify(stopPt)} ` +
+        `running=${running} aChrome=${JSON.stringify(aChrome)} bChrome=${JSON.stringify(bChrome2)} ` +
+          `selected=${JSON.stringify(selected)} armed=${JSON.stringify(armed)} both=${JSON.stringify(both)} stop=${JSON.stringify(stopPt)} ` +
           `stopped=${stopped} two=${JSON.stringify(two)}`)
 
       // broadcast.2. The chord: ⌘⇧I arms and disarms, matched on event.code

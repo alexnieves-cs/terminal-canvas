@@ -2820,6 +2820,19 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const reI = new Promise((resolve) => wc.once('did-finish-load', resolve))
       wc.reload(); await reI
       await settle()
+      // THE STORE IS CONTENT-ADDRESSED, WHICH MEANS IT OUTLIVES THIS RUN.
+      // Two of this check's arms are about a FIRST write — the note says
+      // "already in this canvas's pictures" only on the second add, and
+      // `stored.length === 1` — and both are true only if the store does not
+      // already hold this fixture's bytes. The fixture is a fixed 1x1 PNG, so
+      // its hash is the same on every run this repo will ever do: the first
+      // run after a clean userData passed and every run after it failed, with
+      // the check's own leftovers as the cause. That read as an image-add
+      // regression when it is a check that was never self-contained.
+      // Emptying its own scratch store is the whole fix; the directory holds
+      // nothing but assets these suites put there.
+      const assetsDirBefore = join(app.getPath('userData'), 'assets')
+      if (existsSync(assetsDirBefore)) for (const n of rd(assetsDirBefore).filter((n) => n.endsWith('.png'))) ul(join(assetsDirBefore, n))
       const added = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${one}` }, null, 5000)
       // The same bytes under a different name: one asset, and the note says so.
       const again = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `image-add ${two}` }, null, 5000)
