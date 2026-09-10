@@ -29,11 +29,7 @@ buildSync({
 })
 const F = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const DIR = mkdtempSync(join(tmpdir(), 'tc file '))
 const p = (name) => join(DIR, name)

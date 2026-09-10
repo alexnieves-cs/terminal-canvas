@@ -29,11 +29,7 @@ buildSync({
 })
 const U = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 // An assistant record as Claude Code actually writes one. The field names are
 // copied from a real transcript read on 2026-08-30 and must not be "tidied":

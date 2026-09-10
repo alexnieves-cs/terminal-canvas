@@ -8,11 +8,7 @@ const { existsSync } = require('node:fs')
 const ROOT = resolve(__dirname, '..')
 const ENTRY = join(ROOT, 'src/shared/onboarding.ts')
 const OUT = join(ROOT, 'out/verify/onboarding.cjs')
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ` — ${detail}` : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 let model
 let metadata
 let loadError

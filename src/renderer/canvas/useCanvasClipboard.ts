@@ -1,0 +1,110 @@
+import { useEffect, useRef, type RefObject } from 'react'
+import type { Registry } from '@renderer/session/session-registry'
+import { isChatPanel, type Panel } from '@renderer/panels/panels'
+import { shellQuote } from '@renderer/shell/file-tree-model'
+import { REASON_NOT_STARTED } from '@renderer/palette/commands'
+
+export interface CanvasClipboardDeps {
+  registry: Registry
+  focusedIdRef: RefObject<string | null>
+  panelsRef: RefObject<Panel[]>
+  shouldIgnoreKeys: () => boolean
+  /**
+   * This ref is declared later in Canvas because its writer is lower in the
+   * component. Reading it lazily preserves that hook order while letting an
+   * empty-canvas image paste reach the one image-minting verb.
+   */
+  getAddImage: () => ((path: string, world?: { x: number; y: number }) => Promise<unknown>) | null
+}
+
+/**
+ * The canvas-wide Cmd+C/Cmd+V route.
+ *
+ * This replaces the contiguous ref-plus-effect run in `Canvas.tsx` without
+ * moving it: `focusedIdRef` is created above this call while `addImageRef` is
+ * assigned below it. The latter is read through `getAddImage` only after an
+ * edit event arrives, after Canvas has completed its render and assignment.
+ *
+ * TerminalPanel is deliberately a view, so this is ONE subscription rather
+ * than one per mounted terminal. The current focus comes from a ref for the
+ * same reason: resubscribing on every focus change would create listener
+ * churn around main-side menu accelerators.
+ */
+export function useCanvasClipboard(deps: CanvasClipboardDeps): RefObject<(sentence: string) => void> {
+  const { registry, focusedIdRef, panelsRef, shouldIgnoreKeys, getAddImage } = deps
+  // M149. The palette action object is assigned after this hook's call, so a
+  // refusal on paste is said rather than swallowed.
+  const sayRef = useRef<(sentence: string) => void>(() => {})
+
+  useEffect(() => {
+    const offCopy = window.canvas.edit.onCopy(() => {
+      // With the palette open the user is looking at a text field, not a
+      // terminal, and focusedId still names that terminal (rule 2 keeps it).
+      // Copying its selection here would put text the user cannot see on the
+      // clipboard; Palette.tsx serves its own input instead. shouldIgnoreKeys
+      // rather than palette.isOpen because the nav grid is the SAME
+      // situation and a worse one: revealing it means the user is already
+      // holding Cmd, which makes a stray Cmd+C the most plausible chord in
+      // the app, aimed at a selection an opaque overlay is covering.
+      if (shouldIgnoreKeys()) return
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      const selection = session?.handle.getSelection()
+      if (selection) void navigator.clipboard.writeText(selection)
+    })
+    const offPaste = window.canvas.edit.onPaste((text) => {
+      // Rule 3. Without this the text lands in a running agent, invisibly,
+      // while the user watches an empty text field (palette, verify:panels
+      // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
+      // switch that follows on release takes the evidence off screen.
+      if (shouldIgnoreKeys()) return
+      const id = focusedIdRef.current
+      const session = id ? registry.get(id) : undefined
+      if (text) { session?.handle.paste(text); return }
+      // M145 (backlog #13's bytes case). No TEXT on the clipboard: an image
+      // there becomes a file main writes, and a spawned terminal is handed the
+      // path — shell-quoted, bracketed, the drop's own rule — while a chat
+      // attaches it through its composer. A terminal that is not spawned gets
+      // nothing (a paste into a dormant card has nowhere to land), and an
+      // empty clipboard is the `empty` arm, not a paste of nothing.
+      // M186. NO PANEL HAS THE KEYBOARD: the picture is the canvas's. This is
+      // the arm that did not exist — the paste simply returned, so ⌘V over an
+      // empty canvas did nothing and said nothing. Every agent target below
+      // keeps its behaviour exactly.
+      if (id === null) {
+        void window.canvas.agentSession.clipboardFile().then((file) => {
+          if (file.kind === 'empty') return
+          if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+          void getAddImage()?.(file.path)
+        })
+        return
+      }
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      // A chat keeps its OWN door: ChatNode subscribes to this same event and
+      // attaches the clipboard's bytes when its textarea is focused. The first
+      // cut attached a path here too — one ⌘V, two attachments and a .png the
+      // chat never needed (the Act II critic's Major).
+      if (panel !== undefined && isChatPanel(panel)) return
+      if (session === undefined || !session.spawned) {
+        // Named, never silent: a paste into a card has nowhere to land.
+        sayRef.current(`${REASON_NOT_STARTED} — an image pasted here has no process to receive it`)
+        return
+      }
+      void window.canvas.agentSession.clipboardFile().then((file) => {
+        if (file.kind === 'empty') return
+        if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
+        registry.get(id)?.handle.paste(shellQuote(file.path))
+      })
+    })
+    return () => {
+      offCopy()
+      offPaste()
+    }
+    // shouldIgnoreKeys is referentially stable, so this stays a once-only
+    // install; listing it makes the dependency visible rather than implied.
+    // getAddImage deliberately stays out: its call reads the current ref and
+    // including Canvas's fresh closure would reinstall both subscriptions.
+  }, [shouldIgnoreKeys])
+
+  return sayRef
+}

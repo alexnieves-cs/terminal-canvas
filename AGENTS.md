@@ -1,11 +1,12 @@
 # AGENTS.md
 
-This file is what Codex reads. It is deliberately short. **The law of this repository is
-[CLAUDE.md](CLAUDE.md)**: an engineering decisions log where nearly every entry names an
-invariant and the silent failure that follows from undoing it. Read it in full before your
-first change; it is addressed to any engineer, not to one tool. Then read
-[docs/verify-suites.md](docs/verify-suites.md) before adding or debugging a check, and grep
-[docs/load-bearing.md](docs/load-bearing.md) by module name before changing that module.
+This file is what Codex reads. It is deliberately short. **[CLAUDE.md](CLAUDE.md) is the
+index of this repository**: a short page of the rules everything rests on, and a table saying
+which doc to open for which task — including which run is current. Read it before your first
+change; it is addressed to any engineer, not to one tool. Then open only the doc its table
+names for your task. The large ones (`docs/load-bearing.md` and its `-recovered` sibling,
+`docs/verify-suites.md`, `docs/ideas-backlog.md`) are for grepping by module or suite name,
+never reading whole.
 
 ## The one command
 
@@ -50,6 +51,8 @@ act close. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first; if you see
 - `docs/build-log/` — one log per milestone or act, and the ledgers; the ledger is the state
   of a run.
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — every milestone's spec and plan.
-- `docs/ideas-backlog.md` — declined and deferred ideas, each with a reason.
+- `docs/ideas-backlog.md` — open and deferred ideas, each with a reason;
+  `docs/ideas-backlog-closed.md` — the ones marked DONE or declined.
 - `verify/visual/goldens/` — the visual register; `scripts/verify-*.cjs` — every suite.
-- `docs/superpowers/specs/2026-09-07-v9-finish-prompt.md` — the current run's prompt.
+- The current run's guide and ledger — named in ONE place, CLAUDE.md's index table, so a
+  finished run cannot be left named as current here.

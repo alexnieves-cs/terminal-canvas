@@ -27,11 +27,7 @@ buildSync({
 })
 const R = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /* Async from check 1, even though checks 1-13 need nothing of it: every
    engine check from Task 2 onward is awaited, and retrofitting the wrapper

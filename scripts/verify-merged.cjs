@@ -30,11 +30,7 @@ buildSync({
 })
 const R = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const ws = (id, name, active, panels) => ({ id, name, active, panels })
 // cwd and args are required on PersistedTerminalPanel (layout-schema.ts) —

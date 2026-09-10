@@ -44,11 +44,7 @@ const T = require(OUT)
    that survived eight task reviews. */
 const EXIT_DIR = '/tmp/tc verify/exits'
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 // 1. Version strings tmux actually emits, including suffixed and prefixed forms.
 {

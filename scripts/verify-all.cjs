@@ -53,6 +53,30 @@
       `verify:visual` remain NAMED exclusions (hand-run gates that reach
       outside the repository), the same two 19 already excluded by name.
 
+   4. THE ELECTRON TIER CAN RUN N-WIDE, BUT ONLY WHEN ASKED
+      (TC_VERIFY_ELECTRON_JOBS=N). The default is still one at a time, for
+      the reason note 2 gives, and the gate CI runs is that default. What
+      opting in costs was measured rather than assumed: the five panels
+      parts shared one tmux socket (each kills its server at startup), one
+      bundle under out/verify/ and one userData directory. So each job in
+      flight gets its own TC_VERIFY_SUFFIX — the knob that already kept two
+      checkouts apart — and the harness scopes all three by it. Contention
+      stretches every part's clock, so each job also gets
+      TC_WATCHDOG_SCALE=N: a watchdog measured alone would otherwise read a
+      busy machine as a hang, and headroom.1 (the harness's drift alarm) skips
+      rather than grade a clock that measures the machine. Pinned by
+      verify:meta electron-jobs.1/.2.
+
+      MEASURED, IT IS NOT YET A WORKING FAST PATH (2026-09-10). The tree that
+      passed 39/39 serially in 514s went red 3-wide (237s; shell, agents)
+      and 2-wide (304s; kinds, shell, agents, product), in a DIFFERENT set of
+      checks each time, every one reading the renderer too early — a panel
+      not yet framed, a paste not yet landed. The isolation holds; the waits
+      do not. The panels parts pace themselves on fixed settle() windows
+      (300ms, used hundreds of times), which two renderers side by side
+      overrun. Condition waits in place of those windows are the real lever;
+      until then this knob is for whoever does that work, never the gate.
+
    WAVE ORDER, AND WHY THE BUILD MOVED.
 
      wave 1  the plain tier, concurrently          ~seconds
@@ -123,12 +147,35 @@ const suites = () => Object.keys(pkg.scripts)
   .filter((k) => !isAggregate(pkg.scripts[k]))
   .map((name) => ({ name, body: pkg.scripts[name], tier: tierOf(pkg.scripts[name]) }))
 
+/* Note 4's width. Absent or blank is 1 — serial, every run that existed
+   before the knob. A whole number of at least 1 is that many; anything else
+   is 1, and main() says so rather than guessing (malformed is dropped, never
+   coerced: '2.5' is not "about two"). */
+const electronJobs = (env) => {
+  const raw = env.TC_VERIFY_ELECTRON_JOBS
+  if (raw === undefined || String(raw).trim() === '') return 1
+  const n = Number(raw)
+  return Number.isInteger(n) && n >= 1 ? n : 1
+}
+
+/* A job's environment. SERIAL RETURNS THE PARENT'S OWN OBJECT: an absent key
+   must stay absent, and a spread that wrote `TC_VERIFY_SUFFIX: undefined`
+   would reach the child as present. N-wide, the suite's name becomes a
+   suffix APPENDED to any the caller already set, so two checkouts running
+   N-wide at once stay apart from each other as well as from themselves. */
+const jobEnv = (name, env, jobs) => {
+  if (jobs <= 1) return env
+  const slug = name.replace(/^verify:/, '').replace(/[^A-Za-z0-9_-]/g, '-')
+  const outer = String(env.TC_VERIFY_SUFFIX || '').trim()
+  return { ...env, TC_VERIFY_SUFFIX: outer ? `${outer}-${slug}` : slug, TC_WATCHDOG_SCALE: String(jobs) }
+}
+
 const SUITE_TIMEOUT_MS = 10 * 60 * 1000
 
-const runOne = (name, body, timeoutMs = SUITE_TIMEOUT_MS) => new Promise((resolve) => {
+const runOne = (name, body, timeoutMs = SUITE_TIMEOUT_MS, env = process.env) => new Promise((resolve) => {
   const startedAt = Date.now()
   // The literal package.json text, interpreted by a shell — see note 1 above.
-  const child = spawn('sh', ['-c', body], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn('sh', ['-c', body], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] })
   let out = ''
   const take = (buf) => { out += buf }
   child.stdout.on('data', take)
@@ -167,14 +214,14 @@ const report = (r) => {
   }
 }
 
-const runConcurrently = async (list, limit) => {
+const runConcurrently = async (list, limit, envFor = null) => {
   const queue = list.slice()
   const done = []
   const worker = async () => {
     for (;;) {
       const next = queue.shift()
       if (!next) return
-      const r = await runOne(next.name, next.body)
+      const r = await runOne(next.name, next.body, SUITE_TIMEOUT_MS, envFor ? envFor(next) : process.env)
       report(r)
       done.push(r)
     }
@@ -194,9 +241,14 @@ const main = async () => {
   // output arrive in a less useful order.
   const limit = Math.max(2, Math.min(8, cpus().length))
   const results = []
+  const jobs = electronJobs(process.env)
+  const rawJobs = String(process.env.TC_VERIFY_ELECTRON_JOBS ?? '').trim()
+  if (rawJobs !== '' && jobs === 1 && rawJobs !== '1') {
+    console.log(`note: ignoring TC_VERIFY_ELECTRON_JOBS=${JSON.stringify(rawJobs)} — not a whole number of at least 1; the Electron tier runs serially`)
+  }
 
   console.log(`verify: ${all.length} suites — ${plain.length} plain (concurrently, ${limit} at a time), ` +
-    `${serial.length} under Electron (serially), then the build between them`)
+    `${serial.length} under Electron (${jobs > 1 ? `${jobs} at a time — TC_VERIFY_ELECTRON_JOBS` : 'serially'}), then the build between them`)
   if (unclassified.length) {
     console.log(`note: ${unclassified.map((s) => s.name).join(', ')} did not match a known command shape ` +
       `and will run serially — classify them in scripts/verify-all.cjs if that is wrong`)
@@ -222,12 +274,17 @@ const main = async () => {
   results.push(build)
   if (build.status !== 'passed') return finish(results, started, 'stopped after the build')
 
-  // WAVE 3 — the real-Electron tier, one at a time.
-  console.log(`\n--- wave 3: ${serial.map((s) => s.name).join(' ')}`)
-  for (const s of serial) {
-    const r = await runOne(s.name, s.body)
-    report(r)
-    results.push(r)
+  // WAVE 3 — the real-Electron tier: one at a time, unless note 4's knob asks
+  // for more. The serial branch is the loop it always was, untouched.
+  console.log(`\n--- wave 3${jobs > 1 ? ` (${jobs} at a time)` : ''}: ${serial.map((s) => s.name).join(' ')}`)
+  if (jobs > 1) {
+    results.push(...await runConcurrently(serial, jobs, (s) => jobEnv(s.name, process.env, jobs)))
+  } else {
+    for (const s of serial) {
+      const r = await runOne(s.name, s.body)
+      report(r)
+      results.push(r)
+    }
   }
   return finish(results, started, null)
 }
@@ -255,7 +312,7 @@ const finish = (results, started, note) => {
   setTimeout(() => process.exit(failed.length ? 1 : 0), 5000).unref()
 }
 
-module.exports = { suites, HAND_RUN, isAggregate, tierOf }
+module.exports = { suites, HAND_RUN, isAggregate, tierOf, electronJobs, jobEnv }
 
 if (require.main === module) {
   main().catch((error) => {

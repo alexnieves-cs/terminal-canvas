@@ -14,11 +14,7 @@ buildSync({
   }
 })
 const G = require(OUT)
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ` — ${detail}` : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const panels = [
   G.makePanel('n1', { x: 100, y: 100 }, 2),
   G.makePanel('n2', { x: 500, y: 250 }, 4),

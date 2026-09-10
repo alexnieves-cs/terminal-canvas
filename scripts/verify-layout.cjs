@@ -22,11 +22,7 @@ buildSync({
 })
 const L = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 /** A minimal valid panel, so each check can vary exactly one field. */
 const panel = (over = {}) => ({

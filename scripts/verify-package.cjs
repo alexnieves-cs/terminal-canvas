@@ -10,11 +10,7 @@
    pty:create because a .node binary cannot be required out of an asar. */
 const { buildConfig } = require('../build/builder-config.cjs')
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const config = buildConfig()
 

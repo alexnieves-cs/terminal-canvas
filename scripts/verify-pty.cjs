@@ -8,8 +8,7 @@ const pty = require('node-pty')
 const { execFileSync } = require('node:child_process')
 const os = require('node:os')
 
-const results = []
-const ok = (n, pass, detail) => { results.push({ n, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`) }
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 // Reproduce shell-env's probe exactly.
 const DELIM = '__TERMINAL_CANVAS_ENV__'

@@ -38,13 +38,14 @@ import { SERVICES } from '@shared/credential-schema'
 import type { BrokerAuditRowWire } from '@shared/ipc-contract'
 import { useInspectorDetail } from './useInspectorDetail'
 import {
-  DEMOTE_DELAY_MS, EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
+  EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
-import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
+import { useCanvasClipboard } from './useCanvasClipboard'
+import { useTiering } from './useTiering'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
@@ -106,7 +107,7 @@ import { type CredentialMeta } from '@shared/credential-schema'
 import type { WorkItem } from '@shared/work-item'
 import { JiraNode } from '@renderer/jira/JiraNode'
 import { ChatNode } from '@renderer/chat/ChatNode'
-import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY, REASON_NOT_STARTED } from '@renderer/palette/commands'
+import { REASON_NO_CLAUDE, REASON_CHAT_BUSY, REASON_CHAT_EMPTY, REASON_NO_REPO_MEMORY } from '@renderer/palette/commands'
 import { getChat, insertIntoComposer, attachToComposer, onChatTurnStart, useChatsVersion } from '@renderer/chat/chat-store'
 import { attachmentKind } from '@renderer/chat/composer-model'
 import type { SpawnResult } from '@shared/ipc-contract'
@@ -1430,87 +1431,13 @@ export function Canvas({
     return () => registry.setInputTargets([])
   }, [broadcastInput, broadcastReady, broadcastTargetIds])
 
-  // Menu-driven clipboard. The old per-panel TerminalPanel used to own this
-  // subscription directly against xterm; now that TerminalPanel is a dumb
-  // view, ONE subscription here routes to whichever session is focused,
-  // rather than each panel subscribing and every panel but one discarding
-  // the event. focusedIdRef (declared above, alongside shouldYieldWheel)
-  // mirrors state into a ref (the same pattern as useViewport's viewportRef)
-  // so the listener reads the current focus without resubscribing. (Cmd+C/
-  // Cmd+V arrive as main-side menu accelerators via edit:copy/edit:paste,
-  // not as a canvas keydown, so they are unrelated to useViewport's "every
-  // shortcut requires Cmd" rule for bare keys reaching the PTY.)
-  // M149. The palette's feedback line, reachable from the one edit:paste
-  // subscription below (installed once): a ref, assigned once the actions
-  // object exists further down, so a refusal on a paste is SAID, never swallowed.
-  const sayRef = useRef<(sentence: string) => void>(() => {})
-  useEffect(() => {
-    const offCopy = window.canvas.edit.onCopy(() => {
-      // With the palette open the user is looking at a text field, not a
-      // terminal, and focusedId still names that terminal (rule 2 keeps it).
-      // Copying its selection here would put text the user cannot see on the
-      // clipboard; Palette.tsx serves its own input instead. shouldIgnoreKeys
-      // rather than palette.isOpen because the nav grid is the SAME
-      // situation and a worse one: revealing it means the user is already
-      // holding Cmd, which makes a stray Cmd+C the most plausible chord in
-      // the app, aimed at a selection an opaque overlay is covering.
-      if (shouldIgnoreKeys()) return
-      const id = focusedIdRef.current
-      const session = id ? registry.get(id) : undefined
-      const selection = session?.handle.getSelection()
-      if (selection) void navigator.clipboard.writeText(selection)
-    })
-    const offPaste = window.canvas.edit.onPaste((text) => {
-      // Rule 3. Without this the text lands in a running agent, invisibly,
-      // while the user watches an empty text field (palette, verify:panels
-      // 35) or an opaque grid overlay (nav grid) — and in the grid's case the
-      // switch that follows on release takes the evidence off screen.
-      if (shouldIgnoreKeys()) return
-      const id = focusedIdRef.current
-      const session = id ? registry.get(id) : undefined
-      if (text) { session?.handle.paste(text); return }
-      // M145 (backlog #13's bytes case). No TEXT on the clipboard: an image
-      // there becomes a file main writes, and a spawned terminal is handed the
-      // path — shell-quoted, bracketed, the drop's own rule — while a chat
-      // attaches it through its composer. A terminal that is not spawned gets
-      // nothing (a paste into a dormant card has nowhere to land), and an
-      // empty clipboard is the `empty` arm, not a paste of nothing.
-      // M186. NO PANEL HAS THE KEYBOARD: the picture is the canvas's. This is
-      // the arm that did not exist — the paste simply returned, so ⌘V over an
-      // empty canvas did nothing and said nothing. Every agent target below
-      // keeps its behaviour exactly.
-      if (id === null) {
-        void window.canvas.agentSession.clipboardFile().then((file) => {
-          if (file.kind === 'empty') return
-          if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
-          void addImageRef.current?.(file.path)
-        })
-        return
-      }
-      const panel = panelsRef.current.find((p) => p.rect.id === id)
-      // A chat keeps its OWN door: ChatNode subscribes to this same event and
-      // attaches the clipboard's bytes when its textarea is focused. The first
-      // cut attached a path here too — one ⌘V, two attachments and a .png the
-      // chat never needed (the Act II critic's Major).
-      if (panel !== undefined && isChatPanel(panel)) return
-      if (session === undefined || !session.spawned) {
-        // Named, never silent: a paste into a card has nowhere to land.
-        sayRef.current(`${REASON_NOT_STARTED} — an image pasted here has no process to receive it`)
-        return
-      }
-      void window.canvas.agentSession.clipboardFile().then((file) => {
-        if (file.kind === 'empty') return
-        if (file.kind !== 'ok') { sayRef.current(`the image could not be written — ${file.why}`); return }
-        registry.get(id)?.handle.paste(shellQuote(file.path))
-      })
-    })
-    return () => {
-      offCopy()
-      offPaste()
-    }
-    // shouldIgnoreKeys is referentially stable, so this stays a once-only
-    // install; listing it makes the dependency visible rather than implied.
-  }, [shouldIgnoreKeys])
+  // Menu-driven clipboard stays at this exact hook position: `focusedIdRef`
+  // exists above it, while addImageRef is assigned below it. The hook reads
+  // the latter lazily, once an edit event arrives after this render completes.
+  const sayRef = useCanvasClipboard({
+    registry, focusedIdRef, panelsRef, shouldIgnoreKeys,
+    getAddImage: () => addImageRef.current
+  })
 
   // ONE subscription for the whole canvas, not one per panel: the payload
   // names its own panel, and the store fans it out to exactly the panel that
@@ -2402,110 +2329,12 @@ export function Canvas({
     onSelectPanel(pendingFocusId)
   }, [pendingFocusId, panels, onSelectPanel])
 
-  // Demotions held back for DEMOTE_DELAY_MS, keyed by panel id, valued by the
-  // epoch ms at which the hold started. Refs, not state: the hold is bookkeeping
-  // for a timer, and putting it in state would make every hold trigger the very
-  // re-render that used to restart the timer.
-  const heldSinceRef = useRef(new Map<string, number>())
-  const demoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The most recent unheld assignment, read by the timer when it fires. A held
-  // demotion is released against the LATEST tiering, not the one that was
-  // current when the hold started — so a panel that came back into view during
-  // the delay stays live instead of being demoted by a stale decision.
-  const tiersRef = useRef<Record<string, Tier>>({})
-  // Backlog #75: live count, held count and the budget, lifted out of this
-  // effect's closure so the diagnostics overlay can read them. A plain ref,
-  // updated once at the end of the effect below — no new render, no new
-  // dependency, and nothing that could bump registry.version().
-  const tieringDiagnosticsRef = useRef({ liveCount: 0, heldCount: 0, budget: LIVE_BUDGET })
-
-  // The timer belongs to the component, not to this effect's dependency list:
-  // arming it inside an effect whose cleanup clears it meant any change to
-  // [rects, viewport, focusedId, version] restarted the 250ms clock. `viewport`
-  // changes on every wheel event, so a continuous trackpad pan plus its
-  // momentum restarted it indefinitely and nothing ever demoted.
-  useEffect(() => () => {
-    if (demoteTimerRef.current !== null) clearTimeout(demoteTimerRef.current)
-  }, [])
-
-  useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
-    // M56. Not while a flight is in the air: every frame is a tiering
-    // input, and a 300ms flight across the canvas would create and destroy a
-    // dozen WebGL contexts for panels the user never stopped at. `flying` is
-    // state, so this effect re-runs the moment the flight settles.
-    if (flying) return
-    const bounds = host.getBoundingClientRect()
-    const tiers = assignTiers({
-      // terminalRects, not rects: a review node has no tier at all, and this
-      // is the one line that makes that structural. See terminalPanels above.
-      rects: terminalRects,
-      viewport,
-      size: { width: bounds.width, height: bounds.height },
-      focusedId,
-      // M92. Pins, counted inside the budget by the tier function itself.
-      pinnedIds: new Set(panels.filter((p) => p.pinned === true).map((p) => p.rect.id)),
-      lastFocusedAt: registry.lastFocusedAt(),
-      dormantIds,
-      cardIds: collapsedPanelIds
-    })
-    tiersRef.current = tiers
-
-    // Promotion is immediate so a panel is live by the time you look at it.
-    // Demotion waits, so panning along an edge does not destroy and recreate a
-    // WebGL context every frame. Held-back demotions keep their current tier.
-    const held = heldSinceRef.current
-    const now = Date.now()
-    const applied: Record<string, Tier> = {}
-    const holding: string[] = []
-    let liveCount = 0
-    for (const [id, tier] of Object.entries(tiers)) {
-      const current = registry.get(id)?.tier ?? 'card'
-      if (tier === 'card' && current === 'live') {
-        if (!held.has(id)) held.set(id, now)
-        holding.push(id)
-        applied[id] = 'live'
-      } else {
-        held.delete(id)
-        applied[id] = tier
-        if (tier === 'live') liveCount += 1
-      }
-    }
-    // Drop stale holds for panels that no longer exist, so the map cannot grow
-    // without bound across a run.
-    for (const id of [...held.keys()]) if (tiers[id] === undefined) held.delete(id)
-
-    // INVARIANT: the tier map applied here never contains more than LIVE_BUDGET
-    // live panels — hold-backs included. assignTiers already caps its own
-    // promotions, but a hold-back is a live panel it did not count, so without
-    // this every panel visited during a pan would stay live for the whole
-    // gesture and blow through the WebGL context budget. Oldest holds go first:
-    // they are the ones that have already had most of the anti-flicker grace
-    // period the hold exists to provide.
-    holding.sort((a, b) => (held.get(a) ?? 0) - (held.get(b) ?? 0))
-    const allowedHolds = Math.max(0, LIVE_BUDGET - liveCount)
-    for (const id of holding.slice(0, Math.max(0, holding.length - allowedHolds))) {
-      applied[id] = 'card'
-      held.delete(id)
-    }
-
-    registry.applyTiers(applied)
-    tieringDiagnosticsRef.current = { liveCount, heldCount: held.size, budget: LIVE_BUDGET }
-
-    // Arm the release timer only when one is not already running. Re-arming on
-    // every render is what made the delay unreachable during a gesture.
-    if (held.size === 0 || demoteTimerRef.current !== null) return
-    demoteTimerRef.current = setTimeout(() => {
-      demoteTimerRef.current = null
-      // Release every hold at once against the latest tiering. A hold armed
-      // late in the window gets slightly less than the full delay, which is
-      // fine: the point is to bound the destroy/recreate RATE of WebGL
-      // contexts, not to give each panel an exact grace period.
-      heldSinceRef.current.clear()
-      registry.applyTiers(tiersRef.current)
-    }, DEMOTE_DELAY_MS)
-  }, [terminalRects, viewport, focusedId, version, dormantIds, collapsedPanelIds, flying])
+  // This remains after registry.ensure and at the former tiering-hook position.
+  // The hook owns only card/live presentation; it never disposes a session.
+  const tieringDiagnosticsRef = useTiering({
+    registry, hostRef, terminalRects, viewport, focusedId, version, dormantIds,
+    collapsedPanelIds, panels, flying
+  })
 
   // Persist on every change. Unthrottled on purpose, including the ~60/sec a
   // drag produces: main coalesces to one write per 500ms and keeps only the

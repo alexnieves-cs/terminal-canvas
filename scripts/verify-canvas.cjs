@@ -51,11 +51,7 @@ buildSync({
 const { registerIpcHandlers, PtyManager, createDirectBackend, resolveShellEnv, createLayoutStore } =
   require(ENTRY_OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** The 6 numbers of a CSS matrix(): [a, b, c, d, e, f] = scale/skew/translate. */

@@ -24,11 +24,7 @@ buildSync({
 })
 const { attachPtyLifecycle } = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // A real file, not a data: URL — reloading a data: URL fails with ERR_FAILED.
 const PAGE = join(__dirname, '..', 'out', 'verify', 'probe.html')

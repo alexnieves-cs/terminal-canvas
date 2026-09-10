@@ -58,11 +58,7 @@ const read = (rel) => {
 // something believed fixed.
 const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 const pkg = JSON.parse(read('package.json'))
 
@@ -999,6 +995,113 @@ console.log('\n' + '='.repeat(60))
   ok('guide.1 docs/getting-started.md exists, names the Gatekeeper right-click step for this unsigned build, and every npm run script it mentions is one package.json has',
     exists && /right-click/i.test(guide) && /unsigned/i.test(guide) && named.length > 0 && unknown.length === 0,
     JSON.stringify({ exists, named: [...new Set(named)], unknown }))
+}
+
+// only.1. TC_ONLY, the filter every migrated suite shares through
+// scripts/lib/checks.cjs. Two halves, and the second is the one that matters:
+// a filter that matches NOTHING must be red. A typo'd id that silently
+// reported 0/0 passed would read as a green gate for a check that never ran —
+// the three-state rule, applied to the harness itself. Driven against
+// verify:viewport because it is plain node, offline and ~0.3s, and its check
+// 27 has lettered neighbours to prove the prefix rule keeps `27b` and drops
+// `270`.
+{
+  const { spawnSync } = require('node:child_process')
+  const run = (only) => spawnSync(process.execPath, [join(ROOT, 'scripts', 'verify-viewport.cjs')],
+    { cwd: ROOT, encoding: 'utf8', env: { ...process.env, TC_ONLY: only } })
+  const idsOf = (r) => String(r.stdout || '').split('\n')
+    .filter((l) => /^(PASS|FAIL) {2}/.test(l)).map((l) => l.slice(6).split(/\s+/)[0])
+  const hit = run('27')
+  const none = run('no-such-check-id')
+  const hitIds = idsOf(hit)
+  const noneIds = idsOf(none)
+  ok('only.1 TC_ONLY narrows a suite to the ids it names (lettered sub-checks kept, longer numbers not), and a filter matching nothing is RED rather than an empty green',
+    hit.status === 0 && hitIds.length >= 1 && hitIds.every((id) => /^27(?![0-9])/.test(id)) &&
+      none.status !== 0 && noneIds.length === 0,
+    JSON.stringify({ hit: { status: hit.status, ids: hitIds.slice(0, 8) }, none: { status: none.status, ids: noneIds.slice(0, 4) } }))
+}
+
+// electron-jobs.1. The Electron tier can run N-wide ONLY when asked to, and
+// each job in flight is isolated by the one knob that already isolates
+// checkouts (TC_VERIFY_SUFFIX, see scripts/verify-socket.cjs). Pinned through
+// the runner's exported pure functions, so the default staying SERIAL is a
+// fact checked here and not a comment somebody can outlive. Serial must add
+// NOTHING to the child's env — an absent key stays absent, never `undefined`,
+// which a spread would write and a child would read as present.
+{
+  const runner = require(join(ROOT, 'scripts', 'verify-all.cjs'))
+  const electron = runner.suites().filter((s) => s.tier === 'electron').map((s) => s.name)
+  let pass = false
+  let detail
+  try {
+    const J = (v) => runner.electronJobs(v === undefined ? {} : { TC_VERIFY_ELECTRON_JOBS: v })
+    const jobs = { absent: J(), blank: J(''), three: J('3'), zero: J('0'), word: J('lots'), frac: J('2.5') }
+    const jobsOk = jobs.absent === 1 && jobs.blank === 1 && jobs.three === 3 && jobs.zero === 1 && jobs.word === 1 && jobs.frac === 1
+    const serial = runner.jobEnv('verify:panels:core', { A: '1' }, 1)
+    const serialKept = runner.jobEnv('verify:panels:core', { TC_VERIFY_SUFFIX: 'wt2' }, 1)
+    const serialOk = !('TC_VERIFY_SUFFIX' in serial) && !('TC_WATCHDOG_SCALE' in serial) && serialKept.TC_VERIFY_SUFFIX === 'wt2'
+    const suffixes = electron.map((n) => runner.jobEnv(n, { TC_VERIFY_SUFFIX: 'wt2' }, 3).TC_VERIFY_SUFFIX)
+    const distinct = new Set(suffixes).size === suffixes.length
+    const keepsOuter = suffixes.every((s) => typeof s === 'string' && s.startsWith('wt2-'))
+    const scaled = runner.jobEnv('verify:panels:core', {}, 3).TC_WATCHDOG_SCALE === '3'
+    pass = electron.length >= 5 && jobsOk && serialOk && distinct && keepsOuter && scaled
+    detail = JSON.stringify({ jobs, serialOk, distinct, keepsOuter, scaled, suffixes })
+  } catch (error) {
+    detail = String(error)
+  }
+  ok('electron-jobs.1 the Electron tier is serial unless TC_VERIFY_ELECTRON_JOBS asks otherwise, and every job in flight gets its own suffix and a scaled watchdog',
+    pass, detail)
+}
+
+// electron-jobs.2 / headroom.2. Source text, because neither fact is observable
+// from a serial run: the five panels parts all bundled to ONE out/verify file
+// and wrote ONE userData/assets directory (product clears and counts it), so
+// two parts in flight race on both with no error and a red check in whichever
+// part lost. And headroom.1 is the harness's own drift alarm; deleting it would
+// leave every part green right up until a watchdog reads as a hang again.
+{
+  const harness = stripComments(read(join('scripts', 'panels-harness.cjs')) ?? '')
+  const entryScoped = /const ENTRY_OUT = [^\n]*verifySocket\('panels-entry'\)/.test(harness)
+  const userDataScoped = /app\.setPath\('userData'/.test(harness)
+  ok('electron-jobs.2 a suffixed panels part bundles to its own entry file and keeps its own userData',
+    entryScoped && userDataScoped, JSON.stringify({ entryScoped, userDataScoped }))
+  ok('headroom.2 the panels harness still asserts headroom.1, the red that arrives before a watchdog reads as a hang',
+    /\bok\(\s*`headroom\.1 |\bok\(\s*'headroom\.1 /.test(harness), '')
+}
+
+// load-bearing.recovered.1. docs/load-bearing-recovered.md was admitted in M91
+// on SYMBOL PRESENCE alone — every code name it cites still existed — and not
+// re-verified line by line, which is why it was never merged into the main
+// file. That admission test is re-run here, every verify: a code-shaped name in
+// backticks (a source file, `Type.member`, a camelCase or snake identifier)
+// must still occur in src/, scripts/ or build/. A name that has left the code
+// means its entry can no longer be trusted even as a pointer; the fix is to
+// delete or re-verify the entry, never to add the name to KNOWN_STALE. That
+// list holds the two found when the check was written, named so they are not
+// silently absorbed: `verify-panels.cjs` (split into parts) and
+// `configStampedAt`. TC_META_RECOVERED points the check at a fixture so it can
+// be watched red.
+{
+  const { readdirSync, statSync } = require('node:fs')
+  const KNOWN_STALE = ['verify-panels.cjs', 'scripts/verify-panels.cjs', 'configStampedAt']
+  const walk = (d) => readdirSync(d).flatMap((e) => {
+    const p = join(d, e)
+    return statSync(p).isDirectory() ? walk(p) : [p]
+  })
+  const files = ['src', 'scripts', 'build'].filter((d) => existsSync(join(ROOT, d))).flatMap((d) => walk(join(ROOT, d)))
+  const names = new Set(files.map((f) => f.split('/').pop()))
+  const hay = files.map((f) => readFileSync(f, 'utf8')).join('\n')
+  const text = (process.env.TC_META_RECOVERED ? readFileSync(process.env.TC_META_RECOVERED, 'utf8') : read('docs/load-bearing-recovered.md')) ?? ''
+  const cited = [...new Set([...text.matchAll(/`([^`\n]{3,80})`/g)].map((m) => m[1].replace(/\(\)$/, '')))]
+    // Code-shaped only: prose in backticks, doc paths, JSON files and paths
+    // outside the source tree (out/, origin/…) are not claims about the code.
+    .filter((s) => /^[A-Za-z_$][\w$./-]*$/.test(s) && (/[._/]/.test(s) || /[a-z][A-Z]/.test(s)))
+    .filter((s) => !/\.(md|json)$/.test(s) && !/^(out|origin|commands|docs)\//.test(s))
+  const live = (s) => /\.(tsx?|cjs|js|css)$/.test(s) ? names.has(s.split('/').pop())
+    : /^\w+\.\w+$/.test(s) ? s.split('.').every((p) => hay.includes(p)) : hay.includes(s)
+  const stale = cited.filter((s) => !live(s) && !KNOWN_STALE.includes(s))
+  ok('load-bearing.recovered.1 every code name docs/load-bearing-recovered.md cites still exists in src/, scripts/ or build/',
+    cited.length > 100 && stale.length === 0, JSON.stringify({ cited: cited.length, stale }))
 }
 
 const failed = results.filter((r) => !r.pass)

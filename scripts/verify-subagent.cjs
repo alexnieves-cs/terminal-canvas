@@ -24,11 +24,7 @@ buildSync({
 })
 const S = require(OUT)
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 
 // 1-3. The slug. Every expectation here is a REAL directory name observed
 // under ~/.claude/projects, not a guess about the rule — the rule was inferred

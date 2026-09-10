@@ -11,13 +11,25 @@ const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readF
 const { execFileSync, spawn: spawnChild } = require('node:child_process')
 const { tmpdir } = require('node:os')
 const { app, BrowserWindow, ipcMain, webContents, clipboard } = require('electron')
+// Per-job userData, for the reason ENTRY_OUT is suffixed: captures and assets
+// land under app.getPath('userData'), and product's image-add check clears and
+// COUNTS that directory, so two parts sharing it read each other's files. Only
+// under a suffix — an unsuffixed run (serial, one checkout) keeps the directory
+// it always used. Must precede 'ready', which is why it sits at module load.
+if (require('./verify-socket.cjs').verifySocket('x') !== 'x') {
+  app.setPath('userData', mkdtempSync(join(tmpdir(), 'tc-panels-userdata-')))
+}
 
 // This script is its own Electron entry point (not out/main/index.js), so
 // nothing has registered ipcMain handlers for the pty:* channels the built
 // renderer calls. Bundle and wire up the same pieces main/index.ts wires up
 // at real startup, mirroring the pattern verify-ipc-surface.cjs and
 // verify-window-lifecycle.cjs already use for this exact problem.
-const ENTRY_OUT = join(__dirname, '..', 'out', 'verify', 'panels-entry.cjs')
+// Suffixed like the socket (scripts/verify-socket.cjs). Five parts share this
+// harness, and two in flight at once under TC_VERIFY_ELECTRON_JOBS would race
+// to write and read ONE bundle — a half-written file loads as a syntax error
+// in whichever part lost. Unsuffixed, this is the path it always was.
+const ENTRY_OUT = join(__dirname, '..', 'out', 'verify', require('./verify-socket.cjs').verifySocket('panels-entry') + '.cjs')
 buildSync({
   entryPoints: [join(__dirname, 'panels-entry.cjs')],
   outfile: ENTRY_OUT,
@@ -131,11 +143,7 @@ function findTmux() {
   return null
 }
 
-const results = []
-const ok = (n, pass, detail) => {
-  results.push({ n, pass, detail })
-  console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${detail ? ' — ' + detail : ''}`)
-}
+const { ok, results } = require('./lib/checks.cjs').createChecks()
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
@@ -394,7 +402,18 @@ app.on('window-all-closed', () => {})
  */
 function runPanelsSuite(name, WATCHDOG_MS, body) {
 const startedAt = Date.now()
-console.log(`[verify:panels:${name}] watchdog ${WATCHDOG_MS}ms`)
+// TC_WATCHDOG_SCALE. The runner sets it when the Electron tier runs N-wide:
+// contention stretches every part's wall clock, and a watchdog measured ALONE
+// would read a busy machine as a hang. Absent is 1, silently (every run that
+// existed before it). Present but not a number above zero is 1 with a note —
+// malformed is dropped, never coerced.
+const rawScale = process.env.TC_WATCHDOG_SCALE
+const scaleGiven = rawScale !== undefined && String(rawScale).trim() !== ''
+const parsedScale = Number(rawScale)
+const SCALE = scaleGiven && Number.isFinite(parsedScale) && parsedScale > 0 ? parsedScale : 1
+if (scaleGiven && SCALE !== parsedScale) console.log(`[verify:panels:${name}] ignoring TC_WATCHDOG_SCALE=${JSON.stringify(rawScale)} — not a number above zero`)
+const BUDGET_MS = Math.round(WATCHDOG_MS * SCALE)
+console.log(`[verify:panels:${name}] watchdog ${BUDGET_MS}ms${SCALE === 1 ? '' : ` (${WATCHDOG_MS}ms × TC_WATCHDOG_SCALE ${SCALE})`}`)
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
     show: false,
@@ -1558,10 +1577,10 @@ app.whenReady().then(async () => {
   let watchdogFired = false
   const watchdog = setTimeout(() => {
     watchdogFired = true
-    console.error(`\nFAIL  watchdog — run did not finish within ${WATCHDOG_MS}ms`)
+    console.error(`\nFAIL  watchdog — run did not finish within ${BUDGET_MS}ms`)
     ptyManager.killAll()
     app.exit(1)
-  }, WATCHDOG_MS)
+  }, BUDGET_MS)
 
   // A crashed or watchdog-killed run leaves sessions behind on PANELS_SOCKET:
   // the watchdog exits without ever reaching the tmuxBackend.shutdown() in the
@@ -1741,6 +1760,24 @@ app.whenReady().then(async () => {
     results.push({ n: 'infrastructure', pass: false, detail: String(error) })
   } finally {
     if (!watchdogFired) {
+      // headroom.1 — THE DRIFT ALARM. Each part's WATCHDOG_MS is 1.25x a measured
+      // run, so a fresh pin sits at 80% of its budget; the watchdog fires at
+      // 100%, and a watchdog kill reads as a HANG with every result lost
+      // (M135). Red at 90% is the window between: a part that has grown ~12%
+      // since it was measured goes red HERE, by name and with its figures,
+      // while it still has ~10% to spare. Found the hard way — kinds on a
+      // pre-M237 branch had outgrown its 60s pin and failed only as a hang.
+      // Graded against the scaled budget so TC_WATCHDOG_SCALE below 1 can
+      // prove this check goes red; ABOVE 1 the clock is contention's, not the
+      // part's, so it SKIPS loudly rather than grade the machine.
+      const wallMs = Date.now() - startedAt
+      if (SCALE <= 1) {
+        ok('headroom.1 the part finished inside 90% of its watchdog — when this is red, re-measure and re-pin WATCHDOG_MS',
+          wallMs <= 0.9 * BUDGET_MS, `${(wallMs / 1000).toFixed(1)}s of ${(BUDGET_MS / 1000).toFixed(0)}s (${Math.round((wallMs / BUDGET_MS) * 100)}%)`)
+      } else {
+        ok(`headroom.1 (SKIPPED — TC_WATCHDOG_SCALE ${SCALE}: a contended clock measures the machine, not the part)`, true,
+          `${(wallMs / 1000).toFixed(1)}s against a ${(BUDGET_MS / 1000).toFixed(0)}s scaled watchdog`)
+      }
       console.log('\n' + '='.repeat(60))
       const failed = results.filter((r) => !r.pass)
       console.log(`${results.length - failed.length}/${results.length} passed`)
