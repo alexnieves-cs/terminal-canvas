@@ -43,9 +43,9 @@ function when(at: number, now: number): string {
 function IntegrationsPaneImpl(props: IntegrationsPaneProps): JSX.Element {
   const now = Date.now()
   return (
-    <div className="shell__tree integrations-pane" aria-label="Integrations" data-integrations-pane>
+    <div className="shell__tree integrations-pane" aria-label="Connections" data-integrations-pane>
       <div className="shell__region-title shell__region-title--action navigator__header">
-        <span className="shell__tree-root">Integrations</span>
+        <span className="shell__tree-root">Connections</span>
         <span className="navigator__header-actions">
           <button type="button" className="shell__region-add icon-button" title="Read again" aria-label="Refresh integrations" data-integrations-refresh {...shellControl(props.onRefresh)}><Refresh /></button>
           <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator (⌘\\)" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
