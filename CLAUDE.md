@@ -6,13 +6,13 @@ An index. Every rule in this repository exists because the obvious version fails
 | Doc | Open it when |
 |---|---|
 | [README.md](README.md) | New here. Also the roadmap contract — modules are shaped for milestones that have not landed; don't "simplify" those away. |
-| [docs/load-bearing.md](docs/load-bearing.md) (+ [-recovered](docs/load-bearing-recovered.md)) | Before changing any module. ~145KB of invariants; **grep it, never scroll it** — entries name their module in backticks, and are written from the CAUSE, so searching a symptom fails. |
+| [docs/load-bearing.md](docs/load-bearing.md) (+ [-recovered](docs/load-bearing-recovered.md)) | Before changing any module. Both files are far too large to read whole; **grep them, never scroll** — entries name their module in backticks, and are written from the CAUSE, so searching a symptom fails. |
 | [docs/architecture-map.md](docs/architecture-map.md) | You need to know what a seam is and who owns it. Module-by-module. |
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
 | [docs/product-development-guide-2026-09-08.md](docs/product-development-guide-2026-09-08.md) | The current run (D01–D20 → M193–M224); ledger: [m193-m224](docs/build-log/m193-m224-ledger.md). |
-| [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. |
+| [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
 
 ## What this is
 
