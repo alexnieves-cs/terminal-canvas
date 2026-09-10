@@ -5,6 +5,7 @@ import { CanvasHud } from './CanvasHud'
 import { NewObjectRow } from './NewObjectRow'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
+import { isSheetPath, type SheetView } from '@shared/sheet'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
@@ -66,6 +67,8 @@ import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
+import { SheetNode } from '@renderer/file/SheetNode'
+import { sheetFocused } from '@renderer/file/sheet-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -953,9 +956,10 @@ export function Canvas({
       }
     }
     // File acceptance and handoff links are facts, not canvas geometry history.
+    // M245: so is a sheet's loss consent — undoing a MOVE must not re-arm a confirmation.
     setPanels((current) => next.present.map((panel) => {
       const live = current.find((p) => p.rect.id === panel.rect.id)
-      return isFilePanel(panel) && live && isFilePanel(live) && live.source.checklist !== undefined
+      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.sheet !== undefined)
         ? { ...panel, source: live.source } : panel
     }))
     setGroups((current) => pruneGroups(current, ids))
@@ -1266,7 +1270,7 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused(),
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || sheetFocused(),
     [palette.isOpen]
   )
 
@@ -3253,7 +3257,10 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; exact?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; sheet?: SheetView; exact?: true }) => {
+    // M245. A newly opened .csv/.tsv/.xlsx opens as a sheet. Only NEW opens:
+    // a persisted file panel without the key stays the text view it was.
+    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && isSheetPath(path) ? {} : undefined)
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3279,7 +3286,8 @@ export function Canvas({
           // function for both, so a note and an opened file cannot drift
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
-          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist })
+          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
+          ...(sheet === undefined ? {} : { sheet })
         })
       ]
       commitHistory(next)
@@ -5822,6 +5830,11 @@ export function Canvas({
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
   }, [])
+  // M245. Widths and loss consent, never cells — the file holds those.
+  const setSheetView = useCallback((id: string, view: SheetView) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
+      ? { ...panel, source: { ...panel.source, sheet: view } } : panel))
+  }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
@@ -5844,9 +5857,21 @@ export function Canvas({
         const result = await beginNewChat({ backend: readiness.preferred, at })
         return result.kind === 'refused' ? result : { kind: 'ran' }
       },
-      document: async (checklist, name) => {
+      document: async (view, name) => {
         const root = noteRootRef.current
         if (!root) return { kind: 'refused', reason: 'select a panel with a workspace folder first' }
+        if (view === 'sheet') {
+          // M245. A new sheet is an empty CSV. xlsx is opened, never minted: an
+          // empty workbook is a file nobody asked for in a format they did not choose.
+          const filename = name?.trim() || `sheets/sheet-${Date.now()}.csv`
+          if (!/\.(csv|tsv)$/i.test(filename)) return { kind: 'refused', reason: 'choose a filename ending in .csv or .tsv' }
+          const made = await window.canvas.file.create({ root, name: filename, seed: '' })
+          if (made.kind !== 'created') return { kind: 'refused', reason: made.kind === 'exists' ? 'that file already exists — choose another filename' : made.detail }
+          if (!current()) return { kind: 'refused', reason: `created ${made.path}; the workspace changed, so open the file there explicitly` }
+          openFilePanel(made.path, at, { exact: true, sheet: {} })
+          return { kind: 'ran' }
+        }
+        const checklist = view === 'checklist'
         const filename = name?.trim() || `notes/${checklist ? 'checklist' : 'note'}-${Date.now()}.md`
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
         const seed = `# ${checklist ? 'Checklist' : 'Note'}\n\n`
@@ -6784,6 +6809,10 @@ export function Canvas({
             // onSelectPanel's clear-dormant and registry.wake would be the
             // app's spawn gesture aimed at something that can never spawn.
             if (isFilePanel(panel)) {
+              if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
+                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
+                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setSheetView} />
               if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
                 onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}

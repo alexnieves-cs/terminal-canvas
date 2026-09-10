@@ -1,6 +1,7 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
+import { sheetController } from '@renderer/file/sheet-controllers'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -309,6 +310,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         switch (step.verb) {
           case 'checklist-edit': return self.editChecklist(a.panel!, a.operation!, a.value)
           case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
+          case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '')
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
           case 'workflow-run': return self.runWorkflowNow(a.template!)
@@ -530,6 +532,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     createObject: createObjectNow,
     editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
+    editSheet: async (panel, cell, value) => sheetController(panel)?.edit(cell, value) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the

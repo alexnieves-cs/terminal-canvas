@@ -4305,3 +4305,50 @@ answers `ran`. M204's first Arrange did exactly that and framed the empty destin
 `tidyPanels`, onSpawn and every drag follow the protocol; the agent door's `tidy` executor arm
 (M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
 the D08 build log.
+
+**A sheet stores FORMULAS and never their values (`sheet-formula.ts`, `csv.ts`, M245).** A cell
+whose text begins with `=` is written to the file verbatim; the renderer's lazy evaluator computes
+what it shows. Writing a computed value back freezes the sheet on its first save — the next edit to
+an input changes nothing downstream, and nothing errors. A LITERAL that begins with `=` (or looks
+like a number in an xlsx text cell) is written with a leading apostrophe (`'=`, `sheet-xlsx.ts`'s
+`textCell`), the spreadsheet convention; without it the text becomes a formula on the next read.
+The grammar is closed — anything outside it is `#NAME?` and does nothing, which is the whole
+CSV-injection answer: no function here reaches outside the grid.
+
+**`csv.ts` remembers BOM, dominant line ending, final newline and needlessly-quoted cells.** A sheet
+edits a file an agent and git also read; a one-cell edit that re-serialized a CRLF file as LF, or
+dropped a BOM, turns a one-cell change into a whole-file diff in the review gate. The `quoted` set
+names cells by `r,c`, so the session drops it on a STRUCTURAL edit (rows/columns moved) rather than
+quote the wrong cells.
+
+**`file:read`/`file:write` `encoding` is ABSENT or `'base64'`, and the watcher re-reads in the
+panel's own encoding (`file-read.ts`, `file-write.ts`, `file-watch.ts`, `ipc.ts`, M245).** The
+`bytes` arm reaches only a read that asked for it, so no earlier caller can receive a result it has
+no arm for. `FileWatchers.watch` stores the encoding; re-reading a sheet's file as TEXT on change
+would deliver a `text` arm the session treats as unreadable, and every external change would read
+as a failure instead of a named conflict. `ipc.ts` honours only the exact string, so a malformed
+value is the text path, never a surprise.
+
+**`sheetFocused()` is in `shouldIgnoreKeys` (`Canvas.tsx`, `sheet-controllers.ts`, M245).** A
+sheet mousedown moves `focusedId` to the sheet, but keyboard or programmatic focus does not — so
+DOM focus can sit in the grid while `focusedId` names a live terminal. Unguarded, the menu's
+`edit:paste` goes into the agent and `edit:undo` runs the CANVAS undo as well as the sheet's (whose
+top entry can be a spawn — the panel disappears). `verify:panels` `sheet-clip.1`/`.2` arrange that
+state exactly, with a blurred positive control so the negative is not vacuous.
+
+**An xlsx's losses are read from its zip ENTRY LIST, not its parsed workbook (`sheet-xlsx.ts`'s
+`lossesOf`, M245).** SheetJS Community never parses charts, images, pivot tables or table
+definitions, so a list computed from what it parsed is always empty — a save that drops a chart
+with no warning. `bookFiles: true` exposes `wb.keys`, the zip's own names, and each part is counted
+from there (`verify:sheet` `sheet.xlsx.6` fails if that list is ever empty for a real workbook).
+`readXlsx` also refuses anything without the zip signature: SheetJS happily parses arbitrary bytes
+as CSV or HTML and returns a workbook of garbage that could then be saved over the file.
+
+**An xlsx's per-cell and sheet metadata is carried BY ADDRESS, so row/column edits on an xlsx are
+refused and the book is re-read from every write (`sheet-xlsx.ts`'s `writeXlsx`,
+`sheet-session.ts`'s `encode`, M245's critic).** Comments, number formats, links, merges and
+column widths are copied onto the rewritten sheet by cell address. That is right while nothing
+moves and silently wrong after an insert or delete — a merge or a comment lands on other data.
+And re-keying from the book as first OPENED (rather than as last written) makes every later
+save wrong the same way. **Read with `cellNF: true`**: without it SheetJS leaves `z` unset, no
+date is recognisable, and every date shows — and is retyped — as a serial number.
