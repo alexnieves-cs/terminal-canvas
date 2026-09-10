@@ -58,6 +58,7 @@ import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
 import { createExporters } from './export'
 import { createDeckExporter } from './deck-export'
+import { createToolGenerator } from './tool-generate'
 import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
@@ -1944,7 +1945,7 @@ app.whenReady().then(async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
         return (await mainWindow.webContents.capturePage()).toPNG()
       },
-      // M246. The same dialog, filtered to .pptx; the arms, the scrub and the
+      // M251. The same dialog, filtered to .pptx; the arms, the scrub and the
       // report live in deck-export.ts, plain-node tested by verify:deck.
       deck: createDeckExporter({
         askPath: async (suggested) => {
@@ -2257,7 +2258,10 @@ app.whenReady().then(async () => {
         }
         return { kind: 'read' as const, path, parse: parsePortable(text) }
       }
-    }
+    },
+    // M252. Describe a tool: the SAME claude binary and login environment
+    // sessions use, one run with no tools, and a reply that is only data.
+    createToolGenerator({ runner: claudeCliRunner, command: () => claudePath ?? 'claude', env: () => loginEnv })
   )
   createWindow()
 

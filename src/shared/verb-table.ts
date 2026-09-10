@@ -58,6 +58,8 @@ export interface CreationHost {
   image(path?: string): Promise<CreationResult>
   workflow(): Promise<CreationResult>
   browser(url?: string): Promise<CreationResult>
+  /** M252. Describe a tool: with no description, ask for one; with one, generate — and what arrives is inert. */
+  tool(description?: string): Promise<CreationResult>
 }
 export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
 const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
@@ -73,7 +75,10 @@ export const CREATABLE_OBJECTS = [
   creation('image', 'Image', 'image', (h, value) => h.image(value)),
   creation('workflow', 'Workflow', 'workflow', (h) => h.workflow()),
   creation('browser', 'Browser/Preview', 'browser', (h, value) => h.browser(value)),
-  creation('checklist', 'Checklist', 'checklist', (h, value) => h.document(true, value), 'folder')
+  creation('checklist', 'Checklist', 'checklist', (h, value) => h.document(true, value), 'folder'),
+  // M252. 'folder' because a tool is MADE somewhere: a mini app's files go
+  // under <folder>/tools/, and a workflow's blocks work in that folder.
+  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder')
 ] as const
 
 export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {
@@ -108,7 +113,7 @@ export const VERBS: readonly VerbDef[] = [
   // nobody meant to lose. A destructive verb needs its confirmation at the
   // palette and is refused outright at the agent door (M190's critic, 3).
   { id: 'export-canvas', label: 'Canvas: export', args: [{ name: 'path', kind: 'text', optional: true }, { name: 'pictures', kind: 'value', optional: true }], destructive: true, actions: ['exportCanvas'], target: 'canvas', hint: 'write this canvas as one portable file; add with-pictures to include the pixels' },
-  // M246. NOT destructive, unlike export-canvas, and the difference is the
+  // M251. NOT destructive, unlike export-canvas, and the difference is the
   // same reason: there is no path argument, so every export goes through the
   // save dialog and a person names the file — an agent line cannot overwrite.
   { id: 'export-deck', label: 'Deck: export to PowerPoint', args: [panel()], destructive: false, actions: ['exportDeck'], target: 'panel', hint: 'write a Markdown deck as .pptx — headings, bullets, pictures and notes; secrets scrubbed and counted; anything left out is named' },

@@ -15,6 +15,7 @@ import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
 import { isImagePanel, isSkillPanel, isWorkflowPanel, isWorkPanel, isBrowserPanel, isWatcherPanel, isMemoryPanel, isFilePanel, isGithubPanel, isJiraPanel, isReviewPanel, isToolboxPanel, isTerminalPanel, linksOf, type Panel, isChatPanel } from '@renderer/panels/panels'
+import { capabilityLines, toolCapabilities } from '@shared/tool-spec'
 import type { PanelStatus } from '@renderer/session/panel-session'
 import type { LiveSession } from '@renderer/session/live-session-store'
 import { railLabel } from './rail-rows'
@@ -601,7 +602,13 @@ export function buildInspectorModelBare(
    * OPTIONAL and defaulted, the trade every parameter above it made: absent
    * means nobody asked, and no field appears.
    */
-  lanes?: readonly LaneRecord[]
+  lanes?: readonly LaneRecord[],
+  /**
+   * M252. The workflow's RECORD by id, so its reach (what it runs, reaches and
+   * works in) and whether it has been read live in the inspector layer.
+   * OPTIONAL and defaulted, the trade every parameter above it made.
+   */
+  templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
 ): InspectorModel {
   const links = buildLinkRows(panel, panels ?? [])
   if (isChatPanel(panel)) {
@@ -807,7 +814,20 @@ export function buildInspectorModelBare(
     // M183. The id is a typed MEMBER, never scraped out of a display field: the
     // node editor reads it, and a field made honest (a name) would silently
     // stop rendering the editor (the critic).
-    return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, templateId: panel.workflow.templateId, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }] }
+    // M252. What the workflow runs, reaches and works in — read off its
+    // blocks — and whether a person has read it: configuration and
+    // provenance, the inspector layer's two words.
+    const record = templateOf?.(panel.workflow.templateId)
+    const reachFields = record === undefined ? [] : (() => {
+      const lines = capabilityLines(toolCapabilities({ kind: 'workflow', nodes: record.nodes }))
+      return [
+        { key: 'tool-reach-commands', label: 'runs', value: lines.commands },
+        { key: 'tool-reach-network', label: 'reaches', value: lines.network },
+        { key: 'tool-reach-files', label: 'works in', value: lines.files },
+        ...(record.reviewed === false ? [{ key: 'tool-read', label: 'read', value: 'not yet — its action blocks are refused until you choose I\'ve read this on the panel' }] : [])
+      ]
+    })()
+    return { kind: 'workflow', reviewable: false, state: { kind: 'workflow', status: undefined, dormant: false }, id: panel.rect.id, templateId: panel.workflow.templateId, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [{ key: 'template', label: 'template', value: panel.workflow.templateId }, ...reachFields] }
   }
   // M103. The browser pane: a document kind whose identity is its URL —
   // the full one, which the rail row cannot hold and the address bar shows
@@ -831,9 +851,22 @@ export function buildInspectorModelBare(
     const sourcePanel = panel.preview?.sourcePanelId === undefined
       ? undefined
       : (panels ?? []).find((p) => p.rect.id === panel.preview?.sourcePanelId)
+    // M252. A generated tool's reach lives in the inspector layer too — it is
+    // configuration and provenance — and says whether it has been read.
+    const reach = panel.preview?.tool
+    const reachFields = reach === undefined ? [] : (() => {
+      const lines = capabilityLines(reach)
+      return [
+        { key: 'tool-reach-files', label: 'works in', value: lines.files },
+        { key: 'tool-reach-network', label: 'reaches', value: lines.network },
+        { key: 'tool-reach-commands', label: 'asks to run', value: lines.commands },
+        { key: 'tool-read', label: 'read', value: panel.preview?.reviewed === false ? 'not yet — nothing of it runs until you choose I\'ve read this on the pane' : 'yes' }
+      ]
+    })()
     return { kind: 'browser', reviewable: false, state: { kind: 'browser', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
       { key: 'url', label: 'url', value: panel.url },
-      { key: 'preview-source', label: 'preview source', value: previewSourceLine(panel.preview, sourcePanel === undefined ? undefined : railLabel(sourcePanel, undefined)) }
+      { key: 'preview-source', label: 'preview source', value: previewSourceLine(panel.preview, sourcePanel === undefined ? undefined : railLabel(sourcePanel, undefined)) },
+      ...reachFields
     ] }
   }
   // M187. The sixteenth kind: what it IS and what changes it — its form, its
@@ -1410,9 +1443,11 @@ export function buildInspectorModel(
    * OPTIONAL and defaulted, the trade every parameter above it made: absent
    * means nobody asked, and no field appears.
    */
-  lanes?: readonly LaneRecord[]
+  lanes?: readonly LaneRecord[],
+  /** M252. See buildInspectorModelBare's own. */
+  templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
 ): InspectorModel {
-  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem, templateNameOf, lanes)
+  const model = buildInspectorModelBare(panel, status, live, panels, usage, sessionOptions, typography, dormant, chat, workItem, templateNameOf, lanes, templateOf)
   if (panel.locked === true || panel.pinned === true || panel.maximised !== undefined) {
     return { ...model, marks: { locked: panel.locked === true, pinned: panel.pinned === true, maximised: panel.maximised !== undefined } }
   }

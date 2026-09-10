@@ -463,7 +463,7 @@ export interface PaletteActions {
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
   prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
-  /** M246. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
+  /** M251. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
   exportDeck(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2341,7 +2341,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // (pictures only when the person asks, through the verb line); Import makes
   // a SEPARATE workspace and starts nothing.
   out.push({ id: 'portable.export', title: 'Export this canvas…', subtitle: 'one file: the objects, the workflows, secrets scrubbed and every omission named', group: 'canvas', searchText: 'export canvas file share portable save send', run: () => { void actions.exportCanvas() } })
-  // M246. Present at rest and disabled by name, the image.replace rule: the
+  // M251. Present at rest and disabled by name, the image.replace rule: the
   // verb itself refuses a file that is not Markdown, in its own sentence.
   const deckPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'file')?.id
   out.push(withReason({ id: 'deck.export', title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))

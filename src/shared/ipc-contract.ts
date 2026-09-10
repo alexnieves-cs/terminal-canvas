@@ -8,6 +8,7 @@ import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
 import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
 import type { DeckExportRequest, DeckExportResult } from './deck'
+import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 import type { Discovery as PreviewDiscovery } from './preview'
@@ -528,8 +529,15 @@ export const IPC = {
   EXPORT_PANEL_TEXT: 'export:panel-text',
   /** M58. The composited frame as PNG, through a save dialog. */
   EXPORT_CANVAS_PNG: 'export:canvas-png',
-  /** M246. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
+  /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
   DECK_EXPORT_PPTX: 'deck:export-pptx',
+  /**
+   * M252. Describe a tool: ONE headless agent run with no tools, whose reply
+   * becomes a workflow template or a mini app's files — which arrive INERT.
+   * Main runs it because main owns every process; the renderer decides what
+   * to make of the answer and marks it unreviewed.
+   */
+  TOOL_GENERATE: 'tool:generate',
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
@@ -1633,8 +1641,12 @@ export interface CanvasBridge {
     /** M58; M112 carries the live buffer when the panel has one. */
     panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
     canvasPng(): Promise<CanvasPngExportResult>
-    /** M246. The deck's path; main reads it, so the renderer never hands over text it could have altered. */
+    /** M251. The deck's path; main reads it, so the renderer never hands over text it could have altered. */
     deckPptx(req: DeckExportRequest): Promise<DeckExportResult>
+  }
+  tool: {
+    /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */
+    generate(req: ToolGenerateRequest): Promise<ToolGenerateResult>
   }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the

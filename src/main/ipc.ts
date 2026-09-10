@@ -33,6 +33,7 @@ import type { PersistedRoutine } from '../shared/routines'
 import type { Shelf } from '../shared/skills'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
+import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
@@ -480,8 +481,11 @@ export function registerIpcHandlers(
   /** M188. Appended last, like every collaborator before it. */
   nodes: NodeHandlers = INERT_NODES,
   /** M189. Appended last, like every collaborator before it. */
-  portable: PortableHandlers = INERT_PORTABLE
+  portable: PortableHandlers = INERT_PORTABLE,
+  /** M252. Appended last, like every collaborator before it — a harness that does not wire it gets a named refusal, never a process. */
+  tools: ToolHandlers = INERT_TOOLS
 ): void {
+  ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M181. A relative path is refused as `missing` before the read: the record
   // parser already drops one, and a read resolved against main's cwd would

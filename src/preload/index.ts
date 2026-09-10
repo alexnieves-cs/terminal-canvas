@@ -277,6 +277,9 @@ const bridge: CanvasBridge = {
     canvasPng: () => ipcRenderer.invoke(IPC.EXPORT_CANVAS_PNG),
     deckPptx: (req: { path: string }) => ipcRenderer.invoke(IPC.DECK_EXPORT_PPTX, req)
   },
+  tool: {
+    generate: (req: { description: string; folder: string }) => ipcRenderer.invoke(IPC.TOOL_GENERATE, req)
+  },
   diagnostics: {
     sample: () => ipcRenderer.invoke(IPC.DIAGNOSTICS_SAMPLE),
     export: (snapshot: DiagnosticsSnapshot) => ipcRenderer.invoke(IPC.DIAGNOSTICS_EXPORT, snapshot)

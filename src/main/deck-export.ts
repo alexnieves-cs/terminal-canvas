@@ -1,5 +1,5 @@
 /**
- * M246 — a deck's door out, as a .pptx.
+ * M251 — a deck's door out, as a .pptx.
  *
  * Runs here, in main, against injected functions (the save dialog, the file
  * reads, the write) so verify:deck drives every arm with a fake dialog and

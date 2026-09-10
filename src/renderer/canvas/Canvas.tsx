@@ -46,6 +46,7 @@ import {
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
 import type { DeckMenuFact, TaskMenuFact } from '@renderer/components/PanelFrame'
+import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
@@ -142,7 +143,7 @@ import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
 import { NoteNode } from '@renderer/note/NoteNode'
-import { clearDraft, getDraft, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
+import { clearDraft, getDraft, markDraftRead, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING, TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
@@ -4166,7 +4167,7 @@ export function Canvas({
       arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id))
     }
   }, [])
-  // M246. The ⋯ menu's deck section. `of` reads the panels REF when the menu
+  // M251. The ⋯ menu's deck section. `of` reads the panels REF when the menu
   // opens, the task section's reason: a fact asked on open, never a render
   // input. The export goes through the same action the other three doors
   // take and SAYS its sentence — the count and every omission by name.
@@ -5378,7 +5379,7 @@ export function Canvas({
       // node, sees the line and marks it reviewed; until then it is refused
       // by name with the line quoted, so the refusal is also the review.
       if (reviewed === false) {
-        return { kind: 'failed', reason: `this workflow came from a file and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
+        return { kind: 'failed', reason: `this workflow came from outside this canvas (a file, or an agent's answer) and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
       }
       // The CALLER travels with the line: without it a teammate's plan could
       // write a verb into a template and run it with its identity erased.
@@ -5599,6 +5600,9 @@ export function Canvas({
    */
   const previewSubjectReason = previewSubject() === undefined ? REASON_NO_PREVIEW_SUBJECT : undefined
   const openPreview = useCallback(async (url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    // M252. An unread tool's pane loads NOTHING, from any door — its page is
+    // code nobody has read, and pointing the pane at it is running it.
+    if (previewPane()?.preview?.reviewed === false) return { kind: 'refused', reason: REASON_TOOL_UNREAD }
     if (url !== undefined) {
       const normalised = normaliseTypedUrl(url)
       if (normalised.kind === 'refused') return { kind: 'refused', reason: normalised.reason }
@@ -5706,6 +5710,9 @@ export function Canvas({
     return { kind: 'ran', note: `captured ${shot.url}` }
   }, [commitHistory, previewPane, selectOnly])
   const startDevServer = useCallback(async (script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    // M252. The dev script is a generated tool's COMMAND: no process for an
+    // unread one, whichever door asked.
+    if (previewPane()?.preview?.reviewed === false) return { kind: 'refused', reason: REASON_TOOL_UNREAD }
     const subject = previewSubject()
     if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
     const found = await window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
@@ -5846,6 +5853,65 @@ export function Canvas({
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
   }, [])
+  // M252. What a described tool becomes on the canvas — and nothing it
+  // becomes is RUN. A workflow is saved `reviewed: false`, so M190's refusal
+  // names each action block until a person reads it; an app opens as a
+  // preview whose binding is unread, so the pane makes no guest at all. The
+  // note is returned, never `say()`d: say opens the palette (M149), and the
+  // inert object on the canvas already says what it is.
+  const arriveTool = useCallback(async (result: ToolGenerateResult, at: Point): Promise<CreationResult> => {
+    if (result.kind === 'refused') return result
+    const dropped = result.dropped.length === 0 ? '' : ` · ${result.dropped.length} part${result.dropped.length === 1 ? '' : 's'} of the answer left out: ${result.dropped.join('; ')}`
+    if (result.kind === 'workflow') {
+      const saved = await window.canvas.template.save(result.template)
+      if (saved.kind !== 'saved') return { kind: 'refused', reason: saved.reason }
+      const rows = await window.canvas.template.list()
+      templateRowsRef.current = rows
+      setTemplateRows(rows)
+      openWorkflowPanel(saved.template.id, at)
+      return { kind: 'ran', note: `${saved.template.name} arrived as a workflow — nothing has run; read its blocks, then choose "I've read this" to allow runs${dropped}` }
+    }
+    openBrowserPanel(result.url, { root: result.root, reviewed: false, tool: result.capabilities }, at)
+    return { kind: 'ran', note: `${result.name} arrived in ${result.root} — nothing of it has run; read what it can reach, then choose "I've read this"${dropped}` }
+  }, [openWorkflowPanel, openBrowserPanel])
+  // M252. "I've read this" — a PERSON'S act, and deliberately NOT a verb: no
+  // palette row, no agent line, no workflow node reaches either function
+  // below (verify:verbs tool.door.1), so an agent cannot un-inert its own
+  // answer — the shape of Mark reviewed on a review (M202). The workflow's
+  // mark is cleared on the RECORD at the revision it was read at; a stale
+  // save is refused and said, like any other.
+  const markTemplateRead = useCallback(async (templateId: string): Promise<void> => {
+    const template = templateRowsRef.current.find((t) => t.id === templateId)
+    if (template === undefined) return
+    let revision = template.revision ?? 0
+    if (template.reviewed === false) {
+      const read = { ...template }
+      delete read.reviewed
+      const saved = await window.canvas.template.save(read, template.revision)
+      if (saved.kind !== 'saved') { paletteActionsRef.current?.say(saved.reason); return }
+      revision = saved.template.revision ?? revision
+      // The renderer's own copies change THE MOMENT the save lands, before the
+      // list round-trip: a Run pressed in that gap read the unread row and was
+      // refused (verify:panels tool.2, diagnosed by its own detail).
+      templateRowsRef.current = templateRowsRef.current.map((t) => (t.id === templateId ? saved.template : t))
+      markDraftRead(templateId, revision)
+      const rows = await window.canvas.template.list()
+      templateRowsRef.current = rows
+      setTemplateRows(rows)
+      return
+    }
+    // Run runs the DRAFT when there is one (M184): a record already read with
+    // a draft still marked would leave every door refused.
+    markDraftRead(templateId, revision)
+  }, [])
+  const markPreviewRead = useCallback((paneId: string): void => {
+    setPanels((current) => current.map((panel) => {
+      if (!isBrowserPanel(panel) || panel.rect.id !== paneId || panel.preview?.reviewed !== false) return panel
+      const preview = { ...panel.preview }
+      delete preview.reviewed
+      return { ...panel, preview }
+    }))
+  }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
@@ -5902,11 +5968,26 @@ export function Canvas({
         if (parsed.kind === 'refused') return { kind: 'refused', reason: 'use an http(s) URL' }
         openBrowserPanel(parsed.url, undefined, at)
         return { kind: 'ran' }
+      },
+      tool: async (description) => {
+        const folder = noteRootRef.current
+        if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first — a tool is made inside one' }
+        const typed = description?.trim() ?? ''
+        if (typed === '') {
+          // The palette FIRST: input mode is cleared whenever the palette is
+          // closed, so a prompt set on a closed palette would vanish unseen.
+          palette.openPalette()
+          setInputMode({ kind: 'text', label: 'Describe a tool — what should it do?', initial: '', submit: (said) => { setInputMode(null); if (said.trim() !== '') void createObject('tool', said) } })
+          return { kind: 'ran' }
+        }
+        const result = await window.canvas.tool.generate({ description: typed, folder })
+        if (!current()) return refused()
+        return arriveTool(result, at)
       }
     }
     try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
-  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel])
+  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, arriveTool, palette])
 
   const paletteActions = usePaletteActions({
     createObjectNow: createObject,
@@ -6045,6 +6126,7 @@ export function Canvas({
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
+    templateOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId),
     // M196 (D04). The lane records, already read for the skills door's own
     // lane question. ONE source: this is the same list main's `laneRootOf`
     // asks, so the inspector and the Places gate cannot disagree about which
@@ -6874,6 +6956,7 @@ export function Canvas({
                   onCapture={capturePreviewNow}
                   onStartDev={startDevServer}
                   onBindSource={bindPreview}
+                  onMarkRead={markPreviewRead}
                   {...(previewSubjectReason === undefined ? {} : { bindReason: previewSubjectReason })}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
@@ -7050,7 +7133,7 @@ export function Canvas({
               const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
               return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs} liveFacts={liveRunFacts} onAnswer={paletteActions.answerApproval}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
+                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onMarkRead={(templateId) => { void markTemplateRead(templateId) }} onDelete={deleteWorkflowTemplate}
                 onSave={saveWorkflowDraft} onSaveCopy={saveWorkflowCopy} onReload={reloadWorkflowDraft} onStopRun={stopWorkflowRun}
                 deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
                 runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />

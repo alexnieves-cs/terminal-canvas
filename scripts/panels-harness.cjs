@@ -1530,6 +1530,13 @@ app.whenReady().then(async () => {
       try { text = readFileSync(path, 'utf8') } catch (error) { return { kind: 'refused', reason: String(error && error.message) } }
       return { kind: 'read', path, parse: parsePortable(text) }
     }
+  },
+  // M252. Describe a tool, answered by a PLANTED result: no suite starts a
+  // `claude` process. What the renderer does with the answer — save it
+  // unreviewed, refuse its run by name, open its preview without a page —
+  // is the production path the tool.* checks drive.
+  {
+    generate: async () => state.toolReply ?? { kind: 'refused', reason: 'no tool reply was planted by this check' }
   })
   ipcMain.handle = realIpcMainHandle
 

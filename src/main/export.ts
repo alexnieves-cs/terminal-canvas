@@ -33,7 +33,7 @@ export interface ExporterDeps {
   write?: (path: string, data: string | Buffer) => void
   now?: () => Date
   /**
-   * M246. The deck door, injected rather than imported: deck-export.ts loads
+   * M251. The deck door, injected rather than imported: deck-export.ts loads
    * pptxgenjs, and verify:file bundles THIS file — a type import keeps the
    * library out of every suite that does not export a deck.
    */

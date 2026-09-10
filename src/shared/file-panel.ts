@@ -41,7 +41,7 @@ export interface FileSource {
    */
   prose?: true
   /**
-   * M246. Read this Markdown file as SLIDES (shared/deck.ts) — `---` between
+   * M251. Read this Markdown file as SLIDES (shared/deck.ts) — `---` between
    * slides, `Note:` for speaker notes — and offer the .pptx export. The same
    * display-fact-on-the-source reason as `prose`, and the same `true` or
    * ABSENT rule: a deck is a file looked at another way, not another thing.

@@ -1,7 +1,7 @@
-# M246 — a Markdown deck, exported to .pptx
+# M251 — a Markdown deck, exported to .pptx
 
-Spec: `docs/superpowers/specs/2026-09-10-m246-deck-pptx-export.md`.
-Plan: `docs/superpowers/plans/2026-09-10-m246-deck-pptx-export.md`.
+Spec: `docs/superpowers/specs/2026-09-10-m251-deck-pptx-export.md`.
+Plan: `docs/superpowers/plans/2026-09-10-m251-deck-pptx-export.md`.
 
 ## What landed
 - `shared/deck.ts`: the parse (slides on `---` outside fences, title, bullets with level and

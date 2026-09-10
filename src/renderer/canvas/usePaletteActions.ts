@@ -2015,7 +2015,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     prepareFeedback: (says) => prepareFeedbackNow(says),
     exportCanvas: (path, withPixels) => exportCanvasFile(path, withPixels === 'with-pictures'),
     importCanvas: (path) => importCanvasFile(path),
-    // M246. ONE action for the four doors. The renderer hands main a PATH and
+    // M251. ONE action for the four doors. The renderer hands main a PATH and
     // never the text: main reads the file itself, so what is exported is what
     // is on disk, and the scrub runs where the bytes are.
     exportDeck: async (panelId) => {

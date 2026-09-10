@@ -1,4 +1,4 @@
-# M246 — a Markdown deck, exported to .pptx
+# M251 — a Markdown deck, exported to .pptx
 
 ## Why
 A person drafts a talk where they already write — a Markdown file on the canvas — and needs it

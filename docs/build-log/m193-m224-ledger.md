@@ -387,10 +387,17 @@ still owed.
 
 ## Outside the D-run
 
-- **M246 (deck → .pptx), 2026-09-10, branch `m246-deck-tools`.** Red first: `verify:deck` 0/11
+- **M251 (deck → .pptx), 2026-09-10, branch `m246-deck-tools`.** Red first: `verify:deck` 0/11
   with the modules absent; `gate.2` red with the exporter unnamed. Green: `verify:deck` 11/11 (a
   real .pptx unzipped — 4 slides, 2 notes pages, 1 picture, the planted token nowhere, count 1, 3
   omissions named), `verify:verbs` 25/25, `verify:layout` 255/255, `verify:file` 97/97,
   `verify:checklist` 16/16, `npm run build`. `milestones.1` was red on `main` (M244's log, no
   row); the row is added. Owed: a real ⋯-menu click in `verify:panels`, and opening the file in
-  Keynote by hand — `docs/build-log/m246-deck-pptx-export.md`.
+  Keynote by hand — `docs/build-log/m251-deck-pptx-export.md`.
+- **M252 (describe a tool), 2026-09-10, branch `m246-deck-tools`.** Red first: `verify:tool` 0/11
+  (after a harness crash, fixed and not counted). Green: `verify:tool` 11/11, `verify:verbs` 26/26
+  (`tool.door.1`), `verify:panels:product tool.1–3` in the last run (102/104 — the two reds are
+  pre-existing checks that run before the tool checks; the base commit's own run failed two others
+  and its watchdog). tool.2's race between the saved record and the renderer's copies was
+  diagnosed by the check's own detail and fixed on both sides. Owed: one real `claude` run to
+  confirm the schema field's name — `docs/build-log/m252-describe-a-tool.md`.

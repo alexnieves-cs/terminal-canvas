@@ -201,6 +201,22 @@ export interface PreviewBinding {
    * directory association when the view closes").
    */
   sourcePanelId?: string
+  /**
+   * M252. FALSE for a pane whose page came from outside — a tool an agent
+   * generated — and has not been read yet. While false the pane creates no
+   * guest (its page is code somebody else wrote), and Open, Reload and Start
+   * dev server refuse by name. Absent, and so read, for everything a person
+   * pointed at themselves: every pre-M252 binding. `templates.reviewed`'s
+   * shape, for `templates.reviewed`'s reason.
+   */
+  reviewed?: false
+  /**
+   * M252. What the generated tool will reach — its folder, the addresses in
+   * its files, the dev script — computed when it arrived and shown in the
+   * inspector BEFORE the first run. Kept after it is read: what a tool can
+   * reach does not stop mattering once it is allowed to.
+   */
+  tool?: import('./tool-spec').ToolCapabilities
 }
 
 /**

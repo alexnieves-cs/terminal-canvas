@@ -73,10 +73,10 @@ export interface PanelMarks {
   lens?: ReadonlyMap<string, string> | null
   /** M204 (D08). The ⋯ menu's task section: which task this panel is part of, and the three verbs. Absent in a fixture. */
   task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void }
-  /** M246. The ⋯ menu's deck section: which Markdown file panels are (or can be) decks, and the two verbs. Absent in a fixture. */
+  /** M251. The ⋯ menu's deck section: which Markdown file panels are (or can be) decks, and the two verbs. Absent in a fixture. */
   deck?: { of: (id: string) => DeckMenuFact; export: (id: string) => void; toggle: (id: string) => void }
 }
-/** M246. `none` for every panel that is not a Markdown file — no section, the task section's rule. */
+/** M251. `none` for every panel that is not a Markdown file — no section, the task section's rule. */
 export type DeckMenuFact = 'deck' | 'markdown' | 'none'
 /** M204 (D08). What the ⋯ menu knows about a panel's task, asked when it opens. */
 export type TaskMenuFact = { kind: 'none' } | { kind: 'one'; title: string; related: boolean } | { kind: 'many'; titles: string[] }
@@ -256,7 +256,7 @@ export function PanelFrame({
                   </div>
                 )
               })()}
-              {/* M246. A Markdown file's deck verbs: the export is offered on any
+              {/* M251. A Markdown file's deck verbs: the export is offered on any
                   .md (the export reads the file, not the flag); the toggle is
                   how a person says "this file IS a deck". */}
               {marks.deck !== undefined && (() => {

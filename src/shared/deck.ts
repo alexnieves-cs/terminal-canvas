@@ -1,5 +1,5 @@
 /**
- * M246. A deck is a Markdown FILE read as slides — a view of a file panel
+ * M251. A deck is a Markdown FILE read as slides — a view of a file panel
  * (`FileSource.deck`), never a kind of its own, for the reason `prose` is not
  * one: a note is a file, and so is a deck.
  *

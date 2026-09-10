@@ -1,6 +1,6 @@
-# M246 plan — deck → .pptx
+# M251 plan — deck → .pptx
 
-Spec: `docs/superpowers/specs/2026-09-10-m246-deck-pptx-export.md`.
+Spec: `docs/superpowers/specs/2026-09-10-m251-deck-pptx-export.md`.
 
 1. **Checks first, watched red.** `scripts/verify-deck.cjs` + `deck-entry.cjs` (missing modules
    read as `{}`), fixture `scripts/fixtures/deck/demo.deck.md`; `verify:deck` in package.json.

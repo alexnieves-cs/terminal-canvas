@@ -1,4 +1,4 @@
-/* Verifies M246: a Markdown deck and its .pptx export.
+/* Verifies M251: a Markdown deck and its .pptx export.
    Run with: npm run verify:deck
 
    Plain node. The export runs the REAL pptxgenjs and the check unzips what
