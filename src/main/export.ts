@@ -18,7 +18,7 @@ import { dirname } from 'node:path'
 import type { ScrollbackLog } from './scrollback-log'
 import { stripAnsi } from '../shared/ansi'
 import { outward } from '../shared/outward'
-import type { CanvasPngExportResult, PanelTextExportRequest, PanelTextExportResult } from '../shared/export'
+import type { CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult, PanelTextExportRequest, PanelTextExportResult } from '../shared/export'
 
 export interface ExporterDeps {
   log: Pick<ScrollbackLog, 'readAll'>
@@ -35,6 +35,8 @@ export interface ExporterDeps {
 export interface Exporters {
   panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
   canvasPng(): Promise<CanvasPngExportResult>
+  /** M248. Built in deck-pdf.ts and joined onto this object in main/index.ts. */
+  deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
 }
 
 const atomicWrite = (path: string, data: string | Buffer): void => {
@@ -48,10 +50,11 @@ const stamp = (d: Date): string => d.toISOString().replace(/[:.]/g, '-').slice(0
 
 export const INERT_EXPORTERS: Exporters = {
   panelText: async () => ({ kind: 'failed', reason: 'export is not wired' }),
-  canvasPng: async () => ({ kind: 'failed', reason: 'export is not wired' })
+  canvasPng: async () => ({ kind: 'failed', reason: 'export is not wired' }),
+  deckPdf: async () => ({ kind: 'failed', reason: 'export is not wired' })
 }
 
-export function createExporters(deps: ExporterDeps): Exporters {
+export function createExporters(deps: ExporterDeps): Omit<Exporters, 'deckPdf'> {
   const write = deps.write ?? atomicWrite
   const now = deps.now ?? (() => new Date())
   return {

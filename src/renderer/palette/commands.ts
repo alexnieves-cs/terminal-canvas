@@ -149,6 +149,12 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
+  /** M248. `origin` is 'door' when the step came through runAgentPlan (the agent door or a workflow node): edits then stage. */
+  editDeck(panel: string, slide: number, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  writeDeck(panel: string, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  reviewDeck(panel: string, action: string, slides: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  presentDeck(panel: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  exportDeckPdf(panel: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -918,6 +924,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   const out: Command[] = []
   out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.edit', title: 'Deck: edit a slide…', subtitle: 'deck-edit <panel> <slide> <markdown> — \\n is a new line', group: 'canvas', searchText: 'deck slides slide edit markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.write', title: 'Deck: replace the whole deck…', subtitle: 'deck-write <panel> <markdown>', group: 'canvas', searchText: 'deck slides write replace markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.review', title: 'Deck: keep or discard proposed slides…', subtitle: 'deck-review <panel> keep|discard <slides|all>', group: 'canvas', searchText: 'deck slides review keep discard proposal draft', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.present', title: 'Deck: present…', subtitle: 'deck-present <panel>', group: 'canvas', searchText: 'deck slides present presentation full screen', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'deck-export-pdf <panel>', group: 'canvas', searchText: 'deck slides export pdf print', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
 
   // --- Panels --------------------------------------------------------------

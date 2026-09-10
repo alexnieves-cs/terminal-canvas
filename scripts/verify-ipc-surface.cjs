@@ -251,7 +251,8 @@ app.whenReady().then(() => {
   // M189 portable:export (132) / portable:import (133) — one portable canvas
   // file written and read by main; what to make of a parse is the renderer's.
   // M250 docx:import (134) — a .docx converted in main into a NEW note beside it.
-  const EXPECTED_CHANNELS = 135
+  // M248 export:deck-pdf (135) — a deck printed to PDF by a hidden, script-less window in main.
+  const EXPECTED_CHANNELS = 136
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

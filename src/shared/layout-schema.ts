@@ -1,6 +1,7 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
 import { parseImportedNote } from './imported-note'
+import { parseDeckView } from './deck'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -912,7 +913,10 @@ export function parseFileSource(raw: unknown, id: string, warnings: string[]): F
   // rather than a silent "someone read this".
   const imported = parseImportedNote(raw.imported)
   if (imported.kind === 'malformed') warnings.push(`file panel ${id}: malformed imported-note record dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}) }
+  // M248. The same three states; a malformed view costs the VIEW by name, never the panel.
+  const deck = parseDeckView(raw.deck)
+  if (deck.kind === 'malformed') warnings.push(`file panel ${id}: malformed deck view dropped (${deck.reason})`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}), ...(deck.kind === 'view' ? { deck: deck.view } : {}) }
 }
 
 

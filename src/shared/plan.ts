@@ -72,7 +72,9 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand',
   // M250. The import READS a path the caller names and writes a note beside
   // it — a teammate's plan does not choose which files this app reads.
-  'import-docx'
+  'import-docx',
+  // M248. A deck's file is the person's; a teammate may neither propose into it nor review it.
+  'deck-edit', 'deck-write', 'deck-review'
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {

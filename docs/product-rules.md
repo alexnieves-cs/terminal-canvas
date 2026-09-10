@@ -119,4 +119,10 @@ milestone in it; the evidence and the reasoning are in
   unchanged — this is a copy rule plus one real defect to fix, `RailTailKind`/`StateKind`'s single
   `'note'` literal now carrying BOTH meanings since M187 gave the kind the name the comment says
   it should never have (`rail-rows.ts:147-155, 201-202, 317`; `panel-state.ts:24-25`).
+- **A deck is a note's slides view, not a new kind (M248).** `kind: 'file'` with
+  `source.deck`, the checklist's shape. It KEEPS ITS HEADER under the M236 frame rule — "slide
+  N of M" is a fact the body does not carry, and "N slide changes" appears only above zero. Its
+  filmstrip is the contextual layer (opacity 0 → 1, absolutely positioned, never the body's
+  box). A person's edit writes the file; an agent's or a workflow's is a per-slide proposal a
+  person keeps or discards.
 

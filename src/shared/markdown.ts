@@ -24,14 +24,29 @@ export type Block =
   | { kind: 'paragraph'; children: Inline[] }
   | { kind: 'list'; ordered: boolean; items: Inline[][] }
   | { kind: 'code'; lang: string; text: string }
+  /** M248, `{ slides: true }` only. A line that is nothing but an image. */
+  | { kind: 'image'; alt: string; src: string }
+  /** M248, `{ slides: true }` only. A pipe table with its delimiter row. */
+  | { kind: 'table'; header: Inline[][]; align: ('left' | 'center' | 'right' | null)[]; rows: Inline[][][] }
+
+/**
+ * M248. The slide grammar is an OPTION, never the default: the chat's grammar
+ * (md.1) renders a table as its source and an image as its alt text, and a
+ * transcript is not a page. Only the deck asks for `slides`.
+ */
+export interface MarkdownOptions { slides?: boolean }
 
 const FENCE = /^```\s*([\w+-]*)\s*$/
 const HEADING = /^(#{1,3})\s+(.*?)\s*#*\s*$/
 const UL = /^\s*[-*]\s+(.*)$/
 const OL = /^\s*\d+[.)]\s+(.*)$/
 const TABLE = /^\s*\|.*\|\s*$/
+// `![alt](src)`, `![alt](<a path with spaces>)`, an optional "title" ignored.
+const IMAGE_LINE = /^\s*!\[([^\]]*)\]\((?:<([^>]+)>|([^)\s]+))(?:\s+"[^"]*")?\s*\)\s*$/
+const DELIMITER = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/
+const cells = (row: string): string[] => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
 
-export function parseMarkdown(text: string): Block[] {
+export function parseMarkdown(text: string, options: MarkdownOptions = {}): Block[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n')
   const out: Block[] = []
   let i = 0
@@ -42,6 +57,25 @@ export function parseMarkdown(text: string): Block[] {
   let para: string[] = []
   while (i < lines.length) {
     const line = lines[i]
+    if (options.slides) {
+      const image = IMAGE_LINE.exec(line)
+      if (image) {
+        flushParagraph(para); para = []
+        out.push({ kind: 'image', alt: image[1], src: image[2] ?? image[3] })
+        i += 1
+        continue
+      }
+      if (TABLE.test(line) && i + 1 < lines.length && DELIMITER.test(lines[i + 1]) && lines[i + 1].includes('-')) {
+        flushParagraph(para); para = []
+        const header = cells(line).map((c) => parseInline(c))
+        const align = cells(lines[i + 1]).map((c) => c.startsWith(':') && c.endsWith(':') ? 'center' as const : c.endsWith(':') ? 'right' as const : c.startsWith(':') ? 'left' as const : null)
+        const rows: Inline[][][] = []
+        i += 2
+        while (i < lines.length && TABLE.test(lines[i])) { rows.push(cells(lines[i]).map((c) => parseInline(c))); i += 1 }
+        out.push({ kind: 'table', header, align, rows })
+        continue
+      }
+    }
     const fence = FENCE.exec(line)
     if (fence) {
       flushParagraph(para); para = []
@@ -142,5 +176,6 @@ export function parseInline(text: string): Inline[] {
  */
 export function plainText(blocks: Block[]): string {
   const inl = (runs: Inline[]): string => runs.map((r) => r.kind === 'text' || r.kind === 'code' ? r.text : r.kind === 'link' ? r.text : inl(r.children)).join('')
-  return blocks.map((b) => b.kind === 'code' ? b.text : b.kind === 'list' ? b.items.map(inl).join('\n') : inl(b.children)).join('\n\n')
+  return blocks.map((b) => b.kind === 'code' ? b.text : b.kind === 'list' ? b.items.map(inl).join('\n') : b.kind === 'image' ? b.alt
+    : b.kind === 'table' ? [b.header, ...b.rows].map((row) => row.map(inl).join('\t')).join('\n') : inl(b.children)).join('\n\n')
 }

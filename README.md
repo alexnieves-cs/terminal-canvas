@@ -380,6 +380,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        toolbox:read / toolbox:permissions
                        diagnostics:sample / diagnostics:export
                        export:panel-text / export:canvas-png
+                       export:deck-pdf
                        memory:list / memory:add / vault:read
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
@@ -1016,6 +1017,7 @@ price of not killing something.
 | M235 | v11 Act III — the frame at rest: a rounded glass rim, a state dot, the name at low emphasis over the first row, content to the edge, controls on hover. The scrim is the TERMINAL'S OWN GROUND (`--well`), not `--chrome-bg`: the first cut used the translucent chrome glass and the agent's first line printed straight through the title so neither could be read. Starting from the colour the terminal is already painting means the band reads as empty terminal rather than an overlay, and text scrolls out from under the name the way a large title works everywhere else. `rim.paint.1` went red the moment the chrome was lifted (0.79 where it had been 15.72) — exactly what M228 wrote it for — and `well.paint.1` is retired with its reason: a chromeless terminal has no housing to sink below | ✅ done |
 | M236 | v11 Act III — the frame rule, written down: a kind is chromeless when the object IS its content (terminal; note in text and frame form) and keeps its header when the header carries a fact the body does not repeat — a state word, a count, a path, an address. The test is not how much chrome there is, it is whether removing it hides information. The full per-kind list sits beside the rules it governs in `styles.css`, and the rule plus the absolute-chrome hazard are in `CLAUDE.md`: a rule that is silently per-kind is how the frame drifted before M47 unified it | ✅ done |
 | M244 | Object creation and the file-backed checklist: `CREATABLE_OBJECTS` is the one creatable-kind list every door is derived from, and a checklist is a Markdown file-note view (`source.checklist`) with its own compare-and-swap edits, undo and hand-to-agent — never an in-memory M187 form. Row added by M249 because `verify:meta milestones.1` found its build log without one | ✅ done |
+| M248 | Deck: a Markdown file read as slides (`source.deck`, the checklist's shape, never a new kind). Slides split on `---` outside fences tracked by length; untouched slides are never re-serialised; an agent's or workflow's edit is a per-slide proposal aligned by an LCS on slide hashes and kept or discarded by a person, a moved file being a named conflict, never a merge. The generic `draft-review.ts` is M246's API built first. PDF through a hidden, sandboxed, script-less window, every slide through `outward()` — `docs/build-log/m248-deck.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

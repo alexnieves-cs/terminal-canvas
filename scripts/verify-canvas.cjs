@@ -213,6 +213,37 @@ app.whenReady().then(async () => {
   ok('6 a file drop is cancelled before it can navigate the renderer', dropGuard.drop === true,
     `defaultPrevented=${dropGuard.drop}`)
 
+  // M248 — deck.pdf.1. The REAL renderer main uses: a hidden, sandboxed,
+  // script-less BrowserWindow prints a 4-slide deck (front matter, a fenced
+  // `---`, an image that is not there). Four slides must be four PAGES —
+  // counted as `/Type /Page` objects, never `/Pages` (the tree node) — which
+  // is the observable a wrong @page size or a stray break-after on the last
+  // slide changes (a fifth blank page) and verify:deck's fake render cannot.
+  {
+    const { mkdtempSync: mk, writeFileSync: wf, readFileSync: rf, rmSync: rm } = require('node:fs')
+    const PDF_OUT = join(__dirname, '..', 'out', 'verify', 'deck-pdf.cjs')
+    buildSync({ entryPoints: [join(__dirname, '..', 'src', 'main', 'deck-pdf.ts')], outfile: PDF_OUT, bundle: true, platform: 'node', format: 'cjs', external: ['electron'] })
+    const { createDeckPdf, createPdfRenderer } = require(PDF_OUT)
+    const dir = mk(join(tmpdir(), 'tc deck '))
+    const deck = '---\nmarp: true\n---\n# One\n\n```md\n---\n```\n\n---\n## Two\n\n![gone](gone.png)\n\n---\n## Three\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n## Four\n<!-- notes not on the page -->\n'
+    wf(join(dir, 'talk.md'), deck)
+    const out = join(dir, 'talk.pdf')
+    let result
+    try {
+      result = await createDeckPdf({
+        readText: async (p) => ({ kind: 'text', content: rf(p, 'utf8'), bytes: deck.length, lines: 1, truncatedLines: 0, mtimeMs: 1 }),
+        readImage: () => ({ kind: 'missing' }),
+        render: createPdfRenderer(BrowserWindow, dir),
+        askPath: async () => out
+      })({ path: join(dir, 'talk.md') })
+    } catch (error) { result = { kind: 'threw', reason: String(error) } }
+    let pages = -1, head = ''
+    try { const bytes = rf(out); head = bytes.subarray(0, 5).toString('latin1'); pages = (bytes.toString('latin1').match(/\/Type\s*\/Page(?!s)\b/g) || []).length } catch {}
+    ok('deck.pdf.1 a 4-slide deck prints to a 4-page PDF through the real hidden, sandboxed, script-less window',
+      result?.kind === 'written' && result.pages === 4 && head === '%PDF-' && pages === 4, JSON.stringify({ result, pages, head }))
+    rm(dir, { recursive: true, force: true })
+  }
+
   console.log('\n' + '='.repeat(60))
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)

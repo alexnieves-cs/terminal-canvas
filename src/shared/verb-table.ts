@@ -54,7 +54,8 @@ export type CreationResult = { kind: 'ran'; note?: string } | { kind: 'refused';
 export interface CreationHost {
   terminal(): Promise<CreationResult>
   agent(): Promise<CreationResult>
-  document(checklist: boolean, name?: string): Promise<CreationResult>
+  /** M248: a view discriminator (was a checklist boolean), so M245's 'sheet' joins by adding a word. */
+  document(view: 'note' | 'checklist' | 'deck', name?: string): Promise<CreationResult>
   image(path?: string): Promise<CreationResult>
   workflow(): Promise<CreationResult>
   browser(url?: string): Promise<CreationResult>
@@ -69,11 +70,12 @@ const creation = (id: string, label: string, icon: string, create: (host: Creati
 export const CREATABLE_OBJECTS = [
   creation('terminal', 'Terminal', 'terminal', (h) => h.terminal()),
   creation('agent', 'Agent', 'agent', (h) => h.agent(), 'agent'),
-  creation('note', 'Note', 'note', (h, value) => h.document(false, value), 'folder'),
+  creation('note', 'Note', 'note', (h, value) => h.document('note', value), 'folder'),
   creation('image', 'Image', 'image', (h, value) => h.image(value)),
   creation('workflow', 'Workflow', 'workflow', (h) => h.workflow()),
   creation('browser', 'Browser/Preview', 'browser', (h, value) => h.browser(value)),
-  creation('checklist', 'Checklist', 'checklist', (h, value) => h.document(true, value), 'folder')
+  creation('checklist', 'Checklist', 'checklist', (h, value) => h.document('checklist', value), 'folder'),
+  creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder')
 ] as const
 
 export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {
@@ -84,6 +86,14 @@ export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context:
 }
 
 export const VERBS: readonly VerbDef[] = [
+  // M248. The deck's verbs. Through the palette they are the person's and write;
+  // through the agent door or a workflow action node, edit/write STAGE a
+  // proposal and review may only discard (usePaletteActions passes the origin).
+  { id: 'deck-edit', label: 'Deck: edit a slide', args: [panel(), { name: 'slide', kind: 'value' }, { name: 'value', kind: 'text', rest: true }], destructive: false, actions: ['editDeck'], target: 'panel', hint: 'replace one slide (one-based) with Markdown; \\n is a new line; an agent or workflow proposes rather than writes' },
+  { id: 'deck-write', label: 'Deck: replace the deck', args: [panel(), { name: 'value', kind: 'text', rest: true }], destructive: false, actions: ['writeDeck'], target: 'panel', hint: 'the whole Markdown file; \\n is a new line; an agent or workflow proposes rather than writes' },
+  { id: 'deck-review', label: 'Deck: keep or discard proposed slides', args: [panel(), { name: 'action', kind: 'value' }, { name: 'slides', kind: 'text', rest: true }], destructive: false, actions: ['reviewDeck'], target: 'panel', hint: 'keep|discard, then slide numbers (r3 for a removed slide) or all; keep is a person\'s' },
+  { id: 'deck-present', label: 'Deck: present', args: [panel()], destructive: false, actions: ['presentDeck'], target: 'panel', hint: 'full-window slides; arrows, Space, PageUp/PageDown, Escape; n toggles notes' },
+  { id: 'deck-export-pdf', label: 'Deck: export to PDF', args: [panel()], destructive: false, actions: ['exportDeckPdf'], target: 'panel', hint: 'one 16:9 page per slide, through a save dialog; notes are left out' },
   { id: 'checklist-edit', label: 'Checklist: edit item', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['editChecklist'], target: 'panel', hint: 'add text, toggle/delete a zero-based line, move line to-line, undo or redo' },
   { id: 'checklist-hand', label: 'Checklist: hand to agent', args: [panel(), { name: 'line', kind: 'value' }, panel('agent')], destructive: false, actions: ['handChecklist'], target: 'panel', hint: 'send a task line to an idle conversation, through the ordinary send gate' },
   ...CREATABLE_OBJECTS.map((entry): VerbDef => ({ id: entry.verb, label: `New ${entry.label}`, args: [{ name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['createObject'], target: 'canvas', hint: `create ${entry.label.toLowerCase()} at the viewport centre` })),
@@ -342,6 +352,11 @@ export const WORKFLOW_EXECUTOR_DUE = 'M188'
  * reason: a node that tests a node is a loop with no stop.
  */
 export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agent: string; workflow: DoorEntry }> = {
+  'deck-edit': { canvas: 'deck Edit, then Save', palette: 'deck.edit', agent: 'tc plan deck-edit f1 2 ## New title', workflow: 'an action node whose line is: deck-edit f1 2 ## New title' },
+  'deck-write': { canvas: 'deck Edit, then Save', palette: 'deck.write', agent: 'tc plan deck-write f1 # Title', workflow: 'an action node whose line is: deck-write f1 # Title' },
+  'deck-review': { canvas: 'deck Keep / Discard on a proposed slide, Keep all, Discard all', palette: 'deck.review', agent: 'tc plan deck-review f1 discard all', workflow: 'an action node whose line is: deck-review f1 discard all' },
+  'deck-present': { canvas: 'deck Present', palette: 'deck.present', agent: 'tc plan deck-present f1', workflow: 'an action node whose line is: deck-present f1' },
+  'deck-export-pdf': { canvas: 'deck PDF', palette: 'deck.export-pdf', agent: 'tc plan deck-export-pdf f1', workflow: 'an action node whose line is: deck-export-pdf f1' },
   'checklist-edit': { canvas: 'checklist Add, check, drag/Up/Down, Delete and Undo controls', palette: 'checklist.edit', agent: 'tc plan checklist-edit f1 add hello', workflow: 'an action node whose line is: checklist-edit f1 add hello' },
   'checklist-hand': { canvas: 'Hand to agent on a checklist item', palette: 'checklist.hand', agent: 'tc plan checklist-hand f1 2 ch1', workflow: 'an action node whose line is: checklist-hand f1 2 ch1' },
   ...Object.fromEntries(CREATABLE_OBJECTS.map((entry) => [entry.verb, entry.doors])),

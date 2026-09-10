@@ -77,6 +77,8 @@ import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
 import { checkForUpdate, repoOf } from './update-check'
 import { readImage } from './image-read'
+import { readFile } from './file-read'
+import { createDeckPdf, createPdfRenderer } from './deck-pdf'
 import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
 import { get as httpGet } from 'node:http'
@@ -1932,7 +1934,8 @@ app.whenReady().then(async () => {
     // M58. The save dialog and the composited frame are main's; the arms and
     // the scrubbing live in export.ts, plain-node tested. A written file is
     // revealed in the Finder, which is the only "done" the palette can show.
-    createExporters({
+    {
+    ...createExporters({
       log: scrollbackLog,
       persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
       askPath: async (suggested) => {
@@ -1946,6 +1949,19 @@ app.whenReady().then(async () => {
         return (await mainWindow.webContents.capturePage()).toPNG()
       }
     }),
+    // M248. A deck to PDF: main reads the file, a hidden sandboxed window prints it.
+    deckPdf: createDeckPdf({
+      readText: async (path) => readFile(path),
+      readImage: (path) => readImage(path),
+      render: createPdfRenderer(BrowserWindow, app.getPath('temp')),
+      askPath: async (suggested) => {
+        const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
+        const options = { defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PDF', extensions: ['pdf'] }] }
+        const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+        return r.canceled || !r.filePath ? null : r.filePath
+      }
+    })
+    },
     agentHandlers,
     watcherHandlers,
     // M103. The guest is resolved by the id the node learned on did-attach;

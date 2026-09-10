@@ -6,7 +6,7 @@ import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
-import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 import type { Discovery as PreviewDiscovery } from './preview'
@@ -527,6 +527,8 @@ export const IPC = {
   EXPORT_PANEL_TEXT: 'export:panel-text',
   /** M58. The composited frame as PNG, through a save dialog. */
   EXPORT_CANVAS_PNG: 'export:canvas-png',
+  /** M248. A deck file to PDF, one 16:9 page per slide, through a save dialog. */
+  EXPORT_DECK_PDF: 'export:deck-pdf',
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
@@ -1637,6 +1639,8 @@ export interface CanvasBridge {
     /** M58; M112 carries the live buffer when the panel has one. */
     panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
     canvasPng(): Promise<CanvasPngExportResult>
+    /** M248. Main reads the deck file itself; the renderer names only its path. */
+    deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
   }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the
