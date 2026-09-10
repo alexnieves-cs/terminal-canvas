@@ -920,7 +920,6 @@ export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObj
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
-  out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
   out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
@@ -1252,6 +1251,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     shortcut: '⌘⇧N',
     run: () => actions.beginSpawnSheet()
   })
+  // M244's creation rows, AFTER New panel… rather than ahead of it: M65's rule
+  // (verify:palette sheet.1) is that the considered way to start a panel heads
+  // the spawn section. Pushed first, they displaced it — failing on main since
+  // 7a3323d0, found while gating M245–M247.
+  out.push(...creationCommands(ctx))
 
   // M80. Templates: one row each, disabled by its own reason when it cannot
   // run; and the save verb, refused by name with nothing selected.
