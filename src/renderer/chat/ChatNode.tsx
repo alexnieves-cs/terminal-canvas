@@ -283,7 +283,20 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
   }
 
+  const focusWhenEnabled = useRef(false)
+  // Focus NOW, the caret on the next frame (the value it indexes into is the
+  // one React is about to commit). M205: focusing inside the frame alone never
+  // ran in a window that is not painting — a hidden window, the same trap
+  // `applyStarter`'s placement comment records — so an outside insert (the
+  // first start's empty one, the palette's prompt row) left the keyboard on
+  // nothing. Focusing early is the same end state, reached without a frame.
   const placeCaret = (at: number): void => {
+    // preventScroll is LOAD-BEARING: a plain focus() scrolls every scrollable
+    // ancestor to reveal the element — `.canvas`, the clipping host, included
+    // — and a scrolled host offsets every screen↔world conversion after it.
+    // The first cut of this line put the whole canvas off its own geometry
+    // (panels never framed, clicks landing elsewhere) in three Electron parts.
+    textareaRef.current?.focus({ preventScroll: true })
     requestAnimationFrame(() => {
       const el = textareaRef.current
       if (!el) return
@@ -312,10 +325,26 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   useEffect(() => {
     const insert = chat.insert
     if (!insert) return
+    // M205. A DISABLED composer (a turn pending or streaming) cannot take
+    // focus. When — and ONLY when — the insert asks for the keyboard (the
+    // first start's, whose first message is in flight: `onboarding.intent.e2e.1`
+    // measured BODY holding it), remember and honour it once sending
+    // re-enables. Armed for every insert, a review's Continue took the
+    // keyboard from the canvas when its turn ended (the M205 critic).
+    if (insert.focus === true && textareaRef.current?.disabled === true) focusWhenEnabled.current = true
     if (insert.text !== undefined) insertAtCaret(insert.text)
     if (insert.attach !== undefined) addAttachment(insert.attach)
     takeInsert(id, insert.seq)
   }, [chat.insert, id, insertAtCaret, addAttachment])
+  // M205. The deferred half of `placeCaret`: focus once sending re-enables,
+  // and ONLY while the keyboard is on nothing — a person who clicked into
+  // something else in the meantime has answered where their keyboard goes.
+  useEffect(() => {
+    if (!composer.send.enabled || !focusWhenEnabled.current) return
+    focusWhenEnabled.current = false
+    const active = document.activeElement
+    if (active === null || active === document.body) textareaRef.current?.focus({ preventScroll: true })
+  }, [composer.send.enabled])
   // M122. A search hit's flight: the stored turn's row scrolled into view by the turn's id (a row's id is its turn's).
   useEffect(() => {
     const target = chat.scrollTo

@@ -698,16 +698,22 @@ const SCENES = [
       await k.goTo('server.ts'); await sleep(1500)
       await k.shot('file-missing')
     } },
-  { name: 'starter', intent: 'M181. The starter canvas a first run lands on after `Start a conversation`: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone.',
+  { name: 'starter', intent: 'M181/M205. The starter canvas the OPTIONAL `Starter canvas…` line (inside the launcher\'s `More ways to start`) lays out: the agent (an asleep chat, its composer the first thing to type into) at working size in the middle, and to its right and below a captioned example of each kind — a dormant terminal card, a note over a real Markdown file, a workflow projecting the built-in template, an image showing real pixels — in a group named Examples; every caption a sentence under its object; nothing running, no process spawned; the launcher gone.',
     run: async (k) => {
       // LAST, on an EMPTIED canvas: the chat this scene mints leaves main-side
       // state (the recent folders the sheet's WHERE reads) that shifted four
       // later scenes past their budgets when it ran second.
       await k.emptyCanvas()
-      // A REAL click, at the primary's centre (a dispatched click never reaches
-      // shellControl's mousedown; the product suite's own lesson).
-      const point = await k.js(`(() => { const b = document.querySelector('[data-onboarding-start]'); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
-      if (point) { k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 }) }
+      // REAL clicks (a dispatched click never reaches shellControl's
+      // mousedown; the product suite's own lesson): M205 moved the starter
+      // off the primary and into the disclosure, so open it, then press the line.
+      const press = async (selector) => {
+        const point = await k.js(`(() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b || b.disabled) return null; const r = b.getBoundingClientRect(); if (r.width === 0) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        if (point) { k.wc.focus(); k.wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); k.wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 }) }
+        return point !== null
+      }
+      await press('[data-launcher-more-toggle]')
+      for (let i = 0; i < 20 && !(await press('[data-launcher-starter]')); i++) await sleep(100)
       for (let i = 0; i < 40 && (await k.js(`document.querySelectorAll('.panel[data-panel-kind]').length`)) < 5; i++) await sleep(100)
       for (let i = 0; i < 30 && !(await k.js(`document.querySelector('[data-image-node][data-image-arm="data"]') !== null`)); i++) await sleep(100)
       // LOUD when the arrangement is not there: a capture of the chat alone
