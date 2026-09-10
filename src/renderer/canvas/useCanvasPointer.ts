@@ -240,6 +240,14 @@ export function useCanvasPointer(deps: CanvasPointerDeps): CanvasPointer {
    * lane-space camera is harmless read-only navigation.
    */
   const onCanvasMouseDownCapture = (event: MouseEvent<HTMLDivElement>): void => {
+    // M249 (its critic). The screen-space controls INSIDE .canvas — the
+    // command pill and the new-object row — stand this whole capture slot
+    // down: their own bubble-phase stopPropagation runs too late to stop it,
+    // so an armed link would resolve onto whatever panel lies UNDER the pill
+    // (it sits bottom-centre, where panels are), and a middle-press on it
+    // would start a camera pan. shouldYieldWheel's pill rule, for the pointer.
+    const target = event.target as HTMLElement | null
+    if (target?.closest?.('.command-pill, .new-object-row')) return
     if (onLinkModeMouseDownCapture(event)) return
     if (event.button !== 1) return
     if (palette.isOpen() || navGridIsOpenRef.current()) return

@@ -4305,3 +4305,87 @@ answers `ran`. M204's first Arrange did exactly that and framed the empty destin
 `tidyPanels`, onSpawn and every drag follow the protocol; the agent door's `tidy` executor arm
 (M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
 the D08 build log.
+
+**The command pill never takes the keyboard it was not given (`canvas/CommandPill.tsx`, M249).**
+The pill sits over every running agent. A keypress that reached it would be a keypress the agent
+never saw. Four mechanisms stop that, and each covers a different path:
+- Every button is a `shellControl`. The mousedown `preventDefault` keeps DOM focus in xterm's
+  textarea.
+- A click on the rest pill EXPANDS it without focusing the input. Only a press on the input
+  itself, or `Cmd+Shift+Space`, moves the keyboard there. `useKeyboardNav` tests that chord
+  BEFORE its no-Shift gate, and like every chord it is Cmd-scoped, so no bare key is ever
+  taken from a TUI.
+- Escape, a send and a rest-button collapse hand focus back to the element the input was
+  ENTERED FROM. That element is recorded on the input's focus event (`relatedTarget` outside
+  the pill) and forgotten on a blur to somewhere outside. It is not the element captured when
+  the shortcut fired: the pill stays open across outside clicks, so a person can move from
+  terminal A to terminal B and back into the input, and restoring A would type into an agent
+  that is not the highlighted one (M249's critic).
+- `pillFocused()` sits in `shouldIgnoreKeys`.
+
+The last one is the one that fails silently. `Cmd+V`/`Cmd+Z` are menu accelerators, so with the
+pill's input focused a paste still reaches `useCanvasClipboard` and pastes into the FOCUSED
+TERMINAL, while the pill's own `edit:paste` subscription puts the same text in the input. The
+person sees the text where they expected it and never learns an agent received it too.
+`Cmd+Z` would run the canvas undo, which can dispose a panel. `pill.paste.1`'s discriminating
+clause is `leaked === false` at `ptyManager.write`, never the input's value.
+
+**The command pill is a sibling of `.world` and absolutely positioned; it never pushes anything
+(`Canvas.tsx`'s mount, `styles.css .command-pill`, M249).** It is anchored at `bottom` with
+`left: 50%` and a `translateX(-50%)`, so expanding grows upward over the canvas. Mounting it
+inside `.world` would scale it with the camera. Mounting it as a flow box that reserved space
+at the bottom of the host would shrink the canvas. A chromeless terminal would then refit and
+send a SIGWINCH to the running agent each time the pill opened, which is M234's collapsing-chrome
+defect in a new place. `pill.rects.1` compares every `.panel` rect and the focused terminal's
+`__m4aGrid()` across expand (running list open) and collapse. It also compares the host's own
+box and the `.world` transform: a host shrunk from the bottom moves no panel rect, because the
+world origin is the host's top-left. `shouldYieldWheel` yields over `.command-pill`, because
+the root's bubble-phase `onWheel` stop runs AFTER `useViewport`'s capture listener has already
+panned.
+
+**Screen-space controls inside `.canvas` must stand the CAPTURE slot down, not only stop
+bubbling (`useCanvasPointer.ts`'s `onCanvasMouseDownCapture`, M249).** The pill and the
+new-object row are mounted inside the canvas host. That host's `onMouseDownCapture` resolves
+an armed link by hit-testing the WORLD point under the press, and starts a pan on a
+middle-press. Both run before any bubble-phase `stopPropagation` in the control. So with link
+mode armed, pressing a pill button completed a link onto whatever panel lay under the pill.
+The pill sits bottom-centre, which is where panels are. The button's own action then ran as
+well. The capture handler now returns first for `.command-pill, .new-object-row`. This is the
+pointer's version of the `shouldYieldWheel` rule above.
+
+**The pill shows its send's outcome in place, never through `say()` (`Canvas.tsx`'s
+`sendFromPill`, M249).** `say()` is `setInputMode` plus `openPalette()`, so it moves the
+keyboard into the palette. After a send, the pill has just handed the keyboard back to the
+terminal, and a success sentence through `say()` took it straight away again.
+`sendFromPill` RETURNS its sentence and the pill renders it as a `role=status` note:
+- a `beginNewChat` refusal
+- the "made a supervisor chat" line
+- every `sendRefusalSentence` arm, including the string arms (`refused-budget`,
+  `no-session` …) that M197 found reading as silence
+- a caught IPC error
+
+**The pill has no verbs of its own (`CommandPill.tsx`, M249).** Each control calls an existing
+`PaletteActions` member:
+- Fit is `zoomToFit`.
+- Jump is Cmd+J's queue and cursor (`reachableQueue`/`nextAttentionId` over the same
+  `jumpCursorRef`), landing through `jumpToAttention`, the function a clicked OS notification
+  now calls too.
+- A running-agents row is `goToPanel`, which navigates without waking.
+- The selection controls are `tidyPanels`, `arrangeTask`, `showRelated`, `beginCreateGroup`
+  and `closePanel`.
+
+A second implementation of any of these would drift from the palette's copy with no check to
+say so. Two consequences follow from sharing. The attention COUNT the rest state shows is the
+reachable queue, not `waitingIds`, so the pill never says "1 agent needs you" about a phantom
+Jump cannot reach. And Close is enabled for exactly one selected panel. `close` is the dispose,
+and no other door ends several agents with one press.
+
+**The pill's first send with no orchestrator leaves the text UNSENT (`Canvas.tsx`'s
+`sendFromPill`, M249).** The target is the first `chat.supervisor` chat, else the first
+`chat.orchestrator` chat (`command-pill.ts orchestratorTarget`). With neither, the pill does
+not grow a way to start an agent. It calls the sheet's own supervisor path,
+`beginNewChat({ title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message })`, which
+seats the message in the new composer. That keeps M81's rule that nothing starts work unread,
+and the pill says so in a sentence. Every later send goes through `agentSession.send`, the
+chat composer's own door, and it does NOT carry the composer's first-turn memory block. That
+block belongs to a composer's first message, and the pill is not a composer.

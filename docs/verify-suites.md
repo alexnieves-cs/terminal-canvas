@@ -143,6 +143,33 @@ one `buildSync` call), and it does not transfer between bundles — each `buildS
 own esbuild invocation with its own config, so a fix to one does not cover a sibling that
 reuses the same source file through a *different* entry point. **The only reliable way to know
 
+## `verify:pill` (M249) and `verify:panels:product pill.*`
+
+The plain suite pins the pure half: what the pill says at rest, which chat its input talks to,
+and what counts as a running agent. `pill.rest.zero.1` walks every combination of counts and
+also feeds it `NaN`, `Infinity` and negative numbers, because "0 agents running" and
+"NaN selected" are the two ways the rest layer tells a confident wrong answer.
+
+The product part's five `pill.*` checks share one live `/bin/sh`, and they run in order:
+
+- **`pill.focus.1`** types with REAL `sendInputEvent` characters, so they land wherever DOM
+  focus actually is. It then dispatches a keydown on `.xterm-screen`. A keydown dispatched on
+  `.panel__slot` never reaches xterm.
+- **`pill.rects.1`** compares every `.panel` box and `__m4aGrid()` before, during and after
+  expansion. It opens the running list too, the pill's tallest state.
+- **`pill.paste.1`** is the shortcut, the menu paste and Escape together. Its discriminating
+  clause is `leaked === false`, observed at `ptyManager.write`. The input holding the text is
+  not enough: with `pillFocused()` missing from `shouldIgnoreKeys`, the paste lands in both.
+- **`pill.jump.1`** rings a real bell, pans the camera 150px or more away, then asserts the
+  panel's centre is within 6px of the host's. It also checks the rest text.
+- **`pill.send.1`** needs a canvas with NO supervisor (`__m81SupervisorOffered() === true`).
+  Anything that seeds one earlier in this part will turn it red by name, not by accident. The
+  first send's text must be in the new chat's composer and NOT in any fake process's stdin
+  (M81's unsent rule). The second send must reach stdin.
+
+A throw inside the block fails every check it had not yet recorded, with the error text. It
+never silently skips them.
+
 ## `verify:control` (M54)
 
 Plain node, and the server checks bind a REAL Unix socket in a temp dir — node's own

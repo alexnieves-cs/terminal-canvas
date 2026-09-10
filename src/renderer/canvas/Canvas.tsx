@@ -66,6 +66,8 @@ import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
+import { pillFocused, orchestratorTarget } from './command-pill'
+import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -1155,6 +1157,12 @@ export function Canvas({
     // over it must not zoom the world under a thumb of the world.
     if (target?.closest?.('.minimap')) return true
 
+    // M249. The command pill, rule 1's reason again: it is a screen-space
+    // overlay inside .canvas, so its own onWheel stopPropagation runs AFTER
+    // useViewport's capture listener has already panned the camera — a wheel
+    // over the running-agents list would move the world instead of the list.
+    if (target?.closest?.('.command-pill')) return true
+
     // 2. A zoom gesture is otherwise always the camera's, never a terminal
     // scroll, regardless of what is under the cursor. Both spellings are
     // claimed because canvas-input.ts treats both as a zoom intent: a trackpad
@@ -1266,7 +1274,8 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused(),
+    // M249. The command pill's input is the same situation again (pill.paste.1).
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused(),
     [palette.isOpen]
   )
 
@@ -1493,9 +1502,14 @@ export function Canvas({
   // M43. A clicked OS notification frames its panel — the Cmd+J path, which
   // never wakes. Read through the ref so this subscribes once and never goes
   // stale as paletteActions is rebuilt.
-  useEffect(() => window.canvas.agent.onAttentionJump((panelId) => {
+  // M249. Named so the command pill's Jump runs the SAME landing a clicked
+  // notification does (goToPanel: frame, raise, select — never wake), rather
+  // than a third copy of "go to a waiting panel". Stable identity: it reads
+  // the actions through their ref.
+  const jumpToAttention = useCallback((panelId: string) => {
     paletteActionsRef.current?.goToPanel(panelId)
-  }), [])
+  }, [])
+  useEffect(() => window.canvas.agent.onAttentionJump(jumpToAttention), [jumpToAttention])
 
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription
@@ -2297,6 +2311,23 @@ export function Canvas({
     centreOn(panel.rect)
     selectAndRaise(id)
   }
+
+  // M249. The command pill's Jump: Cmd+J's own queue and its own cursor — so
+  // a pill press and a Cmd+J press advance ONE cycle rather than two that
+  // disagree about which waiting panel is next — landing through
+  // jumpToAttention, the notification click's function. Nothing waiting
+  // does nothing, for Cmd+J's reason.
+  const pillJump = useCallback(() => {
+    const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
+    const id = nextAttentionId(reachableQueue(attentionIds(), known), jumpCursorRef.current, 1)
+    if (id === null) return
+    jumpCursorRef.current = id
+    jumpToAttention(id)
+  }, [jumpToAttention])
+  // Filled by CommandPill with its "expand and take the keyboard"; a ref so
+  // useKeyboardNav's listener installs once (openPill's identity is fixed).
+  const pillOpenRef = useRef<() => void>(() => {})
+  const openPill = useCallback(() => pillOpenRef.current(), [])
 
   const onSelectPanel = useCallback((id: string, additive = false) => {
     if (additive) {
@@ -5951,6 +5982,27 @@ export function Canvas({
   // stale; focusPanel is onFocusPanel; releaseFocus is the background release.
   const goToPanelStable = useCallback((id: string) => { paletteActionsRef.current?.goToPanel(id) }, [])
   const releaseFocusStable = useCallback(() => setFocusedId(null), [])
+  // M249. The pill's input: the orchestrator chat's own send — the door
+  // ChatNode's composer calls — or, with no orchestrator, the sheet's
+  // supervisor path with the text as its first message, UNSENT in the new
+  // composer (M81: nothing starts work unread). Read through refs at send
+  // time, so the target is the canvas as it is when Enter lands.
+  //
+  // It RETURNS its sentence for the pill to show in place, never `say()`: say
+  // opens the palette, which would take the keyboard straight back from the
+  // terminal the send just returned it to (the critic's finding). Every
+  // refusal arm is spelled by sendRefusalSentence — the string arms
+  // (budget, backend, no-session…) read as silence otherwise (M197's trap).
+  const sendFromPill = useCallback(async (text: string): Promise<string | null> => {
+    try {
+      const target = orchestratorTarget(orchestratorCandidates(panelsRef.current))
+      if (target !== null) return sendRefusalSentence(await window.canvas.agentSession.send(target, text, []))
+      const made = await beginNewChatRef.current({ title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message: text })
+      return made.kind === 'refused' ? made.reason : 'no orchestrator yet — made a supervisor chat; your message is in its composer, unsent'
+    } catch (error) {
+      return `not sent — ${error instanceof Error ? error.message : String(error)}`
+    }
+  }, [])
   useKeyboardNav({
     shouldIgnoreKeys,
     rectsRef: terminalRectsRef,
@@ -5961,7 +6013,8 @@ export function Canvas({
     hostRef,
     goToPanel: goToPanelStable,
     focusPanel: onFocusPanel,
-    releaseFocus: releaseFocusStable
+    releaseFocus: releaseFocusStable,
+    openPill
   })
   // The banner lives INSIDE the canvas host, unlike every other shell
   // control, so its press would bubble to useCanvasPointer's background
@@ -6637,6 +6690,16 @@ export function Canvas({
       >
         <NewObjectRow actions={paletteActions} merged={merged} noteRoot={noteRoot}
           agentReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined} />
+        {/* M249. A SIBLING of .world, never inside it: outside the transformed
+            layer it cannot change a panel's size, and it is absolutely
+            positioned so expanding it pushes nothing (pill.rects.1). The
+            attention count is the REACHABLE queue, Cmd+J's, so the pill never
+            says "1 agent needs you" about a phantom it cannot jump to. */}
+        <CommandPill actions={paletteActions} panels={panels}
+          attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
+          selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
+          engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
+          onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
         {/* M69. The far-view tier, provided once for every kind's frame. */}
         <CardDetailContext.Provider value={cardDetail}>
         {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}
