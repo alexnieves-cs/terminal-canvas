@@ -845,7 +845,7 @@ export function registerIpcHandlers(
     return fileWatchers.watch(req.panelId, req.path, (result) => {
       if (sender.isDestroyed()) return
       sender.send(IPC_EVENTS.FILE_CHANGED, { panelId: req.panelId, result })
-    })
+    }, req.encoding === 'base64' ? 'base64' : undefined)
   })
 
   ipcMain.handle(IPC.FILE_CLOSE, (_event, panelId: PanelId) => {
@@ -906,7 +906,8 @@ export function registerIpcHandlers(
     // with nothing to push afterwards. Our own write lands back through the
     // watcher like any other change, which is what makes the panel update
     // itself with no second code path.
-    writeFile(req.path, req.content, req.baseMtimeMs))
+    // Only the one known encoding is honoured; anything else the renderer sends is text.
+    writeFile(req.path, req.content, req.baseMtimeMs, req.encoding === 'base64' ? 'base64' : undefined))
 
   // M27. Create a note. Deliberately NOT folded into FILE_WRITE — see
   // IPC.FILE_CREATE's own comment for why a create and a compare-and-swap

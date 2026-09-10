@@ -151,7 +151,7 @@ export function SkillNode(props: SkillNodeProps): JSX.Element {
           return
         }
         setStamp(undefined)
-        setText({ kind: 'unknown', why: r.kind === 'missing' ? 'the file is gone from disk' : r.kind === 'too-large' ? `the file is ${r.bytes} bytes, past the read cap` : r.kind === 'binary' ? 'the file is not text' : r.detail })
+        setText({ kind: 'unknown', why: r.kind === 'missing' ? 'the file is gone from disk' : r.kind === 'too-large' ? `the file is ${r.bytes} bytes, past the read cap` : r.kind === 'binary' || r.kind === 'bytes' ? 'the file is not text' : r.detail })
       })
       .catch(() => { if (live) { setStamp(undefined); setText({ kind: 'unknown', why: 'the file could not be read' }) } })
     return () => { live = false; void window.canvas.file.close(id) }

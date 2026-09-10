@@ -3,6 +3,7 @@ import {
   BINARY_SCAN_BYTES,
   FILE_MAX_BYTES,
   FILE_MAX_LINES,
+  type FileEncoding,
   type FileResult
 } from '@shared/file-panel'
 
@@ -21,7 +22,7 @@ import {
  * `unreadable` with a stringified Error — the right arm reached by the wrong
  * road, and one that loses the errno on the way.
  */
-export function readFile(path: string): FileResult {
+export function readFile(path: string, encoding?: FileEncoding): FileResult {
   let bytes: number
   try {
     const stat = statSync(path)
@@ -53,6 +54,14 @@ export function readFile(path: string): FileResult {
     // this feature is that something else is writing it.
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'missing' }
     return { kind: 'unreadable', detail: String(error) }
+  }
+
+  // M245. Bytes, for a caller that parses the file itself. The mtime is
+  // taken AFTER the read for the reason the text arm's is (below).
+  if (encoding === 'base64') {
+    let mtimeMs = 0
+    try { mtimeMs = statSync(path).mtimeMs } catch { /* vanished after the read; the bytes are still real */ }
+    return { kind: 'bytes', base64: buf.toString('base64'), bytes, mtimeMs }
   }
 
   // Bounded scan. A NUL past the window reads as text: a deliberate false

@@ -5,6 +5,7 @@ import { CanvasHud } from './CanvasHud'
 import { NewObjectRow } from './NewObjectRow'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
+import { isSheetPath, type SheetView } from '@shared/sheet'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
@@ -16,6 +17,11 @@ import { EdgeIndicators } from './EdgeIndicators'
 import { Minimap } from './MinimapOverlay'
 import { CardDetailContext } from '@renderer/components/card-detail-context'
 import { LinkLayer } from './LinkLayer'
+import { AgentLinkLayer } from './AgentLinkLayer'
+import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
+import { agentLinks } from '@shared/agent-links'
+import { indexToolFiles } from '@shared/tool-index'
+import { getChat as getChatState } from '@renderer/chat/chat-store'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
@@ -66,6 +72,8 @@ import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
+import { SheetNode } from '@renderer/file/SheetNode'
+import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -379,10 +387,10 @@ export function Canvas({
   // beside the runs it belongs with, rather than left to the per-panel
   // forgetEdgesFor calls — those fire on CLOSE, and a workspace switch closes
   // nothing.
-  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges() }, [])
+  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges(); forgetAllAgentLinks() }, [])
   // M80. The sheet is opened by usePaletteActions, which is created above the
   // instantiate verb; the ref is the same indirection every late verb uses.
-  const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
+  const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>, caller?: AgentPlanCaller) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
   const instantiateTemplateStable = useCallback((template: PersistedTemplate, values: Record<string, string>) => instantiateTemplateRef.current(template, values), [])
   /**
    * M133. How many times M80's instantiation has been ENTERED, for
@@ -942,7 +950,7 @@ export function Canvas({
         // M231. Beside every other per-panel store cleared here: without it the
         // edge maps grow for the life of the renderer and a recycled panel id
         // inherits a dead edge's fire.
-        forgetEdgesFor(panel.rect.id)
+        forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
         clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
@@ -953,9 +961,10 @@ export function Canvas({
       }
     }
     // File acceptance and handoff links are facts, not canvas geometry history.
+    // M245: so is a sheet's loss consent — undoing a MOVE must not re-arm a confirmation.
     setPanels((current) => next.present.map((panel) => {
       const live = current.find((p) => p.rect.id === panel.rect.id)
-      return isFilePanel(panel) && live && isFilePanel(live) && live.source.checklist !== undefined
+      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.sheet !== undefined)
         ? { ...panel, source: live.source } : panel
     }))
     setGroups((current) => pruneGroups(current, ids))
@@ -1266,7 +1275,7 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused(),
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || sheetFocused(),
     [palette.isOpen]
   )
 
@@ -1728,7 +1737,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
-      forgetEdgesFor(panel.rect.id)
+      forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
       clearLastLine(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
@@ -1976,6 +1985,64 @@ export function Canvas({
   }, [])
   const snapEnabledRef = useRef(snapEnabled)
   snapEnabledRef.current = snapEnabled
+
+  // M247. Agent → object links. The toggle is a SETTING (canvas.agentLinks), read
+  // the way snap is: at mount and on every settings:changed, so the palette row,
+  // the HUD button, the agent line and an action node all land here.
+  const [agentLinksOn, setAgentLinksOn] = useState(true)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const row = rows.find((r) => r.id === 'canvas.agentLinks')
+        if (row) setAgentLinksOn(row.value === true)
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [])
+  // Derived from each conversation's tool calls, never stored: a restart re-derives
+  // them from the chat store. Published PER AGENT into agent-links-store, which
+  // replaces a snapshot only when its content changed — never the registry's
+  // version counter, which a busy agent's tool calls would otherwise drive.
+  //
+  // useChatsVersion bumps on EVERY chat state replacement, streamed deltas
+  // included; the turns array is replaced only when a turn lands. So each
+  // agent's links are recomputed only when its turns array or the set of
+  // objects (a path, a draft) actually changed — otherwise a streaming reply
+  // would re-index every transcript on the canvas several times a second.
+  // Its own name: Canvas's `chatsVersion` is declared far below, and a dependency
+  // array is evaluated during render, so borrowing it here would throw.
+  const linksChatsVersion = useChatsVersion()
+  const agentLinkCache = useRef(new Map<string, { turns: unknown; objectsKey: string }>())
+  useEffect(() => {
+    const objects = panels.filter(isFilePanel).map((p) => ({
+      id: p.rect.id,
+      path: p.source.path,
+      ...(p.source.sheet?.draft?.by === undefined ? {} : { draftBy: p.source.sheet.draft.by })
+    }))
+    const objectsKey = JSON.stringify(objects)
+    for (const agent of panels.filter(isChatPanel)) {
+      const turns = getChatState(agent.rect.id).turns
+      const hit = agentLinkCache.current.get(agent.rect.id)
+      if (hit !== undefined && hit.turns === turns && hit.objectsKey === objectsKey) continue
+      agentLinkCache.current.set(agent.rect.id, { turns, objectsKey })
+      publishAgentLinks(agent.rect.id, agentLinks({ agent: agent.rect.id, cwd: agent.chat.cwd, touches: indexToolFiles(turns), objects }))
+    }
+    // A closed agent's cache entry goes with it; its links went at the forget site.
+    const live = new Set(panels.map((p) => p.rect.id))
+    for (const id of [...agentLinkCache.current.keys()]) if (!live.has(id)) agentLinkCache.current.delete(id)
+  }, [panels, linksChatsVersion])
+  // A draft badge opens that draft's review: the sheet, brought into view and focused.
+  const openDraftReview = useCallback((objectId: string) => {
+    paletteActionsRef.current?.goToPanel(objectId)
+    sheetController(objectId)?.focusDraft()
+  }, [])
+  const toggleAgentLinks = useCallback(() => {
+    paletteActionsRef.current?.toggleSetting('canvas.agentLinks', !agentLinksOn)
+  }, [agentLinksOn])
   const [snapGuides, setSnapGuides] = useState<readonly SnapGuide[]>([])
   const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }): WorldRect => {
     if (!snapEnabledRef.current) return rect
@@ -2190,7 +2257,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
-    forgetEdgesFor(id)
+    forgetEdgesFor(id); forgetAgentLinksFor(id)
     clearLastLine(id)
     clearLiveSession(id)
     clearSubagents(id)
@@ -3253,7 +3320,10 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; exact?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; sheet?: SheetView; exact?: true }) => {
+    // M245. A newly opened .csv/.tsv/.xlsx opens as a sheet. Only NEW opens:
+    // a persisted file panel without the key stays the text view it was.
+    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && isSheetPath(path) ? {} : undefined)
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3279,7 +3349,8 @@ export function Canvas({
           // function for both, so a note and an opened file cannot drift
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
-          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist })
+          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
+          ...(sheet === undefined ? {} : { sheet })
         })
       ]
       commitHistory(next)
@@ -3583,7 +3654,7 @@ export function Canvas({
     (id: string, nextSpec: PanelSpecTemplate) => {
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
-      forgetEdgesFor(id)
+      forgetEdgesFor(id); forgetAgentLinksFor(id)
       clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
@@ -3892,7 +3963,8 @@ export function Canvas({
    * A chat node's `message` is INSERTED into its composer, never sent: a
    * template must not start work the user has not read.
    */
-  const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
+  // M246. `caller` is who started the run, handed to every action node (the critic's finding 1).
+  const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>, caller?: AgentPlanCaller): Promise<SpawnResult> => {
     instantiateCountRef.current += 1
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     // Fix round 2. The blocks have no runtime yet and the loop below skips
@@ -4034,7 +4106,9 @@ export function Canvas({
     // and the `node-test` verb take — one executor, so a node cannot behave
     // one way when a person tests it and another when the workflow runs it.
     for (const node of runNodes) {
-      const outcome = await runNodeRef.current?.(node, undefined, template.reviewed !== false)
+      // The run's caller, never a hard-coded `undefined`: an agent-started run's
+      // nodes must be refused and routed exactly as that agent's own line would be.
+      const outcome = await runNodeRef.current?.(node, caller, template.reviewed !== false)
       if (outcome !== undefined && outcome.kind === 'failed') sayRef.current(`${node.key}: ${outcome.reason}`)
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
@@ -4922,7 +4996,10 @@ export function Canvas({
     selectOnly(id)
   }, [commitHistory, selectOnly])
 
-  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click'): string | undefined => {
+  // M246. `caller` is who started the run: an agent through `tc plan workflow-run`
+  // (its identity rides into every action node), or absent for a person's Run and
+  // for a timer's fire (a template a person authored and reviewed).
+  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click', caller?: AgentPlanCaller): string | undefined => {
     // M184. The DRAFT is what runs when there is one: what the person sees on
     // the diagram is what the Run button starts. The snapshot the run records
     // below is this same shape, so its outcomes never move under a later edit.
@@ -4945,7 +5022,7 @@ export function Canvas({
     // watcher recording a success per tick while minting nothing.
     const refusal = templateRefusal(template, presetRowsRef.current, claudeAvailable(presetRowsRef.current))
     if (refusal !== undefined) return `not run: ${refusal}`
-    void instantiateTemplateRef.current(template, {})
+    void instantiateTemplateRef.current(template, {}, caller)
     return undefined
   }, [])
 
@@ -5822,6 +5899,11 @@ export function Canvas({
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
   }, [])
+  // M245. Widths and loss consent, never cells — the file holds those.
+  const setSheetView = useCallback((id: string, view: SheetView) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
+      ? { ...panel, source: { ...panel.source, sheet: view } } : panel))
+  }, [])
   const creationWorkspaceRef = useRef<string | undefined>(undefined)
   creationWorkspaceRef.current = workspaceRows.find((w) => w.active)?.id
   const createObject = useCallback(async (kind: string, value?: string): Promise<CreationResult> => {
@@ -5844,9 +5926,21 @@ export function Canvas({
         const result = await beginNewChat({ backend: readiness.preferred, at })
         return result.kind === 'refused' ? result : { kind: 'ran' }
       },
-      document: async (checklist, name) => {
+      document: async (view, name) => {
         const root = noteRootRef.current
         if (!root) return { kind: 'refused', reason: 'select a panel with a workspace folder first' }
+        if (view === 'sheet') {
+          // M245. A new sheet is an empty CSV. xlsx is opened, never minted: an
+          // empty workbook is a file nobody asked for in a format they did not choose.
+          const filename = name?.trim() || `sheets/sheet-${Date.now()}.csv`
+          if (!/\.(csv|tsv)$/i.test(filename)) return { kind: 'refused', reason: 'choose a filename ending in .csv or .tsv' }
+          const made = await window.canvas.file.create({ root, name: filename, seed: '' })
+          if (made.kind !== 'created') return { kind: 'refused', reason: made.kind === 'exists' ? 'that file already exists — choose another filename' : made.detail }
+          if (!current()) return { kind: 'refused', reason: `created ${made.path}; the workspace changed, so open the file there explicitly` }
+          openFilePanel(made.path, at, { exact: true, sheet: {} })
+          return { kind: 'ran' }
+        }
+        const checklist = view === 'checklist'
         const filename = name?.trim() || `notes/${checklist ? 'checklist' : 'note'}-${Date.now()}.md`
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
         const seed = `# ${checklist ? 'Checklist' : 'Note'}\n\n`
@@ -5957,6 +6051,10 @@ export function Canvas({
       .then((r) => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) })
   }, [beginNewChat])
 
+  // M246. The plan door's run: `runWorkflow`'s second parameter is the SOURCE
+  // (click | fire), so passing it straight through would hand the caller in as
+  // a source. Stable, so the palette actions do not re-memo every render.
+  const runWorkflowFromPlan = useCallback((templateId: string, caller?: AgentPlanCaller) => runWorkflow(templateId, 'click', caller), [runWorkflow])
   const paletteActions = usePaletteActions({
     createObjectNow: createObject,
     applyStarter,
@@ -5978,7 +6076,7 @@ export function Canvas({
     startDevServerNow: startDevServer,
     discoverProject,
     stopWorkflowRun,
-    runWorkflowNow: runWorkflow,
+    runWorkflowNow: runWorkflowFromPlan,
     templateRowsRef,
     reloadTemplates,
     recheckEnvironment,
@@ -6790,6 +6888,9 @@ export function Canvas({
             onSelect={merged ? undefined : selectLink}
             cardDetail={cardDetail}
           />
+          {/* M247. Beside LinkLayer, in the same world transform and on the same curve. */}
+          <AgentLinkLayer panels={displayPanels} cardDetail={cardDetail} hidden={!agentLinksOn}
+            onOpenDraft={merged ? undefined : openDraftReview} />
           {/* M130. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
               written back: one column per host at a fixed offset to its
               right, re-derived from the host's rect on every render. Not
@@ -6857,6 +6958,10 @@ export function Canvas({
             // onSelectPanel's clear-dormant and registry.wake would be the
             // app's spawn gesture aimed at something that can never spawn.
             if (isFilePanel(panel)) {
+              if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
+                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
+                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setSheetView} />
               if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
                 onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
@@ -7307,6 +7412,7 @@ export function Canvas({
           viewport={viewport}
           onZoomBy={zoomBy}
           onFit={fitAll}
+          agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
         />
         {palette.open && (
           <Palette

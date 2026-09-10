@@ -1,5 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
+import { parseSheetView } from './sheet'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -904,7 +905,11 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // type says cannot exist.
   const checklist = parseChecklistView(raw.checklist)
   if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
+  // M245. The same drop-the-field rule: a malformed sheet view reopens the file as a plain file panel.
+  const sheet = parseSheetView(raw.sheet)
+  if (sheet.kind === 'malformed' || ('sheet' in raw && sheet.kind === 'absent')) warnings.push(`file panel ${id}: malformed sheet view dropped`)
+  if (sheet.kind === 'view' && sheet.dropped !== undefined) warnings.push(`file panel ${id}: malformed sheet ${sheet.dropped.join(' and ')} dropped`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(sheet.kind === 'view' ? { sheet: sheet.view } : {}) }
 }
 
 

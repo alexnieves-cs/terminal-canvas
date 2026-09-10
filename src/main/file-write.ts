@@ -2,7 +2,7 @@ import { chmodSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } 
 import { randomBytes } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 import { FILE_MAX_BYTES } from '@shared/file-panel'
-import type { FileWriteResult } from '@shared/file-panel'
+import type { FileEncoding, FileWriteResult } from '@shared/file-panel'
 
 export type { FileWriteResult }
 
@@ -22,10 +22,13 @@ export type { FileWriteResult }
  *
  * NEVER throws — readFile's rule, for readFile's reason.
  */
-export function writeFile(path: string, content: string, baseMtimeMs: number | null): FileWriteResult {
+export function writeFile(path: string, content: string, baseMtimeMs: number | null, encoding?: FileEncoding): FileWriteResult {
+  // M245. With base64 the content is bytes (a sheet's CSV with its BOM, or a
+  // whole xlsx). Absent is the utf8 path every earlier caller takes.
+  const data: string | Buffer = encoding === 'base64' ? Buffer.from(content, 'base64') : content
   // Refused on the way OUT as well as the way in. Without this a panel could
   // grow a file past the cap it can then never display again.
-  const bytes = Buffer.byteLength(content, 'utf8')
+  const bytes = typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.length
   if (bytes > FILE_MAX_BYTES) {
     return { kind: 'failed', detail: `this is larger than the ${FILE_MAX_BYTES} byte limit` }
   }
@@ -67,7 +70,8 @@ export function writeFile(path: string, content: string, baseMtimeMs: number | n
   // filesystems is not atomic and falls back to a copy.
   const tmp = join(dirname(real), `.${basename(real)}.tc-${randomBytes(6).toString('hex')}.tmp`)
   try {
-    writeFileSync(tmp, content, 'utf8')
+    if (typeof data === 'string') writeFileSync(tmp, data, 'utf8')
+    else writeFileSync(tmp, data)
     // A fresh temp file is created at the process umask (typically 0644), so
     // without this every save silently strips the executable bit off a script
     // and resets any deliberate permissions — a loss discovered days later by

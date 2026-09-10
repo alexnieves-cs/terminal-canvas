@@ -1938,6 +1938,24 @@ body {
 /* M78. A selected edge: the accent stroke, the badge the remove control. */
 .link-layer__line--selected { stroke: var(--iris); stroke-width: 3px; }
 
+/* M247. Agent → object links. Same box as .link-layer, for the same measured
+   reason (a zero-sized SVG in the world's compositing layer paints nothing of
+   its overflow); pointer-events none on the layer, and only the draft badge
+   opts back in. Each kind says something: read is thin and dashed, wrote is
+   solid, a draft pending review carries the accent. */
+.agent-link-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; z-index: 0; pointer-events: none; }
+.agent-link-layer__line { fill: none; stroke-linecap: round; stroke: var(--line-strong); stroke-width: 1.5px; }
+.agent-link-layer__line--read { stroke-dasharray: 4 5; stroke-width: 1px; }
+.agent-link-layer__line--wrote { stroke-width: 2px; }
+.agent-link-layer__line--draft { stroke: var(--iris); stroke-width: 2px; }
+.agent-link-layer__head { fill: var(--line-strong); }
+.agent-link-layer__head--draft { fill: var(--iris); }
+.agent-link-layer__label { fill: var(--fg-3); font-size: var(--t-xs); font-family: var(--font-ui); }
+.agent-link-layer__label--draft { fill: var(--fg); }
+.agent-link-layer__badge { pointer-events: all; cursor: pointer; }
+.agent-link-layer__badge circle { fill: var(--s-1); stroke: var(--iris); stroke-width: 1.5px; }
+.agent-link-layer__badge path { fill: none; stroke: var(--iris); stroke-width: 1.5px; stroke-linecap: round; }
+
 /* ------------------------------------------------------------------ M232 --
    EDGES MEAN FLOW. An edge animates ONLY when something crosses it; at rest
    it is the quiet line above, with no motion at all.
@@ -5108,13 +5126,13 @@ body {
    Native buttons retain tab/Enter/Space semantics and a visible focus ring. */
 .new-object-row {
   position: absolute; top: 12px; left: 16px; right: 176px; z-index: 20;
-  display: flex; gap: 6px; overflow-x: auto; padding: 3px;
+  display: flex; gap: var(--sp-3); overflow-x: auto; padding: var(--sp-1);
   pointer-events: auto; font-family: var(--font-ui);
 }
 .new-object-row__pill {
-  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px;
-  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 999px; padding: var(--sp-3) var(--sp-5);
+  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-sm);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
 .new-object-row__pill:hover { color: var(--fg); background: var(--s-2); }
@@ -5122,20 +5140,67 @@ body {
 .new-object-row__pill:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
-.checklist-node__body { overflow: auto; height: 100%; padding: 14px; font-family: var(--font-ui); color: var(--fg-2); }
-.checklist-node__items { list-style: none; padding: 0; margin: 0 0 12px; }
-.checklist-node__items li { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.checklist-node__items label { display: flex; align-items: start; gap: 8px; overflow-wrap: anywhere; }
+.checklist-node__body { overflow: auto; height: 100%; padding: var(--sp-6); font-family: var(--font-ui); color: var(--fg-2); }
+.checklist-node__items { list-style: none; padding: 0; margin: 0 0 var(--sp-5); }
+.checklist-node__items li { padding: var(--sp-4) 0; border-bottom: 1px solid var(--line); }
+.checklist-node__items label { display: flex; align-items: start; gap: var(--sp-4); overflow-wrap: anywhere; }
 .checklist-node__items input { accent-color: var(--iris); }
-.checklist-node__actions { display: flex; flex-wrap: wrap; gap: 8px; opacity: 0; transition: opacity var(--dur-1); }
+.checklist-node__actions { display: flex; flex-wrap: wrap; gap: var(--sp-4); opacity: 0; transition: opacity var(--dur-1); }
 .checklist-node__items li:hover .checklist-node__actions, .checklist-node__items li:focus-within .checklist-node__actions { opacity: 1; }
 .checklist-node__body button, .checklist-node__body select, .checklist-node__body input:not([type=checkbox]) {
-  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px;
+  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
 }
 .checklist-node__body button:disabled { color: var(--fg-4); }
-.checklist-node__body form { display: flex; gap: 8px; }
+.checklist-node__body form { display: flex; gap: var(--sp-4); }
 .checklist-node__body form input { min-width: 0; flex: 1; }
-.checklist-node__tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.checklist-node__run { color: var(--fg-3); font-size: 12px; margin-left: 24px; }
-.checklist-node__review { padding: 10px; background: var(--iris-dim); border-radius: 8px; margin-bottom: 12px; }
+.checklist-node__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-5); }
+.checklist-node__run { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-7); }
+.checklist-node__review { padding: var(--sp-5); background: var(--iris-dim); border-radius: var(--r-md); margin-bottom: var(--sp-5); }
 .checklist-node__review pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-family: var(--font-mono); }
+
+/* M245. The sheet. Keeps its header (the frame rule): rows × cols and the
+   directory are facts the grid does not repeat. The grid is a positioned plane
+   inside one scroller; only the visible window is rendered, and the headers
+   are placed at the scroll offset rather than made sticky, because sticky
+   inside an absolutely-positioned plane does not stick. */
+.sheet-node__body { display: flex; flex-direction: column; height: 100%; min-height: 0; font-family: var(--font-ui); color: var(--fg-2); outline: none; }
+.sheet-node__body:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.sheet-node__bar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); min-width: 0; }
+.sheet-node__ref { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); min-width: 3.5em; }
+.sheet-node__formula { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-node__tools { display: flex; gap: var(--sp-2); opacity: 0; transition: opacity var(--dur-1); }
+.sheet-node__body:hover .sheet-node__tools, .sheet-node__body:focus-within .sheet-node__tools { opacity: 1; }
+.sheet-node__tools button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
+.sheet-node__tools button:disabled { color: var(--fg-4); }
+.sheet-node__tools button.is-urgent { color: var(--fg); border-color: var(--amber, var(--iris)); }
+.sheet-node__status { margin: 0; padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); color: var(--fg-2); background: var(--iris-dim); }
+.sheet-node__scroller { position: relative; flex: 1; min-height: 0; overflow: auto; }
+.sheet-node__plane { position: relative; }
+.sheet-node__cell, .sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { position: absolute; box-sizing: border-box; }
+.sheet-node__cell { padding: 0 var(--sp-3); line-height: 23px; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: cell; user-select: none; }
+.sheet-node__cell.is-number { text-align: right; font-variant-numeric: tabular-nums; }
+.sheet-node__cell.is-error { color: var(--amber, var(--fg-3)); }
+.sheet-node__cell.is-in-range { background: var(--iris-dim); }
+.sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { z-index: 2; background: var(--s-1); color: var(--fg-3); font-size: var(--t-xs);
+  line-height: 23px; text-align: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); user-select: none; }
+.sheet-node__corner { z-index: 3; }
+.sheet-node__colhead.is-active, .sheet-node__rowhead.is-active { color: var(--fg); }
+.sheet-node__resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 1; }
+.sheet-node__cursor { position: absolute; pointer-events: none; box-shadow: inset 0 0 0 2px var(--iris); z-index: 1; }
+.sheet-node__editor { position: absolute; z-index: 4; box-sizing: border-box; font: inherit; font-size: var(--t-sm); padding: 0 var(--sp-2);
+  color: var(--fg); background: var(--s-0, var(--s-1)); border: 2px solid var(--iris); outline: none; }
+.sheet-node__dir { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sheet-node__loss { margin-left: var(--sp-4); font: inherit; font-size: var(--t-xs); color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); }
+.sheet-node__loss.is-pending { color: var(--fg); border-color: var(--amber, var(--iris)); cursor: pointer; }
+
+/* M246. The draft layer: proposed cells carry the accent edge and show the NEW value
+   (old → new in the title and the formula bar); the strip is contextual. */
+.sheet-node__cell.is-draft { box-shadow: inset 0 0 0 1px var(--iris); color: var(--fg); background: var(--iris-dim); }
+.sheet-node__draft { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); border-bottom: 1px solid var(--line); }
+.sheet-node__draft > span { flex: 1; min-width: 0; color: var(--fg-2); }
+.sheet-node__draft button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
+.sheet-node__draft button:disabled { color: var(--fg-4); }
+.sheet-node__draft.is-conflict > span { color: var(--fg); }
+.sheet-node__draft.is-done > span { color: var(--fg-3); }
+.sheet-node__changes { margin-left: var(--sp-4); font-size: var(--t-xs); color: var(--fg); border: 1px solid var(--iris); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); white-space: nowrap; }

@@ -170,5 +170,15 @@ export function buildFileNodeModel(input: {
         note: `This file could not be read: ${r.detail}`,
         editableNote: 'This file could not be read, so it cannot be edited.'
       }
+    // M245. Only a read that ASKED for bytes gets this arm (a sheet), so a file
+    // panel reaching it means a sheet view was dropped from a malformed layout.
+    // Said plainly rather than rendered as text it never was.
+    case 'bytes':
+      return {
+        ...shell,
+        summary: humanBytes(r.bytes),
+        note: 'This file was read as a spreadsheet. Reopen it to see its cells.',
+        editableNote: 'Edit this file as a sheet.'
+      }
   }
 }
