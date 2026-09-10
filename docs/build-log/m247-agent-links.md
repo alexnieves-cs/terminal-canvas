@@ -36,6 +36,17 @@ Checked clean by the critic: the store (snapshot caching, forget iterating a cop
 version counter), forget-site parity, the mapping and LOD, the layer's pointer rules, the four
 doors, and the turns-identity cache.
 
+## Merged with open items (the user's decision, 2026-09-10)
+Merged to local main with every plain suite green and each milestone commit typechecked in
+isolation, but two things OPEN:
+- **The Electron tier is unverified.** The one full `npm run verify` that reached it failed
+  across all four panels parts (watchdogs, "Object has been destroyed") on a machine shared by
+  several sessions' Electron tiers with memory near exhaustion; two attempts to compare it
+  against M246 alone were OOM-killed. Until an idle-machine run says otherwise, M247's
+  `Canvas.tsx` additions (the settings read, the chat-driven link feed) are not ruled out.
+- **Milestone numbers collide:** branch `m246-deck-tools` also uses M246/M247 and must renumber
+  when it merges.
+
 ## Honest limits
 Terminal agents have no turns and Codex reports commands without paths, so neither produces
 links. Paths are compared as spelled (with the `/private` symlink spelling normalised); a path
