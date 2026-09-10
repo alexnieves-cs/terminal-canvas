@@ -1327,6 +1327,8 @@ body {
    chip; destructive sits at the right and goes red the moment it is armed. */
 /* M178 (F.1). No background here: at (0,2,1) this rule beat the primary's (0,1,0) iris fill, so an ENABLED Restart painted white on white since M46 — a latent 4.0 defect the second audit caught (`restart.paint.1`). */
 .context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; font-weight: 600; }
+.context__more-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+.context__more-actions[hidden] { display: none; }
 .inspector__action--secondary { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); min-width: 0; white-space: nowrap; }
 .inspector__action--destructive { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
 .inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
