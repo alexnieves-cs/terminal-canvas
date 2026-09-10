@@ -4171,13 +4171,21 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         f !== null && fLift >= 3,
         JSON.stringify({ woke, frame: f, top: fTop, ref: fRef, lift: Number(fLift.toFixed(2)) }))
 
-      const w = pts.well
-      const wTop = w ? await at(w.cx, w.topY) : null
-      const wDeep = w ? await at(w.cx, w.deepY) : null
-      const wSink = w ? lum(wDeep) - lum(wTop) : 0
-      ok('well.paint.1 the terminal well\'s first row paints DARKER than the same well well below its blur — --rim-inner sinking it, measured off the compositor; the cells keep --well either way',
-        w !== null && wSink >= 3,
-        JSON.stringify({ well: w, top: wTop, deep: wDeep, sink: Number(wSink.toFixed(2)) }))
+      // well.paint.1 IS RETIRED HERE BY M234, and this note is its headstone
+      // rather than a silent deletion.
+      //
+      // It measured a terminal well sinking below its housing. M234 makes a
+      // terminal CHROMELESS: the body starts at the frame's own top edge, so
+      // there is no housing seam left to sink below, and a recess drawn
+      // there would sit underneath the chrome's scrim where nobody can see
+      // it. The frame's own lit rim (rim.paint.1, directly above) does the
+      // whole job now, and `.pf--kind-terminal .panel__slot::after` turns the
+      // recess off rather than leaving a rule that paints nothing.
+      //
+      // --rim-inner is NOT retired: it keeps `.launcher__well` and gains the
+      // recessed surfaces of Act IV, and `verify:styles rim.1` still fails if
+      // no surface wears it. What is gone is the claim that a TERMINAL has a
+      // recessed well, which stopped being true in this milestone.
     }
 
     // M229 — aura.paint.1. THE GROUND ANSWERS, IN PIXELS.
@@ -4240,5 +4248,139 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ spot, victim, idle, waiting, warm, attrAfterRelease: attr }))
     }
 
+
+    // M234 — chromeless.resize.1. THE ONE THAT MUST BE RED FIRST.
+    //
+    // A terminal panel goes chromeless: at rest the controls are gone and the
+    // content runs to the edge. There are two ways to do that and only one is
+    // safe.
+    //
+    // The UNSAFE one is to collapse the chrome's BOX on hover — `display:
+    // none`, `height: 0`, or dropping it from the flow. The body then grows
+    // by the chrome's height, xterm refits, and a SIGWINCH goes into the
+    // running agent. On every mouse-over. A resize storm with no visible
+    // error, no exception, and no red suite anywhere — the agent just gets
+    // told its terminal changed size, repeatedly, by a cursor passing over a
+    // panel.
+    //
+    // The SAFE one is to position the chrome ABSOLUTELY over the body and let
+    // the body own the full block size at all times. Then hovering changes
+    // opacity and nothing else, and xterm never hears about it.
+    //
+    // So this check hovers a live terminal and asserts that the xterm grid
+    // and the body's measured block size are UNCHANGED across the hover. It
+    // is written before the implementation and watched failing against the
+    // naive version, because a check written afterwards would be written to
+    // pass whatever shipped.
+    {
+      const geom = await wc.executeJavaScript(`(() => {
+        const slot = document.querySelector('.panel__slot')
+        if (slot === null) return null
+        const panel = slot.closest('.panel')
+        const body = panel.querySelector('.pf__body') ?? slot.parentElement
+        const chrome = panel.querySelector('.pf__chrome')
+        const r = panel.getBoundingClientRect()
+        return { id: panel.getAttribute('data-panel-id'),
+                 hoverX: Math.round(r.left + r.width / 2), hoverY: Math.round(r.top + r.height / 2),
+                 awayX: Math.round(r.left + r.width / 2), awayY: Math.round(r.top) - 40,
+                 bodyH: Math.round(body.getBoundingClientRect().height),
+                 chromePos: chrome ? getComputedStyle(chrome).position : null } })()`)
+      const grid = () => wc.executeJavaScript(`(() => {
+        const s = document.querySelector('.panel__slot')
+        if (s === null) return null
+        const screen = s.querySelector('.xterm-screen')
+        const body = s.closest('.panel').querySelector('.pf__body') ?? s.parentElement
+        return { rows: s.querySelectorAll('.xterm-rows > div').length,
+                 screenH: screen ? Math.round(screen.getBoundingClientRect().height) : null,
+                 bodyH: Math.round(body.getBoundingClientRect().height) } })()`)
+      let before = null, during = null, after = null
+      if (geom !== null) {
+        // DESELECT FIRST. The first cut of this check hovered a SELECTED
+        // panel, whose chrome is shown at rest anyway — so the hover changed
+        // nothing, the sizes matched, and the check passed against the naive
+        // collapsing implementation it was written to catch. A check that
+        // cannot fail is not a check, and this one proved it twice before it
+        // measured anything.
+        await clickEmptyCanvas(wc)
+        await settle(); await sleep(200)
+        // The cursor genuinely away from the panel first, so `before` is a
+        // rest reading and not a hover the previous check left behind.
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
+        await settle(); await sleep(200)
+        before = await grid()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.hoverX, y: geom.hoverY })
+        await settle(); await sleep(350)
+        during = await grid()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
+        await settle(); await sleep(250)
+        after = await grid()
+      }
+      const same = (a, b) => a !== null && b !== null && a.rows === b.rows && a.bodyH === b.bodyH && a.screenH === b.screenH
+      // TWO ARMS, because either alone can be satisfied by the wrong thing.
+      // The MECHANISM arm (the chrome is out of the flow) is what makes the
+      // hazard structurally impossible; the EFFECT arm (nothing resized
+      // across a real hover) is what proves the mechanism was actually
+      // reached on a live terminal rather than declared in a rule that some
+      // other selector overrides.
+      const chromeOut = geom !== null && (geom.chromePos === 'absolute' || geom.chromePos === 'fixed')
+      // M234 — chromeless.paint.1. THE CHROME IS STILL THERE, AND STILL
+      // REACHABLE. M149's lesson, applied to the surface this milestone just
+      // lifted out of the flow: an absolutely positioned element over a
+      // transformed, blurred subtree is exactly the shape that went invisible
+      // for two versions, and a query check stays green through it.
+      //
+      // Three things, because chromeless must not become CONTROL-less — and
+      // the first of them is measured in BOTH states, because the answer is
+      // deliberately different in each and the pair is the whole contract:
+      //   * ON HOVER, elementFromPoint at the ⋯ button's own centre returns
+      //     something inside the chrome — it is on top of the body, not
+      //     behind it. This is the arm that catches the invisible-surface
+      //     failure M149 named;
+      //   * AT REST the SAME point reaches the terminal body instead. That is
+      //     not a weaker version of the first arm, it is the chromeless
+      //     contract: a control nobody can see must not eat the cell under
+      //     it. The first cut of this check asserted `onTop` at rest, which
+      //     is exactly the invisible 36px bar `type.1` caught swallowing a
+      //     click on the terminal's second row — so the check as first
+      //     written could only have been satisfied by the bug. Asserting it
+      //     here means the guarantee lives beside the rule, rather than
+      //     resting on a check about FONT METRICS noticing it by accident;
+      //   * the button is at opacity 0 at rest and 1 on hover, so the panel
+      //     is quiet until it is used (the rest rule), and it keeps a real
+      //     box and an accessible name at rest, so a scripted click lands and
+      //     a keyboard reaches it without hovering (M44's reach rule, which
+      //     chromeless must not spend).
+      // ONE probe, read twice, so the two states are compared like for like:
+      // the same button, the same point, the same query.
+      const probeMore = () => wc.executeJavaScript(`(() => {
+        const p = document.querySelector('.panel[data-panel-id="${geom.id}"]')
+        const b = p === null ? null : p.querySelector('[data-panel-more]')
+        if (b === null) return null
+        const r = b.getBoundingClientRect()
+        const el = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2))
+        return { opacity: getComputedStyle(b).opacity, w: Math.round(r.width), h: Math.round(r.height),
+                 named: (b.getAttribute('aria-label') ?? b.getAttribute('title') ?? '').length > 0,
+                 onTop: el !== null && el.closest('.pf__chrome') !== null,
+                 hitsBody: el !== null && el.closest('.panel__slot') !== null } })()`)
+      const chromeRest = geom === null ? null : await probeMore()
+      let chromeHover = null
+      if (geom !== null) {
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.hoverX, y: geom.hoverY })
+        await settle(); await sleep(300)
+        chromeHover = await probeMore()
+        wc.sendInputEvent({ type: 'mouseMove', x: geom.awayX, y: Math.max(geom.awayY, 4) })
+        await settle(); await sleep(150)
+      }
+      ok('chromeless.paint.1 the lifted chrome PAINTS above the body ON HOVER (elementFromPoint at the ⋯ lands inside it) and is not there for the pointer AT REST (the same point reaches the terminal body, so an unseen control never eats a cell), while the button keeps a real box and an accessible name at rest so a script and a keyboard reach it without hovering',
+        chromeRest !== null && chromeRest.opacity === '0' &&
+          chromeRest.onTop === false && chromeRest.hitsBody === true &&
+          chromeRest.w >= 20 && chromeRest.h >= 20 && chromeRest.named === true &&
+          chromeHover !== null && chromeHover.opacity === '1' && chromeHover.onTop === true,
+        JSON.stringify({ chromeRest, chromeHover }))
+
+      ok('chromeless.resize.1 a terminal\'s chrome is OUT OF THE FLOW (absolute over the body) and a real hover changes neither the xterm screen nor the body\'s measured block size — a chrome whose box collapses fires a SIGWINCH into the running agent on every mouse-over, with no error and no red suite anywhere else',
+        geom !== null && chromeOut && same(before, during) && same(during, after),
+        JSON.stringify({ id: geom && geom.id, chromePos: geom && geom.chromePos, chromeOut, before, during, after }))
+    }
   }
 })

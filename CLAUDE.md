@@ -43,6 +43,16 @@ Four rules the whole product rests on — the long form of each is in
 its execution**. **A `note` is a Markdown FILE and nothing else is** — M187's sticky, text and
 frame are *canvas objects*, never notes; nothing is renamed in code.
 
+**The frame rule (M236).** A kind is **chromeless** — no header, content to the edge, controls
+on hover over a scrim — when the object IS its content: a `terminal`, and a `note` in its text
+and frame forms. Every other kind **keeps its header**, because each header carries a fact the
+body does not repeat (a state word, a count, a path, an address). The test is not how much
+chrome there is, it is *does removing this hide information*. The full list lives beside the
+rules in `styles.css`; a rule that is silently per-kind is how the frame drifted before M47.
+**A chromeless frame's chrome is ABSOLUTELY POSITIONED over the body, never a box that
+collapses** — a collapsing box refits xterm and fires a SIGWINCH into the running agent on
+every mouse-over, measured at 458→422→458px in M234, with no error and no red suite.
+
 **Four density layers** decide WHERE a fact goes: *rest* (name, kind, one meaningful state —
 never a zero-value statement), *contextual* (next action, blocker; opacity 0 → 1),
 *inspector* (configuration, provenance, outcomes), *deep detail* (logs, metrics, history).

@@ -612,3 +612,197 @@ with an existing panel plus a zoom. The rebaseline then wrote **exactly the two 
 and noticing the number was 28 when it should have been 2. This repo's own rule ("a golden
 changes on purpose or not at all") is exactly this, and the tooling's happy path is silent about
 it, so the count is now part of the procedure recorded above.
+---
+
+## Act III — the chromeless terminal (M234–M236)
+
+Build log: [`m234-m236-act3-chromeless.md`](m234-m236-act3-chromeless.md).
+Red-first evidence: [`m234-pure-red-evidence.md`](m234-pure-red-evidence.md).
+
+### M234 · the SIGWINCH check, red first
+
+The naive implementation (collapse the chrome's box at rest) was built **on purpose** and
+`chromeless.resize.1` measured what it does: the body went **458 → 422 → 458 px** across one
+mouse-over. Every one of those is an xterm refit and a SIGWINCH into the running agent. With the
+chrome absolutely positioned: 458 → 458 → 458.
+
+**The check was wrong three times before it measured anything**, which is now the run's pattern
+rather than its exception:
+
+1. It **threw** — a harness helper takes the `wc` — and a check that throws aborts the suite and
+   takes every check below it with it. `docs/verify-suites.md` names exactly this hazard.
+2. It was **vacuous**: it hovered a SELECTED panel, whose chrome shows at rest anyway, so the
+   hover changed nothing and it PASSED against the implementation it was written to catch.
+3. It needed a **MECHANISM arm** beside the EFFECT arm. Sizes alone can be satisfied by the
+   wrong thing; "the chrome is out of the flow" is what makes the hazard structurally
+   impossible, and "a real hover resized nothing" is what proves the rule was reached on a live
+   terminal rather than overridden elsewhere.
+
+`chromeless.paint.1` covers the lifted surface itself — M149's lesson applied to exactly the
+shape that went invisible for two versions: `elementFromPoint` at the `⋯` lands inside the
+chrome, the control is opacity 0 at rest and 1 on hover, and it keeps a real box and an
+accessible name at rest so a script and a keyboard reach it without hovering (M44).
+
+### M235 · the frame at rest
+
+**The scrim is the terminal's own ground.** The first cut faded from `--chrome-bg` — translucent
+glass — and the agent's first line printed straight through the panel's name: `claude — api`
+over `Reading src/server.ts`, neither readable. Painting the scrim in `--well` means the band
+reads as empty terminal rather than as an overlay on one, and text scrolls out from under the
+title the way a large-title header works everywhere else. What it obscures is the OLDEST visible
+row, never the newest.
+
+**Two Act I checks were spent by this milestone, and both said so in advance:**
+
+- `rim.paint.1` fell to **0.79** from **15.72** the moment the chrome was lifted, because
+  `.pf__chrome` draws the frame's specular edge and `.panel`'s own rim sits under the scrim. Its
+  M228 comment had named Act III as where it would matter. Fixed by keeping the chrome's lit top
+  edge and dropping only the bezel — the bezel drew a housing seam, and there is no seam now.
+- `well.paint.1` is **RETIRED**, with its reason written at its site rather than deleted
+  quietly: a chromeless terminal's body starts at the frame's own top edge, so there is no
+  housing to sink below and the recess would be drawn under the scrim. `--rim-inner` keeps its
+  other sites and `rim.1` still fails if no surface wears it.
+
+### M236 · the frame rule
+
+A kind is **chromeless** when the object IS its content (`terminal`; `note` in text and frame
+form) and **keeps its header** when the header carries a fact the body does not repeat — a state
+word, a count, a path, an address. The test is not how much chrome there is, it is whether
+removing it hides information. The per-kind list is in `styles.css` beside the rules it governs,
+and the rule plus the absolute-chrome hazard are in `CLAUDE.md`.
+
+### M235 · the gate's rejection, and the two regressions it did NOT find
+
+A fresh-context critic walked all 14 changed scenes. Its headline: **the name is readable** —
+5.9:1 in light, 7:1 in dark, no clipping — and **no non-terminal panel lost its header**. Three
+findings were acted on:
+
+1. **`group` — a dormant card's only rest line was scrimmed away.** `asleep — nothing recorded
+   before the last quit` measured **1.4:1** against its own panel. That sentence is the panel's
+   one meaningful state and the rest rule says it survives. **FIXED**: every chromeless rule is
+   now scoped `:has(.panel__slot)` — to a terminal actually showing a screen. A dormant terminal
+   renders a CARD, whose whole content is that copy, and a card keeps its header.
+2. **Dark-theme emphasis inversion.** The ghosted terminal row measured brighter (176) than the
+   title (160), so the eye landed on the text meant to be receding. **FIXED**: the resting title
+   is `--fg-2`, one step down from a full header rather than two.
+3. **Zero clearance under the name.** **FIXED** with `padding-bottom` on the absolute chrome —
+   which grows the scrim without moving a single layout box, so it costs no refit.
+
+**DECLINED / deferred to M242** (recorded, not silently dropped): the fade still ends mid-row
+rather than on a cell boundary — CSS cannot know the cell height — and ghost text can pass
+under the `⋯` button's lower edge when controls are visible.
+
+**Three scenes carry stale-golden drift that is NOT this change**, which the critic separated
+cleanly: `file-missing` (M202's work-card row), `vault` (`3 memories from repo`) and `header`
+(a SUBAGENTS count, `run ended`, a pid). More of the same pattern M225 and M228 found.
+
+### M234/M235 · the regression the gate could not see, and an old check caught
+
+`verify` came back with **`type.1`** red — a check from M49 about font metrics and pointer
+correction, not about chrome at all:
+
+```
+type.1 … {"cellBefore":{"h":18},"grew":{"h":25},"target":{"x":552.75,"y":129.5},"reached":false}
+```
+
+Lifting the chrome over the body put an invisible 36px bar across the top of every live
+terminal, and **a real click on the terminal's second row stopped reaching xterm.** All three
+checks written FOR this milestone passed while this was true.
+
+It took three attempts to fix, each teaching something:
+
+1. `pointer-events: none` on the chrome — **not enough**, because its children stayed live.
+2. Children inert until hover/focus/selection — **still not enough**: `elementFromPoint` runs
+   after a synthetic click has already moved the pointer, so the panel was hovered.
+3. **The cause was `.pf__title { flex: 1 1 auto }`** — right for a real header (it is what makes
+   the title the thing that gives when a frame narrows, `header.1`) and wrong over a terminal,
+   where it turns a short name into a bar-wide invisible hit target. Scoped to `flex: 0 1 auto`
+   for the chromeless case; `header.1` and the base rule are untouched.
+
+**The lesson is about the suite, not the CSS.** A four-year-old check about *font size* found a
+click regression that nothing written for this milestone could, because those checks tested that
+the new chrome WORKS and this one tested that the terminal STILL DOES.
+
+
+### M234 · the check that contradicted the fix
+
+`chromeless.paint.1` went red at the end of the act, and **the implementation was right and the
+check was wrong** — which took reading both to establish, because a red check is normally the
+other way round.
+
+Its first arm asserted that `elementFromPoint` at the `⋯` button's centre lands inside the
+chrome, and it measured that **at rest**. But the fix for the `type.1` regression established
+precisely the opposite contract at rest: the chrome takes no pointer events at all until the
+panel is hovered, focused or selected, so that a click on the terminal's second row reaches
+xterm. **The check as first written could only have been satisfied by the bug it sat next to.**
+It was written in the same hour as the naive chrome, and it outlived the reasoning that produced
+it by about twenty minutes.
+
+The arm did not move down a level, it moved to the state where it means something. The check now
+reads the same button at the same point in **both** states, and asserts that the answer is
+different in each:
+
+```
+chromeRest  {"opacity":"0","onTop":false,"hitsBody":true,"w":21,"h":24,"named":true}
+chromeHover {"opacity":"1","onTop":true, "hitsBody":false}
+```
+
+The pair IS the contract — a control nobody can see must not eat the cell under it, and a
+control you are pointing at must be on top of the body — and neither half alone says it.
+The rest arm also brings the `type.1` guarantee to the site of the rule it constrains: it was
+previously held only by a check about FONT METRICS, which found the regression by accident and
+would not have named it.
+
+### M234–M236 · the goldens, four written and one forced
+
+Four scenes changed within the harness's own judgement. A fresh-context comparison of each
+before/after pair was made from copies taken before the write (M233's corrected procedure), and
+**the write count was 4 where 4 were expected** — the check M233 added to this procedure after a
+fixture leak laundered 28 files under a green `61/61`.
+
+> `kinds` — the live terminal at top left has lost its header bar entirely: the name sits at low
+> emphasis over the first row with a small state dot at the right, the output starts at the
+> frame's own top edge, and the boxed `◇ idle` chip is gone in favour of the dot. That is correct
+> because it is the only panel in a fourteen-kind scene that changed — `tests`, `server.ts`,
+> `plan.md`, `toolbox`, the board card and the chat all keep their headers, which is the frame
+> rule (M236) visible in one frame rather than asserted in prose.
+
+> `kinds-dark` — the same, and it is the scene that proves the emphasis fix: `claude — api` reads
+> as the brightest thing in the band while `Reading src/server.ts` recedes under it and
+> `Editing src/server.ts` below is at full strength. The gate's dark-theme inversion (the ghosted
+> row measuring 176 against a 160 title) is not present.
+
+> `subagents` — the pointed-at terminal shows its full control set — `⋯`, the state dot, `fill`,
+> `✕` — floating over the first row with no bar behind them, and the panel beneath is unchanged.
+> That is correct because this is the scene that has to show that chromeless did not become
+> control-LESS: the controls are all still there, they simply have no housing when nobody wants
+> them.
+
+> `header` — the selected `claude — api (2)` terminal is a rounded rim, a name and a green `idle`
+> dot with the screen running to the edge, while the inspector beside it still carries the pid,
+> the changed file and the run — the facts a terminal's header never held. That is correct
+> because the rule is not "less chrome", it is "the header goes where the body already says it":
+> the rail, the inspector and the state dot say everything the bar used to.
+
+> `compact` — at the narrow breakpoint the terminal keeps the same treatment with nothing
+> reflowed or clipped, which is the arm this scene exists for; the frame gets narrower and the
+> name simply has less room, because the title's box now hugs its text (`flex: 0 1 auto`) rather
+> than spanning the bar.
+
+### M234 · the update path can DECLINE a golden the milestone changed
+
+`compact` was **forced**, and the reason is a gap in the tooling worth writing down.
+
+The suite failed it at **0.501%** against a 0.5% budget. The rebaseline run measured the same
+scene at **0.495%** — and `UPDATE_GOLDENS=1` keeps, byte for byte, any golden that still passes.
+That keep rule is deliberate and correct (it is what stopped one changed scene rewriting
+fifty-four goldens into a 14 MB commit), but it has a consequence nobody had met: **a scene the
+milestone genuinely changed, whose change lands within a hair of the budget, is declined by the
+updater and left permanently at the edge** — red on the runs that measure 0.501% and green on
+the runs that measure 0.495%, forever, on antialias noise.
+
+That is the flaky-golden shape M225 spent the act's opening removing, arriving through the door
+marked "unchanged". Forced by deleting the golden — a MISSING golden is always written — with
+its sentence above. There is no per-scene force flag, and adding one is filed rather than built:
+the deletion is explicit, it is visible in `git status`, and a flag would make forcing easy,
+which is the last thing it should be.

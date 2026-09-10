@@ -4894,3 +4894,153 @@ body {
 /* M178 (F.11). A label is a word; the sentence beside it is a note in the UI face, never caps. */
 .teammates-pane__note { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); margin-left: var(--sp-2); text-transform: none; letter-spacing: 0; }
 .panel__card-sentence { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
+
+/* ------------------------------------------------------------------ M236 --
+   THE FRAME RULE, with its exception list, written down once.
+
+   A kind is CHROMELESS when the object IS its content and the header would
+   only repeat what the body already says. A kind KEEPS ITS HEADER when the
+   header carries a fact the body does not: a state word, a count, a path, an
+   address. The test is not "how much chrome is there", it is "does removing
+   this hide information".
+
+   CHROMELESS          why
+     terminal          the content is the panel; six controls over live agent
+                       output was the loudest chrome in the app (M234/M235)
+     note (text)       already, since M187 — the precedent this extends
+     note (frame)      a named region is a boundary, not a card
+
+   KEEPS ITS HEADER    the fact the header carries that the body does not
+     chat              the state pill, the auto chip's count
+     review            the file count and the lane
+     file              the path and the byte/line count
+     toolbox           the skills count
+     work              the board state and the teammate
+     jira / github     the external id and its state
+     memory            the count
+     watcher           WHEN it runs, which nothing in the body says
+     skill             the shelf placement
+     workflow          the run verbs and the tab
+     browser           the real address, which is not the page's title
+     image             the source, and Replace
+     note (sticky)     the tint controls
+
+   A rule with an exception list is fine; a rule that is silently per-kind is
+   how the frame drifted before M47 unified it, which is why this list is
+   here and in CLAUDE.md rather than implied by which selectors exist. */
+
+/* ------------------------------------------------------------------ M234 --
+   THE CHROMELESS TERMINAL — A LIVE ONE. Every rule below is scoped with
+   `:has(.panel__slot)`, i.e. to a terminal that is actually showing a
+   screen. A dormant terminal renders a CARD instead, whose whole content is
+   a sentence or two of rest copy, and the first cut scrimmed that away: a
+   gate critic measured `asleep — nothing recorded before the last quit` at
+   1.4:1 against its own panel. That sentence is the panel's one meaningful
+   state, and the rest rule says it survives. A card keeps its header.
+
+   At rest a live terminal panel is a rounded glass rim, a
+   small state-toned dot, its name at low emphasis over the first row, and
+   content running to the edge. The controls come back on hover, focus or
+   selection, over a scrim that keeps the text under them legible.
+
+   THE CHROME IS ABSOLUTE, AND THAT IS THE WHOLE MILESTONE.
+
+   The obvious implementation is to collapse the chrome's BOX at rest —
+   `display: none`, or dropping it from the flow — and let it back in on
+   hover. That was built first, deliberately, and `chromeless.resize.1`
+   measured what it does: the body went 458px -> 422px -> 458px across one
+   mouse-over. Every one of those is a refit, and every refit is a SIGWINCH
+   into the running agent. A cursor crossing a panel would have sent a resize
+   storm to a live Claude session, with no error, no exception, and every
+   other suite still green.
+
+   Absolutely positioned, the chrome is out of the flow: the body owns the
+   full block size at all times, hovering changes opacity and nothing else,
+   and xterm never hears about it. `.pf__body` is still never transformed
+   (frame.2 / frame.3) — this moves the CHROME, not the body.
+
+   M44's reach rule is untouched: the box, the name, the tab order and every
+   aria-label survive, because nothing here is display: none. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* THE SCRIM IS THE TERMINAL'S OWN GROUND, and that is the whole trick.
+     A --chrome-bg gradient was the first cut and it did not work: --chrome-bg
+     is translucent glass, so the agent's first line showed THROUGH the title
+     and the two occupied the same band. `claude — api` printed straight over
+     `Reading src/server.ts` and neither could be read.
+     Starting from --well — the colour the terminal is already painting —
+     means the band under the chrome reads as empty terminal rather than as a
+     tinted overlay laid on top of one: no seam, no second material, and the
+     title simply sits in space. The text does not disappear, it scrolls out
+     from under the title the way a large-title header works everywhere else,
+     and what it obscures is the OLDEST visible row, never the newest. */
+  background: linear-gradient(to bottom, var(--well) 0%, var(--well) 62%, transparent 100%);
+  /* CLEARANCE UNDER THE NAME. The chrome is absolute, so padding here grows
+     the SCRIM without moving a single layout box — no refit, no SIGWINCH.
+     Without it the name's descenders sat directly on the next row's
+     ascenders and the two read as colliding rather than layered (the Act III
+     gate critic measured zero gap). This buys about half a row of space and
+     lengthens the fade over it. */
+  padding-bottom: var(--sp-5);
+  border-bottom: 0;
+  /* The BEZEL goes — it drew the seam where a housing met a screen, and there
+     is no seam now — but the LIT TOP EDGE stays. Dropping the whole
+     box-shadow was the first cut, and rim.paint.1 caught it immediately: the
+     frame's specular edge measured 0.79 where it had been 15.72, because the
+     chrome is what draws it and .panel's own rim sits UNDER the chrome's
+     scrim. That check exists for precisely this milestone; its comment said
+     so in M228 and it collected. */
+  box-shadow: var(--rim-top);
+}
+/* NO SEPARATE WELL RECESS on a chromeless terminal. --rim-inner sinks a
+   screen into a housing; here the frame IS the housing, the body starts at
+   the frame's own top edge, and the recess would be drawn underneath the
+   chrome's scrim where nobody can see it. The frame's rim above does the
+   whole job. (--rim-inner keeps its other sites; rim.1 still requires it to
+   be worn.) */
+.pf--kind-terminal:has(.panel__slot) .panel__slot::after { box-shadow: none; }
+/* The body starts at the frame's top, so the well rounds all four corners
+   rather than the bottom two. */
+.pf--kind-terminal .panel__slot { border-radius: var(--r-lg); }
+/* AT REST THE CHROME IS NOT THERE, INCLUDING FOR THE POINTER — and that is
+   the chromeless contract, not a workaround.
+   Lifting the chrome over the body put an invisible 36px bar across the top
+   of every live terminal, and `type.1` caught the cost immediately: a real
+   click on the terminal's second row stopped reaching xterm. The bar was
+   eating clicks meant for the cells underneath it. Making only the header
+   inert did not fix it either — `.pf__title` is `flex: 1 1 auto`, so its box
+   spans the bar even though its text does not.
+   So the whole chrome, children included, takes no pointer events until the
+   panel is hovered, focused or selected — the same three conditions that
+   make it VISIBLE. A control you cannot see cannot be clicked, and the cells
+   underneath keep every click. Once you point at the panel the controls are
+   live and the title is a drag handle again, which is the only moment a
+   person could have wanted either. M44's reach rule is untouched: nothing is
+   display:none, the tab order is intact, and :focus-within covers the
+   keyboard route. */
+.pf--kind-terminal:has(.panel__slot) .pf__chrome,
+.pf--kind-terminal:has(.panel__slot) .pf__chrome > * { pointer-events: none; }
+.pf--kind-terminal:has(.panel__slot):hover .pf__chrome > *,
+.pf--kind-terminal:has(.panel__slot):focus-within .pf__chrome > *,
+.panel--selected.pf--kind-terminal:has(.panel__slot) .pf__chrome > * { pointer-events: auto; }
+/* The name at REST: quieter than a header's, but it must still LEAD. A gate
+   critic measured the first cut at --fg-3 and found the ghosted terminal row
+   beneath it reading BRIGHTER (176) than the title (160) in the dark theme —
+   the eye landed on the text that was supposed to be receding, which inverts
+   the whole point. --fg-2 is one step down from a full header and still
+   clears anything the scrim leaves behind. */
+/* The title's BOX hugs its text here, instead of `flex: 1 1 auto` spanning
+   the bar. That flex is right for a real header — it is what makes the title
+   the thing that gives when a frame narrows (header.1) — but over a terminal
+   it makes a short name into a wide invisible hit target, and `type.1`
+   measured the consequence: a click two rows down, well to the right of the
+   text, still landed on the title instead of the cell. The base rule and
+   header.1 are untouched; this is the chromeless case overriding it. */
+.pf--kind-terminal:has(.panel__slot) .pf__title { flex: 0 1 auto; color: var(--fg-2); transition: color var(--dur-1) var(--ease); }
+.pf--kind-terminal:has(.panel__slot):hover .pf__title,
+.pf--kind-terminal:has(.panel__slot):focus-within .pf__title,
+.panel--selected.pf--kind-terminal:has(.panel__slot) .pf__title { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .pf--kind-terminal .pf__title { transition: none; } }
