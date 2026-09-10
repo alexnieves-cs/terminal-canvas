@@ -42,5 +42,11 @@ module.exports = {
      exists and starter.plan.1 fails by name instead of aborting the suite. */
   ...((() => { try { return require('../src/shared/starter.ts') } catch { return {} } })()),
   /* M184. The run's outcome per block, pure over the run's own record. */
-  ...((() => { try { return require('../src/shared/run-outcome.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/run-outcome.ts') } catch { return {} } })()),
+  /* M230. Edge activity: the six states an edge can be in, as a pure reducer
+     over signals that already exist on the wire. Inside a try like its two
+     neighbours, so this bundle still builds before the module exists and the
+     checks fail BY NAME instead of aborting the suite — a check that THROWS
+     takes every check below it with it, and its RED is then not evidence. */
+  ...((() => { try { return require('../src/shared/edge-activity.ts') } catch { return {} } })())
 }

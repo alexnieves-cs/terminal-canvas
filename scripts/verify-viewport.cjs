@@ -2374,6 +2374,135 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// ---------------------------------------------------------------------------
+// M230 — edge.flow.1/.2/.3. EDGE ACTIVITY, the pure model.
+//
+// An edge animates ONLY when something crosses it. At rest it is a quiet line
+// with no motion. That was chosen over a continuously-tinted "health" grammar
+// deliberately: ambient motion on every edge contradicts the rest rule and has
+// no honest reduced-motion degradation.
+//
+// Six states, each from a signal that ALREADY EXISTS on the wire — nothing
+// here invents a new subscription:
+//   rest     no signal
+//   armed    a run is live and both endpoints are in its component
+//   firing   useHandoff recorded { kind: 'fired' } for the source
+//   arrived  a join arrival landed on this edge
+//   waiting  the target is a join with sources still owed, and THIS edge has
+//            already arrived (an unarrived edge stays at rest — the brief:
+//            "armed edges breathe; unarrived edges stay at rest")
+//   blocked  the target's state word is `needs you`
+//
+// The reducer is pure and keyed `from:to`, the automation key every surface
+// in this app already shares.
+{
+  const fn = typeof V.edgeActivity === 'function' ? V.edgeActivity : null
+  const edges = [{ from: 'a', to: 'c' }, { from: 'b', to: 'c' }, { from: 'c', to: 'd' }]
+  const base = { edges, armed: new Set(), fired: new Map(), arrived: new Map(), waitingFor: new Map(), blocked: new Set(), now: 1000 }
+  const at = (m, k) => (m && m.get(k) ? m.get(k).kind : 'no-entry')
+  const run = (over) => (fn === null ? null : fn({ ...base, ...over }))
+
+  // .1 — an edge with NO signal is `rest`, and every declared edge gets an
+  //      answer. "No entry in the map" and "rest" are two different facts to a
+  //      caller and only one of them is true here.
+  const quiet = run({})
+  ok('edge.flow.1 every declared edge answers, and an edge with no signal at all is rest — never a missing entry',
+    quiet !== null && quiet.size === 3 && ['a:c', 'b:c', 'c:d'].every((k) => at(quiet, k) === 'rest'),
+    JSON.stringify(quiet === null ? 'no edgeActivity export' : [...quiet].map(([k, v]) => [k, v.kind])))
+
+  // .2 — PRECEDENCE, and it is not arbitrary. blocked outranks everything: if
+  //      the target is asking a person a question, nothing is crossing that
+  //      edge, and a travelling packet would be a lie. Then firing (the thing
+  //      that is happening now), then arrived, then waiting, then armed.
+  const fired = run({ armed: new Set(['a', 'c']), fired: new Map([['a:c', 900]]) })
+  const blocked = run({ armed: new Set(['a', 'c']), fired: new Map([['a:c', 900]]), blocked: new Set(['c']) })
+  const arrived = run({ armed: new Set(['a', 'c']), arrived: new Map([['a:c', 950]]) })
+  const armedOnly = run({ armed: new Set(['a', 'c']) })
+  ok('edge.flow.2 precedence: blocked outranks a live fire (a packet crossing into a panel that is asking a question would be a lie), firing outranks arrived, and armed is the floor above rest',
+    fired !== null && at(fired, 'a:c') === 'firing' && at(blocked, 'a:c') === 'blocked' &&
+      at(arrived, 'a:c') === 'arrived' && at(armedOnly, 'a:c') === 'armed' &&
+      at(armedOnly, 'c:d') === 'rest',
+    JSON.stringify({ fired: at(fired, 'a:c'), blocked: at(blocked, 'a:c'), arrived: at(arrived, 'a:c'), armed: at(armedOnly, 'a:c'), outsideComponent: at(armedOnly, 'c:d') }))
+
+  // .3 — THE JOIN. c waits on a and b; a has arrived, b has not. The arrived
+  //      edge BREATHES (waiting); the unarrived one does NOT — it stays
+  //      static. Collapsing the two would hide which source is holding the
+  //      join up, which is the only question a waiting join raises.
+  //
+  //      AN AMBIGUITY, RESOLVED HERE. The brief says "armed edges breathe;
+  //      unarrived edges stay at rest", and `rest` is also the name of a
+  //      state in the same table. Read literally, b:c would be `rest` — but
+  //      b:c runs between two panels inside a LIVE run, and `rest` means "no
+  //      signal at all". Calling it rest would contradict `armed`'s own
+  //      definition and would draw the edge as though the run were not
+  //      running through it.
+  //
+  //      So "stay at rest" is read as "stay STILL", which is what the
+  //      sentence is contrasting with "breathe": b:c is `armed` — lifted and
+  //      static. The user still gets the answer, and gets it more precisely:
+  //      breathing = delivered and waiting, lifted-static = live but has not
+  //      delivered, quiet = not in this run at all. Three states where the
+  //      literal reading offered two.
+  // The arrival is 500 ms old — PAST its flash. That matters: `arrived` and
+  // `waiting` are sequential, not competing. The edge reports the arrival for
+  // EDGE_ARRIVE_MS and then settles into breathing while the join is still
+  // owed. The first cut of this check used a 50 ms-old arrival and read
+  // `arrived`, which was the model behaving correctly and the FIXTURE asking
+  // the wrong moment. `d` is in the armed set too, because a run's component
+  // is the whole chain — leaving it out and then expecting `c:d` to be armed
+  // was the same mistake twice in one line.
+  const join = run({ armed: new Set(['a', 'b', 'c', 'd']), arrived: new Map([['a:c', 500]]), waitingFor: new Map([['c', ['b']]]), now: 1000 })
+  const wf = join && join.get('a:c') && join.get('a:c').waitingFor
+  ok('edge.flow.3 a join names who it waits for: the delivered edge breathes and says which sources are owed, an undelivered edge inside the run is lifted but STILL, and an edge outside the run is quiet — three readings, not two',
+    join !== null && at(join, 'a:c') === 'waiting' && Array.isArray(wf) && wf.join(',') === 'b' &&
+      at(join, 'b:c') === 'armed' && at(join, 'c:d') === 'armed' &&
+      // and an edge genuinely outside the run is still quiet, so the three
+      // readings stay distinguishable rather than collapsing into two
+      at(run({ arrived: new Map([['a:c', 500]]), waitingFor: new Map([['c', ['b']]]), now: 1000 }), 'b:c') === 'rest',
+    JSON.stringify(join === null ? 'no edgeActivity export' : [...join].map(([k, v]) => [k, v.kind, v.waitingFor])))
+
+  // .4 — EXPIRY, and the absent/malformed/unknown rule. A fire is a MOMENT:
+  //      once its window has passed the edge falls back to what it otherwise
+  //      is, so a canvas left open for an hour is not still animating a fire
+  //      from breakfast. A malformed entry costs that ENTRY, never the
+  //      collection — a NaN timestamp must not take the other five edges with
+  //      it — and a signal naming an edge that does not exist is ignored
+  //      rather than invented into the map.
+  const stale = run({ armed: new Set(['a', 'c']), fired: new Map([['a:c', 0]]), now: 999999 })
+  const junk = run({ fired: new Map([['a:c', Number.NaN], ['b:c', 900]]), now: 1000 })
+  const ghost = run({ fired: new Map([['zz:qq', 900]]) })
+  ok('edge.flow.4 a fire expires back to what the edge otherwise is; a malformed timestamp costs that entry alone; a signal for an edge that does not exist is ignored, never invented',
+    stale !== null && at(stale, 'a:c') === 'armed' &&
+      junk !== null && at(junk, 'a:c') === 'rest' && at(junk, 'b:c') === 'firing' &&
+      ghost !== null && ghost.size === 3 && at(ghost, 'zz:qq') === 'no-entry',
+    JSON.stringify({ stale: at(stale, 'a:c'), malformed: at(junk, 'a:c'), sibling: at(junk, 'b:c'), ghostSize: ghost && ghost.size }))
+
+  // .5 — the travel parameter. `firing` carries t in [0, 1] so the layer can
+  //      place the packet with the SAME analytic bezier the label already
+  //      uses; the reducer owns the clock so the layer owns no state.
+  const t0 = run({ fired: new Map([['a:c', 1000]]), now: 1000 })
+  const tMid = run({ fired: new Map([['a:c', 1000]]), now: 1000 + Math.floor(V.EDGE_FIRE_MS / 2) })
+  const tEnd = run({ fired: new Map([['a:c', 1000]]), now: 1000 + V.EDGE_FIRE_MS - 1 })
+  const tOf = (m) => (m && m.get('a:c') && m.get('a:c').kind === 'firing' ? m.get('a:c').t : null)
+  ok('edge.flow.5 a firing edge carries t in [0,1] across EDGE_FIRE_MS, so the layer places the packet with the same analytic bezier the label already uses and keeps no clock of its own',
+    typeof V.EDGE_FIRE_MS === 'number' && V.EDGE_FIRE_MS > 0 &&
+      tOf(t0) === 0 && tOf(tMid) !== null && tOf(tMid) > 0.4 && tOf(tMid) < 0.6 &&
+      tOf(tEnd) !== null && tOf(tEnd) > 0.9 && tOf(tEnd) < 1,
+    JSON.stringify({ fireMs: V.EDGE_FIRE_MS, t0: tOf(t0), tMid: tOf(tMid), tEnd: tOf(tEnd) }))
+
+  // .6 — nothing armed means nothing to animate, and the layer needs to know
+  //      that WITHOUT walking the map every frame: no rAF at all while
+  //      nothing is armed is the budget rule, and this is the predicate it
+  //      hangs on.
+  const anim = typeof V.edgesAnimate === 'function' ? V.edgesAnimate : null
+  ok('edge.flow.6 edgesAnimate answers whether ANY edge needs a frame, so the layer can run no rAF at all while nothing is moving',
+    anim !== null && anim(run({})) === false && anim(run({ armed: new Set(['a', 'c']) })) === false &&
+      anim(run({ fired: new Map([['a:c', 1000]]), now: 1000 })) === true &&
+      anim(run({ armed: new Set(['a', 'b', 'c', 'd']), arrived: new Map([['a:c', 500]]), waitingFor: new Map([['c', ['b']]]), now: 1000 })) === true,
+    JSON.stringify(anim === null ? 'no edgesAnimate export' : {
+      quiet: anim(run({})), armed: anim(run({ armed: new Set(['a', 'c']) })), firing: anim(run({ fired: new Map([['a:c', 1000]]), now: 1000 })) }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
