@@ -1,5 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
+import { parseImportedNote } from './imported-note'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -879,7 +880,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   return chat
 }
 
-function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
+/** Exported for `verify:notes notes.gate.3` — the record's on-disk arms are checked where they are parsed. */
+export function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped file panel ${id}: source was not an object`)
     return null
@@ -904,7 +906,13 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // type says cannot exist.
   const checklist = parseChecklistView(raw.checklist)
   if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
+  // M250. A malformed import record drops the RECORD and keeps the panel, and
+  // is never coerced into a reviewed one — dropping it makes the note an
+  // ordinary note, which is the one loss a person can see (the banner is gone)
+  // rather than a silent "someone read this".
+  const imported = parseImportedNote(raw.imported)
+  if (imported.kind === 'malformed') warnings.push(`file panel ${id}: malformed imported-note record dropped`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}) }
 }
 
 

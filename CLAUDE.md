@@ -117,7 +117,7 @@ teammate:choose-place routine:list routine:save routine:delete routine:run shelf
 shelf:save plugin:details skill:write skill:create skill:rename skill:delete skill:trail
 browser:read preview:discover preview:capture asset:put asset:choose node:fetch
 portable:export portable:import board:lane board:lane-status board:open-pr board:comment-pr
-board:repositories update:check image:read starter:prepare pty:data pty:exit edit:copy
+board:repositories update:check image:read starter:prepare docx:import pty:data pty:exit edit:copy
 edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:spawn
 preset:default preset:capture agent:state attention:jump settings:changed spawn:open-sheet
 agent:event watcher:state vault:changed session:live session:recover subagent:state

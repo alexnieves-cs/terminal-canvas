@@ -34,6 +34,7 @@ engineer could get wrong; for the full blow-by-blow of any suite, read that suit
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — Claude Code project-directory slug mapping, … → full text: `### verify:subagent` under Suite details. |
 | `verify:github` | plain node | 6 checks against `main/github-client.ts` over a FAKE broker with recorded GitHub bodies: the no-credential arm sorted by the broker's CODE (never its sentence), two GET calls through the broker with the panel id, the `owner/repo#N` mapping with a PR deduped across both lists and its assignee never its author, 401 rejected against 403 unavailable with GitHub's own message, a truncated answer named, the 50-item page and a search total past the page each a note, control bytes stripped from a body before it can reach a terminal. |
 | `verify:file` | plain node | 83 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory with a SPACE in it (this repo's costliest silent … → full text: `### verify:file` under Suite details. |
+| `verify:notes` | plain node | M250's rich note model and .docx import — round trip as BUFFERS, the loss report as numbers, the docx compared byte for byte before and after. → `## M250 — rich notes and .docx import` below. |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synthesised (never the developer's real `~/.claude`, … → full text: `### verify:toolbox` under Suite details. |
 | `verify:usage` | plain node | 25 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator. **2/3** are one check in two halves: a chunk ending mid-record must return no entry and carry the fragment forward (2), and that carry must complete on the next chunk landing EXACTLY once (3) — 2 alone passes against an implementation that never consumes the fragment (silently losing the turn later), 3 alone passes against one that double-counts it. **10** is the whole four-token-class model's reason to exist: a cache READ must cost less than the same count of FRESH input — its own fixture (cache dominating input by ~60,000x) is satisfied just as well by a price table with the two rates TRANSPOSED, since it only proves a cache-heavy total costs *something*. **11** is `costOf`'s asymmetry: an UNKNOWN model returns `undefined`, never `0` — a zero renders a confident "$0.00" beside a visibly-working agent. **18** is the dedupe nothing else in the repo could catch: a read that adds nothing must return `undefined` rather than a fresh, equal object, or the Cost section re-announces an unchanged total every tick (invisible as anything but heat). **19** is `resetIfShrunk`: a transcript that SHRANK (truncated or replaced) resets the panel's whole state rather than reading from a stale offset into garbage. |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so nothing here reads this machine's real process list, the same injected-dependency trade `review-engine.ts` and `credential-store.ts` make. **2** is why aggregation is RECURSIVE: a panel's pid is a shell or a tmux client, and the agent doing the work is its descendant, so a non-recursive sum reports ~0% CPU beside a fan spinning at full speed. **4** is the one worth knowing: the canvas total folds the UNION of every tree's pids, never the sum of the panel figures, so two targets where one is an ancestor of the other cannot make the canvas count one process twice. **5** is the asymmetry `verify:usage` 11 already states for an unknown model, reached by a second door — an absent root yields NO panel entry rather than a zero-valued one, since "0.0% CPU" beside a live agent is a confident wrong answer while a missing row is an honest one. **6/7** are the two ways this must stay cheap and quiet: an empty target list skips the subprocess entirely, and a `ps` failure returns an empty snapshot rather than REJECTING the invoke (the renderer then keeps its prior reading — a process-table race is the ordinary case, not an error). |
@@ -544,6 +545,26 @@ its lane is left DORMANT on purpose: a restored terminal has no live cwd and no 
 and the check's first run found it silently out of its task. `task.related.1`, `task.far.1` and
 `task.arrange.1` share one fixture over a REAL linked worktree, because the far overview's
 `ready to review` and `1 file changed` must come from a real fork diff.
+
+## M250 — rich notes and .docx import
+
+`verify:notes` is plain node, and every check in it compares BYTES or NUMBERS, never a rendering,
+because every property it guards fails silently. `notes.roundtrip.1` runs the corpus in
+`scripts/fixtures/md-corpus/` plus a CRLF, a mixed-ending and a no-final-newline variant of each
+file MADE IN THE CHECK — a committed CRLF fixture is one `core.autocrlf` away from being LF on the
+next checkout, and the check would then pass against the bug it exists for. `notes.roundtrip.2`
+is the construction behind it (the blocks tile the file, no byte between or outside them);
+`notes.roundtrip.3` compares the bytes before and after an edited block as Buffers. `notes.edit.1`
+is the refusal rule: an edit whose bytes would not read back as the same block (a paragraph
+becoming a heading, a blank line splitting it, inline HTML, a list item growing a nested list) is
+refused with a reason. `docx.fixture.1` rebuilds `scripts/fixtures/sample.docx` from
+`build-sample-docx.cjs` and compares it to the committed bytes, so the fixture is reviewable as
+source; `docx.loss.1` pins the report as numbers against constructs the builder writes on purpose;
+`docx.readonly.1` compares the docx's bytes and mtime after an import; `docx.create.1` imports
+three times and asserts neither existing note was touched. The fixture directory has a SPACE in it.
+mammoth and jszip are EXTERNAL in the suite's esbuild bundle, resolved from node_modules exactly as
+the main bundle's `externalizeDepsPlugin` resolves them.
+
 ## Suite details
 
 The full text of every table cell too long to grep usefully. Each heading is the suite's

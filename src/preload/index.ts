@@ -383,6 +383,9 @@ const bridge: CanvasBridge = {
     put: (req) => ipcRenderer.invoke(IPC.ASSET_PUT, req),
     choose: () => ipcRenderer.invoke(IPC.ASSET_CHOOSE)
   },
+  docx: {
+    import: (req) => ipcRenderer.invoke(IPC.DOCX_IMPORT, req)
+  },
   node: {
     fetch: (req) => ipcRenderer.invoke(IPC.NODE_FETCH, req)
   },

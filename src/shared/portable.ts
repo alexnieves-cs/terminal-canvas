@@ -1,4 +1,5 @@
 import { redactSecrets } from './redact'
+import { parseImportedNote } from './imported-note'
 import type { PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 
@@ -133,7 +134,9 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
     const file = raw.source as import('./file-panel').FileSource
     // References travel, accepted local text and execution links do not. An imported
     // checklist must be read before it can edit a file on this machine or send a task.
-    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }) } } as unknown as PersistedPanel
+    // M250. An imported note's record travels WITHOUT `reviewed`: that a person
+    // on this machine read it says nothing about the person who opens the file.
+    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.imported === undefined ? {} : { imported: { from: scrub(file.imported.from, tally), dropped: file.imported.dropped } }) } } as unknown as PersistedPanel
   }
   // A terminal: the command it was ASKED for, and nothing the process became.
   const command = typeof raw.command === 'string' ? scrub(raw.command, tally) : undefined
@@ -247,7 +250,15 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
     const raw = next as unknown as Record<string, unknown>
     // Import is a gate too: a hand-authored portable file can carry fields our
     // exporter would never write. Strip acceptance and execution links here.
-    if (next.kind === 'file' && next.source?.checklist !== undefined) next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), checklist: {} }
+    // Rebuilt FIELD BY FIELD, never spread: a hand-authored file can carry keys
+    // our exporter would never write. M250: it can also claim `reviewed: true`
+    // — nobody here read it — so the import record is re-parsed (a malformed
+    // one is dropped) and rebuilt without `reviewed`, behind its gate.
+    if (next.kind === 'file' && next.source !== undefined && (next.source.checklist !== undefined || 'imported' in next.source)) {
+      const src = next.source
+      const parsed = parseImportedNote(src.imported)
+      next.source = { path: src.path, ...(src.prose === true ? { prose: true } : {}), ...(src.checklist === undefined ? {} : { checklist: {} }), ...(parsed.kind === 'view' ? { imported: { from: parsed.view.from, dropped: parsed.view.dropped } } : {}) }
+    }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }
       raw.workflow = { templateId: templateIds.get(wf.templateId) ?? wf.templateId }

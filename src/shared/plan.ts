@@ -69,7 +69,10 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.
-  'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand'
+  'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand',
+  // M250. The import READS a path the caller names and writes a note beside
+  // it — a teammate's plan does not choose which files this app reads.
+  'import-docx'
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {

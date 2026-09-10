@@ -4305,3 +4305,65 @@ answers `ran`. M204's first Arrange did exactly that and framed the empty destin
 `tidyPanels`, onSpawn and every drag follow the protocol; the agent door's `tidy` executor arm
 (M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
 the D08 build log.
+
+**A note's blocks TILE the file, and only `\n`/`\r\n` end a line (`md-blocks.ts`'s `splitLines`,
+M250).** An editor that splits on `/\r?\n/` and joins with `\n` has already rewritten every CRLF
+note, every lone `\r`, and the missing final newline before the person types a character — and the
+save that follows is a diff over the whole file that looks like theirs. Each block's `source` is
+its exact bytes, blank runs are blocks too, so `serializeBlocks(parseBlocks(t)) === t` is true by
+construction rather than by care (`verify:notes notes.roundtrip.1–2`).
+
+**A rich edit is accepted only if the WHOLE note reads back the same (`md-blocks.ts`'s
+`editBlock`, M250).** Re-serializing a model can change what the bytes mean: a paragraph whose text
+now starts `# ` is a heading, a blank line in it is two blocks, a `<span>` is inline HTML the model
+cannot hold, a list item with a newline becomes a nested list. A list of such cases drifts from the
+parser the first time either changes. So the edit is spliced in, the document parsed again, and it
+is refused unless every other block is byte-identical and the edited one is the same kind holding
+the same model. The rich editor then reopens that block as SOURCE holding what was typed — a
+refusal never loses typing (`RichNoteEditor.tsx`'s `finish`).
+
+**Rich mode's Save FLUSHES the block being typed in (`FileNode.tsx`'s `save`, `RichNoteEditor`'s
+`handleRef`, M250).** Save is a mousedown with `preventDefault` — shellControl's rule, so focus
+never moves — which means the active block never blurs and its typing never reaches `draft`. A save
+from Rich wrote the note minus its last paragraph with no error. `save` calls `flush()` and writes
+the string it answers, not the `draft` in its closure. And `flush()` is THREE-state: when the active
+block's edit is refused the block reopens as source holding what was typed, and a save that went
+ahead would close the draft, unmount the editor and lose that typing with the refusal never seen —
+so a refused flush stops the save and the Source toggle (M250's critic, finding 1).
+
+**The .docx size cap is on the COMPRESSED file; the inflated size is capped separately
+(`docx-import.ts`'s `analyzeDocx`, M250's critic).** A package that inflates to gigabytes is small
+on disk, and both jszip and mammoth unpack it in MAIN, the process that owns every PTY. The central
+directory's declared sizes are summed before a byte is inflated (`docx.refuse.2`).
+
+**An imported note's `reviewed` has one writer and is stripped at every door out
+(`imported-note.ts`, `portable.ts`'s export and `remapPortable`, `layout-schema.ts`'s
+`parseFileSource`, M250).** `reviewed: true` says a PERSON read converted text. Carried in a
+portable file it would say that about someone who never saw it, so export drops it and import
+strips a hand-authored one; a malformed record is dropped, never coerced, because coercing `"yes"`
+would be a parser deciding someone read something. The only writer is Canvas's `setImportReviewed`,
+reached from the note's "I've read it". While unreviewed the note does not auto-enter its editor,
+✎ is disabled by the gate sentence, and the agent `read` verb refuses it by the same sentence.
+
+**The .docx loss report is counted from the OOXML, never from mammoth's output
+(`docx-import.ts`'s `analyzeDocx`, M250).** mammoth drops comments without a message, SHOWS `w:ins`
+and silently drops `w:del`, and renders a merged cell as a `colspan` a pipe table cannot say — its
+silence is exactly the loss. The regexes end in `\b` because `<w:comments`, `<w:delText` and
+`<w:moveFromRangeStart` are not comments or changes, and a table is complex by its top-level
+`w:tbl` span, so a nested table counts its parent once.
+
+**`sample.docx` rebuilds byte-identically only with `createFolders: false`
+(`scripts/fixtures/build-sample-docx.cjs`, M250).** Without it jszip adds `word/` and `_rels/`
+directory entries stamped with the CURRENT time, and two builds differ at byte ~348 — the fixture
+then cannot be reviewed as source and `docx.fixture.1` could never be written.
+
+**M244's `object.create.*` rows sit ABOVE `spawn.sheet`, and moving them is not a free fix
+(`commands.ts`'s `buildCommands`, measured in M250).** M244 made `object.create.terminal` the first
+row of the section M65's `sheet.1` pins to the sheet, so `verify:palette sheet.1` has been red since
+7a3323d0. Moving the rows below the sheet turns `sheet.1` green but makes
+`verify:panels:agents search.1` fail at SEEDING (the reloaded layout never shows its two
+terminals) in two of two runs, and the part runs at 99% of its watchdog; with M244's order restored
+and nothing else changed, seeding works and the part takes 78%. The mechanism was not found, so
+M250 left the order alone and `sheet.1` red, and handed it to the integrator. The same commit's CSS
+literals were mapped onto the `--sp-*`/`--t-*`/`--r-*` tokens (`verify:styles` 4–6), and its
+README row was added (`verify:meta milestones.1`).

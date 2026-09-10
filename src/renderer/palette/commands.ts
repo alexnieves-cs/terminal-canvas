@@ -464,6 +464,8 @@ export interface PaletteActions {
   prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M250. A .docx into a new, unreviewed note beside it; no path opens the system's chooser. */
+  importDocx(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -2340,6 +2342,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // a SEPARATE workspace and starts nothing.
   out.push({ id: 'portable.export', title: 'Export this canvas…', subtitle: 'one file: the objects, the workflows, secrets scrubbed and every omission named', group: 'canvas', searchText: 'export canvas file share portable save send', run: () => { void actions.exportCanvas() } })
   out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
+  // M250. A literal id, for closure.v9.1's text read. The refusal (a docx the
+  // converter cannot read, a note already there) lands on the feedback line.
+  out.push({ id: 'note.import-docx', title: 'Import a Word document…', subtitle: 'a new Markdown note beside the .docx — what was dropped is named, and the note waits to be read', group: 'canvas', searchText: 'import word docx document convert note markdown', run: () => { void actions.importDocx().then((r) => { if (r.kind === 'refused') actions.say(r.reason) }) } })
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state

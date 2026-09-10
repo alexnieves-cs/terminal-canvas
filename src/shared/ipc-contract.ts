@@ -701,7 +701,14 @@ export const IPC = {
   /** M181. An image panel's bytes as a data URL, read in main by magic number under a cap; four arms, never rejects. */
   IMAGE_READ: 'image:read',
   /** M181. The starter's two files under userData/starter, written once; answers both paths. */
-  STARTER_PREPARE: 'starter:prepare'
+  STARTER_PREPARE: 'starter:prepare',
+  /**
+   * M250. A .docx becomes a NEW Markdown note beside it, converted in main
+   * (mammoth + jszip are main-only dependencies). With no path, main opens the
+   * system's own chooser filtered to .docx. The docx is only read; the note is
+   * written through createFile's `wx`, so nothing is overwritten.
+   */
+  DOCX_IMPORT: 'docx:import'
 } as const
 
 /**
@@ -1812,6 +1819,10 @@ export interface CanvasBridge {
   asset: {
     put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
     choose(): Promise<string | null>
+  }
+  /** M250. Import one .docx as a new, unreviewed note; never rejects. */
+  docx: {
+    import(req: { path?: string }): Promise<import('./imported-note').DocxImportResult>
   }
   /**
    * M188. The fetch node's one request. A GET and only a GET — any other

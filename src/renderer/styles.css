@@ -3264,6 +3264,46 @@ body {
   padding: var(--sp-4);
 }
 
+/* M250. The note's Source | Rich toggle and the rich editor. The editor is a
+   VIEW over the same draft the textarea edits, so it takes the same ground and
+   measure; nothing here changes the panel's box (a note is not a terminal, but
+   the frame rule's "never a box that collapses" costs nothing to keep). */
+.file-node__modes { display: flex; gap: var(--sp-1); padding: 0 var(--sp-4) var(--sp-2); }
+.file-node__modes button { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); background: transparent; color: var(--fg-2); border-radius: var(--r-sm); }
+.file-node__modes button[aria-pressed="true"] { background: var(--s-3); color: var(--fg); }
+/* The loss report is CONTEXTUAL (opacity 0 → 1 with the frame), the rest rule's layer for "what this import could not carry". */
+.file-node__dropped { opacity: 0; transition: opacity var(--dur-1) var(--ease); font-size: var(--t-xs); color: var(--amber, var(--fg-2)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.pf:hover .file-node__dropped, .pf:focus-within .file-node__dropped, .panel--selected .file-node__dropped { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .file-node__dropped { transition: none; } }
+.file-node__import { margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3); border: 1px solid var(--line); background: var(--s-2); display: flex; flex-direction: column; gap: var(--sp-2); }
+.file-node__import p { margin: 0; }
+.rich-note { flex: 1; min-height: 0; overflow: auto; background: var(--s-1); color: var(--fg); padding: var(--sp-2) var(--sp-4) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-sm); line-height: var(--lh-body); }
+.rich-note__tools { display: flex; flex-wrap: wrap; gap: var(--sp-1); position: sticky; top: 0; background: var(--s-1); padding-bottom: var(--sp-2); z-index: 1; }
+.rich-note__tools button, .rich-note__block button { font-size: var(--t-xs); }
+.rich-note__link-form { display: flex; gap: var(--sp-1); }
+.rich-note__block { position: relative; padding: var(--sp-1) var(--sp-2); margin: 0 calc(-1 * var(--sp-2)); border-radius: var(--r-sm); cursor: text; max-width: var(--measure); }
+.rich-note__block:hover, .rich-note__block:focus-visible { background: var(--s-2); }
+.rich-note__block--active { background: var(--s-2); cursor: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
+.rich-note__remove { position: absolute; top: var(--sp-1); right: var(--sp-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.rich-note__block:hover .rich-note__remove, .rich-note__block:focus-within .rich-note__remove { opacity: 1; }
+.rich-note__badge { display: inline-block; font-size: var(--t-xs); color: var(--fg-2); border: 1px solid var(--line); padding: 0 var(--sp-1); border-radius: var(--r-sm); }
+.rich-note__raw, .rich-note__code { margin: 0; white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.rich-note__text { white-space: pre-wrap; outline: 1px solid var(--line); padding: var(--sp-1); min-height: 1.5em; }
+.rich-note__source { width: 100%; resize: vertical; font-family: var(--font-mono); font-size: var(--t-xs); background: var(--s-1); color: var(--fg); border: 1px solid var(--line); }
+.rich-note__p { margin: 0; white-space: pre-wrap; }
+.rich-note__h { font-weight: 600; }
+.rich-note__h1 { font-size: var(--t-lg, 1.25em); } .rich-note__h2 { font-size: var(--t-md, 1.1em); }
+.rich-note__list { margin: 0; padding-left: 1.4em; }
+.rich-note__table { border-collapse: collapse; }
+.rich-note__table th, .rich-note__table td { border: 1px solid var(--line); padding: var(--sp-1) var(--sp-2); text-align: left; }
+.rich-note__table input { width: 100%; min-width: 4em; }
+.rich-note__item { display: flex; gap: var(--sp-1); align-items: center; }
+.rich-note__item input:not([type="checkbox"]) { flex: 1; }
+.rich-note__figure { margin: 0; }
+.rich-note__img { max-width: 100%; max-height: 240px; }
+.rich-note__link { text-decoration: underline; }
+.rich-note__done { align-self: flex-start; }
+
 /* Small text buttons inside a node body: the save control, the conflict
    choices, a Jira transition. One shape. */
 .file-node__save,
@@ -5085,13 +5125,13 @@ body {
    Native buttons retain tab/Enter/Space semantics and a visible focus ring. */
 .new-object-row {
   position: absolute; top: 12px; left: 16px; right: 176px; z-index: 20;
-  display: flex; gap: 6px; overflow-x: auto; padding: 3px;
+  display: flex; gap: var(--sp-3); overflow-x: auto; padding: var(--sp-1);
   pointer-events: auto; font-family: var(--font-ui);
 }
 .new-object-row__pill {
-  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px;
-  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 999px; padding: var(--sp-3) var(--sp-5);
+  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-sm);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
 .new-object-row__pill:hover { color: var(--fg); background: var(--s-2); }
@@ -5099,20 +5139,20 @@ body {
 .new-object-row__pill:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
-.checklist-node__body { overflow: auto; height: 100%; padding: 14px; font-family: var(--font-ui); color: var(--fg-2); }
-.checklist-node__items { list-style: none; padding: 0; margin: 0 0 12px; }
-.checklist-node__items li { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.checklist-node__items label { display: flex; align-items: start; gap: 8px; overflow-wrap: anywhere; }
+.checklist-node__body { overflow: auto; height: 100%; padding: var(--sp-5); font-family: var(--font-ui); color: var(--fg-2); }
+.checklist-node__items { list-style: none; padding: 0; margin: 0 0 var(--sp-5); }
+.checklist-node__items li { padding: var(--sp-4) 0; border-bottom: 1px solid var(--line); }
+.checklist-node__items label { display: flex; align-items: start; gap: var(--sp-4); overflow-wrap: anywhere; }
 .checklist-node__items input { accent-color: var(--iris); }
-.checklist-node__actions { display: flex; flex-wrap: wrap; gap: 8px; opacity: 0; transition: opacity var(--dur-1); }
+.checklist-node__actions { display: flex; flex-wrap: wrap; gap: var(--sp-4); opacity: 0; transition: opacity var(--dur-1); }
 .checklist-node__items li:hover .checklist-node__actions, .checklist-node__items li:focus-within .checklist-node__actions { opacity: 1; }
 .checklist-node__body button, .checklist-node__body select, .checklist-node__body input:not([type=checkbox]) {
-  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px;
+  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
 }
 .checklist-node__body button:disabled { color: var(--fg-4); }
-.checklist-node__body form { display: flex; gap: 8px; }
+.checklist-node__body form { display: flex; gap: var(--sp-4); }
 .checklist-node__body form input { min-width: 0; flex: 1; }
-.checklist-node__tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.checklist-node__run { color: var(--fg-3); font-size: 12px; margin-left: 24px; }
-.checklist-node__review { padding: 10px; background: var(--iris-dim); border-radius: 8px; margin-bottom: 12px; }
+.checklist-node__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-4); }
+.checklist-node__run { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-7); }
+.checklist-node__review { padding: var(--sp-4); background: var(--iris-dim); border-radius: var(--r-md); margin-bottom: var(--sp-5); }
 .checklist-node__review pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-family: var(--font-mono); }
