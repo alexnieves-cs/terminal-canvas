@@ -287,42 +287,59 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     text ? `${text.length} bytes` : 'absent')
 }
 
-// 19. Every verify suite is WIRED INTO the chain. package.json's `verify`
-// script is an enumerated list, which is the shape .github/workflows/verify.yml
-// deliberately refuses for exactly this reason: a suite added as a script and
-// never added to the chain runs nowhere, silently, forever — and the one
-// green-or-not signal this repository has quietly stops covering it, with a
-// green badge still on the README. Same stale-by-omission failure check 14
-// guards for the IPC diagram, turned on the harness itself.
+// 19. Every verify suite RUNS.
 //
-// verify:packaged is excluded deliberately, not overlooked: it rebuilds native
-// modules, reaches electron-builder's cache and needs a network, so it is a
-// hand-run pre-release gate rather than part of the chain.
+// This check used to re-derive the suite list and compare it against
+// package.json's hand-written `verify` chain, because a suite added as a
+// script and never added to that chain ran nowhere, silently, forever — the
+// same stale-by-omission failure check 14 guards for the IPC diagram, and the
+// shape .github/workflows/verify.yml deliberately refuses.
+//
+// M237 removed the copy rather than keep policing it: scripts/verify-all.cjs
+// DERIVES the list off package.json, so there is no second list left to drift
+// out of step. Three things still need pinning, and each of them fails
+// silently:
+//
+//   - HAND_RUN is EXACTLY those two names. It is now the only way a suite can
+//     be excluded from the gate, which makes it the place the old
+//     stale-by-omission failure would reappear: a third name added here to
+//     quiet a red suite would remove it from the gate permanently, and every
+//     other check in this file would still pass. Pinned by name, so growing it
+//     is a decision somebody has to come here and make.
+//   - every part an AGGREGATE names is itself derived. `verify:panels` is a
+//     chain of `npm run verify:panels:<part>`; a part named there but never
+//     declared as a script, or renamed on one side only, runs nowhere.
+//   - nothing sits in the fallback tier unnoticed. `tierOf` sends an
+//     unrecognised command shape to the SERIAL tier so it still runs; that is
+//     the safe default, and it is also how a suite could silently stop being
+//     parallel — or, worse, how a genuinely broken script line could look fine.
+//   - `verify` still points AT the runner. Edited back to anything else, the
+//     whole harness goes with it and every other check here would still pass.
+//
+// verify:packaged and verify:visual stay excluded BY NAME (in the runner's
+// HAND_RUN, read from there rather than restated here — they rebuild native
+// modules or paint every scene of the shot harness, and are pre-release gates
+// a person runs). Requiring a sibling script is the pattern handcheck.1
+// below already uses.
 {
-  // M135: "wired into the chain" is TRANSITIVE. `verify:panels` is itself a
-  // chain of `npm run verify:panels:<part>` since the split, so a part is
-  // wired when some script the chain reaches names it — the same rule,
-  // followed one hop further. A part named by no reachable script is still
-  // unwired, and reads as such.
-  const reachable = new Set()
-  const walk = (text) => {
-    for (const m of String(text || '').matchAll(/npm run (verify:[\w:-]+)/g)) {
-      if (reachable.has(m[1])) continue
-      reachable.add(m[1])
-      walk(pkg.scripts[m[1]])
-    }
-  }
-  walk(pkg.scripts.verify ?? '')
-  // M148: verify:visual is the second named exclusion — it consumes a build
-  // and paints every scene of the shot harness (about two minutes of real
-  // Electron), a hand-run gate like verify:packaged, and it is pinned as one
-  // by visual.1 below.
-  const suites = Object.keys(pkg.scripts)
-    .filter((k) => k.startsWith('verify:') && k !== 'verify:packaged' && k !== 'verify:visual')
-  const unwired = suites.filter((k) => !reachable.has(k))
-  ok('19 every verify suite is wired into the chain',
-    suites.length > 10 && unwired.length === 0,
-    unwired.length ? `unwired: ${unwired.join(', ')}` : `${suites.length} suites`)
+  const runner = require(join(ROOT, 'scripts', 'verify-all.cjs'))
+  const derived = runner.suites()
+  const run = new Set(derived.map((s) => s.name))
+  const declared = Object.keys(pkg.scripts).filter((k) => k.startsWith('verify:'))
+  const aggregates = declared.filter((k) => runner.isAggregate(pkg.scripts[k]))
+  // Not "is every declared suite derived" — tierOf's fallback means every one
+  // of them is, so such a clause could never go red and would be decoration.
+  const handRunDrift = runner.HAND_RUN.slice().sort().join(',') !== 'verify:packaged,verify:visual'
+  const aggregateParts = aggregates.flatMap((k) =>
+    [...String(pkg.scripts[k]).matchAll(/npm run (verify:[\w:-]+)/g)].map((m) => m[1]))
+  const orphanParts = aggregateParts.filter((k) => !run.has(k))
+  const unclassified = derived.filter((s) => s.tier === 'unclassified').map((s) => s.name)
+  const wired = /node scripts\/verify-all\.cjs/.test(String(pkg.scripts.verify || ''))
+  ok('19 every verify suite is run by the derived runner, the hand-run exclusions are exactly two, and every aggregate part is declared',
+    derived.length > 10 && !handRunDrift && orphanParts.length === 0 &&
+      unclassified.length === 0 && wired,
+    JSON.stringify({ derived: derived.length, handRunDrift, orphanParts, unclassified,
+      wired, handRun: runner.HAND_RUN, aggregates }))
 }
 
 // 20. RULE 1, AS SOURCE TEXT: there is no credential:get channel, and no

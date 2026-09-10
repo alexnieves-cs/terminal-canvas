@@ -32,7 +32,7 @@ Its authority, plan, brief and state already exist and you inherit all of them:
   says exactly what M180 has proven, what was attempted and abandoned, and what remains. The
   four evidence notes beside it (`m180-control-evidence.md`, `m180-readiness-evidence.md`,
   `v9-m180-baseline-paste-image.md`, `v9-m180-product-annotation-diagnosis.md`) carry the
-  commands and tallies. Raw logs are under `out/v9-evidence/`, which is gitignored.
+  commands and tallies. Raw logs are under `evidence/v9-run/`, which is gitignored.
 
 ## The goal condition — what the evaluator is actually checking
 
@@ -102,7 +102,7 @@ Do these in order before any new work:
 Then finish M180. What the ledger says remains: run the real onboarding journey check
 (`verify:panels:product` `onboarding.start.1` and `onboarding.agent.1`) and record it; the
 old-launcher red for `onboarding.start.1` is owed once through the corrected renderer-only
-build Astra left under `out/v9-evidence/build-old-launcher.cjs`, or declined by name with the
+build Astra left under `evidence/v9-run/build-old-launcher.cjs`, or declined by name with the
 reason if that build cannot be made to apply; the four-door metadata and any agent transport
 check still open; the visual capture of the changed launcher scene with the critic's sentence
 before its golden is written; the full `npm run verify` chain; then M180's fresh-context

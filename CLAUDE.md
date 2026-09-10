@@ -61,9 +61,17 @@ never a zero-value statement), *contextual* (next action, blocker; opacity 0 →
 
 `package.json` lists the scripts; what it cannot tell you: **`npm run verify` is the whole
 verification story** — there is no unit-test runner and no linter — and it must be green
-before claiming work is done. It chains typecheck and build in the middle. No suite needs a
-display, none has a test-name filter, and each exits non-zero on any failure; to add a check,
-append an `ok(...)` in the IIFE. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first.
+before claiming work is done. It is `scripts/verify-all.cjs`, which **DERIVES** its suite
+list from package.json's `verify:*` keys rather than enumerating one, so a new suite runs by
+being written; `verify:packaged` and `verify:visual` are the only exclusions and they are
+named in the runner's `HAND_RUN` (`verify:meta` 19 pins all of that, and that `verify` still
+points at the runner). Three waves: the plain-node tier **concurrently**, then `npm run build`,
+then the Electron tier **serially** — the build is early so a type error costs seconds
+instead of minutes, but still ahead of `verify:canvas`/`xterm`/`panels`, the only suites that
+read `out/renderer`. No suite needs a display, none has a test-name filter, and each exits
+non-zero on any failure; to add a check, append an `ok(...)` in the IIFE. **Never add a suite
+to the `verify` script** — there is no list there to add it to. `npm run dev` unsets
+`ELECTRON_RUN_AS_NODE` first.
 
 Outside the chain, all real Electron: `npm run shot` (23 PNGs of the real renderer for a
 fresh-context critic), `verify:visual` (those scenes against committed goldens;

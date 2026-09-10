@@ -52,12 +52,12 @@ inherited manual-only list in `docs/load-bearing.md`.
 On the branch head (`3bf4bc5`), under the environment the ledger records (system `TMPDIR`
 for every Electron command; `verify:packaged` with the default npm cache and no fixed home):
 
-`npm run verify:visual` — exit 0, `58/58 passed` (`out/v9-evidence/act1-visual-2.log`).
-`npm run verify:packaged` — exit 0, `12/12 passed` (`out/v9-evidence/act1-packaged-6.log`).
+`npm run verify:visual` — exit 0, `58/58 passed` (`evidence/v9-run/act1-visual-2.log`).
+`npm run verify:packaged` — exit 0, `12/12 passed` (`evidence/v9-run/act1-packaged-6.log`).
 `npm run verify` — see the line appended below this section once the chain on `3bf4bc5`
-has printed every tally (`out/v9-evidence/act1-verify-3.log`).
+has printed every tally (`evidence/v9-run/act1-verify-3.log`).
 
-`npm run verify` on `3bf4bc5` — exit 0 (`out/v9-evidence/act1-verify-3.log`), every suite's tally:
+`npm run verify` on `3bf4bc5` — exit 0 (`evidence/v9-run/act1-verify-3.log`), every suite's tally:
 
 | Suite | Tally |
 |---|---|

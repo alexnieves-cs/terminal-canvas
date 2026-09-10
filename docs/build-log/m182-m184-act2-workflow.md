@@ -40,14 +40,14 @@ template with two editors that cannot disagree**, because both go through one do
 
 ## The three commands
 
-Run on `v9-act2-workflow` at `05a8d97`, in the environment `out/v9-evidence/run-electron.sh`
+Run on `v9-act2-workflow` at `05a8d97`, in the environment `evidence/v9-run/run-electron.sh`
 sets (the system `TMPDIR`, every other transient directory local, `TC_VERIFY_SUFFIX=v9`).
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/m184b-verify-chain.log` |
-| `npm run verify:visual` | 0 | 59/59, 172.7 s wall | `out/v9-evidence/act2-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 — the built `.app` launches with a stripped PATH, spawns a PTY, and a second instance refuses and leaves the incumbent's PTY alive | `out/v9-evidence/act2-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/m184b-verify-chain.log` |
+| `npm run verify:visual` | 0 | 59/59, 172.7 s wall | `evidence/v9-run/act2-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 — the built `.app` launches with a stripped PATH, spawns a PTY, and a second instance refuses and leaves the incumbent's PTY alive | `evidence/v9-run/act2-packaged.log` |
 
 The chain's tallies, in order:
 

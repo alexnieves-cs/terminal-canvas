@@ -6,6 +6,7 @@
    and whether Chromium page-zoomed instead of the canvas. The window is never
    shown. */
 const { join } = require('node:path')
+const { loadRenderer } = require('./load-renderer.cjs')
 const { mkdtempSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { buildSync } = require('esbuild')
@@ -81,6 +82,8 @@ const readCanvasOffset = (wc) =>
 
 app.on('window-all-closed', () => {})
 
+const SCRIPT_NAME = 'verify-canvas.cjs'
+
 app.whenReady().then(async () => {
   const win = new BrowserWindow({
     show: false,
@@ -140,7 +143,7 @@ app.whenReady().then(async () => {
     join(tmpdir(), 'tc-verify-canvas-diagnostics')
   )
 
-  await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
+  await loadRenderer(win)
   await sleep(800)
 
   const wc = win.webContents
@@ -219,4 +222,15 @@ app.whenReady().then(async () => {
   console.log(`${results.length - failed.length}/${results.length} passed`)
   if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
   app.exit(failed.length ? 1 : 0)
+}).catch((error) => {
+  // A THROW IN A REAL-ELECTRON HARNESS HANGS WITHOUT THIS. `app.whenReady()
+  // .then(async () => ...)` with no catch turns any throw into an unhandled
+  // rejection: nothing calls app.exit, the hidden window stays open, and the
+  // suite reads as a suite that is still running. CLAUDE.md names that shape
+  // directly — "the trap manifests as a HANG, not a red suite" — and a chain
+  // of ~40 suites that stops dead with no message is the most expensive
+  // failure this harness can produce, because it does not even say which
+  // suite stopped. Print the error, name the script, exit non-zero.
+  console.log(`\n${SCRIPT_NAME} threw before it could report: ${(error && error.stack) || error}`)
+  app.exit(1)
 })

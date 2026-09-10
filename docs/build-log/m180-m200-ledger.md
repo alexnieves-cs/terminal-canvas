@@ -40,8 +40,8 @@ continue to distinguish requested settings from settings it can actually change.
 ### Baseline command
 
 The first `npm run verify` attempt ran against unchanged source and checks. The full output is
-`out/v9-evidence/act0-verify.log`; the wrapper records the actual exit code in
-`out/v9-evidence/act0-verify.exit`. The following environment keeps transient work local:
+`evidence/v9-run/act0-verify.log`; the wrapper records the actual exit code in
+`evidence/v9-run/act0-verify.exit`. The following environment keeps transient work local:
 `TMPDIR` and `TMUX_TMPDIR` point to `out/t`, `CFFIXED_USER_HOME` to `out/h`, npm and Electron
 caches to `out/cache`, and `TC_VERIFY_SUFFIX=v9` isolates suite sockets. `GIT_CEILING_DIRECTORIES`
 points to `out/t` so fixture directories intended to be outside a git repository do not
@@ -80,8 +80,8 @@ A Foundation path probe, run with `CFFIXED_USER_HOME=out/h` and a repository-loc
 module cache, returned application support and caches beneath this repository (exit 0).
 The second baseline attempt uses the same local directory/cache/socket environment without
 the incompatible outer sandbox. Electron’s own sandbox and all assertions remain unchanged.
-Its output is `out/v9-evidence/act0-verify-local.log`, and its exit code will be in
-`out/v9-evidence/act0-verify-local.exit`. No parent HOME override was used.
+Its output is `evidence/v9-run/act0-verify-local.log`, and its exit code will be in
+`evidence/v9-run/act0-verify-local.exit`. No parent HOME override was used.
 
 The fresh-context xhigh planning review was requested as `act0_plan_review`; the service
 returned a usage-limit error with a reset at 2026-09-08 00:31 America/New_York. No review
@@ -107,7 +107,7 @@ for its new actions is a recorded temporary omission until the M189 adapter, avo
 second executor in onboarding. The plan also explicitly delegates the M197 guide and M198
 audit walk. These are planning corrections, not implementation or verification claims.
 
-Actual tallies from `out/v9-evidence/act0-verify-local.log` (whole command exit 1):
+Actual tallies from `evidence/v9-run/act0-verify-local.log` (whole command exit 1):
 
 | Suite | Printed tally |
 |---|---|
@@ -151,7 +151,7 @@ The chained build completed before canvas verification. The chain did not reach
 
 The separate diagnostic `npm run verify:panels:shell` printed 96/96 passed and exited 0,
 using the same repository-local environment. Evidence is in
-`out/v9-evidence/act0-panels-shell.log` and `act0-panels-shell.exit`. It does not repair the
+`evidence/v9-run/act0-panels-shell.log` and `act0-panels-shell.exit`. It does not repair the
 failed chain. The green-baseline requirement is not met; M180 must diagnose and repair the
 image-paste failure before claiming implementation green. Preserve the test's requirement
 that the actual written path reaches the PTY; do not weaken it to file existence alone.
@@ -212,7 +212,7 @@ usage window and not by work, so the 24-hour wall-clock ceiling restarts from th
 the deadline is now 2026-09-09 04:36 UTC. Astra's original deadline (2026-09-09 04:03:59 UTC)
 is historical.
 
-`npm run typecheck` exited 0 (`out/v9-evidence/m180-typecheck-resume.log`). The working tree
+`npm run typecheck` exited 0 (`evidence/v9-run/m180-typecheck-resume.log`). The working tree
 Astra left was committed verbatim in four scoped commits, exact paths staged, no prose
 changed: `a240470 docs(v9)` (the plan, the brief, this ledger), `e7e737f docs(m180)` (the
 spec and plan), `cd60d53 check(m180)` (the five check files, the four evidence notes,
@@ -221,17 +221,17 @@ files). The tree was clean after the fourth.
 
 Two items the "Act I — started" section lists as pending were already answered by logs
 Astra wrote before the window closed, and this session records them from those logs rather
-than claiming to have run them: `out/v9-evidence/m180-onboarding-ui-proven-old.log` is the
+than claiming to have run them: `evidence/v9-run/m180-onboarding-ui-proven-old.log` is the
 old-launcher red for `onboarding.start.1` (59/60, exit 1 in `.exit`, only that check red,
 through `build-old-launcher.cjs`'s renderer-only build with exactly one module replacement);
-`out/v9-evidence/m180-annotation-product-green.log` (00:25, after the 00:22 rebuild from
+`evidence/v9-run/m180-annotation-product-green.log` (00:25, after the 00:22 rebuild from
 current source, which postdates every source edit) prints 61/61 with `onboarding.start.1`
 and `onboarding.agent.1` both PASS. No `.exit` file was written for the green run, so the
 full chain below is what proves it in this session.
 
-`npm run build` from current source exited 0 (`out/v9-evidence/m180-build-resume.log`).
+`npm run build` from current source exited 0 (`evidence/v9-run/m180-build-resume.log`).
 `npm run verify:visual` in comparison mode under the repository-local environment exited 1
-at 53/57 (`out/v9-evidence/m180-visual-compare.log`): `launcher` at 14.562 % of pixels (the
+at 53/57 (`evidence/v9-run/m180-visual-compare.log`): `launcher` at 14.562 % of pixels (the
 intended M180 change), and `chat-copilot`, `supervisor` and `inspector-detail` each on ONE
 32 px tile. Reading the three diff images: every red tile is the fixture path painted in the
 spawn sheet's WHERE field or the inspector's CWD (`…/out/t/tc shot fixtures golden/repo`
@@ -241,7 +241,7 @@ directory), plus a pid and a port. Decision: the visual suite runs with the syst
 re-baselining three scenes for a path-text reason is exactly the blind change the golden
 sentence rule forbids. The verify chain keeps the local `TMPDIR`; it paints nothing.
 With the system `TMPDIR`, `npm run verify:visual` exited 1 at 56/57 with `launcher` the only
-red (`out/v9-evidence/m180-visual-compare-systmp.log`): the three tile reds were the path
+red (`evidence/v9-run/m180-visual-compare-systmp.log`): the three tile reds were the path
 text, as diagnosed. The launcher's golden waits for the critic's sentence.
 
 ### M180 — the critic's findings and what was done with each
@@ -288,12 +288,12 @@ plan's "Known work a person will owe" table and are restated in the Act I build 
 
 After the fixes: `npm run typecheck` exit 0; `verify:verbs` 22/22, `verify:control` 26/26,
 `verify:styles` 56/56, `verify:onboarding` 14/14, `verify:palette` 143/143, `verify:meta`
-38/38, each exit 0 (`out/v9-evidence/m180-fix-*.log`); `npm run build` exit 0; the visual
+38/38, each exit 0 (`evidence/v9-run/m180-fix-*.log`); `npm run build` exit 0; the visual
 comparison under the system `TMPDIR` 56/57 with `launcher` the only red at 16.064 %
 (`m180-visual-compare-2.log`).
 
 The first full `npm run verify` after the fixes exited 1 at `verify:agent-session
-registry.1` (140/141; `out/v9-evidence/m180-verify-chain.log`): M99's rule that no consumer
+registry.1` (140/141; `evidence/v9-run/m180-verify-chain.log`): M99's rule that no consumer
 compares a `backend` field to a literal engine name, which Astra's `shared/onboarding.ts`
 and the `new-chat` arm both did. FIXED: `FIRST_LAUNCH_ENGINES` is a table keyed by backend
 (name and setup link), `isFirstLaunchBackend` a membership test; a third first-launch engine
@@ -321,7 +321,7 @@ message. The launcher card at 1440x865 fits with the tmux banner dismissed and s
 
 ### The verification environment, amended
 
-The second full chain (`out/v9-evidence/m180-verify-chain-2.log`) exited 1 at
+The second full chain (`evidence/v9-run/m180-verify-chain-2.log`) exited 1 at
 `verify:panels:agents handoff.1` (79/80): the target's PTY log never showed the pasted token
 while the source ran and the row counted its lines. Alone under the same repository-local
 environment the agents part failed `handoff.2` instead (79/80) and the product part failed
@@ -345,7 +345,7 @@ these attempts (the Act 0 chain stopped at core), so this is the first evidence 
 
 ### M180 — the chain, green
 
-Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m180-verify-chain-3.log`, `.exit`), every suite printing its tally:
+Under the amended environment `npm run verify` exited 0 (`evidence/v9-run/m180-verify-chain-3.log`, `.exit`), every suite printing its tally:
 
 | Suite | Tally |
 |---|---|
@@ -389,7 +389,7 @@ Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m180-v
 | `verify:panels:product` | 61/61 passed |
 
 `UPDATE_GOLDENS=1 npm run verify:visual` then wrote the launcher's golden over the same
-build, exit 0, 56/56 with `launcher golden written` (`out/v9-evidence/m180-visual-update.log`,
+build, exit 0, 56/56 with `launcher golden written` (`evidence/v9-run/m180-visual-update.log`,
 `.exit`); the sentence above is its record. No other golden changed.
 
 ### M180 — the verifier
@@ -411,7 +411,7 @@ have since changed twice and the green is the evidence that stands). `agent-door
 `agent-door.6` named `interrupt` and settings without exercising them — FIXED: both checks
 now run `interrupt ag1` against the waiting panel and `set-setting` for the teammate
 caller, refused before any step; `verify:verbs` 22/22 exit 0 after
-(`out/v9-evidence/m180-fix-verbs-2.log`). Its stash pop conflicted on one import line in
+(`evidence/v9-run/m180-fix-verbs-2.log`). Its stash pop conflicted on one import line in
 `ipc-contract.ts` (an M181 edit beside an M180 one); resolved by keeping both, the index reset
 and re-staged to the M180 set, the stash dropped.
 
@@ -442,17 +442,17 @@ Red first. The pure checks were delegated to a fresh-context writer in an isolat
 (`starter.1–.3`, `image.record.1`), `verify:viewport` 137/139 exit 1 (`starter.plan.1`,
 `image.kind.1`), `verify:file` 83/85 exit 1 (`image.1`, `starter.prepare.1`), every
 pre-existing check green. Green after the pure modules: layout 238/238, viewport 139/139,
-file 85/85, exit 0 each (`out/v9-evidence/m181-pure-green-*.log`) — after one fix to the
+file 85/85, exit 0 each (`evidence/v9-run/m181-pure-green-*.log`) — after one fix to the
 delegated `starter.1` check itself, which mutated the parsed record and then asserted the
 pre-mutation values (recorded here; the parser was right). The real-renderer checks
 `starter.1` and `image.1` in the product part ran RED against the M180 build before the
-renderer changed (`out/v9-evidence/m181-product-red.log`, exit 1): `primary: false` (no
+renderer changed (`evidence/v9-run/m181-product-red.log`, exit 1): `primary: false` (no
 `data-onboarding-starter`), `painted: false`, `gone: false`; the two checks' waits then
 tripped the part's 98 s watchdog, which is re-measured below once green (M135's rule, 1.25×
 a measured green run). Plain-node after the implementation: onboarding 14/14, verbs 22/22,
 palette 143/143, meta 38/38, styles 56/56, layout 238/238, viewport 139/139, file 85/85,
 rail 194/194, agent-session 141/141, control 26/26, electron 4/4, exit 0 each
-(`out/v9-evidence/m181-plain-*.log`).
+(`evidence/v9-run/m181-plain-*.log`).
 
 Doors. Canvas: the primary on a first run and the `Starter canvas…` prompt line (disabled
 by name once every key is applied). Palette: `starter.open`. Agent: `tc plan starter`.
@@ -462,7 +462,7 @@ channels (`image:read`, `starter:prepare`) in the contract, both diagrams and
 
 Green, with what the real renderer taught. The first `npm run verify` with M181 exited 1 at
 `verify:panels:product onboarding.start.1` (62/63; `starter.1` and `image.1` PASS,
-`out/v9-evidence/m181-verify-chain.log`): on a first run the primary now lays the starter out
+`evidence/v9-run/m181-verify-chain.log`): on a first run the primary now lays the starter out
 too, and the manifest's image sat at dy 520 under a 620-tall chat, so the Examples group's
 frame spanned the composer and swallowed the click on Send; the check's `noTerminal` also saw
 the dormant terminal card. FIXED: the examples are ONE column beside the agent (440 wide, 40 px
@@ -566,7 +566,7 @@ reveal, which the golden pins as the selected state.
 
 ### M181 — the chain, green, and the verifier
 
-Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m181-verify-chain-2.log`, `.exit`), every suite printing its tally:
+Under the amended environment `npm run verify` exited 0 (`evidence/v9-run/m181-verify-chain-2.log`, `.exit`), every suite printing its tally:
 
 | Suite | Tally |
 |---|---|
@@ -610,7 +610,7 @@ Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m181-v
 | `verify:panels:product` | 63/63 passed |
 
 `UPDATE_GOLDENS=1 npm run verify:visual` wrote the three goldens named in the sentences
-above and nothing else — 57/57, exit 0 (`out/v9-evidence/m181-visual-update.log`, `.exit`);
+above and nothing else — 57/57, exit 0 (`evidence/v9-run/m181-visual-update.log`, `.exit`);
 `verify:meta visual.1` 38/38 after it. This is the evidence line the sentences precede.
 
 The fresh-context verifier (the working tree against `be586dc`; plain node only while the
@@ -628,7 +628,7 @@ narrowed `noTerminal` predicate is the milestone's own change and is documented 
 
 ### Act I — the close, first attempt
 
-On `efb810a` the three commands ran in sequence (`out/v9-evidence/act1-*.log`, `.exit`):
+On `efb810a` the three commands ran in sequence (`evidence/v9-run/act1-*.log`, `.exit`):
 `npm run verify` exit 0 (38 suites, `act1-verify.log`); `npm run verify:visual` exit 1 at
 57/58 — the `starter` scene threw its own guard, "the arrangement is not on screen
 (file,image,terminal,workflow)": four examples and NO conversation; `npm run verify:packaged`
@@ -661,7 +661,7 @@ fixed home, tmux sockets and evidence logs: a 206 MB archive with a socket insid
 `package.json` read back as bytes. FIXED in `build/builder-config.cjs`: the three bundles by
 name (`out/main/**`, `out/preload/**`, `out/renderer/**`); `verify:package` 13/13. The
 packaged app is 55 MB and `npm run verify:packaged` is 12/12, exit 0
-(`out/v9-evidence/act1-packaged-6.log`, `.exit`). Every temporary directory this run keeps
+(`evidence/v9-run/act1-packaged-6.log`, `.exit`). Every temporary directory this run keeps
 under `out/` was invisible to the chain and to the goldens and visible only to the packager.
 
 ## Act I — closed
@@ -706,7 +706,7 @@ green; 245/245 after the module, the fields, the binding and the store. The prod
 `workflow.edit.1` (a real drag on a block moves the draft, the panel reads dirty, the record
 on disk is unchanged, Delete removes the selected block) and `workflow.edit.2` (the agent door
 runs set / add / a refused remove / a refused cycle over the same draft) ran red against the
-Act I build — 63/65, exit 1 (`out/v9-evidence/m182-product-red.log`) — and green after the
+Act I build — 63/65, exit 1 (`evidence/v9-run/m182-product-red.log`) — and green after the
 renderer: 65/65, exit 0 (`m182-product-green.log`).
 
 Doors. Canvas: a drag on a diagram block (move), Delete on the selected block (remove); add,
@@ -758,12 +758,12 @@ Thirteen findings from the fresh-context critic (the working tree against `50cf9
     (DECLINED here, recorded for M183 with the golden change it needs).
 
 After the fixes: typecheck 0; `verify:verbs` 22/22, `verify:layout` 245/245, `verify:palette`
-143/143; product part 66/66, exit 0 (`out/v9-evidence/m182-product-green-2.log`), with
+143/143; product part 66/66, exit 0 (`evidence/v9-run/m182-product-green-2.log`), with
 `workflow.edit.3` the Update round trip the plan promised. The chain reruns on this tree below.
 
 ### M182 — the chain, green, and the verifier
 
-`npm run verify` on the fixed tree exited 0, 38 suites (`out/v9-evidence/m182-verify-chain-2.log`,
+`npm run verify` on the fixed tree exited 0, 38 suites (`evidence/v9-run/m182-verify-chain-2.log`,
 `.exit`); the earlier chain on the pre-fix tree also exited 0 (`m182-verify-chain.log`). The
 fresh-context verifier confirmed typecheck 0, the six plain tallies, the red evidence, the
 green logs, all twelve FIXED dispositions by line, no weakened assertion, no golden change,
@@ -800,7 +800,7 @@ gesture strings.
 Red first. The pure checks were delegated (`docs/build-log/m183-pure-red-evidence.md`):
 `verify:layout` 245/247 exit 1 (`library.1–.2`), 247/247 after the module. The three
 real-renderer checks ran red against the M182 build — 66/69, exit 1
-(`out/v9-evidence/m183-product-red.log`) — and green after the renderer: 69/69, exit 0
+(`evidence/v9-run/m183-product-red.log`) — and green after the renderer: 69/69, exit 0
 (`m183-product-green-7.log`, 99.0 s wall; the watchdog re-measured to 124 s).
 
 What the real renderer taught, each fixed at its cause and recorded: the SVG beside the
@@ -820,7 +820,7 @@ title names the owed arm it still accepts. Palette and agent: M182's. Workflow: 
 omission. Scenes: `workflow-edit` (new) and `workflow` (ports and room at rest), sentences
 before the goldens below.
 
-Visual, M183. The first comparison (`out/v9-evidence/m183-visual-compare.log`) changed
+Visual, M183. The first comparison (`evidence/v9-run/m183-visual-compare.log`) changed
 `workflow` (3.2 %: the ports and the drop room), `wide` (3.3 %: the panel is in that frame,
 and the scene after `workflow-edit` inherited its selection) and `workflow-edit` was
 MISSING — and the first `workflow-edit` capture had no node editor in it, because the shot
@@ -881,7 +881,7 @@ The scene itself took four corrections, each a harness lesson: it presses the pa
 first (the pane names the SELECTED panel), then opens the library, THEN presses the block — a
 point computed before the disclosure shifts the diagram lands on the wrong block — and it
 puts the library, the context tab and the pane back afterwards. Product part 69/69 exit 0
-after every fix (`out/v9-evidence/m183-product-green-9.log`).
+after every fix (`evidence/v9-run/m183-product-green-9.log`).
 
 ### M183 — the critic's sentences, before the goldens
 
@@ -905,7 +905,7 @@ presentational and both the critic's: the disclosure is `aria-expanded` and set 
 the two tabs it neighbours (it read as a third tab), and the node editor is its own section
 with a hairline and a heading at the surface's weight, so the pane reads "this node" then
 "this panel". `UPDATE_GOLDENS=1 npm run verify:visual` then wrote `workflow`, `wide` and the
-new `workflow-edit`, 58/58 exit 0 (`out/v9-evidence/m183-visual-update.log`), and the written
+new `workflow-edit`, 58/58 exit 0 (`evidence/v9-run/m183-visual-update.log`), and the written
 `workflow-edit` golden was read back.
 
 Four things the critic left open, recorded rather than fixed: with the library OPEN two
@@ -926,7 +926,7 @@ answered rather than argued:
 1, 2. The green product log had no `.exit` file, and — the one that mattered — the product
    part had NOT been re-run after the two presentational fixes made before the goldens. Both
    answered by running it again on the current tree: 69/69, exit 0, 98.5 s wall
-   (`out/v9-evidence/m183-product-green-10.log`, `.exit`).
+   (`evidence/v9-run/m183-product-green-10.log`, `.exit`).
 3. Two of the five library examples were English set in mono. FIXED: the example is in the
    UI face — a slot that mixes a command and a sentence is prose in mono either way.
 4. Finding 16's rationale overstated `icons.1` (which bans a symbol as a CONTROL's text).
@@ -949,7 +949,7 @@ was needed (`m183-visual-update-3.log`, 58/58, exit 0).
 
 ### M183 — the chain, green
 
-Under the amended environment `npm run verify` exited 0 (`out/v9-evidence/m183-verify-chain-3.log`, `.exit`), every suite printing its tally:
+Under the amended environment `npm run verify` exited 0 (`evidence/v9-run/m183-verify-chain-3.log`, `.exit`), every suite printing its tally:
 
 | Suite | Tally |
 |---|---|
@@ -1019,7 +1019,7 @@ delegated check, recorded as a fixture repair and not a weakening: its pool node
 definition carried no `width` and no `cwd`, which `parseWorkflowNode` refuses — the fixture
 was wrong, not the rule, and the assertion set is unchanged. The real-renderer check
 `workflow.save.1` ran red against the M183 build (69/70, exit 1,
-`out/v9-evidence/m184-product-red.log`) and green after: 70/70, exit 0, 99.9 s wall
+`evidence/v9-run/m184-product-red.log`) and green after: 70/70, exit 0, 99.9 s wall
 (`m184-product-green.log`).
 
 Doors. Canvas: Save (enabled while dirty, otherwise disabled with "nothing to save — the
@@ -1098,7 +1098,7 @@ the forwarded warning and the pruned mapping), `verify:viewport` 140/140 (`run.o
 extended with `absent`, `skipped`, `stopped` and the open/sealed pair), `verify:verbs` 22/22,
 `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `npm run typecheck` 0.
 `workflow.door.1` was watched failing against the pre-fix adapter — 70/71, that check the only
-failure (`out/v9-evidence/m184b-door-red.log`, exit 1) — and passes with it
+failure (`evidence/v9-run/m184b-door-red.log`, exit 1) — and passes with it
 (`m184b-product.log`, 71/71, exit 0, 101.5 s wall against a 124 s watchdog).
 
 ### Act II — the goldens that changed, and the sentence for each
@@ -1158,10 +1158,10 @@ guest it already has rather than rebuilding it; and four verbs, four palette row
   through the ordinary spawn door, so the server is a panel a person can see and stop.
 
 **Red first.** `preview.1` was watched failing with `preview.ts` and `preview-discover.ts`
-absent (85/86, `out/v9-evidence/m185-file-red.log`, exit 1); `preview.capture.1` was watched
+absent (85/86, `evidence/v9-run/m185-file-red.log`, exit 1); `preview.capture.1` was watched
 failing with `preview-capture.ts` moved out of the tree (86/87,
-`out/v9-evidence/m185-capture-red.log`, exit 1); `preview.device.1` was watched failing with
-its parser arm removed (248/249, `out/v9-evidence/m185-layout-red.log`, exit 1). `preview.1`
+`evidence/v9-run/m185-capture-red.log`, exit 1); `preview.device.1` was watched failing with
+its parser arm removed (248/249, `evidence/v9-run/m185-layout-red.log`, exit 1). `preview.1`
 in the product part was red twice against real defects it found: a chip that pressed nothing
 (the verb read the selection through a ref React had not written yet — the pane is now NAMED by
 its own control) and a harness with the inert preview handlers (now wired to the same
@@ -1170,7 +1170,7 @@ discoverer and capture production uses).
 **Green.** `verify:file` 87/87, `verify:layout` 249/249, `verify:verbs` 22/22,
 `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport`
 140/140, `npm run typecheck` 0, `verify:panels:product` 72/72 at 103.3 s
-(`out/v9-evidence/m185-product.log`, exit 0). The product watchdog is re-measured at 130000 ms
+(`evidence/v9-run/m185-product.log`, exit 0). The product watchdog is re-measured at 130000 ms
 (1.25× the slower of two green runs, 101.5 s and 103.3 s).
 
 **One rule changed.** `closure.v9.1` compared each verb's owed workflow door to the literal
@@ -1217,7 +1217,7 @@ stays absent through both copy sites and serialises to no key, malformed costs t
 through the system's own chooser; and two verbs, two palette rows and two `V9_DOORS` entries.
 
 **Red first.** `asset.1` was watched failing with `asset-store.ts` absent (87/88,
-`out/v9-evidence/m186-asset-red.log`, exit 1). `image.2` in the product part was red against
+`evidence/v9-run/m186-asset-red.log`, exit 1). `image.2` in the product part was red against
 two real defects it found: the plan line splits on whitespace, so a fixture path with a space
 in it is two arguments (the agent line's own bound, now recorded in the check), and — the
 product defect — replacing a picture whose file was deleted with the SAME picture writes the
@@ -1226,7 +1226,7 @@ same content-addressed path back, so an effect keyed on the path alone never re-
 
 **Green.** `verify:file` 88/88, `verify:layout` 250/250, `verify:verbs` 22/22, `verify:palette`
 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 140/140, typecheck 0,
-`verify:panels:product` 73/73 at 104.2 s (`out/v9-evidence/m186-product.log`, exit 0).
+`verify:panels:product` 73/73 at 104.2 s (`evidence/v9-run/m186-product.log`, exit 0).
 
 ## M187 — notes, free text and named frames as equal objects (Act IV.2)
 
@@ -1262,7 +1262,7 @@ top level). Renamed to `NOTE_IDS`/`IMAGE_IDS`.
 
 **Green.** `verify:file` 88/88, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
-`verify:panels:product` 74/74 at 105.9 s (`out/v9-evidence/m187-product.log`, exit 0).
+`verify:panels:product` 74/74 at 105.9 s (`evidence/v9-run/m187-product.log`, exit 0).
 
 **Recorded bound.** `hitTest`'s pure rect math still names a frame for a DROP into its interior;
 only the DOM gesture is form-aware. Drop targeting has six callers and a form-aware exception
@@ -1325,7 +1325,7 @@ tests a node is a loop with no stop.
 
 **Green.** `verify:file` 89/89 (`node.http.1`), `verify:layout` 251/251, `verify:verbs` 22/22,
 `verify:palette` 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141,
-typecheck 0, `verify:panels:product` 75/75 at 106.2 s (`out/v9-evidence/m188-product.log`,
+typecheck 0, `verify:panels:product` 75/75 at 106.2 s (`evidence/v9-run/m188-product.log`,
 exit 0) — including `node.1`, which drives the workflow door end to end (an action node's
 `note-add sticky` puts a sticky note on the canvas) and proves Test this node starts no
 neighbour and records no run.
@@ -1376,7 +1376,7 @@ request timing out; and the import spawning a PTY, which was the product defect 
 
 **Green.** `verify:file` 90/90, `verify:layout` 251/251, `verify:verbs` 22/22, `verify:palette`
 143/143, `verify:styles` 56/56, `verify:meta` 38/38, `verify:viewport` 141/141, typecheck 0,
-`verify:panels:product` 76/76 at 106.8 s (`out/v9-evidence/m189-product.log`, exit 0).
+`verify:panels:product` 76/76 at 106.8 s (`evidence/v9-run/m189-product.log`, exit 0).
 
 ## M190 — the feedback door and the getting-started guide (Act VII)
 
@@ -1404,7 +1404,7 @@ behaviour and checked as a file by `guide.1`.
 
 **Green.** `verify:file` 91/91, `verify:meta` 39/39, `verify:verbs` 22/22, `verify:palette`
 143/143, typecheck 0, `verify:panels:product` 77/77 at 107.2 s
-(`out/v9-evidence/m190-product.log`, exit 0) — `feedback.1` reads the exact url the door opened
+(`evidence/v9-run/m190-product.log`, exit 0) — `feedback.1` reads the exact url the door opened
 and asserts the planted token is not in it, encoded or decoded.
 
 ### M188–M190 — the fresh-context critic, and what was done about it
@@ -1584,9 +1584,9 @@ for exactly one release and then quietly lies in every bug report that carries i
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/final-verify.log` |
-| `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/final-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/final-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/final-verify.log` |
+| `npm run verify:visual` | 0 | 59/59 | `evidence/v9-run/final-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `evidence/v9-run/final-packaged.log` |
 
 ```
 14/14 39/39 56/56 141/141 6/6 12/12 38/38 252/252 18/18 15/15 7/7 143/143 194/194 98/98
@@ -1615,9 +1615,9 @@ Beyond `docs/load-bearing.md`'s standing manual-only list, this run adds four:
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/final3-verify.log` |
-| `npm run verify:visual` | 0 | 59/59 | `out/v9-evidence/final3-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/final3-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/final3-verify.log` |
+| `npm run verify:visual` | 0 | 59/59 | `evidence/v9-run/final3-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `evidence/v9-run/final3-packaged.log` |
 
 Run at the tagged commit with a clean tree. The `tag-*.log` files beside them are the same three
 commands at the previous commit, and the `main-*.log` files the same three at the act's merge —

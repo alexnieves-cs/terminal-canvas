@@ -73,8 +73,13 @@ jobs:
 
       # The whole harness: every plain-node suite, the typecheck, the build,
       # and every suite that needs the real Electron runtime and a hidden
-      # window. `npm run verify` prints each suite's name and its own N/M
-      # passed as it goes, so a failure here still names the suite — nothing
-      # about running it as one job loses that legibility.
+      # window. Since M237 `npm run verify` is scripts/verify-all.cjs, which
+      # DERIVES its suite list from package.json — so the stale-by-omission
+      # failure the one-job decision above avoids is now impossible on the
+      # other side too, and neither this file nor a chain can forget a suite.
+      # Each suite's output is buffered and flushed as one block headed by its
+      # name and its own N/M, so a failure here still names its suite even
+      # though the plain tier now runs concurrently; the run ends with a
+      # slowest-first table of every suite.
       - name: Run the full verification harness
         run: npm run verify

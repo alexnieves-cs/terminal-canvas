@@ -5,7 +5,7 @@ No production code, dependency, golden, assertion id, or watchdog changed.
 
 ## Diagnosis before repair
 
-The Act 0 baseline (`out/v9-evidence/act0-verify-local.log`) ended at core with
+The Act 0 baseline (`evidence/v9-run/act0-verify-local.log`) ended at core with
 77/78 passing: only `echoedPath` was false; the image was written, bracketed paste
 was visible, and the text paste passed. The original observer asked
 `__m4aCellToScreen` for `.png` and `attachments` independently. That hook calls
@@ -15,8 +15,8 @@ A diagnostic run left the original assertion unchanged and captured the target
 panel's durable PTY output, written filename, terminal width, and screen searches
 before closing the panel. It reproduced 77/78, exit 1, in 54.8 seconds:
 
-- `out/v9-evidence/m180-paste-image-red.log`
-- `out/v9-evidence/m180-paste-image-diagnosis.json`
+- `evidence/v9-run/m180-paste-image-red.log`
+- `evidence/v9-run/m180-paste-image-diagnosis.json`
 
 The terminal had 78 columns. After mode 2004's enabling sequence, its output was:
 
@@ -46,7 +46,7 @@ between both delimiters in that PTY log. The previous check only matched two
 unrelated substrings and allowed any PNG already in the directory.
 
 Temporary diagnostic logging was removed from the suite after the red run; the
-captured evidence remains under `out/v9-evidence/`.
+captured evidence remains under `evidence/v9-run/`.
 
 ## Commands and results
 
@@ -56,12 +56,12 @@ Both runs used the same repository-local environment, from the repository root:
 TMPDIR="$PWD/out/t" TMUX_TMPDIR="$PWD/out/t" \
   CFFIXED_USER_HOME="$PWD/out/h" npm_config_cache="$PWD/out/cache/npm" \
   GIT_CEILING_DIRECTORIES="$PWD/out/t" TC_VERIFY_SUFFIX=v9 \
-  npm run verify:panels:core > out/v9-evidence/m180-paste-image-red.log 2>&1
+  npm run verify:panels:core > evidence/v9-run/m180-paste-image-red.log 2>&1
 
 TMPDIR="$PWD/out/t" TMUX_TMPDIR="$PWD/out/t" \
   CFFIXED_USER_HOME="$PWD/out/h" npm_config_cache="$PWD/out/cache/npm" \
   GIT_CEILING_DIRECTORIES="$PWD/out/t" TC_VERIFY_SUFFIX=v9 \
-  npm run verify:panels:core > out/v9-evidence/m180-paste-image-green.log 2>&1
+  npm run verify:panels:core > evidence/v9-run/m180-paste-image-green.log 2>&1
 ```
 
 Red: exit 1, 77/78, `paste.image.1` alone failed, 54.8 seconds.

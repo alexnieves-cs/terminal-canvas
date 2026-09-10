@@ -21,6 +21,7 @@
    backend (reattach is not a visual property), and never the production
    tmux sockets. It spawns real shells. */
 const { join } = require('node:path')
+const { loadRenderer } = require('./load-renderer.cjs')
 const { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, realpathSync, statSync, openSync, readSync, closeSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
@@ -718,6 +719,8 @@ const SCENES = [
     } },
 ]
 
+const SCRIPT_NAME = 'shot.cjs'
+
 app.whenReady().then(async () => {
   await shotHttpReady
   const win = new BrowserWindow({
@@ -1276,7 +1279,7 @@ app.whenReady().then(async () => {
   // with `Script failed to execute` says nothing about why, and the only
   // place the why lives is the renderer's console.
   win.webContents.on('console-message', (_e, level, message) => { if (level >= 2) console.log(`[renderer] ${String(message).slice(0, 300)}`) })
-  await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
+  await loadRenderer(win)
   await sleep(1500)
 
   const manifest = []
@@ -1296,4 +1299,15 @@ app.whenReady().then(async () => {
   ptyManager.killAll()
   for (const p of [FIX, scrollbackDir, SHOT_HOME]) { try { if (existsSync(p)) rmSync(p, { recursive: true, force: true }) } catch { /* best effort */ } }
   app.quit()
+}).catch((error) => {
+  // A THROW IN A REAL-ELECTRON HARNESS HANGS WITHOUT THIS. `app.whenReady()
+  // .then(async () => ...)` with no catch turns any throw into an unhandled
+  // rejection: nothing calls app.exit, the hidden window stays open, and the
+  // suite reads as a suite that is still running. CLAUDE.md names that shape
+  // directly — "the trap manifests as a HANG, not a red suite" — and a chain
+  // of ~40 suites that stops dead with no message is the most expensive
+  // failure this harness can produce, because it does not even say which
+  // suite stopped. Print the error, name the script, exit non-zero.
+  console.log(`\n${SCRIPT_NAME} threw before it could report: ${(error && error.stack) || error}`)
+  app.exit(1)
 })

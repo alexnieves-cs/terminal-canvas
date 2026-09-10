@@ -11,12 +11,12 @@ npm run dev            # electron-vite dev (unsets ELECTRON_RUN_AS_NODE first)
 npm run build          # typecheck + electron-vite build
 npm run package         # electron-builder: the unsigned .app and .dmg, into release/
 npm run typecheck      # both projects; or typecheck:node / typecheck:web individually
-npm run verify         # every suite below, then a build, then the suites that need the build
+npm run verify         # the plain tier concurrently, then the build, then the Electron tier
 ```
 
 There is no unit-test runner and no linter. `npm run verify` is the whole verification
-story — it chains typecheck and build in the middle — and it must be green before claiming
-work is done.
+story — `scripts/verify-all.cjs`, deriving its suite list from package.json rather than
+enumerating one — and it must be green before claiming work is done.
 **A note on check numbering.** Check ids are not sequential across history —
 independent branches each appended "the next global integer" and collided on merge.
 New checks take a scoped string id (`kind-tail.1`), never the next integer; see

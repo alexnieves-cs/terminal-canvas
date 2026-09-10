@@ -30,3 +30,16 @@ graphify-out/
 # M119. The ACP recordings under scripts/fixtures are FIXTURES a suite reads, not logs:
 # the blanket *.log above hid them from git for one whole milestone.
 !scripts/fixtures/agent-session/acp/*.log
+
+# Evidence a committed doc CITES, kept OUT of out/ on purpose. The v9 run's
+# ledger and its five act build-logs cite 84 paths under evidence/v9-run/;
+# those files used to live in out/v9-evidence/, which is a build directory —
+# `rm -rf out` is the normal reflex when a build goes strange, and it silently
+# took the evidence for a whole run's ledger with it. Moved here so a build
+# clean cannot reach it.
+#
+# Still ignored rather than committed, for the reason graphify-out/ is: 15MB of
+# run logs in front of every diff and every reviewer is worse than a path that
+# is machine-local, and the ledger's value is the SENTENCE it records, with the
+# log as the thing that was read to write it.
+evidence/

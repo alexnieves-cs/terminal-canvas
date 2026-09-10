@@ -7,7 +7,7 @@ for the new agent plan door. No annotation production code changed.
 ## Red evidence and cause
 
 The parent's `npm run verify:panels:product` run in
-`out/v9-evidence/m180-onboarding-ui-old.log` ended at 21/24, exit 1
+`evidence/v9-run/m180-onboarding-ui-old.log` ended at 21/24, exit 1
 (`m180-onboarding-ui-old.exit` contains `1`), in 48.4 seconds. Despite its filename,
 the attempted old-launcher override did not apply, so this was the current
 renderer. `onboarding.start.1` passed. `annot.1` threw
@@ -65,12 +65,12 @@ The current renderer was rebuilt, using the repository-local environment:
 TMPDIR="$PWD/out/t" TMUX_TMPDIR="$PWD/out/t" \
   CFFIXED_USER_HOME="$PWD/out/h" npm_config_cache="$PWD/out/cache/npm" \
   GIT_CEILING_DIRECTORIES="$PWD/out/t" TC_VERIFY_SUFFIX=v9 \
-  npm run build > out/v9-evidence/m180-annotation-build.log 2>&1
+  npm run build > evidence/v9-run/m180-annotation-build.log 2>&1
 
 TMPDIR="$PWD/out/t" TMUX_TMPDIR="$PWD/out/t" \
   CFFIXED_USER_HOME="$PWD/out/h" npm_config_cache="$PWD/out/cache/npm" \
   GIT_CEILING_DIRECTORIES="$PWD/out/t" TC_VERIFY_SUFFIX=v9 \
-  npm run verify:panels:product > out/v9-evidence/m180-annotation-product-green.log 2>&1
+  npm run verify:panels:product > evidence/v9-run/m180-annotation-product-green.log 2>&1
 ```
 
 Build: exit 0. Product: pending.

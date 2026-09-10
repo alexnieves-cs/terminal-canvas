@@ -33,14 +33,14 @@ absence: a node that tests a node is a loop with no stop.
 
 ## The three commands
 
-Run on `v9-act5-nodes` at the act's head, in the environment `out/v9-evidence/run-electron.sh`
+Run on `v9-act5-nodes` at the act's head, in the environment `evidence/v9-run/run-electron.sh`
 sets.
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/act56-verify.log` |
-| `npm run verify:visual` | 0 | 59/59, after two goldens changed with their sentences | `out/v9-evidence/act56-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/act56-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/act56-verify.log` |
+| `npm run verify:visual` | 0 | 59/59, after two goldens changed with their sentences | `evidence/v9-run/act56-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `evidence/v9-run/act56-packaged.log` |
 
 ## What these acts struck, and why
 

@@ -6,6 +6,7 @@
    terminal — so it has to be caught mechanically. pty:list makes it possible. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
+const { loadRenderer } = require('./load-renderer.cjs')
 const { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync, readdirSync, rmSync, realpathSync, renameSync, unlinkSync, statSync, openSync, readSync, closeSync } = require('node:fs')
 const { execFileSync, spawn: spawnChild } = require('node:child_process')
 const { tmpdir } = require('node:os')
@@ -1601,7 +1602,12 @@ app.whenReady().then(async () => {
   let GIT_OK = true
   try { execFileSync('git', ['--version'], { stdio: 'ignore' }) } catch { GIT_OK = false }
   try {
-    await win.loadFile(join(__dirname, '..', 'out', 'renderer', 'index.html')).catch(() => {})
+    // Not `loadFile(...).catch(() => {})`. A swallowed load turns up one step
+    // later as `executeJavaScript` failing with "Script failed to execute" —
+    // which is how a real ERR_FILE_NOT_FOUND flake in this very suite read as
+    // 77/78 with an unexplained `infrastructure` line. scripts/load-renderer.cjs
+    // carries the measurement and separates "no build" from "flaked".
+    await loadRenderer(win)
     const wc = win.webContents
 
     // Check 32's evidence, SAMPLED here and asserted at the end of the run

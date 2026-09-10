@@ -33,13 +33,13 @@ about bytes it does.
 
 ## The three commands
 
-Run on `v9-act4-media` at `af06120`, in the environment `out/v9-evidence/run-electron.sh` sets.
+Run on `v9-act4-media` at `af06120`, in the environment `evidence/v9-run/run-electron.sh` sets.
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/act34-verify.log` |
-| `npm run verify:visual` | 0 | 59/59, after four goldens changed with their sentences | `out/v9-evidence/act34-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/act34-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/act34-verify.log` |
+| `npm run verify:visual` | 0 | 59/59, after four goldens changed with their sentences | `evidence/v9-run/act34-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `evidence/v9-run/act34-packaged.log` |
 
 ## What these acts owe
 

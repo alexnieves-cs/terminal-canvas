@@ -24,9 +24,9 @@ getting-started guide, and the three verification commands.
 
 | Command | Exit | Result | Log |
 |---|---|---|---|
-| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `out/v9-evidence/final-verify.log` |
-| `npm run verify:visual` | 0 | 59/59, after thirteen goldens changed with their sentences | `out/v9-evidence/final-visual.log` |
-| `npm run verify:packaged` | 0 | 12/12 | `out/v9-evidence/final-packaged.log` |
+| `npm run verify` | 0 | 38 suite tallies, no FAIL line | `evidence/v9-run/final-verify.log` |
+| `npm run verify:visual` | 0 | 59/59, after thirteen goldens changed with their sentences | `evidence/v9-run/final-visual.log` |
+| `npm run verify:packaged` | 0 | 12/12 | `evidence/v9-run/final-packaged.log` |
 
 `npm run package` produced the unsigned `.app` and `.dmg` in `release/`. The tag `v5.0.0` is
 LOCAL. Nothing was pushed, no GitHub release was created, and no remote object of any kind
