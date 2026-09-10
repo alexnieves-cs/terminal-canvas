@@ -140,6 +140,15 @@ verb changed no scene (the one work card in the scenes, `card12`, is at scale 1 
 rest), so no golden was regenerated and none needed a critic's sentence. **`verify:packaged`:
 exit 0, 12/12.**
 
+**The owed gate, after the merge: `npm run verify` exit 0 — 39/39 suites, 518.2 s.** D08 was
+merged with `main` (`e9c4c02b`, which had moved five commits: the shared `ok()`/`TC_ONLY` verify
+helper, the `useTiering`/`useCanvasClipboard` extraction from `Canvas.tsx`, and the docs split). Two
+conflicts, both additive: `docs/verify-suites.md` (D08's run section beside `main`'s new "Suite
+details" appendix — both kept) and `Canvas.tsx`'s import block (D08's two imports beside the two
+hooks `main` extracted; the `lod` import `main` had removed stays removed). The merged tree
+typechecked clean and the gate ran with the load average at 6.8 — `verify:panels:shell` included,
+green. `main` was fast-forwarded to the merge commit `9ad622b7`. Not pushed.
+
 ## Owed by hand
 
 - A person driving the lens on a canvas of thirty panels at far zoom: whether the veil reads as

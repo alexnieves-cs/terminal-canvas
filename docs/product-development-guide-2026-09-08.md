@@ -31,7 +31,7 @@ All steps start unchecked. Existing implementations may satisfy part of a step; 
 | D05 | M197–M198 ✅ | Start work from an issue or intention | P0 | D04 | One path into a task, agent, and lane |
 | D06 | M199–M200 ✅ | Honest agent and run supervision | P0 | D05 | Blockers, queues, and completion have distinct meanings |
 | D07 | M201–M202 ✅ | Review handoff and local review readiness | P0 | D06 | Task results are reviewable before a PR exists |
-| D08 | M203–M204 | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
+| D08 | M203–M204 ✅ | Task-oriented spatial navigation | P1 | D05–D07 | Show a task and its related objects without hunting |
 | D09 | M205 | Intent-led onboarding | P1 | D05–D08 | A new user starts useful work through the same path |
 | D10 | M206–M208 | Information hierarchy and contextual UI finish | P1 | D06–D09 | A calmer shell, inspector, graph, and far view |
 | D11 | M209–M210 | Retained outcomes and return-to-work | P1 | D07–D10 | Tidying panels does not erase the meaning of the work |
@@ -236,7 +236,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D08 — Navigate tasks spatially
 
-- [ ] Complete and record D08. **M203–M204 built and recorded** — [docs/build-log/m203-m204-d08-task-navigation.md](build-log/m203-m204-d08-task-navigation.md). Left unchecked on purpose: `npm run verify` was 38/39 on a loaded machine, and the one red suite fails on the baseline without D08 too; the box is ticked by the first clean gate on an idle machine.
+- [x] Complete and record D08. **M203–M204** — the record is [docs/build-log/m203-m204-d08-task-navigation.md](build-log/m203-m204-d08-task-navigation.md).
 
 **Do in order:**
 
