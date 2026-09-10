@@ -4,6 +4,9 @@ import { readXlsx, writeXlsx, type XlsxBook } from './sheet-xlsx'
 import { base64ToBytes, bytesToBase64, type SheetFormat, type SheetView } from './sheet'
 import type { Grid } from './sheet-formula'
 import type { FileResult, FileWriteResult } from './file-panel'
+import { contentHash, discard, keep, rebase, stage, type DraftOutcome } from './draft-review'
+import { applyDraftItems, cellValue, type SheetDraft } from './sheet-draft'
+import { refName } from './sheet-formula'
 
 export interface SheetIO {
   /** The file's name, for sentences that name what changed. */
@@ -21,6 +24,8 @@ export interface SheetState {
   losses: string[]
   busy: boolean
   error?: string
+  /** M246. A successful operation's sentence worth reading (what a rebase dropped). Not an error. */
+  note?: string
   undo: number
   redo: number
 }
@@ -40,8 +45,14 @@ interface Loaded { bytes: string; grid: string[][]; csv?: CsvDoc; book?: XlsxBoo
 export function createSheetSession(initial: SheetView, io: SheetIO, format: SheetFormat) {
   let state: SheetState = { view: initial, stale: false, losses: [], busy: false, undo: 0, redo: 0 }
   let base: Loaded | undefined
-  const past: Loaded[] = []
-  const future: Loaded[] = []
+  // M246 (critic, finding 2). Each history step carries the DRAFT as it stood,
+  // so undoing a write that dropped a drafted cell brings the proposal back,
+  // and undoing a write the draft was rebased onto does not read as a conflict.
+  interface Step { loaded: Loaded; draft: SheetDraft | undefined }
+  const past: Step[] = []
+  const future: Step[] = []
+  // Ids the person discarded from the current draft: a history step must not resurrect them.
+  const discardedIds = new Set<string>()
   const listeners = new Set<() => void>()
   const delimiter = format === 'tsv' ? '\t' : ','
   const publish = (patch: Partial<SheetState>): void => {
@@ -95,7 +106,7 @@ export function createSheetSession(initial: SheetView, io: SheetIO, format: Shee
     inFlight += 1
     publish({ busy: true })
     const run = queue.then(async () => {
-      publish({ error: undefined })
+      publish({ error: undefined, note: undefined })
       try { return await work() } catch (e) { return error(String(e)) } finally {
         inFlight -= 1
         if (inFlight === 0) publish({ busy: false })
@@ -128,14 +139,65 @@ export function createSheetSession(initial: SheetView, io: SheetIO, format: Shee
     if (state.stale) return error(changedOnDisk())
     if (structural && base.book) return error(structuralRefusal())
     const previous = base
+    const draftBefore = state.view.draft
     if (!await save(encode(previous, grid, structural))) return false
-    past.push(previous)
+    past.push({ loaded: previous, draft: draftBefore })
     if (past.length > 100) past.shift()
     future.length = 0
+    // M246. A person's own write moves the file under a pending draft. The items
+    // it did not touch still describe the file, so the draft follows the write
+    // (rather than reading as a conflict the person caused); an item whose cell
+    // they overwrote is dropped and named.
+    const b = base
+    if (state.view.draft && b) {
+      const r = rebase(state.view.draft, contentHash(b.bytes), (id) => cellValue(b.grid, id))
+      setDraft(r.draft, r.dropped.length > 0 ? tally(0, r.dropped.length) : undefined)
+      if (r.dropped.length > 0) publish({ note: `your edit replaced drafted ${r.dropped.map((i) => i.id).join(', ')} — dropped from the draft` })
+    }
     publish({})
     return true
   })
   const setView = (view: SheetView): void => { publish({ view }); io.changed(view) }
+
+  // ── M246: the draft ────────────────────────────────────────────────────
+  const tally = (kept: number, discarded: number): DraftOutcome => {
+    const o = state.view.draftOutcome
+    return { at: Date.now(), kept: (o?.kept ?? 0) + kept, discarded: (o?.discarded ?? 0) + discarded }
+  }
+  /** `outcome`: undefined leaves it as it is, null removes it. Absent keys stay ABSENT — never `draft: undefined`. */
+  const setDraft = (draft: SheetDraft | undefined, outcome: DraftOutcome | null | undefined): void => {
+    const { draft: _d, draftOutcome: _o, ...rest } = state.view
+    const nextOutcome = outcome === undefined ? state.view.draftOutcome : outcome ?? undefined
+    setView({ ...rest, ...(draft ? { draft } : {}), ...(nextOutcome ? { draftOutcome: nextOutcome } : {}) })
+  }
+  const decodeGrid = (disk: FileResult): Grid | undefined => { const l = decode(disk); return typeof l === 'string' ? undefined : l.grid }
+  /** BY NAME: the file, whose draft, and exactly which drafted cells no longer read what the draft replaced. */
+  const conflictText = (draft: SheetDraft, grid: Grid | undefined): string => {
+    const moved = grid === undefined ? [] : draft.items.filter((i) => cellValue(grid, i.id) !== i.old).map((i) => i.id)
+    const whose = draft.by === undefined ? 'the' : `${draft.by}'s`
+    return `${io.name} changed on disk after ${whose} draft — ` +
+      (moved.length > 0 ? `${moved.join(', ')} no longer read what the draft replaced` : 'the drafted cells still read what it replaced') +
+      '; Rebase or Discard before keeping'
+  }
+  /**
+   * After undo/redo moved the file: the draft is the step's recorded draft
+   * merged with anything proposed since (current wins), minus what the person
+   * discarded, rebased onto the bytes now on disk — so it neither reads as a
+   * conflict nor loses an item the undone write had dropped.
+   */
+  const restoreDraft = (saved: SheetDraft | undefined, loaded: Loaded): void => {
+    const current = state.view.draft
+    if (saved === undefined && current === undefined) return
+    const byId = new Map<string, SheetDraft['items'][number]>()
+    for (const i of saved?.items ?? []) byId.set(i.id, i)
+    for (const i of current?.items ?? []) byId.set(i.id, i)
+    for (const id of discardedIds) byId.delete(id)
+    const shell = current ?? saved!
+    const merged: SheetDraft | undefined = byId.size === 0 ? undefined : { ...shell, items: [...byId.values()] }
+    if (merged === undefined) { setDraft(undefined, undefined); return }
+    const r = rebase(merged, contentHash(loaded.bytes), (id) => cellValue(loaded.grid, id))
+    setDraft(r.draft, undefined)
+  }
 
   return {
     snapshot: (): SheetState => state,
@@ -169,16 +231,79 @@ export function createSheetSession(initial: SheetView, io: SheetIO, format: Shee
     undo: (): Promise<boolean> => guarded(async () => {
       const target = past.at(-1)
       if (!target || !base) return false
-      const previous = base
-      if (!await save(target)) return false
-      past.pop(); future.push(previous); publish({}); return true
+      const previous: Step = { loaded: base, draft: state.view.draft }
+      if (!await save(target.loaded)) return false
+      past.pop(); future.push(previous); restoreDraft(target.draft, target.loaded); publish({}); return true
     }),
     redo: (): Promise<boolean> => guarded(async () => {
       const target = future.at(-1)
       if (!target || !base) return false
+      const previous: Step = { loaded: base, draft: state.view.draft }
+      if (!await save(target.loaded)) return false
+      future.pop(); past.push(previous); restoreDraft(target.draft, target.loaded); publish({}); return true
+    }),
+    /**
+     * M246. An agent's edit becomes a PROPOSAL: staged in the view, the file untouched.
+     * `old` is what the file holds now, so the person compares against the real thing.
+     */
+    propose: (edits: readonly CellEdit[], by: string): Promise<boolean> => guarded(async () => {
+      if (!base) return error('Read the file before proposing.')
+      const hash = contentHash(base.bytes)
+      let draft = state.view.draft
+      if (draft && draft.baseHash !== hash) return error(conflictText(draft, base.grid))
+      const fresh = draft === undefined
+      if (fresh) discardedIds.clear()
+      // Re-proposing an id is the agent asking again: it is no longer a discarded one.
+      for (const e of edits) discardedIds.delete(refName(e.r, e.c))
+      for (const e of edits) draft = stage(draft, { id: refName(e.r, e.c), old: base.grid[e.r]?.[e.c] ?? '', new: e.value }, hash, by, Date.now())
+      // A fresh draft starts a fresh outcome; the last one's "applied" is history now.
+      setDraft(draft, fresh ? null : undefined)
+      return true
+    }),
+    /** Apply ONLY the chosen items, in one compare-and-swap write. Refused, by name, if the file moved under the draft. */
+    keepDraft: (ids: readonly string[] | 'all'): Promise<boolean> => guarded(async () => {
+      const draft = state.view.draft
+      if (!draft) return error(`${io.name} has no draft to keep`)
+      if (!base) return error('Read the file before keeping.')
+      const disk = await io.read()
+      publish({ disk })
+      if (disk.kind !== 'bytes') return error(describe(disk))
+      if (contentHash(disk.base64) !== draft.baseHash) return error(conflictText(draft, decodeGrid(disk)))
+      const { apply, remaining } = keep(draft, ids)
+      if (apply.length === 0) return error('none of those cells has a pending change')
       const previous = base
+      const target = encode(previous, applyDraftItems(previous.grid, apply), false)
       if (!await save(target)) return false
-      future.pop(); past.push(previous); publish({}); return true
+      past.push({ loaded: previous, draft })
+      if (past.length > 100) past.shift()
+      future.length = 0
+      // The rest still describe the file: their cells were not touched by this write.
+      setDraft(remaining === undefined ? undefined : { ...remaining, baseHash: contentHash(target.bytes) }, tally(apply.length, 0))
+      return true
+    }),
+    /** Drop the chosen items. Nothing is written, so the file stays byte-identical. */
+    discardDraft: (ids: readonly string[] | 'all'): Promise<boolean> => guarded(async () => {
+      const draft = state.view.draft
+      if (!draft) return error(`${io.name} has no draft to discard`)
+      const { dropped, remaining } = discard(draft, ids)
+      if (dropped.length === 0) return error('none of those cells has a pending change')
+      for (const i of dropped) discardedIds.add(i.id)
+      setDraft(remaining, tally(0, dropped.length))
+      return true
+    }),
+    /** After a change underneath: adopt the disk, keep the items it did not touch, and name the ones it did. */
+    rebaseDraft: (): Promise<boolean> => guarded(async () => {
+      const draft = state.view.draft
+      if (!draft) return error(`${io.name} has no draft to rebase`)
+      const disk = await io.read()
+      publish({ disk })
+      const loaded = decode(disk)
+      if (typeof loaded === 'string') return error(loaded)
+      if (!base || loaded.bytes !== base.bytes) { past.length = 0; future.length = 0; adopt(loaded) }
+      const r = rebase(draft, contentHash(loaded.bytes), (id) => cellValue(loaded.grid, id))
+      setDraft(r.draft, r.dropped.length > 0 ? tally(0, r.dropped.length) : undefined)
+      publish({ note: r.dropped.length > 0 ? `dropped ${r.dropped.map((i) => i.id).join(', ')} from the draft — ${io.name} changed them` : `the draft matches ${io.name} again` })
+      return true
     }),
     setWidths: (widths: number[]): void => setView({ ...state.view, widths }),
     /** The person has read the loss list; record exactly what they read, so a longer list asks again. */

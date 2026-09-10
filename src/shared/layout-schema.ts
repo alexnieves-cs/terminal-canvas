@@ -908,6 +908,7 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // M245. The same drop-the-field rule: a malformed sheet view reopens the file as a plain file panel.
   const sheet = parseSheetView(raw.sheet)
   if (sheet.kind === 'malformed' || ('sheet' in raw && sheet.kind === 'absent')) warnings.push(`file panel ${id}: malformed sheet view dropped`)
+  if (sheet.kind === 'view' && sheet.dropped !== undefined) warnings.push(`file panel ${id}: malformed sheet ${sheet.dropped.join(' and ')} dropped`)
   return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(sheet.kind === 'view' ? { sheet: sheet.view } : {}) }
 }
 

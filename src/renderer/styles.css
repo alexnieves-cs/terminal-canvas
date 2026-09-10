@@ -5124,31 +5124,42 @@ body {
    inside an absolutely-positioned plane does not stick. */
 .sheet-node__body { display: flex; flex-direction: column; height: 100%; min-height: 0; font-family: var(--font-ui); color: var(--fg-2); outline: none; }
 .sheet-node__body:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.sheet-node__bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); min-width: 0; }
-.sheet-node__ref { font-family: var(--font-mono); font-size: 12px; color: var(--fg-3); min-width: 3.5em; }
-.sheet-node__formula { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sheet-node__tools { display: flex; gap: 4px; opacity: 0; transition: opacity var(--dur-1); }
+.sheet-node__bar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); min-width: 0; }
+.sheet-node__ref { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-3); min-width: 3.5em; }
+.sheet-node__formula { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-node__tools { display: flex; gap: var(--sp-2); opacity: 0; transition: opacity var(--dur-1); }
 .sheet-node__body:hover .sheet-node__tools, .sheet-node__body:focus-within .sheet-node__tools { opacity: 1; }
-.sheet-node__tools button { font: inherit; font-size: 12px; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.sheet-node__tools button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
 .sheet-node__tools button:disabled { color: var(--fg-4); }
-.sheet-node__tools button.is-urgent { color: var(--fg-1); border-color: var(--amber, var(--iris)); }
-.sheet-node__status { margin: 0; padding: 6px 8px; font-size: 12px; color: var(--fg-2); background: var(--iris-dim); }
+.sheet-node__tools button.is-urgent { color: var(--fg); border-color: var(--amber, var(--iris)); }
+.sheet-node__status { margin: 0; padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); color: var(--fg-2); background: var(--iris-dim); }
 .sheet-node__scroller { position: relative; flex: 1; min-height: 0; overflow: auto; }
 .sheet-node__plane { position: relative; }
 .sheet-node__cell, .sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { position: absolute; box-sizing: border-box; }
-.sheet-node__cell { padding: 0 6px; line-height: 23px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.sheet-node__cell { padding: 0 var(--sp-3); line-height: 23px; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: cell; user-select: none; }
 .sheet-node__cell.is-number { text-align: right; font-variant-numeric: tabular-nums; }
 .sheet-node__cell.is-error { color: var(--amber, var(--fg-3)); }
 .sheet-node__cell.is-in-range { background: var(--iris-dim); }
-.sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { z-index: 2; background: var(--s-1); color: var(--fg-3); font-size: 11px;
+.sheet-node__colhead, .sheet-node__rowhead, .sheet-node__corner { z-index: 2; background: var(--s-1); color: var(--fg-3); font-size: var(--t-xs);
   line-height: 23px; text-align: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); user-select: none; }
 .sheet-node__corner { z-index: 3; }
-.sheet-node__colhead.is-active, .sheet-node__rowhead.is-active { color: var(--fg-1); }
+.sheet-node__colhead.is-active, .sheet-node__rowhead.is-active { color: var(--fg); }
 .sheet-node__resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 1; }
 .sheet-node__cursor { position: absolute; pointer-events: none; box-shadow: inset 0 0 0 2px var(--iris); z-index: 1; }
-.sheet-node__editor { position: absolute; z-index: 4; box-sizing: border-box; font: inherit; font-size: 12px; padding: 0 5px;
-  color: var(--fg-1); background: var(--s-0, var(--s-1)); border: 2px solid var(--iris); outline: none; }
-.sheet-node__dir { color: var(--fg-3); font-size: 12px; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.sheet-node__loss { margin-left: 8px; font: inherit; font-size: 11px; color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
-.sheet-node__loss.is-pending { color: var(--fg-1); border-color: var(--amber, var(--iris)); cursor: pointer; }
+.sheet-node__editor { position: absolute; z-index: 4; box-sizing: border-box; font: inherit; font-size: var(--t-sm); padding: 0 var(--sp-2);
+  color: var(--fg); background: var(--s-0, var(--s-1)); border: 2px solid var(--iris); outline: none; }
+.sheet-node__dir { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sheet-node__loss { margin-left: var(--sp-4); font: inherit; font-size: var(--t-xs); color: var(--fg-3); background: none; border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); }
+.sheet-node__loss.is-pending { color: var(--fg); border-color: var(--amber, var(--iris)); cursor: pointer; }
+
+/* M246. The draft layer: proposed cells carry the accent edge and show the NEW value
+   (old → new in the title and the formula bar); the strip is contextual. */
+.sheet-node__cell.is-draft { box-shadow: inset 0 0 0 1px var(--iris); color: var(--fg); background: var(--iris-dim); }
+.sheet-node__draft { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--t-sm); border-bottom: 1px solid var(--line); }
+.sheet-node__draft > span { flex: 1; min-width: 0; color: var(--fg-2); }
+.sheet-node__draft button { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); }
+.sheet-node__draft button:disabled { color: var(--fg-4); }
+.sheet-node__draft.is-conflict > span { color: var(--fg); }
+.sheet-node__draft.is-done > span { color: var(--fg-3); }
+.sheet-node__changes { margin-left: var(--sp-4); font-size: var(--t-xs); color: var(--fg); border: 1px solid var(--iris); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); white-space: nowrap; }

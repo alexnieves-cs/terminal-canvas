@@ -7,7 +7,10 @@ import type { CreationResult } from '@shared/verb-table'
  * so there is exactly one path to the file.
  */
 export interface SheetController {
-  edit(cell: string, value: string): Promise<CreationResult>
+  /** M246: `caller` names an agent when the edit came through the agent door — then it PROPOSES. */
+  edit(cell: string, value: string, caller?: { panelId?: string }): Promise<CreationResult>
+  /** M246. Keep or discard draft cells: `all`, one cell, or a range like B2:C4. */
+  review(operation: string, target: string, caller?: { panelId?: string }): Promise<CreationResult>
 }
 const controllers = new Map<string, SheetController>()
 export function sheetController(id: string): SheetController | undefined { return controllers.get(id) }

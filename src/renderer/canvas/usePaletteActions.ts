@@ -19,7 +19,7 @@ import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
-import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
+import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type AgentPlanCaller, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
@@ -112,7 +112,7 @@ export interface PaletteActionsDeps {
   startDevServerNow: (script?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   discoverProject: () => Promise<PreviewDiscovery | { kind: 'refused'; reason: string }>
   /** M184. Canvas's Run over the draft (the same instantiation the panel's Run calls). */
-  runWorkflowNow: (templateId: string) => string | undefined
+  runWorkflowNow: (templateId: string, caller?: AgentPlanCaller) => string | undefined
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -302,7 +302,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         templates: allTemplates(templateRowsRef.current).map((t) => ({ id: t.id })),
         worktrees: worktreeRows.map((w) => ({ id: w.id }))
       })
-      const execute = async (step: PlanStep): Promise<StepOutcome> => {
+      // M246. `caller` is WHO asked: present through the agent door (and a
+      // workflow an agent triggered), absent for the palette runner and a
+      // person's own run. Only verbs whose meaning depends on it read it.
+      const execute = async (step: PlanStep, caller?: AgentPlanCaller): Promise<StepOutcome> => {
         const a = step.args
         const creation = CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)
         if (creation) return self.createObject(creation.id, a.value)
@@ -310,10 +313,14 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         switch (step.verb) {
           case 'checklist-edit': return self.editChecklist(a.panel!, a.operation!, a.value)
           case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
-          case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '')
+          case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '', caller)
+          case 'sheet-review': return self.reviewSheet(a.panel!, a.operation!, a.target, caller)
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
-          case 'workflow-run': return self.runWorkflowNow(a.template!)
+          // M246 (critic, finding 1). The caller rides the run into every action
+          // node: dropped here, an agent could put `sheet-review f1 keep all` in a
+          // template and run it as if a person had.
+          case 'workflow-run': return self.runWorkflowNow(a.template!, caller)
           case 'workflow-stop': return self.stopWorkflow(a.template!)
           case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
           case 'node-test': return self.testNode(a.template!, a.node)
@@ -532,7 +539,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     createObject: createObjectNow,
     editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
-    editSheet: async (panel, cell, value) => sheetController(panel)?.edit(cell, value) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
+    editSheet: async (panel, cell, value, caller) => sheetController(panel)?.edit(cell, value, caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
+    reviewSheet: async (panel, operation, target, caller) => sheetController(panel)?.review(operation, target ?? 'all', caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -2008,8 +2016,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // shape). The first cut read those the other way round, so the one door
     // with nobody watching reported a refusal for every run that started and
     // a success for every one that did not.
-    runWorkflowNow: (templateId) => {
-      const refusal = runWorkflowNow(templateId)
+    runWorkflowNow: (templateId, caller) => {
+      const refusal = runWorkflowNow(templateId, caller)
       return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
     },
     testNode: (templateId, key) => testNodeNow(templateId, key),
@@ -2178,7 +2186,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), execute, caller),
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, caller), caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({

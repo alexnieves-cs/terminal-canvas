@@ -385,7 +385,7 @@ export function Canvas({
   const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges() }, [])
   // M80. The sheet is opened by usePaletteActions, which is created above the
   // instantiate verb; the ref is the same indirection every late verb uses.
-  const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
+  const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>, caller?: AgentPlanCaller) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
   const instantiateTemplateStable = useCallback((template: PersistedTemplate, values: Record<string, string>) => instantiateTemplateRef.current(template, values), [])
   /**
    * M133. How many times M80's instantiation has been ENTERED, for
@@ -3900,7 +3900,8 @@ export function Canvas({
    * A chat node's `message` is INSERTED into its composer, never sent: a
    * template must not start work the user has not read.
    */
-  const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>): Promise<SpawnResult> => {
+  // M246. `caller` is who started the run, handed to every action node (the critic's finding 1).
+  const instantiateTemplate = useCallback(async (template: PersistedTemplate, values: Record<string, string>, caller?: AgentPlanCaller): Promise<SpawnResult> => {
     instantiateCountRef.current += 1
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     // Fix round 2. The blocks have no runtime yet and the loop below skips
@@ -4042,7 +4043,9 @@ export function Canvas({
     // and the `node-test` verb take — one executor, so a node cannot behave
     // one way when a person tests it and another when the workflow runs it.
     for (const node of runNodes) {
-      const outcome = await runNodeRef.current?.(node, undefined, template.reviewed !== false)
+      // The run's caller, never a hard-coded `undefined`: an agent-started run's
+      // nodes must be refused and routed exactly as that agent's own line would be.
+      const outcome = await runNodeRef.current?.(node, caller, template.reviewed !== false)
       if (outcome !== undefined && outcome.kind === 'failed') sayRef.current(`${node.key}: ${outcome.reason}`)
     }
     for (const { id, text } of messages) void deliverToComposer(id, text)
@@ -4930,7 +4933,10 @@ export function Canvas({
     selectOnly(id)
   }, [commitHistory, selectOnly])
 
-  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click'): string | undefined => {
+  // M246. `caller` is who started the run: an agent through `tc plan workflow-run`
+  // (its identity rides into every action node), or absent for a person's Run and
+  // for a timer's fire (a template a person authored and reviewed).
+  const runWorkflow = useCallback((templateId: string, source: 'click' | 'fire' = 'click', caller?: AgentPlanCaller): string | undefined => {
     // M184. The DRAFT is what runs when there is one: what the person sees on
     // the diagram is what the Run button starts. The snapshot the run records
     // below is this same shape, so its outcomes never move under a later edit.
@@ -4953,7 +4959,7 @@ export function Canvas({
     // watcher recording a success per tick while minting nothing.
     const refusal = templateRefusal(template, presetRowsRef.current, claudeAvailable(presetRowsRef.current))
     if (refusal !== undefined) return `not run: ${refusal}`
-    void instantiateTemplateRef.current(template, {})
+    void instantiateTemplateRef.current(template, {}, caller)
     return undefined
   }, [])
 
@@ -5909,6 +5915,10 @@ export function Canvas({
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
   }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel])
 
+  // M246. The plan door's run: `runWorkflow`'s second parameter is the SOURCE
+  // (click | fire), so passing it straight through would hand the caller in as
+  // a source. Stable, so the palette actions do not re-memo every render.
+  const runWorkflowFromPlan = useCallback((templateId: string, caller?: AgentPlanCaller) => runWorkflow(templateId, 'click', caller), [runWorkflow])
   const paletteActions = usePaletteActions({
     createObjectNow: createObject,
     applyStarter,
@@ -5930,7 +5940,7 @@ export function Canvas({
     startDevServerNow: startDevServer,
     discoverProject,
     stopWorkflowRun,
-    runWorkflowNow: runWorkflow,
+    runWorkflowNow: runWorkflowFromPlan,
     templateRowsRef,
     reloadTemplates,
     recheckEnvironment,

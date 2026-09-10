@@ -4352,3 +4352,20 @@ moves and silently wrong after an insert or delete — a merge or a comment land
 And re-keying from the book as first OPENED (rather than as last written) makes every later
 save wrong the same way. **Read with `cellNF: true`**: without it SheetJS leaves `z` unset, no
 date is recognisable, and every date shows — and is retyped — as a serial number.
+
+**An agent's sheet edit PROPOSES; the caller decides, and it rides into `execute`
+(`usePaletteActions.ts`'s `execute(step, caller)`, `sheet-draft.ts`'s `sheetEditRoute`, M246).**
+`runAgentPlan` is shared by the agent door and the workflow action node, and `execute` used to
+receive only the step — so no verb could tell a person's line from an agent's. The caller is
+now threaded through; `caller.panelId` present means an agent is asking, and `sheet-edit` stages
+a draft instead of writing. Keeping is refused to any agent caller by name: an agent keeping its
+own draft is the approval the draft exists to hand to a person. A person's own write REBASES a
+pending draft onto the new file (`sheet-session.ts`'s `update`); without that, editing any other
+cell would turn the agent's draft into a "conflict" the person caused. **A workflow run carries
+its caller into every action node** (`Canvas.tsx`'s `instantiateTemplate` node loop and
+`runWorkflowFromPlan`, M246's critic): the loop used to pass a hard-coded `undefined`, so an agent
+could put `sheet-review f1 keep all` in a template, `workflow-run` it, and keep its own draft as a
+person. `runWorkflow`'s second parameter is the SOURCE — never pass `runWorkflow` itself where a
+`(templateId, caller)` function is expected. **Undo/redo carry the draft too**: each history step
+records the draft as it stood, and a traversal re-derives it (merge, minus discards, rebase) —
+otherwise undoing a person's edit reads as a conflict and loses the proposal it had dropped.

@@ -5,6 +5,8 @@ import { createEvaluator, displayText, parseRef, refName, type CellRange, type G
 import { clearRange, deleteCols, deleteRows, gridSize, insertCols, insertRows, pasteTsv, rangeToTsv } from '@shared/sheet-model'
 import { colLeft, colWidth, visibleWindow } from '@shared/sheet-grid'
 import { colName } from '@shared/sheet-formula'
+import { contentHash, draftState } from '@shared/draft-review'
+import { parseReviewTarget, sheetDraftSummary, sheetEditRoute, sheetReviewRefusal } from '@shared/sheet-draft'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { registerSheet, type SheetController } from './sheet-controllers'
@@ -110,12 +112,27 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
   const selRef = useRef(sel); selRef.current = sel
 
   const controller = useMemo<SheetController>(() => ({
-    edit: async (cell, value): Promise<CreationResult> => {
+    edit: async (cell, value, caller): Promise<CreationResult> => {
       if (readOnlyRef.current || !alive.current) return { kind: 'refused', reason: 'this sheet is read-only here' }
       const ref = parseRef(cell)
       if (!ref) return { kind: 'refused', reason: `${cell} is not a cell reference like B2` }
+      // M246. Through the agent door an edit PROPOSES: the file is untouched until a person keeps it.
+      if (sheetEditRoute(caller) === 'draft') {
+        const ok = await session.propose([{ r: ref.r, c: ref.c, value }], caller!.panelId!)
+        return ok ? { kind: 'ran', note: `${refName(ref.r, ref.c)} proposed — the file changes only when a person keeps it` } : { kind: 'refused', reason: session.snapshot().error ?? 'the sheet is busy' }
+      }
       const ok = await session.setCells([{ r: ref.r, c: ref.c, value }])
       return ok ? { kind: 'ran', note: `${refName(ref.r, ref.c)} set` } : { kind: 'refused', reason: session.snapshot().error ?? 'the sheet is busy' }
+    },
+    review: async (operation, target, caller): Promise<CreationResult> => {
+      if (readOnlyRef.current || !alive.current) return { kind: 'refused', reason: 'this sheet is read-only here' }
+      if (operation !== 'keep' && operation !== 'discard') return { kind: 'refused', reason: 'use keep or discard, then a cell, a range like B2:C4, or all' }
+      const refusal = sheetReviewRefusal(operation, caller)
+      if (refusal) return { kind: 'refused', reason: refusal }
+      const ids = parseReviewTarget(target)
+      if (ids === null) return { kind: 'refused', reason: `${target} is not a cell, a range like B2:C4, or all` }
+      const ok = operation === 'keep' ? await session.keepDraft(ids) : await session.discardDraft(ids)
+      return ok ? { kind: 'ran', note: `${operation === 'keep' ? 'kept' : 'discarded'} ${ids === 'all' ? 'the whole draft' : ids.join(', ')}` } : { kind: 'refused', reason: session.snapshot().error ?? 'the sheet is busy' }
     }
   }), [session])
   useEffect(() => registerSheet(id, controller), [id, controller])
@@ -200,20 +217,28 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
     window.addEventListener('mouseup', up)
   }
 
+  // M246. The draft layer over the grid — ahead of the cell loop, which paints it.
+  const draft = state.view.draft
+  const draftById = useMemo(() => new Map((draft?.items ?? []).map((i) => [i.id, i])), [draft])
+  // Hashed once per disk result, not per render: the base64 of a 2 MB file is a long string.
+  const diskHash = useMemo(() => state.disk?.kind === 'bytes' ? contentHash(state.disk.base64) : undefined, [state.disk])
+
   const cells: JSX.Element[] = []
   for (let r = win.r0; r <= win.r1; r++) {
     for (let c = win.c0; c <= win.c1; c++) {
       const raw = grid[r]?.[c] ?? ''
+      const pending = draftById.get(refName(r, c))
       const inRange = r >= range.r0 && r <= range.r1 && c >= range.c0 && c <= range.c1
       const value = raw.startsWith('=') ? ev.value(r, c) : undefined
       const cls = `sheet-node__cell${inRange ? ' is-in-range' : ''}${raw.startsWith('=') && ev.isError(r, c) ? ' is-error' : ''}${typeof value === 'number' || (value === undefined && raw !== '' && !raw.startsWith("'") && /^\s*[-+]?(\d+\.?\d*|\.\d+)\s*$/.test(raw)) ? ' is-number' : ''}`
-      cells.push(<div key={`${r}:${c}`} className={cls} data-cell={refName(r, c)}
+      cells.push(<div key={`${r}:${c}`} className={pending ? `${cls} is-draft` : cls} data-cell={refName(r, c)} data-draft={pending ? 'true' : undefined}
         style={{ left: x0(c), top: ROW_H * (r + 1), width: colWidth(widths, c, DEFAULT_W), height: ROW_H }}
         onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); dragging.current = true; select(r, c, e.shiftKey); body.current?.focus({ preventScroll: true }) }}
         onMouseEnter={(e) => { if (dragging.current && e.buttons === 1) { setSel({ r, c }) } }}
         onDoubleClick={() => { setSel({ r, c }); setAnchor({ r, c }); if (editable) setEditing({ r, c, text: raw }); else setMessage(reason ?? '') }}
-        title={raw.startsWith('=') ? raw : undefined}>
-        {raw === '' ? null : displayText(raw, ev, r, c)}
+        title={pending ? `${pending.old === '' ? '(empty)' : pending.old} → ${pending.new === '' ? '(empty)' : pending.new}` : raw.startsWith('=') ? raw : undefined}>
+        {/* A drafted cell shows what the draft PROPOSES; the file still holds `old` until it is kept. */}
+        {pending ? pending.new : raw === '' ? null : displayText(raw, ev, r, c)}
       </div>)
     }
   }
@@ -237,6 +262,15 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
   const multi = range.r0 !== range.r1 || range.c0 !== range.c1
   const disk = state.disk
   const lossesPending = state.losses.length > 0 && session.lossesPending()
+  const dState = draftState(draft, diskHash, state.view.draftOutcome)
+  const inSelection = (draft?.items ?? []).filter((i) => {
+    const p = parseRef(i.id)
+    return p !== null && p.r >= range.r0 && p.r <= range.r1 && p.c >= range.c0 && p.c <= range.c1
+  }).map((i) => i.id)
+  const resolve = (op: 'keep' | 'discard', ids: string[] | 'all'): void => {
+    void (op === 'keep' ? session.keepDraft(ids) : session.discardDraft(ids)).then(report)
+  }
+  const selectedDraft = draftById.get(refName(sel.r, sel.c))
 
   return <PanelFrame id={id} kind="file" kindWord="sheet" rect={panel.rect} z={panel.z} selected={props.selected}
     className="sheet-node" rootAttrs={{ 'data-sheet': '' }} title={panel.title ?? name}
@@ -245,6 +279,8 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
     chrome={<>
       <span className="pf__summary" data-sheet-summary>{sheetSummary(rows, cols)}</span>
       <span className="sheet-node__dir" data-sheet-directory title={directory}>{directory.split('/').slice(-2).join('/')}</span>
+      {/* M246. Contextual: present only when there ARE changes — the rest layer never states a zero. */}
+      {draft && <span className="sheet-node__changes" data-sheet-changes>{sheetDraftSummary(draft)}</span>}
       {state.losses.length > 0 && <button type="button" className={`sheet-node__loss${lossesPending ? ' is-pending' : ''}`} data-sheet-losses
         title={lossesPending ? `Saving this workbook drops: ${state.losses.join('; ')}. Click to accept and allow saving.` : `Accepted — saving drops: ${state.losses.join('; ')}`}
         disabled={readOnly || !lossesPending} onMouseDown={(e) => e.stopPropagation()} onClick={() => session.acceptLosses()}>
@@ -271,7 +307,9 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
       }}>
       <div className="sheet-node__bar">
         <span className="sheet-node__ref" data-sheet-ref>{refName(sel.r, sel.c)}{multi ? `:${refName(range.r1, range.c1)}` : ''}</span>
-        <span className="sheet-node__formula" data-sheet-formula>{grid[sel.r]?.[sel.c] ?? ''}</span>
+        <span className="sheet-node__formula" data-sheet-formula>{selectedDraft
+          ? `${selectedDraft.old === '' ? '(empty)' : selectedDraft.old} → ${selectedDraft.new === '' ? '(empty)' : selectedDraft.new}`
+          : grid[sel.r]?.[sel.c] ?? ''}</span>
         <div className="sheet-node__tools">
           <button type="button" disabled={!editable || structuralReason !== undefined} title={reason ?? structuralReason ?? `Insert a row above ${range.r0 + 1}`} onClick={() => structural(insertRows(grid, range.r0, 1))}>+ Row</button>
           <button type="button" disabled={!editable || structuralReason !== undefined || range.r0 >= rows} title={reason ?? structuralReason ?? (range.r0 >= rows ? 'no data in the selected rows' : `Delete rows ${range.r0 + 1}–${range.r1 + 1}`)} onClick={() => structural(deleteRows(grid, range.r0, range.r1 - range.r0 + 1))}>− Row</button>
@@ -282,7 +320,26 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
           <button type="button" className={state.stale ? 'is-urgent' : undefined} disabled={state.busy} title={state.stale ? `Adopt the version of ${name} now on disk` : 'Read the file again'} onClick={() => { void session.reload().then(report) }}>Reload</button>
         </div>
       </div>
-      {(message || state.error) && <p role="status" className="sheet-node__status" data-sheet-status>{message || state.error}</p>}
+      {(message || state.error || state.note) && <p role="status" className="sheet-node__status" data-sheet-status>{message || state.error || state.note}</p>}
+      {draft && <div className={`sheet-node__draft${dState === 'conflict' ? ' is-conflict' : ''}`} data-sheet-draft={dState}>
+        <span>{dState === 'conflict' ? `${name} changed on disk after this draft` : `${sheetDraftSummary(draft)} proposed${draft.by ? ` by ${draft.by}` : ''}`}</span>
+        <button type="button" data-sheet-draft-keep="selection" disabled={readOnly || dState === 'conflict' || inSelection.length === 0}
+          title={readOnly ? 'leave merged view to review' : dState === 'conflict' ? 'Rebase first: the file changed under this draft' : inSelection.length === 0 ? 'select drafted cells first' : `Keep ${inSelection.join(', ')}`}
+          onClick={() => resolve('keep', inSelection)}>Keep selected</button>
+        <button type="button" data-sheet-draft-discard="selection" disabled={readOnly || inSelection.length === 0}
+          title={readOnly ? 'leave merged view to review' : inSelection.length === 0 ? 'select drafted cells first' : `Discard ${inSelection.join(', ')}`}
+          onClick={() => resolve('discard', inSelection)}>Discard selected</button>
+        <button type="button" data-sheet-draft-keep="all" disabled={readOnly || dState === 'conflict'}
+          title={readOnly ? 'leave merged view to review' : dState === 'conflict' ? 'Rebase first: the file changed under this draft' : 'Write every proposed cell to the file'}
+          onClick={() => resolve('keep', 'all')}>Keep all</button>
+        <button type="button" data-sheet-draft-discard="all" disabled={readOnly} title={readOnly ? 'leave merged view to review' : 'Drop the whole draft; the file is not touched'}
+          onClick={() => resolve('discard', 'all')}>Discard all</button>
+        {dState === 'conflict' && <button type="button" data-sheet-draft-rebase disabled={readOnly} title="Adopt the file as it is now, keep the proposals it did not touch, and name the ones it did"
+          onClick={() => { void session.rebaseDraft().then(report) }}>Rebase</button>}
+      </div>}
+      {!draft && state.view.draftOutcome && <div className="sheet-node__draft is-done" data-sheet-draft="applied">
+        <span>Last draft: {state.view.draftOutcome.kept} kept, {state.view.draftOutcome.discarded} discarded</span>
+      </div>}
       {state.grid === undefined && disk !== undefined && disk.kind !== 'bytes' && <p role="status" className="sheet-node__status">{state.error ?? 'This file could not be read.'}</p>}
       {/* data-scroll-host: the attribute shouldYieldWheel reads, so a wheel over the grid scrolls it rather than panning the canvas. */}
       <div ref={scroller} className="sheet-node__scroller" data-sheet-scroller data-scroll-host

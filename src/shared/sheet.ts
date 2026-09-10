@@ -5,11 +5,22 @@
  * the file and nowhere else; a copy in layout.json would be a second author
  * of the data that goes stale the moment an agent writes the file.
  */
+import { parseDraftOutcome, parseSheetDraft, type SheetDraft } from './sheet-draft'
+import type { DraftOutcome } from './draft-review'
+
 export interface SheetView {
   /** Column widths in px, by column index. Absent means every column is the default. */
   widths?: number[]
   /** The xlsx loss list the person confirmed. A list that later grows asks again. */
   lossAccepted?: string[]
+  /**
+   * M246. An agent's proposed cell changes, pending a person's review. The FILE
+   * is untouched until a keep; the draft lives here, persisted with the layout,
+   * and never leaves through an export.
+   */
+  draft?: SheetDraft
+  /** M246. What the drafts since the last fresh one came to — the "applied" state a restart must still show. */
+  draftOutcome?: DraftOutcome
 }
 
 export type SheetFormat = 'csv' | 'tsv' | 'xlsx'
@@ -21,7 +32,7 @@ export function sheetFormat(path: string): SheetFormat {
 }
 export const isSheetPath = (path: string): boolean => /\.(csv|tsv|xlsx)$/i.test(path)
 
-export function parseSheetView(raw: unknown): { kind: 'absent' } | { kind: 'malformed'; reason: string } | { kind: 'view'; view: SheetView } {
+export function parseSheetView(raw: unknown): { kind: 'absent' } | { kind: 'malformed'; reason: string } | { kind: 'view'; view: SheetView; dropped?: string[] } {
   if (raw === undefined) return { kind: 'absent' }
   const bad = { kind: 'malformed' as const, reason: 'sheet view must hold bounded column widths and a loss list of strings' }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return bad
@@ -37,7 +48,20 @@ export function parseSheetView(raw: unknown): { kind: 'absent' } | { kind: 'malf
     if (!Array.isArray(l) || l.length > 50 || !l.every((s) => typeof s === 'string' && s.length <= 200)) return bad
     view.lossAccepted = [...l] as string[]
   }
-  return { kind: 'view', view }
+  // M246. A malformed draft costs the DRAFT, never the view: dropping the whole
+  // view would reopen the sheet as a text file over a bad pending proposal.
+  const dropped: string[] = []
+  if ('draft' in value) {
+    const d = parseSheetDraft(value.draft)
+    if (d.kind === 'draft') view.draft = d.draft
+    else dropped.push('draft')
+  }
+  if ('draftOutcome' in value) {
+    const o = parseDraftOutcome(value.draftOutcome)
+    if (o.kind === 'outcome') view.draftOutcome = o.outcome
+    else dropped.push('draft outcome')
+  }
+  return { kind: 'view', view, ...(dropped.length > 0 ? { dropped } : {}) }
 }
 
 /** The header's size fact. An empty sheet says nothing rather than "0 rows" — the rest layer never states a zero. */

@@ -149,8 +149,10 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
-  /** M245. Set one cell of an open sheet, through its guarded write. */
-  editSheet(panel: string, cell: string, value: string): Promise<CreationResult>
+  /** M245. Set one cell of an open sheet, through its guarded write. M246: with an agent caller it proposes. */
+  editSheet(panel: string, cell: string, value: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
+  /** M246. Keep or discard a sheet's draft cells; keeping is refused to an agent caller. */
+  reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -496,7 +498,7 @@ export interface PaletteActions {
   /** M204 (D08). Compact a task's panels in reading order, clear of every other panel, as ONE undo. Refused in the merged view. */
   arrangeTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
-  runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  runWorkflowNow(templateId: string, caller?: import('@shared/plan').AgentPlanCaller): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
   stopWorkflow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M74. A claude terminal's session, rendered and continued as a chat. */
@@ -919,6 +921,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
+  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'sheet-review <panel> keep|discard <cell, B2:C4 or all>', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', run: () => actions.beginRunVerb() })
   out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'sheet-edit <panel> <cell> <value or =formula>', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', run: () => actions.beginRunVerb() })
 
   // --- Panels --------------------------------------------------------------
