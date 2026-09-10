@@ -904,7 +904,10 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // type says cannot exist.
   const checklist = parseChecklistView(raw.checklist)
   if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
+  // M246. `deck` is `prose`'s twin — a display fact, so a malformed one drops
+  // the FIELD with a warning and keeps the panel; absent warns nothing.
+  if ('deck' in raw && raw.deck !== true) warnings.push(`file panel ${id}: malformed deck flag dropped`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(raw.deck === true ? { deck: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
 }
 
 

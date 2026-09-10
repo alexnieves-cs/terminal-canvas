@@ -384,3 +384,13 @@ a root taken from a live session's cwd and a file panel's own path can disagree 
 and a `SKILL.md` under a bound root does not reload the preview (`unknown-source`, by name). They
 are listed with their reasons in §9 of the build log. Every hand check the v9 run left owed is
 still owed.
+
+## Outside the D-run
+
+- **M246 (deck → .pptx), 2026-09-10, branch `m246-deck-tools`.** Red first: `verify:deck` 0/11
+  with the modules absent; `gate.2` red with the exporter unnamed. Green: `verify:deck` 11/11 (a
+  real .pptx unzipped — 4 slides, 2 notes pages, 1 picture, the planted token nowhere, count 1, 3
+  omissions named), `verify:verbs` 25/25, `verify:layout` 255/255, `verify:file` 97/97,
+  `verify:checklist` 16/16, `npm run build`. `milestones.1` was red on `main` (M244's log, no
+  row); the row is added. Owed: a real ⋯-menu click in `verify:panels`, and opening the file in
+  Keynote by hand — `docs/build-log/m246-deck-pptx-export.md`.

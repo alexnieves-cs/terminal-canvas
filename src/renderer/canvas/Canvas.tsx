@@ -45,7 +45,7 @@ import {
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
-import type { TaskMenuFact } from '@renderer/components/PanelFrame'
+import type { DeckMenuFact, TaskMenuFact } from '@renderer/components/PanelFrame'
 import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
@@ -4166,6 +4166,29 @@ export function Canvas({
       arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id))
     }
   }, [])
+  // M246. The ⋯ menu's deck section. `of` reads the panels REF when the menu
+  // opens, the task section's reason: a fact asked on open, never a render
+  // input. The export goes through the same action the other three doors
+  // take and SAYS its sentence — the count and every omission by name.
+  const deckVerbs = useMemo(() => ({
+    of: (id: string): DeckMenuFact => {
+      const panel = panelsRef.current.find((p) => p.rect.id === id)
+      if (panel === undefined || !isFilePanel(panel) || !/\.(md|markdown)$/i.test(panel.source.path)) return 'none'
+      return panel.source.deck === true ? 'deck' : 'markdown'
+    },
+    export: (id: string) => {
+      void paletteActionsRef.current?.exportDeck(id).then((r) => paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')))
+    },
+    // `true` or ABSENT: turning it off REMOVES the key rather than writing
+    // `deck: false`, which layout.json would carry as present.
+    toggle: (id: string) => {
+      setPanels((current) => current.map((panel) => {
+        if (!isFilePanel(panel) || panel.rect.id !== id) return panel
+        const { deck, ...rest } = panel.source
+        return { ...panel, source: deck === true ? rest : { ...rest, deck: true as const } }
+      }))
+    }
+  }), [])
   const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
   const panelMarks = useMemo<PanelMarks>(() => ({
     marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
@@ -4185,8 +4208,9 @@ export function Canvas({
     // M204 (D08). The lens rides the one context every kind's frame reads, so
     // a terminal, a chat and a card dim on ONE rule.
     lens: lensMap,
-    task: taskVerbs
-  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs])
+    task: taskVerbs,
+    deck: deckVerbs
+  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs, deckVerbs])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History

@@ -108,6 +108,10 @@ export const VERBS: readonly VerbDef[] = [
   // nobody meant to lose. A destructive verb needs its confirmation at the
   // palette and is refused outright at the agent door (M190's critic, 3).
   { id: 'export-canvas', label: 'Canvas: export', args: [{ name: 'path', kind: 'text', optional: true }, { name: 'pictures', kind: 'value', optional: true }], destructive: true, actions: ['exportCanvas'], target: 'canvas', hint: 'write this canvas as one portable file; add with-pictures to include the pixels' },
+  // M246. NOT destructive, unlike export-canvas, and the difference is the
+  // same reason: there is no path argument, so every export goes through the
+  // save dialog and a person names the file — an agent line cannot overwrite.
+  { id: 'export-deck', label: 'Deck: export to PowerPoint', args: [panel()], destructive: false, actions: ['exportDeck'], target: 'panel', hint: 'write a Markdown deck as .pptx — headings, bullets, pictures and notes; secrets scrubbed and counted; anything left out is named' },
   { id: 'import-canvas', label: 'Canvas: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importCanvas'], target: 'canvas', hint: 'read a portable file into a NEW workspace; nothing in it is started' },
   // M188. Test one node, by template and (optionally) key: with no key it is
   // the block the person has selected on the diagram.
@@ -355,6 +359,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   // gesture is OWED with its milestone, which is what the owed shape is for.
   feedback: { canvas: 'Help ▸ Prepare feedback… in the menu bar', palette: 'feedback.open', agent: 'tc plan feedback', workflow: 'an action node whose line is: feedback' },
   'export-canvas': { canvas: { reason: 'export needs a canvas with something on it, so the launcher (an empty canvas) is the wrong home for it and the frame has no room at rest', due: 'M191' }, palette: 'portable.export', agent: 'tc plan export-canvas', workflow: 'an action node whose line is: export-canvas' },
+  'export-deck': { canvas: 'Export to PowerPoint… in the ⋯ menu of a Markdown file panel', palette: 'deck.export', agent: 'tc plan export-deck f1', workflow: 'an action node whose line is: export-deck f1' },
   'import-canvas': { canvas: 'the launcher\'s Import a canvas… line', palette: 'portable.import', agent: 'tc plan import-canvas', workflow: 'an action node whose line is: import-canvas' },
   'node-test': { canvas: 'Test this node on the workflow panel\'s selected block', palette: 'node.test', agent: 'tc plan node-test t1 n1', workflow: { reason: 'a node that tests a node is a loop with no stop', due: WORKFLOW_EXECUTOR_DUE } },
   'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: 'an action node whose line is: note-add sticky' },

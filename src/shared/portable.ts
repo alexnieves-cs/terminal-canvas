@@ -133,7 +133,7 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
     const file = raw.source as import('./file-panel').FileSource
     // References travel, accepted local text and execution links do not. An imported
     // checklist must be read before it can edit a file on this machine or send a task.
-    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }) } } as unknown as PersistedPanel
+    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.deck === true ? { deck: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }) } } as unknown as PersistedPanel
   }
   // A terminal: the command it was ASKED for, and nothing the process became.
   const command = typeof raw.command === 'string' ? scrub(raw.command, tally) : undefined
@@ -247,7 +247,7 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
     const raw = next as unknown as Record<string, unknown>
     // Import is a gate too: a hand-authored portable file can carry fields our
     // exporter would never write. Strip acceptance and execution links here.
-    if (next.kind === 'file' && next.source?.checklist !== undefined) next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), checklist: {} }
+    if (next.kind === 'file' && next.source?.checklist !== undefined) next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), ...(next.source.deck === true ? { deck: true } : {}), checklist: {} }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }
       raw.workflow = { templateId: templateIds.get(wf.templateId) ?? wf.templateId }

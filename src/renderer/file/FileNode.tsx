@@ -558,7 +558,7 @@ function FileNodeImpl({
       linkTarget={linkTarget}
       readOnly={readOnly}
       title={model.heading}
-      kindWord={model.prose ? 'note' : 'file'}
+      kindWord={panel.source.deck === true ? 'deck' : model.prose ? 'note' : 'file'}
       onSelect={onSelect}
       onBeginDrag={onBeginDrag}
       onBeginLink={onBeginLink}

@@ -203,8 +203,12 @@ const FACTS = {
     // export is a structure scrubbed field by field whose count is part of the
     // file. `shared/feedback.ts` scrubs a draft whose count is stated IN the
     // draft, so the person can see what was taken out before they send it.
-    ok('gate.2 redactSecrets has exactly six callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, and M190\'s feedback draft, whose count is stated in the draft itself), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    // M246 adds the SEVENTH by name: `main/deck-export.ts` writes a .pptx, a
+    // structure like the portable file, so it scrubs title, bullets, body,
+    // alt text and notes one field at a time and reports the count in its
+    // export sentence — `outward`'s one-text-one-note answer cannot say that.
+    ok('gate.2 redactSecrets has exactly seven callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export and M246\'s deck export, which each scrub field by field and report their count, and M190\'s feedback draft, whose count is stated in the draft itself), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 

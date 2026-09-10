@@ -57,6 +57,7 @@ import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
 import { createExporters } from './export'
+import { createDeckExporter } from './deck-export'
 import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
@@ -1942,7 +1943,17 @@ app.whenReady().then(async () => {
       capture: async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
         return (await mainWindow.webContents.capturePage()).toPNG()
-      }
+      },
+      // M246. The same dialog, filtered to .pptx; the arms, the scrub and the
+      // report live in deck-export.ts, plain-node tested by verify:deck.
+      deck: createDeckExporter({
+        askPath: async (suggested) => {
+          const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
+          const options = { title: 'Export deck', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PowerPoint', extensions: ['pptx'] }] }
+          const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+          return r.canceled || !r.filePath ? null : r.filePath
+        }
+      })
     }),
     agentHandlers,
     watcherHandlers,

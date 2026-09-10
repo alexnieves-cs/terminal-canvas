@@ -4305,3 +4305,12 @@ answers `ran`. M204's first Arrange did exactly that and framed the empty destin
 `tidyPanels`, onSpawn and every drag follow the protocol; the agent door's `tidy` executor arm
 (M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
 the D08 build log.
+
+**A deck export scrubs FIELD BY FIELD and decides a picture by its FIRST BYTES
+(`main/deck-export.ts`, M246).** A .pptx is a structure, like the portable file, so it cannot go
+through `outward` (one text, one note): title, each bullet, each paragraph, alt text and notes each
+pass `redactSecrets` and the count is part of the export sentence — which is why the file is on
+`gate.2`'s named list. A picture's bytes are embedded unscrubbed, so a deck line
+`![x](~/.ssh/id_rsa)` would carry a key out inside the zip if the extension were believed; M181's
+`readImage` decides by magic number and the line lands in the report as `not an image` instead.
+The renderer hands main a PATH, never text, so what leaves is what is on disk.

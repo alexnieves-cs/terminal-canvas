@@ -48,6 +48,7 @@
     "verify:subagent": "node scripts/verify-subagent.cjs",
     "verify:file": "node scripts/verify-file.cjs",
     "verify:checklist": "node scripts/verify-checklist.cjs",
+    "verify:deck": "node scripts/verify-deck.cjs",
     "verify:toolbox": "node scripts/verify-toolbox.cjs",
     "verify:usage": "node scripts/verify-usage.cjs",
     "verify:machine-cost": "node scripts/verify-machine-cost.cjs",
@@ -75,7 +76,8 @@
   },
   "dependencies": {
     "@sentry/electron": "7.18.0",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "pptxgenjs": "4.0.1"
   },
   "devDependencies": {
     "@doyensec/electronegativity": "^1.10.3",

@@ -73,7 +73,11 @@ export interface PanelMarks {
   lens?: ReadonlyMap<string, string> | null
   /** M204 (D08). The ⋯ menu's task section: which task this panel is part of, and the three verbs. Absent in a fixture. */
   task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void }
+  /** M246. The ⋯ menu's deck section: which Markdown file panels are (or can be) decks, and the two verbs. Absent in a fixture. */
+  deck?: { of: (id: string) => DeckMenuFact; export: (id: string) => void; toggle: (id: string) => void }
 }
+/** M246. `none` for every panel that is not a Markdown file — no section, the task section's rule. */
+export type DeckMenuFact = 'deck' | 'markdown' | 'none'
 /** M204 (D08). What the ⋯ menu knows about a panel's task, asked when it opens. */
 export type TaskMenuFact = { kind: 'none' } | { kind: 'one'; title: string; related: boolean } | { kind: 'many'; titles: string[] }
 export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
@@ -249,6 +253,20 @@ export function PanelFrame({
                     <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
                     <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
                     <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
+                  </div>
+                )
+              })()}
+              {/* M246. A Markdown file's deck verbs: the export is offered on any
+                  .md (the export reads the file, not the flag); the toggle is
+                  how a person says "this file IS a deck". */}
+              {marks.deck !== undefined && (() => {
+                const fact = marks.deck.of(id)
+                if (fact === 'none') return null
+                const deck = marks.deck
+                return (
+                  <div className="pf__menu-task" data-panel-menu-deck={fact}>
+                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-deck-verb="export" title="Write this file as a .pptx — headings, bullets, pictures and notes; secrets scrubbed and anything left out named" {...shellControl(() => { setMenuOpen(false); deck.export(id) })}>Export to PowerPoint…</button>
+                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-deck-verb="toggle" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : fact === 'deck' ? 'Read this file as a plain Markdown file again' : 'Read this file as slides: --- between slides, Note: for speaker notes'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); deck.toggle(id) })}>{fact === 'deck' ? 'Show as a file' : 'Show as a deck'}</button>
                   </div>
                 )
               })()}

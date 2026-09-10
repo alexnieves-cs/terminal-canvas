@@ -101,7 +101,9 @@ export function buildFileNodeModel(input: {
   // `prose` rides the shell, so every arm inherits it — a note that is
   // MISSING or BINARY is still a note, and an arm that dropped the flag would
   // paint that arm's own note text in a code view for no reason.
-  const prose = input.source.prose === true
+  // M246. A deck is Markdown a person writes as prose, so it paints as one;
+  // the slide view is its export, not a second renderer.
+  const prose = input.source.prose === true || input.source.deck === true
   const shell = { heading, directory: dir, lines: [] as FileLine[], editable: false, prose }
 
   // Undefined is the in-flight state: the read is an IPC round trip, so this
