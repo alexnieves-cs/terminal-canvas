@@ -73,6 +73,8 @@ export interface WorkNodeProps {
   prReason: string | null
   /** M115. Fly to the review of the lane's diff. */
   onReview: (itemId: string) => void
+  /** M203 (D08). Frame this card's task — by the CARD's panel id, the verb's argument at every door. */
+  onShow: (panelId: string) => void
   /** M115. Mark the item done. */
   onDone: (itemId: string) => void
 }
@@ -115,6 +117,24 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
       rootAttrs={{ 'data-work-node': '', 'data-work-item': panel.work.itemId, 'data-work-state': item === undefined ? undefined : item.state }}
       title={item?.title ?? panel.title ?? 'work'}
       state={state}
+      // M204 (D08). THE TASK OVERVIEW at far zoom, in the summary tier's slot
+      // (M69; the chat's pending question is its sibling): what the runtime
+      // is doing, the question it waits on, whether there is something to
+      // review, and the key evidence — never a transcript. A zero is not
+      // stated (the rest-layer rule): an empty lane says so through its
+      // readiness word, not through `0 files changed`.
+      far={item === undefined ? undefined : (() => {
+        const blocker = props.execution?.blocker ?? props.handoff?.blocker
+        const files = props.handoff?.changes?.files ?? 0
+        return (
+          <div className="work-node__far" data-work-far>
+            {props.execution !== undefined && <span className="work-node__far-line" data-work-far-execution data-tone={props.execution.tone}>{props.execution.word}</span>}
+            {blocker !== undefined && <span className="work-node__far-line" data-work-far-blocker>waiting on {blocker.subject}</span>}
+            {props.handoff !== undefined && <span className="work-node__far-line" data-work-far-readiness data-tone={props.handoff.tone}>{props.handoff.word}</span>}
+            {files > 0 && <span className="work-node__far-line" data-work-far-evidence>{files} {files === 1 ? 'file' : 'files'} changed</span>}
+          </div>
+        )
+      })()}
       onSelect={props.onSelect}
       onBeginDrag={props.onBeginDrag}
       onBeginLink={props.onBeginLink}
@@ -213,6 +233,16 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   ? (item.panelId === undefined ? 'no lane yet — start work on this item first' : null)
                   : props.handoff.action === 'review' ? null : props.handoff.detail,
                 () => props.onReview(item.id), props.handoff?.action === 'review' ? { 'data-work-next': 'review' } : undefined)}
+              {/* M203 (D08). Show is a CAMERA move, so it is the one verb here
+                  that stays enabled in the merged view: it reads the displayed
+                  rects and writes no geometry. Hence not `verb()`, whose first
+                  precedence is the merged refusal — and a `shellControl`, not
+                  `press`: `press` binds mousedown alone, so Enter or Space on
+                  the focused button fires a click nothing handles (M204's
+                  critic). The other verbs here still use `press`; that is
+                  older than D08 and recorded, not changed. */}
+              <button type="button" className="pf__verb pf__verb--word" data-work-verb="show"
+                title="Frame this task — its conversation, lane, reviews and links; nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
               {verb('done', 'Done', null, () => props.onDone(item.id))}
               {assignOpen && (
                 <ul className="work-node__menu" role="menu" data-work-assign-menu onMouseDown={(e) => e.stopPropagation()}>

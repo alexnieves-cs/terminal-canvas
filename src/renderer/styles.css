@@ -242,6 +242,8 @@
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
+  /* M204 (D08). The task lens's veil over a panel outside the task: the ground, most of the way opaque. A TOKEN, so the dim is a declared colour an audit can read — never a fractional opacity (verify:styles 3). */
+  --lens-veil: color-mix(in srgb, var(--s-0) 68%, transparent);
   --panel-bg:  var(--glass-1);
   --chrome-bg: var(--glass-2);
   --border:    var(--line);
@@ -327,6 +329,8 @@
   --text:      var(--fg);
   --muted:     var(--fg-3);
   --bg:        var(--s-0);
+  /* M204 (D08). The task lens's veil over a panel outside the task: the ground, most of the way opaque. A TOKEN, so the dim is a declared colour an audit can read — never a fractional opacity (verify:styles 3). */
+  --lens-veil: color-mix(in srgb, var(--s-0) 68%, transparent);
   --panel-bg:  var(--glass-1);
   --chrome-bg: var(--glass-2);
   --border:    var(--line);
@@ -5044,3 +5048,36 @@ body {
 .pf--kind-terminal:has(.panel__slot):focus-within .pf__title,
 .panel--selected.pf--kind-terminal:has(.panel__slot) .pf__title { color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .pf--kind-terminal .pf__title { transition: none; } }
+
+/* M204 (D08). THE TASK LENS — paint only. `opacity` and `outline` are not
+   layout: no box moves, so no chromeless terminal refits and no agent gets a
+   SIGWINCH (M234's rule). The members keep full presence and wear an iris
+   ring outside their frame; everything else steps back. */
+/* The veil is a pseudo-element over the frame, not an opacity on it: the
+   ground token painted most of the way across, pointer-transparent, so the
+   panel stays clickable and its box — and its terminal's grid — never moves.
+   `.pf::before` is the state edge; `::after` is free. */
+.panel[data-task-lens="other"]::after { content: ''; position: absolute; inset: 0; background: var(--lens-veil); pointer-events: none; z-index: 5; }
+.panel[data-task-lens="member"] { outline: 2px solid var(--iris); outline-offset: 3px; }
+.task-lens {
+  position: absolute;
+  top: var(--sp-4);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(720px, 92%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--iris);
+  border-radius: var(--r-md);
+  background: var(--s-1);
+  color: var(--fg);
+  font-size: var(--t-sm);
+}
+.task-lens__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-lens__count, .task-lens__missing { color: var(--fg-2); }
+.pf__menu-task { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
+/* M204 (D08). The card's far overview, under the summary's title and word. */
+.work-node__far { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--t-lg); color: var(--fg-2); }

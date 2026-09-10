@@ -4271,3 +4271,37 @@ on disk already had — where a person reads it, edits it on purpose and presses
 they would in any editor. The distinction the Act II critic asked to be recorded: the store
 stays read-only and the door is a deliberate edit, never a toggle; hooks' `settings.json`
 and MCP's `~/.claude.json` get the same door and no toggle, by #26's own argument.
+
+**A task's lane is read from the handoff hook's records, never from the palette's worktree list
+(`Canvas.tsx`'s `taskMemberships`, M203).** `worktreeRows` is loaded when ⌘K opens. Membership
+read from it made every in-lane panel vanish from a task until somebody had opened the palette —
+and the first real run of `task.show.1` passed only because `say()` had opened the palette on the
+card's press. M202's `reviewTaskLane` records the same trap; `useTaskHandoffs`' `laneOf` is the
+source that loads without the palette. The origin panel id is the one fact only the palette's list
+knows, and with no list the origin is taken to be the conversation rather than reported missing.
+
+**A restored terminal's directory is its OWN spec's `cwd`, not the registry's (`taskMemberships`'
+`cwdOf`, M203).** A terminal restored from disk is DORMANT — no PTY, no live cwd — and reading
+`registry.get(id)?.spec` alone dropped every sleeping terminal in a lane out of its task. Live cwd
+first, then the panel record.
+
+**`say()` OPENS THE PALETTE (`usePaletteActions.ts`, M149).** It is the feedback line for a refusal
+that would otherwise be swallowed. A camera move that reported success through it put the palette
+over the task it had just framed, and the open palette then swallowed Cmd+[ (`shouldIgnoreKeys`).
+D08's surfaces speak only on a refusal or when part of the task is missing (`partial`).
+
+**The task lens dims with a TOKEN-painted veil, never an opacity (`styles.css`'s
+`[data-task-lens="other"]::after`, M204).** `verify:styles` 3 forbids fractional opacity because
+it compounds against an already-muted token and no audit of declared colours can see it. The veil
+is `--lens-veil` (both theme blocks) on a pointer-transparent pseudo-element: paint only, so no box
+moves, no chromeless terminal refits (M234) and the panel stays clickable. `.pf::before` is the
+state edge; `::after` was free.
+
+**A canvas mutation MOVES through `setPanels` and pushes its undo entry from inside the updater;
+`commitHistory` alone moves nothing (`Canvas.tsx`'s `commitHistory`, found by M204).** `history`
+is separate state whose value the component never reads (`const [, setHistory]`), so a verb that
+only calls `commitHistory(next)` records an undo step for a change that never happened — and still
+answers `ran`. M204's first Arrange did exactly that and framed the empty destination.
+`tidyPanels`, onSpawn and every drag follow the protocol; the agent door's `tidy` executor arm
+(M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
+the D08 build log.

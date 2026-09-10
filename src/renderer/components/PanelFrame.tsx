@@ -69,7 +69,13 @@ export interface PanelMarks {
   readOnly: boolean
   /** M106. The ⋯ menu's door: focus this panel and open the palette captured on it. Absent in a fixture. */
   more?: (id: string) => void
+  /** M204 (D08). The task lens: each member's id → why it is one; null or absent when no lens is on. */
+  lens?: ReadonlyMap<string, string> | null
+  /** M204 (D08). The ⋯ menu's task section: which task this panel is part of, and the three verbs. Absent in a fixture. */
+  task?: { of: (id: string) => TaskMenuFact; show: (id: string) => void; related: (id: string) => void; arrange: (id: string) => void }
 }
+/** M204 (D08). What the ⋯ menu knows about a panel's task, asked when it opens. */
+export type TaskMenuFact = { kind: 'none' } | { kind: 'one'; title: string; related: boolean } | { kind: 'many'; titles: string[] }
 export const PanelMarksContext = createContext<PanelMarks>({ marks: new Map(), maximise: () => {}, restore: () => {}, readOnly: true })
 
 export interface PanelFrameProps {
@@ -227,6 +233,25 @@ export function PanelFrame({
             <div className="pf__menu" role="menu" data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
+              {/* M204 (D08). The contextual door onto the task verbs, on EVERY
+                  member and not only the card. A panel in two tasks says so
+                  and names both rather than choosing; a panel in none shows
+                  no section — there is no task to act on, and an empty
+                  heading on every menu of the canvas would be noise. */}
+              {marks.task !== undefined && (() => {
+                const t = marks.task.of(id)
+                if (t.kind === 'many') return <p className="pf__note" data-panel-menu-task="many">part of {t.titles.length} tasks — {t.titles.join(' and ')}; act from a card</p>
+                if (t.kind === 'none') return null
+                const task = marks.task
+                return (
+                  <div className="pf__menu-task" data-panel-menu-task="one">
+                    <div className="pf__note">task · {t.title}</div>
+                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
+                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
+                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
+                  </div>
+                )
+              })()}
               {more !== undefined && <button type="button" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
               <button type="button" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
             </div>
@@ -311,6 +336,9 @@ export function PanelFrame({
       // clipping and its pointer-events: none for free, and one element
       // cannot contradict itself about which edge of the frame means what.
       data-edge-arriving={arriving ? '' : undefined}
+      // M204 (D08). The task lens, as an ATTRIBUTE the stylesheet paints —
+      // opacity and an outline, neither of which is layout.
+      data-task-lens={marks.lens === undefined || marks.lens === null ? undefined : marks.lens.has(id) ? 'member' : 'other'}
       {...(rootAttrs ?? {})}
     >
       {motion ? (

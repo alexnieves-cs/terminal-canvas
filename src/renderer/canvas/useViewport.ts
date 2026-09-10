@@ -95,6 +95,13 @@ export interface ViewportControls {
    */
   fitSelection: (rects: WorldRect[]) => void
   /**
+   * M203 (D08). Frame rects AS A JUMP — the same `fitTo` as fitSelection, but
+   * pushed onto the trail, so Camera Back returns to where the person was.
+   * fitSelection keeps its M146 meaning (a flight, no trail entry); a "show
+   * me the task" that could not be undone would strand the person.
+   */
+  frameRects: (rects: WorldRect[]) => void
+  /**
    * M56. The named verbs behind bookmarks and the trail. Same stability
    * requirement as every verb above: each sits in Canvas.tsx's paletteActions
    * dep array. `flying` is STATE, not a ref: the tier-assignment effect has
@@ -402,6 +409,13 @@ export function useViewport(
     flyTo(fitTo(rects, { width: bounds.width, height: bounds.height }))
   }, [hostRef, flyTo])
 
+  const frameRects = useCallback((rects: WorldRect[]) => {
+    const host = hostRef.current
+    if (!host || rects.length === 0) return
+    const bounds = host.getBoundingClientRect()
+    jump(fitTo(rects, { width: bounds.width, height: bounds.height }))
+  }, [hostRef, jump])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // Cmd is required for every canvas shortcut. Agent TUIs claim essentially
@@ -650,7 +664,7 @@ export function useViewport(
   }, [])
 
   return {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying
   }

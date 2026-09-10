@@ -211,7 +211,7 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
 }
 
 /**
@@ -318,6 +318,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'preview-open': return self.openPreview(a.url)
           case 'preview-bind': return self.bindPreview()
           case 'review-task': return self.reviewTask(step.args.panel as string)
+          case 'show-task': return self.showTask(step.args.panel as string)
+          case 'show-related': return self.showRelated(step.args.panel as string)
+          case 'arrange-task': return self.arrangeTask(step.args.panel as string)
           case 'preview-width': return self.setPreviewWidth(a.device!)
           case 'preview-capture': return self.capturePreview()
           case 'preview-dev': return self.startDevServer(a.script)
@@ -2017,6 +2020,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       if (!isWorkPanel(panel)) return { kind: 'refused', reason: `${panelId} is not a work card — a task review needs one` }
       return boardVerbsRef.current?.review?.(panel.work.itemId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' }
     },
+    // M203 (D08). Canvas owns every fact membership reads (the runs, the live
+    // cwds, the worktree rows), so this delegates the way `reviewTask` does
+    // rather than widening this hook's deps with four more.
+    showTask: (panelId) => boardVerbsRef.current?.show?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    // M204 (D08). The same delegation, for the same reason.
+    showRelated: (panelId) => boardVerbsRef.current?.related?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    arrangeTask: (panelId) => boardVerbsRef.current?.arrange?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     setPreviewWidth: (device) => setPreviewWidthNow(device),
     capturePreview: () => capturePreviewNow(),
     startDevServer: (script) => startDevServerNow(script),

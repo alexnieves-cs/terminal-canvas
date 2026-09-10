@@ -57,7 +57,8 @@ function sectionFor(across: ReviewAcross, lanePath: string): ReviewSection | und
 export function useTaskHandoffs(deps: TaskHandoffDeps): {
   handoffOf: (itemId: string) => ReviewHandoff | undefined
   /** The task's lane, from the SAME records the handoff was judged against. */
-  laneOf: (itemId: string) => { path: string; root: string } | undefined
+  /** M204 (D08). `panelId` is the record's: the panel that opened the lane, so a task can say that panel is gone without the palette's list. */
+  laneOf: (itemId: string) => { path: string; root: string; panelId: string } | undefined
   /** The lane's changed paths, from the SAME read the handoff was judged against. */
   pathsOf: (itemId: string) => readonly string[] | undefined
   refresh: () => void
@@ -108,12 +109,12 @@ export function useTaskHandoffs(deps: TaskHandoffDeps): {
   // card whose worktree record is gone contributes NO root: it must not drag
   // a read of some other repository along behind it.
   const lanes = useMemo(() => {
-    const out: Record<string, { path: string; root: string }> = {}
+    const out: Record<string, { path: string; root: string; panelId: string }> = {}
     for (const item of workItems) {
       if (item.worktreeId === undefined) continue
       const record = worktreeRows.find((w) => w.id === item.worktreeId)
       if (record === undefined) continue
-      out[item.id] = { path: record.path, root: record.root }
+      out[item.id] = { path: record.path, root: record.root, panelId: record.panelId }
     }
     return out
   }, [workItems, worktreeRows])

@@ -42,6 +42,8 @@ import {
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
+import type { TaskMenuFact } from '@renderer/components/PanelFrame'
+import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { assignTiers, LIVE_BUDGET, type Tier } from './lod'
 import {
   screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke } from './viewport'
@@ -331,7 +333,7 @@ export function Canvas({
   const workItemsRef = useRef(workItems)
   workItemsRef.current = workItems
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     setWorkItems((current) => current.some((i) => i.panelId === chatId)
       ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
@@ -1258,7 +1260,7 @@ export function Canvas({
   )
 
   const {
-    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection,
+    viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
     beginPanDrag, panning,
     goToViewport, cameraBack, cameraForward, trail, flying
   } = useViewport(
@@ -4251,6 +4253,79 @@ export function Canvas({
   // Frozen on a SIGNATURE of the marks, not on `panels`: a drag rebuilds the
   // array at 60Hz, and a context value that changed with it would re-render
   // every frame consuming it (the rail's own freeze, applied here).
+  // M203/M204 (D08). EVERY TASK'S MEMBERS, built ONE way for the three verbs,
+  // the lens and the ⋯ menu — derived from what the canvas already holds and
+  // never stored. A plain function, not a hook: each caller passes the panels
+  // it means (the DISPLAYED ones) and reads it at its own moment.
+  const taskMemberships = (shown: readonly Panel[], items: readonly PersistedWorkItem[]): TaskMembership[] => {
+    const cwdOf = (id: string): string | undefined => {
+      const live = getLiveSession(id)?.cwd
+      if (live !== undefined) return live
+      const p = shown.find((q) => q.rect.id === id)
+      if (p !== undefined && isChatPanel(p)) return p.chat.cwd
+      // The panel's OWN spec, never only the registry: a restored terminal is
+      // DORMANT (no session, no PTY) until touched, and reading the registry
+      // alone dropped every sleeping terminal in the lane out of its task —
+      // `task.show.1` found it on its first real press.
+      if (p !== undefined && isTerminalPanel(p)) return p.spec.cwd
+      return registry.get(id)?.spec.cwd
+    }
+    // The LANE comes from the handoff hook's records, never from
+    // `worktreeRows`: the palette's list loads only when ⌘K opens, so reading
+    // it made a task's in-lane panels vanish until somebody had opened the
+    // palette (task.show.1's second run) — the trap M202's `reviewTaskLane`
+    // already names. The origin panel id rides the SAME record (M204's
+    // critic: read from the palette's list, a gone origin could not be
+    // reported until ⌘K had opened, and a fallback of '' reported a panel
+    // with no id as gone).
+    const memberships = items.map((item) => {
+      const lane = taskLaneOf(item.id)
+      return taskMembership({ item, panels: shown, cwdOf, runs, ...(lane === undefined ? {} : { lane: { path: lane.path, panelId: lane.panelId } }) })
+    })
+    return memberships
+  }
+  // M204 (D08). THE TASK LENS — a VIEW state, never persisted (M106's flip is
+  // the precedent). Derived as the task's panels change, and cleared when the
+  // task leaves the board — which includes switching to a workspace whose
+  // board does not hold it, since Canvas is not remounted per workspace.
+  const [relatedItemId, setRelatedItemId] = useState<string | null>(null)
+  const lens = useMemo(() => {
+    if (relatedItemId === null) return null
+    const item = workItems.find((i) => i.id === relatedItemId)
+    return item === undefined ? null : (taskMemberships(displayPanels, [item])[0] ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relatedItemId, displayPanels, workItems, worktreeRows, runs])
+  // Keyed on a SIGNATURE string, never on `lens` itself: the lens is
+  // re-derived from `displayPanels`, a new array on every frame of a drag,
+  // and the marks context below is frozen precisely so a drag re-renders no
+  // frame (M204's critic). The same members with the same reasons are the
+  // same map.
+  const lensSignature = lens === null ? null : lens.members.map((m) => `${m.panelId}=${m.reason}`).join(',')
+  const lensMap = useMemo(() => (lensSignature === null ? null : new Map(lensSignature === '' ? [] : lensSignature.split(',').map((e) => e.split('=') as [string, string]))), [lensSignature])
+  useEffect(() => { if (relatedItemId !== null && !workItems.some((i) => i.id === relatedItemId)) setRelatedItemId(null) }, [relatedItemId, workItems])
+  // M204 (D08). The ⋯ menu's task section asks this at the moment it opens.
+  // A ref, so the marks object below keeps ONE identity and no frame
+  // re-renders for a membership it is not showing.
+  const taskMenuRef = useRef<(id: string) => TaskMenuFact>(() => ({ kind: 'none' }))
+  taskMenuRef.current = (id) => {
+    const items = workItemsRef.current
+    const owners = taskMemberships(displayPanelsRef.current, items).filter((m) => m.members.some((x) => x.panelId === id))
+    const title = (m: TaskMembership): string => items.find((i) => i.id === m.itemId)?.title ?? m.itemId
+    if (owners.length === 0) return { kind: 'none' }
+    if (owners.length > 1) return { kind: 'many', titles: owners.map(title) }
+    return { kind: 'one', title: title(owners[0]!), related: owners[0]!.itemId === relatedItemId }
+  }
+  const taskVerbs = useMemo(() => {
+    const speak = (r: { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string } | undefined): void => {
+      if (r !== undefined && (r.kind === 'refused' || ('partial' in r && r.partial === true))) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))
+    }
+    return {
+      of: (id: string) => taskMenuRef.current(id),
+      show: (id: string) => speak(paletteActionsRef.current?.showTask(id)),
+      related: (id: string) => speak(paletteActionsRef.current?.showRelated(id)),
+      arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id))
+    }
+  }, [])
   const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
   const panelMarks = useMemo<PanelMarks>(() => ({
     marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
@@ -4266,8 +4341,12 @@ export function Canvas({
     // M106. The ⋯ menu's door: the ref is set HERE as well as by the render,
     // because openPalette captures the ref synchronously and the focus it just
     // asked for lands a render later.
-    more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() }
-  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette])
+    more: (id) => { onFocusPanel(id); focusedIdRef.current = id; palette.openPalette() },
+    // M204 (D08). The lens rides the one context every kind's frame reads, so
+    // a terminal, a chat and a card dim on ONE rule.
+    lens: lensMap,
+    task: taskVerbs
+  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -4675,6 +4754,98 @@ export function Canvas({
   // M202 (D07). The fourth door's landing point: the palette row, the agent
   // line and an action node all reach the card's own Review through here.
   boardVerbsRef.current.review = reviewTaskLane
+  // M203 (D08). SHOW THIS TASK. Membership is derived at PRESS time from what
+  // the canvas already holds — the DISPLAYED panels (an anchored card's
+  // derived rect, a merged lane's synthetic one), the board, the worktree
+  // rows, the runs and the live cwds — and framed through the camera TRAIL.
+  // A camera move and nothing else: no selection, no focus, no tier change,
+  // no geometry, so no session can be reached from here.
+  boardVerbsRef.current.show = (panelId: string) => {
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const memberships = taskMemberships(shown, items)
+    const target = showTaskTarget(panelId, shown, memberships, Object.fromEntries(items.map((i) => [i.id, i.title])))
+    if (target.kind === 'refused') return target
+    frameRects(target.rects)
+    const title = items.find((i) => i.id === target.itemId)?.title ?? target.itemId
+    const gone = missingSentence(target.missing)
+    // `partial` is what a SURFACE keys on: the card and the palette row say
+    // nothing when the whole task was framed — the camera move IS the answer,
+    // and `say` opens the palette, which would sit over the very task just
+    // shown and swallow Cmd+[ (task.show.1's first run) — and speak only when
+    // part of the task is gone. The agent door reports the note either way.
+    return { kind: 'ran', note: `showing ${target.rects.length} panel${target.rects.length === 1 ? '' : 's'} of ${title}${gone === '' ? '' : ` — ${gone}`}`, ...(gone === '' ? {} : { partial: true as const }) }
+  }
+  // M204 (D08). SHOW RELATED — the lens on, or off for the task already
+  // shown. Resolution is show-task's (a card, or the one task a member is in).
+  boardVerbsRef.current.related = (panelId: string) => {
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
+    if (target.kind === 'refused') return target
+    const title = items.find((i) => i.id === target.itemId)?.title ?? target.itemId
+    if (relatedItemId === target.itemId) { setRelatedItemId(null); return { kind: 'ran', note: `stopped showing what is related to ${title}` } }
+    setRelatedItemId(target.itemId)
+    return { kind: 'ran', note: `showing what is related to ${title} — ${target.rects.length} panel${target.rects.length === 1 ? '' : 's'}; nothing moved` }
+  }
+  // M204 (D08). FRAME and ARRANGE, keyed by the ITEM. The verbs resolve a
+  // panel to its task first; the lens bar already knows its task and calls
+  // these directly — acting through a proxy panel could pick one that
+  // belongs to two tasks and refuse under a bar naming one (M204's critic).
+  const frameItem = (itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    const shown = displayPanelsRef.current
+    const membership = taskMemberships(shown, workItemsRef.current).find((m) => m.itemId === itemId)
+    const ids = new Set(membership?.members.map((m) => m.panelId) ?? [])
+    const rects = shown.filter((q) => ids.has(q.rect.id)).map((q) => q.rect)
+    if (rects.length === 0) return { kind: 'refused', reason: 'no panel of this task is on the canvas — its card and its conversation are closed' }
+    frameRects(rects)
+    return { kind: 'ran' }
+  }
+  // ARRANGE THIS TASK — `arrangePlan` decides, one history entry writes. A
+  // dispatched card is a FOLLOWER of its conversation (its rect is derived
+  // from the anchor every render), so only the leader's rect is written and
+  // the card comes with it; an undo of the entry restores both.
+  const arrangeItem = (itemId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange — its geometry is not this canvas\'s to write' }
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const membership = taskMemberships(shown, items).find((m) => m.itemId === itemId)
+    if (membership === undefined) return { kind: 'refused', reason: 'this task is no longer on the board' }
+    const followers = items.flatMap((i) => i.anchor === undefined ? [] : shown.filter((q) => isWorkPanel(q) && q.work.itemId === i.id).map((q) => ({ id: q.rect.id, leaderId: i.anchor!.panelId, dx: i.anchor!.dx, dy: i.anchor!.dy })))
+    // A COLLAPSED group was folded on purpose; its members are obstacles here,
+    // not panels this verb may pull out of the fold (M204's critic).
+    const folded = new Set(groups.filter((g) => g.collapsed === true).flatMap((g) => g.panelIds))
+    const plan = arrangePlan({ memberIds: membership.members.map((m) => m.panelId), panels: shown, followers, fixedIds: folded })
+    if (plan.kind === 'refused') return plan
+    const moved = new Map(plan.rects.map((r) => [r.id, r]))
+    // The file's commit protocol: MOVE through `setPanels` and push the entry
+    // from inside its updater (`tidyPanels`, onSpawn, a drag). `commitHistory`
+    // alone only records an undo entry — `history` is separate state whose
+    // value this component never reads — so the first cut answered `arranged
+    // 2 panels`, framed where they would have gone, and moved nothing.
+    // `task.arrange.1` found it on screen; no pure check can.
+    setPanels((prev) => {
+      const next = prev.map((q) => { const r = moved.get(q.rect.id); return r === undefined || (r.x === q.rect.x && r.y === q.rect.y) ? q : { ...q, rect: { ...q.rect, x: r.x, y: r.y } } })
+      if (next.every((q, i) => q === prev[i])) return prev
+      commitHistory(next)
+      return next
+    })
+    // The block can slide clear of a band of panels and land off screen, so
+    // the camera FOLLOWS it — through the trail, so Cmd+[ goes back (M204's
+    // critic: a task that silently left the view is the disappearance this
+    // repo refuses everywhere else).
+    const carried = followers.filter((f) => moved.has(f.leaderId)).flatMap((f) => { const lead = moved.get(f.leaderId)!; const own = shown.find((q) => q.rect.id === f.id); return own === undefined ? [] : [{ ...own.rect, x: lead.x + f.dx, y: lead.y + f.dy }] })
+    frameRects([...plan.rects, ...carried])
+    const title = items.find((i) => i.id === itemId)?.title ?? itemId
+    return { kind: 'ran', note: `arranged ${plan.rects.length} panel${plan.rects.length === 1 ? '' : 's'} of ${title} — one undo puts them back` }
+  }
+  boardVerbsRef.current.arrange = (panelId: string) => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'leave the merged view to arrange — its geometry is not this canvas\'s to write' }
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
+    return target.kind === 'refused' ? target : arrangeItem(target.itemId)
+  }
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -6900,6 +7071,10 @@ export function Canvas({
                 // and otherwise only left a note — a task whose agent was
                 // dismissed is exactly the one a person comes back to review.
                 onReview={(itemId) => { const r = reviewTaskLane(itemId); if (r.kind === 'refused') patchWorkItem(itemId, { note: r.reason }) }}
+                // M203 (D08). The card's door onto the same verb; the sentence
+                // is SAID, never written to the item — a camera move leaves no
+                // record, and a missing member is a fact of now, not of the task.
+                onShow={(panelId) => { const r = paletteActionsRef.current?.showTask(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
                 handoff={item === undefined ? undefined : taskHandoffOf(item.id)}
                 // M202 (D07). Resume is a CAMERA and FOCUS move onto the
                 // lane's conversation, never a send: the person decides what
@@ -7113,6 +7288,32 @@ export function Canvas({
             through your shell's rc files may not be found. Environment… in ⌘K says what was.
           </div>
         )}
+        {/* M204 (D08). The lens bar: which task is lit, how much of it, what
+            is missing, and the ways out. Viewport-pinned like the env banner;
+            Escape is deliberately not bound — it belongs to the focused
+            terminal, and an agent reading the canvas's Escape is the paste
+            defect CLAUDE.md already documents. */}
+        {lens !== null && (() => {
+          const title = workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId
+          const gone = missingSentence(lens.missing)
+          // Every control is present and enabled but Arrange in the merged
+          // view; each refuses BY NAME through the feedback line (a task with
+          // nothing on the canvas says so) rather than greying out silently.
+          const act = (r: { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }): void => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }
+          return (
+            <div className="task-lens" data-task-lens-bar={lens.itemId} role="status">
+              <span className="task-lens__title">{title}</span>
+              <span className="task-lens__count" data-task-lens-count>{lens.members.length} related</span>
+              {gone !== '' && <span className="task-lens__missing" data-task-lens-missing>{gone}</span>}
+              <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="frame" title="Frame every panel of this task"
+                {...shellControl(() => act(frameItem(lens.itemId)))}>Frame</button>
+              <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="arrange" disabled={merged}
+                title={merged ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'}
+                {...shellControl(() => { if (!merged) act(arrangeItem(lens.itemId)) })}>Arrange</button>
+              <button type="button" className="pf__verb pf__verb--word" data-task-lens-verb="stop" title="Stop showing what is related" {...shellControl(() => setRelatedItemId(null))}>Stop</button>
+            </div>
+          )
+        })()}
         <CanvasHud
           updateNewer={updateState.result?.kind === 'newer' ? { version: updateState.result.version, url: updateState.result.url } : null}
           viewport={viewport}

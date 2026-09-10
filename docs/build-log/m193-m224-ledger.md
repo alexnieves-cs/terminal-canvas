@@ -25,7 +25,8 @@ milestone did run them; it still did not drive the app by hand, and says so wher
 | D05 | M197–M198 | ✅ done | [M197](m197-d05-start-work.md), [M198](m198-d05-start-recovery.md) |
 | D06 | M199–M200 | ✅ done | [m199-m200-d06-supervision.md](m199-m200-d06-supervision.md) |
 | D07 | M201–M202 | ✅ done | [m201-m202-d07-review-handoff.md](m201-m202-d07-review-handoff.md) |
-| D08–D20 | M203–M224 | not started | — |
+| D08 | M203–M204 | 🟡 built; gate owed — `verify` 38/39, the red suite (`panels:shell`) fails on the baseline too under load | [m203-m204-d08-task-navigation.md](m203-m204-d08-task-navigation.md) |
+| D09–D20 | M205–M224 | not started | — |
 
 The full map, its splits and its reservations are below. A phase's evidence, critic disposition and
 owed hand checks go in that phase's own build log, and its row here is updated when it lands.
@@ -47,7 +48,7 @@ re-recorded before the work starts, never after.
 | D05 | **M197–M198** | **re-recorded at M197** — M197 the FLOW (the one entry door, the three inputs, and the executor made to answer); M198 idempotency and partial-failure recovery. *Was:* M197 the one entry door and the task record; M198 the assembly and its recovery. The seam moved because the assembly (`board:lane` → `agent:create` → the first send) is M114's and needed no rebuilding: what was missing was the *asking*, and what was broken was the *answering*. The task record needed no change at all — `work-items.ts` is untouched. **This was re-recorded during the milestone, not before it**, which is a departure from this table's own rule; it is written down rather than tidied away | ✅ done |
 | D06 | **M199–M200** | M199 the run's own truth (a pending question as a run entry; a turn is not a task); M200 the supervision surface that reads it | ✅ done |
 | D07 | **M201–M202** | **re-recorded before the work started** — M201 local review readiness AS A FACT (the pure projection, the two axes, evidence attribution, the persisted mark); M202 the SURFACE (the `review-task` verb's four doors, the card's contextual action, the review node's task section, `Mark reviewed`, `Continue the conversation`). *Was:* M201 the record; M202 readiness and the PR/refusal path. The seam moved because the guide's own step 1 is "specify local review readiness separately", and the *record* needed almost nothing — `work-items.ts` gained one optional field. What was missing was the VOCABULARY, and what was navigation-only was the card's `Review`. The PR path needed no change at all: `prRefusal`'s arms are unchanged and `review` still means a pull request exists | ✅ done |
-| D08 | **M203–M204** | M203 `Show this task`; M204 `Show related` and the far view's work groups | not started |
+| D08 | **M203–M204** | M203 `Show this task` (membership derived, never stored; the camera on the trail); M204 `Show related` (the lens), the far view's task overview, and `Arrange this task`. *Was:* "the far view's work groups" — read at the work as the card's own summary-tier overview (`PanelFrame`'s `far` slot), not a second far renderer; and the guide's step 5, Arrange, which the split did not name, landed in M204 rather than being dropped | 🟡 built; gate owed on an idle machine |
 | D09 | **M205** | — | not started |
 | D10 | **M206–M208** | M206 shell, rail and the category labels; M207 the inspector and contextual controls; M208 the graph, the far view and the rest-layer sweep | not started |
 | D11 | **M209–M210** | M209 outcomes that outlive canvas membership (§3.4); M210 Resume | not started |

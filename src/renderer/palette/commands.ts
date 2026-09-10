@@ -479,6 +479,16 @@ export interface PaletteActions {
    * done is a person's act and has no verb at all, on purpose.
    */
   reviewTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /**
+   * M203 (D08). Frame a task — from its card, or from any panel that belongs
+   * to exactly one task. A camera move over a DERIVED membership, through the
+   * trail: nothing is moved, selected, woken or stopped.
+   */
+  showTask(panelId: string): { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }
+  /** M204 (D08). The task lens on (or off, for the task already shown): members ringed, the rest dimmed, nothing moved. */
+  showRelated(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  /** M204 (D08). Compact a task's panels in reading order, clear of every other panel, as ONE undo. Refused in the merged view. */
+  arrangeTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
   runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
@@ -2334,6 +2344,12 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // name when the selection is not a picture.
   out.push({ id: 'image.add', title: 'Image: add a picture…', subtitle: 'type image-add <path> — or drop one on the canvas', group: 'canvas', searchText: 'image add picture png jpeg drop paste screenshot', run: () => actions.beginRunVerb() })
   out.push(withReason({ id: 'work.review', title: 'Task: review the lane', subtitle: 'open the review for the selected work card\'s lane, beside the task and its conversation', group: 'canvas', searchText: 'task review lane work card changes diff ready handoff', run: () => { if (workPanelId !== undefined) { const r = actions.reviewTask(workPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, workPanelId === undefined ? 'select a work card first' : undefined))
+  // M203 (D08). From a card, or from the one selected panel of a task; the
+  // verb itself refuses by name for a panel in no task or in two.
+  const taskPanelId = workPanelId ?? (ctx.selectedIds.length === 1 ? ctx.selectedIds[0] : undefined)
+  out.push(withReason({ id: 'task.show', title: 'Task: show this task', subtitle: 'frame the selected card\'s task — or the task the selected panel belongs to; nothing moves', group: 'canvas', searchText: 'task show frame related lane conversation work card find navigate where', run: () => { if (taskPanelId !== undefined) { const r = actions.showTask(taskPanelId); if (r.kind === 'refused' || r.partial === true) actions.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.related', title: 'Task: show related', subtitle: 'ring the task\'s panels and dim the rest; nothing moves — again to turn it off', group: 'canvas', searchText: 'task related highlight lens dim focus members show', run: () => { if (taskPanelId !== undefined) { const r = actions.showRelated(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
+  out.push(withReason({ id: 'task.arrange', title: 'Task: arrange this task', subtitle: 'compact the task\'s panels in reading order, clear of everything else — one undo', group: 'canvas', searchText: 'task arrange tidy compact layout members gather', run: () => { if (taskPanelId !== undefined) { const r = actions.arrangeTask(taskPanelId); if (r.kind === 'refused') actions.say(r.reason) } } }, taskPanelId === undefined ? 'select a work card, or one panel of a task, first' : undefined))
   out.push(withReason({ id: 'image.replace', title: 'Image: replace this picture…', subtitle: 'choose different bytes for the selected picture', group: 'canvas', searchText: 'image replace picture missing repair choose', run: () => { if (imagePanelId !== undefined) void actions.replaceImage(imagePanelId) } }, imagePanelId === undefined ? 'select a picture panel first' : undefined))
   // M185, and M195's fifth. The preview's rows. Every one is PRESENT at rest — the verbs
   // refuse by name against no subject (this repo's rule: a row that

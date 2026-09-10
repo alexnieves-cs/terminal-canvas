@@ -26,7 +26,7 @@ New checks take a scoped string id (`kind-tail.1`), never the next integer; see
 |---|---|---|
 | `verify:meta` | plain node | 38 checks against the repo's own release hygiene, read as values off disk: LICENSE, `package.json`'s engine floor/repository/`private`, no tracked `.c |
 | `verify:viewport` | plain node | ~137 checks over pure canvas/panel geometry: `viewport.ts` (pan/zoom/clamp), `lod.ts` (tiering), `panel-interaction.ts`/`panels.ts` (drag/z math), `poi |
-| `verify:groups` | plain node | 6 checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag |
+| `verify:groups` | plain node | Checks against `renderer/groups/groups.ts` — a group is pure MEMBERSHIP plus derived geometry, and both of its failure modes look fine until a drag — and, from M203/M204 (D08), `renderer/canvas/task-members.ts`: a task's membership derived from facts (`task.members.*`), `show-task`'s decision (`task.show.target.1`) and Arrange's plan (`arrange.1–.3`) |
 | `verify:merged` | plain node | 12 checks against two pure modules — `merged-layout.ts`'s lane placement and `marquee.ts`'s arithmetic — because every workspace lays its panels out i |
 | `verify:registry` | plain node | 38 assertions against `session-registry.ts`'s lifecycle (create/attach/detach/dispose, dormant attach/wake, closing a never-spawned panel, restart-in- |
 | `verify:layout` | plain node | 234 checks (several lettered sub-checks) against `shared/layout-schema.ts`'s on-disk format and `layout-store.ts`'s coalescing/atomic-write/settings |

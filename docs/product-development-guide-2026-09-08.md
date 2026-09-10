@@ -236,7 +236,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D08 — Navigate tasks spatially
 
-- [ ] Complete and record D08.
+- [ ] Complete and record D08. **M203–M204 built and recorded** — [docs/build-log/m203-m204-d08-task-navigation.md](build-log/m203-m204-d08-task-navigation.md). Left unchecked on purpose: `npm run verify` was 38/39 on a loaded machine, and the one red suite fails on the baseline without D08 too; the box is ticked by the first clean gate on an idle machine.
 
 **Do in order:**
 

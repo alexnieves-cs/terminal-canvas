@@ -4,7 +4,7 @@
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
 const { runPanelsSuite } = require('./panels-harness.cjs')
 
-const WATCHDOG_MS = 190000 // measured (re-measured) 2026-09-09 alone in the Electron tier after M202 added work.action.1 and review.task.2 (two real git worktrees and two reloads): 125 s green, was 155000 against a ~110 s run after M195. Headroom above 1.25x on purpose — a watchdog kill reads as a HANG and not as a red check (M135), so the cheap error is a slow suite and the expensive one is a false hang. Re-measure when a milestone adds checks
+const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 
 runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   const { harnessAttachmentsDir, harnessStarterDir, prepareStarter, STARTER_OBJECTS, AgentSessionManager, BOOT_DEFAULT_PRESET, BrowserWindow, CASCADE_STEP, DEFAULT_CAMERA, ECHO_PRESET, ENTRY_OUT, FILE_MAX_LINES, FileWatchers, IPC, IPC_EVENTS, LAYOUT_PATH, LIVE_AT_BOOT, NEVER_RENDERED_PANEL_ID, NEVER_RENDERED_WORKSPACE_ID, NEVER_WOKEN_ID, PANELS_SOCKET, PLUGIN_DETAILS_TEXT, PLUGIN_DIR, PLUGIN_ID, PROJECT_DIR, PROJECT_PROMPT_BODY, PROJECT_PROMPT_NAME, PROMPT_DIRS, PtyManager, RENAMABLE_PRESET, REVIEW_FENCES, SEEDED_PROMPT, SEED_PANELS, ToolboxCache, WORKTREES_DIR, activeWorkspaceId, agentHandlers, agentSessions, agentTranscripts, allPresets, allTemplates, app, appendFileSync, approvalTracker, attachPtyLifecycle, backgroundPoint, baselineCapture, bootDefault, brokerAuditForChecks, buildSync, buildTmuxConf, cardCount, cardTexts, chatFixture, chatRunner, chatSpawns, clickEmptyCanvas, clickPanelAt, clickPanelBody, clickPanelClose, clickRail, closeSync, commitIndexDir, commitIndexSeq, createAgentTranscriptLog, createApprovalTracker, createBaselineCapture, createBoardLane, createBrokerAudit, createBrowserHandlers, createControlHandler, createControlServer, createDirectBackend, createExporters, createGitRunner, createLayoutSnapshots, createLayoutStore, createMemoryStore, createPlacesGate, createReviewCommitter, createReviewDiscarder, createReviewEngine, createRunLedger, createScrollbackLog, createTmuxBackend, createWatchRunner, createWorktreeManager, credentialDir, credentialStore, dockTo, execFileSync, existsSync, expandTilde, fencedGitRunner, findTmux, flushLayoutStore, fromPanels, frontTranscripts, gitPath, gridState, harnessCredentialDir, harnessGrants, importClaudeTranscript, ipcMain, isBuiltInTemplate, join, killedPanelIds, knownUsageSessionIds, lastPanelCentreInWorld, layoutSnapshots, layoutStore, linkOpens, listGithubWorkItems, listSessions, liveCount, loginEnv, memoryDir, memoryStore, mergePrompts, mkdirSync, mkdtempSync, nodeBox, nodeCount, ok, openSync, panelCount, parseLayout, parseShelf, pidsPreserved, presetFromCapture, presetRows, pressArrow, pressChord, pressPlain, ptyManager, pushDefaultPreset, railAgentState, railPan, readFileSync, readFrom, readProjectPrompts, readSync, readVault, readdirSync, realGitRunner, realIpcMainHandle, realpathSync, registerIpcHandlers, registeredHandlers, releaseMeta, renameSync, requestFromRenderer, resolveAttachment, resolveAvailability, resolveCwd, resolveShellEnv, resolveSpawnRequest, restoreFromSnapshot, results, reviewCommit, reviewEngine, rmSync, runLedger, scrollbackLog, sessionMap, settle, settledSessionMap, skillTrashCalls, skillWriteHandlers, sleep, snapshotDir, statSync, templateOf, tmpdir, toolboxCache, trailFor, unlinkSync, usageFixtureDir, usageFixtureFile, verifySocket, viewCentreInWorld, waitUntil, watchDirWatchers, watchFileWatchers, watchRunner, watchTimers, watcherHandlers, wc, webContents, whichFromEnv, whichHere, win, worktreeManager, writeFileSync, zoomTo, state } = ctx
@@ -3280,8 +3280,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // M202 (D07) added a FIFTH verb, `resume`, beside the four — an addition,
             // never a rename: the DOM aliases the other four wear are what roughly
             // two hundred checks select on. The count is asserted rather than
-            // loosened so a sixth cannot arrive unnoticed.
-            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 5 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            // loosened so a sixth cannot arrive unnoticed. M203 (D08) IS that
+            // sixth, on purpose: `show`, the card's door onto Show this task —
+            // an addition beside the five, never a rename of one.
+            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 6 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {
@@ -3479,6 +3481,291 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
         try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
         for (const d of [repoD, laneD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
+      }
+    }
+
+    /* ========== M203 (D08): Show this task ============================== */
+    // A task is FRAMED from facts, never from position: the card, the
+    // terminal the item names as its conversation, and a terminal working
+    // inside the lane's real directory are shown; a terminal TOUCHING the card
+    // with nothing in common is not a member, and a far unrelated one stays
+    // out of frame. Every door is a camera move and nothing else — the saved
+    // rects and the live PTYs are compared before and after — and the move
+    // goes on the TRAIL, so Cmd+[ returns the person to where they were.
+    {
+      const IDS = [
+        'task.show.1 a card\'s Show, pressed as a person does, frames the card, its conversation and a terminal in the lane while a far unrelated panel stays out of frame; Cmd+[ returns the camera to where it was; the agent door shows the same task from a MEMBER and says how many panels it framed, and refuses by name for a panel touching the card that is in no task; no rect moved and no PTY ended'
+      ]
+      const laneD = mkdtempSync(join(tmpdir(), 'tc panels d08 lane '))
+      const elseD = mkdtempSync(join(tmpdir(), 'tc panels d08 else '))
+      try {
+        const lane = realpathSync(laneD)
+        const other = realpathSync(elseD)
+        layoutStore.addWorktree({ id: 'wt-d08', root: other, path: lane, branch: 'tc/d08', createdAt: 1, panelId: 't8C' })
+        const term = (id, x, y, cwd, z) => ({ id, x, y, w: 400, h: 240, z, cwd, command: '/bin/sh', args: ['-c', 'sleep 600'], title: id })
+        const saved = [
+          term('t8C', 100, 100, lane, 1),
+          term('t8X', 100, 1600, lane, 2),
+          // Touching the card's left edge, in another directory, linked to nothing.
+          term('t8U', 500, 100, other, 3),
+          term('t8F', 7000, 7000, other, 4),
+          { id: 'd8A', kind: 'work', x: 900, y: 100, w: 640, h: 220, z: 5, title: 'Frame the task', work: { itemId: 'wi-d08' } }
+        ]
+        layoutStore.save({
+          panels: saved,
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+          workItems: [{ id: 'wi-d08', source: 'typed', title: 'Frame the task', state: 'working', teammateId: 'nobody', panelId: 't8C', worktreeId: 'wt-d08', createdAt: 10, updatedAt: 20 }]
+        })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+        const plan = (line) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, 3000)
+        // Restored panels are DORMANT. Wake the conversation so a real PTY is
+        // there to protect; leave t8X asleep ON PURPOSE — a dormant terminal
+        // has no live cwd and no registry session, and it is still in the
+        // lane (the defect this check's first run found).
+        const woke = await plan('start t8C')
+        await waitUntil(() => ptyManager.list().some((p) => p.id === 't8C'), 15000)
+        await settle()
+        const sessions = () => wc.executeJavaScript(`JSON.stringify(window.__m4aSessions().filter((s) => ['t8C', 't8X', 't8U', 't8F'].includes(s.id)).sort((a, b) => a.id < b.id ? -1 : 1))`)
+        const paletteOpen = () => wc.executeJavaScript(`!!document.querySelector('[data-palette], .palette')`)
+        const sessionsBefore = await sessions()
+
+        const vp = () => wc.executeJavaScript('window.__m4aViewport()')
+        const same = (a, b) => a && b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.scale - b.scale) < 0.001
+        // A flight ends when two reads a frame apart agree and differ from where it started.
+        const landed = async (from) => waitUntil(async () => {
+          const a = await vp(); await new Promise((r) => setTimeout(r, 120)); const b = await vp()
+          return same(a, b) && !same(a, from) ? b : false
+        }, 6000)
+        const framing = () => wc.executeJavaScript(`(() => {
+          const W = window.innerWidth, H = window.innerHeight, out = {}
+          for (const id of ['t8C', 't8X', 't8U', 't8F', 'd8A']) {
+            const n = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!n) { out[id] = 'absent'; continue }
+            const r = n.getBoundingClientRect()
+            out[id] = r.right <= 0 || r.bottom <= 0 || r.left >= W || r.top >= H ? 'outside'
+              : r.left >= -1 && r.top >= -1 && r.right <= W + 1 && r.bottom <= H + 1 ? 'inside' : 'partial'
+          }
+          return out })()`)
+        const ptysBefore = ptyManager.list().map((p) => p.id).sort().join(',')
+        const vp0 = await vp()
+
+        // ---- the card's Show, in two tasks (M195's lesson) ----
+        const pressShow = async (type) => wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="d8A"] [data-work-verb="show"]'); if (!b) return false
+          b.dispatchEvent(new MouseEvent(${JSON.stringify(type)}, { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+        const pressedDown = await pressShow('mousedown')
+        await settle()
+        await pressShow('click')
+        const vp1 = await landed(vp0)
+        const framed = await framing()
+        // The WHOLE task was framed, so the card says nothing: no palette sits over what was just shown.
+        const paletteAfterShow = await paletteOpen()
+
+        // ---- Camera Back, as a keyboard does ----
+        await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: '[', code: 'BracketLeft', metaKey: true, bubbles: true }))`)
+        const back = await landed(vp1)
+
+        // ---- the agent door, from a MEMBER, and a refusal for a neighbour ----
+        const fromMember = await plan('show-task t8X')
+        const vp2 = await landed(back || vp0)
+        const neighbour = await plan('show-task t8U')
+        await settle()
+        const vp3 = await vp()
+
+        layoutStore.flushSync()
+        const after = (layoutStore.initial().panels || []).filter((p) => saved.some((q) => q.id === p.id))
+        const unmoved = saved.every((q) => { const a = after.find((p) => p.id === q.id); return a && a.x === q.x && a.y === q.y && a.w === q.w && a.h === q.h })
+        const ptysAfter = ptyManager.list().map((p) => p.id).sort().join(',')
+        const sessionsAfter = await sessions()
+        ok(IDS[0],
+          woke?.kind === 'ran' && pressedDown === true && paletteAfterShow === false &&
+            // Framing woke nothing and ended nothing: the dormant terminals it brought on screen stay asleep.
+            sessionsAfter === sessionsBefore && vp1 !== false && back !== false && vp2 !== false &&
+            framed.d8A === 'inside' && framed.t8C === 'inside' && framed.t8X === 'inside' && framed.t8F !== 'inside' &&
+            same(back, vp0) &&
+            fromMember?.kind === 'ran' && /showing 3 panels of Frame the task/.test(JSON.stringify(fromMember)) && same(vp2, vp1) &&
+            neighbour?.kind === 'refused' && /not part of any task/.test(neighbour.reason) && same(vp3, vp2) &&
+            // The sessions are tmux-backed here, so ptyManager's list is empty on
+            // both sides; the registry's session list above is the process fact.
+            unmoved && ptysAfter === ptysBefore && /"t8C","dormant":false,"spawned":true/.test(sessionsAfter),
+          JSON.stringify({ woke, pressedDown, paletteAfterShow, vp0, vp1, framed, back, fromMember, vp2, neighbour, vp3, unmoved, ptysBefore, ptysAfter, sessionsBefore, sessionsAfter }))
+      } catch (d08Err) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(d08Err && d08Err.message || d08Err))
+      } finally {
+        try { layoutStore.dropWorktree('wt-d08') } catch { /* nothing recorded */ }
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const d of [laneD, elseD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
+      }
+    }
+
+    /* ========== M204 (D08): Show related, the far overview, Arrange ====== */
+    // The lens is PAINT: the task's panels are ringed, the rest dimmed, and no
+    // rect, no screen box and no session changes. At far zoom the card shows
+    // the task, not a transcript — read off a REAL fork diff, because a fake
+    // directory would answer `baseline-lost` and the overview would pass for
+    // the wrong reason. Arrange moves the task clear of an unrelated panel,
+    // leaves a locked member where it is, and one undo puts every rect back.
+    {
+      const IDS = [
+        'task.related.1 show-related rings every member (the card, the conversation, a DORMANT terminal in the lane, a locked one) and dims the unrelated panel, with the lens bar counting them; no screen box, rect or session changes; the ⋯ menu of the unrelated panel has no task section, a member\'s reads `Stop showing related`, and pressing it turns the lens off everywhere',
+        'task.far.1 at far zoom the card\'s summary carries the task overview — the readiness word read from the lane\'s real fork diff and the key evidence (`1 file changed`) — under its title',
+        'task.arrange.1 arrange-task from a member moves the task\'s unlocked panels clear of an unrelated panel and a locked member, keeps every size, leaves the unrelated and the locked panel where they were, and carries the DISPATCHED card with its conversation without ever writing the card or its anchor; the camera follows the arrangement; no session ends; ONE undo restores every rect; and the merged view refuses by name'
+      ]
+      const repoD = mkdtempSync(join(tmpdir(), 'tc panels d08b repo '))
+      const laneD = mkdtempSync(join(tmpdir(), 'tc panels d08b lane '))
+      const elseD = mkdtempSync(join(tmpdir(), 'tc panels d08b else '))
+      try {
+        const g = (dir, ...args) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' })
+        g(repoD, 'init', '-q', '.'); g(repoD, 'config', 'user.email', 'v@e.com'); g(repoD, 'config', 'user.name', 'v')
+        writeFileSync(join(repoD, 'a.txt'), 'a\n'); g(repoD, 'add', '-A'); g(repoD, 'commit', '-qm', 'init')
+        const lanePath = join(laneD, 'work')
+        g(repoD, 'worktree', 'add', '-q', '-b', 'tc/d08b', lanePath)
+        writeFileSync(join(lanePath, 'b.txt'), 'b\n')
+        const lane = realpathSync(lanePath)
+        const other = realpathSync(elseD)
+        layoutStore.addWorktree({ id: 'wt-d08b', root: realpathSync(repoD), path: lane, branch: 'tc/d08b', createdAt: 1, panelId: 't9C' })
+        const term = (id, x, y, cwd, z, extra = {}) => ({ id, x, y, w: 400, h: 240, z, cwd, command: '/bin/sh', args: ['-c', 'sleep 600'], title: id, ...extra })
+        const IDS9 = ['t9C', 't9X', 't9U', 't9L', 'd9A']
+        const saved = [
+          term('t9C', 100, 100, lane, 1),
+          term('t9X', 100, 1600, lane, 2),
+          // Unrelated, and exactly where plain compaction would put t9X.
+          term('t9U', 520, 400, other, 3),
+          term('t9L', 2000, 1600, lane, 4, { locked: true }),
+          { id: 'd9A', kind: 'work', x: 900, y: 100, w: 640, h: 220, z: 5, title: 'Light the task', work: { itemId: 'wi-d08b' } }
+        ]
+        layoutStore.save({
+          panels: saved,
+          camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null,
+          // The card is ANCHORED to its conversation (M114), so Arrange's follower path runs for real.
+          workItems: [{ id: 'wi-d08b', source: 'typed', title: 'Light the task', state: 'working', teammateId: 'nobody', panelId: 't9C', worktreeId: 'wt-d08b', anchor: { panelId: 't9C', dx: 800, dy: 0 }, createdAt: 10, updatedAt: 20 }]
+        })
+        flushLayoutStore()
+        const reD = new Promise((resolve) => wc.once('did-finish-load', resolve))
+        wc.reload(); await reD
+        await settle()
+        const plan = (line) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, 3000)
+        await plan('start t9C')
+        await waitUntil(() => wc.executeJavaScript(`window.__m4aSessions().some((s) => s.id === 't9C' && s.spawned)`), 15000)
+        await settle()
+        const sessions = () => wc.executeJavaScript(`JSON.stringify(window.__m4aSessions().filter((s) => ${JSON.stringify(IDS9)}.includes(s.id)).sort((a, b) => a.id < b.id ? -1 : 1))`)
+        const sizes = () => wc.executeJavaScript(`JSON.stringify(${JSON.stringify(IDS9)}.map((id) => { const n = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!n) return null; const r = n.getBoundingClientRect(); return [id, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] }))`)
+        const lensAttrs = () => wc.executeJavaScript(`(() => { const o = {}; for (const id of ${JSON.stringify(IDS9)}) { const n = document.querySelector('.panel[data-panel-id="' + id + '"]'); o[id] = n ? n.getAttribute('data-task-lens') : 'absent' }
+          const bar = document.querySelector('[data-task-lens-bar]'); o.bar = bar ? (bar.querySelector('[data-task-lens-count]') || {}).textContent || '' : null; return o })()`)
+        // Every control here is a shellControl: pressed in TWO tasks (M195).
+        const press = async (selector) => {
+          let found = false
+          for (const type of ['mousedown', 'click']) {
+            found = await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b) return false; b.dispatchEvent(new MouseEvent('${type}', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+            await settle()
+          }
+          return found
+        }
+        const menuOf = (id) => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="${id}"] [data-panel-menu]'); if (!m) return { open: false }
+          const t = m.querySelector('[data-panel-menu-task]'); const rel = m.querySelector('[data-panel-menu-task-verb="related"]')
+          return { open: true, task: t ? t.getAttribute('data-panel-menu-task') : null, related: rel ? rel.textContent : null } })()`)
+        const sessionsBefore = await sessions()
+        const sizesBefore = await sizes()
+        const lensBefore = await lensAttrs()
+
+        // ---- task.related.1 ----
+        const on = await plan('show-related d9A')
+        await settle()
+        const lit = await lensAttrs()
+        const sizesLit = await sizes()
+        // Compared HERE, before any ⋯ press: opening a frame's ⋯ menu on a
+        // dormant terminal wakes it (a press on the frame's chrome selects the
+        // panel, since M106) — the menu's behaviour, not the lens's. The lens
+        // itself must wake and end nothing.
+        const sessionsLens = await sessions()
+        await press('.panel[data-panel-id="t9U"] [data-panel-more]')
+        const menuU = await menuOf('t9U')
+        await press('.panel[data-panel-id="t9U"] [data-panel-menu-close]')
+        await press('.panel[data-panel-id="t9X"] [data-panel-more]')
+        const menuX = await menuOf('t9X')
+        await press('.panel[data-panel-id="t9X"] [data-panel-menu-task-verb="related"]')
+        const off = await lensAttrs()
+        const noLens = (o) => IDS9.every((id) => o[id] === null) && o.bar === null
+        ok(IDS[0],
+          on?.kind === 'ran' && noLens(lensBefore) &&
+            lit.d9A === 'member' && lit.t9C === 'member' && lit.t9X === 'member' && lit.t9L === 'member' && lit.t9U === 'other' &&
+            /^4 related$/.test(lit.bar || '') &&
+            sizesLit === sizesBefore &&
+            menuU.open === true && menuU.task === null &&
+            menuX.open === true && menuX.task === 'one' && /Stop showing related/.test(menuX.related || '') &&
+            noLens(off) && sessionsLens === sessionsBefore,
+          JSON.stringify({ on, lensBefore, lit, sizesBefore, sizesLit, menuU, menuX, off, sessionsBefore, sessionsLens }))
+
+        // ---- task.far.1 ----
+        const readiness = () => wc.executeJavaScript(`(() => { const r = document.querySelector('.panel[data-panel-id="d9A"] [data-work-readiness]'); return r ? r.getAttribute('data-work-readiness') : null })()`)
+        const ready = await waitUntil(async () => (await readiness()) === 'ready', 15000)
+        const cmd = (key, code) => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(key)}, code: ${JSON.stringify(code)}, metaKey: true, bubbles: true }))`)
+        const scale = () => wc.executeJavaScript('window.__m4aViewport().scale')
+        for (let i = 0; i < 40 && (await scale()) >= 0.22; i += 1) await cmd('-', 'Minus')
+        await settle()
+        const farScale = await scale()
+        const far = await waitUntil(() => wc.executeJavaScript(`(() => { const n = document.querySelector('.panel[data-panel-id="d9A"]'); if (!n || !n.querySelector('[data-card-summary]')) return false
+          const f = n.querySelector('[data-work-far]'); if (!f) return false
+          const t = (sel) => { const e = f.querySelector(sel); return e ? e.textContent : null }
+          return { title: (n.querySelector('.panel__card-summary-title') || {}).textContent || null, readiness: t('[data-work-far-readiness]'), evidence: t('[data-work-far-evidence]') } })()`), 6000)
+        await cmd('0', 'Digit0')
+        await settle()
+        ok(IDS[1],
+          ready !== false && farScale < 0.22 && farScale > 0.11 && far !== false &&
+            far.title === 'Light the task' && /ready to review/.test(far.readiness || '') && far.evidence === '1 file changed',
+          JSON.stringify({ ready, farScale, far }))
+
+        // ---- task.arrange.1 ----
+        const sessionsPreArrange = await sessions()
+        const vpPreArrange = await wc.executeJavaScript('window.__m4aViewport()')
+        const arranged = await plan('arrange-task t9X')
+        await settle()
+        const rectsOf = () => wc.executeJavaScript(`Object.fromEntries(${JSON.stringify(IDS9)}.map((id) => { const n = document.querySelector('.panel[data-panel-id="' + id + '"]'); if (!n) return [id, null]
+          const px = (v) => Math.round(parseFloat(v)); return [id, { x: px(n.style.left), y: px(n.style.top), w: px(n.style.width), h: px(n.style.height) }] }))`)
+        const hits = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+        // The renderer's save is COALESCED: wait for the store to hold a moved rect rather than reading it after one settle.
+        const movedOf = (r) => saved.filter((q) => r[q.id] && (r[q.id].x !== q.x || r[q.id].y !== q.y)).map((q) => q.id)
+        const after = (await waitUntil(async () => { const r = await rectsOf(); return movedOf(r).length > 0 ? r : false }, 8000)) || await rectsOf()
+        // The card MOVES on screen (it follows) — what must not happen is a WRITE to its record, asserted through the anchor and the stored rect below.
+        const movedIds = saved.filter((q) => after[q.id] && (after[q.id].x !== q.x || after[q.id].y !== q.y)).map((q) => q.id)
+        const followed = after.d9A && after.t9C && after.d9A.x === after.t9C.x + 800 && after.d9A.y === after.t9C.y
+        layoutStore.flushSync()
+        const storedCard = (layoutStore.initial().panels || []).find((q) => q.id === 'd9A')
+        // The card's stored rect is never written; where it SHOWS is its conversation's rect plus the anchor.
+        const cardShown = after.d9A
+        const clear = [after.t9C, after.t9X, cardShown].every((r) => r && !hits(r, after.t9U) && !hits(r, after.t9L)) && !hits(cardShown, after.t9X)
+        layoutStore.flushSync()
+        const anchorKept = ((layoutStore.initial().workItems || []).find((i) => i.id === 'wi-d08b') || {}).anchor
+        const vpArranged = await wc.executeJavaScript('window.__m4aViewport()')
+        const sizesKept = saved.every((q) => after[q.id] && after[q.id].w === q.w && after[q.id].h === q.h)
+        const sessionsArranged = await sessions()
+        await wc.executeJavaScript('window.__m4bUndo()')
+        await settle()
+        const undone = (await waitUntil(async () => { const r = await rectsOf(); return movedOf(r).length === 0 ? r : false }, 8000)) || await rectsOf()
+        const restored = saved.every((q) => undone[q.id] && undone[q.id].x === q.x && undone[q.id].y === q.y)
+        // ---- the merged view refuses by name ----
+        const MERGE = () => wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', code: 'KeyA', metaKey: true, shiftKey: true, bubbles: true })), true`)
+        await MERGE()
+        const mergedRefusal = await waitUntil(async () => { const r = await plan('arrange-task t9X'); return r?.kind === 'refused' && /merged/.test(r.reason) ? r : false }, 8000)
+        await MERGE()
+        await settle()
+        ok(IDS[2],
+          arranged?.kind === 'ran' && /arranged 2 panels of Light the task/.test(JSON.stringify(arranged)) &&
+            movedIds.includes('t9C') && movedIds.includes('t9X') && followed && !movedIds.includes('t9L') && !movedIds.includes('t9U') &&
+            storedCard && storedCard.x === 900 && storedCard.y === 100 &&
+            anchorKept && anchorKept.panelId === 't9C' && anchorKept.dx === 800 && anchorKept.dy === 0 &&
+            vpArranged && vpPreArrange && (vpArranged.x !== vpPreArrange.x || vpArranged.y !== vpPreArrange.y || vpArranged.scale !== vpPreArrange.scale) &&
+            clear && sizesKept && restored && sessionsArranged === sessionsPreArrange && mergedRefusal !== false,
+          JSON.stringify({ arranged, after, movedIds, followed, storedCard, anchorKept, vpPreArrange, vpArranged, clear, sizesKept, undone, restored, sessionsPreArrange, sessionsArranged, mergedRefusal }))
+      } catch (d08bErr) {
+        for (const id of IDS) ok(id, false, 'threw: ' + String(d08bErr && d08bErr.message || d08bErr))
+      } finally {
+        try { layoutStore.dropWorktree('wt-d08b') } catch { /* nothing recorded */ }
+        try { layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null }); flushLayoutStore() } catch { /* the next check saves its own */ }
+        try { const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re; await settle() } catch { /* nothing to drain */ }
+        for (const d of [repoD, laneD, elseD]) { try { rmSync(d, { recursive: true, force: true }) } catch { /* gone */ } }
       }
     }
 

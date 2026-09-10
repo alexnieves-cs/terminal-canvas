@@ -504,3 +504,22 @@ approval, both queue reasons, stopped/failed/unknown, neutral turn/exit results,
 live request ids from history. `verify:rail run.1` owns aggregate run wording; `run.surface.1` pins
 WorkflowNode and WorkNode to the shared projection and existing approval action. A completed
 execution must never be asserted as a completed work item.
+
+## The v10 run, D08 (M203–M204)
+
+`verify:groups task.members.1–.5` own the membership rule: one panel per reason (card,
+conversation, review, a process/file/preview inside the lane, a link, a shared run), and one decoy
+per rule — a panel TOUCHING the card with nothing in common, a second-hop link, a sibling
+directory (`/lanes/one-2` beside `/lanes/one`), a closed conversation that must be `missing` and
+never a member. `task.show.target.1` owns the verb's decision, including the member of two tasks
+that must refuse NAMING both. `arrange.1–.3` own Arrange's plan; `arrange.1`'s obstacle sits
+exactly where plain `tidyPanels` compaction would land, so the obvious implementation is red there.
+
+`verify:panels:product task.show.1` is the real renderer: the card's `Show` pressed in two tasks,
+Cmd+[ back to the prior camera, the agent door from a member, a refusal for the adjacent panel, and
+the registry's session list compared before and after — the sessions are tmux-backed in this
+harness, so `ptyManager.list()` is empty on both sides and is NOT the process fact. One terminal in
+its lane is left DORMANT on purpose: a restored terminal has no live cwd and no registry session,
+and the check's first run found it silently out of its task. `task.related.1`, `task.far.1` and
+`task.arrange.1` share one fixture over a REAL linked worktree, because the far overview's
+`ready to review` and `1 file changed` must come from a real fork diff.

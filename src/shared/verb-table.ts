@@ -105,6 +105,16 @@ export const VERBS: readonly VerbDef[] = [
   // teammate pointing a person at what it changed is doing the right thing,
   // and nothing here starts a session or changes a setting. Marking a review
   // DONE has no verb at all, on purpose; see V9_DOORS below.
+  // M203 (D08). Showing a task is a CAMERA move over a DERIVED set — no
+  // geometry, no selection, no session — so it is not on
+  // TEAMMATE_REFUSED_VERBS, for `focus`'s reason: a teammate pointing a
+  // person at the work it belongs to is doing the right thing.
+  { id: 'show-task', label: 'Task: show this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showTask'], target: 'panel', hint: 'frame a task — its card, conversation, lane, reviews and links — from the card or any panel of it; nothing moves' },
+  // M204 (D08). The lens is PAINT and arrange is one undo: neither starts a
+  // session or changes a setting, so neither is refused for a teammate —
+  // `tidy`, which arrange is a scoped copy of, is not either.
+  { id: 'show-related', label: 'Task: show related', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['showRelated'], target: 'panel', hint: 'ring a task\'s panels and dim the rest — nothing moves; the same verb on the same task turns it off' },
+  { id: 'arrange-task', label: 'Task: arrange this task', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['arrangeTask'], target: 'panel', hint: 'compact a task\'s panels in reading order, clear of everything else — one undo; locked panels stay' },
   { id: 'review-task', label: 'Task: review the lane', args: [{ name: 'panel', kind: 'panel' }], destructive: false, actions: ['reviewTask'], target: 'panel', hint: 'open the review for a work card\'s lane, beside the task and its conversation' },
   { id: 'preview-dev', label: 'Preview: start the dev server', args: [{ name: 'script', kind: 'value', optional: true }], destructive: false, actions: ['startDevServer'], target: 'canvas', hint: 'run the project\'s dev script in a terminal panel you can see and stop' },
   { id: 'workflow-copy', label: 'Workflow: save a copy', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['saveWorkflowCopy'], target: 'canvas', hint: 'keep the diagram under a new name — a built-in workflow\'s only save' },
@@ -317,6 +327,9 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-width': { canvas: 'the four width chips on the preview pane', palette: 'preview.width', agent: 'tc plan preview-width phone', workflow: 'an action node whose line is: preview-width phone' },
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
+  'show-task': { canvas: 'Show on a work card', palette: 'task.show', agent: 'tc plan show-task wk1', workflow: 'an action node whose line is: show-task wk1' },
+  'show-related': { canvas: 'Show related in the ⋯ menu of any panel of a task', palette: 'task.related', agent: 'tc plan show-related wk1', workflow: 'an action node whose line is: show-related wk1' },
+  'arrange-task': { canvas: 'Arrange this task in the ⋯ menu of any panel of a task, and Arrange on the lens bar', palette: 'task.arrange', agent: 'tc plan arrange-task wk1', workflow: 'an action node whose line is: arrange-task wk1' },
   'review-task': { canvas: 'Review on a work card', palette: 'work.review', agent: 'tc plan review-task wk1', workflow: 'an action node whose line is: review-task wk1' },
   'preview-dev': { canvas: 'Start dev server in the preview pane\'s discovery list', palette: 'preview.dev', agent: 'tc plan preview-dev dev', workflow: 'an action node whose line is: preview-dev dev' },
   'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: 'an action node whose line is: workflow-copy t1' },
