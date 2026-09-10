@@ -172,6 +172,33 @@
   --bubble:     #e6ecf7;   /* M162. The user turn's ground: a soft tint one step from the panel */
   --blur:       blur(12px) saturate(120%);
 
+  /* M227 (the Obsidian-amplified brief). THE DEPTH TOKENS. The glass ramp is
+     four levels now and the LEVEL IS THE FACT: --glass-0 a recessed well
+     (a terminal's frame, a code block, an input, a scroll area), --glass-1
+     the panel, --glass-2 the shell chrome, --glass-3 a floating overlay.
+     verify:styles depth.1 pins that a surface sits on --glass-N only inside
+     a surface below N, so the ramp cannot rot into a convention.
+
+     --glass-1 and --glass-2 keep their M109/M163 values EXACTLY. That is what
+     makes every existing golden a valid comparison — an overshoot shows up as
+     a pixel number against a scene you can still read — and it is the whole
+     reason this direction was chosen over a fresh palette.
+
+     THE RIM PAIR is how depth is paid: --rim is the 1px specular top edge of
+     a RAISED surface, --rim-inner the inset shadow that sinks a WELL. A
+     surface wears one or the other, NEVER both (rim.1) — both together is the
+     2008 bevel. Neither composites: a border and an inset box-shadow are free
+     where a second backdrop-filter is not, which is what keeps this payable
+     on a forty-panel canvas (blur.1's budget is untouched).
+
+     --rim is NOT a re-spelling of --edge-light. --edge-light keeps its own two
+     sites (the palette's top edge, the rail and inspector's inner highlight);
+     --rim is what the FRAME wears, so the two never argue over one name. */
+  --glass-0:    rgba(226, 230, 238, .92);
+  --glass-3:    rgba(255, 255, 255, .94);
+  --rim:        rgba(255, 255, 255, .95);
+  --rim-inner:  inset 0 1px 2px rgba(30, 40, 70, .12);
+
   /* Back-compat aliases. Recorded as debt in M45's build log: they let the
      migration land task by task, and they go when their last user does.
      M109: --panel-bg and --chrome-bg alias the GLASS — verify:panels reads a
@@ -244,6 +271,18 @@
   --on-iris:    #06111a;
   --bubble:     #1a2130;
   --blur:       blur(14px) saturate(140%);
+
+  /* M227. The depth tokens, DARK. --glass-0 sits BELOW --s-0 in lightness so a
+     well reads as cut into the ground rather than laid on it; --glass-3 sits
+     a clear step above --glass-1 so an overlay is legibly nearer than the
+     panel it covers. The rim is white at a low alpha (a lit edge, not a
+     border) and --rim-inner is a black inset deep enough to read at the
+     golden's scale — M163's finding about --edge-light at .06, applied to the
+     new pair before it ships rather than after. */
+  --glass-0:    rgba(7, 9, 15, .92);
+  --glass-3:    rgba(30, 36, 49, .94);
+  --rim:        rgba(255, 255, 255, .14);
+  --rim-inner:  inset 0 1px 3px rgba(0, 0, 0, .55);
 
   --text:      var(--fg);
   --muted:     var(--fg-3);

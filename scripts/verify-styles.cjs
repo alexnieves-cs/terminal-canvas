@@ -584,7 +584,12 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 // background against var(--panel-bg), so the alias is what keeps that check
 // measuring the real fill.
 {
-  const GLASS = ['--glass-1', '--glass-2', '--edge-light', '--bezel', '--lift', '--aura-1', '--aura-2', '--on-iris', '--blur']
+  // M227. obsidian.1 is a FLOOR, not an exact set — it filters for MISSING
+  // names, so adding to it can only ever tighten it. The four depth tokens
+  // join the list because a load-bearing token that no check pins is a token
+  // a later run deletes without noticing; depth.1 and rim.1 check how they are
+  // USED, and this checks that they still EXIST.
+  const GLASS = ['--glass-0', '--glass-1', '--glass-2', '--glass-3', '--rim', '--rim-inner', '--edge-light', '--bezel', '--lift', '--aura-1', '--aura-2', '--on-iris', '--blur']
   const missing = GLASS.filter((t) => !(perBlock.light || {})[t] || !(perBlock.dark || {})[t])
   const alias = ['light', 'dark'].every((n) => /var\(--glass-1\)/.test((perBlock[n] || {})['--panel-bg'] || ''))
   const panelUses = /\n\.panel\s*\{[^}]*background:\s*var\(--panel-bg\)/.test(bare) || /\n\.panel\s*\{[^}]*background:\s*var\(--glass-1\)/.test(bare)
@@ -637,6 +642,51 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const commit = sel.includes('.review-node__commit')
   ok('primary.1', 'the .is-primary rule fills with --iris, inks with --on-iris, and names its sites (the launcher start among them) and never Commit',
     rule !== undefined && missing.length === 0 && !commit, JSON.stringify({ sel: sel.slice(0, 200), missing, commit }))
+}
+
+// M227 — depth.1. ELEVATION IS MONOTONIC. The glass ramp is four levels and
+// the level IS the fact: --glass-0 is a recessed well, --glass-1 the panel,
+// --glass-2 the shell chrome, --glass-3 a floating overlay. A surface may sit
+// on --glass-N only if the surface CONTAINING it sits on a level below N.
+//
+// Checkable as text because this stylesheet is flat: for every pair of
+// glass-bearing selectors where one selector is a DESCENDANT of the other
+// (its selector text begins with the ancestor's followed by a combinator),
+// the descendant's level must be strictly greater. That is a real containment
+// test over the rules that actually exist, not a convention — and a
+// convention nothing pins is one a later run breaks without noticing, which
+// is exactly how --glass-1 and --glass-2 came to be used interchangeably on
+// four surfaces before M163 re-derived them.
+//
+// WHAT IT CANNOT SEE, stated so a green run is not read as more: containment
+// through the DOM rather than through selector text. `.palette__row` inside
+// `.palette` is caught; a `.sheet__field` that only ever renders inside
+// `.palette` is not, because nothing in this file says so. The check covers
+// the case that has occurred (a nested selector pair) and not that one.
+{
+  const LEVEL = /var\(--glass-([0-3])\)/
+  const surfaces = []
+  for (const r of bodyRules) {
+    const m = LEVEL.exec((r.body.match(/background[^;]*;/g) || []).join(' '))
+    if (m === null) continue
+    for (const part of r.sel.split(',').map((p) => p.trim())) {
+      if (part.length > 0) surfaces.push({ sel: part, level: Number(m[1]) })
+    }
+  }
+  // b is a descendant of a when b's selector begins with a's and the next
+  // character is a combinator — never a bare prefix, or `.pf` would "contain"
+  // `.pf__body`, which is a BEM sibling and not a descendant at all.
+  const contains = (a, b) => b.length > a.length && b.startsWith(a) && /[\s>+~]/.test(b[a.length])
+  const inversions = []
+  for (const a of surfaces) {
+    for (const b of surfaces) {
+      if (contains(a.sel, b.sel) && b.level <= a.level) inversions.push(`${b.sel} (--glass-${b.level}) inside ${a.sel} (--glass-${a.level})`)
+    }
+  }
+  const declared = [0, 1, 2, 3].filter((n) => ['light', 'dark'].every((t) => (perBlock[t] || {})[`--glass-${n}`] !== undefined))
+  ok('depth.1', 'the glass ramp declares all four levels in both theme blocks and elevation is monotonic — a surface sits on --glass-N only inside a surface below N',
+    declared.length === 4 && inversions.length === 0,
+    JSON.stringify({ declared, surfaces: surfaces.length, inversions: inversions.slice(0, 6) }))
 }
 
 // M110 — far.1. ONE STATUS WALL. The block tier and the minimap draw the

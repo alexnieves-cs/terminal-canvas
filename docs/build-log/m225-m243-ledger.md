@@ -265,3 +265,57 @@ harness that cannot run on a busy machine.
 This is in scope for M225 rather than deferred: the milestone's stated job is to prove the
 harness stable at zero diff, and this is a harness-stability defect that proving it uncovered.
 
+---
+
+## Act I — the material (M227–M229)
+
+Branch: `m225-visual-baseline` (Act 0 and Act I share it; the act closes to `main` with its
+build log).
+
+### M227 · the depth tokens
+
+- Spec: [`2026-09-09-m227-depth-tokens.md`](../superpowers/specs/2026-09-09-m227-depth-tokens.md)
+- Plan: [`2026-09-09-m227-depth-tokens-plan.md`](../superpowers/plans/2026-09-09-m227-depth-tokens-plan.md)
+- Red-first evidence: [`m227-pure-red-evidence.md`](m227-pure-red-evidence.md) — `depth.1` and
+  `rim.1` both watched FAILING against the untouched stylesheet, with the details naming the
+  absence (`declared: [1, 2]`, `both: false`), so neither was passing by accident.
+
+**What landed.** `--glass-0`, `--glass-3`, `--rim`, `--rim-inner` in **both** theme blocks, and
+nothing else. `--glass-1` and `--glass-2` keep their M109/M163 values exactly.
+
+**New check `depth.1`** — the ramp declares all four levels in both blocks and elevation is
+monotonic: a surface sits on `--glass-N` only inside a surface below `N`. It is a containment
+test over selector TEXT, and the prefix test requires a combinator deliberately — a bare
+`startsWith` would make `.pf` "contain" `.pf__body`, a BEM sibling, and the check would fail on a
+correct stylesheet. Its blind spot (containment that exists only in the DOM) is written into its
+own comment rather than left for a later reader.
+
+**`obsidian.1` extended** with all four names. It is a FLOOR — it filters for MISSING names — so
+adding to it can only tighten it; a load-bearing token that no check pins is one a later run
+deletes without noticing.
+
+**`rim.1` held to M228.** A check that requires a surface to USE the pair cannot be satisfied by
+a milestone that changes no surface. Landing it here meant either a red suite or a check written
+to pass vacuously, and the second is worse.
+
+**The values, and why the ramp is right.** Measured relative luminance says `--glass-0` reads as
+`--s-0` in the dark theme — but `--s-0` is not its parent. A well sits inside a PANEL, and against
+`--glass-1` the dark well is about a third of the panel's luminance and the light well is clearly
+darker than its panel. The ramp is monotonic **against each surface's actual container**, which
+is what `depth.1` checks and what the eye reads.
+
+**Zero-drift proof.** `UPDATE_GOLDENS=1 npm run verify:visual` on a build carrying these four
+tokens wrote **exactly the two goldens M202 had left stale and kept the other 56 byte for byte**
+(`59/59 passed`). Fifty-six scenes unchanged with the tokens declared is the evidence that the
+token layer is inert until it is spent — the claim M227 exists to make.
+
+```
+PASS  kinds golden written
+PASS  kinds-dark golden written
+56 × "golden kept — unchanged within both budgets"
+59/59 passed
+```
+
+**Goldens touched:** `kinds`, `kinds-dark` — both attributed to **M202** above, with a critic
+sentence each. **No golden moved for M227's own change.**
+
