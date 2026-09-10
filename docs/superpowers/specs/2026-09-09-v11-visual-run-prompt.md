@@ -143,7 +143,7 @@ terminal, "edge-to-edge" means the body must own the full height — so the chro
   `backdrop-filter` on every card is the one way to make this app feel *worse*. Any new blur
   site inherits that gate.
 - **Motion respects `prefers-reduced-motion`, and degrades by reporting.** With motion off a
-  fire still *reports* — the edge highlights for `--dur-3` and releases — it simply does not
+  fire still *reports* — the edge highlights for `--dur-2` and releases — it simply does not
   travel. **The event is never lost, only the animation.** The `reduced-motion` golden scene is
   the proof.
 - **The face rule, the rest rule, the path rule, the metrics rule and "words, not codes"
