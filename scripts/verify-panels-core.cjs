@@ -4051,5 +4051,193 @@ runPanelsSuite('core', WATCHDOG_MS, async (ctx) => {
         read.cards >= 3 && read.glyphs === read.cards && read.titles === read.cards && read.lines === 0 && read.costs === 0 && read.washed === read.cards,
         JSON.stringify(read))
     }
+
+    // M228 — rim.paint.1 / well.paint.1. THE RIM PAIR, AS PIXELS.
+    //
+    // PAINT checks, because two other instruments cannot see this change and
+    // each is blind for its own reason:
+    //
+    //   * verify:styles reads the stylesheet as TEXT. It proves the rule was
+    //     written, never that anything painted — M149 found two surfaces open
+    //     in the DOM and invisible for two whole versions, both because a
+    //     transform or a blur introduced a stacking context. This run
+    //     introduces both.
+    //   * verify:visual cannot see a hairline AT ALL, and that is arithmetic,
+    //     not luck. A 1px rim contributes ONE row to a halved golden: across a
+    //     32px tile that is 32 of 1024 pixels, 3.1%, against a 35% tile
+    //     budget, and far under the 0.5% frame budget. Measured on M228's own
+    //     run: 60/60 passed with the rim pair on every panel in every scene. A
+    //     green visual suite is SILENT about this milestone.
+    //
+    // BOTH CHECKS ARE DIFFERENTIAL, and that is the whole design. The first
+    // two cuts were not, and a mutation test — delete the rim pair, rebuild,
+    // re-run — showed both PASSING against a stylesheet with no rim in it.
+    // They had been reading structure that was there all along: a lit band at
+    // a frame's top edge is also the --frame-line border, and a dark band at a
+    // slot's top edge is also the chrome's border-bottom above it. "A band
+    // exists" is not evidence; "this edge differs from an edge that should NOT
+    // have it" is.
+    //
+    // So each samples TWO points on the SAME surface and compares them:
+    //   rim  — just inside the TOP border (has the rim) against just inside
+    //          the RIGHT border at the same fill (has none). The right edge,
+    //          not the left: .pf::before hangs a 14px tone glow off the LEFT
+    //          edge and would pollute the reference.
+    //   well — the slot's first rows (inside the inset) against rows well
+    //          below its 4px blur (outside it), on the same --well fill.
+    //
+    // Every sample point is validated with elementFromPoint before it is
+    // captured. A coordinate inside an element's RECT is not necessarily a
+    // coordinate where that element PAINTS — an overlapping panel, a drawer
+    // or a HUD can own the pixel — and a check that captures blind reports
+    // the neighbour's colour with total confidence. That is M149's lesson
+    // stated as a procedure rather than a warning.
+    {
+      // Wake a terminal the way a person does: by this point in the suite
+      // every terminal is a card again, and a well needs a live one. A real
+      // click with real coordinates, not a dispatched event.
+      const woke = (await wc.executeJavaScript(`document.querySelector('.panel__slot') !== null`))
+        ? 'already live'
+        : await (async () => {
+            if (!(await wc.executeJavaScript(`document.querySelector('.panel__card-idle') !== null`))) return 'no card to wake'
+            await clickPanelBody('.panel__card-idle')
+            await waitUntil(async () => await wc.executeJavaScript(`document.querySelector('.panel__slot') !== null`), 4000)
+            await settle(); await sleep(300)
+            return 'woken by click'
+          })()
+
+      // Ask the RENDERER for points it will actually paint, rather than
+      // computing them here and hoping. Each candidate is accepted only if
+      // elementFromPoint lands inside the element the sample is about.
+      const pts = await wc.executeJavaScript(`(() => {
+        const owns = (x, y, sel) => { const el = document.elementFromPoint(x, y); return !!(el && (el.matches(sel) || el.closest(sel))) }
+        const out = { frame: null, well: null, woke: null }
+        for (const p of [...document.querySelectorAll('.panel')]) {
+          const r = p.getBoundingClientRect()
+          if (r.width < 160 || r.height < 80) continue
+          const cx = Math.round(r.left + r.width / 2)
+          const id = p.getAttribute('data-panel-id')
+          const sel = '.panel[data-panel-id="' + id + '"]'
+          // the top inner edge (rim) and a reference on the right inner edge,
+          // both a little way down so they share the chrome's own fill
+          const topY = Math.round(r.top) + 1
+          const refX = Math.round(r.right) - 2
+          const refY = Math.round(r.top) + 14
+          if (owns(cx, topY, sel) && owns(refX, refY, sel)) { out.frame = { id, cx, topY, refX, refY }; break }
+        }
+        for (const slot of [...document.querySelectorAll('.panel__slot')]) {
+          const r = slot.getBoundingClientRect()
+          if (r.height < 60 || r.width < 80) continue
+          const cx = Math.round(r.left + r.width / 2)
+          const topY = Math.round(r.top) + 1
+          const deepY = Math.round(r.top) + 40
+          // .xterm paints INSIDE the slot, so either owning the point is fine
+          if (owns(cx, topY, '.panel__slot') && owns(cx, deepY, '.panel__slot')) {
+            out.well = { id: (slot.closest('.panel') || {}).getAttribute ? slot.closest('.panel').getAttribute('data-panel-id') : null, cx, topY, deepY }
+            break
+          }
+        }
+        return out })()`)
+
+      const lum = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b
+      // One CSS pixel, captured off the compositor and averaged over the
+      // device pixels it covers, so the reading does not depend on dpr.
+      const at = async (x, y) => {
+        const img = await win.webContents.capturePage({ x, y, width: 1, height: 1 })
+        const b = img.getBitmap()
+        const n = b.length / 4
+        let r = 0, g = 0, bl = 0
+        for (let i = 0; i < n; i++) { r += b[i * 4 + 2]; g += b[i * 4 + 1]; bl += b[i * 4] }
+        return [Math.round(r / n), Math.round(g / n), Math.round(bl / n)]
+      }
+
+      const f = pts.frame
+      const fTop = f ? await at(f.cx, f.topY) : null
+      const fRef = f ? await at(f.refX, f.refY) : null
+      // The lit edge LIGHTENS in both themes: --edge-light is white at .95
+      // (light) and .11 (dark). One assertion covers both.
+      //
+      // AN INVARIANT, NOT A DELTA, and the ledger says so. A mutation test
+      // showed this reading 13 with the frame's own --rim-top deleted and 16
+      // with it: the lit top edge predates M228, because .pf__chrome has worn
+      // inset 0 1px 0 var(--edge-light) since M109 and the chrome sits at the
+      // frame's top. What M228 changes is WHOSE property it is — .panel's
+      // rather than whichever child happens to be at the top — which is what
+      // keeps it when Act III lifts the chrome off the flow. This check is
+      // the guard for that: it will still have to pass when the chrome is
+      // absolute and can no longer be the thing supplying the light.
+      const fLift = f ? lum(fTop) - lum(fRef) : 0
+      ok('rim.paint.1 the frame\'s TOP inner edge paints lighter than its own right inner edge — the specular highlight, measured off the compositor against a reference edge that has none (an INVARIANT: Act III must not lose it when the chrome stops sitting at the top)',
+        f !== null && fLift >= 3,
+        JSON.stringify({ woke, frame: f, top: fTop, ref: fRef, lift: Number(fLift.toFixed(2)) }))
+
+      const w = pts.well
+      const wTop = w ? await at(w.cx, w.topY) : null
+      const wDeep = w ? await at(w.cx, w.deepY) : null
+      const wSink = w ? lum(wDeep) - lum(wTop) : 0
+      ok('well.paint.1 the terminal well\'s first row paints DARKER than the same well well below its blur — --rim-inner sinking it, measured off the compositor; the cells keep --well either way',
+        w !== null && wSink >= 3,
+        JSON.stringify({ well: w, top: wTop, deep: wDeep, sink: Number(wSink.toFixed(2)) }))
+    }
+
+    // M229 — aura.paint.1. THE GROUND ANSWERS, IN PIXELS.
+    //
+    // aura.1 proves the rules were written and that the effect stays inside
+    // one element. It cannot know whether the ground actually changes colour,
+    // and this is precisely the shape of change that fails silently: the
+    // attribute lands, the rule matches, and a custom property that was never
+    // registered transitions to nothing. So drive the state and read the
+    // compositor.
+    //
+    // The sample point is near the canvas CENTRE, because the aura is a
+    // radial gradient at 50% 48% and is transparent at the edges — a point
+    // chosen by scanning from the top-left (the harness's own backgroundPoint
+    // does that, for its own good reasons) would sit where this effect is
+    // designed to be invisible and would read no change for the right reason
+    // at the wrong place.
+    {
+      const spot = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas').getBoundingClientRect()
+        const cx = Math.round(host.left + host.width / 2)
+        const cy = Math.round(host.top + host.height / 2)
+        // Spiral out from the centre for a pixel the AURA owns: not a panel,
+        // not the HUD, not the minimap.
+        for (let r = 0; r < Math.min(host.width, host.height) / 2 - 20; r += 12) {
+          for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r], [r, r], [-r, -r], [r, -r], [-r, r]]) {
+            const x = cx + dx, y = cy + dy
+            if (x < host.left + 8 || x > host.right - 8 || y < host.top + 8 || y > host.bottom - 8) continue
+            const el = document.elementFromPoint(x, y)
+            if (el && !el.closest('.panel') && !el.closest('.canvas-hud') && !el.closest('.minimap') && !el.closest('.palette')) return { x, y }
+          }
+        }
+        return null })()`)
+      const sample = async () => {
+        const img = await win.webContents.capturePage({ x: spot.x, y: spot.y, width: 1, height: 1 })
+        const b = img.getBitmap()
+        const n = b.length / 4
+        let r = 0, g = 0, bl = 0
+        for (let i = 0; i < n; i++) { r += b[i * 4 + 2]; g += b[i * 4 + 1]; bl += b[i * 4] }
+        return [Math.round(r / n), Math.round(g / n), Math.round(bl / n)]
+      }
+      const victim = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel'); return p ? p.getAttribute('data-panel-id') : null })()`)
+      const idle = spot === null ? null : await sample()
+      if (spot !== null && victim !== null) {
+        wc.send(IPC_EVENTS.AGENT_STATE, { panelId: victim, state: 'wants-you' })
+        await waitUntil(async () => await wc.executeJavaScript(`document.querySelector('.canvas__aura').getAttribute('data-activity') === 'waiting'`), 3000)
+        await sleep(400) // the crossfade is --dur-2; read it settled, not mid-flight
+      }
+      const waiting = spot === null ? null : await sample()
+      // Put the canvas back before anything else reads it.
+      if (victim !== null) { wc.send(IPC_EVENTS.AGENT_STATE, { panelId: victim, state: 'idle' }); await sleep(300) }
+      const attr = await wc.executeJavaScript(`document.querySelector('.canvas__aura').getAttribute('data-activity')`)
+      // Toward AMBER: --aura-wait is the same amber every waiting panel wears,
+      // so the red channel must rise against the blue one. Asserting the
+      // DIRECTION rather than a value keeps this true in both themes without
+      // hard-coding either theme's ground.
+      const warm = (idle !== null && waiting !== null) ? (waiting[0] - waiting[2]) - (idle[0] - idle[2]) : 0
+      ok('aura.paint.1 a panel that needs you warms the canvas ground toward amber and releases it — measured off the compositor at the aura\'s centre, not read off the DOM',
+        spot !== null && victim !== null && warm >= 2 && attr === null,
+        JSON.stringify({ spot, victim, idle, waiting, warm, attrAfterRelease: attr }))
+    }
   }
 })

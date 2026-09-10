@@ -112,7 +112,7 @@ import type { AgentOptions } from '@shared/cost'
 import { useChatSessions, disposeChat, revokeChatGrants } from '@renderer/chat/useChatSessions'
 import { disposeWatcher, useWatchers } from '@renderer/watcher/useWatchers'
 import { useApprovals } from '@renderer/chat/chat-store'
-import { panelState } from '@renderer/panels/panel-state'
+import { panelState, TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { DISPATCH_PROMPT, SUPERVISOR_PROMPT, REASON_NO_CODEX, type AgentBackend } from '@shared/agent-session'
 import { BACKENDS, backendOf, carryBackend } from '@shared/agent-backends'
 import { chatStateInput } from '@renderer/chat/chat-model'
@@ -3151,6 +3151,25 @@ export function Canvas({
   // Named for what it holds, not for the store function it came from:
   // Task 5 imports the store's `attentionIds` read into this same scope.
   const waitingIds = useAttentionIds()
+  // M229. What the CANVAS is doing, as one word for the ground's light. Two
+  // facts this component already holds, and no new subscription: the
+  // wants-you queue it renders the bell from, and the runs array it persists.
+  //
+  // needs-you outranks working, the order STATE_PRIORITY already gives them —
+  // a canvas where someone is being ASKED something outranks one merely busy.
+  // undefined is the third state and it is the common one: an idle canvas
+  // stamps no attribute and resolves to --aura-1, byte-identical to before
+  // M229. (Three states, not two: "nothing running" and "running quietly" are
+  // different facts, and only the first leaves the ground alone.)
+  //
+  // The two words come from panel-state.ts, never spelled here: the ground is
+  // answering the SAME fact a panel's edge answers, so it says it with the
+  // same vocabulary. `verify:rail state.2` caught the first cut writing
+  // 'working' straight into this file, which is precisely the drift that
+  // check exists to stop.
+  const canvasActivity: Tone | undefined = waitingIds.length > 0
+    ? TONE_NEEDS_YOU
+    : runs.some((r) => r.endedAt === undefined) ? TONE_WORKING : undefined
   // M76. The pending requests with the panel's label, for the palette's
   // Allow/Deny rows. The label is the same one the rail row shows.
   const pendingApprovals = useApprovals()
@@ -6370,8 +6389,15 @@ export function Canvas({
         chromeRef.current.dismissTransient()
       }}
     >
-      {/* M109. The ground's light, under every region (the chrome is glass). */}
-      <div className="shell__aura" aria-hidden="true" />
+      {/* M109. The ground's light, under every region (the chrome is glass).
+          M229: it answers activity too. It MUST — the two aura layers light
+          the same ground, and a gate critic reading the first cut found a
+          cool corner wash and a warm centre wash meeting in a muddy seam
+          around x 600–700. If the ground's colour is a statement about state,
+          a patch of ground still saying the old thing is a contradictory
+          statement, and it undercuts the whole premise. Same attribute, same
+          value, one source. */}
+      <div className="shell__aura" aria-hidden="true" data-activity={canvasActivity} />
       {/* DOM order is screen order for a screen reader: dock, then the top
           bar, then the navigator. */}
       <Dock
@@ -6484,7 +6510,12 @@ export function Canvas({
         {/* M109. The camera's light, under the world: a sibling BEFORE .world so
             the world paints over it, moved at 0.12 of the viewport's translation
             (parallax — the ground is far away). Never a click target. */}
-        <div className="canvas__aura" aria-hidden="true" style={{ transform: `translate(${viewport.x * 0.12}px, ${viewport.y * 0.12}px)` }} />
+        {/* M229. data-activity is the ENTIRE cost of the responsive aura: one
+            attribute on the layer that was already here, re-valuing the one
+            gradient already painting on it. No second layer, no per-panel
+            element, no layout read per frame — a light that cost frames
+            during a drag would be a net loss whatever it looked like. */}
+        <div className="canvas__aura" aria-hidden="true" data-activity={canvasActivity} style={{ transform: `translate(${viewport.x * 0.12}px, ${viewport.y * 0.12}px)` }} />
         <div
           className="world"
           data-detail={cardDetail}

@@ -8,7 +8,8 @@ Four tokens land in both theme blocks and **nothing on screen changes**.
 
 - `--glass-0` — the recessed well.
 - `--glass-3` — floating overlays (menu, popover, palette, sheet).
-- `--rim` — the 1px specular top edge of a raised surface.
+- ~~`--rim` — the 1px specular top edge of a raised surface.~~ **STRUCK in M228**: it was a
+  second name for `--edge-light`, which has meant exactly this since M109. See the brief §2.
 - `--rim-inner` — the inset shadow that makes a well read as recessed.
 
 ## Why nothing changes
@@ -25,9 +26,11 @@ palette: an overshoot shows up as a pixel number against a scene you can still r
 ## What it may not do
 
 - No `.panel__*` selector changes, no surface changes of any kind.
-- No re-spelling of an existing token. `--rim` is **not** `--edge-light` renamed — `--edge-light`
-  keeps its own two sites (the palette's top edge, the rail and inspector's inner highlight) and
-  `--rim` is what the frame wears, so the two never argue over one name.
+- No re-spelling of an existing token. **This milestone broke that rule and M228 caught it**:
+  `--rim` *was* `--edge-light` renamed, and the argument recorded here for why it was not (that
+  the two had different sites) did not survive contact with a paint check. The rule was right;
+  the reasoning applying it was not, and no text-level check could tell the difference — only
+  pixels could.
 - Every measured token stays six-digit hex. `verify:panels` parses `--line-strong` with `toRgb`
   and skips an rgba, so a glass fill is a NEW NAME, never a re-spelling into rgba.
 - `--amber` stays a literal; `--well` still equals the xterm background for the same theme.

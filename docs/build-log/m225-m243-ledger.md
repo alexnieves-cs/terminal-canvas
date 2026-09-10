@@ -319,3 +319,95 @@ PASS  kinds-dark golden written
 **Goldens touched:** `kinds`, `kinds-dark` — both attributed to **M202** above, with a critic
 sentence each. **No golden moved for M227's own change.**
 
+### M228 · the rim pair, applied
+
+- Spec: [`2026-09-09-m228-rim-pair.md`](../superpowers/specs/2026-09-09-m228-rim-pair.md)
+- Plan: [`2026-09-09-m228-rim-pair-plan.md`](../superpowers/plans/2026-09-09-m228-rim-pair-plan.md)
+- Red-first evidence: [`m228-pure-red-evidence.md`](m228-pure-red-evidence.md)
+
+**What landed.** `--rim-top` (the recipe, on bare `:root`) worn by `.panel` at all eight rules
+that write the frame's shadow and by `.launcher`; `--rim-inner` worn by `.panel__slot::after`
+and `.launcher__well`. Two new PAINT checks in `verify:panels:core`.
+
+**Three findings, none of which a text-level check could have produced.** All three came from
+mutation-testing the paint checks — delete the rim pair, rebuild, re-measure. The full account
+is in the red-evidence file; the short form:
+
+1. **`box-shadow: inset` on `.panel__slot` never painted.** An inset shadow paints between an
+   element's background and its CONTENT, and xterm's canvases *are* the slot's content.
+   `verify:styles` was green on a rule that did nothing. The recess moved to
+   `.panel__slot::after` at `z-index: 11` (xterm's layers run to 10; `.pf__body`'s
+   `isolation: isolate` keeps that number local) with `pointer-events: none`.
+2. **`--rim` was a second name for `--edge-light` — STRUCK.** `.pf__chrome` has carried
+   `inset 0 1px 0 var(--edge-light)` since M109 and the chrome's top edge IS the frame's top
+   edge; a paint check measured the two stacked at one y, values agreeing to within .03 alpha
+   in both themes. M226's brief §2 argued they could not collide, named their separate sites,
+   and was wrong. The brief is struck with the measurement. `--rim-top` resolves to
+   `--edge-light`; `--rim-inner` survives because nothing recessed anything before it.
+3. **Both paint checks were VACUOUS on their first two cuts** — they passed against a
+   stylesheet with the rim pair deleted, because "a lit band exists at a frame's top edge" is
+   also true of the border, and "a dark band exists at a slot's top edge" is also true of the
+   chrome's border-bottom. Both were rewritten as DIFFERENTIALS (two points on the same
+   surface, compared) with every sample point validated by `elementFromPoint` first.
+
+**`rim.paint.1` is recorded as an INVARIANT, not a delta.** It still passes under mutation,
+because the frame's lit top edge predates M228. What M228 changes is whose property it is —
+`.panel`'s rather than whichever child sits at the top — so the check's real job begins in
+Act III, when the chrome stops being that child. Saying this plainly is the point: a green
+check whose meaning is misread is worse than no check.
+
+**Why `--rim-inner` was deepened twice.** First cut `inset 0 1px 2px / .55` (dark): measured a
+6-point luminance dip — the paint check called it correctly as no recess. Second cut
+`inset 0 2px 4px / .8` on the wrong element: no dip at all. Shipped at `inset 0 2px 3px / .9`
+on the pseudo-element: a 6.79-point sink, with the first row of agent output untouched. This is
+M163's `--edge-light` finding (.06 invisible, .11 visible) met a second time — answered before
+the milestone shipped rather than two versions later.
+
+**The visual gate saw nothing, and that is arithmetic.** `verify:visual` reported **60/60** with
+the rim pair on every panel in every scene. A 1px feature contributes one row to a halved
+golden: 32 of 1024 pixels in a 32px tile (3.1% against a 35% budget) and far under the 0.5%
+frame budget. **A green `verify:visual` is SILENT about this milestone** — it is not
+confirmation, and the six scenes below were therefore forced through the gate by hand, as the
+run's own rule for a change that matters and sits under the budget requires.
+
+### THE GOLDEN GATE — a procedure correction, made mid-act
+
+The gate says a fresh-context critic must compare **before, after and diff** before
+`UPDATE_GOLDENS=1` runs. Acting on that naively produced a **false finding**, and the correction
+is load-bearing for every act after this one.
+
+**What went wrong.** `verify:visual` writes `out/visual/<scene>.fresh.png` only for a scene that
+FAILS. M228's change was under both budgets, so no scene failed and no "after" existed. To give
+the critic something to compare, the golden was used as "before" and a `npm run shot` capture as
+"after" — **two different capture paths**. The critic (correctly, from what it was given)
+reported that the light theme's frame highlight had been *dimmed* from 253 to 246, a net loss of
+lit edge, and flagged it as the thing to decide before baselining.
+
+**It was not real.** Re-measured with both sides captured by `verify:visual` — copy the golden
+aside, delete it, let `UPDATE_GOLDENS=1` write the new one (a missing golden is always written),
+then compare the copy with the new file — the light theme's frame edge moved by **exactly 0.00
+on every row**, averaged over 270 px of x:
+
+```
+kinds (light)     y=86 213.4 → 213.4   y=87 253.0 → 253.0   y=88 247.0 → 247.0    Δ 0.00
+kinds-dark        y=86  37.6 →  38.0   y=87  39.0 →  43.0   y=88  15.0 →  15.0    Δ +3.47
+```
+
+The light frame is unchanged because the panel's rim sits BEHIND `.pf__chrome`, whose fill is
+nearly opaque white in that theme; in dark the chrome is 82% opaque and the rim shows through.
+That is the expected behaviour of the change, and the "regression" was an artifact of comparing
+across harnesses.
+
+**The corrected procedure, used for the rest of this run.** Copy the goldens aside → delete them
+→ `UPDATE_GOLDENS=1 verify:visual` writes them → critic compares the copies with the new files →
+**if the critic rejects, restore with one `cp`.** The ordering deviates from the letter of the
+gate (the golden is written before the sentence exists) and is recorded here rather than
+glossed: the alternative is a critic judging two images the app never produced the same way,
+which is what just manufactured a phantom defect. The copies are the rollback, and the decision
+is still the critic's.
+
+**The second correction: average, never sample.** Both capture runs carry sub-pixel rasterization
+jitter of up to ~48 levels on glyph and high-contrast antialiased edges. Every measurement in
+this ledger from here on is averaged over an area (270 px of x for an edge profile, 13x13 for a
+point) which swamps it. A single-pixel reading in this repository is not evidence.
+

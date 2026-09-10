@@ -589,7 +589,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // join the list because a load-bearing token that no check pins is a token
   // a later run deletes without noticing; depth.1 and rim.1 check how they are
   // USED, and this checks that they still EXIST.
-  const GLASS = ['--glass-0', '--glass-1', '--glass-2', '--glass-3', '--rim', '--rim-inner', '--edge-light', '--bezel', '--lift', '--aura-1', '--aura-2', '--on-iris', '--blur']
+  const GLASS = ['--glass-0', '--glass-1', '--glass-2', '--glass-3', '--rim-inner', '--edge-light', '--bezel', '--lift', '--aura-1', '--aura-2', '--on-iris', '--blur']
   const missing = GLASS.filter((t) => !(perBlock.light || {})[t] || !(perBlock.dark || {})[t])
   const alias = ['light', 'dark'].every((n) => /var\(--glass-1\)/.test((perBlock[n] || {})['--panel-bg'] || ''))
   const panelUses = /\n\.panel\s*\{[^}]*background:\s*var\(--panel-bg\)/.test(bare) || /\n\.panel\s*\{[^}]*background:\s*var\(--glass-1\)/.test(bare)
@@ -687,6 +687,81 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('depth.1', 'the glass ramp declares all four levels in both theme blocks and elevation is monotonic — a surface sits on --glass-N only inside a surface below N',
     declared.length === 4 && inversions.length === 0,
     JSON.stringify({ declared, surfaces: surfaces.length, inversions: inversions.slice(0, 6) }))
+}
+
+// M228 — rim.1. THE RIM PAIR, APPLIED. Depth is a border plus an inset
+// box-shadow — neither composites, which is why it stays payable on forty
+// panels — and a surface wears ONE of the pair, never both: a lit top edge
+// AND a recessed inset together is the 2008 bevel.
+//
+// The rim is worn through --rim-top, a RECIPE on bare :root: the geometry of
+// a specular top edge (inset, 1px down, no blur, no spread) is
+// theme-invariant, and only its colour is a theme's. So this check follows
+// the indirection rather than grepping for the colour token in a body rule —
+// the first cut did exactly that and went red against a correct stylesheet,
+// which is the same failure mode depth.1's combinator test avoids.
+//
+// The colour is --edge-light, the token that has meant "the 1px inner light
+// on a top edge" since M109. M228 briefly declared a --rim beside it and a
+// paint check found the two stacked at one y with values agreeing to within
+// .03 alpha; --rim was struck. Pinning the recipe's RESOLUTION here is what
+// stops that being re-litigated by a literal folded into --rim-top, which
+// would take the colour out of the theme blocks with no other check noticing:
+// check 1 does not read bare :root, and theme.1 only compares the two theme
+// blocks with each other.
+{
+  const both = ['--edge-light', '--rim-inner'].every((t) => ['light', 'dark'].every((n) => (perBlock[n] || {})[t] !== undefined))
+  const recipe = (perBlock.root || {})['--rim-top'] || ''
+  const recipeOk = /^inset\s+0\s+1px\s+0\s+var\(--edge-light\)$/.test(recipe.trim())
+  const wearsRim = (b) => /var\(--rim-top\)/.test(b)
+  const wearsWell = (b) => /var\(--rim-inner\)/.test(b)
+  const rimSites = bodyRules.filter((r) => wearsRim(r.body)).map((r) => r.sel)
+  const wellSites = bodyRules.filter((r) => wearsWell(r.body)).map((r) => r.sel)
+  const wearsBoth = bodyRules.filter((r) => wearsRim(r.body) && wearsWell(r.body)).map((r) => r.sel)
+  ok('rim.1', 'the rim pair is declared in both theme blocks, --rim-top is the recipe on bare :root and resolves to --edge-light, both halves are worn, and no one surface wears both',
+    both && recipeOk && rimSites.length >= 1 && wellSites.length >= 1 && wearsBoth.length === 0,
+    JSON.stringify({ both, recipe, recipeOk, rimSites: rimSites.length, wellSites: wellSites.length, wearsBoth: wearsBoth.slice(0, 6) }))
+}
+
+// M229 — aura.1. LIGHT THAT RESPONDS, AND WHAT IT MAY COST. Four arms, and
+// the last two are the ones worth having:
+//
+//   * the two activity colours are declared in BOTH theme blocks and are the
+//     app's own state vocabulary rather than a third one — the attribute's
+//     values are panel-state.ts's TONES, so verify:rail state.2 holds the
+//     other end of the same rule;
+//   * every animatable slot is a REGISTERED custom property, because a
+//     gradient cannot be transitioned and an unregistered custom property
+//     cannot either — a plain `transition: background` here does exactly
+//     nothing, silently, and would read as correct in review;
+//   * BOTH aura layers answer. ground.1 already pins that there are exactly
+//     two (.shell__aura behind every region, .canvas__aura following the
+//     camera) and that they light the same ground. A gate critic reading the
+//     first cut of M229 found only the centre warming while the corner stayed
+//     cool, the two washes meeting in a muddy diagonal seam: if the ground's
+//     colour is a statement about state, a patch of ground still saying the
+//     old thing is a contradictory statement. Half a system is worse here
+//     than none;
+//   * and the aura stays TWO elements with nothing but colour changing. No
+//     activity state may buy a layer, a filter or an animation. This is the
+//     budget arm, and the failure it guards is not ugliness — it is a canvas
+//     that drops frames on a drag, which no screenshot and no golden shows.
+{
+  const LAYERS = ['.shell__aura', '.canvas__aura']
+  const declared = ['--aura-working', '--aura-needs-you'].every((t) => ['light', 'dark'].every((n) => (perBlock[n] || {})[t] !== undefined))
+  const registered = ['--aura-now', '--aura-now-2'].every((t) => new RegExp(`@property\\s+${t}\\s*\\{[^}]*syntax:\\s*"<color>"`).test(bare))
+  const layerRules = LAYERS.map((sel) => bodyRules.find((r) => r.sel === sel))
+  const crossfades = layerRules.every((r) => r !== undefined && /transition:\s*--aura-now\b[^;]*var\(--dur-2\)/.test(r.body))
+  const answers = layerRules.every((r) => r !== undefined && /--aura-now:\s*var\(--aura-1\)/.test(r.body))
+  // The state rules re-value the slots and NOTHING else.
+  const states = bodyRules.filter((r) => /^\[data-activity=/.test(r.sel.trim()))
+  const overspend = states.filter((r) => !/^\s*--aura-now:\s*var\(--aura-(working|needs-you)\);\s*--aura-now-2:\s*var\(--aura-(working|needs-you)\);?\s*$/.test(r.body)).map((r) => r.sel)
+  // And no THIRD aura layer has appeared to carry the effect.
+  const auraSelectors = [...new Set(bodyRules.filter((r) => /__aura\b/.test(r.sel)).flatMap((r) => r.sel.split(',').map((p) => p.trim().replace(/\[.*/, ''))))]
+  const extraLayers = auraSelectors.filter((sel) => !LAYERS.includes(sel))
+  ok('aura.1', 'BOTH aura layers answer activity through registered custom properties — the two colours in both theme blocks, a real crossfade on each, no third layer, and no activity state buying a layer, a filter or an animation',
+    declared && registered && crossfades && answers && states.length === 2 && overspend.length === 0 && extraLayers.length === 0,
+    JSON.stringify({ declared, registered, crossfades, answers, states: states.length, overspend, extraLayers }))
 }
 
 // M110 — far.1. ONE STATUS WALL. The block tier and the minimap draw the

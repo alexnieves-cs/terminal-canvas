@@ -28,6 +28,23 @@ export type Tone = 'kind' | 'asleep' | 'none' | 'starting' | 'working' | 'needs-
 
 export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'working', 'needs-you', 'idle', 'exited']
 
+/**
+ * M229. The two tones anything OUTSIDE a panel may speak.
+ *
+ * The canvas ground answers activity (`.canvas__aura[data-activity]`), and
+ * what it is answering is the same fact a panel's edge answers — so it must
+ * use the same word, and the word must come from here. `verify:rail state.2`
+ * is what enforces that: it greps every renderer file outside this one for a
+ * state literal, and it caught `'working'` written straight into Canvas.tsx
+ * on the first cut of the responsive aura.
+ *
+ * Exported as constants rather than inlined at the call site so the
+ * vocabulary keeps exactly one home. A third surface that needs to say
+ * "working" adds a reader here, never a literal there.
+ */
+export const TONE_WORKING: Tone = 'working'
+export const TONE_NEEDS_YOU: Tone = 'needs-you'
+
 export interface StateInput {
   kind: StateKind
   status: PanelStatus | undefined

@@ -49,15 +49,33 @@ do not composite, so this stays cheap enough to paint on every panel on a forty-
 
 | Token | Meaning | Light | Dark |
 |---|---|---|---|
-| `--rim` | the 1px **specular top edge** of a RAISED surface | `rgba(255, 255, 255, .95)` | `rgba(255, 255, 255, .14)` |
-| `--rim-inner` | the inset shadow that makes a **well** read as recessed | `inset 0 1px 2px rgba(30, 40, 70, .12)` | `inset 0 1px 3px rgba(0, 0, 0, .55)` |
+| ~~`--rim`~~ | ~~the 1px specular top edge of a RAISED surface~~ | — | — |
+| `--edge-light` | the 1px **specular top edge** (M109's token, unchanged) | `rgba(255, 255, 255, .95)` | `rgba(255, 255, 255, .11)` |
+| `--rim-top` | the *recipe*, on bare `:root`: `inset 0 1px 0 var(--edge-light)` | theme-invariant geometry | theme-invariant geometry |
+| `--rim-inner` | the inset shadow that makes a **well** read as recessed | `inset 0 2px 3px rgba(30, 40, 70, .22)` | `inset 0 2px 3px rgba(0, 0, 0, .9)` |
 
-- **Raised** (panel frame, overlay, card): `--rim` as a 1px inset highlight on the top edge
-  only, over the existing `--frame-line` border and the existing `--lift`. `--edge-light` keeps
-  its own sites (the palette's top edge, the rail's inner highlight); `--rim` is the token the
-  FRAME wears, so the two do not fight over one name.
+> **STRUCK in M228: `--rim`.** This section argued the new token could not collide with
+> `--edge-light` because "`--edge-light` keeps its own sites and `--rim` is what the FRAME
+> wears". That was wrong. `.pf__chrome` has carried `inset 0 1px 0 var(--edge-light)` since
+> M109, and **the chrome's top edge IS the frame's top edge** — a paint check measured the two
+> stacked at one y (`39,42,51` with `--edge-light` alone, `45,48,57` with `--rim` added over
+> it), and their values agreed to within .03 alpha in both themes. That is what two names for
+> one thing looks like. `--rim` is struck; the recipe `--rim-top` resolves to `--edge-light`.
+> `--rim-inner` survives, because nothing in this app recessed anything before it.
+
+- **Raised** (panel frame, overlay, card): `--rim-top` as a 1px inset highlight on the top edge
+  only, over the existing `--frame-line` border and the existing `--lift`. It goes on `.panel`
+  rather than being left to `.pf__chrome` so the lit edge is a property of the **frame** rather
+  than of whichever child happens to sit at the top — which is what makes it survive Act III,
+  where a terminal's chrome stops sitting there at all.
 - **Recessed** (well, input, code block, scroll area): `--rim-inner`, and `--glass-0` as the
-  fill. A well never carries `--rim`.
+  fill. A well never carries the lit edge.
+- **A recess over a canvas must be drawn on a pseudo-element.** `box-shadow: inset` paints
+  between an element's background and its CONTENT, and xterm's canvases *are* the terminal
+  slot's content: the shadow is covered completely. M228 shipped that mistake, `verify:styles`
+  went green on it, and a paint check read the well's first row at exactly `--well`. The recess
+  is drawn by `.panel__slot::after` at `z-index: 11` (xterm's layers run to 10), with
+  `pointer-events: none`.
 - **A surface wears one or the other, never both.** Both together is the 2008 bevel.
 
 `--amber` stays a literal; `--well` still equals the xterm background for the same theme

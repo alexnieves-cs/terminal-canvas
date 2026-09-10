@@ -69,6 +69,30 @@
   --dur-breath: 1.2s;
   --dur-stagger: 30ms; /* M179: the ⌘G grid's per-cell delay — motion.2 reads the longhands too */
   --ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* M228. THE RIM, as a recipe. The GEOMETRY of a specular top edge — inset,
+     1px down, no blur, no spread — is theme-invariant, so it lives here with
+     the radii and the durations; only its COLOUR (--edge-light) is a theme's. Written
+     once because it is restated at every rule that writes the frame's
+     box-shadow, and those rules already exist for a reason that has bitten
+     before: each of them RESTATES --lift, or a selected panel would drop to
+     the ground when clicked (M109). The rim inherits that hazard exactly, so
+     it inherits the same fix rather than a new one.
+
+     NOT folded into --lift. shadow.1 reads `var(--lift)` in body rules by
+     name and counts its sites; a composite token that swallowed it would make
+     the one resting shadow unfindable by the check that exists to keep it the
+     only one.
+
+     WHY THE FRAME WEARS IT AT ALL when .pf__chrome already lights its own top
+     edge: the chrome is about to stop being the thing at the top. Act III
+     makes a terminal's chrome ABSOLUTE over the body, and a card at the far
+     tiers has no chrome to begin with. Putting the lit edge on .panel is what
+     makes it a property of the FRAME rather than of whichever child happens
+     to sit at the top, so it survives that change instead of vanishing with
+     no error. Where a chrome does sit at the top, the two coincide at the
+     same y and the same colour, which costs a pixel nobody can see. */
+  --rim-top: inset 0 1px 0 var(--edge-light);
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -168,6 +192,11 @@
   --lift:       0 12px 30px -16px rgba(30, 50, 90, .28);
   --aura-1:     rgba(14, 116, 144, .14);
   --aura-2:     rgba(99, 102, 241, .10);
+  /* M229. The ground's two ACTIVITY lights. Not new hues: the same working
+     blue and needs-you amber every panel edge already uses, at the aura's own
+     low alpha. A third colour here would be a third vocabulary. */
+  --aura-working:   rgba(47, 107, 216, .13);
+  --aura-needs-you: rgba(160, 108, 8, .12);
   --on-iris:    #ffffff;
   --bubble:     #e6ecf7;   /* M162. The user turn's ground: a soft tint one step from the panel */
   --blur:       blur(12px) saturate(120%);
@@ -184,20 +213,26 @@
      a pixel number against a scene you can still read — and it is the whole
      reason this direction was chosen over a fresh palette.
 
-     THE RIM PAIR is how depth is paid: --rim is the 1px specular top edge of
-     a RAISED surface, --rim-inner the inset shadow that sinks a WELL. A
-     surface wears one or the other, NEVER both (rim.1) — both together is the
-     2008 bevel. Neither composites: a border and an inset box-shadow are free
-     where a second backdrop-filter is not, which is what keeps this payable
-     on a forty-panel canvas (blur.1's budget is untouched).
+     THE RIM PAIR is how depth is paid: a lit top edge on a RAISED surface,
+     --rim-inner the inset shadow that sinks a WELL. A surface wears one or
+     the other, NEVER both (rim.1) — both together is the 2008 bevel. Neither
+     composites: a border and an inset box-shadow are free where a second
+     backdrop-filter is not, which is what keeps this payable on a
+     forty-panel canvas (blur.1's budget is untouched).
 
-     --rim is NOT a re-spelling of --edge-light. --edge-light keeps its own two
-     sites (the palette's top edge, the rail and inspector's inner highlight);
-     --rim is what the FRAME wears, so the two never argue over one name. */
+     THE LIT HALF IS --edge-light, and M228's brief was WRONG to name a
+     --rim beside it. The brief argued the two could not collide because
+     --edge-light had its own sites and --rim was "what the frame wears" —
+     but .pf__chrome has carried `inset 0 1px 0 var(--edge-light)` since M109
+     and the chrome's top edge IS the frame's top edge. A paint check measured
+     them stacked: 39,42,51 with --edge-light alone and 45,48,57 with --rim
+     added on top of it, two lit lines at one y. Their values agreed to within
+     .03 alpha in both themes, which is what two names for one thing looks
+     like. --rim is struck; --rim-inner survives because nothing recessed
+     anything before it. */
   --glass-0:    rgba(226, 230, 238, .92);
   --glass-3:    rgba(255, 255, 255, .94);
-  --rim:        rgba(255, 255, 255, .95);
-  --rim-inner:  inset 0 1px 2px rgba(30, 40, 70, .12);
+  --rim-inner:  inset 0 2px 3px rgba(30, 40, 70, .22);
 
   /* Back-compat aliases. Recorded as debt in M45's build log: they let the
      migration land task by task, and they go when their last user does.
@@ -268,6 +303,8 @@
   --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
   --aura-1:     rgba(99, 102, 241, .22);
   --aura-2:     rgba(45, 212, 191, .12);
+  --aura-working:   rgba(122, 162, 247, .20);
+  --aura-needs-you: rgba(224, 175, 104, .18);
   --on-iris:    #06111a;
   --bubble:     #1a2130;
   --blur:       blur(14px) saturate(140%);
@@ -276,13 +313,16 @@
      well reads as cut into the ground rather than laid on it; --glass-3 sits
      a clear step above --glass-1 so an overlay is legibly nearer than the
      panel it covers. The rim is white at a low alpha (a lit edge, not a
-     border) and --rim-inner is a black inset deep enough to read at the
-     golden's scale — M163's finding about --edge-light at .06, applied to the
-     new pair before it ships rather than after. */
+     border) and --rim-inner is a black inset deep enough to READ — M228
+     measured the first cut (inset 0 1px 3px / .55) off the compositor at a
+     6-point luminance dip against the well, which is under the threshold a
+     paint check can honestly separate from dithering and well under what an
+     eye finds. This is M163's --edge-light finding (.06 was invisible at the
+     golden's scale, .11 was not) met a second time, and answered before the
+     milestone shipped rather than two versions later. */
   --glass-0:    rgba(7, 9, 15, .92);
   --glass-3:    rgba(30, 36, 49, .94);
-  --rim:        rgba(255, 255, 255, .14);
-  --rim-inner:  inset 0 1px 3px rgba(0, 0, 0, .55);
+  --rim-inner:  inset 0 2px 3px rgba(0, 0, 0, .9);
 
   --text:      var(--fg);
   --muted:     var(--fg-3);
@@ -427,9 +467,17 @@ body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  /* M229. Both of its stops travel, not just the first. This layer's two
+     gradients and .canvas__aura's one light the SAME ground, and a gate
+     critic found the first cut leaving this one cool while the centre went
+     warm — the two washes met in a muddy diagonal seam. A patch of ground
+     still saying the old thing is a contradictory statement about state. */
+  --aura-now: var(--aura-1);
+  --aura-now-2: var(--aura-2);
   background:
-    radial-gradient(60% 55% at 12% 0%, var(--aura-1), transparent 62%),
-    radial-gradient(50% 45% at 96% 100%, var(--aura-2), transparent 60%);
+    radial-gradient(60% 55% at 12% 0%, var(--aura-now), transparent 62%),
+    radial-gradient(50% 45% at 96% 100%, var(--aura-now-2), transparent 60%);
+  transition: --aura-now var(--dur-2) var(--ease), --aura-now-2 var(--dur-2) var(--ease);
 }
 .shell__top { grid-area: top; }
 .shell__dock { grid-area: dock; }
@@ -1603,12 +1651,59 @@ body {
    the world paints over it; translated by Canvas.tsx at 0.12 of the
    viewport's own translation (parallax — the ground is far away). Oversized
    so the light never shows an edge. Never a click target. */
+/* M229. LIGHT THAT RESPONDS. The aura answered the camera and nothing else.
+   It now also answers what the canvas is DOING — a run in flight warms the
+   ground toward the working blue, a panel that needs you warms it toward
+   amber — and an idle canvas is byte-identical to before.
+
+   THE WHOLE COST IS ONE CUSTOM PROPERTY. No second layer, no per-panel
+   element, no layout read on any frame: Canvas stamps one attribute on the
+   element that already exists, and the rules below re-value the one gradient
+   already painting there. A beautiful aura that costs frames during a drag is
+   a net loss, so the budget was the design constraint rather than a check
+   applied afterwards.
+
+   --aura-now is registered with @property so the swap can CROSS-FADE. A
+   gradient cannot be transitioned and a custom property cannot either unless
+   it is registered with a type — a plain `transition: background` here does
+   nothing at all, silently, which is the failure this comment exists to stop
+   someone rediscovering. The colours are the app's own state vocabulary
+   (--blue is working, --amber is needs-you, everywhere else in this file), so
+   the ground says the same thing the panels say.
+
+   ground.1 reads this rule for a gradient, no pointer events and --aura-1,
+   and all three survive: --aura-1 is still what the resting canvas resolves
+   to, one indirection later. */
+@property --aura-now {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
+/* The shell layer has TWO stops, so it needs two animatable slots. Both are
+   registered for the same reason the first is: an unregistered custom
+   property does not transition, silently. */
+@property --aura-now-2 {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
 .canvas__aura {
   position: absolute;
   inset: -40%;
   pointer-events: none;
-  background: radial-gradient(38% 38% at 50% 48%, var(--aura-1), transparent 70%);
+  --aura-now: var(--aura-1);
+  background: radial-gradient(38% 38% at 50% 48%, var(--aura-now), transparent 70%);
+  transition: --aura-now var(--dur-2) var(--ease);
 }
+/* needs-you outranks working, the same order STATE_PRIORITY gives them: a
+   canvas where someone is being ASKED something outranks one merely busy.
+
+   The attribute's values are TONES — panel-state.ts's own words, exported as
+   TONE_WORKING and TONE_NEEDS_YOU and never spelled in a component. The
+   ground is answering the same fact a panel's edge answers, so it answers it
+   in the same vocabulary; verify:rail state.2 is what keeps that true. */
+[data-activity="working"] { --aura-now: var(--aura-working); --aura-now-2: var(--aura-working); }
+[data-activity="needs-you"] { --aura-now: var(--aura-needs-you); --aura-now-2: var(--aura-needs-you); }
 
 /* Backlog #68: space-drag and middle-drag pan cursor feedback. --panning
    wins over --space-armed (space held mid-drag still shows grabbing), and it
@@ -1976,7 +2071,7 @@ body {
   background: var(--panel-bg);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--lift);
+  box-shadow: var(--lift), var(--rim-top);
   user-select: none;
   transition: box-shadow var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease);
 }
@@ -2109,7 +2204,7 @@ body {
 .panel--selected {
   border-color: var(--iris);
   /* M67. A ring. M109: and the lift restated, or a click drops the panel. */
-  box-shadow: 0 0 0 1px var(--iris), var(--lift);
+  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
@@ -2117,7 +2212,7 @@ body {
    (M67: the ring is the whole shadow now — resting elevation left every
    panel, so there is no base box-shadow for this rule to preserve.) */
 .panel[data-link-target] {
-  box-shadow: 0 0 0 2px var(--iris), var(--lift);
+  box-shadow: 0 0 0 2px var(--iris), var(--lift), var(--rim-top);
 }
 
 /* Agent state, M6c. A BORDER rather than a fill: the panel's body is a
@@ -2141,8 +2236,8 @@ body {
    read borderTopColor, and border-color stays a plain, untransformed
    var(--amber) below, outside the keyframes. Do not fold it in. */
 @keyframes wants-you-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--lift); }
-  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 36px var(--amber-dim), var(--lift); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--amber), 0 0 20px var(--amber-dim), var(--lift), var(--rim-top); }
+  50%      { box-shadow: 0 0 0 2px var(--amber), 0 0 36px var(--amber-dim), var(--lift), var(--rim-top); }
 }
 .panel--agent-wants-you {
   border-color: var(--frame-line);
@@ -2153,7 +2248,7 @@ body {
      whatever is declared HERE. Without this line an unselected waiting panel
      shows no amber ring at all, for exactly the users who asked for less
      motion — silently removing the app's one attention signal. */
-  box-shadow: 0 0 0 2px var(--amber), var(--lift);
+  box-shadow: 0 0 0 2px var(--amber), var(--lift), var(--rim-top);
   /* M109. ONE BREATH, not a heartbeat: two cycles over 1.2s, then the static
      ring above. A pulse that never ends on a panel that waits an hour is a
      signal the eye learns to skip (brief, Motion: three moments). */
@@ -2174,8 +2269,9 @@ body {
      critic sampled it. Blue is now only ever "working". */
   border-color: var(--iris);
   /* The ring, restated: this rule is the LATER one at equal specificity and
-     would otherwise drop it — and the lift with it (M109). */
-  box-shadow: 0 0 0 1px var(--iris), var(--lift);
+     would otherwise drop it — and the lift with it (M109), and the rim with
+     that (M228). */
+  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -2188,7 +2284,7 @@ body {
    selection never paints over. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--iris);
-  box-shadow: 0 0 0 1px var(--iris), var(--lift);
+  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
 }
 
 /* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
@@ -2334,6 +2430,47 @@ body {
   background: var(--well);
   border-radius: 0 0 var(--r-lg) var(--r-lg);
   overflow: hidden;
+  /* M228. THE WELL, RECESSED — on a PSEUDO-ELEMENT, not on the slot.
+     An inset box-shadow on .panel__slot itself paints between the slot's
+     background and its content, and xterm's own canvases ARE that content:
+     they cover it completely. Measured, not reasoned — the first cut put the
+     shadow here, verify:styles went green, and a paint check read the well's
+     first row at exactly --well with the shadow declared. A mutation test
+     (delete the rim pair, rebuild, re-measure) is what proved it: the reading
+     did not move.
+
+     So the recess is drawn OVER the cells by ::after below. Read the block
+     further up before touching either: this slot may take no padding, no
+     border and no margin, because xterm-pointer.ts re-expresses a click
+     against the SLOT's rect while xterm subtracts .xterm-screen's, so any
+     inset between the two survives as d * (1 - 1/scale) and every click at a
+     zoomed-out scale lands a column or more off. `position: relative` and an
+     absolutely positioned child change NO layout box — the same property
+     M144's counter-scale relies on — and xterm's own absolute layers resolve
+     against .xterm, which is positioned itself, so they do not see this. */
+  position: relative;
+}
+/* The recess itself. z-index 11 clears xterm's layers, which run to 10;
+   .pf__body's `isolation: isolate` (M149, audit F.12) keeps that number
+   inside the body's own stacking context, so it competes with nothing above.
+   pointer-events: none, or the well would stop taking clicks — the one
+   mistake here that a screenshot cannot show. A 1px line with a 2px falloff
+   rather than a deep blur: the shadow lands ON the first row of agent output,
+   and the app exists to show that output. Light above (the frame's --rim) and
+   dark below (this) across one boundary is what a recess IS. Two pixels with
+   a three-pixel falloff: measured at one, the well sank 1.4 luminance points,
+   which the paint check called correctly as no recess at all. */
+.panel__slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 11;
+  /* The slot's own radius, restated rather than `inherit`: verify:styles 5
+     reads border-radius literals and `inherit` is one to it. Restating keeps
+     the check meaningful instead of teaching it a new word. */
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  box-shadow: var(--rim-inner);
 }
 
 .panel__slot > .panel__terminal {
@@ -2589,12 +2726,12 @@ body {
   background: var(--glass-1);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
-  box-shadow: var(--lift);
+  box-shadow: var(--lift), var(--rim-top);
   color: var(--fg-2);
   overflow: hidden;
 }
 .launcher__chrome { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--line); background: var(--s-2); }
-.launcher__well { padding: var(--sp-6); background: var(--well); }
+.launcher__well { padding: var(--sp-6); background: var(--well); box-shadow: var(--rim-inner); }
 .launcher__title {
   font-family: var(--font-ui);
   font-size: var(--t-md);
