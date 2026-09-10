@@ -2887,6 +2887,29 @@ body {
 .launcher__engine { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-2) 0; font-size: var(--t-sm); color: var(--fg-3); }
 .launcher__engine + .launcher__engine { border-top: 1px solid var(--line); }
 .launcher__engine--check { color: var(--fg-4); }
+/* M205 (D09). THE INTENT FORM: a sentence, a folder, one primary and one
+   alternative. The primary keeps `.launcher__start`'s fill through
+   `.is-primary` (primary.1); only its box changes here, from a full-width
+   card to the wider of two buttons on one row. */
+.launcher__intent { display: flex; flex-direction: column; gap: var(--sp-3); }
+.launcher__field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.launcher__label { font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg-2); }
+.launcher__input { width: 100%; box-sizing: border-box; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); line-height: var(--lh-body); resize: vertical; }
+.launcher__input:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 3px var(--iris-dim); }
+/* The face rule: a path is mono; the sentence is prose. */
+.launcher__input--path { font-family: var(--font-mono); font-size: var(--t-sm); }
+.launcher__folder-row { display: flex; align-items: center; gap: var(--sp-2); }
+.launcher__intent .launcher__recents { margin: 0; }
+.launcher__summary { margin: 0; font-size: var(--t-sm); color: var(--fg-3); line-height: var(--lh-body); }
+.launcher__refusal { margin: 0; padding: var(--sp-2) var(--sp-4); border-radius: var(--r-md); background: var(--amber-dim); color: var(--fg-2); font-size: var(--t-sm); line-height: var(--lh-body); }
+.launcher__actions { display: flex; align-items: stretch; gap: var(--sp-3); }
+.launcher__actions .launcher__start { flex: 1 1 auto; width: auto; align-items: center; justify-content: center; padding: var(--sp-4) var(--sp-5); }
+.launcher__ask { flex: 0 0 auto; justify-content: center; padding: var(--sp-4) var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); }
+/* Every other door, behind one native disclosure. */
+.launcher__more { margin-top: var(--sp-2); }
+.launcher__more-toggle { cursor: pointer; padding: var(--sp-2) 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); }
+.launcher__more-toggle:hover { color: var(--fg); }
+.launcher__more[open] .launcher__more-toggle { margin-bottom: var(--sp-4); }
 .launcher__verb--door { flex-direction: column; align-items: flex-start; gap: var(--sp-2); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); box-shadow: inset 0 1px 0 var(--edge-light); }
 .launcher__verb--door .launcher__verb-name { font-family: var(--font-ui); font-size: var(--t-lg); font-weight: 600; }
 .launcher__verb--door .launcher__verb-hint { white-space: normal; line-height: var(--lh-body); }

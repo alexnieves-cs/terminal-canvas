@@ -157,7 +157,7 @@ import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
-import { onboardingReadiness, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
+import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 import { GROUP_COLOURS } from '@shared/groups'
 import { BUILT_IN_TEMPLATES } from '@shared/templates'
 import { clearBrowser } from '@renderer/browser/browser-store'
@@ -260,10 +260,10 @@ const registry = createRegistry({
  * exists: `insertIntoComposer` is a no-op for an id the store has not seeded,
  * and the seeding is the panel's own hook, a render away.
  */
-async function deliverToComposer(id: string, text: string): Promise<void> {
+async function deliverToComposer(id: string, text: string, opts?: { focus?: true }): Promise<void> {
   for (let i = 0; i < 40; i += 1) {
     const state = getChat(id)
-    if (state.snapshot !== null || state.refusal !== null) { insertIntoComposer(id, text); return }
+    if (state.snapshot !== null || state.refusal !== null) { insertIntoComposer(id, text, opts); return }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
 }
@@ -5883,6 +5883,79 @@ export function Canvas({
     try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
   }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel])
+  /**
+   * M205 (D09). THE FIRST START — the launcher's primary. A sentence and a
+   * folder, run through D05's own executor (`startWork` → `dispatchWorkItem`),
+   * so a new person starts through the same path a returning one does.
+   *
+   * The ORDER is the rule: the pure plan, then the repository question, and
+   * only then any mint. `git:status` is read-only, so a folder that is not a
+   * repository (or a machine with no git) refuses having minted nothing — no
+   * teammate holding a grant for a start that never happened, no card.
+   *
+   * The teammate is REUSED when a standing one's place contains the folder;
+   * otherwise one is minted whose only place is exactly that folder
+   * (`firstWorkPlan`'s rules). Main's Places gate stays the authority.
+   *
+   * A retry of the same sentence in the same folder resumes the SAME item
+   * (M198's recovery journal lives on it): the launcher stays up after a
+   * refused lane, and a second press must not mint a twin card.
+   */
+  const firstWorkItemRef = useRef<{ key: string; itemId: string } | null>(null)
+  const startFirstWork = useCallback(async (req: FirstWorkRequest): Promise<FirstWorkOutcome> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const plan = firstWorkPlan(req, { teammates: teammatesRef.current, readiness: onboardingReadiness(envReportRef.current) })
+    if (plan.kind === 'refused') return { kind: 'refused', reason: plan.reason }
+    const repo = firstWorkRepoAnswer(await window.canvas.git.status(plan.folder), plan.folder)
+    if (repo.kind !== 'repository') return repo
+    const actions = paletteActionsRef.current
+    if (actions === null || actions === undefined) return { kind: 'refused', reason: 'the canvas is not ready yet' }
+    let teammateId = plan.teammate.reuse
+    const mint = plan.teammate.mint
+    if (mint !== undefined) {
+      const id = `tm-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
+      const saved = await window.canvas.teammate.save({ ...emptyTeammate(id, mint.name), places: mint.places })
+      // The mirror is made current HERE: `dispatchWorkItem` → main reads the
+      // roster by id, and the reload below lands a render later.
+      teammatesRef.current = [...teammatesRef.current.filter((t) => t.id !== id), saved.teammate]
+      reloadTeammates()
+      teammateId = id
+    }
+    const key = `${plan.folder}\n${plan.title}`
+    const standing = firstWorkItemRef.current?.key === key && workItemsRef.current.some((i) => i.id === firstWorkItemRef.current?.itemId) ? firstWorkItemRef.current.itemId : undefined
+    const itemId = standing ?? actions.addWorkItem({ source: 'typed', title: plan.title, ...(plan.description === undefined ? {} : { description: plan.description }), state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
+    firstWorkItemRef.current = { key, itemId }
+    if (teammateId === undefined) return { kind: 'refused', reason: 'no teammate was chosen for this folder' }
+    const outcome = await actions.startWork(itemId, teammateId, plan.folder)
+    if (outcome.kind !== 'started') return { kind: 'refused', reason: outcome.reason }
+    // The keyboard follows the work: the sentence was SENT, so the next thing
+    // a person types is the follow-up. An empty insert through the store's
+    // own bus is what places the composer's caret (ChatNode's `insertAtCaret`
+    // focuses) — the launcher that held focus has just unmounted, and without
+    // this the keyboard lands on nothing.
+    void deliverToComposer(outcome.panelId, '', { focus: true })
+    // A later start of the same words in the same folder is a NEW task: the
+    // conversation this one made may be closed by then, and reusing its item
+    // would fold the second start into the first (the M205 critic).
+    firstWorkItemRef.current = null
+    return { kind: 'started' }
+  }, [reloadTeammates])
+  /** M205. The ONE alternative: M120's no-folder conversation, on the engine readiness found, the sentence in its composer — inserted, never sent (M80). */
+  const askWithoutFolder = useCallback((intention: string): void => {
+    const preferred = onboardingReadiness(envReportRef.current).preferred
+    if (preferred === undefined) return
+    const message = intention.trim()
+    void beginNewChat({ sandbox: true, ...(preferred === 'claude' ? {} : { backend: preferred }), ...(message === '' ? {} : { message }) })
+      .then((r) => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) })
+  }, [beginNewChat])
+  /** M205. After `not-a-repository`: a conversation IN that folder. No lane (there is no branch to make), nothing sent. */
+  const chatInFolder = useCallback((req: FirstWorkRequest): void => {
+    const preferred = onboardingReadiness(envReportRef.current).preferred
+    if (preferred === undefined) return
+    const message = req.intention.trim()
+    void beginNewChat({ cwd: req.folder.trim(), ...(preferred === 'claude' ? {} : { backend: preferred }), ...(message === '' ? {} : { message }) })
+      .then((r) => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) })
+  }, [beginNewChat])
 
   const paletteActions = usePaletteActions({
     createObjectNow: createObject,
@@ -7170,7 +7243,12 @@ export function Canvas({
             presets={presetRows}
             onImportCanvas={() => { void importCanvas() }}
             recents={launcherRecents}
-            onOpenRecent={(dir) => paletteActions.beginSpawnSheet(undefined, undefined, { cwd: dir })}
+            // M205 (D09). The intent form: D05's Start work, the one alternative, and the folder dialog.
+            onStartWork={startFirstWork}
+            onAsk={askWithoutFolder}
+            onChatHere={chatInFolder}
+            onChooseFolder={() => window.canvas.teammate.choosePlace()}
+            teammates={teammates ?? []}
             tmux={hintsLoaded && backendInfo?.kind === 'direct' && hintsLeft(hintsSeen, 'launcher').length > 0 ? backendInfo.reason : null}
             onDismissTmux={() => markHint('tmux')}
             report={envReport}
@@ -7182,16 +7260,12 @@ export function Canvas({
             onNewNote={paletteActions.newNote}
             noteReason={noteRoot === null ? 'select a panel first — a note is saved in its directory' : null}
             onNewChat={paletteActions.newChat}
-            // M181. A first run (no starter record) lays the starter canvas out around the conversation; a returning canvas mints the chat alone.
-            starterFirstRun={starter === undefined}
-            onStart={(engine) => { if (starter === undefined) void paletteActions.openStarter(); else paletteActions.newChat(engine) }}
+            // M205. The starter is an OPTIONAL line; the primary never lays it out.
             onOpenStarter={() => { void paletteActions.openStarter() }}
             starterReason={starterKeysToApply(starter).length === 0 ? 'every starter object is already on this canvas' : onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine has been discovered — the starter begins with an agent; install one and Check again' : null}
             chatReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             onNewCodexChat={() => paletteActions.newChat('codex')}
             codexReason={codexAvailable(presetRows) ? null : REASON_NO_CODEX}
-            onNewSandboxChat={() => { void beginNewChat({ sandbox: true }) }}
-            sandboxReason={claudeAvailable(presetRows) ? null : REASON_NO_CLAUDE}
             update={updateState}
             onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
           />

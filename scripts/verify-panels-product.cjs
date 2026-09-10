@@ -228,7 +228,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // then types a sentence and presses Send. No test hook mints the chat.
     // The CLI report and availability preset are fixtures, the runtime is
     // the harness's real manager, and its fake runner records the user line.
-    const id = 'onboarding.start.1 the first-launch primary opens a conversation and a typed message receives the recorded reply without a terminal'
+    const id = 'onboarding.start.1 the launcher\'s no-folder alternative opens a conversation and a typed message receives the recorded reply without a terminal'
     const savedReport = state.harnessEnvReport
     await settle()
     flushLayoutStore()
@@ -265,14 +265,19 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
       flushLayoutStore()
       await reload()
+      // M205 (D09). The conversation door is now the launcher's ONE
+      // alternative, `Ask without a folder` — the primary is Start work, which
+      // needs a repository (`onboarding.intent.e2e.1`). The property is
+      // unchanged: a beginner reaches a real composer and a recorded reply
+      // with no terminal.
       const primary = await waitUntil(() => wc.executeJavaScript(`(() => {
-        const b = document.querySelector('[data-onboarding-start]')
-        return b && !b.disabled && b.textContent.includes('Start a conversation') ? true : false
+        const b = document.querySelector('[data-onboarding-ask]')
+        return b && !b.disabled && b.textContent.includes('Ask without a folder') ? true : false
       })()`), 1500)
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
-      const started = primary === true && await clickVisible('[data-onboarding-start]')
-      // M181. 8 s, not 4: the primary now lays the starter out too, and one run
-      // under a slow `browser.1` saw the chat land after the four-second mark.
+      const started = primary === true && await clickVisible('[data-onboarding-ask]')
+      // 8 s, not 4: one run under a slow `browser.1` saw the chat land after
+      // the four-second mark (M181).
       if (started) openedId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 8000)
       let typed = false
       let sent = false
@@ -340,6 +345,128 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
   }
 
   {
+    // M205 (D09) — onboarding.intent.e2e.*. THE FIRST START through the
+    // launcher's own fields, real input end to end: a sentence and a folder
+    // typed (a click, then insertText into the focused field), Start work
+    // pressed through the hit-test. Nothing here calls a test hook to mint —
+    // the hooks only READ the board afterwards. The repository is a real
+    // temporary git repo, so the lane is a real worktree (M198's own setup).
+    const IDS = [
+      'onboarding.intent.e2e.1 a sentence and a repository folder typed into the launcher start work through D05 — a teammate whose only place is that folder, a typed task, a conversation in its lane whose first user line is the sentence, the caret in its composer, no terminal and no starter tour',
+      'onboarding.intent.e2e.2 a folder that is not a repository is refused by name with nothing minted, and Chat in this folder instead opens a conversation there with the sentence in its composer, unsent'
+    ]
+    const savedReport = state.harnessEnvReport
+    await settle()
+    flushLayoutStore()
+    const saved = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+    const savedWorkspace = saved.workspaces.find((w) => w.id === saved.activeWorkspaceId) || saved.workspaces[0]
+    const repo = mkdtempSync(join(tmpdir(), 'tc panels onboarding repo '))
+    const plain = mkdtempSync(join(tmpdir(), 'tc panels onboarding plain '))
+    const teammatesBefore = layoutStore.teammates().map((t) => t.id)
+    const minted = () => layoutStore.teammates().filter((t) => !teammatesBefore.includes(t.id))
+    const chatIds = []
+    const reload = async () => { const loaded = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await loaded; await settle() }
+    const clickVisible = async (selector) => {
+      const point = await wc.executeJavaScript(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || node.disabled) return null; const r = node.getBoundingClientRect(), x = Math.round(r.left + r.width / 2), y = Math.round(r.top + r.height / 2); return node.contains(document.elementFromPoint(x, y)) ? { x, y } : null })()`)
+      if (!point) return false
+      wc.focus(); wc.sendInputEvent({ type: 'mouseDown', ...point, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', ...point, button: 'left', clickCount: 1 })
+      return true
+    }
+    // insertText lands in whatever is focused WHEN IT RUNS (onboarding.start.1's
+    // lesson): wait for the field to hold focus, a condition, never a delay.
+    const typeInto = async (selector, text) => {
+      if (!(await clickVisible(selector))) return false
+      const focused = await waitUntil(() => wc.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(selector)})`), 2000)
+      if (focused !== true) return false
+      await wc.insertText(text)
+      return true
+    }
+    const userLineWith = (from, text) => chatSpawns.slice(from).some((s) => s.proc.stdin.some((line) => {
+      try { const v = JSON.parse(line); return v.type === 'user' && JSON.stringify(v.message).includes(text) } catch { return false }
+    }))
+    try {
+      const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+      g('init', '-q', '.'); g('config', 'user.email', 'v@e.com'); g('config', 'user.name', 'v')
+      writeFileSync(join(repo, 'greeting.txt'), 'hello\n'); g('add', '-A'); g('commit', '-qm', 'init')
+      state.harnessEnvReport = { ...savedReport, clis: [{ name: 'claude', path: '/fake/claude' }, { name: 'codex', path: null }, { name: 'git', path: '/usr/bin/git' }] }
+      // The composer's availability reads the PRESET rows (`claudeAvailable`),
+      // not the report: without a claude-code preset the conversation's
+      // composer stays disabled with noCli forever — the first cut's `caret`
+      // red, measured as `inputDisabled: true` for eight seconds.
+      layoutStore.addPreset({ id: 'onboarding-intent-claude', name: 'Claude (intent fixture)', cwd: '~', command: '/bin/sh', args: [], agent: 'claude-code' })
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+
+      // e2e.1 — a repository.
+      const sentence = 'Make the greeting say hello in French'
+      const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
+      const typed = await typeInto('[data-onboarding-intent]', sentence) && await typeInto('[data-onboarding-folder]', repo)
+      const summary = await wc.executeJavaScript(`document.querySelector('[data-onboarding-summary]')?.textContent ?? null`)
+      const ready = typed && await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-onboarding-start]')?.disabled === false`), 2000) === true
+      const pressed = ready && await clickVisible('[data-onboarding-start]')
+      const chatId = pressed ? await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 10000) : false
+      if (typeof chatId === 'string') chatIds.push(chatId)
+      const firstLine = typeof chatId === 'string' ? await waitUntil(() => userLineWith(before.spawns, sentence), 6000) : false
+      const caret = typeof chatId === 'string' ? await waitUntil(() => wc.executeJavaScript(`document.activeElement === document.querySelector(${JSON.stringify(`.panel[data-panel-id="${chatId}"] [data-chat-input]`)})`), 8000) : false
+      // What holds the keyboard when `caret` is false — a red that names its
+      // cause rather than a bare boolean.
+      const focusWhere = await wc.executeJavaScript(`(() => { const a = document.activeElement; const i = document.querySelector('.panel[data-panel-kind="chat"] [data-chat-input]'); return { active: a ? a.tagName + '.' + String(a.className).slice(0, 50) : null, inputDisabled: i ? i.disabled : null } })()`)
+      const mates = minted()
+      const lane = typeof chatId === 'string' ? layoutStore.worktrees().find((w) => w.panelId === chatId) : undefined
+      const item = typeof chatId === 'string' ? (await wc.executeJavaScript(`window.__m113.items()`)).find((i) => i.panelId === chatId) : undefined
+      await settle(); flushLayoutStore()
+      const after = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws = after.workspaces.find((w) => w.id === after.activeWorkspaceId)
+      const onlyPlace = mates.length === 1 && mates[0].places.length === 1 && realpathSync(mates[0].places[0]) === realpathSync(repo)
+      ok(IDS[0], typed && /may work only in/.test(summary ?? '') && pressed && typeof chatId === 'string' && firstLine === true && caret === true &&
+        onlyPlace && lane !== undefined && realpathSync(lane.root) === realpathSync(repo) &&
+        item !== undefined && item.source === 'typed' && item.title === sentence && item.teammateId === mates[0]?.id &&
+        ws && ws.starter === undefined && ptyManager.list().length === before.ptys,
+      JSON.stringify({ typed, summary, ready, pressed, chatId, firstLine, caret, focusWhere, mates, lane, item, starter: ws && ws.starter, ptys: [before.ptys, ptyManager.list().length] }))
+
+      // e2e.2 — a plain folder. Back to an empty canvas (the launcher).
+      for (const id of chatIds.splice(0)) await clickPanelClose(wc, id)
+      layoutStore.save({ panels: [], camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
+      flushLayoutStore()
+      await reload()
+      const matesBefore2 = minted().length
+      const itemsBefore2 = (await wc.executeJavaScript(`window.__m113.items()`)).length
+      const spawnsBefore2 = chatSpawns.length
+      const typed2 = await typeInto('[data-onboarding-intent]', sentence) && await typeInto('[data-onboarding-folder]', plain)
+      const pressed2 = typed2 && await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-onboarding-start]')?.disabled === false`), 2000) === true && await clickVisible('[data-onboarding-start]')
+      const refusal = pressed2 ? await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-onboarding-refusal="not-a-repository"]')?.textContent ?? false`), 4000) : false
+      const mintedNothing = minted().length === matesBefore2 && (await wc.executeJavaScript(`window.__m113.items()`)).length === itemsBefore2 &&
+        await wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind]').length === 0`)
+      const here = typeof refusal === 'string' && await clickVisible('[data-onboarding-chat-here]')
+      const hereId = here ? await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? false`), 6000) : false
+      if (typeof hereId === 'string') chatIds.push(hereId)
+      const inComposer = typeof hereId === 'string' ? await waitUntil(() => wc.executeJavaScript(`(document.querySelector(${JSON.stringify(`.panel[data-panel-id="${hereId}"] [data-chat-input]`)})?.value ?? '').includes(${JSON.stringify(sentence)})`), 4000) : false
+      await settle(); flushLayoutStore()
+      const after2 = JSON.parse(readFileSync(LAYOUT_PATH, 'utf8'))
+      const ws2 = after2.workspaces.find((w) => w.id === after2.activeWorkspaceId)
+      const inPlain = JSON.stringify((ws2 && ws2.panels || []).find((p) => (p.id ?? p.rect?.id) === hereId) ?? null).includes(plain)
+      ok(IDS[1], typed2 && pressed2 && typeof refusal === 'string' && /not a git repository/.test(refusal) && mintedNothing &&
+        typeof hereId === 'string' && inComposer === true && inPlain && !userLineWith(spawnsBefore2, sentence),
+      JSON.stringify({ typed2, pressed2, refusal, mintedNothing, hereId, inComposer, inPlain }))
+    } catch (e) {
+      for (const id of IDS) ok(id, false, 'threw: ' + String(e && e.message || e))
+    } finally {
+      for (const id of chatIds) { try { await clickPanelClose(wc, id) } catch {} }
+      await settle()
+      for (const lane of layoutStore.worktrees().filter((w) => { try { return realpathSync(w.root) === realpathSync(repo) } catch { return false } })) { try { await worktreeManager.remove(lane.id) } catch {} }
+      for (const t of minted()) { try { layoutStore.deleteTeammate(t.id) } catch {} }
+      try { layoutStore.deletePreset('onboarding-intent-claude') } catch {}
+      state.harnessEnvReport = savedReport
+      layoutStore.save(savedWorkspace)
+      flushLayoutStore()
+      try { rmSync(repo, { recursive: true, force: true }) } catch {}
+      try { rmSync(plain, { recursive: true, force: true }) } catch {}
+      await reload()
+    }
+  }
+
+  {
     // M181 — starter.1. THE STARTER CANVAS through the visible primary on a
     // first run: the conversation AND one captioned example of each kind
     // (a dormant terminal, a note, a workflow, an image) in a named group,
@@ -347,7 +474,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     // second application refused by name through the agent door. The
     // examples are minted through the ordinary paths — a check that found
     // five panels but a spawned shell would be the fleet the brief forbids.
-    const id = 'starter.1 the first-launch primary lays the starter canvas around the conversation — four captioned examples in a named group, nothing spawned, the record on disk, a second application refused by name'
+    const id = 'starter.1 the optional Starter canvas line lays the starter canvas around a conversation — four captioned examples in a named group, nothing spawned, the record on disk, a second application refused by name'
     const savedReport = state.harnessEnvReport
     await settle()
     flushLayoutStore()
@@ -369,8 +496,12 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       flushLayoutStore()
       await reload()
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
-      const primary = await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-onboarding-start]'); return b && !b.disabled ? b.getAttribute('data-onboarding-starter') === 'first-run' : false })()`), 1500)
-      const started = primary === true && await clickVisible('[data-onboarding-start]')
+      // M205 (D09). The starter is an OPTIONAL line inside `More ways to
+      // start`, never the primary: open the disclosure with a real click on
+      // its summary, then press the line — both through the hit-test.
+      const opened = await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-launcher-more-toggle]')`), 1500) === true && await clickVisible('[data-launcher-more-toggle]')
+      const primary = opened && await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-launcher-starter]'); return b && !b.disabled && b.offsetParent !== null ? true : false })()`), 1500)
+      const started = primary === true && await clickVisible('[data-launcher-starter]')
       const kinds = started ? await waitUntil(() => wc.executeJavaScript(`(() => { const k = [...document.querySelectorAll('.panel[data-panel-kind]')].map((p) => p.getAttribute('data-panel-kind')).sort(); return k.length >= 5 ? k.join(',') : false })()`), 6000) : false
       chatId = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-kind="chat"]')?.getAttribute('data-panel-id') ?? null`)
       const captions = await waitUntil(() => wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('[data-annotation][data-annotation-kind="panel"] [data-annotation-label]')].map((n) => n.textContent).sort(); return t.length >= 4 ? t : false })()`), 3000)
@@ -2313,7 +2444,17 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         wc.reload(); await reR2
         await settle()
         await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-launcher]') !== null`), 6000)
-        const launcher = await tabWalk('[data-launcher-sheet]', `const n = el.querySelector && el.querySelector('.launcher__verb-name'); return n ? 'verb:' + n.textContent : null`, 30)
+        // M205 (D09). Every door but two now sits in the `More ways to start`
+        // disclosure; a closed <details> keeps its rows out of the tab order
+        // BY DESIGN, so the walk opens it first — the property is still that
+        // every enabled verb is keyboard-reachable once shown — and starts
+        // where it always did, `New panel…`: the one door enabled on every
+        // machine. The alternative is disabled here when the harness's report
+        // finds no engine (the first cut started there and never started), and
+        // the summary cannot start it — its label reads null, and the walk
+        // stops at the first control that reads the same as its start.
+        await wc.executeJavaScript(`(() => { const d = document.querySelector('[data-launcher-more]'); if (d) d.open = true; return true })()`)
+        const launcher = await tabWalk('[data-launcher-sheet]', `const n = el.querySelector && el.querySelector('.launcher__verb-name'); return n ? 'verb:' + n.textContent : null`, 40)
         const verbsInOrder = launcher.visited.filter((v) => typeof v === 'string' && v.startsWith('verb:')).length
         const verbCount = await wc.executeJavaScript(`document.querySelectorAll('[data-launcher] .launcher__verb:not([disabled])').length`)
         ok(IDS[0], paneOk && launcher.started === true && verbsInOrder >= verbCount,

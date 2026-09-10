@@ -257,7 +257,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D09 — Make onboarding intent-led
 
-- [ ] Complete and record D09.
+- [ ] Complete and record D09. **M205** — built; the record is [docs/build-log/m205-d09-intent-led-onboarding.md](build-log/m205-d09-intent-led-onboarding.md). Left unticked on purpose: the gate is owed (§6 there — the shell/agents reds are shared by the base commit, and `verify:visual`/`verify:packaged` did not complete under load).
 
 **Do in order:**
 
