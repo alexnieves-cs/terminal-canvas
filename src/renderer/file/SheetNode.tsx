@@ -112,6 +112,18 @@ export function SheetNode(props: FileNodeProps & { onView: (id: string, view: Sh
   const selRef = useRef(sel); selRef.current = sel
 
   const controller = useMemo<SheetController>(() => ({
+    // M247 (critic, finding 2). The badge opens the REVIEW: the first proposed
+    // cell selected, so Keep/Discard selected work on the first click.
+    focusDraft: (): boolean => {
+      const first = session.snapshot().view.draft?.items[0]
+      const ref = first === undefined ? null : parseRef(first.id)
+      if (ref === null) return false
+      setSel(ref)
+      setAnchor(ref)
+      // After the camera move and this render, so the cell exists to scroll to.
+      requestAnimationFrame(() => { ensureVisible(ref.r, ref.c); body.current?.focus({ preventScroll: true }) })
+      return true
+    },
     edit: async (cell, value, caller): Promise<CreationResult> => {
       if (readOnlyRef.current || !alive.current) return { kind: 'refused', reason: 'this sheet is read-only here' }
       const ref = parseRef(cell)

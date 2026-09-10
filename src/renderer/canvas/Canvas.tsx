@@ -17,6 +17,11 @@ import { EdgeIndicators } from './EdgeIndicators'
 import { Minimap } from './MinimapOverlay'
 import { CardDetailContext } from '@renderer/components/card-detail-context'
 import { LinkLayer } from './LinkLayer'
+import { AgentLinkLayer } from './AgentLinkLayer'
+import { forgetAgentLinksFor, forgetAllAgentLinks, publishAgentLinks } from './agent-links-store'
+import { agentLinks } from '@shared/agent-links'
+import { indexToolFiles } from '@shared/tool-index'
+import { getChat as getChatState } from '@renderer/chat/chat-store'
 import { useLinkMode } from './useLinkMode'
 import { useSpaceHeld } from './useSpaceHeld'
 import { useTheme } from './useTheme'
@@ -68,7 +73,7 @@ import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { SheetNode } from '@renderer/file/SheetNode'
-import { sheetFocused } from '@renderer/file/sheet-controllers'
+import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -382,7 +387,7 @@ export function Canvas({
   // beside the runs it belongs with, rather than left to the per-panel
   // forgetEdgesFor calls — those fire on CLOSE, and a workspace switch closes
   // nothing.
-  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges() }, [])
+  const forgetOpenRuns = useCallback(() => { forgetOpenRunsRef.current(); forgetAllEdges(); forgetAllAgentLinks() }, [])
   // M80. The sheet is opened by usePaletteActions, which is created above the
   // instantiate verb; the ref is the same indirection every late verb uses.
   const instantiateTemplateRef = useRef<(template: PersistedTemplate, values: Record<string, string>, caller?: AgentPlanCaller) => Promise<SpawnResult>>(async () => ({ kind: 'refused', reason: 'the canvas is not ready' }))
@@ -945,7 +950,7 @@ export function Canvas({
         // M231. Beside every other per-panel store cleared here: without it the
         // edge maps grow for the life of the renderer and a recycled panel id
         // inherits a dead edge's fire.
-        forgetEdgesFor(panel.rect.id)
+        forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
         clearLastLine(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
@@ -1732,7 +1737,7 @@ export function Canvas({
       // Same reason as the undo/redo site above: reset drops every panel at
       // once, and each dropped id needs its cached agent state cleared too.
       clearAgentState(panel.rect.id)
-      forgetEdgesFor(panel.rect.id)
+      forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
       clearLastLine(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
@@ -1980,6 +1985,64 @@ export function Canvas({
   }, [])
   const snapEnabledRef = useRef(snapEnabled)
   snapEnabledRef.current = snapEnabled
+
+  // M247. Agent → object links. The toggle is a SETTING (canvas.agentLinks), read
+  // the way snap is: at mount and on every settings:changed, so the palette row,
+  // the HUD button, the agent line and an action node all land here.
+  const [agentLinksOn, setAgentLinksOn] = useState(true)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const row = rows.find((r) => r.id === 'canvas.agentLinks')
+        if (row) setAgentLinksOn(row.value === true)
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [])
+  // Derived from each conversation's tool calls, never stored: a restart re-derives
+  // them from the chat store. Published PER AGENT into agent-links-store, which
+  // replaces a snapshot only when its content changed — never the registry's
+  // version counter, which a busy agent's tool calls would otherwise drive.
+  //
+  // useChatsVersion bumps on EVERY chat state replacement, streamed deltas
+  // included; the turns array is replaced only when a turn lands. So each
+  // agent's links are recomputed only when its turns array or the set of
+  // objects (a path, a draft) actually changed — otherwise a streaming reply
+  // would re-index every transcript on the canvas several times a second.
+  // Its own name: Canvas's `chatsVersion` is declared far below, and a dependency
+  // array is evaluated during render, so borrowing it here would throw.
+  const linksChatsVersion = useChatsVersion()
+  const agentLinkCache = useRef(new Map<string, { turns: unknown; objectsKey: string }>())
+  useEffect(() => {
+    const objects = panels.filter(isFilePanel).map((p) => ({
+      id: p.rect.id,
+      path: p.source.path,
+      ...(p.source.sheet?.draft?.by === undefined ? {} : { draftBy: p.source.sheet.draft.by })
+    }))
+    const objectsKey = JSON.stringify(objects)
+    for (const agent of panels.filter(isChatPanel)) {
+      const turns = getChatState(agent.rect.id).turns
+      const hit = agentLinkCache.current.get(agent.rect.id)
+      if (hit !== undefined && hit.turns === turns && hit.objectsKey === objectsKey) continue
+      agentLinkCache.current.set(agent.rect.id, { turns, objectsKey })
+      publishAgentLinks(agent.rect.id, agentLinks({ agent: agent.rect.id, cwd: agent.chat.cwd, touches: indexToolFiles(turns), objects }))
+    }
+    // A closed agent's cache entry goes with it; its links went at the forget site.
+    const live = new Set(panels.map((p) => p.rect.id))
+    for (const id of [...agentLinkCache.current.keys()]) if (!live.has(id)) agentLinkCache.current.delete(id)
+  }, [panels, linksChatsVersion])
+  // A draft badge opens that draft's review: the sheet, brought into view and focused.
+  const openDraftReview = useCallback((objectId: string) => {
+    paletteActionsRef.current?.goToPanel(objectId)
+    sheetController(objectId)?.focusDraft()
+  }, [])
+  const toggleAgentLinks = useCallback(() => {
+    paletteActionsRef.current?.toggleSetting('canvas.agentLinks', !agentLinksOn)
+  }, [agentLinksOn])
   const [snapGuides, setSnapGuides] = useState<readonly SnapGuide[]>([])
   const snapNow = useCallback((rect: WorldRect, exclude: ReadonlySet<string>, resize?: { growsX: boolean; growsY: boolean }): WorldRect => {
     if (!snapEnabledRef.current) return rect
@@ -2194,7 +2257,7 @@ export function Canvas({
     // Same reason as the other two dispose sites: a closed panel's id must
     // not keep a cached agent state that a recycled id could inherit.
     clearAgentState(id)
-    forgetEdgesFor(id)
+    forgetEdgesFor(id); forgetAgentLinksFor(id)
     clearLastLine(id)
     clearLiveSession(id)
     clearSubagents(id)
@@ -3591,7 +3654,7 @@ export function Canvas({
     (id: string, nextSpec: PanelSpecTemplate) => {
       if (!isRestartable(registry.get(id)?.status)) return
       clearAgentState(id)
-      forgetEdgesFor(id)
+      forgetEdgesFor(id); forgetAgentLinksFor(id)
       clearLastLine(id)
       clearLiveSession(id)
       clearSubagents(id)
@@ -6752,6 +6815,9 @@ export function Canvas({
             onSelect={merged ? undefined : selectLink}
             cardDetail={cardDetail}
           />
+          {/* M247. Beside LinkLayer, in the same world transform and on the same curve. */}
+          <AgentLinkLayer panels={displayPanels} cardDetail={cardDetail} hidden={!agentLinksOn}
+            onOpenDraft={merged ? undefined : openDraftReview} />
           {/* M130. THE TRAIL'S LANE, derived beside `anchoredPanels` and never
               written back: one column per host at a fixed offset to its
               right, re-derived from the host's rect on every render. Not
@@ -7272,6 +7338,7 @@ export function Canvas({
           viewport={viewport}
           onZoomBy={zoomBy}
           onFit={fitAll}
+          agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
         />
         {palette.open && (
           <Palette

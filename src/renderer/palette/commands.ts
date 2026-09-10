@@ -153,6 +153,8 @@ export interface PaletteActions {
   editSheet(panel: string, cell: string, value: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
   /** M246. Keep or discard a sheet's draft cells; keeping is refused to an agent caller. */
   reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
+  /** M247. Show, hide or toggle the agent → object links (the `canvas.agentLinks` setting). */
+  setAgentLinks(mode: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -921,6 +923,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
+  out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
   out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'sheet-review <panel> keep|discard <cell, B2:C4 or all>', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', run: () => actions.beginRunVerb() })
   out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'sheet-edit <panel> <cell> <value or =formula>', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', run: () => actions.beginRunVerb() })
 

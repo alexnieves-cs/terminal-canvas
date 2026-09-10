@@ -91,6 +91,8 @@ export const VERBS: readonly VerbDef[] = [
   // M245. "Edit sheet X": one cell, through the sheet's own guarded write. An empty value clears the cell.
   { id: 'sheet-edit', label: 'Sheet: set a cell', args: [panel(), { name: 'cell', kind: 'value' }, { name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['editSheet'], target: 'panel', hint: 'set a cell like B2 to a value or =formula; empty clears it — from an agent it proposes a draft' },
   // M246. Resolve draft cells. Keeping is a person's: the agent door is refused by name.
+  // M247. The agent → object links, shown or hidden. A canvas-wide view fact, stored as a setting.
+  { id: 'agent-links', label: 'Agent links: show or hide', args: [{ name: 'state', kind: 'value' }], destructive: false, actions: ['setAgentLinks'], target: 'canvas', hint: 'on, off or toggle the lines from each agent to what it read, wrote or drafted' },
   { id: 'sheet-review', label: 'Sheet: keep or discard draft cells', args: [panel(), { name: 'operation', kind: 'value' }, { name: 'target', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['reviewSheet'], target: 'panel', hint: 'keep or discard a cell, a range like B2:C4, or all of a pending draft' },
   ...CREATABLE_OBJECTS.map((entry): VerbDef => ({ id: entry.verb, label: `New ${entry.label}`, args: [{ name: 'value', kind: 'text', optional: true, rest: true }], destructive: false, actions: ['createObject'], target: 'canvas', hint: `create ${entry.label.toLowerCase()} at the viewport centre` })),
   { id: 'check-readiness', label: 'Check engine readiness', args: [], destructive: false, actions: ['checkReadiness'], target: 'canvas', hint: 'ask discovery again; installation is not sign-in' },
@@ -345,6 +347,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'checklist-edit': { canvas: 'checklist Add, check, drag/Up/Down, Delete and Undo controls', palette: 'checklist.edit', agent: 'tc plan checklist-edit f1 add hello', workflow: 'an action node whose line is: checklist-edit f1 add hello' },
   'checklist-hand': { canvas: 'Hand to agent on a checklist item', palette: 'checklist.hand', agent: 'tc plan checklist-hand f1 2 ch1', workflow: 'an action node whose line is: checklist-hand f1 2 ch1' },
   'sheet-edit': { canvas: 'type into a sheet cell (double-click, Enter or start typing)', palette: 'sheet.edit', agent: 'tc plan sheet-edit f1 B2 =SUM(B1:B1)', workflow: 'an action node whose line is: sheet-edit f1 B2 =SUM(B1:B1)' },
+  'agent-links': { canvas: 'the links button in the canvas HUD\'s zoom cluster', palette: 'canvas.agent-links', agent: 'tc plan agent-links off', workflow: 'an action node whose line is: agent-links off' },
   'sheet-review': { canvas: 'Keep / Discard selected, Keep all / Discard all on a sheet\'s draft strip', palette: 'sheet.review', agent: 'tc plan sheet-review f1 discard all', workflow: 'an action node whose line is: sheet-review f1 keep B2' },
   ...Object.fromEntries(CREATABLE_OBJECTS.map((entry) => [entry.verb, entry.doors])),
   'check-readiness': { canvas: 'launcher Check again', palette: 'onboarding.readiness', agent: 'tc plan check-readiness', workflow: 'an action node whose line is: check-readiness' },

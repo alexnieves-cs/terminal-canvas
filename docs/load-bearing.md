@@ -4369,3 +4369,14 @@ person. `runWorkflow`'s second parameter is the SOURCE — never pass `runWorkfl
 `(templateId, caller)` function is expected. **Undo/redo carry the draft too**: each history step
 records the draft as it stood, and a traversal re-derives it (merge, minus discards, rebase) —
 otherwise undoing a person's edit reads as a conflict and loses the proposal it had dropped.
+
+**Agent links are forgotten BEFORE the palette close loop's sessionless `continue`
+(`usePaletteActions.ts`, `agent-links-store.ts`, M247).** That loop `continue`s past every clear
+for a sessionless panel — a file, note, checklist or sheet — which is exactly what a link points
+AT; a `forgetAgentLinksFor` beside `clearAgentState` would never run for them. The store forgets in
+both directions (a closed agent loses its links; a closed object is dropped from every agent's),
+and `verify:agent-links` `forget.1` counts the sites. **The feed caches per agent on the TURNS
+array's identity** (`Canvas.tsx`): `useChatsVersion` bumps on every streamed delta, so an uncached
+feed re-indexes every transcript on the canvas several times a second while any agent types.
+**It uses its own `linksChatsVersion`**: Canvas's `chatsVersion` is declared ~1,100 lines below,
+and a dependency array is evaluated during render — borrowing it throws before declaration.

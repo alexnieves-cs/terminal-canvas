@@ -1938,6 +1938,24 @@ body {
 /* M78. A selected edge: the accent stroke, the badge the remove control. */
 .link-layer__line--selected { stroke: var(--iris); stroke-width: 3px; }
 
+/* M247. Agent → object links. Same box as .link-layer, for the same measured
+   reason (a zero-sized SVG in the world's compositing layer paints nothing of
+   its overflow); pointer-events none on the layer, and only the draft badge
+   opts back in. Each kind says something: read is thin and dashed, wrote is
+   solid, a draft pending review carries the accent. */
+.agent-link-layer { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; z-index: 0; pointer-events: none; }
+.agent-link-layer__line { fill: none; stroke-linecap: round; stroke: var(--line-strong); stroke-width: 1.5px; }
+.agent-link-layer__line--read { stroke-dasharray: 4 5; stroke-width: 1px; }
+.agent-link-layer__line--wrote { stroke-width: 2px; }
+.agent-link-layer__line--draft { stroke: var(--iris); stroke-width: 2px; }
+.agent-link-layer__head { fill: var(--line-strong); }
+.agent-link-layer__head--draft { fill: var(--iris); }
+.agent-link-layer__label { fill: var(--fg-3); font-size: var(--t-xs); font-family: var(--font-ui); }
+.agent-link-layer__label--draft { fill: var(--fg); }
+.agent-link-layer__badge { pointer-events: all; cursor: pointer; }
+.agent-link-layer__badge circle { fill: var(--s-1); stroke: var(--iris); stroke-width: 1.5px; }
+.agent-link-layer__badge path { fill: none; stroke: var(--iris); stroke-width: 1.5px; stroke-linecap: round; }
+
 /* ------------------------------------------------------------------ M232 --
    EDGES MEAN FLOW. An edge animates ONLY when something crosses it; at rest
    it is the quiet line above, with no motion at all.

@@ -2,6 +2,7 @@ import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from 
 import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
 import { sheetController } from '@renderer/file/sheet-controllers'
+import { forgetAgentLinksFor } from './agent-links-store'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -315,6 +316,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
           case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '', caller)
           case 'sheet-review': return self.reviewSheet(a.panel!, a.operation!, a.target, caller)
+          case 'agent-links': return self.setAgentLinks(a.state!)
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
           // M246 (critic, finding 1). The caller rides the run into every action
@@ -540,6 +542,16 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     editSheet: async (panel, cell, value, caller) => sheetController(panel)?.edit(cell, value, caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
+    // M247. The toggle is the `canvas.agentLinks` SETTING, so every door writes the
+    // same record the HUD button and the settings palette row write.
+    setAgentLinks: async (mode) => {
+      if (mode !== 'on' && mode !== 'off' && mode !== 'toggle') return { kind: 'refused', reason: 'use agent-links on, off or toggle' }
+      const rows = await window.canvas.settings.list()
+      const current = rows.find((r) => r.id === 'canvas.agentLinks')?.value !== false
+      const next = mode === 'toggle' ? !current : mode === 'on'
+      self.toggleSetting('canvas.agentLinks', next)
+      return { kind: 'ran', note: next ? 'agent links shown' : 'agent links hidden' }
+    },
     reviewSheet: async (panel, operation, target, caller) => sheetController(panel)?.review(operation, target ?? 'all', caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
@@ -1387,6 +1399,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     // panelsRef to be told apart: for any other kind this is
                     // a no-op in main (no session) and on disk (no file).
                     disposeChat(panelId, true); disposeWatcher(panelId)
+                    // M247. BEFORE the sessionless `continue` below: a file object is
+                    // exactly what agent links point AT, so its links must go too.
+                    forgetAgentLinksFor(panelId)
                     if (doomedSessionlessIds.has(panelId)) {
                       clearFileResult(panelId)
                       clearToolbox(panelId)
