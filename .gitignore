@@ -43,3 +43,6 @@ graphify-out/
 # is machine-local, and the ledger's value is the SENTENCE it records, with the
 # log as the thing that was read to write it.
 evidence/
+
+# Playwright MCP browser snapshots — scratch output, never source.
+.playwright-mcp/
