@@ -3079,6 +3079,19 @@ body {
   z-index: 3;
 }
 
+/* M260. A TOOL, not another document: a quiet tint on the review kind's own
+   chrome (`--glass-2`, already declared both themes and used for shell
+   chrome elsewhere — no new hue), and a touch less body padding/line-height
+   than a reading surface needs, so the row list reads as a dense instrument
+   rather than prose. `.review-node__file` keeps its OWN card border/radius
+   (diff.1 pins them) — this only tightens the space around it. */
+.pf--kind-review .panel__chrome { background: color-mix(in srgb, var(--iris) 5%, var(--chrome-bg)); }
+/* display:flex here, not on a `.review-node__body` rule of its own — frame.1
+   forbids a kind namespace from ever declaring the shared `body` family;
+   scoping through the KIND class instead of a second selector keeps every
+   other `.pf__body--text` consumer (file, note, toolbox, Jira) untouched. */
+.pf--kind-review .pf__body--text { display: flex; flex-direction: column; line-height: var(--lh-tight); }
+
 /* --fg-3, not --fg-4: --fg-4 is the DISABLED step and this is ordinary
    running text. */
 .review-node__root { font-family: var(--font-mono); font-size: var(--t-sm); margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
@@ -3118,12 +3131,137 @@ body {
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own. */
-.review-node__line--add { color: var(--green); background: var(--green-dim); }
-.review-node__line--del { color: var(--red); background: var(--red-dim); }
+/* M260. TEXT-ONLY, no background wash: `DiffLine.text` already carries its
+   leading +/- marker (shared/review.ts's own comment on why — a diff that
+   stripped it would be unreadable once copied out of), so the colour alone
+   is never the only signal, and a full-width tint on every added/removed
+   line was the loudest thing on the surface for the least important reason
+   (there are two colours in this app and this used both, everywhere, at
+   once). Sparing means the file-row's two count PILLS (`.review-node__add`/
+   `.review-node__del`, below) stay the one place red/green fills anything. */
+.review-node__line--add { color: var(--green); }
+.review-node__line--del { color: var(--red); }
 .review-node__line--hunk { color: var(--blue); }
 .review-node__line--meta { color: var(--fg-3); }
+.review-node__line--active { background: var(--iris-dim); }
 
 .review-node__hunk-note { margin: var(--sp-2); color: var(--fg-3); }
+
+/* M260. THE RAIL + DETAIL SPLIT. `.review-node__body` becomes a flex column
+   so `.review-node__layout` can claim the remaining vertical space after the
+   summary/task/note sections above it; in the STACK case (one file, or too
+   narrow) `.review-node__layout` is just a block child and the body scrolls
+   as one column exactly as it always did — `.pf__body--text`'s own
+   `overflow: auto` is untouched either way. `shouldYieldWheel`'s rule 3 only
+   asks whether the focused panel contains data-scroll-host ANYWHERE
+   (Canvas.tsx), so leaving that attribute on the outer body needs no change
+   here: the browser's own wheel-scroll still finds whichever of the rail or
+   the detail pane is under the cursor. */
+.review-node__layout { flex: 1 1 auto; min-height: 0; }
+.review-node__layout[data-review-layout="rail"] { display: flex; gap: var(--sp-3); min-height: 0; }
+.review-node__layout[data-review-layout="rail"] > .review-node__rail {
+  flex: 0 0 220px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.review-node__group-head {
+  margin: var(--sp-2) 0 var(--sp-1);
+  padding: 0 var(--sp-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+  list-style: none;
+}
+.review-node__group-head:first-child { margin-top: 0; }
+.review-node__detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--line);
+}
+/* M260. Centred nav: sticky at the pane's own top so it travels with
+   scrolling rather than sitting above the fold once a long diff scrolls. */
+.review-node__nav {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-1) 0;
+  background: var(--s-1);
+}
+.review-node__nav-verb { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); cursor: pointer; }
+.review-node__nav-verb:hover:not(:disabled) { background: var(--s-4); }
+.review-node__nav-verb:disabled { color: var(--fg-4); border-style: dashed; cursor: default; }
+.review-node__nav-verb svg { width: 12px; height: 12px; }
+.review-node__nav-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* M260. THE WARNING BANNER: an amber-tinted lead sentence with a "why?"
+   disclosure, in place of the bare paragraph the shared-checkout note used
+   to be. `.review-node__note` inside it is untouched (class and
+   `data-review-node-note` both survive) — this wraps it, never replaces it. */
+.review-node__banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-3); border-left: 2px solid var(--amber); background: var(--amber-dim); border-radius: var(--r-sm); }
+/* .pf__note, not .review-node__note — frame.1 forbids the latter (the
+   shared "note" family) from ever taking a kind-specific rule; the frame
+   class is the one every note-bearing element in this app already carries. */
+.review-node__banner .pf__note { margin: 0; flex: 1 1 auto; color: var(--fg); }
+.review-node__banner-toggle { flex: none; min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.review-node__banner-toggle:hover { background: var(--s-4); }
+.review-node__banner-detail { flex: 1 0 100%; margin: 0; color: var(--fg-2); font-size: var(--t-sm); }
+
+/* M260. "Mark seen this session": the toggle hover-reveals like discard
+   (the rest rule); the mark it leaves on the row (`.review-node__reviewed-
+   mark`, in `renderFileRow`) is the opposite — a rest-layer fact, present
+   only while true and never opacity-gated, so it reads at a glance without a
+   hover the way the row's own count pills do. */
+.review-node__mark-reviewed { opacity: 0; transition: opacity var(--dur-1) var(--ease); flex: none; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: var(--fg-3); cursor: pointer; font: inherit; font-size: var(--t-xs); }
+.review-node__file:hover .review-node__mark-reviewed, .review-node__file:focus-within .review-node__mark-reviewed { opacity: 1; }
+.review-node__mark-reviewed:hover { color: var(--fg); background: var(--s-4); }
+.review-node__mark-reviewed[aria-pressed="true"] { opacity: 1; color: var(--iris); }
+.review-node__reviewed-mark { display: inline-flex; color: var(--iris); flex: none; }
+.review-node__reviewed-mark svg { width: 12px; height: 12px; }
+
+/* M260. THE STICKY FOOTER: pinned to the bottom of the scrolling body, one
+   resting shadow at its top edge (the app's own --lift, not a new one) so it
+   reads as a distinct zone without a second shadow style. */
+.review-node__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) calc(-1 * var(--inset)) calc(-1 * var(--inset));
+  padding: var(--sp-2) var(--inset);
+  background: var(--s-2);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 8px -4px var(--bezel);
+}
+.review-node__footer-progress { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* M260. TWO-PHASE REMOVE: a discarded row (or one swept up in "discard all")
+   shrinks away instead of vanishing the instant the re-fetched list drops
+   it — `--dur-2`, the bigger-event duration, since a row disappearing is a
+   bigger event than the hover-reveal opacity fades use `--dur-1` for. */
+.review-node__file[data-review-node-removing] {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+  transition: max-height var(--dur-2) var(--ease), opacity var(--dur-1) var(--ease), margin var(--dur-2) var(--ease), padding var(--dur-2) var(--ease), border-width var(--dur-2) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-node__file[data-review-node-removing] { transition: none; }
+}
 
 /* Matches the refresh control rather than standing out: a destructive verb
    that looks like a primary action invites the accidental press this app's
