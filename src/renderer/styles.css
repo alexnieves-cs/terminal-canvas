@@ -177,6 +177,10 @@
   --e-2: 0 2px 8px rgba(15, 18, 26, .12);
   --e-3: 0 6px 20px rgba(15, 18, 26, .16);
   --e-4: 0 14px 40px rgba(15, 18, 26, .22);
+  /* The palette's own dim behind it — a flat fill, never a blur (see where
+     it mounts). Darker than any --e token because it has to read against a
+     LIT canvas, not against .palette's own opaque surface. */
+  --scrim: rgba(15, 18, 26, .45);
 
   /* M109. THE MATERIAL (Obsidian). Glass fills are rgba over a blur — a
      NEW name each, so nothing check 11 measures stops being hex. --lift is
@@ -297,6 +301,7 @@
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
+  --scrim: rgba(0, 0, 0, .60);
 
   --glass-1:    rgba(18, 22, 31, .88);   /* M163 (finding 8): one clear step from --s-0; was .74 */
   --glass-2:    rgba(13, 16, 24, .82);
@@ -3619,6 +3624,18 @@ body {
   pointer-events: none;
 }
 
+/* A flat dim, no blur (see the comment where this mounts): raises the
+   overlay's elevation without asking the canvas underneath to composite a
+   filtered layer on every pan frame. Opacity-in only, on its OWN element —
+   the same rule .palette's entrance obeys. Pointer-events: none so the
+   outside-click exit — mounted on .shell, never here — is untouched. */
+@keyframes palette-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.palette__scrim {
+  position: absolute; inset: 0; z-index: 999; pointer-events: none;
+  background: var(--scrim);
+  animation: palette-scrim-in var(--dur-2) var(--ease) both;
+}
+
 /* The palette is in SCREEN space — a sibling of .world, never inside it. A
    scale() ancestor would shrink it at low zoom and would put it in the
    coordinate space xterm-pointer.ts rewrites during a drag. */
@@ -3738,6 +3755,14 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* The intentional fade: a soft mask at the bottom edge says "more below",
+   set ONLY while there is more below — Palette.tsx's scroll effect toggles
+   this attribute, so a short list that already fits is never shown a cut-off
+   row that is not actually cut off. */
+.palette__list[data-more-below] {
+  mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+}
 
 /* Sticky, so the section a row belongs to is still readable after scrolling
    into the middle of a long one. Its height is duplicated as scroll-margin-top
@@ -3783,12 +3808,16 @@ body {
 }
 
 /* An accent bar as well as a fill: Enter acts on this row, so it is the one
-   thing in the overlay that must never be ambiguous. */
+   thing in the overlay that must never be ambiguous. --iris-dim, not --s-4:
+   a plain grey fill and a thin bar read as one more hover state in LIGHT
+   mode, where --s-4 sits a hair off --s-3 — the tint is what makes "this is
+   what Enter runs" survive a glance rather than a stare. */
 .palette__row--selected {
-  background: var(--s-4);
+  background: var(--iris-dim);
   color: var(--fg);
-  box-shadow: inset 3px 0 0 var(--iris);
+  box-shadow: inset 4px 0 0 var(--iris);
 }
+.palette__row--selected .palette__title { font-weight: 600; }
 
 .palette__row--disabled {
   color: var(--fg-4);
@@ -3796,6 +3825,11 @@ body {
      click, and a pointer cursor over it would promise both. */
   cursor: default;
 }
+/* The lock glyph ahead of a disabled row's reason — the same information
+   .palette__hint already prints as text, made scannable at a glance without
+   reading every line in a mixed list. */
+.palette__row--disabled .palette__hint { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.palette__row--disabled .palette__hint svg { flex: none; width: 11px; height: 11px; }
 
 /* Destructive rows are marked as well as gated (Canvas.tsx confirms them).
    The colour is the warning; the confirm is the safety. */
@@ -5308,38 +5342,93 @@ body {
 .command-pill {
   position: absolute; left: 50%; bottom: var(--sp-5); transform: translateX(-50%); z-index: 930;
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
-  max-width: min(560px, calc(100% - 2 * var(--sp-5)));
+  max-width: min(400px, calc(100% - 2 * var(--sp-5)));
   pointer-events: auto; font-family: var(--font-ui);
 }
+/* The rest pill IS the "shared container": it never unmounts, so it reads as
+   the one object the panel above grows out of rather than a button that
+   summons a second, disconnected surface. */
 .command-pill__rest {
-  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 28px;
-  border: 1px solid var(--line); border-radius: var(--r-full); padding: 0 var(--sp-3);
-  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-xs); cursor: pointer;
-  transition: color var(--dur-1), background var(--dur-1);
+  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 30px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-full); padding: 0 var(--sp-5);
+  background: var(--s-2); color: var(--fg-2); font: inherit; font-size: var(--t-xs); font-weight: 500; cursor: pointer;
+  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
-.command-pill__rest:hover { color: var(--fg); background: var(--s-2); }
-.command-pill__rest[data-pill-state="attention"] { color: var(--amber); border-color: var(--amber); }
+.command-pill__rest:hover { color: var(--fg); background: var(--s-3); }
+.command-pill__rest[data-pill-state="attention"] { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+/* The send's outcome, said in the SAME element the rest text lives in — an
+   accent bar rather than a new colour, so it reads as this pill answering
+   rather than a second voice interrupting it. */
+.command-pill__rest[data-pill-state="result"] { color: var(--fg); box-shadow: inset 3px 0 0 var(--iris); }
+.command-pill__rest .command-pill__text { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The panel GROWS from the rest pill: transform-origin pins the animation to
+   where the rest pill sits, so the motion reads as one object changing shape
+   rather than a second one appearing beside it. Transform + opacity only —
+   see .palette's own note on why nothing here animates a layout property. */
+@keyframes pill-expand {
+  from { opacity: 0; transform: scale(.92) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
 .command-pill__panel {
-  display: flex; flex-direction: column; gap: var(--sp-2); width: 100%;
-  border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: var(--sp-2);
+  display: flex; flex-direction: column; gap: var(--sp-4); width: 100%;
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: var(--sp-5);
   background: var(--s-2);
+  transform-origin: bottom center;
+  animation: pill-expand var(--dur-2) var(--ease) both;
 }
+@media (prefers-reduced-motion: reduce) { .command-pill__panel { animation: none; } }
+
+.command-pill__zone { display: flex; flex-direction: column; gap: var(--sp-2); }
+.command-pill__zone + .command-pill__zone { padding-top: var(--sp-4); border-top: 1px solid var(--line); }
+
+.command-pill__ask-row { display: flex; align-items: center; gap: var(--sp-2); }
 .command-pill__input {
-  font: inherit; font-size: var(--t-md); color: var(--fg); background: var(--s-1);
-  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-2); min-width: 0;
+  flex: 1; font: inherit; font-size: var(--t-md); color: var(--fg); background: var(--s-1);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); min-width: 0;
+  transition: border-color var(--dur-1) var(--ease);
 }
+.command-pill__input:focus { outline: none; border-color: var(--iris); }
 .command-pill__input:disabled { color: var(--fg-4); }
-.command-pill__actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.command-pill__send {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px;
+  border: none; border-radius: var(--r-md); background: var(--iris); color: var(--on-iris); cursor: pointer;
+  transition: opacity var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.command-pill__send:hover:not(:disabled) { transform: scale(1.06); }
+.command-pill__send:disabled { background: var(--s-4); color: var(--fg-4); cursor: default; }
+/* The delivery destination, stated plainly — never left for the person to
+   infer from an avatar or a colour. */
+.command-pill__destination { padding: 0 var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); }
+.command-pill__destination strong { color: var(--fg-3); font-weight: 600; }
+
+.command-pill__status-row {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%;
+  border: 1px solid var(--amber); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3);
+  background: var(--amber-dim); color: var(--amber); font: inherit; font-size: var(--t-xs); font-weight: 600; cursor: pointer; text-align: left;
+}
+.command-pill__status-row:hover { background: color-mix(in srgb, var(--amber-dim) 70%, var(--amber) 8%); }
+
+.command-pill__actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); position: relative; }
 .command-pill__action, .command-pill__row {
   display: inline-flex; align-items: center; gap: var(--sp-1);
-  border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-2) var(--sp-2);
+  border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-2) var(--sp-3);
   background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-xs); cursor: pointer;
 }
 .command-pill__action:hover, .command-pill__row:hover { color: var(--fg); background: var(--s-3); }
 .command-pill__action:disabled { color: var(--fg-4); cursor: default; }
-.command-pill__note { max-width: 100%; color: var(--fg-2); font-size: var(--t-xs); text-align: center; overflow-wrap: anywhere; }
 .command-pill__running { list-style: none; margin: 0; padding: 0; max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
-.command-pill__rest:focus-visible, .command-pill__action:focus-visible, .command-pill__row:focus-visible, .command-pill__input:focus-visible {
+.command-pill__row { width: 100%; }
+.command-pill__more-note { padding: 0 var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); }
+/* The overflow shelf. Anchored under the actions row rather than floating
+   free of it, so More reads as revealing part of the SAME row, not opening a
+   second menu. */
+.command-pill__more-panel {
+  display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-top: var(--sp-1);
+  padding-top: var(--sp-3); border-top: 1px dashed var(--line);
+}
+.command-pill__rest:focus-visible, .command-pill__action:focus-visible, .command-pill__row:focus-visible,
+.command-pill__input:focus-visible, .command-pill__send:focus-visible, .command-pill__status-row:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 .checklist-node__body { overflow: auto; height: 100%; padding: var(--sp-6); font-family: var(--font-ui); color: var(--fg-2); }

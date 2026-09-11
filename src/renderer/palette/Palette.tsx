@@ -34,7 +34,7 @@ import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } fro
 import type { CanvasGroup } from '@renderer/groups/groups'
 import type { CredentialMeta } from '@shared/credential-schema'
 import type { PaletteController } from './usePalette'
-import { ChevronRight } from '@renderer/icons'
+import { ChevronRight, Lock } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import type { EnvReport } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
@@ -383,6 +383,21 @@ export function Palette(props: PaletteProps): JSX.Element {
     }
     selectedRef.current?.scrollIntoView({ block: 'nearest' })
   }, [index, rows])
+
+  // The bottom fade is a claim ("there is more below") that has to stay
+  // true: toggled on scroll and on every row-set change, not painted
+  // unconditionally, or a short list that already fits reads as truncated.
+  useEffect(() => {
+    const el = listRef.current
+    if (el === null) return
+    const update = (): void => {
+      const more = el.scrollHeight - el.scrollTop - el.clientHeight > 1
+      el.toggleAttribute('data-more-below', more)
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    return () => el.removeEventListener('scroll', update)
+  }, [rows])
 
   // Cmd+C / Cmd+V are the app menu's accelerators (main/menu.ts), so they take
   // priority over the page: the browser never delivers a native copy or paste
@@ -747,7 +762,7 @@ export function Palette(props: PaletteProps): JSX.Element {
                       marked in it, the way the title's match is. */}
                   <span className="palette__hint">
                     {row.disabledReason !== undefined
-                      ? row.disabledReason
+                      ? <>{Lock}{row.disabledReason}</>
                       : (scope === 'search' && row.subtitle !== undefined
                           ? splitHighlight(row.subtitle, query).map((seg, si) => seg.hit ? <mark key={si} className="palette__hit">{seg.text}</mark> : <span key={si}>{seg.text}</span>)
                           : (row.subtitle ?? ''))}

@@ -7681,6 +7681,12 @@ export function Canvas({
         {packPreview !== null && (
           <PackPreview preview={packPreview} onAdd={addPack} onClose={() => setPackPreview(null)} />
         )}
+        {/* A flat, non-interactive scrim: no blur (a composited layer over a
+            canvas that repaints on every pan frame is the cost .palette's own
+            comment already declines to pay) and no pointer-events, so the
+            outside-click exit stays exactly where it was — .shell's capture
+            handler, never here. */}
+        {palette.open && <div className="palette__scrim" aria-hidden="true" />}
         {palette.open && (
           <Palette
             controller={palette}
