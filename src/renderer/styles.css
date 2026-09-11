@@ -435,9 +435,14 @@ body {
 .shell--inspector-collapsed { --shell-ctx-w: 0px; }
 .shell--rail-collapsed .shell__rail { border-right: 0; }
 .shell--inspector-collapsed .shell__inspector { border-left: 0; }
-/* Compact: nothing but the dock is resident. The chrome hook never lets a
-   persisted toggle produce a column here; the drawer classes are the only
-   way a pane appears, and they OVERLAY. */
+/* Compact: nothing but the dock is resident. The chrome hook never lets the
+   plain `shell.inspectorOpen` toggle produce a column here; the drawer
+   classes are the only way a pane appears from THAT control, and they
+   OVERLAY. This redesign's "pin the inspector" is a second, opt-in, off-by-default
+   exception a user reaches deliberately: Canvas leaves its own inline
+   `--shell-ctx-w` in place at compact only while `shell.inspectorPinned` is
+   on (an inline style beats this rule's specificity, so it must be
+   conditional rather than always winning — see that style's own comment). */
 .shell[data-bp="compact"] { --shell-nav-w: 0px; --shell-ctx-w: 0px; }
 .shell--nav-drawer .shell__rail,
 .shell--ctx-drawer .shell__inspector {
@@ -744,12 +749,26 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
+/* (this redesign) The resize handle: a slim hit target straddling the pane's left
+   border, widening on hover so it is findable without narrating itself. No
+   width transition on drag for the same reason the comment above forbids
+   one on the collapse — a live-resized pane must never animate its own
+   width while `--shell-ctx-w` is changing every frame. */
+.inspector__resize-handle {
+  position: absolute; top: 0; bottom: 0; left: -3px; width: 6px;
+  cursor: ew-resize; z-index: 5; background: transparent;
+}
+.inspector__resize-handle:hover, .inspector__resize-handle:active { background: var(--iris-dim); }
+.shell--inspector-collapsed .inspector__resize-handle,
+.shell[data-bp="compact"]:not(.shell--inspector-pinned) .inspector__resize-handle { display: none; }
 
 /* M46: the region toggles are .icon-buttons now (the navigator's chevron in
    its header, the context pane's in the top bar). The pressed context
    toggle reads like a pressed dock icon. */
 .shell__inspector-toggle--on { color: var(--iris); background: var(--iris-dim); }
+.shell__inspector-pin--on { color: var(--iris); background: var(--iris-dim); }
 
 /* NO width transition. What an animated collapse would cost is a pip-layer
    re-render on every frame of the transition (EdgeIndicators' ResizeObserver
@@ -950,18 +969,74 @@ body {
 .canvas-group[data-group-id^="run:"] { border-style: dashed; border-color: var(--line-strong); background: transparent; }
 /* M83. The memory node: entries newest first, each `kind · text · time`, and
    one line to add another. */
-/* M89. The Integrations page: one section per service, the state sentence in
-   its tone beside the label, one verb, the audit rows in mono beneath. */
-.integrations-pane__list { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); overflow-y: auto; }
-.integration { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-2); }
+/* M89 (redesigned). The Integrations page: one COMPACT row per service —
+   icon, account, state pill, one action — with the fix line, the permission
+   sentence and the last-verified/used facts always visible, and the
+   translated activity (raw requests one disclosure further in) folded away
+   so scanning every service never scrolls past one call's detail. */
+.integrations-pane__list { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-2) var(--sp-3); overflow-y: auto; }
+.integration { border-bottom: 1px solid var(--line); padding-bottom: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
 .integration:last-of-type { border-bottom: 0; }
-.integration__head { display: flex; flex-direction: column; gap: var(--sp-1); }
-.integration__label { font-size: var(--t-sm); color: var(--fg); }
-.integration__sentence { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
-.integration__word { color: var(--tone, var(--fg-2)); }
+.integration__head { display: flex; align-items: center; gap: var(--sp-3); }
+.integration__icon {
+  flex: none;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--r-md);
+  background: var(--tone-dim); color: var(--tone);
+}
+.integration__identity { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.integration__label { font-size: var(--t-sm); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration__account { font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.integration__pill {
+  flex: none;
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2); border-radius: var(--r-full);
+  background: var(--tone-dim); color: var(--tone);
+  font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
+}
+.integration__pill svg { flex: none; }
+.integration__cta {
+  flex: none; font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600;
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--fg-2);
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+.integration__cta:hover { color: var(--fg); border-color: var(--line-strong); background: var(--s-4); }
+/* (this redesign) Reconnect is PRIMARY when a token is rejected — the visually distinct
+   fix — while Verify (or Connect on a bare service) stays a quiet secondary
+   ask; the two must never be styled alike or a rejected token reads as one
+   more routine check (#17's brief). */
+.integration__cta[data-cta="primary"] { border-color: var(--iris); background: var(--iris-dim); color: var(--iris); }
+.integration__cta[data-cta="primary"]:hover { background: var(--iris); color: var(--bg); }
+.integration__sentence { margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
+.integration__word { color: var(--tone, var(--fg-2)); font-weight: 600; }
+/* (this redesign) The bounded error state: a tinted, bordered block — never a bare red
+   paragraph — that carries the fix inline with the failure. */
+.integration__error {
+  margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg);
+  padding: var(--sp-2) var(--sp-3); border: 1px solid var(--red); border-radius: var(--r-sm);
+  background: var(--red-dim);
+}
+.integration__error .integration__word { color: var(--red); }
+.integration__permission { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.integration__meta-line { margin: 0; font-size: var(--t-xs); color: var(--fg-4); font-variant-numeric: tabular-nums; }
 .integration__code { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
-.integration__verbs { margin-top: var(--sp-1); }
+.integration__details { font-size: var(--t-xs); }
+.integration__details-summary, .integration__raw > summary {
+  cursor: pointer; color: var(--fg-3); list-style: none; user-select: none;
+}
+.integration__details-summary::-webkit-details-marker, .integration__raw > summary::-webkit-details-marker { display: none; }
+.integration__details-summary::before { content: '▸ '; }
+.integration__details[open] > .integration__details-summary::before { content: '▾ '; }
+.integration__raw > summary::before { content: '▸ '; }
+.integration__raw[open] > summary::before { content: '▾ '; }
+.integration__details-summary:hover, .integration__raw > summary:hover { color: var(--fg); }
 .integration__empty { margin: var(--sp-1) 0 0; font-size: var(--t-xs); color: var(--fg-3); }
+.integration__activity { margin: var(--sp-1) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-2); }
+.integration__activity-row { display: flex; flex-direction: column; }
+.integration__activity-text { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
+.integration__activity-row--refused .integration__activity-text { color: var(--fg-3); }
+.integration__raw { margin-top: var(--sp-2); padding-left: var(--sp-3); border-left: 1px solid var(--line); }
 .integration__audit { margin: var(--sp-1) 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); }
 .integration__row { display: flex; flex-direction: column; }
 /* A path WRAPS rather than truncates: the last segment is what the agent did
@@ -970,6 +1045,19 @@ body {
 .integration__row-meta { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); }
 .integration__row--refused .integration__row-meta { color: var(--red); }
 .integration__note { margin: 0; font-size: var(--t-xs); color: var(--fg-4); }
+/* (this redesign) The success transition: a brief lift on the pill the instant a verify
+   turns a service `connected` — the confirmation #17 asked for. One breath
+   (the wants-you rule above), never a loop; the reduced-motion block already
+   collapses this to its static end state with nothing further to declare. */
+@keyframes integration-verified-pop {
+  0% { transform: scale(0.92); }
+  40% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.integration[data-integration-fresh] .integration__pill {
+  animation: integration-verified-pop var(--dur-2) var(--ease);
+  background: var(--green-dim); color: var(--green);
+}
 /* M88. The GitHub work node: one card per item, identity first (owner/repo#N
    and its state in mono), the title, the body's first line dim, two verbs. */
 .github-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); }
@@ -1309,39 +1397,96 @@ body {
    one — a defect no attribute-reading check could see. */
 .context__panel { display: block; }
 .context__panel[hidden] { display: none; }
-/* M66. A GRID, not a wrapped flex: the wrapped version let Restart become a
-   tall column beside the stacked chips (M61's critic, finding 6). Restart
-   takes its own full row; the secondary verbs and Close share the second. */
+/* The restrained 8px crossfade this redesign asked for. `[hidden]`
+   toggles instantly (a real Tab-order and `el.hidden` read both depend on
+   it — verify:panels agents 804 reads the property directly, so it cannot
+   become a CSS-only visibility trick), so only the INCOMING panel can
+   animate: the outgoing one is already `display: none` the same tick.
+   `animation-name` starts fresh every time `[hidden]` is removed and this
+   rule newly matches, which is what makes a plain keyframe (not a
+   transition, which needs both states visible) work here at all. */
+@keyframes context-panel-enter {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: none; }
+}
+.context__panel:not([hidden]) { animation: context-panel-enter var(--dur-2) var(--ease); }
+/* (this redesign) ONE primary control plus the ⋯ menu host — a flex row, not the old
+   two-column grid the disclosure-panel shape needed. Allow/Deny (a pending
+   chat) and Restart grow to fill the row; the menu host stays a fixed small
+   square beside them, never competing for the primary's width. */
 .inspector__actions.context__actions {
   /* Both classes, so this beats `.inspector__actions`' flex column declared
-     later in the sheet — the first cut lost to it and the bar stayed a stack. */
+     later in the sheet on `display` — but NOT on `flex-direction`, which
+     that single-class rule is otherwise the only declaration touching:
+     CSS resolves conflicts per property, not per rule, so leaving this one
+     unset here let `column` win regardless of this selector's higher
+     specificity, stacking Restart above the ⋯ trigger instead of beside it
+     (caught in this redesign's shot review, `inspector-detail.png`). */
   flex: none;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex-direction: row;
+  display: flex;
+  align-items: stretch;
   gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-5);
   border-top: 1px solid var(--line);
   margin-top: 0;
 }
+.context__actions > [data-inspector-action] { flex: 1 1 auto; min-width: 0; }
 /* Three ranks. Primary keeps the full control; secondary shrinks to a text
    chip; destructive sits at the right and goes red the moment it is armed. */
 /* M178 (F.1). No background here: at (0,2,1) this rule beat the primary's (0,1,0) iris fill, so an ENABLED Restart painted white on white since M46 — a latent 4.0 defect the second audit caught (`restart.paint.1`). */
-.context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; font-weight: 600; }
-.context__more-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
-.context__more-actions[hidden] { display: none; }
+.context__actions [data-inspector-action="restart"] { font-weight: 600; }
 .inspector__action--secondary { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); min-width: 0; white-space: nowrap; }
 .inspector__action--destructive { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
 .inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
 .inspector__action--armed { color: var(--red); border-color: var(--red); background: var(--red-dim); }
 
-/* The pane's body. Scrolls on its own: a long cwd plus an error message can
-   exceed the pane's height, and a body that grew would push the pinned
-   action bar off screen. */
+/* (this redesign) The ⋯ MENU: a fixed trigger and a floating dropdown, the same shape
+   PanelFrame's own `pf__menu`/`pf__menu-host` already use for its panel-wide
+   ⋯ — reused here rather than a second visual language for "more actions". */
+.inspector__menu-host { position: relative; flex: none; display: block; }
+.inspector__menu-open {
+  flex: none; width: 32px; height: 100%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.inspector__menu {
+  position: absolute; bottom: calc(100% + var(--sp-2)); right: 0; z-index: 30;
+  width: max-content; min-width: 180px; max-width: 240px;
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border-radius: var(--r-md);
+  /* No shadow: `--lift` is reserved for the panel frame and the launcher
+     alone (verify:styles shadow.1) — `.pf__menu`, the identical pattern this
+     is copied from, separates from the canvas with background + border only. */
+  background: var(--s-3); border: 1px solid var(--line);
+}
+.inspector__menu[hidden] { display: none; }
+.inspector__menu .inspector__action { width: 100%; text-align: left; }
+/* Item 7 of the redesigned anatomy: destructive actions, set off from the
+   rest of the menu by a rule rather than merely a colour. */
+.inspector__menu-divider { height: 1px; margin: var(--sp-1) 0; background: var(--line); }
+
+/* The pane's body. Bounded, never scrolling itself: a long cwd plus an
+   error message can exceed the pane's height, and a body that grew would
+   push the pinned action bar off screen — so each TAB scrolls on its own
+   below, and this host only clips. */
 .inspector__body {
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--sp-2) var(--sp-5) var(--sp-5);
+  overflow: hidden;
+  position: relative;
+}
+/* (this redesign) Each tab is its OWN scroll container, not a shared one: three tabs
+   sharing a single scrollTop meant scrolling Detail 300px down and
+   switching to Work showed Work already scrolled 300px, since there was
+   only ever one scrollable element under them. Independent overflow here
+   means the browser keeps each hidden panel's scrollTop while it is
+   `display: none` and simply shows it again on the next switch — no JS, no
+   stored position needed. */
+.context__panel {
+  height: 100%;
   overflow-y: auto;
+  padding: var(--sp-2) var(--sp-5) var(--sp-5);
+  box-sizing: border-box;
 }
 
 /* The pane's title — the third reader of M6a's honest chain. It must never
@@ -4778,9 +4923,6 @@ body {
    (the list's flex basis would otherwise yield to the detail in the column). */
 .rail-list--teammates { flex: 0 0 auto; }
 .teammates-pane__detail { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
-
-/* M102. The grant line is a sentence beside `connected as`, never a heading over the service. */
-.integration__grants { margin: 0; font-size: var(--t-xs); }
 
 /* M105. The rail says what is happening: a second line with the agent's last
    line said (prose, cut from the right), an unread dot before the label, and

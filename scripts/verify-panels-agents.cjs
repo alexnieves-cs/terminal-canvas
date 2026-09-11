@@ -3251,7 +3251,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onC = (_e, level, message) => { if (level >= 2) cLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onC)
       const IDS = [
-        'context.2 the Work tab renders Changes, Run, Commands and Cost with a first-arm line each for a plain shell outside a repository',
+        'context.2 the Work tab renders Changes, Run and Cost with a first-arm line each for a plain shell outside a repository, and Commands stays absent — an empty section is not actionable',
         'context.3 the Jira panel with no credential offers Connect Jira…, which opens the palette in its Credentials scope',
         'context.4 the Files pane names the panel its root belongs to, and the Workspaces pane\'s merged row toggles the merged view'
       ]
@@ -3288,10 +3288,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           work = await wc.executeJavaScript(`(() => { const arm = (k) => document.querySelector('[data-work-arm="' + k + '"]')?.textContent ?? null
             const heads = [...document.querySelectorAll('[data-context-panel="work"] .inspector__section-heading')].map((h) => h.textContent)
             return { heads, changes: arm('changes'), runs: arm('runs'), run: document.querySelector('[data-work-run]')?.textContent ?? null, cost: arm('cost'), heading: document.querySelector('[data-inspector-heading]')?.textContent ?? null, tab: document.querySelector('.context__tab--on')?.textContent ?? null, summary: document.querySelector('[data-review-summary]')?.textContent ?? null } })()`)
-          if (work && work.changes !== null && work.runs !== null && work.cost !== null) break
+          // (this redesign) Commands is now HIDDEN rather than a heading over "no
+          // commands yet" — an absent section is not actionable, and #17's
+          // brief names this exact pattern — so `work.runs` never resolves;
+          // the wait no longer gates on it.
+          if (work && work.changes !== null && work.cost !== null) break
           await sleep(100)
         }
-        ok(IDS[0], work !== null && work.changes !== null && work.runs !== null && work.run !== null && work.cost !== null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Commands', 'Cost']) && /not a repository/.test(work.changes) && work.runs === 'no commands yet' && /no agent on this panel/.test(work.cost),
+        ok(IDS[0], work !== null && work.changes !== null && work.run !== null && work.cost !== null && work.runs === null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Cost']) && /not a repository/.test(work.changes) && /no agent on this panel/.test(work.cost),
           JSON.stringify({ work, log: cLog.slice(-3) }))
 
         // The Jira panel: the verb, then the scope it opens.

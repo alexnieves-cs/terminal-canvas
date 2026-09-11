@@ -1164,7 +1164,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
   // edge-waiting: M232's join breath — a MOMENT like the others, three breaths
   // and then rest, never a heartbeat (pulse.1's rule, applied to an edge).
-  const allowed = ['chat-caret', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  // context-panel-enter: the Inspector redesign's restrained tab crossfade —
+  // the incoming `.context__panel` alone, since the outgoing one is already
+  // `display: none` the same tick (`[hidden]` cannot itself transition).
+  // integration-verified-pop: the Integrations redesign's success
+  // transition — one breath on a service's state pill the instant Verify
+  // succeeds.
+  const allowed = ['chat-caret', 'context-panel-enter', 'edge-waiting', 'integration-verified-pop', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
@@ -1215,12 +1221,19 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ more: more?.body, hidden: hidden?.body, github: github?.body }))
 }
 
+// (this redesign) The inspector's generic layout and configuration controls moved from
+// a full-width push-down disclosure to a real ⋯ dropdown menu — one primary
+// button in the bar, everything else floating over the canvas rather than
+// shoving the pane's own content down. `.inspector__menu` is positioned
+// (never `static`) and hidden by `display: none` while closed, and the
+// destructive footer (Close) is set off by its own divider rule.
 {
-  const more = all.find((r) => r.sel.trim() === '.context__more-actions')
-  const hidden = all.find((r) => r.sel.trim() === '.context__more-actions[hidden]')
-  ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one full-width disclosure that leaves no empty grid while closed',
-    more !== undefined && /grid-column:\s*1\s*\/\s*-1/.test(more.body) && /display:\s*grid/.test(more.body) && hidden !== undefined && /display:\s*none/.test(hidden.body),
-    JSON.stringify({ more: more?.body, hidden: hidden?.body }))
+  const menu = all.find((r) => r.sel.trim() === '.inspector__menu')
+  const hidden = all.find((r) => r.sel.trim() === '.inspector__menu[hidden]')
+  const divider = all.find((r) => r.sel.trim() === '.inspector__menu-divider')
+  ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one floating ⋯ menu, absent from layout while closed, with its destructive action set off by a divider',
+    menu !== undefined && /position:\s*absolute/.test(menu.body) && hidden !== undefined && /display:\s*none/.test(hidden.body) && divider !== undefined,
+    JSON.stringify({ menu: menu?.body, hidden: hidden?.body, divider: divider?.body }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

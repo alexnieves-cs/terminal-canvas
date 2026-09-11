@@ -2962,6 +2962,61 @@ export function Canvas({
     const off = window.canvas.settings.onChanged(read)
     return () => { live = false; off() }
   }, [settingRows])
+  // (this redesign) The inspector's width and pinned-through-compact setting, read the
+  // same way `globalFontSize` is — `shell.inspectorWidth`/`shell.inspectorPinned`
+  // are ordinary settings, so a write from the palette or from this pane's own
+  // resize handle must both apply, and only `settings:list` sees both.
+  const [inspectorWidth, setInspectorWidth] = useState(260)
+  const [inspectorPinned, setInspectorPinned] = useState(false)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const w = rows.find((r) => r.id === 'shell.inspectorWidth')
+        if (w && typeof w.value === 'number') setInspectorWidth(w.value)
+        const p = rows.find((r) => r.id === 'shell.inspectorPinned')
+        if (p && typeof p.value === 'boolean') setInspectorPinned(p.value)
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [settingRows])
+  // (this redesign) THE DRAG. Imperative, on `shellRef` directly — never React state per
+  // mousemove — for the same reason `applyDrag`'s own doc comment gives for
+  // panel dragging: recomputing from a per-frame delta through a re-render
+  // is the path that drifts and stutters. The CSS var IS the resize; commit
+  // to the setting only once, on mouseup, clamped to the schema's own bounds.
+  const onInspectorResizeDown = useCallback((event: ReactMouseEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    const shell = shellRef.current
+    if (shell === null) return
+    const startX = event.clientX
+    const startWidth = inspectorWidth
+    const min = 220, max = 480
+    // `MouseEvent` alone resolves to React's `MouseEvent<T>` in this file
+    // (imported for JSX handler props above) — `globalThis.MouseEvent` is
+    // the real DOM type a `document.addEventListener` callback receives.
+    const onMove = (e: globalThis.MouseEvent): void => {
+      // The inspector sits on the RIGHT edge, so dragging left (negative dx) widens it.
+      const next = Math.min(max, Math.max(min, startWidth - (e.clientX - startX)))
+      shell.style.setProperty('--shell-ctx-w', `${next}px`)
+    }
+    const onUp = (e: globalThis.MouseEvent): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const next = Math.min(max, Math.max(min, startWidth - (e.clientX - startX)))
+      setInspectorWidth(next)
+      void window.canvas.settings.set('shell.inspectorWidth', next)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [inspectorWidth])
+  const onToggleInspectorPinned = useCallback((): void => {
+    setInspectorPinned((v) => { const next = !v; void window.canvas.settings.set('shell.inspectorPinned', next); return next })
+  }, [])
   const fontOverridesSig = panels.map((p) => (isTerminalPanel(p) && p.fontSize !== undefined ? `${p.rect.id}=${p.fontSize}` : '')).filter(Boolean).join(',')
   useEffect(() => {
     const overrides: Record<string, number> = {}
@@ -6488,8 +6543,11 @@ export function Canvas({
     // line, as the credential rows already do it.
     onVerify: (service: string) => { void window.canvas.credential.verify(service).then((res) => { if (!res.ok) paletteActions.verifyCredential(service); reloadIntegrations() }).catch(() => reloadIntegrations()) },
     onRefresh: reloadIntegrations,
-    // M102. The roster's grants per service, by teammate name.
-    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => t.name)]))
+    // M102. The roster's grants per service, by teammate name, with the
+    // folders each may act from — a teammate's `places`, empty meaning it is
+    // granted the service but has nowhere yet to spend it (this redesign's permission
+    // line: who may use it, and from which workspace).
+    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => ({ name: t.name, places: t.places }))]))
   }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations, teammates])
 
   // M150. A note's chip asks the pane to filter: the request rides to the
@@ -6921,7 +6979,16 @@ export function Canvas({
       className={`shell${chrome.navVisible ? '' : ' shell--rail-collapsed'}${
         chrome.ctxVisible ? '' : ' shell--inspector-collapsed'}${
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
-        chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}`}
+        chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
+        inspectorPinned ? ' shell--inspector-pinned' : ''}`}
+      // (this redesign) The resize handle sets this same custom property live, imperatively,
+      // during a drag; this inline value is only what REACT last committed —
+      // the source of truth between drags, not during one. Set ONLY outside
+      // Compact (or when pinned): an inline style beats every stylesheet
+      // rule including `.shell[data-bp="compact"]`'s own zeroing, so setting
+      // it unconditionally would silently defeat the compact collapse for
+      // every user, not only a pinned one.
+      style={(chrome.bp !== 'compact' || inspectorPinned) ? ({ '--shell-ctx-w': `${inspectorWidth}px` } as CSSProperties) : undefined}
       data-bp={chrome.bp}
       onMouseDownCapture={(event) => {
         onMouseDownCapture(event)
@@ -6965,6 +7032,8 @@ export function Canvas({
         onToggleMerged={toggleMerged}
         contextOpen={chrome.ctxVisible}
         onToggleContext={chrome.toggleContext}
+        inspectorPinned={inspectorPinned}
+        onToggleInspectorPinned={onToggleInspectorPinned}
       />
       <Navigator
         hints={hintsLoaded ? hintsLeft(hintsSeen, 'rail') : []}
@@ -7752,6 +7821,7 @@ export function Canvas({
         repository={repository}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}
+        onResizeHandleDown={onInspectorResizeDown}
       />
     </div>
   )
