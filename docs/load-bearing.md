@@ -4550,3 +4550,23 @@ array's identity** (`Canvas.tsx`): `useChatsVersion` bumps on every streamed del
 feed re-indexes every transcript on the canvas several times a second while any agent types.
 **It uses its own `linksChatsVersion`**: Canvas's `chatsVersion` is declared ~1,100 lines below,
 and a dependency array is evaluated during render — borrowing it throws before declaration.
+**A deck export scrubs FIELD BY FIELD and decides a picture by its FIRST BYTES
+(`main/deck-export.ts`, M251).** A .pptx is a structure, like the portable file, so it cannot go
+through `outward` (one text, one note): title, each bullet, each paragraph, alt text and notes each
+pass `redactSecrets` and the count is part of the export sentence — which is why the file is on
+`gate.2`'s named list. A picture's bytes are embedded unscrubbed, so a deck line
+`![x](~/.ssh/id_rsa)` would carry a key out inside the zip if the extension were believed; M181's
+`readImage` decides by magic number and the line lands in the report as `not an image` instead.
+The renderer hands main a PATH, never text, so what leaves is what is on disk.
+
+**A described tool is INERT until a person reads it, and reading it has NO door (`shared/tool-spec.ts`,
+`main/tool-generate.ts`, `Canvas.tsx`'s `markTemplateRead`/`markPreviewRead`, M252).** The agent
+is run with `--tools ""`, so its answer is data and this app writes the files. A workflow is saved
+`reviewed: false`; an app's `PreviewBinding.reviewed: false` makes `BrowserNode` create NO guest
+(loading the page is running it) and Open / Start dev server refuse — and the binding's flag fails
+CLOSED on a malformed value. "I've read this" reaches the two mark-read functions only as
+`onMarkRead` props: a verb, palette row, agent line or action node that could clear it would let
+an agent un-inert its own answer (`verify:verbs tool.door.1` reads the door files). Marking read
+must clear the RECORD, the renderer's `templateRowsRef` and the DRAFT at once, the moment the save
+lands: Run reads the draft-or-rows copy, and clearing only main's record left the next Run refused
+for a window a check could hit (`verify:panels tool.2`, found by its own diagnostic detail).

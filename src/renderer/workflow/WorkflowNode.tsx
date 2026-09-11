@@ -10,6 +10,7 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState } from '@renderer/panels/panel-state'
 import { blockCount } from '@shared/workflow-nodes'
 import { isBuiltInTemplate } from '@shared/templates'
+import { capabilityLines, toolCapabilities } from '@shared/tool-spec'
 import { projectRun, type RunLiveFact, type RunNodeSupervision } from '@shared/run-outcome'
 import type { PersistedTemplate } from '@shared/templates'
 import type { PersistedRun } from '@shared/runs'
@@ -79,6 +80,12 @@ export interface WorkflowNodeProps {
   runReason: string | null
   /** Mint a chat pointed at this template's file and schema — §4.1's door, aimed at a template. */
   onBuildWithAi: (templateId: string) => void
+  /**
+   * M252. "I've read this" on an unread workflow (imported, or an agent's
+   * answer) — a person's act with no verb behind it, so no agent can un-inert
+   * its own output. Absent in a fixture, where the control is disabled.
+   */
+  onMarkRead?: (templateId: string) => void
 }
 
 export const REASON_MERGED_VIEW = 'leave merged view to act on this workflow'
@@ -381,6 +388,23 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
           <p className="pf__note workflow-node__gone" data-workflow-arm="gone">{TEMPLATE_GONE}</p>
         ) : (
           <>
+            {/* M252. An unread workflow says so ABOVE its verbs, with what it
+                would run and reach — read off its blocks, never off what it
+                says about itself — and the one control that allows runs. */}
+            {template.reviewed === false && (() => {
+              const lines = capabilityLines(toolCapabilities({ kind: 'workflow', nodes: template.nodes }))
+              return (
+                <div className="workflow-node__unread" data-workflow-unread role="status">
+                  <p className="pf__note">Not read yet — this workflow came from outside this canvas (a file, or an agent's answer). Its action blocks are refused by name until you read them.</p>
+                  <p className="pf__note" data-workflow-reach="commands">runs · {lines.commands}</p>
+                  <p className="pf__note" data-workflow-reach="network">reaches · {lines.network}</p>
+                  <p className="pf__note" data-workflow-reach="files">works in · {lines.files}</p>
+                  <button type="button" className="pf__verb pf__verb--word" data-workflow-mark-read disabled={readOnly === true || props.onMarkRead === undefined}
+                    title={readOnly === true ? REASON_MERGED_VIEW : 'You have read every block above — allow this workflow to run'}
+                    onMouseDown={press(() => props.onMarkRead?.(id))}>I've read this — allow runs</button>
+                </div>
+              )
+            })()}
             <div className="workflow-node__verbs" data-workflow-verbs>
               {verb('run', 'Run', props.runReason, () => props.onRun(id))}
               <button type="button" className="pf__verb pf__verb--word workflow-node__more" data-workflow-more

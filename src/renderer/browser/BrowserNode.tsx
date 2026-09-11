@@ -6,6 +6,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { browserHost, normaliseTypedUrl } from '@shared/browser-panel'
 import { clearBrowser, registerBrowser } from './browser-store'
 import { DEVICE_WIDTHS, deviceWidth, previewSourceLine, type Discovery as PreviewDiscovery, type DeviceWidthId } from '@shared/preview'
+import { capabilityLines } from '@shared/tool-spec'
 import { ChevronLeft, ChevronRight, RotateCw } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
 
@@ -67,6 +68,11 @@ export interface BrowserNodeProps {
    */
   onBindSource: (paneId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /**
+   * M252. "I've read this" on an unread tool's pane — a person's act with no
+   * verb behind it. Absent in a fixture, where the control is disabled.
+   */
+  onMarkRead?: (paneId: string) => void
+  /**
    * M195. Why binding is not available, when it is not — the subject rule is
    * the CANVAS's to answer, so the reason arrives as a prop and the control is
    * present-and-disabled with it rather than answering a refusal after a press
@@ -116,10 +122,15 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
   const say = (text: string): void => { setSaid(text); window.clearTimeout(sayTimer.current); sayTimer.current = window.setTimeout(() => setSaid((v) => (v === text ? null : v)), 4000) }
   const navigated = useRef(props.onNavigated)
   navigated.current = props.onNavigated
+  // M252. An unread tool's pane makes NO guest: its page is code an agent
+  // wrote, and loading it is running it. The effect keys on this, so the
+  // guest is created the moment a person marks it read — never before.
+  const inert = panel.preview?.reviewed === false
+  const reach = panel.preview?.tool
 
   useEffect(() => {
     const host = hostRef.current
-    if (host === null) return
+    if (host === null || inert) return
     const el = document.createElement('webview') as GuestElement
     el.className = 'browser-node__guest'
     el.setAttribute('data-browser-guest', id)
@@ -174,7 +185,7 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
       el.remove()
       clearBrowser(id)
     }
-  }, [id])
+  }, [id, inert])
 
   // M195 (D03). THE RELOAD EFFECT IS NOT HERE ANY MORE, and it must not come
   // back. It lived on this node from M185 to M192 and subscribed per pane with
@@ -346,8 +357,29 @@ function BrowserNodeImpl(props: BrowserNodeProps): JSX.Element {
         {/* M185. The named width is a LAYOUT of the host, not a transform: a
             scaled guest would report the wrong viewport to the page and every
             media query would answer for the pane rather than the device. */}
-        <div className="browser-node__host" ref={hostRef} data-preview-width={panel.device ?? 'full'}
-          style={deviceWidth(panel.device).px === null ? undefined : { width: `${deviceWidth(panel.device).px}px`, margin: '0 auto' }} />
+        {inert ? (
+          // M252. What the tool will reach, BEFORE anything of it runs — the
+          // folder, every address in its files, the dev script it asks for.
+          <div className="browser-node__unread" data-preview-unread role="status">
+            <p className="pf__note">A generated tool — nothing of it has run. Its page is code an agent wrote; read what it can reach first.</p>
+            {reach !== undefined && (() => {
+              const lines = capabilityLines(reach)
+              return (
+                <>
+                  <p className="pf__note" data-preview-reach="files">works in · {lines.files}</p>
+                  <p className="pf__note" data-preview-reach="network">reaches · {lines.network}</p>
+                  <p className="pf__note" data-preview-reach="commands">asks to run · {lines.commands}</p>
+                </>
+              )
+            })()}
+            <button type="button" className="pf__verb pf__verb--word" data-preview-mark-read disabled={readOnly || props.onMarkRead === undefined}
+              title={readOnly ? 'the merged view is read-only' : 'Let this pane load its page — the dev server still starts only when you ask for it'}
+              {...shellControl(() => props.onMarkRead?.(id))}>I've read this — allow it to run</button>
+          </div>
+        ) : (
+          <div className="browser-node__host" ref={hostRef} data-preview-width={panel.device ?? 'full'}
+            style={deviceWidth(panel.device).px === null ? undefined : { width: `${deviceWidth(panel.device).px}px`, margin: '0 auto' }} />
+        )}
       </div>
     </PanelFrame>
   )

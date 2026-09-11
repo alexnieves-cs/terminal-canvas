@@ -953,12 +953,29 @@ function parsePreviewBinding(value: unknown, id: string, warnings: string[]): Pr
     warnings.push(`browser panel ${id}: preview root ${JSON.stringify(record.root)} is not an absolute folder — the pane is kept, bound to nothing`)
     return undefined
   }
+  // M252. `reviewed` FAILS CLOSED, the template rule: `true` normalises to
+  // absent, and any other present value keeps the pane unread with a warning
+  // — a corrupted flag must never be the thing that starts somebody's code.
+  const rawReviewed = record.reviewed
+  const unread = rawReviewed !== undefined && rawReviewed !== true
+  if (unread && rawReviewed !== false) warnings.push(`browser panel ${id}: preview reviewed ${JSON.stringify(rawReviewed)} is not a boolean — the pane stays unread`)
+  // The capability lists are a DISPLAY of what arrived: a malformed one drops
+  // the field (the pane still refuses to run until read) rather than the pane.
+  const rawTool = record.tool
+  const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string')
+  let tool: PreviewBinding['tool']
+  if (rawTool !== undefined) {
+    const t = rawTool as Record<string, unknown> | null
+    if (t !== null && typeof t === 'object' && strings(t.files) && strings(t.network) && strings(t.commands)) tool = { files: t.files, network: t.network, commands: t.commands }
+    else warnings.push(`browser panel ${id}: preview tool capabilities were malformed and dropped`)
+  }
+  const extra = { ...(unread ? { reviewed: false as const } : {}), ...(tool === undefined ? {} : { tool }) }
   const rawSource = record.sourcePanelId
   if (rawSource !== undefined && (typeof rawSource !== 'string' || rawSource === '')) {
     warnings.push(`browser panel ${id}: preview sourcePanelId ${JSON.stringify(rawSource)} is not a panel id — the folder ${root} is still bound`)
-    return { root }
+    return { root, ...extra }
   }
-  return { root, ...(rawSource === undefined ? {} : { sourcePanelId: rawSource }) }
+  return { root, ...(rawSource === undefined ? {} : { sourcePanelId: rawSource }), ...extra }
 }
 
 function parsePanel(

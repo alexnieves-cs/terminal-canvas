@@ -59,6 +59,8 @@ export interface CreationHost {
   image(path?: string): Promise<CreationResult>
   workflow(): Promise<CreationResult>
   browser(url?: string): Promise<CreationResult>
+  /** M252. Describe a tool: with no description, ask for one; with one, generate — and what arrives is inert. */
+  tool(description?: string): Promise<CreationResult>
 }
 export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
 const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
@@ -76,7 +78,10 @@ export const CREATABLE_OBJECTS = [
   creation('browser', 'Browser/Preview', 'browser', (h, value) => h.browser(value)),
   creation('checklist', 'Checklist', 'checklist', (h, value) => h.document('checklist', value), 'folder'),
   creation('sheet', 'Sheet', 'sheet', (h, value) => h.document('sheet', value), 'folder'),
-  creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder')
+  creation('deck', 'Deck', 'deck', (h, value) => h.document('deck', value), 'folder'),
+  // M252. 'folder' because a tool is MADE somewhere: a mini app's files go
+  // under <folder>/tools/, and a workflow's blocks work in that folder.
+  creation('tool', 'Describe a tool', 'tool', (h, value) => h.tool(value), 'folder')
 ] as const
 
 export function creationReason(entry: typeof CREATABLE_OBJECTS[number], context: CreationAvailability): string | undefined {
@@ -125,6 +130,10 @@ export const VERBS: readonly VerbDef[] = [
   // nobody meant to lose. A destructive verb needs its confirmation at the
   // palette and is refused outright at the agent door (M190's critic, 3).
   { id: 'export-canvas', label: 'Canvas: export', args: [{ name: 'path', kind: 'text', optional: true }, { name: 'pictures', kind: 'value', optional: true }], destructive: true, actions: ['exportCanvas'], target: 'canvas', hint: 'write this canvas as one portable file; add with-pictures to include the pixels' },
+  // M251. NOT destructive, unlike export-canvas, and the difference is the
+  // same reason: there is no path argument, so every export goes through the
+  // save dialog and a person names the file — an agent line cannot overwrite.
+  { id: 'deck-export-pptx', label: 'Deck: export to PowerPoint', args: [panel()], destructive: false, actions: ['exportDeck'], target: 'panel', hint: 'write a Markdown deck as .pptx — headings, bullets, pictures and notes; secrets scrubbed and counted; anything left out is named' },
   { id: 'import-canvas', label: 'Canvas: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importCanvas'], target: 'canvas', hint: 'read a portable file into a NEW workspace; nothing in it is started' },
   // M250. A .docx becomes a NEW note beside it, unreviewed until a person reads
   // it. Not destructive: the docx is only read and the note is created with
@@ -386,6 +395,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   // gesture is OWED with its milestone, which is what the owed shape is for.
   feedback: { canvas: 'Help ▸ Prepare feedback… in the menu bar', palette: 'feedback.open', agent: 'tc plan feedback', workflow: 'an action node whose line is: feedback' },
   'export-canvas': { canvas: { reason: 'export needs a canvas with something on it, so the launcher (an empty canvas) is the wrong home for it and the frame has no room at rest', due: 'M191' }, palette: 'portable.export', agent: 'tc plan export-canvas', workflow: 'an action node whose line is: export-canvas' },
+  'deck-export-pptx': { canvas: 'deck PPTX', palette: 'deck.export-pptx', agent: 'tc plan deck-export-pptx f1', workflow: 'an action node whose line is: deck-export-pptx f1' },
   'import-canvas': { canvas: 'the launcher\'s Import a canvas… line', palette: 'portable.import', agent: 'tc plan import-canvas', workflow: 'an action node whose line is: import-canvas' },
   'import-docx': { canvas: 'drop a .docx on the canvas', palette: 'note.import-docx', agent: 'tc plan import-docx /tmp/Plan.docx', workflow: 'an action node whose line is: import-docx /tmp/Plan.docx' },
   'node-test': { canvas: 'Test this node on the workflow panel\'s selected block', palette: 'node.test', agent: 'tc plan node-test t1 n1', workflow: { reason: 'a node that tests a node is a loop with no stop', due: WORKFLOW_EXECUTOR_DUE } },

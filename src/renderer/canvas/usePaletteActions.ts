@@ -24,6 +24,7 @@ import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type AgentPlanCaller, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
 import { importedNoteReason } from '@shared/imported-note'
+import { deckExportSentence } from '@shared/deck-pptx'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
@@ -340,6 +341,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'node-test': return self.testNode(a.template!, a.node)
           case 'feedback': return self.prepareFeedback(a.says)
           case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
+          case 'deck-export-pptx': return self.exportDeck(step.args.panel as string)
           case 'import-canvas': return self.importCanvas(a.path)
           // A plan must NAME the document: with no path the import opens the
           // system's chooser, and a modal nobody asked for in front of the
@@ -2073,6 +2075,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     exportCanvas: (path, withPixels) => exportCanvasFile(path, withPixels === 'with-pictures'),
     importCanvas: (path) => importCanvasFile(path),
     importDocx: (path) => importDocxFile(path),
+    // M251. ONE action for the four doors. The renderer hands main a PATH and
+    // never the text: main reads the file itself, so what is exported is what
+    // is on disk, and the scrub runs where the bytes are.
+    exportDeck: async (panelId) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+      if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+      if (panel.kind !== 'file') return { kind: 'refused', reason: `${panelId} is not a file panel — a deck is a Markdown file` }
+      if (!/\.(md|markdown)$/i.test(panel.source.path)) return { kind: 'refused', reason: `${panel.source.path} is not Markdown — a deck is a .md file with --- between slides` }
+      const r = await window.canvas.export.deckPptx({ path: panel.source.path })
+      return r.kind === 'written' || r.kind === 'cancelled' ? { kind: 'ran', note: deckExportSentence(r) } : { kind: 'refused', reason: deckExportSentence(r) }
+    },
     addNote: (form, text) => addNote(form, text),
     setNoteText: (panelId, text) => setNoteText(panelId, text),
     setNoteTint: (panelId, tint) => setNoteTint(panelId, tint),

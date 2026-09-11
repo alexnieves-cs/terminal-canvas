@@ -33,6 +33,7 @@ import type { PersistedRoutine } from '../shared/routines'
 import type { Shelf } from '../shared/skills'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
+import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
 import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
@@ -491,8 +492,11 @@ export function registerIpcHandlers(
   /** M189. Appended last, like every collaborator before it. */
   portable: PortableHandlers = INERT_PORTABLE,
   /** M250. Appended last, like every collaborator before it. */
-  docx: DocxHandlers = INERT_DOCX
+  docx: DocxHandlers = INERT_DOCX,
+  /** M252. Appended last, like every collaborator before it — a harness that does not wire it gets a named refusal, never a process. */
+  tools: ToolHandlers = INERT_TOOLS
 ): void {
+  ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
   // M250. The renderer names a path (or none, for the chooser) and nothing
   // else; a non-string is treated as absent rather than trusted.
@@ -644,6 +648,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, req: PanelTextExportRequest) => exporters.panelText(req))
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
   ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
+  ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))

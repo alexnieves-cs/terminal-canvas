@@ -3209,6 +3209,116 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } catch { /* the checks below will say so */ }
     }
 
+    // M252 — tool.1–3. DESCRIBE A TOOL, END TO END IN THE REAL RENDERER.
+    //     Main's generator is replaced by a PLANTED answer (`state.toolReply`),
+    //     so no `claude` process starts here; everything the renderer does with
+    //     the answer is production. The workflow is saved UNREVIEWED and its
+    //     action block refused by name; the app's pane makes NO guest, and its
+    //     Open and Start dev server are refused; "I've read this" — pressed on
+    //     the object, never called — is the only thing that lifts either.
+    const TOOL_IDS = [
+      'tool.1 a described workflow arrives saved as reviewed: false with its reach on the panel; its run makes nothing, and node-test is refused naming the block and saying it has not been read',
+      'tool.2 "I\'ve read this" pressed on the workflow panel clears the mark on the record, and the same run then makes its sticky note',
+      'tool.3 a described app arrives as a preview with NO guest and its reach (an address and the dev script) shown before anything runs; Open and Start dev server are refused by name and no process starts; after "I\'ve read this" the pane creates its guest'
+    ]
+    {
+      let toolDir = null
+      try {
+        toolDir = realpathSync(mkdtempSync(join(tmpdir(), 'tc-tool-')))
+        const dir = toolDir
+        writeFileSync(join(dir, 'seed.md'), '# seed\n')
+        // A selected FILE panel puts its folder in scope (`noteRoot`), which
+        // is what a `folder` creation needs — no terminal, no process.
+        const seedCanvas = async () => {
+          layoutStore.save({ panels: [{ id: 'tl1', kind: 'file', x: 200, y: 200, w: 400, h: 300, z: 1, source: { path: join(dir, 'seed.md') } }], camera: { x: 0, y: 0, scale: 1 }, selectedId: 'tl1', focusedId: null })
+          flushLayoutStore()
+          const re = new Promise((resolve) => wc.once('did-finish-load', resolve)); wc.reload(); await re
+          await settle()
+          // The seeded canvas and ONLY it: a panel that was already there would
+          // pass a presence test on a canvas this check did not write.
+          const present = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="tl1"]') !== null && document.querySelectorAll('.panel[data-panel-id]').length === 1`), 20000)
+          // SELECTED the way a person selects — the rail row — rather than
+          // trusting the saved selectedId: a renderer autosave racing the
+          // reload can write the previous selection back over it (tool.3's
+          // first red: no folder in scope, "select a panel with a workspace
+          // folder first"). The context-tree check selects the same way.
+          await dockTo('panels')
+          const picked = await clickRail('[data-rail-row="tl1"] .rail-row__main')
+          await settle()
+          return present === true && picked === true
+        }
+        const plan = (line, ms = 8000) => ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line }, null, ms)
+        const notes = () => wc.executeJavaScript(`document.querySelectorAll('.panel[data-panel-kind="note"]').length`)
+        const LINE = 'note-add sticky from a generated tool'
+
+        // tool.1 — the workflow arm.
+        state.toolReply = { kind: 'workflow', template: { name: 'Generated check', nodes: [{ key: 'a1', kind: 'action', line: LINE, cwd: dir, dx: 0, dy: 0 }], edges: [], reviewed: false }, capabilities: { files: [dir], network: [], commands: [LINE] }, dropped: [] }
+        const seeded = await seedCanvas()
+        const notesBefore = await notes()
+        const made = await plan('create-tool a note every night')
+        await settle()
+        flushLayoutStore()
+        const tpl = layoutStore.current().templates.find((t) => t.name === 'Generated check')
+        const sel = tpl === undefined ? null : `[data-workflow-template=${JSON.stringify(tpl.id)}]`
+        const banner = sel === null ? null : await waitUntil(() => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel + ' [data-workflow-unread]')}); return b ? b.textContent : false })()`), 5000)
+        const ranUnread = tpl === undefined ? null : await plan(`workflow-run ${tpl.id}`)
+        await settle()
+        const tested = tpl === undefined ? null : await plan(`node-test ${tpl.id} a1`)
+        await settle()
+        const notesAfterRefusal = await notes()
+        ok(TOOL_IDS[0],
+          seeded === true && made?.kind === 'ran' && tpl !== undefined && tpl.reviewed === false &&
+            typeof banner === 'string' && banner.includes(LINE) && /Not read yet/.test(banner) &&
+            tested?.kind === 'refused' && /has not been read yet/.test(String(tested.reason)) && /a1/.test(String(tested.reason)) &&
+            notesAfterRefusal === notesBefore,
+          JSON.stringify({ seeded, made, tpl: tpl && { id: tpl.id, reviewed: tpl.reviewed }, banner, ranUnread, tested, notesBefore, notesAfterRefusal }))
+
+        // tool.2 — pressed, not called: the button's own mousedown.
+        const pressed = sel === null ? false : await wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(sel + ' [data-workflow-mark-read]')}); if (!b) return false; b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); return true })()`)
+        const cleared = tpl === undefined ? false : await waitUntil(() => { flushLayoutStore(); const t = layoutStore.current().templates.find((x) => x.id === tpl.id); return t !== undefined && !('reviewed' in t) }, 5000)
+        // The RENDERER is the sync point, not main's record: Run reads the
+        // renderer's copy, and the banner leaving is what a person waits for.
+        const bannerGone = sel === null ? false : await waitUntil(() => wc.executeJavaScript(`document.querySelector(${JSON.stringify(sel + ' [data-workflow-unread]')}) === null`), 5000)
+        const ranRead = tpl === undefined ? null : await plan(`workflow-run ${tpl.id}`)
+        const noteMade = await waitUntil(async () => (await notes()) === notesBefore + 1, 8000)
+        // Diagnostics, carried in the detail so a red names its layer: what a
+        // spoken refusal left in the palette, and what testing the block ALONE
+        // answers — `node-test` reads the same draft-or-record the run does.
+        const spoken = await wc.executeJavaScript(`(document.querySelector('.palette')?.textContent ?? '').slice(0, 300)`)
+        const testedRead = noteMade === true || tpl === undefined ? null : await plan(`node-test ${tpl.id} a1`)
+        ok(TOOL_IDS[1], pressed === true && cleared === true && bannerGone === true && ranRead?.kind === 'ran' && noteMade === true,
+          JSON.stringify({ pressed, cleared, bannerGone, ranRead, notes: await notes(), notesBefore, spoken, testedRead }))
+        if (tpl !== undefined) layoutStore.deleteTemplate(tpl.id)
+
+        // tool.3 — the app arm.
+        const root = join(dir, 'tools', 'stop-watch')
+        state.toolReply = { kind: 'app', name: 'Stop watch', root, url: 'http://127.0.0.1:9', devScript: 'python3 -m http.server 4173', capabilities: { files: [root], network: ['time.example.net'], commands: ['python3 -m http.server 4173'] }, dropped: [] }
+        const seededApp = await seedCanvas()
+        const ptyBefore = ptyManager.list().length
+        const madeApp = await plan('create-tool a stopwatch')
+        await settle()
+        const pane = await waitUntil(() => wc.executeJavaScript(`(() => { const u = document.querySelector('[data-preview-unread]'); if (!u) return false; return { text: u.textContent, guests: document.querySelectorAll('webview[data-browser-guest]').length } })()`), 5000)
+        const devRefused = await plan('preview-dev dev')
+        const openRefused = await plan('preview-open http://127.0.0.1:9')
+        await settle()
+        const ptyAfter = ptyManager.list().length
+        // shellControl runs on CLICK (its mousedown only prevents focus loss).
+        const clicked = await clickRail('[data-preview-mark-read]')
+        const guest = await waitUntil(() => wc.executeJavaScript(`document.querySelectorAll('webview[data-browser-guest]').length > 0 && document.querySelector('[data-preview-unread]') === null`), 5000)
+        ok(TOOL_IDS[2],
+          seededApp === true && madeApp?.kind === 'ran' && pane && pane.guests === 0 && /time\.example\.net/.test(pane.text) && /python3 -m http\.server 4173/.test(pane.text) &&
+            devRefused?.kind === 'refused' && /nobody has read yet/.test(String(devRefused.reason)) &&
+            openRefused?.kind === 'refused' && /nobody has read yet/.test(String(openRefused.reason)) &&
+            ptyAfter === ptyBefore && clicked === true && guest === true,
+          JSON.stringify({ seededApp, madeApp, pane, devRefused, openRefused, ptyBefore, ptyAfter, clicked, guest }))
+      } catch (toolErr) {
+        for (const id of TOOL_IDS) ok(id, false, 'threw: ' + String(toolErr && toolErr.stack || toolErr))
+      } finally {
+        state.toolReply = undefined
+        if (toolDir !== null) rmSync(toolDir, { recursive: true, force: true })
+      }
+    }
+
     // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.
     //     (a) An `action` node holds a verb LINE, and running the workflow
     //         runs it through the same executor the palette and the agent door

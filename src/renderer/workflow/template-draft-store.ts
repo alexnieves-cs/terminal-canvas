@@ -73,6 +73,23 @@ export function resetDraft(id: string, saved?: PersistedTemplate): void {
   notify(id)
 }
 
+/**
+ * M252. A person read the workflow: the DRAFT loses its unread mark too,
+ * because Run runs the draft when there is one (M184) — clearing only the
+ * record left every door refused, found by verify:panels tool.2. A dirty
+ * draft keeps its edits; its base moves to the record's new revision, since
+ * the only change between the two was this mark, so its next save is not
+ * refused as stale for a write the person made themselves.
+ */
+export function markDraftRead(id: string, revision: number): void {
+  const draft = drafts.get(id)
+  if (draft === undefined || draft.template.reviewed !== false) return
+  const template = { ...draft.template }
+  delete template.reviewed
+  drafts.set(id, { template, baseRevision: revision, dirty: draft.dirty })
+  notify(id)
+}
+
 export function clearDraft(id: string): void { const had = drafts.delete(id); selection.delete(id); if (had) notify(id) }
 
 export function selectedOf(id: string): string | null { return selection.get(id) ?? null }

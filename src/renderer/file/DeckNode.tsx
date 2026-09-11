@@ -7,6 +7,7 @@ import { hashText } from '@shared/deck'
 import type { ImageResult } from '@shared/starter'
 import type { CreationResult } from '@shared/verb-table'
 import { PanelFrame } from '@renderer/components/PanelFrame'
+import { deckExportSentence } from '@shared/deck-pptx'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
 import { Markdown } from '@renderer/chat/Markdown'
 import { registerDeck, type DeckController } from './deck-controllers'
@@ -197,6 +198,11 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
       <button type="button" className="pf__verb" disabled={unavailable !== null} title="Present full-window" onMouseDown={(e) => e.stopPropagation()} onClick={() => setPresenting(true)}>Present</button>
       <button type="button" className="pf__verb" disabled={unavailable !== null} title="Export to PDF, one page per slide" onMouseDown={(e) => e.stopPropagation()}
         onClick={() => { void controller.exportPdf().then(report) }}>PDF</button>
+      {/* M251. The .pptx door beside the PDF one, the same shape: main reads the
+          file, scrubs every field and names what a slide could not hold. */}
+      <button type="button" className="pf__verb" disabled={unavailable !== null} title="Export to PowerPoint — titles, bullets, pictures and speaker notes; secrets scrubbed, anything left out named" onMouseDown={(e) => e.stopPropagation()}
+        data-deck-export-pptx
+        onClick={() => { void window.canvas.export.deckPptx({ path }).then((r) => report(r.kind === 'written' || r.kind === 'cancelled' ? { kind: 'ran', note: deckExportSentence(r) } : { kind: 'refused', reason: deckExportSentence(r) })) }}>PPTX</button>
     </>}>
     <div ref={body} className="deck-node__body" data-deck-body tabIndex={0}
       onMouseDown={(e) => { e.stopPropagation(); props.onFocus(id) }}

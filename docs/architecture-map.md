@@ -993,7 +993,10 @@ src/renderer/groups/
   product does not have; a lost lane routes to `Start work again…`.
   **`Mark reviewed` has no verb, no palette row and no agent line, on purpose** — an agent line
   asserting a person reviewed something is the false claim this phase removes; it sits beside
-  `Commit`. `Continue the conversation` INSERTS and never sends (M80), and requires a CHAT:
+  `Commit`. **M252's `I've read this` is the same shape for the same reason** — on the workflow
+  panel and on an unread tool's preview pane, reachable only through each node's `onMarkRead`
+  prop (`Canvas.tsx`'s `markTemplateRead` / `markPreviewRead`); an agent that could clear
+  `reviewed` would un-inert its own answer. `verify:verbs tool.door.1` reads the door files. `Continue the conversation` INSERTS and never sends (M80), and requires a CHAT:
   `insertIntoComposer` is a no-op for anything else, so over a terminal lane the control was enabled
   and silently did nothing. `resume` is a FIFTH card verb ADDED beside the four, never a rename — the
   aliases are what two hundred checks select on.

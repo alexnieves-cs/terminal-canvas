@@ -111,7 +111,8 @@ review:baseline review:at review:diff git:status review:across review:commit rev
 credential:list credential:set credential:delete credential:verify jira:list github:list
 broker:audit jira:transitions jira:comment jira:transition file:open file:read file:close
 fs:list toolbox:read toolbox:permissions file:write file:create diagnostics:sample
-diagnostics:export export:panel-text export:canvas-png export:deck-pdf env:report link:open ledger:list
+diagnostics:export export:panel-text export:canvas-png export:deck-pdf deck:export-pptx
+tool:generate env:report link:open ledger:list
 ledger:usage spawn:sheet spawn:recent agent:create agent:send agent:interrupt agent:dispose
 agent:answer agent:list agent:transcript agent:import agent:clipboard-image
 attachment:clipboard-file agent:auto-start agent:auto-stop agent:grants agent:revoke-grants

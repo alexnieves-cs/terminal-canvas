@@ -252,7 +252,9 @@ app.whenReady().then(() => {
   // file written and read by main; what to make of a parse is the renderer's.
   // M250 docx:import (134) — a .docx converted in main into a NEW note beside it.
   // M248 export:deck-pdf (135) — a deck printed to PDF by a hidden, script-less window in main.
-  const EXPECTED_CHANNELS = 136
+  // M251 deck:export-pptx (137) — main reads the deck and writes the .pptx.
+  // M252 tool:generate (138) — one headless run with no tools; its answer is data.
+  const EXPECTED_CHANNELS = 138
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)
