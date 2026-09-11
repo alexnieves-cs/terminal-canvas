@@ -1009,7 +1009,7 @@ function FileNodeImpl({
               {tags.length > 0 && (
                 <p className="file-node__tags" data-file-tags={tags.join(' ')}>
                   {tags.map((t) => (
-                    <button key={t} type="button" className="file-node__tag" data-file-tag={t}
+                    <button key={t} type="button" className="file-node__tag" data-file-tag={t} title={`notes tagged #${t}`}
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => { event.stopPropagation(); vault.onFilterTag(t) }}>#{t}</button>
                   ))}

@@ -119,7 +119,7 @@ function SkillsWorkspaceImpl(props: SkillsWorkspaceProps): JSX.Element {
         <h2 className="skills-ws__title">Skills</h2>
         <div className="skills-ws__tabs" role="tablist" aria-label="Kind">
           {SKILL_PANE_KINDS.map((k) => (
-            <button key={k} type="button" role="tab" className="skills-ws__tab" aria-selected={props.kind === k}
+            <button key={k} type="button" role="tab" className="skills-ws__tab" aria-selected={props.kind === k} title={`Show ${k}s`}
               {...shellControl(() => props.onChooseKind(k))}>{k}s</button>
           ))}
         </div>
