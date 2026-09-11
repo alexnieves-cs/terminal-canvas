@@ -309,27 +309,27 @@ export function chatHeaderLine(input: { cwd: string; branch?: string; backend: s
  * an empty group is omitted (a heading over nothing is a promise the list
  * cannot keep); the group order is fixed here and nowhere else.
  */
-export type RailGroupId = 'agents' | 'files' | 'reviews' | 'boards' | 'integrations' | 'workflows'
+export type RailGroupId = 'agents' | 'files' | 'reviews' | 'work' | 'workflows' | 'capabilities'
 export interface RailGroup<R extends { state: { kind: string } }> { id: RailGroupId; label: string; rows: R[] }
 
 const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[] = [
   { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat'] },
-  { id: 'files', label: 'Files', kinds: ['file', 'note', 'image'] },
+  { id: 'files', label: 'Files', kinds: ['file', 'note', 'image', 'browser', 'memory'] },
   { id: 'reviews', label: 'Reviews', kinds: ['review'] },
-  { id: 'boards', label: 'Boards', kinds: ['work', 'jira', 'github'] },
-  { id: 'integrations', label: 'Integrations', kinds: ['browser', 'watcher', 'memory', 'toolbox', 'skill'] },
-  { id: 'workflows', label: 'Workflows', kinds: ['workflow'] }
+  { id: 'work', label: 'Work', kinds: ['work', 'jira', 'github'] },
+  { id: 'workflows', label: 'Workflows', kinds: ['workflow', 'watcher'] },
+  { id: 'capabilities', label: 'Capabilities', kinds: ['toolbox', 'skill'] }
 ]
 
-/** The `other` group by policy: a kind the table does not name sits with the integrations — a named `Other` heading would be more honest and costs a golden; declined in the ledger by name. */
-const FALLBACK = GROUP_ORDER.findIndex((g) => g.id === 'integrations')
+/** A future kind remains discoverable with capabilities until its product role is named. */
+const FALLBACK = GROUP_ORDER.findIndex((g) => g.id === 'capabilities')
 
 export function railGroups<R extends { state: { kind: string } }>(rows: readonly R[], kindOf: (row: R) => string = (r) => r.state.kind): RailGroup<R>[] {
   const out: RailGroup<R>[] = GROUP_ORDER.map((g) => ({ id: g.id, label: g.label, rows: [] }))
   for (const row of rows) {
     const kind = kindOf(row)
     const i = GROUP_ORDER.findIndex((g) => g.kinds.includes(kind))
-    // A kind this table does not name lands with the integrations rather than
+    // A kind this table does not name lands with capabilities rather than
     // vanishing: a row that disappears is indistinguishable from a feature
     // that was never built (CLAUDE.md).
     out[i === -1 ? FALLBACK : i].rows.push(row)

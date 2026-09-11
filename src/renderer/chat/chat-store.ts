@@ -38,7 +38,7 @@ export interface ChatState {
    */
   /** M98. Tools main answered from a session grant this launch, in order — the quiet row's source. */
   granted?: string[]
-  insert?: { seq: number; text?: string; attach?: { kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
+  insert?: { seq: number; text?: string; /** M205. Hold the keyboard once sending re-enables — asked for explicitly, never implied. */ focus?: true; attach?:{ kind: 'path'; path: string } | { kind: 'data'; mediaType: string; base64: string; name: string } }
   /** M122. Ask the panel to scroll a stored turn into view — a search hit's flight. */
   scrollTo?: { seq: number; turnIndex: number }
   /**
@@ -181,10 +181,14 @@ export function seedChat(
 let insertSeq = 0
 
 /** M75. Ask the composer of `id` to insert text at its caret. */
-export function insertIntoComposer(id: string, text: string): void {
+export function insertIntoComposer(id: string, text: string, opts?: { focus?: true }): void {
   const prev = states.get(id)
   if (!prev) return
-  update(id, { ...prev, insert: { seq: ++insertSeq, text } })
+  // M205. `focus` is an EXPLICIT request to hold the keyboard once sending
+  // re-enables. Only the first start asks for it; every other insert (a
+  // review's Continue, the palette's prompt row) must not take the keyboard
+  // when a turn ends later (the M205 critic).
+  update(id, { ...prev, insert: { seq: ++insertSeq, text, ...(opts?.focus === true ? { focus: true as const } : {}) } })
 }
 
 /** M122. Ask the chat panel of `id` to scroll the turn at `turnIndex` into view. */

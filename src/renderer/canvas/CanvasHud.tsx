@@ -9,7 +9,14 @@ export interface CanvasHudProps {
   onFit: () => void
   /** M123. The last update check's `newer` result, or absent. */
   updateNewer?: { version: string; url: string } | null
+  /** M247. The agent-links toggle — the canvas door of `canvas.agentLinks` (the palette row, the agent line and an action node are the other three). */
+  agentLinks?: { on: boolean; onToggle: () => void }
 }
+
+// M247. A link glyph, drawn here until a second surface needs it (NewObjectRow's rule).
+const LinksGlyph = (): JSX.Element => <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.3" aria-hidden="true">
+  <circle cx="3.5" cy="4" r="2" /><circle cx="12.5" cy="12" r="2" /><path d="M5.3 5.2 C 8 6, 8 10, 10.7 10.8" />
+</svg>
 
 /**
  * The step the +/- buttons take. Restated here rather than imported because
@@ -28,7 +35,7 @@ const ZOOM_STEP = 1.2
  * in one organised settings surface" rule does not claim it. It renders
  * nothing at all on the tmux path, so the common case costs a null check.
  */
-export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer }: CanvasHudProps): JSX.Element {
+export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks }: CanvasHudProps): JSX.Element {
   return (
     <div className="canvas-hud">
       {/* M46. The zoom cluster: the ONE pointer surface in the HUD (the rest
@@ -42,6 +49,13 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer }: CanvasHudP
           aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
         <button type="button" className="icon-button" data-hud-fit title="Fit everything (⌘1)"
           aria-label="Fit everything" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">fit</span></button>
+        {/* M247. Inside the zoom cluster, the HUD's one pointer surface, so it
+            inherits that cluster's wheel yielding rather than needing its own. */}
+        {agentLinks !== undefined && (
+          <button type="button" className="icon-button" data-hud-agent-links aria-pressed={agentLinks.on}
+            title={agentLinks.on ? 'Hide agent links' : 'Show agent links (what each agent read, wrote or drafted)'}
+            aria-label={agentLinks.on ? 'Hide agent links' : 'Show agent links'} {...shellControl(agentLinks.onToggle)}><LinksGlyph /></button>
+        )}
       </span>
       {/* M173. THE STATUS BAR AT REST SAYS NOTHING (the brief, finding 4): the
           coordinates, the selected panel's name, the CPU · RAM total and the tmux

@@ -257,7 +257,7 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D09 — Make onboarding intent-led
 
-- [ ] Complete and record D09.
+- [ ] Complete and record D09. **M205** — built; the record is [docs/build-log/m205-d09-intent-led-onboarding.md](build-log/m205-d09-intent-led-onboarding.md). Left unticked on purpose: the gate is owed (§6 there — the shell/agents reds are shared by the base commit, and `verify:visual`/`verify:packaged` did not complete under load).
 
 **Do in order:**
 
@@ -278,7 +278,10 @@ Inspection is not permission. Context resolution must never broaden a teammate's
 
 ## D10 — Finish hierarchy, navigation, and contextual controls
 
-- [ ] Complete and record D10.
+- [ ] Complete and record D10. **M206–M208** — built; the record is
+  [docs/build-log/m206-m208-d10-hierarchy.md](build-log/m206-m208-d10-hierarchy.md). Left unticked:
+  the inherited D09/base gate remains red and the audit reconciliation keeps backlog #86 and the
+  harness-owned remainder of #88 explicitly open rather than claiming them from presentation work.
 
 **Why here:** Finish the surfaces after the primary journey and state vocabulary stabilize. Apply these standards during earlier work as well; this phase is the comprehensive reconciliation.
 

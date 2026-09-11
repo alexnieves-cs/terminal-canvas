@@ -3,9 +3,15 @@ import { CREATABLE_OBJECTS } from '@shared/verb-table'
 import { creationCommands, type PaletteActions } from '@renderer/palette/commands'
 import { KindTerminal, KindChat, KindNote, KindImage, KindWorkflow, KindBrowser, Check, Plus } from '@renderer/icons'
 
+// M245. A grid, drawn here rather than added to the shared icon set until a second surface needs it.
+const SheetGlyph = (): JSX.Element => <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
+  <rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6.5h12M2 10h12M6.5 2.5v11" />
+</svg>
+
 const icons: Record<string, () => JSX.Element> = {
   terminal: () => <KindTerminal />, agent: () => <KindChat />, note: () => <KindNote />,
-  image: () => <KindImage />, workflow: () => <KindWorkflow />, browser: () => <KindBrowser />, checklist: () => <Check />
+  image: () => <KindImage />, workflow: () => <KindWorkflow />, browser: () => <KindBrowser />, checklist: () => <Check />,
+  sheet: () => <SheetGlyph />
 }
 
 export function NewObjectRow(props: { actions: Pick<PaletteActions, 'createObject'>; merged?: boolean; noteRoot: string | null; agentReason?: string }): JSX.Element {

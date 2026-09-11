@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, dirname } from 'node:path'
-import type { FileResult } from '@shared/file-panel'
+import type { FileEncoding, FileResult } from '@shared/file-panel'
 import { readFile } from './file-read'
 
 /**
@@ -24,6 +24,8 @@ interface Entry {
   timer: NodeJS.Timeout | undefined
   hash: string
   onChange: (result: FileResult) => void
+  /** M245. The encoding the panel read with, so a change arrives in the arm it already renders. */
+  encoding: FileEncoding | undefined
 }
 
 /**
@@ -59,13 +61,13 @@ export class FileWatchers {
    * what makes the very first change event a real change rather than a
    * duplicate of the content the panel is already showing.
    */
-  watch(panelId: string, path: string, onChange: (result: FileResult) => void): FileResult {
+  watch(panelId: string, path: string, onChange: (result: FileResult) => void, encoding?: FileEncoding): FileResult {
     // Re-arming at the same id replaces rather than stacks: a component that
     // remounts (a workspace switch back, a React re-key) must not leave the
     // previous FSWatcher alive with a stale callback.
     this.close(panelId)
 
-    const result = readFile(path)
+    const result = readFile(path, encoding)
     const base = basename(path)
     let watcher: FSWatcher
     try {
@@ -92,7 +94,8 @@ export class FileWatchers {
       base,
       timer: undefined,
       hash: hashOf(result),
-      onChange
+      onChange,
+      encoding
     })
     return result
   }
@@ -108,7 +111,7 @@ export class FileWatchers {
       // renderer no longer has.
       const current = this.entries.get(panelId)
       if (current === undefined) return
-      const result = readFile(current.path)
+      const result = readFile(current.path, current.encoding)
       const hash = hashOf(result)
       // The dedupe, and it is the design rather than an optimisation — the
       // rule applyEvent already follows for agent state. Undeduped this is a

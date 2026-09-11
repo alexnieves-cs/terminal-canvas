@@ -70,8 +70,11 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.
   'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand',
-  // M251. The same for a pack: a teammate chooses neither where this app
-  // writes nor what a person is asked to add to their library.
+  // M246: `sheet-edit` is deliberately NOT here. Through the agent door it
+  // PROPOSES — a draft, no file changes — and keeping a draft is refused to
+  // every agent by name (sheet-draft.ts's sheetReviewRefusal).
+  // M251. The same as M189's for a pack: a teammate chooses neither where
+  // this app writes nor what a person is asked to add to their library.
   'export-pack', 'import-pack'
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {

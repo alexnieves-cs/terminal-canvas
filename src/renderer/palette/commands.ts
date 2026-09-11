@@ -151,6 +151,12 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
+  /** M245. Set one cell of an open sheet, through its guarded write. M246: with an agent caller it proposes. */
+  editSheet(panel: string, cell: string, value: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
+  /** M246. Keep or discard a sheet's draft cells; keeping is refused to an agent caller. */
+  reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
+  /** M247. Show, hide or toggle the agent → object links (the `canvas.agentLinks` setting). */
+  setAgentLinks(mode: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -502,7 +508,7 @@ export interface PaletteActions {
   /** M204 (D08). Compact a task's panels in reading order, clear of every other panel, as ONE undo. Refused in the merged view. */
   arrangeTask(panelId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Run the shape on the diagram — the draft when there is one; the same instantiation the panel's Run calls. */
-  runWorkflowNow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
+  runWorkflowNow(templateId: string, caller?: import('@shared/plan').AgentPlanCaller): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M184. Interrupt everything this workflow started; nothing is killed. */
   stopWorkflow(templateId: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   /** M74. A claude terminal's session, rendered and continued as a chat. */
@@ -925,9 +931,11 @@ export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObj
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
-  out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
+  out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
+  out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'sheet-review <panel> keep|discard <cell, B2:C4 or all>', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', run: () => actions.beginRunVerb() })
+  out.push({ id: 'sheet.edit', title: 'Sheet: set a cell…', subtitle: 'sheet-edit <panel> <cell> <value or =formula>', group: 'canvas', searchText: 'sheet spreadsheet csv xlsx cell edit formula set', run: () => actions.beginRunVerb() })
 
   // --- Panels --------------------------------------------------------------
 
@@ -1254,6 +1262,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     shortcut: '⌘⇧N',
     run: () => actions.beginSpawnSheet()
   })
+  // M244's creation rows, AFTER New panel… rather than ahead of it: M65's rule
+  // (verify:palette sheet.1) is that the considered way to start a panel heads
+  // the spawn section. Pushed first, they displaced it — failing on main since
+  // 7a3323d0, found while gating M245–M247.
+  out.push(...creationCommands(ctx))
 
   // M80. Templates: one row each, disabled by its own reason when it cannot
   // run; and the save verb, refused by name with nothing selected.
@@ -1867,7 +1880,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M89. Every service on one page: the door is the navigator's pane, and
   // this row enters the Credentials scope the page's verbs open, so there
   // is one path from either side.
-  out.push({ id: 'manage.integrations', title: 'Manage integrations…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'integrations services connected github jira credentials tokens', run: () => {} })
+  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github jira credentials tokens', run: () => {} })
   // M88. PRESENT at rest and disabled with the Connect reason when no
   // github credential exists — the Jira door below only exists once a
   // credential does, which is the "row that disappears" rule broken by a

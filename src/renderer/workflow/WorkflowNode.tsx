@@ -125,6 +125,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   // store's one door, so the two views cannot disagree.
   const { template, dirty } = useTemplateDraft(panel.workflow.templateId, saved)
   const [tab, setTab] = useState<'definition' | 'runs'>('definition')
+  const [actionsOpen, setActionsOpen] = useState(false)
   // M182. A block DRAG on the diagram: a real pointer gesture on the SVG,
   // committed on release as ONE `moveNode` (one undo of the draft); the
   // offset during the gesture is view state. The panel's own drag is stopped
@@ -382,6 +383,10 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
           <>
             <div className="workflow-node__verbs" data-workflow-verbs>
               {verb('run', 'Run', props.runReason, () => props.onRun(id))}
+              <button type="button" className="pf__verb pf__verb--word workflow-node__more" data-workflow-more
+                aria-expanded={actionsOpen} title={actionsOpen ? 'Hide workflow actions' : 'Show triggers, stop, save, delete and build actions'}
+                onMouseDown={press(() => setActionsOpen((v) => !v))}>{actionsOpen ? 'Fewer actions' : 'More actions…'}</button>
+              <div className="workflow-node__more-actions" data-workflow-more-actions hidden={!actionsOpen}>
               {/* M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence. */}
               {verb('triggers', 'Triggers', props.runReason, () => props.onTrigger(id))}
               {/* M184. Stop is the SELECTED run's when one is selected, and
@@ -396,6 +401,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 : verb('save', 'Save', dirty ? null : REASON_NOTHING_TO_SAVE, () => { void props.onSave(id).then((r) => { if (r.kind === 'stale') setStale(r.reason); else if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}
               {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
               {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
+              </div>
             </div>
             {stale !== null && (
               <div className="workflow-node__stale" data-workflow-stale role="status">

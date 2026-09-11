@@ -48,6 +48,9 @@
     "verify:subagent": "node scripts/verify-subagent.cjs",
     "verify:file": "node scripts/verify-file.cjs",
     "verify:checklist": "node scripts/verify-checklist.cjs",
+    "verify:sheet": "node scripts/verify-sheet.cjs",
+    "verify:draft": "node scripts/verify-draft.cjs",
+    "verify:agent-links": "node scripts/verify-agent-links.cjs",
     "verify:toolbox": "node scripts/verify-toolbox.cjs",
     "verify:usage": "node scripts/verify-usage.cjs",
     "verify:machine-cost": "node scripts/verify-machine-cost.cjs",
@@ -75,7 +78,8 @@
   },
   "dependencies": {
     "@sentry/electron": "7.18.0",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@doyensec/electronegativity": "^1.10.3",

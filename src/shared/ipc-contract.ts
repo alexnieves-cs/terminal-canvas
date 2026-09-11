@@ -957,6 +957,12 @@ export const IPC_EVENTS = {
 export interface FileReadRequest {
   panelId: PanelId
   path: string
+  /**
+   * M245. `base64` asks for the `bytes` arm, and arms the watch in the same
+   * encoding. ABSENT is the text read — never send `encoding: undefined`,
+   * which is the absent-stays-absent trap at an IPC boundary.
+   */
+  encoding?: import('./file-panel').FileEncoding
 }
 
 /** What `toolbox:read` is asked. See TOOLBOX_READ for why it is a cwd. */
@@ -1046,6 +1052,8 @@ export interface FileWriteRequest {
    * passes it is the Overwrite control shown after a `stale`.
    */
   baseMtimeMs: number | null
+  /** M245. `base64` means `content` is bytes. Absent is utf8 text. */
+  encoding?: import('./file-panel').FileEncoding
 }
 
 export interface FileChangedEvent {

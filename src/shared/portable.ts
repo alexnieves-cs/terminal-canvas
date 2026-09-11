@@ -133,7 +133,9 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
     const file = raw.source as import('./file-panel').FileSource
     // References travel, accepted local text and execution links do not. An imported
     // checklist must be read before it can edit a file on this machine or send a task.
-    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }) } } as unknown as PersistedPanel
+    // M245. A sheet travels as "this is a sheet" and nothing more: widths are this
+    // machine's taste and loss consent was given to a file on this machine.
+    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.sheet === undefined ? {} : { sheet: {} }) } } as unknown as PersistedPanel
   }
   // A terminal: the command it was ASKED for, and nothing the process became.
   const command = typeof raw.command === 'string' ? scrub(raw.command, tally) : undefined
@@ -247,7 +249,9 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
     const raw = next as unknown as Record<string, unknown>
     // Import is a gate too: a hand-authored portable file can carry fields our
     // exporter would never write. Strip acceptance and execution links here.
-    if (next.kind === 'file' && next.source?.checklist !== undefined) next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), checklist: {} }
+    if (next.kind === 'file' && (next.source?.checklist !== undefined || next.source?.sheet !== undefined)) {
+      next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), ...(next.source.checklist === undefined ? {} : { checklist: {} }), ...(next.source.sheet === undefined ? {} : { sheet: {} }) }
+    }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }
       raw.workflow = { templateId: templateIds.get(wf.templateId) ?? wf.templateId }
