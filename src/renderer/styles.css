@@ -177,6 +177,10 @@
   --e-2: 0 2px 8px rgba(15, 18, 26, .12);
   --e-3: 0 6px 20px rgba(15, 18, 26, .16);
   --e-4: 0 14px 40px rgba(15, 18, 26, .22);
+  /* M256. The Compact drawer's scrim — dark in both themes (it dims the
+     CANVAS behind it, not the drawer, which is its own opaque surface), a
+     touch lighter here since the light ground has less contrast to spend. */
+  --scrim: rgba(15, 18, 26, .35);
 
   /* M109. THE MATERIAL (Obsidian). Glass fills are rgba over a blur — a
      NEW name each, so nothing check 11 measures stops being hex. --lift is
@@ -297,6 +301,7 @@
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
   --e-3: 0 6px 20px rgba(0, 0, 0, .50);
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
+  --scrim: rgba(0, 0, 0, .55);
 
   --glass-1:    rgba(18, 22, 31, .88);   /* M163 (finding 8): one clear step from --s-0; was .74 */
   --glass-2:    rgba(13, 16, 24, .82);
@@ -460,6 +465,26 @@ body {
    strip again two milestones after it was fixed (M68's critic). */
 .shell--ctx-drawer .inspector__actions.context__actions { padding-bottom: calc(var(--sp-5) + 44px); }
 .shell--nav-drawer .rail-list { padding-bottom: calc(var(--sp-5) + 44px); }
+
+/* M256 (spec §18). The scrim: a genuine overlay drawer reads as a surface
+   ABOVE the canvas, not a column that happens to float — and it gives the
+   dismiss-by-outside-click a visible reason rather than a click that seems to
+   land on nothing. Below the drawer's own z-index (900) and above the top
+   bar's (1) and the canvas; it never covers the dock (left: var(--shell-dock-w))
+   so the dock's own icons — the other way to close a drawer — stay reachable
+   without crossing the dimmed area. No pointer handler of its own: the
+   existing outside-mousedown-capture listener on `.shell` already dismisses
+   on anything that is not the drawer or the dock (see Canvas.tsx), and the
+   scrim is simply not in that exclusion list. */
+.shell__scrim {
+  position: absolute;
+  top: var(--shell-top-h);
+  left: var(--shell-dock-w);
+  right: 0;
+  bottom: 0;
+  z-index: 850;
+  background: var(--scrim);
+}
 
 /* M109. THE AURA. Two radial lights on the ground, painted ONCE under every
    region (the chrome is glass, so the light shows through the rail and the
@@ -702,6 +727,54 @@ body {
   box-shadow: none;
 }
 .shell__spacer { flex: 1; }
+
+/* M256 (spec §18). Below Compact the bar reads mark / Create / Search / one
+   overflow: `.shell__top-secondary` (Merged view, Settings) hides and
+   `.shell__overflow` — hidden everywhere else — takes its place. Both are
+   ALWAYS mounted (the shell's own rule: a resident control is a width or
+   display change, never an unmount), so neither has to be created on first
+   resize past the threshold. */
+.shell[data-bp="compact"] .shell__top-secondary { display: none; }
+.shell__overflow-wrap { position: relative; -webkit-app-region: no-drag; }
+/* Two-class specificity on both sides of this toggle (0,2,0), so neither can
+   lose to .icon-button's own `display: inline-grid` (0,1,0) by source order —
+   the exact trap `.inspector__actions.context__actions` hit before (see the
+   compact drawer padding comment above). */
+.shell__top .shell__overflow { display: none; }
+.shell[data-bp="compact"] .shell__overflow { display: inline-grid; }
+.shell__overflow-popover {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: 950;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--s-1);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--e-3);
+}
+.shell__overflow-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.shell__overflow-item:hover { background: var(--s-4); color: var(--fg); }
+.shell__overflow-item[aria-pressed="true"] { color: var(--iris); }
 
 /* M45. A shortcut chip, on exactly the two top-bar buttons whose shortcut
    is the way most people will reach them (New panel, Search). A chip on
@@ -1135,6 +1208,24 @@ body {
 .status-dot[data-tone="idle"],
 .status-dot[data-tone="exited"] { background: var(--tone); }
 
+/* M256 (spec §19). Visually hidden but still in the accessibility tree: text
+   alternatives (the minimap's per-panel list) and polite live-region
+   announcements (agent state, completed operations) that have no visible
+   home of their own. `clip-path` over the older `clip` property, 1px rather
+   than 0 so it is never mistaken for `display: none` by a UA optimisation. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* min-width: 0 on the flex item, or a long resolved command refuses to shrink
    and pushes the tail and both controls out of the rail entirely — the same
    min-width:auto failure the .canvas grid cell's own comment records. */
@@ -1224,8 +1315,13 @@ body {
 .icon-button {
   display: inline-grid;
   place-items: center;
-  min-width: 24px;
-  min-height: 24px;
+  /* M256 (spec §19). 28px is the floor for an icon-only target on desktop;
+     the dock already draws its own 32px (`.dock__button`), which is why this
+     bump alone is enough to bring every OTHER icon-only control — the rail's
+     chevron, the top bar's search/settings/context toggle, a region's Add —
+     up to the same reachable size without touching the dock's own rule. */
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--r-md);
@@ -4546,7 +4642,8 @@ body {
 .skill-card__menu-host { flex: 0 0 auto; margin-right: var(--sp-1); }
 /* Two lines, then an ellipsis. A description is a sentence, and a card that
    let it run set the column's width — which is the defect this round fixes. */
-.skill-card__description { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* M256 (spec §19). A two-line CLAMPED PROSE description, not a label. */
+.skill-card__description { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .skill-card__facts, .skill-card__note { flex: 1 0 100%; padding: 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* M178 (F.15): the facts line (`3 resources · placed`) is words — the M162 opt-in is withdrawn; a path inside it would be its own span. */
 /* M127 critic wave. The resource SENTENCE, on its own line under the
@@ -4658,7 +4755,9 @@ body {
 .workflow-node__entry { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); cursor: grab; font-family: var(--font-ui); }
 .workflow-node__entry-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .workflow-node__entry-name { font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
-.workflow-node__entry-sentence { font-size: var(--t-xs); color: var(--fg-3); line-height: var(--lh-body); }
+/* M256 (spec §19). A SENTENCE, per its own name — kept off --t-xs, which this
+   file otherwise reserves for labels, counts and timestamps. */
+.workflow-node__entry-sentence { font-size: var(--t-sm); color: var(--fg-3); line-height: var(--lh-body); }
 .workflow-node__entry-example { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); } /* M183 (the verifier): the UI FACE — two of the five examples are English, and a mixed slot set in mono is prose in mono. */
 .workflow-node__port { fill: var(--iris); stroke: var(--s-1); stroke-width: 1.5; cursor: crosshair; }
 .workflow-node__wire { stroke: var(--iris); stroke-width: 2; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
@@ -4984,7 +5083,10 @@ body {
 .empty-state__glyph svg { width: 16px; height: 16px; }
 .empty-state__sentence { margin: 0; font-size: var(--t-sm); line-height: var(--lh-body); max-width: var(--measure); color: var(--fg-2); }
 .empty-state__verb { margin-top: var(--sp-1); }
-.empty-state__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); max-width: var(--measure); overflow-wrap: anywhere; }
+/* M256 (spec §19). Sentence-length content, not a label — the empty state's
+   guidance prose is the one thing on that surface a person actually READS,
+   so it keeps --t-sm rather than the --t-xs every label around it uses. */
+.empty-state__note { margin: 0; font-size: var(--t-sm); color: var(--fg-3); max-width: var(--measure); overflow-wrap: anywhere; }
 .rail-empty .empty-state { padding: var(--sp-4) 0; }
 
 /* M178 (F.8). The rest rule reaches the group frame: its verbs rest at 0 and

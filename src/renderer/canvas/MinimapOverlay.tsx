@@ -31,17 +31,29 @@ export interface MinimapProps {
   marks?: readonly { x: number; y: number }[]
 }
 
-function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number } }): JSX.Element {
+/** The one place a minimap row's state is derived — Block and its `.sr-only`
+ *  text alternative below both call it, so a colour and its word can never
+ *  drift apart. */
+function useMinimapRowState(row: MinimapRow): ReturnType<typeof panelState> {
   const agent = useAgentState(row.id)
   // M73. A chat block reads its session mirror, as the rail row does, so the
   // status board shows a conversation's state and not its kind.
   const chat = useChat(row.id)
   const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
-  const shown = panelState(chatInput === undefined ? row.state : { ...row.state, chat: chatInput }, agent)
+  return panelState(chatInput === undefined ? row.state : { ...row.state, chat: chatInput }, agent)
+}
+
+function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number } }): JSX.Element {
+  const shown = useMinimapRowState(row)
   return (
     <div className="minimap__block" data-minimap-block={row.id} data-tone={shown.tone} title={`${row.label} — ${shown.word}`}
       style={{ left: box.x, top: box.y, width: Math.max(2, box.w), height: Math.max(2, box.h) }} />
   )
+}
+
+function MinimapAltRow({ row }: { row: MinimapRow }): JSX.Element {
+  const shown = useMinimapRowState(row)
+  return <li>{row.label} — {shown.word}</li>
 }
 
 export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): JSX.Element | null {
@@ -117,6 +129,16 @@ export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): J
       {(marks ?? []).map((m, i) => (
         <span key={i} className="minimap__mark" data-minimap-mark style={{ left: m.x * projection.scale + projection.ox, top: m.y * projection.scale + projection.oy }} />
       ))}
+      {/* M256 (spec §19). The map's own `aria-label` says how many panels and
+          nothing about which — a colour swatch at thumbnail scale has no text
+          equivalent otherwise. A screen reader reaches every panel's label
+          and state here; a sighted person never sees it (`.sr-only`). */}
+      <ul className="sr-only">
+        {projection.blocks.map((b) => {
+          const row = byId.get(b.id)
+          return row === undefined ? null : <MinimapAltRow key={b.id} row={row} />
+        })}
+      </ul>
       <div className={`minimap__view${ghost !== null ? ' minimap__view--dragging' : ''}`} data-minimap-view
         style={{ left: viewBox.x, top: viewBox.y, width: Math.max(4, viewBox.w), height: Math.max(4, viewBox.h) }} />
     </div>

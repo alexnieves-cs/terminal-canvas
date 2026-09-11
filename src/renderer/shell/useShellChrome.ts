@@ -18,6 +18,10 @@ export interface ShellChrome {
   ctxDrawer: boolean
   /** The Attention popover is up. */
   attentionOpen: boolean
+  /** M256. The top bar's overflow popover (Compact only) is up — Merged view
+   *  and Settings move here so the bar reads mark / Create / Search / one
+   *  overflow at narrow widths (spec §18). */
+  overflowOpen: boolean
   contextTab: ContextTab
   /** The dock's verb: show this pane (and open the navigator), or collapse it if it is the active one. */
   chooseNavigator: (pane: NavigatorPane) => void
@@ -25,6 +29,7 @@ export interface ShellChrome {
   toggleContext: () => void
   toggleTree: () => void
   toggleAttention: () => void
+  toggleOverflow: () => void
   setContextTab: (tab: ContextTab) => void
   /** Close every transient surface (drawers, the popover): Escape and the outside click. */
   dismissTransient: () => void
@@ -77,6 +82,7 @@ export function useShellChrome(deps: {
   const [navDrawer, setNavDrawer] = useState(false)
   const [ctxDrawer, setCtxDrawer] = useState(false)
   const [attentionOpen, setAttentionOpen] = useState(false)
+  const [overflowOpen, setOverflowOpen] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -105,7 +111,7 @@ export function useShellChrome(deps: {
   // Drawers are transient by definition: leaving Compact closes them, so a
   // widened window never carries an overlay into a breakpoint with columns.
   useEffect(() => {
-    if (bp !== 'compact') { setNavDrawer(false); setCtxDrawer(false) }
+    if (bp !== 'compact') { setNavDrawer(false); setCtxDrawer(false); setOverflowOpen(false) }
   }, [bp])
 
   // The breakpoint rule, in one place.
@@ -122,14 +128,14 @@ export function useShellChrome(deps: {
   // The IPC write is deliberately OUTSIDE any setState updater: an updater
   // must be pure, and under StrictMode it runs twice.
   const toggleNavigator = useCallback(() => {
-    if (bp === 'compact') { setNavDrawer((d) => !d); setCtxDrawer(false); setAttentionOpen(false); return }
+    if (bp === 'compact') { setNavDrawer((d) => !d); setCtxDrawer(false); setAttentionOpen(false); setOverflowOpen(false); return }
     const next = !railOpen
     setRailPref(next)
     write('shell.railOpen', next)
   }, [bp, railOpen])
 
   const toggleContext = useCallback(() => {
-    if (bp === 'compact') { setCtxDrawer((d) => !d); setNavDrawer(false); setAttentionOpen(false); return }
+    if (bp === 'compact') { setCtxDrawer((d) => !d); setNavDrawer(false); setAttentionOpen(false); setOverflowOpen(false); return }
     // Present means the user won: the toggle is how a pane becomes present,
     // in either direction, at Standard and Wide alike.
     const next = !inspectorOpen
@@ -147,7 +153,7 @@ export function useShellChrome(deps: {
       if (navigatorPref !== pane) { setNavigatorPref(pane); write('shell.navigator', pane) }
     }
     if (!navVisible) {
-      if (bp === 'compact') { setNavDrawer(true); setCtxDrawer(false); setAttentionOpen(false) }
+      if (bp === 'compact') { setNavDrawer(true); setCtxDrawer(false); setAttentionOpen(false); setOverflowOpen(false) }
       else { setRailPref(true); write('shell.railOpen', true) }
     }
   }, [bp, navVisible, navigator, treeOpen, navigatorPref, toggleNavigator])
@@ -162,6 +168,12 @@ export function useShellChrome(deps: {
 
   const toggleAttention = useCallback(() => {
     setAttentionOpen((o) => !o)
+    setOverflowOpen(false)
+  }, [])
+
+  const toggleOverflow = useCallback(() => {
+    setOverflowOpen((o) => !o)
+    setAttentionOpen(false)
   }, [])
 
   const setContextTab = useCallback((tab: ContextTab) => {
@@ -170,7 +182,7 @@ export function useShellChrome(deps: {
   }, [])
 
   const dismissTransient = useCallback(() => {
-    setNavDrawer(false); setCtxDrawer(false); setAttentionOpen(false)
+    setNavDrawer(false); setCtxDrawer(false); setAttentionOpen(false); setOverflowOpen(false)
   }, [])
 
   useEffect(() => {
@@ -178,7 +190,7 @@ export function useShellChrome(deps: {
       // Escape closes a transient surface — the palette's own rule, on a
       // second and third surface. Only when one is up, so a bare Escape still
       // reaches the agent every other time.
-      if (event.key === 'Escape' && (navDrawer || ctxDrawer || attentionOpen)) {
+      if (event.key === 'Escape' && (navDrawer || ctxDrawer || attentionOpen || overflowOpen)) {
         if (paletteIsOpen()) return
         event.preventDefault()
         dismissTransient()
@@ -211,11 +223,11 @@ export function useShellChrome(deps: {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen])
+  }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen, overflowOpen])
 
   return {
-    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, contextTab,
-    chooseNavigator, toggleNavigator, toggleContext, toggleTree, toggleAttention, setContextTab, dismissTransient,
+    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, overflowOpen, contextTab,
+    chooseNavigator, toggleNavigator, toggleContext, toggleTree, toggleAttention, toggleOverflow, setContextTab, dismissTransient,
     railOpen: navVisible, inspectorOpen: ctxVisible, treeOpen,
     toggleRail: toggleNavigator, toggleInspector: toggleContext
   }

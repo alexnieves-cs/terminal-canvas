@@ -20,10 +20,48 @@ import type { ResolvedTheme } from '@renderer/terminal/themes'
  * land in layout.json and apply on the next Cmd+K — a theme picker that
  * appears to do nothing.
  */
+/**
+ * M256. Stronger borders and no translucency, one set per theme so a hairline
+ * still clears the same ground it always sat on. `--frame-line` is included
+ * because its base rule (styles.css) already points it at --line (light) or
+ * --line-strong (dark) — an inline override of --line alone would leave the
+ * panel frame on the OLD value once the derived var is itself overridden
+ * here, so every token the base rule derives from these is restated.
+ */
+const HIGH_CONTRAST: Record<ResolvedTheme, Record<string, string>> = {
+  light: {
+    '--line': '#8a92a3',
+    '--line-strong': '#4a5165',
+    '--frame-line': '#4a5165',
+    '--fg-4': '#4a5165',
+    '--blur': 'none',
+    '--glass-0': '#e2e6ee',
+    '--glass-1': '#f6f7fa',
+    '--glass-2': '#eef0f5',
+    '--glass-3': '#ffffff'
+  },
+  dark: {
+    '--line': '#4a5268',
+    '--line-strong': '#7f8bab',
+    '--frame-line': '#7f8bab',
+    '--fg-4': '#a7afc0',
+    '--blur': 'none',
+    '--glass-0': '#070910',
+    '--glass-1': '#12161f',
+    '--glass-2': '#0f131b',
+    '--glass-3': '#1e2431'
+  }
+}
+
 export function useTheme(settingsSignal: unknown): ResolvedTheme {
   const [setting, setSetting] = useState<'system' | 'light' | 'dark'>('system')
   const [systemDark, setSystemDark] = useState<boolean>(() =>
     typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  // M256. `accessibility.highContrast` — a SEPARATE axis from light/dark
+  // (spec §19: "distinct from light/dark mode"), stamped as its own
+  // attribute rather than a third value of `appearance.theme` so it composes
+  // with either theme instead of replacing one.
+  const [highContrast, setHighContrast] = useState(false)
 
   useEffect(() => {
     let live = true
@@ -33,6 +71,8 @@ export function useTheme(settingsSignal: unknown): ResolvedTheme {
         const row = rows.find((r) => r.id === 'appearance.theme')
         const v = row?.value
         setSetting(v === 'light' || v === 'dark' ? v : 'system')
+        const contrastRow = rows.find((r) => r.id === 'accessibility.highContrast')
+        setHighContrast(contrastRow?.value === true)
       })
     }
     read()
@@ -53,6 +93,30 @@ export function useTheme(settingsSignal: unknown): ResolvedTheme {
   useEffect(() => {
     document.documentElement.dataset.theme = resolved
   }, [resolved])
+
+  // M256 (spec §19). Applied as INLINE custom properties on the root, not a
+  // third stylesheet block keyed on a new attribute. verify:styles' theme.1/
+  // theme.2/obsidian.1/depth.1 all parse styles.css by matching
+  // `data-theme="..."` inside a selector STRING — a combined selector like
+  // `:root[data-theme="dark"][data-contrast="high"]` still contains that
+  // substring and would silently fold this override into the very token
+  // table those checks measure, corrupting them with no failure anywhere
+  // (the class of bug theme.1's own comment warns about, one level up: a
+  // token that drifts and is never caught because nothing reads the RENDERED
+  // value). An inline style is outside the stylesheet entirely, wins on
+  // specificity over both theme blocks unconditionally, and is trivial to
+  // remove by deleting the property rather than juggling cascade order.
+  useEffect(() => {
+    const root = document.documentElement.style
+    if (highContrast) {
+      document.documentElement.dataset.contrast = 'high'
+      const c = resolved === 'dark' ? HIGH_CONTRAST.dark : HIGH_CONTRAST.light
+      for (const [prop, value] of Object.entries(c)) root.setProperty(prop, value)
+    } else {
+      delete document.documentElement.dataset.contrast
+      for (const prop of Object.keys(HIGH_CONTRAST.light)) root.removeProperty(prop)
+    }
+  }, [highContrast, resolved])
 
   return resolved
 }

@@ -225,6 +225,7 @@ import { TopBar } from '../shell/TopBar'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
+import { useAttentionAnnouncer } from '../shell/useAttentionAnnouncer'
 import { useShellBreakpoint } from '../shell/useShellBreakpoint'
 import { Dock } from '../shell/Dock'
 import { Navigator } from '../shell/Navigator'
@@ -3096,7 +3097,7 @@ export function Canvas({
   // composed below, never a copy (spec §7.6). Read through a ref so
   // shouldIgnoreKeys keeps its identity.
   const chromeTransientRef = useRef(false)
-  chromeTransientRef.current = chrome.navDrawer || chrome.ctxDrawer || chrome.attentionOpen
+  chromeTransientRef.current = chrome.navDrawer || chrome.ctxDrawer || chrome.attentionOpen || chrome.overflowOpen
   const chromeRef = useRef(chrome)
   chromeRef.current = chrome
 
@@ -6911,6 +6912,8 @@ export function Canvas({
     selectedSpawned: selectedId !== null && (registry.get(selectedId)?.status.kind === 'running' || getChat(selectedId).snapshot?.pid !== undefined)
   })
 
+  const attentionAnnouncement = useAttentionAnnouncer(railAttention)
+
   return (
     <div
       ref={shellRef}
@@ -6930,7 +6933,7 @@ export function Canvas({
         // excluded because its icons toggle these surfaces themselves.
         if (!chromeTransientRef.current) return
         const t = event.target as HTMLElement | null
-        if (t?.closest('.shell__dock, .dock__popover, .shell--nav-drawer .shell__rail, .shell--ctx-drawer .shell__inspector')) return
+        if (t?.closest('.shell__dock, .dock__popover, .shell__overflow, .shell__overflow-popover, .shell--nav-drawer .shell__rail, .shell--ctx-drawer .shell__inspector')) return
         chromeRef.current.dismissTransient()
       }}
     >
@@ -6943,6 +6946,18 @@ export function Canvas({
           statement, and it undercuts the whole premise. Same attribute, same
           value, one source. */}
       <div className="shell__aura" aria-hidden="true" data-activity={canvasActivity} />
+      {/* M256 (spec §19). The polite live region for "a panel just started
+          wanting you" — see useAttentionAnnouncer's own comment for why this
+          is not the dock badge's aria-live (a count, not a sentence). */}
+      <div className="sr-only" aria-live="polite">{attentionAnnouncement}</div>
+      {/* M256 (spec §18). A genuine scrim under a Compact drawer: the panels
+          under it are still there in world space (the column is 0 width, not
+          display:none — see the frame comment above), so the scrim is purely
+          visual and takes no pointer handler of its own. The dismissal is the
+          existing outside-mousedown-capture listener above, which already
+          fires on any target that is not the drawer or the dock; the scrim
+          just needs to not be in that exclusion list, and it isn't. */}
+      {(chrome.navDrawer || chrome.ctxDrawer) && <div className="shell__scrim" aria-hidden="true" />}
       {/* DOM order is screen order for a screen reader: dock, then the top
           bar, then the navigator. */}
       <Dock
@@ -6965,6 +6980,8 @@ export function Canvas({
         onToggleMerged={toggleMerged}
         contextOpen={chrome.ctxVisible}
         onToggleContext={chrome.toggleContext}
+        overflowOpen={chrome.overflowOpen}
+        onToggleOverflow={chrome.toggleOverflow}
       />
       <Navigator
         hints={hintsLoaded ? hintsLeft(hintsSeen, 'rail') : []}

@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
-import { Gear, Lanes, PanelRight, Search  } from '@renderer/icons'
+import { Gear, Lanes, More, PanelRight, Search  } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -17,6 +17,13 @@ export interface TopBarProps {
   /** M46. The context pane is on screen (a column, or a Compact drawer). */
   contextOpen: boolean
   onToggleContext: () => void
+  /** M256. Below the Compact breakpoint the bar reads mark / Create / Search /
+   *  one overflow (spec §18); Merged view and Settings move into it. Which
+   *  breakpoint is active is a CSS fact (`.shell[data-bp]`), not a prop here —
+   *  `.shell__top-secondary` and `.shell__overflow` are always mounted and the
+   *  stylesheet alone decides which one is visible. */
+  overflowOpen: boolean
+  onToggleOverflow: () => void
 }
 
 
@@ -38,7 +45,8 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext, workspaceName
+  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext, workspaceName,
+  overflowOpen, onToggleOverflow
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -84,7 +92,7 @@ export function TopBar({
           pair for the reason PaletteActions.toggleMerged is one. */}
       <button
         type="button"
-        className={`shell__merge${merged ? ' shell__merge--on' : ' icon-button'}`}
+        className={`shell__merge shell__top-secondary${merged ? ' shell__merge--on' : ' icon-button'}`}
         aria-pressed={merged}
         aria-label={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
         title={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
@@ -103,7 +111,7 @@ export function TopBar({
 
       <button type="button" className="shell__search" title="Search commands (⌘K)"
         {...shellControl(onSearch)}><Search /> Search <kbd>⌘K</kbd></button>
-      <button type="button" className="shell__settings icon-button" title="Settings"
+      <button type="button" className="shell__settings shell__top-secondary icon-button" title="Settings"
         aria-label="Settings" {...shellControl(onSettings)}><Gear /></button>
       {/* M46. The context pane's toggle lives here, not in the pane: when
           the pane is hidden there is no pane to hold it, and the old 22px
@@ -112,6 +120,30 @@ export function TopBar({
         title={contextOpen ? 'Hide the context pane (⇧⌘\\)' : 'Show the context pane (⇧⌘\\)'}
         aria-label={contextOpen ? 'Hide the context pane' : 'Show the context pane'}
         aria-pressed={contextOpen} {...shellControl(onToggleContext)}><PanelRight /></button>
+      {/* M256 (spec §18). Below Compact, `.shell__top-secondary` (Merged view,
+          Settings) is hidden by CSS and lives here instead, so the bar reads
+          mark / Create / Search / one overflow rather than squeezing six
+          controls into a narrow window. Always mounted — like every other
+          transient surface in this shell — so it never has to be created on
+          first open; only display and the popover's presence change. */}
+      <div className="shell__overflow-wrap">
+        <button type="button" className={`shell__overflow icon-button${overflowOpen ? ' shell__inspector-toggle--on' : ''}`}
+          title="More"
+          aria-label="More" aria-haspopup="menu" aria-expanded={overflowOpen}
+          {...shellControl(onToggleOverflow)}><More /></button>
+        {overflowOpen && (
+          <div className="shell__overflow-popover" role="menu" aria-label="More">
+            <button type="button" role="menuitem" className="shell__overflow-item" aria-pressed={merged}
+              {...shellControl(() => { onToggleMerged(); onToggleOverflow() })}>
+              <Lanes /> {merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view'}
+            </button>
+            <button type="button" role="menuitem" className="shell__overflow-item"
+              {...shellControl(() => { onSettings(); onToggleOverflow() })}>
+              <Gear /> Settings
+            </button>
+          </div>
+        )}
+      </div>
     </header>
   )
 }
