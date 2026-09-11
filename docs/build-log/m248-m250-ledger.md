@@ -225,3 +225,40 @@ The integrator takes the union.
     - `work.action.1`, `review.task.2`, `browser.1` and `onboarding.start.1` pass.
     - `reach.1` and `reach.3` are red on base-product too (102/105): M207/M208 moved the inspector's and workflow's secondary verbs behind "More actions…". That is main's red, not ours.
 - Owed, unchanged from Integration 1: the goldens critic pass and the manual `npm run dev` pass. Main also owes its own `reach.1`/`.3` re-pin after the M207/M208 disclosures.
+
+## Integration 3 — m246-deck-tools (M251/M252) and main d8022e22 (M209, M211), landed on main
+
+- Merged `m246-deck-tools` (cd3939dc): unions at every registry, `verify:ipc` the counted union
+  (138: main's + `docx:import` + `export:deck-pdf` + `deck:export-pptx` + `tool:generate`),
+  `pptxgenjs` 4.0.1 beside jszip/mammoth/xlsx with the lockfile regenerated. Then main f9a63d14
+  (df8c23cd) and d8022e22 (80b83d93), both without conflicts. README gains the M249/M250 rows,
+  each with its own log pointing here (`verify:meta milestones.1`).
+- Gate on 80b83d93 (`TC_VERIFY_SUFFIX=integ3`, under the lock, no foreign test Electron):
+  **44/48 suites, 573.8s**; typecheck, build and every plain suite green.
+- Two reds were the integration's own, both fixed:
+  - `tool.1–3`: `registerIpcHandlers`' collaborators are positional; M250's `docx` and M252's
+    `tools` were each appended on their own branch, and the harness's planted tool reply landed in
+    docx's slot. `panels-harness.cjs` now passes `undefined` there (d0672fe5). Rerun with
+    `TC_WATCHDOG_SCALE=2`: tool.1–3 and pill.* PASS, 109/113.
+  - `link-draw.1`/`.5`: red twice here, green on main d8022e22. The port box was read while
+    `railGoTo`'s camera glide was still moving, so the press landed where the port had been. The
+    check now reads until two consecutive boxes agree (c2074464); `panels:kinds` twice → 6/6.
+- The rest, each measured against a scratch build of main d8022e22 the same evening:
+  - `panels:shell` 98/98b/106 — red on main; 127 — red on base e94ad552 (Integration 2).
+  - `panels:kinds` `broadcast.1` + watchdog (+ "Object has been destroyed") — identical on main.
+  - `panels:agents` `attention.1` — main's own run is red on `keyboard.1–4` + headroom; both sets
+    are the recorded seeding/contention flakes of this part.
+  - `panels:product` `reach.1`/`.3` — main's (M207/M208's disclosure); `work.action.1`,
+    `review.task.2` — recorded base flakes, both PASS in the gate run itself.
+- **Goldens: not re-baselined, deliberately.** `verify:visual` on main d8022e22 is already red on
+  60/62 scenes at almost the same percentages as this branch (launcher 17.89% vs 17.91%; the rest
+  within ~0.15 points), so the committed goldens predate several merged milestones. Writing them
+  here would bless all of that unseen. The branch's own visible change, read side by side against
+  main's fresh `kinds` render: the new-object row gains **Deck**, and the tenth pill (**Describe a
+  tool**) runs UNDER the minimap at the 1440px scene width — hidden and unclickable there. That is a
+  real defect, owed as its own fix (the row must wrap or overflow into a menu before the minimap).
+  The command pill is absent at rest in these scenes, as its rest rule says.
+- Still owed: the manual `npm run dev` pass (deck present/filmstrip/PDF, pill send/jump,
+  Rich/Source, a .docx import, a .pptx opened in Keynote, one real `claude -p --json-schema` run for
+  describe-a-tool); main's golden re-baseline with a critic's sentence per scene; the new-object
+  row overflow.
