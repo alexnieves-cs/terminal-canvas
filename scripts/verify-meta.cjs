@@ -1104,6 +1104,80 @@ console.log('\n' + '='.repeat(60))
     cited.length > 100 && stale.length === 0, JSON.stringify({ cited: cited.length, stale }))
 }
 
+// ledger.1. CLAUDE.md's table is where a fresh session learns which run is
+// live, and it pointed at the M193–M224 ledger for a whole run after
+// m225-m243-ledger.md existed — a session following it planned against the
+// wrong state, with nothing red. Two runs can be live at once, so the check is
+// not "exactly one link" but: the ledger whose range starts highest is linked,
+// and no ledger link is broken.
+{
+  const { readdirSync } = require('node:fs')
+  const ledgers = readdirSync(join(ROOT, 'docs', 'build-log'))
+    .map((f) => /^m(\d+)-m(\d+)-ledger\.md$/.exec(f)).filter(Boolean)
+    .map((m) => ({ file: `docs/build-log/${m[0]}`, start: Number(m[1]) }))
+    .sort((a, b) => b.start - a.start)
+  const claudeMd = read('CLAUDE.md') ?? ''
+  const linked = [...claudeMd.matchAll(/\]\((docs\/build-log\/[^)\s]+-ledger\.md)\)/g)].map((m) => m[1])
+  const broken = linked.filter((p) => !existsSync(join(ROOT, p)))
+  const newest = ledgers[0]
+  ok('ledger.1 CLAUDE.md links the newest run ledger, and every ledger it links exists',
+    Boolean(newest) && linked.includes(newest.file) && broken.length === 0,
+    JSON.stringify({ newest: newest && newest.file, linked, broken }))
+}
+
+// lb.1 / lb.2. `npm run lb` (scripts/lb.cjs) is how CLAUDE.md now says to
+// search the load-bearing files. A parse that silently orphans text shrinks
+// every search with no error — an unmatched ``` did that to all of
+// load-bearing.md — so every line after the preamble must land in an entry,
+// and a module the files are known to cite must come back named in a lead.
+{
+  const lb = require('./lb.cjs')
+  const per = lb.FILES.map((f) => {
+    const text = read(f) ?? ''
+    const lost = lb.unowned(text, f)
+    return { f, entries: lb.parseEntries(text, f).entries.length, lost: lost.length, first: lost.slice(0, 5) }
+  })
+  ok('lb.1 both load-bearing files parse into entries, and no line after a preamble belongs to none',
+    per.every((p) => p.entries >= 150 && p.lost === 0), JSON.stringify(per))
+  const hits = lb.search(lb.loadAll(), ['pty-manager'])
+  ok('lb.2 a module the load-bearing files cite comes back as entries naming it in the lead',
+    hits.some((h) => h.inLead), `${hits.length} entries`)
+}
+
+// affected.1 / affected.2. `npm run affected` derives each suite's sources
+// (script -> entries -> the src import graph) instead of reading a table. Its
+// failure is silent in the WORST direction — a suite it cannot see is never
+// selected, and the narrowed run is green for a change it never tested. So:
+// every suite resolves to something beyond its own script and the shared
+// ok(), except a named exemption that must itself still resolve to nothing
+// (so the sentence explaining it can never describe a suite that changed);
+// and three known answers, including the three-state one.
+{
+  const affected = require('./affected.cjs')
+  const runnerMod = require('./verify-all.cjs')
+  // verify:pty drives node-pty from node_modules; it imports no module of ours.
+  const NO_REPO_SOURCES = ['verify:pty']
+  const blind = []
+  const staleExempt = []
+  for (const s of runnerMod.suites()) {
+    const { files, dirs } = affected.sourcesOf(s.body)
+    const own = [...files].filter((f) => !/^scripts\/(verify-[\w.-]+|lib\/checks)\.cjs$/.test(f))
+    const sees = own.length + dirs.size > 0
+    if (NO_REPO_SOURCES.includes(s.name)) { if (sees) staleExempt.push(s.name) } else if (!sees) blind.push(s.name)
+  }
+  ok('affected.1 every verify suite resolves to a repository source beyond its own script, and the exemption still resolves to none',
+    blind.length === 0 && staleExempt.length === 0, JSON.stringify({ blind, staleExempt }))
+  const pick = (files) => affected.select(files).picked.map((p) => p.suite.name)
+  const vp = pick(['src/renderer/canvas/viewport.ts'])
+  const lib = pick(['scripts/lib/checks.cjs'])
+  const users = runnerMod.suites().filter((s) => affected.sourcesOf(s.body).files.has('scripts/lib/checks.cjs')).length
+  const none = affected.select(['docs/no-such-file.md'])
+  ok('affected.2 a canvas module selects its suite and the build consumers but no main-process-only suite; the shared ok() selects every suite requiring it; an unread file is UNMAPPED',
+    vp.includes('verify:viewport') && vp.includes('verify:panels:core') && !vp.includes('verify:jira') &&
+      users >= 30 && lib.length === users && none.picked.length === 0 && none.unmapped.length === 1,
+    JSON.stringify({ viewport: vp, lib: lib.length, users, unmapped: none.unmapped }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

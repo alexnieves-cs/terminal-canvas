@@ -6,12 +6,12 @@ An index. Every rule in this repository exists because the obvious version fails
 | Doc | Open it when |
 |---|---|
 | [README.md](README.md) | New here. Also the roadmap contract — modules are shaped for milestones that have not landed; don't "simplify" those away. |
-| [docs/load-bearing.md](docs/load-bearing.md) (+ [-recovered](docs/load-bearing-recovered.md)) | Before changing any module. Both files are far too large to read whole; **grep them, never scroll** — entries name their module in backticks, and are written from the CAUSE, so searching a symptom fails. |
+| [docs/load-bearing.md](docs/load-bearing.md) (+ [-recovered](docs/load-bearing-recovered.md)) | Before changing any module. Both files are far too large to read whole; **search them, never scroll** — `npm run lb -- <module>` lists every entry naming it, as whole entries with a file:line. Entries are written from the CAUSE, so searching a symptom fails. |
 | [docs/architecture-map.md](docs/architecture-map.md) | You need to know what a seam is and who owns it. Module-by-module. |
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
-| [docs/product-development-guide-2026-09-08.md](docs/product-development-guide-2026-09-08.md) | The current run (D01–D20 → M193–M224); ledger: [m193-m224](docs/build-log/m193-m224-ledger.md). |
+| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **Two runs are live and number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md). Work numbered past a ledger's range is logged per milestone beside them. `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
 
 ## What this is
@@ -75,7 +75,10 @@ what it runs (checks share state in-process; a filter matching nothing is red).
 `settle()` windows overrun under contention), so never the gate. A panels part's `headroom.1` goes red at 90% of its watchdog — re-pin it then, not after a
 hang. All three in [docs/verify-suites.md](docs/verify-suites.md). **Never add a suite
 to the `verify` script** — there is no list there to add it to. `npm run dev` unsets
-`ELECTRON_RUN_AS_NODE` first.
+`ELECTRON_RUN_AS_NODE` first. **Between gates, `npm run affected`** runs only the suites the
+branch's changes reach — derived from each suite's script, entries and `src`'s import graph, a
+changed file no suite reads printed as UNMAPPED — and says on every run that it is not the
+gate; `--list` shows the selection without running it.
 
 Outside the chain, all real Electron: `npm run shot` (23 PNGs of the real renderer for a
 fresh-context critic), `verify:visual` (those scenes against committed goldens;

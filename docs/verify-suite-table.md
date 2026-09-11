@@ -12,7 +12,14 @@ npm run build          # typecheck + electron-vite build
 npm run package         # electron-builder: the unsigned .app and .dmg, into release/
 npm run typecheck      # both projects; or typecheck:node / typecheck:web individually
 npm run verify         # the plain tier concurrently, then the build, then the Electron tier
+npm run affected       # only the suites this branch's changes reach — for iterating, NEVER the gate
+npm run lb -- <module> # the load-bearing entries naming a module, as whole entries with file:line
 ```
+
+`npm run affected` derives each suite's sources from its script, the `*-entry.cjs` files and
+`src`'s import graph (no table to go stale); a changed file no suite reads is printed as
+UNMAPPED rather than skipped, and `--list` shows the selection without running it. Pinned by
+`verify:meta affected.1`/`.2`.
 
 There is no unit-test runner and no linter. `npm run verify` is the whole verification
 story — `scripts/verify-all.cjs`, deriving its suite list from package.json rather than

@@ -312,7 +312,10 @@ const finish = (results, started, note) => {
   setTimeout(() => process.exit(failed.length ? 1 : 0), 5000).unref()
 }
 
-module.exports = { suites, HAND_RUN, isAggregate, tierOf, electronJobs, jobEnv }
+// runOne/report/runConcurrently/finish are exported for scripts/affected.cjs,
+// so a narrowed run executes, prints and summarises suites exactly as the gate
+// does rather than through a second copy that could drift from it.
+module.exports = { suites, HAND_RUN, isAggregate, tierOf, electronJobs, jobEnv, runOne, report, runConcurrently, finish }
 
 if (require.main === module) {
   main().catch((error) => {
