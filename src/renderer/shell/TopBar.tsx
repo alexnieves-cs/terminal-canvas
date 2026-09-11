@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
-import { Check, ChevronDown, Lanes, PanelRight, ProductMark, Search } from '@renderer/icons'
+import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -20,6 +20,9 @@ export interface TopBarProps {
   /** M46. The context pane is on screen (a column, or a Compact drawer). */
   contextOpen: boolean
   onToggleContext: () => void
+  /** (this redesign) Keeps the inspector open through the Compact breakpoint's own auto-collapse (`shell.inspectorPinned`). */
+  inspectorPinned: boolean
+  onToggleInspectorPinned: () => void
 }
 
 
@@ -42,7 +45,7 @@ export interface TopBarProps {
  */
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
-  workspaceName, taskName, theme, onSetTheme
+  workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -110,11 +113,21 @@ export function TopBar({
           <button type="button" role="menuitemcheckbox" aria-checked={contextOpen}
             className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
             {...shellControl(onToggleContext)}><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>⇧⌘\\</kbd></button>
+          {/* (this redesign) Pin the inspector open THROUGH the Compact
+              breakpoint's own auto-collapse — a separate axis from
+              contextOpen above (open/closed at all), the way
+              `shell--inspector-pinned` is a separate class from
+              `shell--inspector-collapsed` in the stylesheet. */}
+          <button type="button" role="menuitemcheckbox" aria-checked={inspectorPinned}
+            className={`shell__inspector-pin${inspectorPinned ? ' shell__inspector-pin--on' : ''}`}
+            title={inspectorPinned ? 'Stop keeping the inspector open on a narrow window' : 'Keep the inspector open even when the window narrows'}
+            {...shellControl(onToggleInspectorPinned)}><span className="shell__view-check">{inspectorPinned && <Check />}</span>{Pin} Pin inspector open</button>
           <button type="button" role="menuitemcheckbox" aria-checked={merged} aria-pressed={merged}
             className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
             {...shellControl(onToggleMerged)}><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</button>
         </div>
       </div>
+
     </header>
   )
 }

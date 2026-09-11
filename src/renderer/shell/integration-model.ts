@@ -42,6 +42,12 @@ export interface IntegrationRow {
   word: string
   verb: 'connect' | 'verify' | 'reconnect'
   rows: AuditRowLike[]
+  /** When the credential last verified — absent for `not-connected`/`stored`. */
+  verifiedAt?: string
+  /** When the credential was added — absent for `not-connected`. */
+  addedAt?: string
+  /** The newest audit row's timestamp — absent when nothing has called through it yet. */
+  lastUsedAt?: number
 }
 
 export function buildIntegrationRows(
@@ -53,17 +59,71 @@ export function buildIntegrationRows(
   return services.map((svc) => {
     const meta = metas.find((m) => m.service === svc.id)
     const rows = audit.filter((r) => r.service === svc.id).slice().sort((a, b) => b.at - a.at).slice(0, cap)
+    const lastUsedAt = rows[0]?.at
     if (meta === undefined) {
-      return { id: svc.id, label: svc.label, state: 'not-connected', word: 'not connected', sentence: notConnectedReason(svc.id), verb: 'connect', rows }
+      return { id: svc.id, label: svc.label, state: 'not-connected', word: 'not connected', sentence: notConnectedReason(svc.id), verb: 'connect', rows, lastUsedAt }
     }
     if (meta.rejectedAt !== undefined) {
       // The sentence's fix and the verb beneath it are ONE door: `Reconnect…`
       // opens the Credentials scope, so the sentence does not name a second.
-      return { id: svc.id, label: svc.label, state: 'rejected', who: meta.label, word: 'token rejected', sentence: `token rejected — add a new ${svc.id} token`, verb: 'reconnect', rows }
+      return { id: svc.id, label: svc.label, state: 'rejected', who: meta.label, word: 'token rejected', sentence: `token rejected — add a new ${svc.id} token`, verb: 'reconnect', rows, verifiedAt: meta.verifiedAt, addedAt: meta.addedAt, lastUsedAt }
     }
     if (meta.verifiedAt === undefined) {
-      return { id: svc.id, label: svc.label, state: 'stored', who: meta.label, word: 'not verified', sentence: 'token added, not verified yet', verb: 'verify', rows }
+      return { id: svc.id, label: svc.label, state: 'stored', who: meta.label, word: 'not verified', sentence: 'token added, not verified yet', verb: 'verify', rows, addedAt: meta.addedAt, lastUsedAt }
     }
-    return { id: svc.id, label: svc.label, state: 'connected', who: meta.label, word: 'connected', sentence: `connected as ${meta.label}`, verb: 'verify', rows }
+    return { id: svc.id, label: svc.label, state: 'connected', who: meta.label, word: 'connected', sentence: `connected as ${meta.label}`, verb: 'verify', rows, verifiedAt: meta.verifiedAt, addedAt: meta.addedAt, lastUsedAt }
   })
+}
+
+/**
+ * ONE translated sentence for a raw broker call, from the real path shapes
+ * `github-client.ts` and an agent's own `tc api <service> <path>` produce. A
+ * shape this does not recognise falls back to the method and path
+ * themselves — never a fabricated verb for a request nobody described.
+ *
+ * Each match names its verb in the BASE form ("comment on issue #12") so a
+ * refusal can prefix "tried to" without guessing at English past-tense
+ * spelling — the earlier version stripped a trailing "ed" to un-conjugate,
+ * which silently left "read" (no "ed" ending) in the present tense on a
+ * refused call, claiming a read that never happened.
+ */
+export function describeCall(service: string, row: AuditRowLike): string {
+  const base = describeCallBase(service, row)
+  const fail = row.status !== 0 ? '' : ` — refused${row.reason === undefined || row.reason === 'refused' ? '' : ` (${row.reason})`}`
+  return `${row.status === 0 ? `tried to ${base}` : `${past(base)}`}${fail}`
+}
+
+/** The base-form sentence, before tense: "comment on issue #12 in o/r". */
+function describeCallBase(service: string, row: AuditRowLike): string {
+  if (service === 'github') {
+    let m = row.path.match(/^\/repos\/([^/]+\/[^/?]+)\/issues\/(\d+)\/comments/)
+    if (m) return `comment on issue #${m[2]} in ${m[1]}`
+    m = row.path.match(/^\/repos\/([^/]+\/[^/?]+)\/pulls\/(\d+)/)
+    if (m) return `read pull request #${m[2]} in ${m[1]}`
+    m = row.path.match(/^\/repos\/([^/]+\/[^/?]+)\/(?:issues|pulls)\b/)
+    if (m) return `list ${row.path.includes('/pulls') ? 'pull requests' : 'issues'} in ${m[1]}`
+    m = row.path.match(/^\/repos\/([^/]+\/[^/?]+)\/releases/)
+    if (m) return `publish a release in ${m[1]}`
+    m = row.path.match(/^\/repos\/([^/]+\/[^/?]+)/)
+    if (m) return `${row.method === 'GET' ? 'read' : 'change'} ${m[1]}`
+    if (row.path.startsWith('/issues')) return 'list assigned issues'
+    if (row.path === '/user') return 'check the connected account'
+  }
+  if (service === 'jira') {
+    let m = row.path.match(/\/issue\/([^/?]+)\/comment/)
+    if (m) return `comment on ${m[1]}`
+    m = row.path.match(/\/issue\/([^/?]+)\/transitions/)
+    if (m) return `move ${m[1]}`
+    m = row.path.match(/\/issue\/([^/?]+)/)
+    if (m) return `read ${m[1]}`
+    if (/\/search\b/.test(row.path)) return 'search Jira'
+  }
+  return `${row.method} ${row.path}`
+}
+
+/** The base form's verb, past tense — a small closed list, not a suffix guess. */
+const PAST: Record<string, string> = { comment: 'commented', read: 'read', list: 'listed', publish: 'published', change: 'changed', check: 'checked', move: 'moved', search: 'searched' }
+function past(base: string): string {
+  const verb = base.split(' ', 1)[0]
+  return PAST[verb] === undefined ? base : `${PAST[verb]}${base.slice(verb.length)}`
 }
