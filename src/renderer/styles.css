@@ -5182,10 +5182,19 @@ body {
 /* M204 (D08). The card's far overview, under the summary's title and word. */
 .work-node__far { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--t-lg); color: var(--fg-2); }
 /* M244. Creation is resting canvas chrome: one low-contrast row, no metrics.
-   Native buttons retain tab/Enter/Space semantics and a visible focus ring. */
+   Native buttons retain tab/Enter/Space semantics and a visible focus ring.
+   M252 (fix). `overflow-x: auto` clipped the row to a scrollbar nobody could
+   see: at the standard 1440px width, with the sidebar and the minimap both
+   showing, the row's own budget (right: 176px clears the minimap) is 900px
+   but ten pills need 1024px, so `Describe a tool` — the last pill — sat
+   almost entirely past the clip line, an 11px sliver touching the minimap's
+   edge and nothing a person could click. `flex-wrap` drops the overflow to
+   a second line INSIDE the same left/right bounds instead of scrolling it
+   out of sight, so it never enters the minimap's reserved corner and needs
+   no new gesture to reach it. */
 .new-object-row {
   position: absolute; top: 12px; left: 16px; right: 176px; z-index: 20;
-  display: flex; gap: var(--sp-3); overflow-x: auto; padding: var(--sp-1);
+  display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-1);
   pointer-events: auto; font-family: var(--font-ui);
 }
 .new-object-row__pill {
