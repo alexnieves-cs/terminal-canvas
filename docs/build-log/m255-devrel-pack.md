@@ -94,5 +94,22 @@ sent. It is fixed: the confirm names the lines it did not show and the file to r
   `npm run verify` stays offline.
 - **A canvas control on the file panel itself for the publish verbs** (M256). The palette row on
   the selected draft is the person's door.
-- **The full `npm run verify` gate after merging main.** Main gained `packs-11`, deck, pill and
-  notes after this branch's base, and `gate.2` and `EXPECTED_CHANNELS` re-pin on that merge.
+
+## The gate, after merging main (ef6c4c4a → 45b45356, then 63f39fea)
+
+The full `npm run verify` passed **46/48 suites** (551s, under `/tmp/tc-electron-lock`, 23:18).
+Both reds are main's own:
+- `verify:panels:kinds broadcast.1/.2` plus its watchdog were red on main at c9fc193f.
+- `verify:panels:product reach.1/.3` are red on a main build too (M207/M208 moved the secondary
+  verbs behind "More actions…").
+
+Every M253, M255 and M252 check passed:
+- M253 and M255: `pack.*`, `devrel.*`, `publish.1–.7`, `broker.gap.*`, `control.gap.1`, `scope.1`
+  and `preset.reviewed.*`;
+- the pins: `gate.2` at eight callers, `closure.1` and `closure.v9.1`, `agent-door.7`;
+- M252's `tool.*`, including `tool.door.1`.
+
+The merge's one real conflict was M252's `tool.door.1`: "I've read this" has no palette row.
+M253's `workflow.read.<id>` rows would have cleared any unread template, a described tool's
+included, so they were removed (63f39fea). M252's button on the workflow panel marks an imported
+pack workflow read. The preset read row stays, because a preset has no canvas object.
