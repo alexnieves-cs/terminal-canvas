@@ -1200,7 +1200,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // finished edge of a selected run ONCE and ends invisible; a moment, never a loop.
   // drawer-in-left / drawer-in-right / drawer-scrim-in: a compact drawer
   // sliding from its own edge on --dur-drawer, over a scrim fading with it.
-  const allowed = ['chat-caret', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-waiting', 'integration-verified-pop', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // landing-halo: attention navigation's arrival — one swell around the
+  // destination frame after the camera lands, then gone (landing.1).
+  const allowed = ['chat-caret', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
@@ -1327,6 +1329,23 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     dormant.length >= 2 && has('.panel[data-dormant]', /border-style:\s*dashed/) && has('.panel__card-dormant', /border-radius/) &&
       dormant.every((r) => !/(^|;|\s)(width|height|top|left|right|bottom|inset|transform):/.test(r.body)),
     JSON.stringify(dormant.map((r) => r.sel)))
+}
+
+// Attention navigation's arrival glow. Three facts that fail silently: the
+// CSS duration and Canvas.tsx's unmount timer must agree (shorter cuts the
+// fade off mid-swell, longer leaves a dead overlay); a STATIC ring must be
+// declared, or reduced-motion users — whose animations the global block
+// forces off — get no signal at all; and it must never take a click meant
+// for the panel under it.
+{
+  const halo = all.find((r) => r.sel.trim() === '.landing-halo')
+  const canvasSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  const timer = (canvasSrc.match(/const LANDING_LIT_MS = (\d+)/) || [])[1]
+  const cssMs = halo && /animation:\s*landing-halo\s+var\(--dur-land\)/.test(halo.body) ? (bare.match(/--dur-land:\s*(\d+)ms/) || [])[1] : undefined
+  ok('landing.1', 'the landing halo has a static ring, takes no pointer, and fades over exactly LANDING_LIT_MS',
+    !!halo && /box-shadow:\s*0 0 0 3px var\(--amber\)/.test(halo.body) && /pointer-events:\s*none/.test(halo.body) &&
+      timer !== undefined && timer === cssMs,
+    JSON.stringify({ found: !!halo, timer, cssMs }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

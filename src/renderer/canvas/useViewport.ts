@@ -114,6 +114,15 @@ export interface ViewportControls {
   trail: { back: boolean; forward: boolean }
   flying: boolean
   /**
+   * Attention navigation's landing signal. Every discrete jump ends in
+   * exactly ONE settle — the flight's last frame, the instant set a
+   * reduced-motion or zero-distance jump makes, or a gesture grabbing the
+   * camera mid-air — and `seq` counts them. `landed` separates the first two
+   * from the third: a destination the user pulled away from must not light
+   * up behind them. STATE, like `flying`, so an effect can key on it.
+   */
+  landing: { seq: number; landed: boolean }
+  /**
    * Arms a camera drag-pan from a mousedown's screen coordinates — backlog
    * #68's middle-drag and space-drag. The seventh narrow verb, after
    * resetViewport/worldCentre/centreOn/restoreCamera/zoomBy/fitAll: the
@@ -245,21 +254,29 @@ export function useViewport(
   // — the user grabbed the camera mid-air and it must stay where it is.
   const [flying, setFlying] = useState(false)
   const flightRef = useRef<number | null>(null)
-  const cancelFlight = useCallback(() => {
+  const [landing, setLanding] = useState({ seq: 0, landed: false })
+  const settle = useCallback((landed: boolean) => {
+    setLanding((l) => ({ seq: l.seq + 1, landed }))
+  }, [])
+  // `superseded`: flyTo replacing its own flight is not a settle — the new
+  // flight will settle — and counting it would cancel the landing the new
+  // jump is about to make.
+  const cancelFlight = useCallback((superseded = false) => {
     if (flightRef.current !== null) {
       cancelAnimationFrame(flightRef.current)
       flightRef.current = null
       setFlying(false)
+      if (!superseded) settle(false)
     }
-  }, [])
+  }, [settle])
   const flyTo = useCallback((target: Viewport) => {
-    cancelFlight()
+    cancelFlight(true)
     const host = hostRef.current
     const bounds = host ? host.getBoundingClientRect() : { width: 800, height: 600 }
     const size = { width: bounds.width, height: bounds.height }
     const from = viewportRef.current
     const duration = flightDuration(from, target, size, prefersReducedMotion())
-    if (duration === 0) { setViewport(target); return }
+    if (duration === 0) { setViewport(target); settle(true); return }
     const centre = { x: size.width / 2, y: size.height / 2 }
     const started = performance.now()
     setFlying(true)
@@ -269,13 +286,14 @@ export function useViewport(
         flightRef.current = null
         setViewport(target)
         setFlying(false)
+        settle(true)
         return
       }
       setViewport(interpolateViewport(from, target, easeInOut(t), centre))
       flightRef.current = requestAnimationFrame(step)
     }
     flightRef.current = requestAnimationFrame(step)
-  }, [cancelFlight, hostRef])
+  }, [cancelFlight, hostRef, settle])
   useEffect(() => () => { if (flightRef.current !== null) cancelAnimationFrame(flightRef.current) }, [])
 
   // M56. The trail: a SECOND History<Viewport>, never the panels' — that
@@ -290,10 +308,12 @@ export function useViewport(
   }, [])
   const jump = useCallback((target: Viewport) => {
     const here = viewportRef.current
-    if (here.x === target.x && here.y === target.y && here.scale === target.scale) return
+    // Already there still counts as arriving: a person who asks to be taken
+    // to a panel that is on screen must still be shown which one it is.
+    if (here.x === target.x && here.y === target.y && here.scale === target.scale) { settle(true); return }
     syncTrail(pushHistory({ ...trailRef.current, present: here }, target))
     flyTo(target)
-  }, [flyTo, syncTrail])
+  }, [flyTo, syncTrail, settle])
   const cameraBack = useCallback(() => {
     if (!canUndo(trailRef.current)) return
     const h = undoHistory(trailRef.current)
@@ -666,6 +686,6 @@ export function useViewport(
   return {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
     beginPanDrag, panning,
-    goToViewport, cameraBack, cameraForward, trail, flying
+    goToViewport, cameraBack, cameraForward, trail, flying, landing
   }
 }
