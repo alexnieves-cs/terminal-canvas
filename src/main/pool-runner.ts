@@ -24,13 +24,16 @@
  * even between two items finishing, not just at the moment one does.
  */
 import type { PoolNode } from '../shared/workflow-nodes'
+import { budgetCrossing } from '@shared/rate-limit'
 
 export interface PoolDeps {
   /** Reads the shared list file. A failure is a REFUSAL, before any worker exists. */
   readList: (path: string) => { kind: 'ok'; items: string[] } | { kind: 'error'; why: string }
-  /** M82's ceilings, read live — never captured at start. */
-  limits: () => { maxConcurrent: number; budgetUsd: number }
+  /** Ceilings, read live — never captured at start. Window percent is the subscriber arm. */
+  limits: () => { maxConcurrent: number; budgetUsd: number; budgetWindowPercent?: number }
   spend: () => number
+  /** Binding window utilization when known; absent means the window budget cannot fire. */
+  windowUtil?: () => number | undefined
   createWorker: (prompt: string, item: string) => Promise<{ id: string }>
   interrupt: (id: string) => void
   onEvent: (e: PoolEvent) => void
@@ -93,8 +96,14 @@ export function startPool(node: PoolNode, deps: PoolDeps): PoolHandle {
     }
     pumping = true
     try {
-      const { maxConcurrent, budgetUsd } = deps.limits() // LIVE, every pump
-      if (budgetUsd > 0 && deps.spend() >= budgetUsd) {
+      const { maxConcurrent, budgetUsd, budgetWindowPercent } = deps.limits() // LIVE, every pump
+      const crossing = budgetCrossing({
+        budgetUsd,
+        budgetWindowPercent: budgetWindowPercent ?? 0,
+        spentUsd: deps.spend(),
+        windowUtil: deps.windowUtil?.()
+      })
+      if (crossing !== null) {
         const inFlight = [...live]
         live.clear()
         for (const id of inFlight) deps.interrupt(id) // interrupt, never kill

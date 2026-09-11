@@ -183,6 +183,19 @@ export const SETTINGS: readonly SettingDef[] = [
     category: AGENT_CATEGORY
   },
   {
+    // Subscriber arm of the same stop path as budgetUsd: utilization comes
+    // from rate_limit_event (max of the 5-hour and weekly windows).
+    id: 'agents.budgetWindowPercent',
+    label: 'Stop at this % of the usage window',
+    description: 'stop this canvas\'s agents when the binding Claude usage window (5-hour or weekly, whichever is higher) reaches this percent — for subscribers; 0 is no ceiling',
+    keywords: ['budget', 'window', 'percent', 'rate', 'limit', 'subscriber', 'five hour', 'weekly', 'ceiling'],
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 100,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.bell',
     planWritable: true,
     label: 'Detect the terminal bell',

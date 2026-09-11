@@ -135,7 +135,7 @@ export type AgentSessionEvent = { id: string } & (
   /** M82. `concurrency` is the second reason a send queues: the canvas's ceiling, not this session's turn. */
   | { type: 'queued'; text: string; reason?: 'in-flight' | 'concurrency' }
   /** M82. The canvas crossed its budget: every turn in flight was interrupted. Once per crossing. */
-  | { type: 'budget'; spent: number; limit: number; interrupted: number }
+  | { type: 'budget'; spent: number; limit: number; interrupted: number; unit?: 'usd' | 'window' }
   /** A queued message written after the result that freed the turn. */
   | { type: 'dequeued'; text: string }
   | { type: 'queue-dropped'; count: number }
@@ -177,7 +177,7 @@ export function sendRefusalSentence(answer: SendAnswer | undefined): string | nu
   if (answer === undefined) return null
   if (typeof answer === 'object' && answer !== null && 'refused' in answer) return answer.refused
   switch (answer) {
-    case 'refused-budget': return 'the budget ceiling was reached — raise agents.budgetUsd in Settings, then send again'
+    case 'refused-budget': return 'the budget ceiling was reached — raise agents.budgetUsd or agents.budgetWindowPercent in Settings, then send again'
     case 'refused-backend': return 'this engine cannot take the message'
     case 'refused-images': return 'this engine cannot take images'
     case 'refused-sandbox': return 'this engine has no read-only mode, and the conversation has no folder'

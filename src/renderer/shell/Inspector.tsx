@@ -2,7 +2,7 @@ import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMo
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machine-cost-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
-import { agentStateLabel, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
+import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
 import { panelState } from '@renderer/panels/panel-state'
 import { nextHandoffState } from '@renderer/panels/panels'
@@ -362,6 +362,7 @@ function AutomationList({
  * cross-workspace counts land here rather than needing a new surface.
  */
 function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element {
+  const gauge = formatRateLimitGauge(summary.rateLimit ?? { kind: 'none' })
   return (
     <div className="inspector__body" data-inspector-summary>
       {/* M48 (spec §5). The one line this pane owed: what selecting does. */}
@@ -390,6 +391,44 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
         <div className="inspector__field">
           <dt className="inspector__label">list price</dt>
           <dd className="inspector__value" data-summary="cost">{summary.cost === undefined ? '—' : `$${summary.cost.toFixed(2)}`}</dd>
+        </div>
+        {/* Account-level usage windows — the subscriber question "can I start
+            a 6-wide pool right now?". Per-panel tokens stay above / in Work. */}
+        <div className="inspector__field inspector__field--gauge" data-summary="rate-limit" data-rate-limit={gauge.kind}>
+          <dt className="inspector__label">usage window</dt>
+          <dd className="inspector__value">
+            {gauge.kind === 'none' ? (
+              <span data-rate-limit-none>no window data yet</span>
+            ) : (
+              <ul className="inspector__rate-limit">
+                {gauge.kind === 'limited' && (
+                  <li className="inspector__rate-limit-status" data-rate-limit-status="limited">
+                    limited until {formatRateLimitReset(gauge.until ?? 0)}
+                  </li>
+                )}
+                {gauge.fiveHour !== undefined && (
+                  <li data-rate-limit-window="five_hour">
+                    <span className="inspector__rate-limit-name">5-hour</span>
+                    <span className="inspector__rate-limit-bar" aria-hidden="true">
+                      <span className="inspector__rate-limit-fill" style={{ width: `${Math.min(100, gauge.fiveHour.percent)}%` }} />
+                    </span>
+                    <span className="inspector__rate-limit-pct">{gauge.fiveHour.percent}%</span>
+                    <span className="inspector__rate-limit-reset">resets {formatRateLimitReset(gauge.fiveHour.resetsAt)}</span>
+                  </li>
+                )}
+                {gauge.weekly !== undefined && (
+                  <li data-rate-limit-window="seven_day">
+                    <span className="inspector__rate-limit-name">weekly</span>
+                    <span className="inspector__rate-limit-bar" aria-hidden="true">
+                      <span className="inspector__rate-limit-fill" style={{ width: `${Math.min(100, gauge.weekly.percent)}%` }} />
+                    </span>
+                    <span className="inspector__rate-limit-pct">{gauge.weekly.percent}%</span>
+                    <span className="inspector__rate-limit-reset">resets {formatRateLimitReset(gauge.weekly.resetsAt)}</span>
+                  </li>
+                )}
+              </ul>
+            )}
+          </dd>
         </div>
         {/* M142 (#19's history half). This week's CLOSED sessions from the run
             ledger, three states: reading, nothing closed, a figure (or

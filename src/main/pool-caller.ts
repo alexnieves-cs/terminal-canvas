@@ -81,8 +81,9 @@ export interface PoolCallerDeps {
   agents: PoolAgents
   mint: (req: PoolMintRequest) => Promise<PoolMintReply>
   readList: (path: string) => { kind: 'ok'; items: string[] } | { kind: 'error'; why: string }
-  limits: () => { maxConcurrent: number; budgetUsd: number }
+  limits: () => { maxConcurrent: number; budgetUsd: number; budgetWindowPercent?: number }
   spend: () => number
+  windowUtil?: () => number | undefined
   emit: (event: PoolCallerEvent) => void
 }
 
@@ -149,6 +150,7 @@ export function createPoolCaller(deps: PoolCallerDeps): PoolCaller {
       readList: () => listed,
       limits: deps.limits,
       spend: deps.spend,
+      ...(deps.windowUtil === undefined ? {} : { windowUtil: deps.windowUtil }),
       createWorker: async (prompt, item) => {
         if (entry.ended) return { id: '' }
         const reply = await deps.mint({ templateId: req.templateId, key: req.key, cwd: req.node.cwd, prompt, item, index: index++ })

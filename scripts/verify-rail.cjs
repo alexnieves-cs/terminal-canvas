@@ -269,6 +269,38 @@ ok('17 isRunning counts starting as running, and nothing else as running',
     JSON.stringify({ s, bad, none }))
 }
 
+// Usage-window gauge on the no-selection summary: 5-hour + weekly with
+// reset times. `none` is honest emptiness, never zero bars that look like room left.
+{
+  const none = R.formatRateLimitGauge({ kind: 'none' })
+  const allowed = R.formatRateLimitGauge({
+    kind: 'allowed',
+    overage: false,
+    at: 0,
+    windows: {
+      five_hour: { utilization: 0.02, resetsAt: 1788480000 },
+      seven_day: { utilization: 0.46, resetsAt: 1788685200 }
+    }
+  })
+  const limited = R.formatRateLimitGauge({
+    kind: 'limited',
+    until: 1788480000,
+    overage: false,
+    at: 0,
+    windows: {
+      five_hour: { utilization: 1, resetsAt: 1788480000 },
+      seven_day: { utilization: 0.9, resetsAt: 1788685200 }
+    }
+  })
+  ok('summary.rate.1 the rate-limit gauge names none / allowed / limited; allowed and limited expose both windows as percent + resetsAt; none exposes no bars',
+    none.kind === 'none' && allowed.kind === 'allowed' && limited.kind === 'limited' &&
+      allowed.fiveHour && allowed.fiveHour.percent === 2 && allowed.fiveHour.resetsAt === 1788480000 &&
+      allowed.weekly && allowed.weekly.percent === 46 && allowed.weekly.resetsAt === 1788685200 &&
+      limited.fiveHour && limited.fiveHour.percent === 100 && limited.until === 1788480000 &&
+      none.fiveHour === undefined && none.weekly === undefined,
+    JSON.stringify({ none, allowed, limited }))
+}
+
 // M49 — type.1. The Detail field: the effective size, and whether it is the
 //      default or this panel's own.
 {

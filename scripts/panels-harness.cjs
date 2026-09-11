@@ -144,6 +144,7 @@ function findTmux() {
 }
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
+const { windowUtilization } = require('../src/shared/rate-limit')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
@@ -1010,7 +1011,7 @@ app.whenReady().then(async () => {
     // create needs nothing from it, and no check sends on one here.
     codex: { command: '/fake/codex' },
     // M82. The canvas's ceilings, read live from the same store main reads.
-    limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0 }),
+    limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0, budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0 }),
     newSessionId: () => `fake-${chatSpawns.length}`, interruptGraceMs: 200, coalesceMs: 16,
     // M74. The fenced answer to "has the CLI written this session": the
     // front-end fixture store, so an imported chat's first send resumes.
@@ -1101,7 +1102,7 @@ app.whenReady().then(async () => {
         return items.length === 0 ? { kind: 'error', why: `${listPath} holds no items` } : { kind: 'ok', items }
       } catch (error) { return { kind: 'error', why: String(error && error.message || error) } }
     },
-    limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0 }),
+    limits: () => ({ maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0, budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0, budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0 }),
     spend: () => agentSessions.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
     emit: (event) => { win.webContents.send(IPC_EVENTS.POOL_EVENT, event) }
   })
@@ -1122,6 +1123,11 @@ app.whenReady().then(async () => {
       const answer = agentSessions.send(id, text, images)
       // M82. Main's own mapping: the ceiling refuses by name with the fix.
       if (answer === 'refused-budget') {
+        const windowPct = Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
+        const util = windowUtilization(agentSessions.rateLimit())
+        if (windowPct > 0 && util !== undefined && util >= windowPct / 100) {
+          return { refused: `over the ${windowPct}% usage-window budget for this canvas — raise agents.budgetWindowPercent in settings, or wait for a window to reset` }
+        }
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
         return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
       }

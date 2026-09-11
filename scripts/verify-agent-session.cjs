@@ -144,16 +144,80 @@ const count = (events, pred) => events.filter(pred).length
 {
   const unknownTop = T.parseStreamLine('{"type":"telepathy","x":1}')
   const unknownSys = T.parseStreamLine('{"type":"system","subtype":"weather"}')
-  const rate = T.parseStreamLine(fixture('turn.jsonl').find((l) => l.includes('"rate_limit_event"')))
+  const progress = T.parseStreamLine('{"type":"tool_progress","tool":"x"}')
   const status = T.parseStreamLine('{"type":"system","subtype":"status","status":"requesting"}')
   const noType = T.parseStreamLine('{"subtype":"init"}')
   ok('transcript.unknown an unseen top-level type or system subtype is reported as unknown with its kind; a known-but-useless record is ignored with its kind; a missing type is malformed',
     unknownTop.type === 'unknown' && unknownTop.kind === 'telepathy' &&
       unknownSys.type === 'unknown' && unknownSys.kind === 'system/weather' &&
-      rate.type === 'ignored' && rate.kind === 'rate_limit_event' &&
+      progress.type === 'ignored' && progress.kind === 'tool_progress' &&
       status.type === 'ignored' && status.kind === 'system/status' &&
       noType.type === 'malformed',
-    JSON.stringify({ unknownTop, unknownSys, rate, status, noType }))
+    JSON.stringify({ unknownTop, unknownSys, progress, status, noType }))
+}
+
+{
+  // rate_limit_event is live usage state, not IGNORED_TOP: a depleted window
+  // must not look like a stuck agent, and the gauge needs both windows.
+  const rate = T.parseStreamLine(fixture('turn.jsonl').find((l) => l.includes('"rate_limit_event"')))
+  const limited = T.parseStreamLine(JSON.stringify({
+    type: 'rate_limit_event',
+    rate_limit_info: {
+      status: 'rejected',
+      resetsAt: 1788480000,
+      rateLimitType: 'five_hour',
+      isUsingOverage: true,
+      unifiedWindows: {
+        five_hour: { utilization: 1, resetsAt: 1788480000 },
+        seven_day: { utilization: 0.9, resetsAt: 1788685200 }
+      }
+    }
+  }))
+  const absent = T.parseStreamLine('{"type":"rate_limit_event"}')
+  const badWin = T.parseStreamLine(JSON.stringify({
+    type: 'rate_limit_event',
+    rate_limit_info: { status: 'allowed', unifiedWindows: { five_hour: { utilization: 'x', resetsAt: null } } }
+  }))
+  ok('rate-limit.1 rate_limit_event parses to a typed event with status, overage, and each window\'s utilization and resetsAt; an absent info is malformed; a present-but-malformed window is dropped, never coerced',
+    rate.type === 'rate-limit' && rate.status === 'allowed' && rate.overage === false &&
+      rate.windows.five_hour && rate.windows.five_hour.utilization === 0.02 && rate.windows.five_hour.resetsAt === 1788480000 &&
+      rate.windows.seven_day && rate.windows.seven_day.utilization === 0.46 && rate.windows.seven_day.resetsAt === 1788685200 &&
+      limited.type === 'rate-limit' && limited.status === 'rejected' && limited.overage === true &&
+      limited.windows.five_hour && limited.windows.five_hour.utilization === 1 &&
+      absent.type === 'malformed' &&
+      badWin.type === 'rate-limit' && badWin.windows.five_hour === undefined,
+    JSON.stringify({ rate, limited, absent, badWin }))
+}
+
+{
+  // Three states, never two: none / allowed / limited-until-T. Collapsing
+  // "no event" with "allowed at 0%" is how a depleted window looked stuck.
+  const RL = M.rateLimit
+  const none = RL.RATE_LIMIT_NONE
+  const allowedEvt = T.parseStreamLine(fixture('turn.jsonl').find((l) => l.includes('"rate_limit_event"')))
+  const allowed = RL.foldRateLimit(none, allowedEvt)
+  const limitedEvt = {
+    type: 'rate-limit',
+    status: 'rejected',
+    resetsAt: 1788480000,
+    overage: false,
+    windows: { five_hour: { utilization: 1, resetsAt: 1788480000 }, seven_day: { utilization: 0.5, resetsAt: 1788685200 } }
+  }
+  const limited = RL.foldRateLimit(allowed, limitedEvt, 1_700_000_000_000)
+  const utilNone = RL.windowUtilization(none)
+  const utilAllowed = RL.windowUtilization(allowed)
+  const utilLimited = RL.windowUtilization(limited)
+  const crossUsd = RL.budgetCrossing({ budgetUsd: 1, budgetWindowPercent: 80, spentUsd: 1.5, windowUtil: 0.1 })
+  const crossWin = RL.budgetCrossing({ budgetUsd: 0, budgetWindowPercent: 80, spentUsd: 0, windowUtil: 0.85 })
+  const crossMax = RL.budgetCrossing({ budgetUsd: 0, budgetWindowPercent: 80, spentUsd: 0, windowUtil: 0.5 })
+  const crossNone = RL.budgetCrossing({ budgetUsd: 0, budgetWindowPercent: 80, spentUsd: 0, windowUtil: undefined })
+  ok('rate-limit.2 fold keeps none / allowed / limited-until-T distinct; windowUtilization is the max of named windows; budgetCrossing reuses one path for USD and for window percent (whichever window is higher)',
+    none.kind === 'none' && allowed.kind === 'allowed' && limited.kind === 'limited' && limited.until === 1788480000 &&
+      utilNone === undefined && Math.abs(utilAllowed - 0.46) < 1e-9 && utilLimited === 1 &&
+      crossUsd && crossUsd.unit === 'usd' && crossUsd.limit === 1 &&
+      crossWin && crossWin.unit === 'window' && crossWin.limit === 0.8 &&
+      crossMax === null && crossNone === null,
+    JSON.stringify({ none, allowed, limited, utilNone, utilAllowed, utilLimited, crossUsd, crossWin, crossMax, crossNone }))
 }
 
 {
@@ -1084,6 +1148,72 @@ const isResult = (l) => l.includes('"type":"result"')
         interrupts.some((n) => n > 0) && two.spawns.every((s) => s.proc.killed === 0) && before.every((k) => k === 0) &&
         afterSecond === 1,
       JSON.stringify({ budgetEvents, interrupts, killed: two.spawns.map((s) => s.proc.killed), afterSecond }))
+  }
+
+  {
+    // Live rate-limit state on the manager: emit the event, keep none/allowed/
+    // limited, and stop at N% of the binding window through the SAME budget path.
+    const limits = { maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0 }
+    const { manager, spawns, events } = makeManager({ limits: () => limits })
+    manager.create({ id: 'rl1', cwd: '/r' })
+    ok('rate-limit.3a before any event the manager\'s rate-limit state is none',
+      manager.rateLimit().kind === 'none', JSON.stringify(manager.rateLimit()))
+    manager.send('rl1', 'go')
+    const rateLine = fixture('turn.jsonl').find((l) => l.includes('"rate_limit_event"'))
+    spawns[0].proc.emitLines([rateLine])
+    await tick(5)
+    const emitted = events.filter((e) => e.type === 'rate-limit')
+    ok('rate-limit.3b a rate_limit_event is emitted (not ignored) and the manager folds it to allowed with both windows',
+      emitted.length === 1 && emitted[0].status === 'allowed' && manager.rateLimit().kind === 'allowed' &&
+        manager.rateLimit().windows.five_hour && manager.rateLimit().windows.seven_day,
+      JSON.stringify({ emitted, state: manager.rateLimit() }))
+
+    // End the first turn so the next send is a fresh ceiling check, not an in-flight queue.
+    spawns[0].proc.emitLines([JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(5)
+    limits.budgetWindowPercent = 80
+    const under = manager.send('rl1', 'still ok')
+    spawns[0].proc.emitLines([JSON.stringify({
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        isUsingOverage: false,
+        unifiedWindows: {
+          five_hour: { utilization: 0.85, resetsAt: 1788480000 },
+          seven_day: { utilization: 0.1, resetsAt: 1788685200 }
+        }
+      }
+    }), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.02, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(5)
+    const turnsBefore = manager.transcript('rl1').filter((t) => t.role === 'user').length
+    const refused = manager.send('rl1', 'too much')
+    const afterRefuse = manager.transcript('rl1').filter((t) => t.role === 'user').length
+    ok('rate-limit.3c budgetWindowPercent refuses a send when max(window) crosses the threshold, stores no turn, and leaves budgetUsd alone for API-key users',
+      under === 'sent' && refused === 'refused-budget' && afterRefuse === turnsBefore,
+      JSON.stringify({ under, refused, turnsBefore, afterRefuse, state: manager.rateLimit() }))
+
+    // Interrupt path: a result that lands a window crossing stops in-flight turns.
+    const w = { maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 50 }
+    const two = makeManager({ limits: () => w })
+    two.manager.create({ id: 'w1', cwd: '/r' })
+    two.manager.create({ id: 'w2', cwd: '/r' })
+    two.manager.send('w1', 'a')
+    two.manager.send('w2', 'b')
+    two.spawns[0].proc.emitLines([JSON.stringify({
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        isUsingOverage: false,
+        unifiedWindows: { five_hour: { utilization: 0.6, resetsAt: 1 }, seven_day: { utilization: 0.1, resetsAt: 2 } }
+      }
+    }), JSON.stringify({ type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, usage: { input_tokens: 1, output_tokens: 1 } })])
+    await tick(10)
+    const budgetEvents = two.events.filter((e) => e.type === 'budget')
+    const interrupts = two.spawns.map((s) => s.proc.stdin.filter((l) => l.includes('interrupt')).length)
+    ok('rate-limit.3d a window crossing interrupts in-flight turns once through enforceBudget (spent/limit are window fractions)',
+      budgetEvents.length === 1 && budgetEvents[0].unit === 'window' && budgetEvents[0].limit === 0.5 &&
+        interrupts.some((n) => n > 0) && two.spawns.every((s) => s.proc.killed === 0),
+      JSON.stringify({ budgetEvents, interrupts }))
   }
 
   // quit — the optional agents dependency

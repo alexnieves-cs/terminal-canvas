@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import { isChatPanel } from '@renderer/panels/panels'
 import { applyChatEvent, clearChat, getChat, seedChat, setChatGrants } from './chat-store'
+import { applyRateLimit } from '@renderer/session/rate-limit-store'
 import { DISPATCH_PROMPT, SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { ROUTINE_PROMPT } from '@shared/routines'
 
@@ -29,7 +30,10 @@ let subscribed = false
 function ensureSubscribed(): void {
   if (subscribed) return
   subscribed = true
-  window.canvas.agentSession.onEvent((event) => applyChatEvent(event))
+  window.canvas.agentSession.onEvent((event) => {
+    applyChatEvent(event)
+    if (event.type === 'rate-limit') applyRateLimit(event)
+  })
 }
 
 export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void {

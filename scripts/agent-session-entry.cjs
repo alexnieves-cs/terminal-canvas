@@ -46,5 +46,7 @@ module.exports = {
   /* M138. The pool's production caller: main's half between a workflow's Run
      and startPool — the mint asked of the renderer, the send, the finished
      and tick driven from the manager's own events. Absent until it lands. */
-  poolCaller: (() => { try { return require('../src/main/pool-caller') } catch { return undefined } })()
+  poolCaller: (() => { try { return require('../src/main/pool-caller') } catch { return undefined } })(),
+  /* Account-level usage windows + unit-aware budgetCrossing. */
+  rateLimit: require('../src/shared/rate-limit')
 }

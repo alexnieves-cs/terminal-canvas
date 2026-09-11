@@ -1,4 +1,5 @@
 import type { TokenTotals } from './cost'
+import { parseRateLimitInfo, type RateLimitWindows } from './rate-limit'
 
 /**
  * M71. The transcript schema and the line parser for an agent conversation,
@@ -102,7 +103,18 @@ export type TranscriptEvent =
       toolUseId?: string
     }
   | { type: 'control-response'; requestId: string; ok: boolean; error?: string }
-  /** A record this app knows and has no use for (hooks, status, rate limits). */
+  /**
+   * Account-level usage windows from the CLI. Live state for the gauge and
+   * the window budget — not ignored, or a depleted window looks like a stuck agent.
+   */
+  | {
+      type: 'rate-limit'
+      status: string
+      resetsAt?: number
+      overage: boolean
+      windows: RateLimitWindows
+    }
+  /** A record this app knows and has no use for (hooks, status, tool progress). */
   | { type: 'ignored'; kind: string }
   /** A record type or system subtype this version has never seen. */
   | { type: 'unknown'; kind: string }
@@ -217,7 +229,7 @@ const IGNORED_SYSTEM = new Set([
 ])
 
 /** Known top-level types this app has no use for. */
-const IGNORED_TOP = new Set(['rate_limit_event', 'tool_progress'])
+const IGNORED_TOP = new Set(['tool_progress'])
 
 const PREVIEW_MAX = 80
 
@@ -360,6 +372,11 @@ export function parseStreamLine(line: string): TranscriptEvent {
         ok,
         error: ok ? undefined : str(response.error) ?? str(response.subtype) ?? 'error'
       }
+    }
+    case 'rate_limit_event': {
+      const info = parseRateLimitInfo(parsed.rate_limit_info)
+      if (info === undefined) return malformed(line)
+      return { type: 'rate-limit', ...info }
     }
     default:
       if (IGNORED_TOP.has(type)) return { type: 'ignored', kind: type }

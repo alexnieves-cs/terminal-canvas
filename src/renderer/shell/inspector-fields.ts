@@ -11,6 +11,7 @@ import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotal
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
+import type { RateLimitState } from '@shared/rate-limit'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { workflowWatchWord } from '@renderer/workflow/workflow-diagram'
@@ -178,6 +179,54 @@ export interface InspectorSummary {
   cost: number | undefined
   /** M142. This week's closed sessions from the run ledger; absent until the ledger has answered. */
   history?: UsageHistory | null
+  /** Account-level Claude usage windows for the no-selection gauge. */
+  rateLimit?: RateLimitState
+}
+
+/** One bar on the usage gauge: percent of the window and when it resets. */
+export interface RateLimitGaugeBar {
+  percent: number
+  resetsAt: number
+}
+
+/**
+ * The no-selection gauge's three arms. `none` exposes no bars on purpose —
+ * rendering 0% would say "plenty left" when we have never heard from the CLI.
+ */
+export type RateLimitGauge =
+  | { kind: 'none'; fiveHour?: undefined; weekly?: undefined }
+  | {
+      kind: 'allowed' | 'limited'
+      fiveHour?: RateLimitGaugeBar
+      weekly?: RateLimitGaugeBar
+      until?: number
+    }
+
+function gaugeBar(window: { utilization: number; resetsAt: number } | undefined): RateLimitGaugeBar | undefined {
+  if (window === undefined) return undefined
+  return { percent: Math.round(window.utilization * 100), resetsAt: window.resetsAt }
+}
+
+export function formatRateLimitGauge(state: RateLimitState): RateLimitGauge {
+  if (state.kind === 'none') return { kind: 'none' }
+  return {
+    kind: state.kind,
+    ...(state.kind === 'limited' ? { until: state.until } : {}),
+    ...(gaugeBar(state.windows.five_hour) === undefined ? {} : { fiveHour: gaugeBar(state.windows.five_hour) }),
+    ...(gaugeBar(state.windows.seven_day) === undefined ? {} : { weekly: gaugeBar(state.windows.seven_day) })
+  }
+}
+
+/** Human reset time for a unix-seconds stamp — the gauge's own words. */
+export function formatRateLimitReset(resetsAt: number, nowMs: number = Date.now()): string {
+  const ms = resetsAt * 1000
+  const delta = ms - nowMs
+  if (delta <= 0) return 'now'
+  const mins = Math.round(delta / 60_000)
+  if (mins < 60) return `in ${mins}m`
+  const hours = Math.round(mins / 60)
+  if (hours < 36) return `in ${hours}h`
+  return new Date(ms).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
 }
 
 /** M142. The fold over this week's usage rows: sessions, tokens, and a price by the summary's own rule. */

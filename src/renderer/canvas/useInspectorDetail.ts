@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Registry } from '@renderer/session/session-registry'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { getUsage } from '@renderer/session/usage-store'
+import { useRateLimit } from '@renderer/session/rate-limit-store'
 import type { Panel } from '@renderer/panels/panels'
 import { inspectionDirectory } from './inspection-directory'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
@@ -252,11 +253,14 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   }, [panelCount])
   const summaryBuilt = buildInspectorSummary(
     panels, (id) => registry.get(id)?.status, waitingIds, getUsage, history)
+  const rateLimit = useRateLimit()
+  const summaryWithRate = { ...summaryBuilt, rateLimit }
   // M46: the canvas-wide totals join the signature, so a usage tick moves
   // the summary the way it moves a selected panel's Cost section. M142: the
-  // history's word joins it, so the ledger's answer moves it too.
-  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}/${history === undefined ? 'reading' : history === null ? 'failed' : `${history.sessions}/${history.tokens}/${history.costUsd}`}`
-  const inspectorSummary = useMemo(() => summaryBuilt, [summarySig])
+  // history's word joins it, so the ledger's answer moves it too. Rate-limit
+  // windows join so the no-selection gauge moves without touching registry.version().
+  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}/${history === undefined ? 'reading' : history === null ? 'failed' : `${history.sessions}/${history.tokens}/${history.costUsd}`}/${rateLimit.kind}/${rateLimit.kind === 'none' ? '' : `${rateLimit.windows.five_hour?.utilization ?? ''}/${rateLimit.windows.seven_day?.utilization ?? ''}/${rateLimit.kind === 'limited' ? rateLimit.until : ''}`}`
+  const inspectorSummary = useMemo(() => summaryWithRate, [summarySig])
 
   // Cheap, and read once per render of the palette: getSelection() is a string
   // copy out of xterm's buffer, not a repaint.

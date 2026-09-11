@@ -12,6 +12,13 @@ import {
 import { BACKEND_ADAPTERS } from './backend-adapters'
 import type { AgentExitInfo, AgentProcess, AgentRunner } from './agent-runner'
 import { imagesAllowed } from '@shared/agent-session'
+import {
+  budgetCrossing,
+  foldRateLimit,
+  RATE_LIMIT_NONE,
+  windowUtilization,
+  type RateLimitState
+} from '@shared/rate-limit'
 import type {
   AgentBackend,
   NegotiatedCapabilities,
@@ -84,10 +91,12 @@ export type {
 
 export interface AgentSessionDeps {
   /**
-   * M82. The canvas's ceilings, read LIVE on every send and every result.
+   * The canvas's ceilings, read LIVE on every send and every result.
    * `0` means no ceiling — which is every caller that does not pass this.
+   * `budgetWindowPercent` is the subscriber arm (stop at N% of the binding
+   * usage window); `budgetUsd` stays for API-key spend. Both reuse one stop path.
    */
-  limits?: () => { maxConcurrent: number; budgetUsd: number }
+  limits?: () => { maxConcurrent: number; budgetUsd: number; budgetWindowPercent?: number }
   runner: AgentRunner
   /** The resolved path of the `claude` binary. */
   command: string
@@ -225,8 +234,10 @@ const INTERRUPT_GRACE_MS = 5000
 const COALESCE_MS = 16
 
 export class AgentSessionManager {
-  /** M82. Latched at a crossing so one crossing is one stop; cleared when the ceiling is raised. */
+  /** Latched at a crossing so one crossing is one stop; cleared when the ceiling is raised. */
   private budgetStopped = false
+  /** Canvas-wide usage windows from the latest rate_limit_event. */
+  private rateLimitState: RateLimitState = RATE_LIMIT_NONE
 
   private readonly sessions = new Map<string, Session>()
   private readonly listeners = new Set<(event: AgentSessionEvent) => void>()
@@ -239,6 +250,11 @@ export class AgentSessionManager {
     this.now = deps.now ?? (() => Date.now())
     this.interruptGraceMs = deps.interruptGraceMs ?? INTERRUPT_GRACE_MS
     this.coalesceMs = deps.coalesceMs ?? COALESCE_MS
+  }
+
+  /** Account-level usage windows — none until the first rate_limit_event. */
+  rateLimit(): RateLimitState {
+    return this.rateLimitState
   }
 
   /** Synchronous, cannot fail, idempotent at an id. Spawns nothing. */
@@ -309,8 +325,14 @@ export class AgentSessionManager {
     // snapshot no longer carries it (the renderer's dismiss is local; this is
     // main's half, so a workspace switch does not resurrect a dismissed chip).
     if (session.auto === undefined && session.autoLast !== undefined) session.autoLast = undefined
-    const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0 }
-    if (limits.budgetUsd > 0 && this.spent() >= limits.budgetUsd) {
+    const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0 }
+    const crossing = budgetCrossing({
+      budgetUsd: limits.budgetUsd,
+      budgetWindowPercent: limits.budgetWindowPercent ?? 0,
+      spentUsd: this.spent(),
+      windowUtil: windowUtilization(this.rateLimitState)
+    })
+    if (crossing !== null) {
       // Nothing stored: a refused message is not a turn, and a transcript that
       // held it would show the user a message the agent never received.
       return 'refused-budget'
@@ -748,6 +770,13 @@ export class AgentSessionManager {
       case 'ignored':
         session.counters.ignored += 1
         return
+      case 'rate-limit':
+        // Canvas-wide, not per session: the last event from any conversation
+        // is the account's truth for the gauge and the window budget.
+        this.rateLimitState = foldRateLimit(this.rateLimitState, event, this.now())
+        this.emit({ id, ...event })
+        this.enforceBudget()
+        return
       case 'unknown':
         session.counters.unknown += 1
         this.emit({ id, ...event })
@@ -1006,21 +1035,26 @@ export class AgentSessionManager {
   }
 
   /**
-   * M82. One crossing, one stop. `budgetStopped` latches so a second result
+   * One crossing, one stop. `budgetStopped` latches so a second result
    * does not interrupt again (and does not say it again); it is cleared when
    * the ceiling is raised above the spend, which is what "until raised"
-   * means.
+   * means. USD and window percent share this path — same interrupt, same latch.
    */
   private enforceBudget(): void {
-    const limit = this.deps.limits?.().budgetUsd ?? 0
-    const spent = this.spent()
-    if (limit <= 0 || spent < limit) { this.budgetStopped = false; return }
+    const limits = this.deps.limits?.() ?? { maxConcurrent: 0, budgetUsd: 0, budgetWindowPercent: 0 }
+    const crossing = budgetCrossing({
+      budgetUsd: limits.budgetUsd,
+      budgetWindowPercent: limits.budgetWindowPercent ?? 0,
+      spentUsd: this.spent(),
+      windowUtil: windowUtilization(this.rateLimitState)
+    })
+    if (crossing === null) { this.budgetStopped = false; return }
     if (this.budgetStopped) return
     this.budgetStopped = true
     let interrupted = 0
     for (const s of this.sessions.values()) {
       if (!s.inFlight) continue
-      // M90. A backend with no interrupt door: a budget is a stop, and the
+      // A backend with no interrupt door: a budget is a stop, and the
       // only stop is the kill — named as such on the aborted turn.
       if (!BACKENDS[s.backend].interrupts) {
         if (s.proc) { s.abortReason = 'budget'; s.proc.kill(); interrupted += 1 }
@@ -1028,7 +1062,10 @@ export class AgentSessionManager {
       }
       if (this.interrupt(s.id)) interrupted += 1
     }
-    for (const s of this.sessions.values()) { this.emit({ id: s.id, type: 'budget', spent, limit, interrupted }); break }
+    for (const s of this.sessions.values()) {
+      this.emit({ id: s.id, type: 'budget', spent: crossing.spent, limit: crossing.limit, interrupted, unit: crossing.unit })
+      break
+    }
   }
 
   private snapshot(session: Session): AgentSessionSnapshot {

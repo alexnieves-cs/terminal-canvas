@@ -70,6 +70,7 @@ import { createWorktreeManager } from './worktree-manager'
 import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
 import { AgentSessionManager } from './agent-session'
+import { RATE_LIMIT_NONE, windowUtilization } from '@shared/rate-limit'
 import { createPoolCaller, type PoolCaller } from './pool-caller'
 import { writeClipboardImage } from './clipboard-file'
 import { claudeCliRunner } from './claude-cli-runner'
@@ -1062,7 +1063,8 @@ app.whenReady().then(async () => {
     // raised in the palette must take effect on the next send.
     limits: () => ({
       maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
-      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
+      budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
     }),
     // M98. Resolved at CALL time through the module-level `approvals`: the
     // tracker is created after the manager (it subscribes to it), so a
@@ -1108,9 +1110,11 @@ app.whenReady().then(async () => {
     },
     limits: () => ({
       maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
-      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0
+      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
+      budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
     }),
     spend: () => poolAgents.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
+    windowUtil: () => windowUtilization(poolAgents.rateLimit()),
     emit: (event) => { mainWindow?.webContents.send(IPC_EVENTS.POOL_EVENT, event) }
   })
   // M73. The durable transcript, written from the manager's own events so
@@ -1581,6 +1585,11 @@ app.whenReady().then(async () => {
       if (answer === 'refused-images') return { refused: row.reasons.noImages }
       // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
       if (answer === 'refused-budget') {
+        const windowPct = Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
+        const util = windowUtilization(agentSessions?.rateLimit() ?? RATE_LIMIT_NONE)
+        if (windowPct > 0 && util !== undefined && util >= windowPct / 100) {
+          return { refused: `over the ${windowPct}% usage-window budget for this canvas — raise agents.budgetWindowPercent in settings, or wait for a window to reset` }
+        }
         const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
         return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
       }

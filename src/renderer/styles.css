@@ -1752,6 +1752,58 @@ body {
   margin-top: var(--sp-1);
 }
 
+/* Account-level usage windows on the no-selection summary — denser than the
+   big count fields above, because two bars + resets are a reading, not a hero. */
+.inspector__field--gauge .inspector__value {
+  font-weight: 400;
+  font-size: var(--t-sm);
+  line-height: var(--lh-tight);
+  letter-spacing: 0;
+  margin-top: var(--sp-2);
+}
+.inspector__rate-limit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.inspector__rate-limit-status {
+  color: var(--fg-2);
+  font-weight: 600;
+}
+.inspector__rate-limit li[data-rate-limit-window] {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  grid-template-rows: auto auto;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: center;
+}
+.inspector__rate-limit-name { color: var(--fg-3); }
+.inspector__rate-limit-bar {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--border);
+  overflow: hidden;
+}
+.inspector__rate-limit-fill {
+  display: block;
+  height: 100%;
+  background: var(--fg-2);
+  border-radius: var(--r-full);
+}
+.inspector__rate-limit-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  justify-self: end;
+}
+.inspector__rate-limit-reset {
+  grid-column: 1 / -1;
+  color: var(--fg-4);
+  font-size: var(--t-xs);
+}
+
 .inspector__actions {
   display: flex;
   flex-direction: column;
