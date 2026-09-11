@@ -4,6 +4,7 @@ import { parseSheetView } from './sheet'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
+import { parseArtifactReference, type ArtifactReference } from './artifact-reference'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteForm, type NoteTint } from './notes'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
@@ -423,7 +424,7 @@ export interface PersistedImagePanel extends PersistedPanelBase {
    * path still paints, and a picture that vanished because its id was
    * misspelled would read as a panel the app deleted.
    */
-  image: { path: string; asset?: string }
+  image: { path: string; asset?: string; artifact?: ArtifactReference }
 }
 
 /**
@@ -1140,7 +1141,9 @@ function parsePanel(
       if (isAssetId(assetRaw)) asset = assetRaw
       else warnings.push(`image panel ${id}: image.asset ${JSON.stringify(assetRaw)} is not a sha-256 asset id — the picture is kept and its store identity dropped`)
     }
-    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }) } }
+    const artifact = image.artifact === undefined ? undefined : parseArtifactReference(image.artifact)
+    if (image.artifact !== undefined && artifact === undefined) warnings.push(`image panel ${id}: malformed artifact provenance dropped`)
+    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }), ...(artifact === undefined ? {} : { artifact }) } }
   }
   if (kind === 'note') {
     const note = (raw as Record<string, unknown>).note

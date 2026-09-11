@@ -54,7 +54,7 @@ re-recorded before the work starts, never after.
 | D09 | **M205** | — | ✅ built, gate owed |
 | D10 | **M206–M208** | M206 shell, rail and the category labels; M207 the inspector and contextual controls; M208 the graph, the far view and the rest-layer sweep | ✅ built — gate owed |
 | D11 | **M209–M210** | M209 outcomes that outlive canvas membership (§3.4); M210 Resume | not started |
-| D12 | **M211–M212** | M211 artifact provenance; M212 decision capture | not started |
+| D12 | **M211–M212** | M211 artifact provenance; M212 decision capture | ✅ done — [build log](m211-m212-d12-artifacts-decisions.md) |
 | D13 | **M213–M214** | M213 the reader-failure fix and honest coverage (§3.5); M214 the broader scopes | not started |
 | D14 | **M215–M216** | M215 save an arrangement; M216 save a workflow from it | not started |
 | D15 | **M217–M218** | M217 nodes; M218 integration depth | not started |

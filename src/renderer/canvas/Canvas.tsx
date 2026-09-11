@@ -5763,7 +5763,7 @@ export function Canvas({
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
     setPanels((current) => {
-      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`)]
+      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`, undefined, { kind: 'capture', id: shot.id, url: shot.url, capturedAt: shot.capturedAt })]
       commitHistory(next)
       return next
     })
@@ -7151,6 +7151,7 @@ export function Canvas({
                   // the captured id); the open waits a tick for the focus ref to land.
                   onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
                   teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
+                  taskId={workItems.find((item) => item.panelId === panel.rect.id)?.id}
                 />
               )
             }
