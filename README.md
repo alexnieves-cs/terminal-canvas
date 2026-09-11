@@ -401,6 +401,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        asset:put / asset:choose
                        node:fetch
                        portable:export / portable:import
+                       pack:read / pack:add / pack:export / preset:mark-reviewed
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        board:repositories
@@ -1031,6 +1032,7 @@ price of not killing something.
 | M250 | rich note editing and .docx import — a Rich/Source toggle over the same Markdown file that says what it cannot round-trip rather than rewriting it; a .docx converted in main through mammoth into a NEW note beside it (the .docx is only read), pictures through the asset store, every dropped construct named and counted, and the import inert until read — `docs/build-log/m250-notes-docx.md` | ✅ done |
 | M251 | a Markdown deck exported to .pptx — built on M248's deck (`splitDeck` + `parseMarkdown`), never a second deck model; `deck-export-pptx` runs in main over the real pptxgenjs, headings to titles, lists to bullets, pictures (decided by magic number) embedded, `<!-- notes -->` to speaker notes; every string scrubbed field by field and counted, `main/deck-export.ts` the seventh named `redactSecrets` caller, and every construct a slide cannot hold named with its slide in the sentence; four doors — `docs/build-log/m251-deck-pptx-export.md` | ✅ done |
 | M252 | describe a tool — a description becomes a workflow of existing node kinds or a preview-backed mini app through ONE headless run given no tools (`--tools ""`, a JSON schema), whose answer is only data; what arrives is INERT — a workflow saved `reviewed: false` with its action blocks refused by name, an app's pane with no guest and its Open and dev server refused — until a person presses "I've read this", which has no verb, row, agent line or node; its reach (folder, addresses, commands) is shown on the object and in the inspector before the first run; four doors through one creatable kind — `docs/build-log/m252-describe-a-tool.md` | ✅ done |
+| M253 | Packs, Phase A — one discipline's workflows, saved prompts and presets in one `.tcpack` file, READ before anything is added. `pack:read` holds the parse under a token and `pack:add` takes only the token, so what is added is exactly what was shown; every workflow and preset arrives unread, and an unread preset is refused by name at every spawn door in main. The manifest names each credential by service and FIELD (never a value) and the preview says what is missing per field; an unknown service is kept, not dropped. Phase B (a dev-relations pack on the existing GitHub credential) is sketched, not built. |
 
 ### What's next — the v10 run (D01–D20)
 

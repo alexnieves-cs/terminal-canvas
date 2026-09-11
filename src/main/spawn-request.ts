@@ -1,5 +1,5 @@
 import type { PresetTemplate, SpawnRequest, SpawnResult } from '../shared/ipc-contract'
-import { templateOf } from './presets'
+import { templateOf, unreviewedPresetReason } from './presets'
 import type { Preset } from '../shared/layout-schema'
 
 /**
@@ -31,6 +31,8 @@ export function resolveSpawnRequest(
   }
   const found = presets.find((p) => p.id === req.presetId)
   if (found === undefined) return { kind: 'refused', reason: 'that preset no longer exists' }
+  const unread = unreviewedPresetReason(found)
+  if (unread !== null) return { kind: 'refused', reason: unread }
   const template: PresetTemplate = { ...templateOf(found), cwd, focus: true }
   if (req.agentOptions !== undefined && template.agent !== undefined && Object.keys(req.agentOptions).length > 0) {
     template.agentOptions = { ...(template.agentOptions ?? {}), ...req.agentOptions }

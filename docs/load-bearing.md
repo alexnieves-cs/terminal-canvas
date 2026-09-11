@@ -1442,6 +1442,40 @@ link layer to take pointer events, undoing the guarantee above. Incoming rows li
 panel as `from` — reversed, the remove/relabel controls on an incoming row silently do nothing,
 because the mutator looks for a link on a panel that doesn't hold it.
 
+**A pack is added by TOKEN, never by payload (`main/pack-handlers.ts`, `shared/ipc-contract.ts`
+`pack:add`).** `pack:read` parses the file in main, holds the parse under a fresh token, and
+answers the manifest. `pack:add` takes only that token. The obvious shape, `pack:add(pack)` with
+the renderer handing back what it previewed, lets whatever the renderer sends become library
+records: a preview and an add could disagree and nothing would say so. A second read replaces the
+held parse, and an add consumes its token, so a stale preview cannot add twice. The panels harness
+builds the SAME factory with only its choosers swapped, so `verify:panels:product pack.import.1`
+drives production code, not a copy.
+
+**An unread pack preset is refused in MAIN, at every door that resolves a preset
+(`main/presets.ts` `unreviewedPresetReason`, `main/spawn-request.ts`, `main/control-handler.ts`,
+`main/index.ts` `onSpawnPreset`, `main/menu.ts`).** A preset carries a command, so an imported one
+is a stranger's process one click away. Guarding one door is not enough: the menu, the palette,
+the spawn sheet and `tc spawn` each resolve presets independently, and an unguarded door silently
+reopens the gate. All four ask the one function for the one sentence. The menu disables the item
+and labels why, rather than hiding it. `reviewed` follows M190's template rule: absent means read;
+a non-boolean fails SAFE as unread; it is rebuilt without the key when cleared, never written `true`.
+
+**A pack's manifest names a credential by service and FIELD, never by value, and an unknown
+service is KEPT (`shared/pack.ts` `buildPack`, `parsePack`, `packRequirements`).**
+- `buildPack` rebuilds each credential requirement as `{service, fields: [{id, label}]}`, so a
+  caller that passes a value has no key for it to land in. `pack.build.1` asserts on the KEYS, not
+  on content.
+- The parser drops an unknown CONTENT kind by name, but keeps an unknown SERVICE, and
+  `packRequirements` answers it `unknown-service`. Dropping it would hide a requirement, and a
+  pack that silently lost its credential rows reads as a pack that needs nothing.
+- Requirements come from `credentialStore.list()` metadata only, so the store's pinned reader
+  list (`verify:meta readers.1`) does not grow.
+
+**A pack is its own `kind`, never a portable kind (`shared/pack.ts`, `shared/portable.ts`
+`PORTABLE_KINDS`).** Adding `'pack'` to `PORTABLE_KINDS` looks like reuse, but `parsePortable`
+accepts any listed kind, so Import canvas would make a workspace of a pack. Each parser refuses
+the other's file by name instead ("that is a canvas file, not a pack — use Import canvas").
+
 **A credential never reaches a PTY, and that's STRICTER than `shell-env.ts` on purpose
 (`main/credential-store.ts`, `main/shell-env.ts`).** This is the entry most likely to be "fixed"
 for consistency, and undoing it deletes the milestone in one line. `shell-env.ts` already hands

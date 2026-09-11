@@ -254,7 +254,10 @@ app.whenReady().then(() => {
   // M248 export:deck-pdf (135) — a deck printed to PDF by a hidden, script-less window in main.
   // M251 deck:export-pptx (137) — main reads the deck and writes the .pptx.
   // M252 tool:generate (138) — one headless run with no tools; its answer is data.
-  const EXPECTED_CHANNELS = 138
+  // M253 pack:read / pack:add / pack:export and preset:mark-reviewed (139-142)
+  // — a pack is read and held by main, added by token, and a pack preset is
+  // spawned only after "I've read this".
+  const EXPECTED_CHANNELS = 142
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

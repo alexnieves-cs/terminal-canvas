@@ -172,6 +172,7 @@ import { laneOfPath } from '@shared/work-scope'
 import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
 import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
+import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness, FIRST_LAUNCH_ENGINES, firstWorkPlan, firstWorkRepoAnswer, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
@@ -4104,6 +4105,9 @@ export function Canvas({
       if (node.presetId !== undefined) {
         const resolved = await window.canvas.preset.template(node.presetId)
         if (resolved === null) { undoCreated(); return { kind: 'refused', reason: `${node.key} names a preset that no longer exists` } }
+        // M253. Main's own sentence for an unread pack preset — never the
+        // "no longer exists" arm, which would tell the person the wrong fix.
+        if ('refused' in resolved) { undoCreated(); return { kind: 'refused', reason: `${node.key}: ${resolved.refused}` } }
         spec = {
           panelId: '', cwd: node.cwd, args: [...resolved.args],
           ...(resolved.command === undefined ? {} : { command: resolved.command }),
@@ -5471,6 +5475,41 @@ export function Canvas({
   }, [commitHistory, reloadTemplates, switchWorkspace])
 
   /**
+   * M253. PACKS. Import READS: main parses, holds the parse under a token and
+   * answers requirements, and this only SHOWS it — nothing is added until the
+   * preview's Add sends that token back. Main does the adding (a pack's
+   * objects are library records only main can mint ids for), so the renderer
+   * never supplies a payload. Export is main-built for the same reason.
+   */
+  const [packPreview, setPackPreview] = useState<PackPreviewState | null>(null)
+  const importPack = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const answer = await window.canvas.pack.read(path === undefined ? {} : { path })
+    if (answer.kind === 'cancelled') return { kind: 'ran', note: 'nothing read' }
+    if (answer.kind === 'refused') return { kind: 'refused', reason: answer.reason }
+    if (answer.parse.kind !== 'pack') return { kind: 'refused', reason: answer.parse.reason }
+    setPackPreview({ token: answer.token, path: answer.path, pack: answer.parse.pack, warnings: answer.parse.warnings, requirements: answer.requirements ?? { credentials: [], tools: [] } })
+    return { kind: 'ran', note: `${answer.parse.pack.manifest.name} — nothing is added until you choose Add` }
+  }, [])
+  const addPack = useCallback(async (token: string) => {
+    const added = await window.canvas.pack.add({ token })
+    if (added.kind === 'added') { reloadTemplates(); reloadPresets() }
+    return added
+  }, [reloadTemplates, reloadPresets])
+  const exportPack = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const name = (await window.canvas.workspace.list()).find((w) => w.active)?.name ?? 'pack'
+    const written = await window.canvas.pack.write({ ...(path === undefined ? {} : { path }), name })
+    if (written.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
+    if (written.kind === 'refused') return { kind: 'refused', reason: written.reason }
+    return { kind: 'ran', note: `${displayPath(written.path).short} · ${written.sentence}` }
+  }, [])
+  const markPresetRead = useCallback(async (id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const changed = await window.canvas.preset.markReviewed(id)
+    if (!changed) return { kind: 'refused', reason: 'that preset no longer exists' }
+    reloadPresets()
+    return { kind: 'ran', note: 'marked read — it will spawn now' }
+  }, [reloadPresets])
+
+  /**
    * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
    * inspector's Test control and the `node-test` verb all take, so a node
    * cannot behave one way when a person tests it and another when the
@@ -6234,6 +6273,9 @@ export function Canvas({
     prepareFeedbackNow: prepareFeedback,
     importCanvasFile: importCanvas,
     importDocxFile,
+    exportPackFile: exportPack,
+    importPackFile: importPack,
+    markPresetReadNow: markPresetRead,
     addNote,
     setNoteText,
     setNoteTint,
@@ -7624,6 +7666,9 @@ export function Canvas({
           onFit={fitAll}
           agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
         />
+        {packPreview !== null && (
+          <PackPreview preview={packPreview} onAdd={addPack} onClose={() => setPackPreview(null)} />
+        )}
         {palette.open && (
           <Palette
             controller={palette}

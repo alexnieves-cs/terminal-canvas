@@ -92,6 +92,8 @@ export interface LayoutStore {
   addPreset(preset: Preset): void
   /** Rename one user preset. False when the id names nothing. */
   renamePreset(id: string, name: string): boolean
+  /** M253. A person read an imported preset's command: drop the mark. False when the id names nothing. */
+  markPresetReviewed(id: string): boolean
   /**
    * Remove one user preset. False when the id names nothing — including every
    * built-in id, which is not this file's data to remove.
@@ -958,6 +960,19 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       const before = snapshot.worktrees.length
       snapshot.worktrees = snapshot.worktrees.filter((w) => w.id !== id)
       if (snapshot.worktrees.length === before) return false
+      scheduleWrite()
+      return true
+    },
+    markPresetReviewed(id) {
+      const found = snapshot.presets.find((p) => p.id === id)
+      if (!found) return false
+      // Rebuilt without the key, setPresetWorktree's rule: reviewed is ABSENT,
+      // never `true` on disk.
+      snapshot.presets = snapshot.presets.map((p) => {
+        if (p.id !== id) return p
+        const { reviewed: _read, ...rest } = p
+        return rest
+      })
       scheduleWrite()
       return true
     },

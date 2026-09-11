@@ -83,7 +83,13 @@ export function allPresets(user: Preset[]): Preset[] {
  * nothing at all is the worse failure.
  */
 export function resolveDefault(user: Preset[], id: string): Preset {
-  return allPresets(user).find((p) => p.id === id) ?? BUILT_IN_PRESETS[0]
+  const found = allPresets(user).find((p) => p.id === id)
+  // M253 (the critic, 2). Cmd+N spawns from the template this resolves, pushed
+  // ahead of time — it never passes through `unreviewedPresetReason`. So an
+  // unread pack preset is never the resolved default, however it came to be
+  // named one (the palette row is disabled too, but a hand-edited layout or
+  // an older build could still name it).
+  return found !== undefined && found.reviewed !== false ? found : BUILT_IN_PRESETS[0]
 }
 
 /**
@@ -245,6 +251,9 @@ export function resolveAvailability(
 
 /** Says WHY it is disabled. A greyed-out row with no reason is a bug report. */
 export function menuLabel(entry: PresetAvailability): string {
+  // M253. Before availability: an unread preset will not spawn even when its
+  // command is on the PATH, and the reason a person can act on is "read it".
+  if (entry.preset.reviewed === false) return `${entry.preset.name} — from a pack, not read yet`
   return entry.available ? entry.preset.name : `${entry.preset.name} — not found on PATH`
 }
 
@@ -273,6 +282,20 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     ...(preset.agentOptions !== undefined ? { agentOptions: { ...preset.agentOptions } } : {}),
     // M37. Absent stays absent, so the palette's toggle row can say "off"
     // for a preset that never asked and "on" for one that did.
-    ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {})
+    ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {}),
+    // M253. Carried so the palette can say WHY a row will not spawn and offer
+    // "I've read this" beside it, rather than a row that silently does nothing.
+    ...(preset.reviewed === false ? { reviewed: false as const } : {})
   }))
+}
+
+/**
+ * M253. THE one refusal sentence for a preset that arrived in a pack and has
+ * not been read. Every spawn path that resolves a user preset asks this —
+ * the menu, the palette, the spawn sheet and `tc spawn` — so none can reach
+ * a stranger's command by a door the others guard.
+ */
+export function unreviewedPresetReason(preset: { name: string; reviewed?: false }): string | null {
+  if (preset.reviewed !== false) return null
+  return `"${preset.name}" came from a pack and has not been read yet — open it in ⌘K › Presets and choose "I've read this" before spawning it`
 }

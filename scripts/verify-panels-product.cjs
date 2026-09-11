@@ -3318,6 +3318,85 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         if (toolDir !== null) rmSync(toolDir, { recursive: true, force: true })
       }
     }
+    // M253 — pack.import.1 / .2. A PACK IS READ BEFORE ANYTHING IS ADDED, and
+    //     what it adds is inert. Driven through the PRODUCTION pack factory
+    //     (createPackHandlers — only the chooser is the harness's). Reading
+    //     shows the manifest and adds NOTHING and spawns NOTHING; Add makes one
+    //     of each kind under FRESH ids, the workflow and the preset unread;
+    //     spawning the unread preset is refused by name with no new session;
+    //     "I've read this" drops the mark. .2 is the missing-credential message
+    //     named PER FIELD: a service this app cannot hold always shows its
+    //     field; GitHub's field shows its not-connected sentence exactly when
+    //     the harness store holds no github credential (earlier checks may).
+    const PACK_IDS = [
+      'pack.import.1 reading a pack shows its manifest and adds nothing and spawns nothing; Add makes one workflow, prompt and preset under fresh ids with the workflow and preset unread; the unread preset\'s spawn is refused by name with no session; I\'ve read this drops the mark',
+      'pack.import.2 the preview names each missing credential PER FIELD: an unknown service\'s field always, and GitHub\'s personal access token as not connected exactly when no github credential is stored'
+    ]
+    try {
+      const packPath = join(mkdtempSync(join(tmpdir(), 'tc-pack-')), 'devrel.tcpack')
+      writeFileSync(packPath, JSON.stringify({
+        version: 1, kind: 'pack', createdAt: 1, app: 'x', omitted: [], redacted: 0,
+        manifest: {
+          name: 'devrel', version: '1.0.0',
+          contents: [{ kind: 'workflow', id: 'w1', name: 'release' }, { kind: 'prompt', id: 'q1', name: 'release note' }, { kind: 'preset', id: 'r1', name: 'gh watch' }],
+          credentials: [{ service: 'github', fields: [{ id: 'token', label: 'personal access token' }] }, { service: 'mastodon', fields: [{ id: 'token', label: 'access token' }] }]
+        },
+        templates: [{ id: 'w1', name: 'release', nodes: [{ key: 'a1', kind: 'action', line: 'note-add sticky', cwd: '/tmp', dx: 0, dy: 0 }], edges: [] }],
+        prompts: [{ id: 'q1', name: 'release note', body: 'Draft release notes for the tag.' }],
+        presets: [{ id: 'r1', name: 'gh watch', cwd: '/tmp', command: '/bin/sh', args: ['-c', 'sleep 600'] }]
+      }))
+      flushLayoutStore()
+      const countOf = () => { const c = layoutStore.current(); return { templates: c.templates.length, prompts: c.prompts.length, presets: c.presets.length } }
+      const before = countOf()
+      const spawnsBefore = (await listSessions(wc)).length
+      const read = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `import-pack ${packPath}` }, null, 10000)
+      const shown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-pack-preview]') !== null`), 5000)
+      const previewText = await wc.executeJavaScript(`(document.querySelector('[data-pack-preview]') || {}).textContent || ''`)
+      const needs = await wc.executeJavaScript(`[...document.querySelectorAll('[data-pack-need]')].map((e) => e.getAttribute('data-pack-need') + ': ' + e.textContent)`)
+      flushLayoutStore()
+      const afterRead = countOf()
+      const clicked = await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-pack-add]'); if (!b) return false; b.click(); return true })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-pack-result]') !== null`), 5000)
+      const resultText = await wc.executeJavaScript(`(document.querySelector('[data-pack-result]') || {}).textContent || ''`)
+      flushLayoutStore()
+      const after = countOf()
+      const cur = layoutStore.current()
+      const addedPreset = cur.presets.find((p) => p.name === 'gh watch')
+      const addedTemplate = cur.templates.find((t) => t.name === 'release')
+      const addedPrompt = cur.prompts.find((q) => q.name === 'release note')
+      const refused = addedPreset === undefined ? null : await wc.executeJavaScript(`window.canvas.preset.spawnById(${JSON.stringify(addedPreset.id)})`)
+      await settle()
+      const spawnsAfter = (await listSessions(wc)).length
+      const marked = addedPreset === undefined ? false : await wc.executeJavaScript(`window.canvas.preset.markReviewed(${JSON.stringify(addedPreset.id)})`)
+      flushLayoutStore()
+      const markedPreset = addedPreset === undefined ? undefined : layoutStore.current().presets.find((p) => p.id === addedPreset.id)
+      ok(PACK_IDS[0],
+        read && read.kind === 'ran' && shown === true && /devrel/.test(previewText) && /release note/.test(previewText) && /gh watch/.test(previewText) &&
+          JSON.stringify(afterRead) === JSON.stringify(before) &&
+          clicked === true && /devrel 1\.0\.0/.test(resultText) &&
+          after.templates === before.templates + 1 && after.prompts === before.prompts + 1 && after.presets === before.presets + 1 &&
+          addedTemplate !== undefined && addedTemplate.id !== 'w1' && addedTemplate.reviewed === false &&
+          addedPreset !== undefined && addedPreset.id !== 'r1' && addedPreset.reviewed === false &&
+          addedPrompt !== undefined && addedPrompt.id !== 'q1' && !('reviewed' in addedPrompt) &&
+          typeof refused === 'string' && /gh watch/.test(refused) && /not been read/.test(refused) &&
+          spawnsAfter === spawnsBefore &&
+          marked === true && markedPreset !== undefined && !('reviewed' in markedPreset),
+        JSON.stringify({ read, shown, before, afterRead, after, clicked, resultText, refused, spawnsBefore, spawnsAfter, marked, addedPreset, addedTemplate: addedTemplate && { id: addedTemplate.id, reviewed: addedTemplate.reviewed } }))
+      const hasGithub = credentialStore.list().some((m) => m.service === 'github')
+      const githubRow = needs.find((n) => /GitHub · personal access token/.test(n))
+      ok(PACK_IDS[1],
+        needs.some((n) => n.startsWith('unknown-service: ') && /mastodon/.test(n) && /access token/.test(n)) &&
+          (hasGithub ? githubRow === undefined || /^rejected: /.test(githubRow) : githubRow !== undefined && /^not-connected: /.test(githubRow) && /not connected/.test(githubRow)),
+        JSON.stringify({ needs, hasGithub }))
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-pack-close]') || document.querySelector('[data-pack-cancel]'); if (b) b.click(); return true })()`)
+      if (addedPreset !== undefined) layoutStore.deletePreset(addedPreset.id)
+      if (addedTemplate !== undefined) layoutStore.deleteTemplate(addedTemplate.id)
+      if (addedPrompt !== undefined) layoutStore.deletePrompt(addedPrompt.id)
+      flushLayoutStore()
+      await settle()
+    } catch (packErr) {
+      for (const id of PACK_IDS) ok(id, false, 'threw: ' + String(packErr && packErr.stack || packErr))
+    }
 
     // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.
     //     (a) An `action` node holds a verb LINE, and running the workflow

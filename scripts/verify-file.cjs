@@ -2342,6 +2342,146 @@ await (async () => {
   }
 }
 
+// M253 — pack.*. A PACK IS A DISCIPLINE'S LIBRARY OBJECTS, READ BEFORE ADDED.
+//      The manifest is what a person reads before agreeing, so its parser
+//      holds the repo's three arms per key: ABSENT optional keys warn nothing
+//      and stay absent (never `key: undefined`); PRESENT-but-malformed values
+//      warn by name and are dropped, never coerced; an UNKNOWN content kind
+//      costs that entry, never the list. An unknown credential SERVICE is the
+//      exception on purpose: it is kept and answered `unknown-service` by
+//      packRequirements, because dropping it would hide a requirement — a row
+//      that disappears reads as a pack that needs nothing.
+{
+  const has = typeof F.buildPack === 'function' && typeof F.parsePack === 'function' && typeof F.packRequirements === 'function' && typeof F.remapPack === 'function'
+  const need = (name) => { if (!has) ok(name, false, 'pack.ts does not export buildPack / parsePack / packRequirements / remapPack'); return has }
+  const token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const prompt = { id: 'q1', name: 'release note', body: 'Draft release notes for the tag.' }
+  const template = { id: 't1', name: 'ship', nodes: [{ key: 'n1', kind: 'terminal', cwd: '/w/repo', dx: 0, dy: 0 }], edges: [] }
+  const preset = { id: 'r1', name: 'gh watch', cwd: '/w/repo', command: 'gh', args: ['run', 'watch'] }
+
+  if (need('pack.manifest.1 ABSENT optional manifest keys warn nothing and stay absent through build and parse — no description, credentials or tools key is written as undefined')) {
+    const file = F.buildPack({ manifest: { name: 'devrel', version: '1.0.0' }, templates: [], prompts: [prompt], presets: [], app: '5.0.0', now: 1 })
+    const parsed = F.parsePack(JSON.stringify(file))
+    const m = parsed.kind === 'pack' ? parsed.pack.manifest : {}
+    ok('pack.manifest.1 ABSENT optional manifest keys warn nothing and stay absent through build and parse — no description, credentials or tools key is written as undefined',
+      parsed.kind === 'pack' && parsed.warnings.length === 0 &&
+        !('description' in m) && !('credentials' in m) && !('tools' in m) &&
+        !('description' in file.manifest) && !('credentials' in file.manifest) && !('tools' in file.manifest) &&
+        m.name === 'devrel' && m.version === '1.0.0' && m.contents.length === 1 && m.contents[0].kind === 'prompt',
+      JSON.stringify({ parsed }))
+  }
+
+  if (need('pack.manifest.2 PRESENT-but-malformed values warn BY NAME and are dropped, never coerced')) {
+    const base = (manifest, extra = {}) => JSON.stringify({ version: 1, kind: 'pack', createdAt: 1, app: 'x', manifest, templates: [], prompts: [prompt], presets: [], omitted: [], redacted: 0, ...extra })
+    const numVersion = F.parsePack(base({ name: 'devrel', version: 3, contents: [] }))
+    const noName = F.parsePack(base({ version: '1.0.0', contents: [] }))
+    const bad = F.parsePack(base({
+      name: 'devrel', version: '1.0.0', description: 5, contents: {},
+      credentials: [{ service: 'github', fields: [{ id: 'token' }, { id: 'pat', label: 'personal access token' }] }, 'github'],
+      tools: [{ command: 'rm -rf /' }, { command: 'gh', why: 7 }, { command: 'pandoc', why: 'renders the notes' }]
+    }))
+    const m = bad.kind === 'pack' ? bad.pack.manifest : {}
+    const w = bad.kind === 'pack' ? bad.warnings.join(' | ') : ''
+    ok('pack.manifest.2 PRESENT-but-malformed values warn BY NAME and are dropped, never coerced: a numeric version is not-a-pack naming version (3 is never "3.0.0"), a missing name is not-a-pack naming name, a non-string description / non-list contents / label-less field / non-object credential / unsafe tool command / non-string why each cost only themselves',
+      numVersion.kind === 'not-a-pack' && /version/.test(numVersion.reason) &&
+        noName.kind === 'not-a-pack' && /name/.test(noName.reason) &&
+        bad.kind === 'pack' && !('description' in m) && /description/.test(w) &&
+        /contents/.test(w) &&
+        m.credentials.length === 1 && m.credentials[0].fields.length === 1 && m.credentials[0].fields[0].id === 'pat' && /label/.test(w) &&
+        /credential/.test(w) &&
+        m.tools.map((t) => t.command).join(',') === 'gh,pandoc' && /rm -rf/.test(w) &&
+        !('why' in m.tools[0]) && m.tools[1].why === 'renders the notes' && /why/.test(w),
+      JSON.stringify({ numVersion, noName, bad }))
+  }
+
+  if (need('pack.manifest.3 an UNKNOWN content kind costs that entry by name; an unknown manifest key is named and ignored; a canvas file and a future version are refused by name; an unknown credential service is KEPT')) {
+    const text = JSON.stringify({ version: 1, kind: 'pack', createdAt: 1, app: 'x', templates: [], presets: [], omitted: [], redacted: 0, prompts: [prompt],
+      manifest: { name: 'devrel', version: '1.0.0', colour: 'teal', contents: [{ kind: 'routine', id: 'x1', name: 'nightly' }, { kind: 'prompt', id: 'q1', name: 'release note' }],
+        credentials: [{ service: 'twitter', fields: [{ id: 'key', label: 'API key' }] }] } })
+    const parsed = F.parsePack(text)
+    const canvas = F.parsePack(JSON.stringify({ version: 1, kind: 'canvas', workspace: { name: 'w', panels: [] } }))
+    const future = F.parsePack(JSON.stringify({ version: 99, kind: 'pack' }))
+    const notJson = F.parsePack('<html>')
+    const w = parsed.kind === 'pack' ? parsed.warnings.join(' | ') : ''
+    ok('pack.manifest.3 an UNKNOWN content kind costs that entry by name; an unknown manifest key is named and ignored; a canvas file and a future version are refused by name; an unknown credential service is KEPT',
+      parsed.kind === 'pack' && parsed.pack.manifest.contents.map((c) => c.id).join(',') === 'q1' && /routine/.test(w) &&
+        /colour/.test(w) && !('colour' in parsed.pack.manifest) &&
+        parsed.pack.manifest.credentials.length === 1 && parsed.pack.manifest.credentials[0].service === 'twitter' &&
+        canvas.kind === 'not-a-pack' && /canvas/.test(canvas.reason) && /Import canvas/.test(canvas.reason) &&
+        future.kind === 'unknown-version' && future.found === 99 && future.known === F.PACK_VERSION &&
+        notJson.kind === 'not-a-pack' && /not JSON/.test(notJson.reason),
+      JSON.stringify({ parsed, canvas, future, notJson }))
+  }
+
+  if (need('pack.manifest.4 the contents list is reconciled against the payload: a listed item with nothing behind it and a payload item the list does not name are both named, and the unlisted item is NOT added')) {
+    const text = JSON.stringify({ version: 1, kind: 'pack', createdAt: 1, app: 'x', omitted: [], redacted: 0,
+      manifest: { name: 'devrel', version: '1.0.0', contents: [{ kind: 'prompt', id: 'q1', name: 'release note' }, { kind: 'workflow', id: 'ghost', name: 'phantom' }] },
+      prompts: [prompt], templates: [template], presets: [] })
+    const parsed = F.parsePack(text)
+    const w = parsed.kind === 'pack' ? parsed.warnings.join(' | ') : ''
+    ok('pack.manifest.4 the contents list is reconciled against the payload: a listed item with nothing behind it and a payload item the list does not name are both named, and the unlisted item is NOT added',
+      parsed.kind === 'pack' && /phantom/.test(w) && /ship/.test(w) &&
+        parsed.pack.templates.length === 0 && parsed.pack.prompts.length === 1 &&
+        parsed.pack.manifest.contents.map((c) => c.id).join(',') === 'q1',
+      JSON.stringify({ parsed }))
+  }
+
+  if (need('pack.build.1 buildPack scrubs and COUNTS secrets in every payload, derives contents from the payload, names what never travels, and has no key a credential VALUE could occupy')) {
+    const file = F.buildPack({
+      manifest: { name: 'devrel', version: '1.0.0', description: 'release work', credentials: [{ service: 'github', fields: [{ id: 'token', label: 'personal access token', value: token }], token }], tools: [{ command: 'gh', why: 'opens releases' }] },
+      templates: [{ ...template, nodes: [{ ...template.nodes[0], command: `echo ${token}` }] }],
+      prompts: [{ ...prompt, body: `use ${token}` }],
+      presets: [{ ...preset, args: ['auth', token], env: { GH_TOKEN: token } }],
+      app: '5.0.0', now: 1, hasRoutines: true
+    })
+    const text = JSON.stringify(file)
+    const cred = file.manifest.credentials[0]
+    ok('pack.build.1 buildPack scrubs and COUNTS secrets in every payload, derives contents from the payload, names what never travels, and has no key a credential VALUE could occupy',
+      !text.includes(token) && file.redacted >= 3 && file.kind === 'pack' && file.version === F.PACK_VERSION &&
+        Object.keys(cred).sort().join(',') === 'fields,service' && Object.keys(cred.fields[0]).sort().join(',') === 'id,label' &&
+        !('env' in file.presets[0]) &&
+        file.manifest.contents.map((c) => `${c.kind}:${c.id}`).sort().join(',') === 'preset:r1,prompt:q1,workflow:t1' &&
+        file.omitted.some((o) => /routine/.test(o.what)) && file.omitted.some((o) => /skill/.test(o.what)) && file.omitted.some((o) => /credential/.test(o.what)),
+      JSON.stringify({ redacted: file.redacted, cred, contents: file.manifest.contents, omitted: file.omitted, preset: file.presets[0] }))
+  }
+
+  if (need('pack.requires.1 a missing credential is named PER FIELD; connected, rejected, not-connected and unknown-service are distinct rows; a tool is found, missing or unanswered')) {
+    const manifest = { name: 'devrel', version: '1.0.0', contents: [],
+      credentials: [
+        { service: 'github', fields: [{ id: 'token', label: 'personal access token' }] },
+        { service: 'jira', fields: [{ id: 'site', label: 'site URL' }, { id: 'email', label: 'Atlassian email' }, { id: 'token', label: 'API token' }] },
+        { service: 'twitter', fields: [{ id: 'key', label: 'API key' }] }
+      ],
+      tools: [{ command: 'gh' }, { command: 'pandoc' }, { command: 'ffmpeg' }] }
+    const none = F.packRequirements(manifest, [{ service: 'jira', label: 'me@x', addedAt: 'a', rejectedAt: 'b' }], { gh: true, pandoc: false })
+    const connected = F.packRequirements(manifest, [{ service: 'github', label: 'ada', addedAt: 'a' }], {})
+    const gh = none.credentials.find((r) => r.service === 'github')
+    const jira = none.credentials.filter((r) => r.service === 'jira')
+    const tw = none.credentials.find((r) => r.service === 'twitter')
+    const tool = (c) => none.tools.find((t) => t.command === c)
+    ok('pack.requires.1 a missing credential is named PER FIELD; connected, rejected, not-connected and unknown-service are distinct rows; a tool is found, missing or unanswered',
+      none.credentials.length === 5 &&
+        gh.state === 'not-connected' && /GitHub · personal access token/.test(gh.sentence) && /not connected/.test(gh.sentence) && /Credentials/.test(gh.sentence) &&
+        jira.length === 3 && jira.every((r) => r.state === 'rejected') &&
+        ['site URL', 'Atlassian email', 'API token'].every((label, i) => jira[i].sentence.includes(`Jira · ${label}`)) &&
+        tw.state === 'unknown-service' && /twitter/.test(tw.sentence) && /API key/.test(tw.sentence) &&
+        connected.credentials.find((r) => r.service === 'github').state === 'connected' && connected.credentials.find((r) => r.service === 'github').sentence === undefined &&
+        tool('gh').state === 'found' && tool('pandoc').state === 'missing' && /pandoc/.test(tool('pandoc').sentence) &&
+        tool('ffmpeg').state === 'unanswered',
+      JSON.stringify({ none, connected }))
+  }
+
+  if (need('pack.remap.1 remapPack mints fresh ids for every object and marks every workflow AND preset reviewed: false; a prompt is inert text and carries no mark')) {
+    const file = F.buildPack({ manifest: { name: 'devrel', version: '1.0.0' }, templates: [template], prompts: [prompt], presets: [preset], app: '5.0.0', now: 1 })
+    let n = 0
+    const out = F.remapPack(file, (prefix) => `${prefix}-new-${++n}`)
+    ok('pack.remap.1 remapPack mints fresh ids for every object and marks every workflow AND preset reviewed: false; a prompt is inert text and carries no mark',
+      out.templates[0].id.startsWith('t-new-') && out.prompts[0].id.startsWith('q-new-') && out.presets[0].id.startsWith('r-new-') &&
+        out.templates[0].reviewed === false && out.presets[0].reviewed === false && !('reviewed' in out.prompts[0]),
+      JSON.stringify(out))
+  }
+}
+
 // M190 — feedback.1. THE DRAFT THIS APP NEVER SENDS. What travels is chosen
 //      by TYPE — a version, a platform, engine WORDS and panel COUNTS — so
 //      there is nowhere in the shape for a path, a command, a transcript or a

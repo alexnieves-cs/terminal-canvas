@@ -1040,7 +1040,7 @@ app.whenReady().then(async () => {
     {
       list: () => [{ id: 'shell', name: 'Login shell', available: true, builtIn: true, isDefault: true, subtitle: '~', cwd: '~' }, { id: 'claude', name: 'Claude', available: true, builtIn: true, isDefault: false, subtitle: '~', cwd: '~', agent: 'claude-code' }],
       rename: () => false, remove: () => false, setDefault: () => {},
-      spawn: () => {}, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
+      spawn: () => null, markPresetReviewed: () => false, savePanel: () => {}, requestReset: () => {}, listPrompts: () => [], savePrompt: () => {}, removePrompt: () => false,
       // M142/M149. The ledger's week rows: nothing closed in a fixture canvas — the answered arm, never the reading one.
       ledgerUsage: () => Promise.resolve([]),
       // M80. Templates: the built-ins plus the store's own.

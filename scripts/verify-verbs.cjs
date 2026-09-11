@@ -60,7 +60,10 @@ const FACTS = {
   {
     const src = (p) => readFileSync(join(__dirname, '..', 'src', p), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
     const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts']
-    const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*[:=]/.test(src(p)))
+    // A WRITE of `reviewed` (`reviewed:` or `reviewed =`), never a read: M253's
+    // palette greys an unread preset with `preset.reviewed === false`, and the
+    // old `[:=]` matched that `===` as if commands.ts cleared the mark.
+    const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*(?::|=(?!=))/.test(src(p)))
     const canvas = src('renderer/canvas/Canvas.tsx')
     const uses = (name) => [...canvas.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
     const passedOnly = uses('markTemplateRead') === 2 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(canvas) &&
@@ -224,8 +227,11 @@ const FACTS = {
     // structure like the portable file, so it scrubs title, bullets, body,
     // alt text and notes one field at a time and reports the count in its
     // export sentence — `outward`'s one-text-one-note answer cannot say that.
-    ok('gate.2 redactSecrets has exactly seven callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export and M251\'s deck export, which each scrub field by field and report their count, and M190\'s feedback draft, whose count is stated in the draft itself), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    // M253 adds the EIGHTH: `shared/pack.ts` scrubs a pack's workflows,
+    // prompts and presets field by field for the same reason portable.ts
+    // does — the count is part of the file.
+    ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export and M251\'s deck export, which each scrub field by field and report their count, and M190\'s feedback draft, whose count is stated in the draft itself, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 
@@ -442,7 +448,9 @@ const FACTS = {
     }
     return null
   }
-  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x']
+  // M253 adds both pack verbs: a teammate chooses neither where this app
+  // writes a pack nor what a person is asked to add to their library.
+  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x']
     .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))
   const exportVerb = V.VERBS.find((verb) => verb.id === 'export-canvas')
   const destructivePlan = P.buildPlan(P.parsePlanLine('export-canvas /tmp/x'), facts)

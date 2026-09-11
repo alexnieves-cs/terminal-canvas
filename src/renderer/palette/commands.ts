@@ -46,6 +46,8 @@ export { SERVICES }
 
 /** A preset as the palette needs it: main answers preset:list with these. */
 export interface PresetRow {
+  /** M253. Arrived in a pack and not yet read; the spawn row is disabled by name and a read row sits beside it. */
+  reviewed?: false
   id: string
   name: string
   /** Its command is on the resolved login PATH. Only main can know this. */
@@ -480,6 +482,11 @@ export interface PaletteActions {
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M250. A .docx into a new, unreviewed note beside it; no path opens the system's chooser. */
   importDocx(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M253. Packs: import READS and shows the manifest, adding nothing; export writes the library as one pack. */
+  exportPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  importPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M253. "I've read this" for a pack preset — a person's statement, so no verb reaches it (EXCLUDED_ACTIONS). A preset has no canvas object; its palette row is its home. */
+  markPresetRead(id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -704,6 +711,8 @@ export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
+/** M253. A pack preset refused until read — the row beside it is where reading happens. */
+export const REASON_UNREAD_PRESET = 'from a pack, not read yet — choose "I\'ve read this preset" first'
 /** M49. A font size belongs to a terminal; the other kinds set their own text. */
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 /** M50. One panel has nothing to be tidied against. */
@@ -1435,9 +1444,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           ...(preset.isDefault ? { shortcut: '⌘N' } : {}),
           run: () => actions.spawnPreset(preset.id)
         },
-        preset.available ? undefined : REASON_NOT_ON_PATH
+        // M253. Unread comes first: a pack preset whose command IS on the
+        // PATH still will not spawn, and "read it" is the fix a person can act on.
+        preset.reviewed === false ? REASON_UNREAD_PRESET : preset.available ? undefined : REASON_NOT_ON_PATH
       )
     )
+    // M253. The unread preset's own door, beside the disabled row: the
+    // subtitle is the command and directory a person is agreeing to run.
+    if (preset.reviewed === false) {
+      out.push({ id: `preset.read.${preset.id}`, title: `I've read this preset: ${preset.name}`, subtitle: preset.subtitle, searchText: `read reviewed trust preset pack ${preset.name}`, group: 'spawn', scope: 'presets', run: () => { void actions.markPresetRead(preset.id) } })
+    }
   }
 
   // --- Prompts -------------------------------------------------------------
@@ -2001,7 +2017,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           hiddenAtRest: true,
           run: () => actions.setDefaultPreset(preset.id)
         },
-        preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
+        // M253 (the critic, 2). Unread first: Cmd+N would otherwise spawn a
+        // stranger's command with no refusal anywhere on its path.
+        preset.reviewed === false ? REASON_UNREAD_PRESET : preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
       )
     )
     // M37. A toggle that names its CURRENT state rather than a pair of rows:
@@ -2375,6 +2393,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M250. A literal id, for closure.v9.1's text read. The refusal (a docx the
   // converter cannot read, a note already there) lands on the feedback line.
   out.push({ id: 'note.import-docx', title: 'Import a Word document…', subtitle: 'a new Markdown note beside the .docx — what was dropped is named, and the note waits to be read', group: 'canvas', searchText: 'import word docx document convert note markdown', run: () => { void actions.importDocx().then((r) => { if (r.kind === 'refused') actions.say(r.reason) }) } })
+  // M253. A pack's two rows. Import shows what the pack holds and needs FIRST
+  // and adds nothing until Add; export writes the library — not this canvas.
+  out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and presets in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })
+  out.push({ id: 'pack.import', title: 'Import a pack…', subtitle: 'shows what it holds and needs; nothing is added until you choose Add', group: 'canvas', searchText: 'import pack bundle open discipline library add', run: () => { void actions.importPack() } })
+  // An imported workflow is marked read by the button ON its workflow panel
+  // (M252's `onMarkRead`), never by a palette row: M253's `workflow.read.<id>`
+  // rows would have cleared ANY unread template — a described tool's included —
+  // which `verify:verbs tool.door.1` forbids.
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state

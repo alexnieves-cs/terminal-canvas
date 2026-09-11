@@ -486,6 +486,13 @@ export interface Preset {
   id: string
   name: string
   cwd: string
+  /**
+   * M253. `false` is the only value: this preset arrived in a pack and its
+   * command has not been read, so main refuses to spawn it by name. Absent
+   * means reviewed — every preset this machine saved itself. M190's template
+   * mark, reached by a second kind.
+   */
+  reviewed?: false
   command?: string
   args: string[]
   w?: number
@@ -1360,7 +1367,7 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
     warnings.push('dropped a preset that was not an object')
     return null
   }
-  const { id, name, cwd, command, args, w, h, agent, agentOptions, worktree, env } = raw
+  const { id, name, cwd, command, args, w, h, agent, agentOptions, worktree, env, reviewed } = raw
   if (!isStr(id) || !ID_PATTERN.test(id)) {
     warnings.push(`dropped a preset with an unusable id: ${JSON.stringify(id)}`)
     return null
@@ -1403,6 +1410,11 @@ function parsePreset(raw: unknown, seen: Set<string>, warnings: string[]): Prese
   if (parseWorktreeFlag(worktree, `preset ${id}`, warnings)) preset.worktree = true
   const presetEnv = parseEnvMap(env, `preset ${id}`, warnings)
   if (presetEnv !== undefined) preset.env = presetEnv
+  // M253. The template rule (M190): anything present that is not `true`
+  // costs the FIELD and fails SAFE — an unreadable mark reads as "not read",
+  // because the other failure spawns a stranger's command.
+  if (reviewed !== undefined && reviewed !== true && reviewed !== false) warnings.push(`preset ${id}: reviewed was not a boolean — the preset is kept and treated as unreviewed`)
+  if (reviewed !== undefined && reviewed !== true) preset.reviewed = false
   return preset
 }
 
