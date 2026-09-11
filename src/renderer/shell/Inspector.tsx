@@ -876,6 +876,14 @@ function InspectorPanel({
           {toolbox.more > 0 && (
             <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
           )}
+          {/* M256. The skills this selection has not used, counted — a
+              person reading the list must not take "not here" for "not
+              installed". The Skills view lists every one. */}
+          {toolbox.elsewhere !== undefined && (
+            <p className="inspector__review-note" data-toolbox-elsewhere={String(toolbox.elsewhere)}>
+              {toolbox.elsewhere} user or plugin skill{toolbox.elsewhere === 1 ? '' : 's'} not used here - see Skills
+            </p>
+          )}
           {/* Present whenever the section renders, because a toolbox needs
               only a DIRECTORY — and, since M194, DISABLED WITH A REASON when
               that directory cannot be used, rather than a control that opens a

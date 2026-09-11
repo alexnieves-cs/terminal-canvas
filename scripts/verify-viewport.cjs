@@ -2499,6 +2499,17 @@ console.log('\n' + '='.repeat(60))
       quiet: anim(run({})), armed: anim(run({ armed: new Set(['a', 'c']) })), firing: anim(run({ fired: new Map([['a:c', 1000]]), now: 1000 })) }))
 }
 
+// M256. Document focus widens about the CENTRE, never shrinks, and keeps the id.
+{
+  const small = V.docFocusRect({ id: 'f', x: 100, y: 100, w: 400, h: 300 })
+  const big = V.docFocusRect({ id: 'g', x: 0, y: 0, w: 1200, h: 900 })
+  ok('doc-focus.1 widened about the centre to the minimum; a larger panel is untouched',
+    small.id === 'f' && small.w === V.DOC_FOCUS_MIN.w && small.h === V.DOC_FOCUS_MIN.h &&
+      small.x + small.w / 2 === 300 && small.y + small.h / 2 === 250 &&
+      big.x === 0 && big.y === 0 && big.w === 1200 && big.h === 900,
+    JSON.stringify({ small, big }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

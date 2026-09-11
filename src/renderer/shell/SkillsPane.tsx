@@ -1,7 +1,10 @@
 import { emptyState } from '@shared/empty-states'
 import { memo, useState, type DragEvent, type JSX } from 'react'
+import { createPortal } from 'react-dom'
+import { SkillsWorkspace } from './SkillsWorkspace'
+import type { SkillUse } from '@renderer/skills/skill-trail-store'
 import { shellControl } from './shell-control'
-import { ChevronLeft, More } from '@renderer/icons'
+import { ChevronLeft, Maximize, More } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
@@ -115,7 +118,16 @@ export interface SkillsPaneProps {
   projectScopeNote?: string | null
   /** Main's own answer to the last create, as a sentence. Null when there is nothing to say. */
   newSkillResult: string | null
+  /** M256. Keys with a skill panel open on this canvas — the "On canvas" state. */
+  placedKeys?: ReadonlySet<SkillKey>
+  /** M256. Place a skill panel at the canvas centre. */
+  onPlaceOnCanvas?: (scope: ToolScope, name: string) => void
+  /** M256. A snapshot of skill uses for the workspace's "Recent use". */
+  readUsage?: () => SkillUse[]
 }
+
+const NO_KEYS: ReadonlySet<SkillKey> = new Set()
+const NO_USES = (): SkillUse[] => []
 
 const SCOPES: readonly ToolScope[] = ['user', 'project', 'local']
 
@@ -164,6 +176,9 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
   // the title GIVES and every control is `flex: 0 0 auto`, which means the
   // verbs collapse into one control rather than shrinking.
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  // M256. The dedicated workspace view — local, like the draft: whether it is
+  // open is nothing anything outside the pane needs to know.
+  const [workspace, setWorkspace] = useState(false)
   const toggleMenu = (key: string): void => setOpenMenu((m) => (m === key ? null : key))
   const dropHandlers = (columnId: string): { onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
     onDragOver: (e) => {
@@ -184,10 +199,15 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
           {/* M127 critic wave. ONE control, named with words. A bare `+`
               beside a worded `New skill` read as a second, unexplained verb;
               the column door says what it makes. */}
+          {/* M256. "Create collection", not "New column": the thing made is a
+              named group of skills, and a column is only how this narrow pane
+              happens to draw one. The hook keeps its old name for its readers. */}
           <button type="button" className="rail-row__verb" data-skills-new-column
-            title="Add a column to the shelf" {...shellControl(props.onNewColumn)}>New column</button>
+            title="Create a collection to group skills in" {...shellControl(props.onNewColumn)}>Create collection</button>
           <button type="button" className="rail-row__verb" data-skills-new-skill
             title="Scaffold a new skill's SKILL.md" {...shellControl(() => setDrafting((d) => !d))}>New skill</button>
+          <button type="button" className="icon-button" data-skills-open-workspace title="Open the skills workspace - list, detail and details side by side"
+            aria-label="Open the skills workspace" {...shellControl(() => setWorkspace(true))}><Maximize /></button>
           <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
@@ -268,6 +288,16 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
 
       {props.assignNotice !== null && (
         <p className="pf__note skills-pane__assign-notice" data-skills-assign-notice>{props.assignNotice}</p>
+      )}
+
+      {workspace && createPortal(
+        <SkillsWorkspace columns={props.state.kind === 'inventory' ? props.columns : []} kind={props.kind} onChooseKind={props.onChooseKind}
+          query={props.query} onQuery={props.onQuery}
+          {...(props.state.kind === 'inventory' ? {} : { notReady: props.state.kind === 'no-cwd' ? SKILLS_NO_CWD : props.state.kind === 'pending' ? SKILLS_PENDING : props.state.why })}
+          placedKeys={props.placedKeys ?? NO_KEYS}
+          {...(props.onPlaceOnCanvas === undefined ? {} : { onPlaceOnCanvas: props.onPlaceOnCanvas })}
+          readUsage={props.readUsage ?? NO_USES} onCreateCollection={props.onNewColumn} onClose={() => setWorkspace(false)} />,
+        document.body
       )}
 
       {props.state.kind === 'no-cwd' ? (

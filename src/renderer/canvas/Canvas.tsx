@@ -58,7 +58,7 @@ import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type Task
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -213,7 +213,7 @@ import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { sendRefusalSentence } from '@shared/agent-session'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
-import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
+import { applyTrail, clearTrail, recentSkillUses } from '@renderer/skills/skill-trail-store'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
@@ -2342,6 +2342,31 @@ export function Canvas({
       return next
     })
   }, [addToSelection, commitHistory, selectOnly])
+
+  /**
+   * M256. DOCUMENT FOCUS — one file at a time, centred, widened and the only
+   * object at full strength. A VIEW state, never a layout one: the widening is
+   * a display rect handed to the one panel (`docFocusRect`), so nothing is
+   * written to the layout, the history or the undo stack, and leaving puts
+   * the panel back exactly where it was. Entering is a camera JUMP onto the
+   * trail, so leaving by the panel's own control is a Camera Back.
+   *
+   * Left implicitly when the panel stops being the selection (a background
+   * click, another panel) — quietening the canvas around a file nobody has
+   * selected would hide the thing the person just chose.
+   */
+  const [docFocusId, setDocFocusId] = useState<string | null>(null)
+  const onDocFocus = useCallback((id: string, on: boolean) => {
+    if (!on) { setDocFocusId(null); cameraBack(); return }
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (panel === undefined) return
+    selectAndRaise(id)
+    setDocFocusId(id)
+    frameRects([docFocusRect(panel.rect)])
+  }, [selectAndRaise, frameRects, cameraBack])
+  useEffect(() => {
+    if (docFocusId !== null && (!selectedIds.has(docFocusId) || selectedIds.size !== 1)) setDocFocusId(null)
+  }, [docFocusId, selectedIds])
 
   // Which panel the jump key last visited. A ref, not state: it is a cursor
   // for a keydown handler and nothing renders from it, so putting it in state
@@ -6681,6 +6706,11 @@ export function Canvas({
     if (cwd === undefined || cwd === '') return []
     return [{ panelId: p.rect.id, cwd, label: railRows.find((r) => r.id === p.rect.id)?.label ?? p.rect.id }]
   }), [panels, railRows])
+  // M256. Keyed on a SIGNATURE of the skill panels, never on `panels`: the
+  // array changes identity on every drag frame, and the Skills pane's props
+  // must not rebuild at 60Hz for a fact that changes when a panel opens.
+  const placedSkillSig = panels.filter(isSkillPanel).map((p) => skillKey(p.skill.scope, p.skill.name)).sort().join('\n')
+  const placedSkillKeys = useMemo<ReadonlySet<SkillKey>>(() => new Set(placedSkillSig === '' ? [] : placedSkillSig.split('\n')), [placedSkillSig])
   const skillsPaneProps = useMemo(() => {
     const entries = skillsInventory?.kind === 'inventory' ? skillsInventory.inventory.entries : []
     const state: SkillsInventoryState =
@@ -6789,6 +6819,11 @@ export function Canvas({
           .catch(() => setNewSkillResult('the create did not answer'))
       },
       columns: paneColumns,
+      // M256. The workspace's canvas facts: which skills already have a panel,
+      // the one door that opens one, and a usage snapshot read on open.
+      placedKeys: placedSkillKeys,
+      onPlaceOnCanvas: (scope: ToolScope, name: string) => { paletteActionsRef.current?.openSkillPanel(scope, name, worldCentre()) },
+      readUsage: () => recentSkillUses(panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, label: railRows.find((r) => r.id === p.rect.id)?.label ?? p.rect.id }))),
       teammates: teammates ?? [],
       assignNotice: skillAssignNotice,
       onAssignColumn: (columnId: string, teammateId: string) => {
@@ -6825,7 +6860,7 @@ export function Canvas({
       },
       onNewColumn: () => {
         const id = `col-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-        writeShelf({ columns: [...shelf.columns.map(carryOneColumn), { id, title: `column ${shelf.columns.length + 1}`, keys: [] }] })
+        writeShelf({ columns: [...shelf.columns.map(carryOneColumn), { id, title: `collection ${shelf.columns.length + 1}`, keys: [] }] })
       },
       onDeleteColumn: (id: string) => {
         // Ungrouped refuses in the model AND here: the pane's control is
@@ -6840,7 +6875,7 @@ export function Canvas({
   // Omitting it left the lane refusal frozen at whatever it was when another
   // dep last changed — the kind of staleness that shows up as a door that is
   // enabled when it should not be, only sometimes.
-  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, worktreeRows, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
+  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, worktreeRows, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice, placedSkillKeys, railRows, worldCentre])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
@@ -7035,7 +7070,7 @@ export function Canvas({
         // M121. The flip as a readable FACT on the host (verify:panels flip.1),
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
-        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
@@ -7229,11 +7264,16 @@ export function Canvas({
               return (
                 <FileNode
                   key={panel.rect.id}
-                  panel={panel}
+                  // M256. The widened DISPLAY rect while in document focus —
+                  // and a drag on it leaves focus instead of moving it, so the
+                  // widened size can never be committed to the layout.
+                  panel={docFocusId === panel.rect.id ? { ...panel, rect: docFocusRect(panel.rect) } : panel}
+                  docFocused={docFocusId === panel.rect.id}
+                  onDocFocus={onDocFocus}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
+                  onBeginDrag={docFocusId === panel.rect.id ? () => onDocFocus(panel.rect.id, false) : onBeginDrag}
                   onClose={onClosePanel}
                   // The editor textarea is a third surface that takes DOM
                   // focus off xterm, so it inherits usePalette's rule 4 —

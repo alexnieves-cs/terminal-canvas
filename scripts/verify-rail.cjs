@@ -3425,6 +3425,65 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M256. The Skills workspace's four words, the inspector's relevance cut and
+// the missing file's two stories — each a decision made once in a pure model,
+// so the surfaces that paint them cannot drift into a second rule.
+{
+  try {
+    const card = (over) => ({ installed: true, active: 'active', scope: 'user', ...over })
+    ok('skills-ws.1 the scope badge is Plugin before the scope a plugin was read under',
+      R.skillBadge({ scope: 'user', pluginId: 'superpowers@x' }) === 'Plugin' &&
+        R.skillBadge({ scope: 'user' }) === 'User' && R.skillBadge({ scope: 'project' }) === 'Project' &&
+        R.skillBadge({ scope: 'local' }) === 'Local',
+      'a User badge on a plugin skill sends a person to the wrong folder')
+    const states = [
+      R.skillState(card({}), false), R.skillState(card({}), true),
+      R.skillState(card({ active: 'disabled' }), true), R.skillState(card({ installed: false }), true)
+    ]
+    ok('skills-ws.2 four states, each with a reason: installed, on canvas, available-but-off, unavailable',
+      states.map((x) => x.kind).join(',') === 'installed,placed,available,unavailable' && states.every((x) => x.why.length > 0),
+      JSON.stringify(states))
+    ok('skills-ws.3 the purpose is the first sentence, empty stays empty, and a long one never cuts mid-word',
+      R.skillPurpose('Build a graph. Then more.') === 'Build a graph.' && R.skillPurpose('   ') === '' &&
+        /\S…$/.test(R.skillPurpose('word '.repeat(60))) && R.skillPurpose('word '.repeat(60)).length <= R.PURPOSE_MAX + 1,
+      R.skillPurpose('word '.repeat(60)))
+    ok('skills-ws.4 frontmatter is stripped only when it opens AND closes',
+      R.stripFrontmatter('---\nname: x\n---\n\n# Body') === '# Body' && R.stripFrontmatter('---\nunclosed') === '---\nunclosed',
+      JSON.stringify(R.stripFrontmatter('---\nname: x\n---\n\n# Body')))
+    const cols = R.buildSkillColumns([{ kind: 'skill', scope: 'project', name: 'a', description: 'd', sourcePath: '/r/.claude/skills/a/SKILL.md', active: { kind: 'disabled' } }],
+      { columns: [{ id: 'c', title: 't', keys: ['["user","ghost"]'] }] }, { kind: 'skill', query: '', scopes: null, placedOnly: false })
+    const all = cols.flatMap((c) => c.cards)
+    const real = all.find((c) => c.name === 'a'), ghost = all.find((c) => c.name === 'ghost')
+    ok('skills-ws.5 a card carries scope, active and sourcePath; a ghost carries no path key at all',
+      real.scope === 'project' && real.active === 'disabled' && real.sourcePath === '/r/.claude/skills/a/SKILL.md' &&
+        ghost.active === 'unknown' && !('sourcePath' in ghost),
+      JSON.stringify({ real, ghost }))
+  } catch (e) {
+    ok('skills-ws.1', false, 'threw: ' + String(e && e.message || e))
+  }
+  try {
+    const mk = (over) => invEntry({ id: over.name, ...over })
+    const entries = [mk({ name: 'global' }), mk({ name: 'used' }), mk({ name: 'mine', scope: 'project' }), { ...mk({ name: 'm' }), kind: 'mcp', command: 'x' }]
+    const cut = R.buildToolboxFields(inventory({ entries }), { used: ['used'] })
+    const whole = R.buildToolboxFields(inventory({ entries }))
+    ok('inspector-skills.1 with relevance, unused user skills are COUNTED, never listed; without it, every row',
+      cut.rows.map((r) => r.name).join(',') === 'used,mine,m' && cut.elsewhere === 1 &&
+        whole.rows.length === 4 && !('elsewhere' in whole),
+      JSON.stringify({ cut: cut.rows.map((r) => r.name), elsewhere: cut.elsewhere, whole: whole.rows.length }))
+  } catch (e) {
+    ok('inspector-skills.1', false, 'threw: ' + String(e && e.message || e))
+  }
+  try {
+    const gone = R.missingStory(true, 'plan.md'), never = R.missingStory(false, 'plan.md')
+    ok('file-missing.1 a file seen then lost and a file never found are two stories with two fixes',
+      gone.arm === 'gone' && never.arm === 'never' && /deleted or moved/.test(gone.headline) && /never found/.test(never.headline) &&
+        gone.detail !== never.detail,
+      JSON.stringify({ gone, never }))
+  } catch (e) {
+    ok('file-missing.1', false, 'threw: ' + String(e && e.message || e))
+  }
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

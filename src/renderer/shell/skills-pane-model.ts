@@ -9,7 +9,7 @@ import {
   type Shelf,
   type SkillKey
 } from '@shared/skills'
-import type { NamedToolEntry, SkillResources, ToolEntry, ToolScope } from '@shared/toolbox'
+import type { NamedToolEntry, SkillResources, ToolActive, ToolEntry, ToolScope } from '@shared/toolbox'
 
 /**
  * M127. The Skills pane's whole model: an inventory plus the shelf plus the
@@ -84,6 +84,12 @@ export interface SkillCard {
    * emptied would read as a column the app rearranged by itself.
    */
   installed: boolean
+  /** M256. The scope the inventory read it from — the badge's source. */
+  scope: ToolScope
+  /** M256. The inventory's own active word; `unknown` for a shelf ghost. */
+  active: ToolActive['kind']
+  /** M256. Absent for a ghost — there is no file behind it to name. */
+  sourcePath?: string
 }
 
 export interface SkillColumn {
@@ -179,7 +185,12 @@ export function buildSkillColumns(
       // Field by field, never a spread: a spread writes `pluginId: undefined`,
       // which survives IPC and reads as present.
       ...(entry.pluginId === undefined ? {} : { pluginId: entry.pluginId }),
-      installed: true
+      installed: true,
+      scope: entry.scope,
+      // Read defensively: a hand-built entry (a check's fixture, an older
+      // main) may carry no `active`, and a throw here would empty the rack.
+      active: (entry.active as ToolActive | undefined)?.kind ?? 'unknown',
+      ...(typeof entry.sourcePath === 'string' && entry.sourcePath !== '' ? { sourcePath: entry.sourcePath } : {})
     })
   }
 
@@ -202,7 +213,9 @@ export function buildSkillColumns(
           why: 'placed',
           resources: GONE,
           ...(plugin === null ? {} : { pluginId: plugin }),
-          installed: false
+          installed: false,
+          scope: parsed.scope,
+          active: 'unknown'
         })
       }
     }
@@ -235,4 +248,67 @@ export function buildSkillColumns(
     origin: null
   })
   return out
+}
+
+/**
+ * M256. THE SKILLS WORKSPACE'S FOUR WORDS — pure, so the badge, the state and
+ * the purpose line are decided once and the workspace only paints them.
+ */
+
+/**
+ * The scope badge. PLUGIN wins over the scope it was read under: a plugin's
+ * skill is read from the user's plugin cache, and a `User` badge on it would
+ * send a person to `~/.claude/skills` looking for a folder that is not there.
+ */
+export type SkillBadge = 'User' | 'Project' | 'Local' | 'Plugin'
+export function skillBadge(card: Pick<SkillCard, 'scope' | 'pluginId'>): SkillBadge {
+  if (card.pluginId !== undefined) return 'Plugin'
+  return card.scope === 'user' ? 'User' : card.scope === 'project' ? 'Project' : 'Local'
+}
+
+/**
+ * Four states, never folded: a skill on the canvas, one the agent will load,
+ * one that is present but will NOT load (disabled, or waiting on approval),
+ * and a shelf slot whose file is gone. "Available" and "unavailable" lead to
+ * different fixes — turn it on, or reinstall it — so each carries its reason.
+ */
+export type SkillState =
+  | { kind: 'placed'; word: 'On canvas'; why: string }
+  | { kind: 'installed'; word: 'Installed'; why: string }
+  | { kind: 'available'; word: 'Available'; why: string }
+  | { kind: 'unavailable'; word: 'Unavailable'; why: string }
+export function skillState(card: Pick<SkillCard, 'installed' | 'active'>, placedOnCanvas: boolean): SkillState {
+  if (!card.installed) return { kind: 'unavailable', word: 'Unavailable', why: 'not installed - the shelf kept its slot' }
+  if (card.active === 'disabled') return { kind: 'available', word: 'Available', why: 'present but turned off in settings' }
+  if (card.active === 'needs-approval') return { kind: 'available', word: 'Available', why: 'present, waiting for approval before it loads' }
+  if (placedOnCanvas) return { kind: 'placed', word: 'On canvas', why: 'a panel for it is open on this canvas' }
+  if (card.active === 'unknown') return { kind: 'installed', word: 'Installed', why: 'installed; whether it is active could not be told' }
+  return { kind: 'installed', word: 'Installed', why: 'installed and active for this directory' }
+}
+
+/**
+ * The one-line purpose a row leads with — the description's first sentence,
+ * never a mid-word cut. Empty stays empty: an invented "no description" would
+ * read as the skill's own words.
+ */
+export const PURPOSE_MAX = 140
+export function skillPurpose(description: string): string {
+  const flat = description.replace(/\s+/g, ' ').trim()
+  if (flat === '') return ''
+  const stop = flat.search(/[.!?](\s|$)/)
+  const first = stop === -1 ? flat : flat.slice(0, stop + 1)
+  if (first.length <= PURPOSE_MAX) return first
+  const cut = first.slice(0, PURPOSE_MAX)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > PURPOSE_MAX / 2 ? cut.slice(0, space) : cut).replace(/[,;:\s]+$/, '')}…`
+}
+
+/**
+ * A SKILL.md with its YAML frontmatter removed, for the preview. Only a
+ * frontmatter block that OPENS the file and CLOSES is removed; an unclosed
+ * `---` is text, and the preview shows it rather than swallowing the file.
+ */
+export function stripFrontmatter(text: string): string {
+  const m = /^---\r?\n[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/.exec(text)
+  return m === null ? text : text.slice(m[0].length).replace(/^\s+/, '')
 }
