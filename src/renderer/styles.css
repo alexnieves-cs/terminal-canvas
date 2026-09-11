@@ -93,6 +93,16 @@
      no error. Where a chrome does sit at the top, the two coincide at the
      same y and the same colour, which costs a pixel nobody can see. */
   --rim-top: inset 0 1px 0 var(--edge-light);
+  /* M258. The editorial measure a file or note page reads at — tighter than
+     --measure, which is the assistant's prose — and its face: the system's
+     own reading serif, local, so the CSP's default-src 'self' is untouched. */
+  --measure-read: 66ch;
+  --font-read: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  /* M258. The HUD pill's height, so the minimap can stack directly above it
+     as ONE navigation cluster on a wide window. */
+  --nav-hud-h: 34px;
+  /* M258. The graph-paper pitch on a workflow's surface. */
+  --grid-pitch: 16px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -169,6 +179,12 @@
      interface itself: selection in the palette and rail, links, focus. */
   --iris: #0b7f97;  --iris-dim: rgba(11, 127, 151, .12);
   --focus: var(--iris);
+  /* M258. The navigation cluster's moat — a ring of the ground colour that
+     parts the minimap from panels passing under it — and the graph-paper and
+     lane rules a workflow and a board draw on their surfaces. */
+  --nav-moat: var(--s-0);
+  --grid-line: rgba(27, 30, 38, .06);
+  --lane-line: rgba(27, 30, 38, .08);
 
   /* Elevation, and ONLY elevation: e-1 a chip, e-2 a panel, e-3 an overlay,
      e-4 a modal. A boundary is always a --line beside these, never carried
@@ -296,6 +312,9 @@
 
   --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .14);
   --focus: var(--iris);
+  --nav-moat: var(--s-0);
+  --grid-line: rgba(233, 236, 244, .05);
+  --lane-line: rgba(233, 236, 244, .07);
 
   --e-1: 0 1px 2px rgba(0, 0, 0, .35);
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
@@ -5754,3 +5773,110 @@ body {
 .skill-state--placed { color: var(--on-iris); background: var(--iris); border-color: var(--iris); }
 .skill-state--available { color: var(--amber); }
 .skill-state--unavailable { color: var(--red); }
+
+/* ------------------------------------------------------------------ M258 --
+   NAVIGATION AND OBJECT IDENTITY. Quiet at rest, precise on hover.
+
+   THE MINIMAP is separated from the canvas by an OPAQUE raised backing, a
+   stronger boundary, the overlay elevation and a moat of ground colour, so a
+   panel passing under it never reads as part of the map. */
+.minimap {
+  background: var(--s-3);
+  border-color: var(--line-strong);
+  box-shadow: var(--e-3), var(--rim-top);
+  outline: 3px solid var(--nav-moat);
+}
+/* The CAMERA is the loudest thing on the map and nothing else looks like it:
+   a 2px iris ring over its wash, grabbable (the drag pans — minimap.ts's
+   minimapPanViewport). A SELECTED block is a neutral ink ring, never iris. */
+.minimap__view { border-width: 2px; pointer-events: auto; cursor: grab; }
+.minimap[data-grabbing], .minimap[data-grabbing] .minimap__view { cursor: grabbing; }
+.minimap__block[data-selected] { outline: 1px solid var(--fg); outline-offset: 1px; }
+/* The LEGEND is the contextual layer: opacity 0 at rest, 1 on hover. */
+.minimap__legend {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--s-3); border-top: 1px solid var(--line);
+  font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2);
+  opacity: 0; transition: opacity var(--dur-1) var(--ease);
+  pointer-events: none;
+}
+.minimap:hover .minimap__legend { opacity: 1; }
+.minimap[data-grabbing] .minimap__legend { opacity: 0; }
+.minimap__legend-item { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+.minimap__legend-swatch { width: 8px; height: 8px; box-sizing: border-box; border: 1px solid var(--tone); background: color-mix(in srgb, var(--tone) 26%, var(--s-1)); }
+.minimap__legend-swatch[data-tone="asleep"] { border-style: dashed; background: transparent; }
+.minimap__legend-swatch--view { border: 2px solid var(--iris); background: var(--iris-dim); }
+@media (prefers-reduced-motion: reduce) { .minimap__legend { transition: none; } }
+
+/* THE HUD wears the same separation as the map, so the two read as one
+   instrument. The zoom READOUT is news, not furniture: at rest it fades out
+   unless the scale differs from 100% by more than 5% (zoomReadoutShown);
+   its box stays, so the buttons never move under a cursor mid-zoom. */
+.canvas-hud { border-color: var(--line-strong); box-shadow: var(--e-3), var(--rim-top); outline: 3px solid var(--nav-moat); }
+.canvas-hud__readout { transition: opacity var(--dur-1) var(--ease); }
+.canvas-hud__readout[data-hud-readout="rest"] { opacity: 0; }
+.canvas-hud [data-hud-fit-task] { display: inline-flex; flex-direction: row; align-items: center; gap: var(--sp-1); min-width: 24px; padding: 0 var(--sp-2); }
+.canvas-hud [data-hud-fit-task]:disabled { color: var(--fg-4); cursor: default; }
+.shell[data-bp="compact"] .canvas-hud [data-hud-fit-task] .canvas-hud__fit-label { display: none; }
+@media (prefers-reduced-motion: reduce) { .canvas-hud__readout { transition: none; } }
+
+/* ONE NAVIGATION CLUSTER on a wide window: the map stacks directly above
+   the zoom pill in the bottom-right corner, right edges aligned. Narrow,
+   they stay apart — the map in the top-right corner as before. */
+@media (min-width: 1280px) {
+  .minimap { top: auto; bottom: calc(var(--sp-5) + var(--nav-hud-h) + var(--sp-3)); }
+}
+
+/* THE FRAME. The kind glyph sits in a FIXED-WIDTH column, so titles align
+   down a column of panels whatever their glyph's own width. */
+.pf__state--kind { flex: 0 0 16px; width: 16px; justify-content: center; }
+.pf__state--kind svg { width: 14px; height: 14px; }
+/* DRAG HIT-SLOP without chrome: an invisible strip hangs below a HEADER, so a
+   grab a few pixels low still moves the panel. It is the chrome's own
+   pseudo-element (the header's mousedown starts the move), absolutely
+   positioned — no box changes size, so nothing refits. z-index -1 inside the
+   chrome's stacking context keeps it under the ⋯ menu. NOT on the chromeless
+   kinds: over a terminal a strip would eat clicks meant for xterm's first
+   row (type.1's lesson), and a note's text is its content. */
+.pf__chrome::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: var(--sp-4); z-index: -1; }
+.pf--kind-terminal .pf__chrome::after, .pf--kind-note .pf__chrome::after { content: none; }
+.pf__maximise { display: inline-flex; align-items: center; }
+.pf__maximise svg { width: 12px; height: 12px; }
+
+/* EACH KIND'S INTERIOR, one shared frame. */
+/* File / note: an editorial page — the reading serif at a tighter measure,
+   centred, with more air between lines. Code leaves keep mono by name. */
+.pf--kind-file .file-node__prose { max-width: var(--measure-read); margin-inline: auto; font-family: var(--font-read); font-size: var(--t-lg); line-height: 1.6; color: var(--fg); }
+/* Workflow: graph paper under the diagram. */
+.pf--kind-workflow .workflow-node__body {
+  background-color: var(--panel-bg);
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-pitch) var(--grid-pitch);
+}
+/* Board (a work card): a lane surface — vertical lane rules. */
+.pf--kind-work .work-node__body {
+  background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(33.333% - 1px), var(--lane-line) calc(33.333% - 1px), var(--lane-line) 33.333%);
+}
+/* Browser: viewport first. The address bar is a compact floating pill over
+   the page's ground rather than a toolbar with a rule under it. */
+.pf--kind-browser .browser-node__body { background: var(--well); }
+.pf--kind-browser .browser-node__bar { margin: var(--sp-2) var(--sp-3) var(--sp-1); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); border-bottom: 1px solid var(--line); background: var(--s-3); }
+.pf--kind-browser .browser-node__address { border-color: transparent; border-radius: var(--r-full); background: transparent; }
+.pf--kind-browser .browser-node__address:focus { border-color: var(--focus); }
+/* Review: a diff-oriented surface — the file list reads as navigation. */
+.pf--kind-review .pf__body--text { background: var(--glass-0); }
+/* Chat: a readable transcript with the composer anchored to the foot. */
+.pf--kind-chat .pf__body { display: flex; flex-direction: column; }
+
+/* DORMANT PANELS are compressed summaries, not large empty rectangles: the
+   frame becomes a dashed ghost of its footprint and the card is a compact
+   block at its top. VISUAL ONLY — the stored rect is untouched, and a
+   dormant terminal has no xterm mounted, so nothing here can refit one. */
+.panel[data-dormant] { border-style: dashed; border-color: var(--line-strong); box-shadow: none; }
+.panel[data-dormant] .panel__card { padding: var(--sp-4); justify-content: flex-start; }
+.panel__card-dormant { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-4) var(--sp-5); border: 1px solid var(--frame-line); border-radius: var(--r-md); background: var(--s-1); max-height: 100%; overflow: hidden; }
+.panel__card-dormant .panel__card-idle { margin-top: 0; }
+.panel[data-dormant] .panel__card-line--recorded:nth-last-child(n+6) { display: none; }
+.panel__card-since { align-self: flex-start; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }

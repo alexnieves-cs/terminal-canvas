@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
-import { minimapProjection, minimapToWorld, viewportCentredAt, type MinimapProjection } from './minimap'
+import { minimapPanViewport, minimapProjection, minimapToWorld, minimapViewHit, viewportCentredAt, type MinimapProjection } from './minimap'
 import type { Size, Viewport, WorldRect } from './viewport'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import { panelState, type StateInput } from '@renderer/panels/panel-state'
+import { MINIMAP_LEGEND, panelState, type StateInput } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
 
@@ -29,9 +29,12 @@ export interface MinimapProps {
   goTo: (vp: Viewport) => void
   /** M93. World points of the annotations — drawn as dots so the map shows the margins too. */
   marks?: readonly { x: number; y: number }[]
+  /** M258. The selected panels — drawn with a neutral ring, never the camera's iris, so the two cannot be confused. */
+  selected?: ReadonlySet<string>
 }
 
-function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number } }): JSX.Element {
+
+function Block({ row, box, selected }: { row: MinimapRow; box: { x: number; y: number; w: number; h: number }; selected: boolean }): JSX.Element {
   const agent = useAgentState(row.id)
   // M73. A chat block reads its session mirror, as the rail row does, so the
   // status board shows a conversation's state and not its kind.
@@ -39,12 +42,12 @@ function Block({ row, box }: { row: MinimapRow; box: { x: number; y: number; w: 
   const chatInput = row.state.kind === 'chat' ? chatStateInput(chat.snapshot, chat.turns.length > 0) : undefined
   const shown = panelState(chatInput === undefined ? row.state : { ...row.state, chat: chatInput }, agent)
   return (
-    <div className="minimap__block" data-minimap-block={row.id} data-tone={shown.tone} title={`${row.label} — ${shown.word}`}
+    <div className="minimap__block" data-minimap-block={row.id} data-tone={shown.tone} data-selected={selected ? '' : undefined} title={`${row.label} — ${shown.word}`}
       style={{ left: box.x, top: box.y, width: Math.max(2, box.w), height: Math.max(2, box.h) }} />
   )
 }
 
-export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): JSX.Element | null {
+export function Minimap({ rects, rows, viewport, goTo, marks, selected }: MinimapProps): JSX.Element | null {
   const hostRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<Size>({ width: 1, height: 1 })
   // The CANVAS's size, not the thumb's: the camera's rectangle is the canvas
@@ -66,7 +69,14 @@ export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): J
   )
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows])
 
+  // M258. `ghost` is the preview rectangle's TOP-LEFT in thumb px. Two
+  // gestures share it: a press on the camera's rectangle GRABS it (the
+  // rectangle slides with the grab offset kept, minimapPanViewport from the
+  // ORIGIN camera and projection), a press anywhere else recentres it on the
+  // pointer (M69). Either way the camera moves once, on release, through
+  // goTo — the preview-not-track rule the minimap's load-bearing entry keeps.
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
+  const [grabbing, setGrabbing] = useState(false)
   const dragRef = useRef<{ moved: boolean } | null>(null)
   const local = (event: MouseEvent | ReactMouseEvent): { x: number; y: number } => {
     const b = hostRef.current!.getBoundingClientRect()
@@ -78,21 +88,35 @@ export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): J
     // keeps DOM focus where it was (xterm), stopPropagation keeps the canvas
     // host from starting a marquee or a pan under the thumb.
     event.preventDefault(); event.stopPropagation()
+    const origin = local(event)
+    const pr = projection, vp = viewport
+    const grab = minimapViewHit(origin, pr)
+    const at = (p: { x: number; y: number }): { x: number; y: number } => grab
+      ? { x: pr.view.x + (p.x - origin.x), y: pr.view.y + (p.y - origin.y) }
+      : { x: p.x - pr.view.w / 2, y: p.y - pr.view.h / 2 }
     dragRef.current = { moved: false }
-    setGhost(local(event))
-    const move = (e: MouseEvent): void => { if (dragRef.current) { dragRef.current.moved = true; setGhost(local(e)) } }
+    setGrabbing(grab)
+    setGhost(at(origin))
+    const move = (e: MouseEvent): void => { if (dragRef.current) { dragRef.current.moved = true; setGhost(at(local(e))) } }
     const up = (e: MouseEvent): void => {
       document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up)
       const p = local(e)
+      const moved = dragRef.current?.moved === true
       dragRef.current = null
       setGhost(null)
-      const world = minimapToWorld(p, projection)
-      goTo(viewportCentredAt(world, viewport, size))
+      setGrabbing(false)
+      if (grab) {
+        // A press on the rectangle that never moved is not a request to go
+        // anywhere: the camera is already there.
+        if (moved) goTo(minimapPanViewport(vp, origin, p, pr))
+        return
+      }
+      goTo(viewportCentredAt(minimapToWorld(p, pr), vp, size))
     }
     document.addEventListener('mousemove', move); document.addEventListener('mouseup', up)
   }, [projection, viewport, size, goTo])
 
-  const viewBox = ghost === null ? projection.view : { ...projection.view, x: ghost.x - projection.view.w / 2, y: ghost.y - projection.view.h / 2 }
+  const viewBox = ghost === null ? projection.view : { ...projection.view, x: ghost.x, y: ghost.y }
   // An empty canvas has no board to show: nothing, rather than an iris box
   // beside the launcher with no purpose a person could name.
   if (rects.length === 0) return null
@@ -103,15 +127,16 @@ export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): J
       className="minimap"
       data-minimap
       data-cover={cover > 0.9 ? 'full' : 'part'}
+      data-grabbing={grabbing ? '' : undefined}
       role="img"
-      aria-label={`Overview: ${rects.length} panel${rects.length === 1 ? '' : 's'}; click or drag to move the camera`}
-      title="Overview — click or drag to move the camera"
+      aria-label={`Overview: ${rects.length} panel${rects.length === 1 ? '' : 's'}; click to move the camera, or drag the view rectangle to pan`}
+      title="Overview — click to move the camera, or drag the view rectangle to pan"
       style={{ width: MINIMAP_W, height: MINIMAP_H }}
       onMouseDown={onMouseDown}
     >
       {projection.blocks.map((b) => {
         const row = byId.get(b.id)
-        return row === undefined ? null : <Block key={b.id} row={row} box={b} />
+        return row === undefined ? null : <Block key={b.id} row={row} box={b} selected={selected?.has(b.id) === true} />
       })}
       {/* M93. Annotations as dots, so the map shows the margins too. */}
       {(marks ?? []).map((m, i) => (
@@ -119,6 +144,11 @@ export function Minimap({ rects, rows, viewport, goTo, marks }: MinimapProps): J
       ))}
       <div className={`minimap__view${ghost !== null ? ' minimap__view--dragging' : ''}`} data-minimap-view
         style={{ left: viewBox.x, top: viewBox.y, width: Math.max(4, viewBox.w), height: Math.max(4, viewBox.h) }} />
+      {/* M258. The legend is contextual: opacity 0 at rest, 1 on hover. */}
+      <div className="minimap__legend" data-minimap-legend aria-hidden="true">
+        {MINIMAP_LEGEND.map((l) => <span key={l.tone} className="minimap__legend-item"><span className="minimap__legend-swatch" data-tone={l.tone} />{l.word}</span>)}
+        <span className="minimap__legend-item"><span className="minimap__legend-swatch minimap__legend-swatch--view" />view</span>
+      </div>
     </div>
   )
 }

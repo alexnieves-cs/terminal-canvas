@@ -1390,7 +1390,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', false)`)
         await settle()
         const seeded = await waitUntil(() => wc.executeJavaScript(`['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
-        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        // M258. The first point of the panel that is actually ITS topmost pixel — the centre, else a quarter point: on a wide window the navigation cluster (minimap over the zoom pill) owns the bottom-right corner, and a real click there lands on the map.
+        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); for (const [fx, fy] of [[.5, .5], [.25, .5], [.5, .25], [.25, .25], [.75, .5]]) { const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height * fy); const top = document.elementFromPoint(x, y); if (top && p.contains(top)) return { x, y } } return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
         const wakeG = async (id) => {
           const pt = await cardPoint(id); if (!pt) return false
           wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })

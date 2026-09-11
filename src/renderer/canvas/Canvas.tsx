@@ -54,7 +54,7 @@ import {
 import { useViewport } from './useViewport'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
-import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
+import { arrangePlan, fitTaskTarget, FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
@@ -191,6 +191,7 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { lastLineOf } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
@@ -362,7 +363,7 @@ export function Canvas({
   const retainedOutcomesRef = useRef(retainedOutcomes)
   retainedOutcomesRef.current = retainedOutcomes
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     const item = workItemsRef.current.find((candidate) => candidate.panelId === chatId)
     if (item !== undefined) {
@@ -972,6 +973,7 @@ export function Canvas({
         // inherits a dead edge's fire.
         forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
         clearLastLine(panel.rect.id)
+        clearLastActive(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
         clearTrail(panel.rect.id)
@@ -1772,6 +1774,7 @@ export function Canvas({
       clearAgentState(panel.rect.id)
       forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
       clearLastLine(panel.rect.id)
+      clearLastActive(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
       clearTrail(panel.rect.id)
@@ -2292,6 +2295,7 @@ export function Canvas({
     clearAgentState(id)
     forgetEdgesFor(id); forgetAgentLinksFor(id)
     clearLastLine(id)
+    clearLastActive(id)
     clearLiveSession(id)
     clearSubagents(id)
     clearTrail(id)
@@ -3742,6 +3746,7 @@ export function Canvas({
       clearAgentState(id)
       forgetEdgesFor(id); forgetAgentLinksFor(id)
       clearLastLine(id)
+      clearLastActive(id)
       clearLiveSession(id)
       clearSubagents(id)
       clearTrail(id)
@@ -4849,6 +4854,26 @@ export function Canvas({
     const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
     return target.kind === 'refused' ? target : arrangeItem(target.itemId)
   }
+  // M258. FIT TASK — the four doors' landing point (the HUD button, the
+  // `task.fit` row, `tc plan fit-task`, an action node). The ACTIVE task is
+  // the lens's when one is lit, else the one task of the single selected
+  // panel (or the focused one). A camera move through the trail and nothing
+  // else, exactly as Show this task: no selection, focus, tier or geometry.
+  boardVerbsRef.current.fitTask = () => {
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const selected = selectedIdsRef.current
+    const panelId = selected.size === 1 ? [...selected][0] : (focusedIdRef.current ?? undefined)
+    const target = fitTaskTarget({ lensItemId: relatedItemId, ...(panelId === undefined ? {} : { panelId }), panels: shown, memberships: taskMemberships(shown, items), titles: Object.fromEntries(items.map((i) => [i.id, i.title])) })
+    if (target.kind === 'refused') return target
+    frameRects(target.rects)
+    const title = items.find((i) => i.id === target.itemId)?.title ?? target.itemId
+    return { kind: 'ran', note: `fitted ${target.rects.length} panel${target.rects.length === 1 ? '' : 's'} of ${title}` }
+  }
+  // The HUD's disabled state is the CHEAP half of that decision — is there
+  // any task context at all — so no membership is derived per render; a
+  // panel in no task still refuses by name on press.
+  const fitTaskContext = relatedItemId !== null || selectedIds.size === 1 || focusedId !== null
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -7573,7 +7598,7 @@ export function Canvas({
             corner, hidden while merged (the merged view's geometry is not this
             canvas's) and by `canvas.minimap`. */}
         {minimapEnabled && !merged && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -7716,6 +7741,7 @@ export function Canvas({
           viewport={viewport}
           onZoomBy={zoomBy}
           onFit={fitAll}
+          fitTask={{ disabledReason: fitTaskContext ? undefined : FIT_TASK_NO_CONTEXT, run: () => { const r = boardVerbsRef.current.fitTask?.(); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) } }}
           agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
         />
         {packPreview !== null && (

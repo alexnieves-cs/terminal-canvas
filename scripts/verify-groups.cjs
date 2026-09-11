@@ -156,6 +156,23 @@ const group = { id: 'g1', label: 'auth refactor', colour: 'blue', panelIds: ['n1
       arms.ghost.kind === 'refused' && /no longer on the board/.test(arms.ghost.reason) &&
       arms.unknown.kind === 'refused',
     JSON.stringify(arms))
+  // M258 — fit-task.1. FIT TASK frames the ACTIVE task: the lens's task when
+  // one is lit (it outranks the selection — the bar says which task is
+  // active), else the one task the selected panel belongs to, else nothing,
+  // refused with the NAMED reason the HUD's disabled button carries.
+  let fit
+  try {
+    const F = (input) => G.fitTaskTarget({ panels: task, memberships: [m1, m2], titles, ...input })
+    fit = { lens: F({ lensItemId: 'wi2', panelId: 't1' }), member: F({ lensItemId: null, panelId: 't1' }), both: F({ lensItemId: null, panelId: 'n9' }), none: F({ lensItemId: null }), gone: F({ lensItemId: 'wiX' }), reason: G.FIT_TASK_NO_CONTEXT }
+  } catch (e) { fit = String(e) }
+  ok('fit-task.1 Fit task frames the lens\'s task first, else the selected panel\'s one task; two tasks refuse naming both, and no context refuses with the named FIT_TASK_NO_CONTEXT reason',
+    typeof fit === 'object' &&
+      fit.lens.kind === 'frame' && fit.lens.itemId === 'wi2' && fit.lens.rects.length === m2.members.length &&
+      fit.member.kind === 'frame' && fit.member.itemId === 'wi1' &&
+      fit.both.kind === 'refused' && /Ship the rail/.test(fit.both.reason) &&
+      fit.none.kind === 'refused' && typeof fit.reason === 'string' && fit.reason.length > 10 && fit.none.reason === fit.reason &&
+      fit.gone.kind === 'refused',
+    JSON.stringify(fit))
 }
 
 // M204 (D08) — arrange.1–.3. ARRANGE THIS TASK: the task's own panels are

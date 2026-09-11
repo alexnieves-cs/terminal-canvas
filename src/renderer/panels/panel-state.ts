@@ -268,3 +268,26 @@ export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone 
     case 'stopped': return 'exited'
   }
 }
+
+/**
+ * M258. THE MINIMAP'S LEGEND, in this file's vocabulary (state.2: no state
+ * word is a literal outside panel-state.ts). The four block styles a person
+ * meets on the map, each with the word the rail and the frame already say.
+ */
+export const MINIMAP_LEGEND: readonly { tone: Tone; word: string }[] = [
+  { tone: 'working', word: 'working' }, { tone: 'needs-you', word: 'needs you' }, { tone: 'idle', word: 'idle' }, { tone: 'asleep', word: 'asleep' }
+]
+
+/**
+ * M258. A DORMANT PANEL'S "LAST ACTIVE" SIGNAL — `paused 3m`, `idle 2d`.
+ * Only from a KNOWN time: an absent, zero or future `at` is no answer and
+ * says nothing (the three-state rule — a guessed "just now" would be a
+ * confident wrong fact). `asleep` pauses; every other tone idles.
+ */
+export function lastActiveWord(input: { at?: number; now: number; tone: string }): string | undefined {
+  const at = input.at
+  if (at === undefined || !Number.isFinite(at) || at <= 0 || at > input.now) return undefined
+  const s = (input.now - at) / 1000
+  const age = s < 60 ? '<1m' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`
+  return `${input.tone === 'asleep' ? 'paused' : 'idle'} ${age}`
+}
