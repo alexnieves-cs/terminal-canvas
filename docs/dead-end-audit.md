@@ -41,6 +41,7 @@ file, so a reason nobody wrote down is a reason nobody reviewed.
 | `REASON_ALREADY_ACTIVE` | already the active workspace | — (informational) |
 | `REASON_ALREADY_DEFAULT` | already the default | — (informational) |
 | `REASON_NOT_ON_PATH` | not found on PATH | install the CLI; the Environment rows say which |
+| `REASON_UNREAD_PRESET` | from a pack, not read yet — choose "I've read this preset" first | the `preset.read.<id>` row beside it, whose subtitle is the command and directory (M251) |
 | `REASON_TERMINAL_LIVE` | stop the terminal first — one front-end at a time | let the agent exit, or close its process; then Open as chat (M74) |
 | `REASON_NOT_CLAUDE_SESSION` | only a terminal started as a claude session can open as chat | start the terminal from the Claude preset (a hand-typed `claude` has no pinned session, M17's rule) |
 | `REASON_CHAT_BUSY` | the chat is still answering — interrupt it first | press Interrupt, then Open in terminal (M74) |

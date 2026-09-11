@@ -94,6 +94,11 @@ export interface PaletteActionsDeps {
   /** M189. The portable file's two verbs — the renderer builds it and decides what to make of one. */
   exportCanvasFile: (path?: string, withPixels?: boolean) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvasFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M251. A pack's two doors, and the two "I've read this" statements. */
+  exportPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  importPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  markPresetReadNow: (id: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  markWorkflowReadNow: (templateId: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M188. Test one node: the same executor the workflow's own run takes. */
   testNodeNow: (templateId: string, key?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M187. The note's three verbs — one record, three forms. */
@@ -245,7 +250,7 @@ export interface PaletteActionsDeps {
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     createObjectNow,
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, exportPackFile, importPackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -318,6 +323,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'feedback': return self.prepareFeedback(a.says)
           case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
           case 'import-canvas': return self.importCanvas(a.path)
+          case 'export-pack': return self.exportPack(a.path)
+          case 'import-pack': return self.importPack(a.path)
           case 'note-add': return self.addNote(a.form!, a.text)
           case 'note-set': return self.setNoteText(a.panel!, a.text ?? '')
           case 'note-tint': return self.setNoteTint(a.panel!, a.tint!)
@@ -379,7 +386,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           }
           case 'focus': selectAndRaise(a.panel!); { const p = panelOf(a.panel!); if (p) centreOn(p.rect) } return { kind: 'ran' }
           case 'start': onSelectPanel(a.panel!); return { kind: 'ran' }
-          case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; void window.canvas.preset.spawnById(a.preset!); return { kind: 'ran' } }
+          case 'spawn': { const row = presetRows.find((p) => p.id === a.preset); if (!row?.available) return { kind: 'refused', reason: `${a.preset} is not available — ${row === undefined ? 'no such preset' : 'its command is not on the PATH'}` }; return window.canvas.preset.spawnById(a.preset!).then((refusal) => (refusal === null ? { kind: 'ran' as const } : { kind: 'refused' as const, reason: refusal })) }
           case 'type': {
             const p = panelOf(a.panel!)
             if (p && isChatPanel(p)) { insertIntoComposer(p.rect.id, a.text ?? ''); return { kind: 'ran', note: 'inserted into the composer' } }
@@ -2013,6 +2020,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     prepareFeedback: (says) => prepareFeedbackNow(says),
     exportCanvas: (path, withPixels) => exportCanvasFile(path, withPixels === 'with-pictures'),
     importCanvas: (path) => importCanvasFile(path),
+    exportPack: (path) => exportPackFile(path),
+    importPack: (path) => importPackFile(path),
+    markPresetRead: (id) => markPresetReadNow(id),
+    markWorkflowRead: (templateId) => markWorkflowReadNow(templateId),
     addNote: (form, text) => addNote(form, text),
     setNoteText: (panelId, text) => setNoteText(panelId, text),
     setNoteTint: (panelId, tint) => setNoteTint(panelId, tint),
@@ -2396,7 +2407,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, exportPackFile, importPackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

@@ -102,7 +102,7 @@ export function buildAppMenu(options: AppMenuOptions): void {
             label: menuLabel(entry),
             // Disabled rather than hidden: a user who installed neither CLI
             // should still learn the feature exists and what it wants.
-            enabled: entry.available,
+            enabled: entry.available && entry.preset.reviewed !== false,
             click: () => options.onSpawnPreset(entry.preset.id)
           }))
         },

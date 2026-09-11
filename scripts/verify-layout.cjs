@@ -4900,6 +4900,24 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect', 'a
     JSON.stringify({ ids: runs.map((x) => x.id), plain, good, badrev, badneg, unsaved, badnodes, badmapentry, badmap, plainHasKey: /"definition"|"mapping"/.test(plainText), warnings: r.warnings }))
 }
 
+// M251 — preset.reviewed.1. AN IMPORTED PRESET IS A STRANGER'S COMMAND, so it
+//      carries M190's mark. Absent means reviewed (every preset this machine
+//      saved, and every pre-M251 file) and stays ABSENT — never `reviewed:
+//      undefined`, which survives IPC and reads as present. `false` is kept.
+//      A non-boolean is malformed and costs the FIELD, failing SAFE: the
+//      preset is kept and read as unreviewed, and the warning names it.
+{
+  const w = []
+  const base = { cwd: '/w', args: [] }
+  const got = L.parsePresets([{ ...base, id: 'plain' }, { ...base, id: 'stranger', reviewed: false }, { ...base, id: 'odd', reviewed: 'yes' }, { ...base, id: 'read', reviewed: true }], w)
+  const by = (id) => got.find((p) => p.id === id)
+  ok('preset.reviewed.1 parsePresets: an absent reviewed stays absent (no key), false is kept, a non-boolean keeps the preset as unreviewed and warns naming it, and true reads as reviewed with no key',
+    got.length === 4 && !('reviewed' in by('plain')) && by('stranger').reviewed === false &&
+      by('odd').reviewed === false && w.some((x) => /odd/.test(x) && /reviewed/.test(x)) &&
+      !('reviewed' in by('read')) && w.length === 1,
+    JSON.stringify({ got, w }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

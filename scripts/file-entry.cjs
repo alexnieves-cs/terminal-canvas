@@ -85,5 +85,7 @@ module.exports = {
   // M189. The portable file: both halves, pure.
   ...((() => { try { return require('../src/shared/portable.ts') } catch { return {} } })()),
   // M190. The feedback draft this app never submits.
-  ...((() => { try { return require('../src/shared/feedback.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/feedback.ts') } catch { return {} } })()),
+  // M251. The pack file: a discipline's library objects, read before added.
+  ...((() => { try { return require('../src/shared/pack.ts') } catch { return {} } })())
 }

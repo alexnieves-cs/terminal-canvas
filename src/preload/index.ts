@@ -172,7 +172,8 @@ const bridge: CanvasBridge = {
     spawnById: (id: string) => ipcRenderer.invoke(IPC.PRESET_SPAWN_BY_ID, id),
     template: (id: string) => ipcRenderer.invoke(IPC.PRESET_TEMPLATE, id),
     setWorktree: (id: string, on: boolean) => ipcRenderer.invoke(IPC.PRESET_SET_WORKTREE, id, on),
-    savePanel: (captured: CapturedPanel) => ipcRenderer.invoke(IPC.PRESET_SAVE_PANEL, captured)
+    savePanel: (captured: CapturedPanel) => ipcRenderer.invoke(IPC.PRESET_SAVE_PANEL, captured),
+    markReviewed: (id: string) => ipcRenderer.invoke(IPC.PRESET_MARK_REVIEWED, id)
   },
   // M80. A preset's resolved template, for a template's node.
   // (declared inside `preset` below)
@@ -389,6 +390,11 @@ const bridge: CanvasBridge = {
   portable: {
     write: (req) => ipcRenderer.invoke(IPC.PORTABLE_EXPORT, req),
     read: (req) => ipcRenderer.invoke(IPC.PORTABLE_IMPORT, req)
+  },
+  pack: {
+    read: (req) => ipcRenderer.invoke(IPC.PACK_READ, req),
+    add: (req) => ipcRenderer.invoke(IPC.PACK_ADD, req),
+    write: (req) => ipcRenderer.invoke(IPC.PACK_EXPORT, req)
   },
   board: {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),

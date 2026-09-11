@@ -46,6 +46,8 @@ export { SERVICES }
 
 /** A preset as the palette needs it: main answers preset:list with these. */
 export interface PresetRow {
+  /** M251. Arrived in a pack and not yet read; the spawn row is disabled by name and a read row sits beside it. */
+  reviewed?: false
   id: string
   name: string
   /** Its command is on the resolved login PATH. Only main can know this. */
@@ -464,6 +466,12 @@ export interface PaletteActions {
   prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M251. Packs: import READS and shows the manifest, adding nothing; export writes the library as one pack. */
+  exportPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  importPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M251. "I've read this" — a person's statement, so no verb reaches either (EXCLUDED_ACTIONS). */
+  markPresetRead(id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  markWorkflowRead(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -624,7 +632,8 @@ export interface PaletteContext {
   /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
   /** M100. How many teammates the roster holds, for the door's hint. */
   teammateCount?: number
-  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
+  /** M251. `reviewed` and `lines` carry an imported workflow's unread mark and the action lines its read row shows. */
+  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string; reviewed?: false; lines?: string }[]
   /**
    * M76. Every pending permission request on this renderer, with the panel's
    * label. Optional so every older fixture builds; absent is none.
@@ -688,6 +697,8 @@ export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
 export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
 export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
 export const REASON_NOT_ON_PATH = 'not found on PATH'
+/** M251. A pack preset refused until read — the row beside it is where reading happens. */
+export const REASON_UNREAD_PRESET = 'from a pack, not read yet — choose "I\'ve read this preset" first'
 /** M49. A font size belongs to a terminal; the other kinds set their own text. */
 export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
 /** M50. One panel has nothing to be tidied against. */
@@ -1407,9 +1418,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           ...(preset.isDefault ? { shortcut: '⌘N' } : {}),
           run: () => actions.spawnPreset(preset.id)
         },
-        preset.available ? undefined : REASON_NOT_ON_PATH
+        // M251. Unread comes first: a pack preset whose command IS on the
+        // PATH still will not spawn, and "read it" is the fix a person can act on.
+        preset.reviewed === false ? REASON_UNREAD_PRESET : preset.available ? undefined : REASON_NOT_ON_PATH
       )
     )
+    // M251. The unread preset's own door, beside the disabled row: the
+    // subtitle is the command and directory a person is agreeing to run.
+    if (preset.reviewed === false) {
+      out.push({ id: `preset.read.${preset.id}`, title: `I've read this preset: ${preset.name}`, subtitle: preset.subtitle, searchText: `read reviewed trust preset pack ${preset.name}`, group: 'spawn', scope: 'presets', run: () => { void actions.markPresetRead(preset.id) } })
+    }
   }
 
   // --- Prompts -------------------------------------------------------------
@@ -2340,6 +2358,16 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // a SEPARATE workspace and starts nothing.
   out.push({ id: 'portable.export', title: 'Export this canvas…', subtitle: 'one file: the objects, the workflows, secrets scrubbed and every omission named', group: 'canvas', searchText: 'export canvas file share portable save send', run: () => { void actions.exportCanvas() } })
   out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
+  // M251. A pack's two rows. Import shows what the pack holds and needs FIRST
+  // and adds nothing until Add; export writes the library — not this canvas.
+  out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and presets in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })
+  out.push({ id: 'pack.import', title: 'Import a pack…', subtitle: 'shows what it holds and needs; nothing is added until you choose Add', group: 'canvas', searchText: 'import pack bundle open discipline library add', run: () => { void actions.importPack() } })
+  // M251. "I've read this", one row per unread workflow. The subtitle carries
+  // the lines a person is agreeing to, so the row IS the reading.
+  for (const t of ctx.templates ?? []) {
+    if (t.reviewed !== false) continue
+    out.push({ id: `workflow.read.${t.id}`, title: `I've read this workflow: ${t.name}`, subtitle: t.lines === undefined || t.lines === '' ? 'imported — its action nodes are refused until you have read them' : t.lines, group: 'canvas', searchText: `read reviewed trust imported workflow pack ${t.name}`, run: () => { void actions.markWorkflowRead(t.id) } })
+  }
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state

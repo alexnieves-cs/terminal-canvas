@@ -675,6 +675,14 @@ export const IPC = {
   PORTABLE_EXPORT: 'portable:export',
   /** M189. Read one portable canvas file, parsed and previewed before anything is made. */
   PORTABLE_IMPORT: 'portable:import',
+  /** M251. Read one pack: parse it and answer its requirements from credential METADATA and a PATH probe. Adds nothing. */
+  PACK_READ: 'pack:read',
+  /** M251. Add the pack main last read under this token — fresh ids, every workflow and preset unreviewed. */
+  PACK_ADD: 'pack:add',
+  /** M251. Write one pack; the path is chosen by the system's own dialog when none is given. */
+  PACK_EXPORT: 'pack:export',
+  /** M251. "I've read this" for an imported preset: drops its reviewed mark so main will spawn it. */
+  PRESET_MARK_REVIEWED: 'preset:mark-reviewed',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -1275,6 +1283,8 @@ export interface PresetListRow {
   id: string
   name: string
   available: boolean
+  /** M251. Arrived in a pack and not yet read; main refuses to spawn it. Absent means reviewed. */
+  reviewed?: false
   builtIn: boolean
   isDefault: boolean
   subtitle: string
@@ -1374,6 +1384,28 @@ export type PortableReadResult =
   | { kind: 'cancelled' }
   | { kind: 'refused'; reason: string }
 
+/**
+ * M251. A read pack and what it needs. `token` names the parse main HOLDS:
+ * `pack:add` adds that one, so the renderer can confirm only what it was
+ * shown and never hand main a different payload. `requirements` is absent
+ * unless the parse is a pack.
+ */
+export type PackReadResult =
+  | { kind: 'read'; path: string; token: string; parse: import('./pack').PackParse; requirements?: import('./pack').PackRequirements }
+  | { kind: 'cancelled' }
+  | { kind: 'refused'; reason: string }
+
+/** M251. Where the pack went and what it holds, or why it did not — a cancelled dialog is neither. */
+export type PackWriteResult =
+  | { kind: 'written'; path: string; bytes: number; sentence: string }
+  | { kind: 'cancelled' }
+  | { kind: 'refused'; reason: string }
+
+/** M251. What the add made, counted; or why nothing was made. */
+export type PackAddResult =
+  | { kind: 'added'; sentence: string; workflows: number; prompts: number; presets: number }
+  | { kind: 'refused'; reason: string }
+
 export interface CanvasBridge {
   pty: {
     create(spec: PanelSpec): Promise<PtyCreateResult>
@@ -1445,7 +1477,10 @@ export interface CanvasBridge {
      * the same event a menu pick produces — which is what gives a palette
      * spawn the ordinary undo behaviour rather than a second spawn path.
      */
-    spawnById(id: string): Promise<void>
+    /** M251. The refusal sentence when nothing was spawned (an unread pack preset), null when main sent it. */
+    spawnById(id: string): Promise<string | null>
+    /** M251. "I've read this" for a preset that arrived in a pack. False when the id names nothing. */
+    markReviewed(id: string): Promise<boolean>
     /** M80. The preset's resolved template, or null when the id names nothing. */
     template(id: string): Promise<PresetTemplate | null>
     /** Save THIS panel as a preset. See PRESET_SAVE_PANEL. */
@@ -1830,6 +1865,19 @@ export interface CanvasBridge {
   portable: {
     write(req: { path?: string; file: unknown; suggested?: string }): Promise<PortableWriteResult>
     read(req: { path?: string }): Promise<PortableReadResult>
+  }
+  /**
+   * M251. A pack's three doors. `read` parses and answers requirements and
+   * adds NOTHING; `add` adds the pack main holds under the token `read`
+   * answered (never a payload from the renderer); `write` BUILDS a pack from
+   * main's own store — the user's workflows, saved prompts and presets, which
+   * the renderer only sees as lossy rows — under the name given, and writes
+   * it. A cancelled dialog is `cancelled`, not a refusal.
+   */
+  pack: {
+    read(req: { path?: string }): Promise<PackReadResult>
+    add(req: { token: string }): Promise<PackAddResult>
+    write(req: { path?: string; name: string; suggested?: string }): Promise<PackWriteResult>
   }
   /** M114. The board's main-side verbs. */
   board: {

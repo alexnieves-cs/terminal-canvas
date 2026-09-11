@@ -156,6 +156,8 @@ module.exports = {
      would prove the harness right and leave production's shared mint
      unexercised end to end. */
   presetFromCapture: require('../src/main/presets').presetFromCapture,
+  // M251. The ONE pack factory production builds, so pack.import.* drives it.
+  createPackHandlers: require('../src/main/pack-handlers').createPackHandlers,
   /* Check 40a drives preset:spawn-by-id end to end, and the harness answers
      that invoke the way main/index.ts's onSpawnPreset does: resolve the id,
      then push the SAME template a menu pick would. templateOf is what makes

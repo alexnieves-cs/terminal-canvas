@@ -12,6 +12,7 @@ import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
 import { parsePortable } from '@shared/portable'
+import { createPackHandlers } from './pack-handlers'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -102,7 +103,8 @@ import {
   presetRows,
   pushDefaultPreset,
   resolveAvailability,
-  templateOf
+  templateOf,
+  unreviewedPresetReason
 } from './presets'
 import { mergePrompts, readProjectPrompts } from './prompts'
 import { parseShelf } from '../shared/skills'
@@ -516,16 +518,20 @@ const runClaudePluginDetails = (id: string): PluginRunner => () =>
  * two picks have to be the identical code — a second copy is a second place
  * for "which preset does this id mean" to answer differently.
  */
-function onSpawnPreset(id: string): void {
+function onSpawnPreset(id: string): string | null {
   const user = layoutStore.presets()
   const found = allPresets(user).find((p) => p.id === id)
   if (!found) {
     // Never substitute a different preset: spawning the wrong program in
     // the wrong directory is worse than spawning nothing.
     console.warn(`[presets] a pick named ${id}, which no longer exists`)
-    return
+    return 'that preset no longer exists'
   }
+  // M251. A pack's preset is a stranger's command until a person reads it.
+  const unread = unreviewedPresetReason(found)
+  if (unread !== null) return unread
   mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+  return null
 }
 
 function rebuildMenu(): void {
@@ -1668,8 +1674,12 @@ app.whenReady().then(async () => {
         layoutStore.setDefaultPreset(id)
         afterPresetChange()
       },
-      spawn: (id) => {
-        onSpawnPreset(id)
+      spawn: (id) => onSpawnPreset(id),
+      markPresetReviewed: (id) => {
+        const changed = layoutStore.markPresetReviewed(id)
+        // The menu labels an unread preset and disables it, so it must learn.
+        if (changed) afterPresetChange()
+        return changed
       },
       spawnWith: (req) => {
         // M100. A teammate's terminal is gated the same way its chat is.
@@ -2246,7 +2256,27 @@ app.whenReady().then(async () => {
         }
         return { kind: 'read' as const, path, parse: parsePortable(text) }
       }
-    }
+    },
+    // M251. Packs — the ONE factory production and the panels harness both
+    // build (main/pack-handlers.ts), so the suite drives this code and not a
+    // copy. Only the choosers are this file's: the system's own dialogs.
+    createPackHandlers({
+      store: layoutStore,
+      credentials: () => credentialStore.list(),
+      which,
+      afterPresetChange,
+      app: app.getVersion(),
+      chooseOpen: async () => {
+        if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused', reason: 'there is no window to ask' }
+        const answer = await dialog.showOpenDialog(mainWindow, { title: 'Read a pack', properties: ['openFile'], filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
+        return answer.canceled || answer.filePaths[0] === undefined ? { kind: 'cancelled' } : { kind: 'path', path: answer.filePaths[0] }
+      },
+      chooseSave: async (suggested) => {
+        if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused', reason: 'there is no window to ask' }
+        const answer = await dialog.showSaveDialog(mainWindow, { title: 'Export a pack', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
+        return answer.canceled || answer.filePath === undefined ? { kind: 'cancelled' } : { kind: 'path', path: answer.filePath }
+      }
+    })
   )
   createWindow()
 

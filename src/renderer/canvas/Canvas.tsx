@@ -155,6 +155,7 @@ import { laneOfPath } from '@shared/work-scope'
 import { buildFeedback, FEEDBACK_REPO } from '@shared/feedback'
 import type { AgentPlanCaller } from '@shared/plan'
 import { buildPortable, exportSentence, remapPortable, type parsePortable } from '@shared/portable'
+import { PackPreview, type PackPreviewState } from '../pack/PackPreview'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, noteSummary, normaliseNoteText } from '@shared/notes'
 import { AGENT_KEY, STARTER_OBJECTS, STARTER_VERSION, starterKeysToApply, type PersistedStarter } from '@shared/starter'
 import { onboardingReadiness, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
@@ -3066,7 +3067,10 @@ export function Canvas({
   const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
-    return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
+    // M251. An unread workflow carries its action LINES to its read row — the
+    // verb lines somebody else wrote are exactly what a person is agreeing to.
+    const lines = t.reviewed === false ? t.nodes.map((n) => (n as { line?: unknown }).line).filter((l): l is string => typeof l === 'string' && l !== '').join(' · ') : ''
+    return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }), ...(t.reviewed === false ? { reviewed: false as const, lines } : {}) }
   }), [templateRows, presetRows])
   const paletteApprovals = useMemo<ApprovalRow[]>(() => pendingApprovals.map((a) => {
     const panel = panelsRef.current.find((p) => p.rect.id === a.id)
@@ -5334,6 +5338,53 @@ export function Canvas({
   }, [commitHistory, reloadTemplates, switchWorkspace])
 
   /**
+   * M251. PACKS. Import READS: main parses, holds the parse under a token and
+   * answers requirements, and this only SHOWS it — nothing is added until the
+   * preview's Add sends that token back. Main does the adding (a pack's
+   * objects are library records only main can mint ids for), so the renderer
+   * never supplies a payload. Export is main-built for the same reason.
+   */
+  const [packPreview, setPackPreview] = useState<PackPreviewState | null>(null)
+  const importPack = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const answer = await window.canvas.pack.read(path === undefined ? {} : { path })
+    if (answer.kind === 'cancelled') return { kind: 'ran', note: 'nothing read' }
+    if (answer.kind === 'refused') return { kind: 'refused', reason: answer.reason }
+    if (answer.parse.kind !== 'pack') return { kind: 'refused', reason: answer.parse.reason }
+    setPackPreview({ token: answer.token, path: answer.path, pack: answer.parse.pack, warnings: answer.parse.warnings, requirements: answer.requirements ?? { credentials: [], tools: [] } })
+    return { kind: 'ran', note: `${answer.parse.pack.manifest.name} — nothing is added until you choose Add` }
+  }, [])
+  const addPack = useCallback(async (token: string) => {
+    const added = await window.canvas.pack.add({ token })
+    if (added.kind === 'added') { reloadTemplates(); reloadPresets() }
+    return added
+  }, [reloadTemplates, reloadPresets])
+  const exportPack = useCallback(async (path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const name = (await window.canvas.workspace.list()).find((w) => w.active)?.name ?? 'pack'
+    const written = await window.canvas.pack.write({ ...(path === undefined ? {} : { path }), name })
+    if (written.kind === 'cancelled') return { kind: 'ran', note: 'nothing exported' }
+    if (written.kind === 'refused') return { kind: 'refused', reason: written.reason }
+    return { kind: 'ran', note: `${displayPath(written.path).short} · ${written.sentence}` }
+  }, [])
+  const markPresetRead = useCallback(async (id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const changed = await window.canvas.preset.markReviewed(id)
+    if (!changed) return { kind: 'refused', reason: 'that preset no longer exists' }
+    reloadPresets()
+    return { kind: 'ran', note: 'marked read — it will spawn now' }
+  }, [reloadPresets])
+  const markWorkflowRead = useCallback(async (templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const template = templateRowsRef.current.find((t) => t.id === templateId)
+    if (template === undefined) return { kind: 'refused', reason: 'that workflow no longer exists' }
+    // Rebuilt without the key: reviewed is ABSENT once read, never `true`.
+    // Saved at the revision it was READ at, so a workflow that changed while
+    // the person read it is refused rather than marked on lines they never saw.
+    const { reviewed: _read, ...rest } = template
+    const saved = await window.canvas.template.save(rest, template.revision)
+    if (saved.kind !== 'saved') return { kind: 'refused', reason: 'the workflow changed while you read it — read it again' }
+    reloadTemplates()
+    return { kind: 'ran', note: 'marked read — its action nodes will run now' }
+  }, [reloadTemplates])
+
+  /**
    * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
    * inspector's Test control and the `node-test` verb all take, so a node
    * cannot behave one way when a person tests it and another when the
@@ -5895,6 +5946,10 @@ export function Canvas({
     exportCanvasFile: exportCanvas,
     prepareFeedbackNow: prepareFeedback,
     importCanvasFile: importCanvas,
+    exportPackFile: exportPack,
+    importPackFile: importPack,
+    markPresetReadNow: markPresetRead,
+    markWorkflowReadNow: markWorkflowRead,
     addNote,
     setNoteText,
     setNoteTint,
@@ -7234,6 +7289,9 @@ export function Canvas({
           onZoomBy={zoomBy}
           onFit={fitAll}
         />
+        {packPreview !== null && (
+          <PackPreview preview={packPreview} onAdd={addPack} onClose={() => setPackPreview(null)} />
+        )}
         {palette.open && (
           <Palette
             controller={palette}

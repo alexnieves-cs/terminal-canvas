@@ -110,7 +110,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1530,7 +1530,19 @@ app.whenReady().then(async () => {
       try { text = readFileSync(path, 'utf8') } catch (error) { return { kind: 'refused', reason: String(error && error.message) } }
       return { kind: 'read', path, parse: parsePortable(text) }
     }
-  })
+  },
+  // M251. The PRODUCTION pack factory, not a copy: only the choosers are the
+  // harness's (`state.packPath` stands in for both dialogs), and the credential
+  // store is the harness's real one — metadata only, exactly as in main.
+  createPackHandlers({
+    store: layoutStore,
+    credentials: () => credentialStore.list(),
+    which: () => null,
+    afterPresetChange: () => {},
+    app: 'harness',
+    chooseOpen: async () => (state.packPath ? { kind: 'path', path: state.packPath } : { kind: 'cancelled' }),
+    chooseSave: async () => (state.packPath ? { kind: 'path', path: state.packPath } : { kind: 'cancelled' })
+  }))
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

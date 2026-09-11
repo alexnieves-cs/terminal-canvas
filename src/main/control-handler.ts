@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs'
 import type { Preset } from '../shared/layout-schema'
 import type { ControlCanvasModel } from '../shared/ipc-contract'
 import { resolveOpen, type ControlRequest } from './control-protocol'
+import { unreviewedPresetReason } from './presets'
 import type { ControlReply } from './control-server'
 import type { AgentPlanCaller, AgentPlanReply } from '../shared/plan'
 
@@ -87,6 +88,9 @@ export function createControlHandler(deps: ControlHandlerDeps): (req: ControlReq
       case 'open': {
         const resolved = resolveOpen({ req, presets: deps.presets(), defaultId: deps.defaultId(), exists })
         if (resolved.kind === 'refused') return { ok: false, error: resolved.error }
+        // M251. `tc spawn` is a door too; an unread pack preset is refused here as at the palette.
+        const unread = unreviewedPresetReason(resolved.preset)
+        if (unread !== null) return { ok: false, error: unread }
         deps.spawn(resolved.preset, resolved.cwd)
         return { ok: true, preset: resolved.preset.id }
       }

@@ -67,6 +67,7 @@ renderer --invoke--> preview:discover / preview:capture                         
 renderer --invoke--> asset:put / asset:choose                                    --> main
 renderer --invoke--> node:fetch                                                  --> main
 renderer --invoke--> portable:export / portable:import                           --> main
+renderer --invoke--> pack:read / pack:add / pack:export / preset:mark-reviewed   --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer --invoke--> board:repositories                                          --> main
