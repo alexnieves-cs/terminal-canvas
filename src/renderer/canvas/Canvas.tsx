@@ -3184,10 +3184,7 @@ export function Canvas({
   const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
-    // M253. An unread workflow carries its action LINES to its read row — the
-    // verb lines somebody else wrote are exactly what a person is agreeing to.
-    const lines = t.reviewed === false ? t.nodes.map((n) => (n as { line?: unknown }).line).filter((l): l is string => typeof l === 'string' && l !== '').join(' · ') : ''
-    return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }), ...(t.reviewed === false ? { reviewed: false as const, lines } : {}) }
+    return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
   }), [templateRows, presetRows])
   const paletteApprovals = useMemo<ApprovalRow[]>(() => pendingApprovals.map((a) => {
     const panel = panelsRef.current.find((p) => p.rect.id === a.id)
@@ -5519,18 +5516,6 @@ export function Canvas({
     reloadPresets()
     return { kind: 'ran', note: 'marked read — it will spawn now' }
   }, [reloadPresets])
-  const markWorkflowRead = useCallback(async (templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
-    const template = templateRowsRef.current.find((t) => t.id === templateId)
-    if (template === undefined) return { kind: 'refused', reason: 'that workflow no longer exists' }
-    // Rebuilt without the key: reviewed is ABSENT once read, never `true`.
-    // Saved at the revision it was READ at, so a workflow that changed while
-    // the person read it is refused rather than marked on lines they never saw.
-    const { reviewed: _read, ...rest } = template
-    const saved = await window.canvas.template.save(rest, template.revision)
-    if (saved.kind !== 'saved') return { kind: 'refused', reason: 'the workflow changed while you read it — read it again' }
-    reloadTemplates()
-    return { kind: 'ran', note: 'marked read — its action nodes will run now' }
-  }, [reloadTemplates])
 
   /**
    * M188. RUN ONE NODE — the ONE executor the workflow's own run, the
@@ -6300,7 +6285,6 @@ export function Canvas({
     importPackFile: importPack,
     importSamplePackFile: importSamplePack,
     markPresetReadNow: markPresetRead,
-    markWorkflowReadNow: markWorkflowRead,
     addNote,
     setNoteText,
     setNoteTint,

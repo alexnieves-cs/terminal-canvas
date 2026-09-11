@@ -269,7 +269,6 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // M255. The row-only step that asks for the tag, number or category; the
   // verbs it leads to (publish-*) carry every argument on their line.
   beginPublish: 'opens the text field asking for the tag, number or category — the publish-* verbs take them on the line',
-  markWorkflowRead: 'a person\'s statement that they read an imported workflow\'s lines — never a plan',
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
   // M197. The start flow's door opens a SHEET — three fields a person

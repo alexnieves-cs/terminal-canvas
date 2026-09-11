@@ -60,7 +60,7 @@ const FACTS = {
   {
     const src = (p) => readFileSync(join(__dirname, '..', 'src', p), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
     const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts']
-    const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*[:=]/.test(src(p)))
+    const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*(?::|=(?!=))/.test(src(p)))
     const canvas = src('renderer/canvas/Canvas.tsx')
     const uses = (name) => [...canvas.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
     const passedOnly = uses('markTemplateRead') === 2 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(canvas) &&

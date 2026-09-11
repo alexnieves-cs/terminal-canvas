@@ -493,9 +493,8 @@ export interface PaletteActions {
   publishDiscussion(category: string, file?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M255. The palette row's step: ask for the tag, number or category, then publish the selected draft. */
   beginPublish(kind: 'release' | 'comment' | 'discussion'): void
-  /** M253. "I've read this" — a person's statement, so no verb reaches either (EXCLUDED_ACTIONS). */
+  /** M253. "I've read this" for a pack preset — a person's statement, so no verb reaches it (EXCLUDED_ACTIONS). A preset has no canvas object; its palette row is its home. */
   markPresetRead(id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
-  markWorkflowRead(templateId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   addNote(form: string, text?: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
   setNoteText(panelId: string, text: string): { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }
@@ -656,8 +655,7 @@ export interface PaletteContext {
   /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
   /** M100. How many teammates the roster holds, for the door's hint. */
   teammateCount?: number
-  /** M253. `reviewed` and `lines` carry an imported workflow's unread mark and the action lines its read row shows. */
-  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string; reviewed?: false; lines?: string }[]
+  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
   /**
    * M76. Every pending permission request on this renderer, with the panel's
    * label. Optional so every older fixture builds; absent is none.
@@ -2415,12 +2413,10 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   out.push(withReason({ id: 'publish.comment', title: 'Comment on a pull request…', subtitle: 'the selected draft file becomes a comment on the PR you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github comment pull request pr draft', run: () => actions.beginPublish('comment') }, oneSelected))
   out.push(withReason({ id: 'publish.discussion', title: 'Post a GitHub Discussion…', subtitle: 'the selected draft file becomes a Discussion in the category you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github discussion announcement post draft', run: () => actions.beginPublish('discussion') }, oneSelected))
   out.push({ id: 'pack.import', title: 'Import a pack…', subtitle: 'shows what it holds and needs; nothing is added until you choose Add', group: 'canvas', searchText: 'import pack bundle open discipline library add', run: () => { void actions.importPack() } })
-  // M253. "I've read this", one row per unread workflow. The subtitle carries
-  // the lines a person is agreeing to, so the row IS the reading.
-  for (const t of ctx.templates ?? []) {
-    if (t.reviewed !== false) continue
-    out.push({ id: `workflow.read.${t.id}`, title: `I've read this workflow: ${t.name}`, subtitle: t.lines === undefined || t.lines === '' ? 'imported — its action nodes are refused until you have read them' : t.lines, group: 'canvas', searchText: `read reviewed trust imported workflow pack ${t.name}`, run: () => { void actions.markWorkflowRead(t.id) } })
-  }
+  // M255 (merge). An imported workflow is marked read by the button ON its
+  // workflow panel (M252's `onMarkRead`), never by a palette row: M253's
+  // `workflow.read.<id>` rows would have cleared ANY unread template —
+  // a described tool's included — which `verify:verbs tool.door.1` forbids.
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state
