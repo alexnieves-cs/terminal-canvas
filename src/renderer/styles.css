@@ -67,6 +67,8 @@
   --dur-1: 90ms; --dur-2: 160ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
+  /* A compact drawer's slide: longer than an arrival because it travels 300px. */
+  --dur-drawer: 200ms;
   --dur-stagger: 30ms; /* M179: the ⌘G grid's per-cell delay — motion.2 reads the longhands too */
   --ease: cubic-bezier(.2, .8, .2, 1);
 
@@ -483,8 +485,32 @@ body {
   z-index: 900;
   box-shadow: var(--e-3);
 }
-.shell--nav-drawer .shell__rail { left: var(--shell-dock-w); border-right: 1px solid var(--line); }
-.shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line-strong); }
+.shell--nav-drawer .shell__rail { left: var(--shell-dock-w); border-right: 1px solid var(--line); animation: drawer-in-left var(--dur-drawer) var(--ease) both; }
+.shell--ctx-drawer .shell__inspector { right: 0; border-left: 1px solid var(--line-strong); animation: drawer-in-right var(--dur-drawer) var(--ease) both; }
+/* The drawer's arrival: a slide from its own edge, on transform only — the
+   pane is absolutely positioned at its final 300px from the first frame, so
+   nothing measures a moving box (the canvas inset identity above is
+   untouched). The global reduced-motion block collapses both to one frame. */
+@keyframes drawer-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes drawer-in-right { from { transform: translateX(100%); } to { transform: none; } }
+/* The scrim: a dim over the canvas behind an open drawer, fading in with it.
+   pointer-events: none is load-bearing — the outside click that dismisses a
+   drawer (Canvas.tsx) must still land on the canvas beneath, exactly as it
+   did before there was a scrim. Below the drawers (900), above the world. */
+@keyframes drawer-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.shell--nav-drawer::after,
+.shell--ctx-drawer::after {
+  content: '';
+  position: absolute;
+  top: var(--shell-top-h);
+  left: var(--shell-dock-w);
+  right: 0;
+  bottom: 0;
+  z-index: 899;
+  background: var(--scrim);
+  pointer-events: none;
+  animation: drawer-scrim-in var(--dur-drawer) var(--ease) both;
+}
 /* The strips sit ABOVE a drawer (compact.1), so a drawer's last rows — the
    context pane's pinned Close, the navigator's last panel row — pad past the
    strip band rather than hide under it: the compact shot showed Link to…
