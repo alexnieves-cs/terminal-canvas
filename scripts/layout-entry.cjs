@@ -7,6 +7,7 @@ module.exports = {
   ...require('../src/shared/annotations'),
   /* M113. The board's record: pure data and rules. */
   ...require('../src/shared/work-items'),
+  ...require('../src/shared/retained-outcomes'),
   /* M120. The chat record's marks (dispatch, sandbox) and their carry. */
   ...require('../src/shared/chat-panel'),
   ...require('../src/shared/layout-schema'),
