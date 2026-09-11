@@ -15,6 +15,8 @@ import { projectRun, type RunLiveFact, type RunNodeSupervision } from '@shared/r
 import type { PersistedTemplate } from '@shared/templates'
 import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
+import { autoLayout, completedWalk, diagramIssues, edgeGeometry, neighbourhood, runTimeline } from './workflow-graph'
+import { AutoLayout, Check, History, More, Plus, Trigger, Warn, WORKFLOW_NODE_GLYPH } from '@renderer/icons'
 
 /** M183. Extra SVG room beyond the diagram's extent, for a drop or a wire past the last block. */
 const DROP_ROOM = 220
@@ -23,17 +25,19 @@ const DROP_ROOM = 220
  * M133. THE WORKFLOW PANEL — the FOURTEENTH kind, sessionless like the work
  * card, and a VIEW of a template rather than a second editor of one.
  *
- * The Definition tab draws `buildDiagram`'s projection as an SVG sibling
+ * The graph draws `buildDiagram`'s projection as an SVG sibling
  * layer, the way `AnnotationLayer.tsx` sits beside the link layer: one
- * `<svg>` under the tab's own body, with no camera, no selection and no
+ * `<svg>` under the panel's own body, with no camera, no selection and no
  * undo of its own. That absence is the design — spec §9 — and it is why
  * `@xyflow/react` is declined: **the live canvas is the editor and the
  * template is the truth.** Editing a workflow means editing the panels on
  * the canvas and saving them as a template again; this panel never writes
  * a node.
  *
- * The Runs tab is M79's records filtered to this template — data that has
- * existed since M79, needing no store of its own.
+ * The History drawer (M259; the Runs tab before it) is M79's records
+ * filtered to this template — data that has existed since M79, needing no
+ * store of its own — plus the selected run's timeline read back onto the
+ * blocks (`workflow-graph.ts`).
  *
  * A panel whose template is GONE (deleted, or a layout restored from a
  * snapshot that never had it) renders one sentence and only Close, never a
@@ -114,6 +118,30 @@ export const STALE_VERBS = 'Reload takes the record as it stands; Save a copy ke
  */
 export const RUNS_UNATTRIBUTED = 'no runs recorded since this app started - runs from earlier sessions are not attributed to a workflow'
 
+/** M259. A block's kind in the strip's words — the library's own names, so the strip and the library never disagree. */
+const KIND_NAME: Record<string, string> = Object.fromEntries(LIBRARY.map((e) => [e.kind, e.name]))
+/**
+ * M259. A kind's FAMILY decides its hue, never the kind itself: seven kinds
+ * in seven saturated colours is the unrelated-colour failure the brief names.
+ * Agents (a conversation leads, joins or answers) wear the accent; workers
+ * over a list wear blue; the workflow's hands (a shell, a verb, a fetch) stay
+ * neutral. The glyph and the strip's word carry the kind itself.
+ */
+const KIND_FAMILY: Record<string, 'agent' | 'worker' | 'hand'> = { chat: 'agent', orchestrator: 'agent', collect: 'agent', pool: 'worker', terminal: 'hand', action: 'hand', http: 'hand' }
+/** What a refused wire says at the pointer — `addEdge`'s own three refusals, said before the release rather than after it. */
+function wireRefusal(template: PersistedTemplate, from: string, over: string | null): string | null {
+  if (over === null) return null
+  if (over === from) return 'a block cannot hand off to itself'
+  if (template.edges.some((x) => x.from === from && x.to === over)) return 'already connected'
+  if (edgeWouldCycle(template.edges, from, over)) return 'would close a loop'
+  return null
+}
+/** `+1.2s` — an offset on the run timeline; the rail's own arithmetic, shorter. */
+function offsetWord(ms: number): string {
+  const s = ms / 1000
+  return s < 60 ? `+${s < 10 ? s.toFixed(1) : Math.round(s)}s` : `+${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s`
+}
+
 const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
 
 /** `1m 04s`, `12s` — a run's duration, the rail's own arithmetic. */
@@ -131,7 +159,12 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   // editors (this SVG's drag and the palette/agent verbs) go through the
   // store's one door, so the two views cannot disagree.
   const { template, dirty } = useTemplateDraft(panel.workflow.templateId, saved)
-  const [tab, setTab] = useState<'definition' | 'runs'>('definition')
+  // M259. History is a DRAWER beside the graph, not a tab over it: the run
+  // timeline maps its events back onto the blocks, which it cannot do from
+  // behind a tab that hides them.
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // M259. A timeline row under the pointer lights its block.
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
   const [actionsOpen, setActionsOpen] = useState(false)
   // M182. A block DRAG on the diagram: a real pointer gesture on the SVG,
   // committed on release as ONE `moveNode` (one undo of the draft); the
@@ -153,7 +186,7 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   // that cannot show its blocks is a worse resting state than the one before it.
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [ghost, setGhost] = useState<{ kind: string; x: number; y: number } | null>(null)
-  const [wire, setWire] = useState<{ from: string; x1: number; y1: number; x2: number; y2: number; over: string | null; allowed: boolean } | null>(null)
+  const [wire, setWire] = useState<{ from: string; x1: number; y1: number; x2: number; y2: number; over: string | null; allowed: boolean; reason: string | null } | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   // M184. A stale save keeps the draft and offers the two verbs that can end it.
   const [stale, setStale] = useState<string | null>(null)
@@ -196,13 +229,22 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
       // The inverse of buildDiagram's own placement (x = PAD + dx - minX) for a block CENTRED on the pointer — in the diagram's exported constants, never literals: a changed pad would otherwise land every drop off its ghost with nothing on screen to say so.
       const dx = Math.round(p.x - DIAGRAM_PAD + minX - BLOCK_W / 2), dy = Math.round(p.y - DIAGRAM_PAD + minY - BLOCK_H / 2)
       const r = applyDraftOp(panel.workflow.templateId, saved, { type: 'add', node: { ...defaultNodeOf(kind), dx, dy } })
-      if (r.kind === 'refused') say(r.reason)
+      // M259. The library COLLAPSES after a placement: it is a drawer you
+      // reach into, and left open it keeps a third of the graph covered for
+      // the rest of the edit. A refusal keeps it open for the second try.
+      if (r.kind === 'refused') say(r.reason); else setLibraryOpen(false)
     }
     window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
   }
   const addFromLibrary = (kind: (typeof LIBRARY)[number]['kind']): void => {
     if (readOnly || template === undefined) return
     const r = applyDraftOp(panel.workflow.templateId, saved, { type: 'add', node: { ...defaultNodeOf(kind), ...placementFor(template) } })
+    if (r.kind === 'refused') say(r.reason); else setLibraryOpen(false)
+  }
+  /** M259. Auto layout: the proposal committed as ONE draft operation — one step, refused whole. */
+  const arrange = (direction: 'horizontal' | 'vertical'): void => {
+    if (readOnly || template === undefined) return
+    const r = applyDraftOp(panel.workflow.templateId, saved, { type: 'arrange', moves: autoLayout(template, direction) })
     if (r.kind === 'refused') say(r.reason)
   }
   const beginWire = (from: string, e: ReactMouseEvent<SVGCircleElement>): void => {
@@ -215,8 +257,8 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
       // The preview answers with `addEdge`'s OWN rules — a cycle included: a
       // block lit as allowed and then refused on release is the preview failing
       // at the one job it has (the M183 critic).
-      const allowed = over !== null && over !== from && !template.edges.some((x) => x.from === from && x.to === over) && !edgeWouldCycle(template.edges, from, over)
-      setWire({ from, x1: start.x, y1: start.y, x2: p.x, y2: p.y, over, allowed })
+      const reason = wireRefusal(template, from, over)
+      setWire({ from, x1: start.x, y1: start.y, x2: p.x, y2: p.y, over, allowed: over !== null && reason === null, reason })
     }
     const onUp = (ev: MouseEvent): void => {
       window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)
@@ -331,33 +373,74 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
   const stoppable = livePools.length > 0 || mine.some((r) => r.endedAt === undefined && (runId === null || r.id === runId))
 
   /**
-   * M133 critic wave. A disabled verb's reason is ON SCREEN, not in `title`
-   * alone: a tooltip needs a hover the reader must already suspect is worth
-   * making, so a verb that simply looks grey reads as broken. Every disabled
-   * verb contributes one dim sentence under the row; three states stay three
-   * (a verb that can act says nothing, and the row is absent when none is
-   * disabled rather than printing an empty box).
+   * M133 critic wave, re-homed by M259. A disabled verb's reason is reachable
+   * ON SCREEN, not in `title` alone — but it no longer prints as a column of
+   * prose between the toolbar and the graph. Every reason is a line in the
+   * STATUS popover at the toolbar's end (revealed on hover or focus, the
+   * chrome's own rule), and each disabled control still carries its reason in
+   * its own `title`, which is what a pointer and a screen reader both reach.
    */
   const disabled: { label: string; why: string }[] = []
-  const verb = (key: string, label: string, own: string | null, run: () => void): JSX.Element => {
+  const verb = (key: string, label: string, own: string | null, run: () => void, icon?: JSX.Element): JSX.Element => {
     const reason = readOnly ? REASON_MERGED_VIEW : own
-    // M191 (the golden audit, 3). The reason rides the control's OWN title
-    // and is announced there; it is no longer printed as a permanent line
-    // above the diagram. The 5.0 brief forbids that shape by name ("avoid
-    // duplicating a refusal as two permanent explanation lines above a
-    // graph"), and it cost the diagram two rows at every rest — M133's own
-    // "a reason must be on screen" idiom, applied to a surface where the
-    // reasons are ordinary and permanent rather than surprising.
     if (reason !== null) disabled.push({ label, why: reason })
     return (
-      <button type="button" className="pf__verb pf__verb--word" data-workflow-verb={key} disabled={reason !== null}
-        title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })}>{label}</button>
+      <button type="button" className={`pf__verb pf__verb--word${icon === undefined ? '' : ' workflow-node__tool'}`} data-workflow-verb={key} disabled={reason !== null}
+        title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })}>{icon}<span>{label}</span></button>
     )
   }
   /** The arrowhead's id is per PANEL: two workflow panels on one canvas share a document. */
   const isBuiltIn = isBuiltInTemplate(panel.workflow.templateId)
   const arrowId = `wf-arrow-${panel.rect.id}`
+  const arrowLitId = `wf-arrow-lit-${panel.rect.id}`
   const id = template?.id ?? panel.workflow.templateId
+
+  // M259. What is incomplete, on the shape being DRAWN (a run's snapshot when one is selected).
+  const issues = useMemo(() => (drawn === undefined ? {} : diagramIssues(drawn)), [drawn])
+  const issueCount = Object.values(issues).reduce((n, list) => n + list.length, 0)
+  // M259. A selected block lights its lineage and quiets everything else.
+  const hood = useMemo(() => (selectedBlock === null || drawn === undefined ? null : neighbourhood(drawn.edges, selectedBlock)), [selectedBlock, drawn])
+  const litBlocks = hood === null ? null : new Set([...hood.up, ...hood.down, selectedBlock as string])
+  const litEdges = hood === null ? null : new Set(hood.edges)
+  // M259. The traveling highlight: completed blocks, and the finished path
+  // between them walked once in rank order. An edge animates the first time
+  // it JOINS the walk for this run — a newly finished handoff during a live
+  // run moves once, and a re-render never replays one that already moved.
+  const done = useMemo(() => new Set(Object.entries(outcomes).filter(([, o]) => o.execution === 'ended' && (o.result === 'passed' || o.result === 'turn-complete')).map(([k]) => k)), [outcomes])
+  const walk = useMemo(() => (drawn === undefined || runId === null ? [] : completedWalk(drawn.edges, done)), [drawn, done, runId])
+  // The step each edge animates at is PINNED the first time it joins the
+  // walk: the overlay stays mounted (its one animation ends on opacity 0), so
+  // a later render neither replays it nor cuts it short. Idempotent, so a
+  // double render writes the same pins.
+  const walked = useRef<{ runId: string | null; step: Map<string, number> }>({ runId: null, step: new Map() })
+  if (walked.current.runId !== runId) walked.current = { runId, step: new Map() }
+  const fresh = walk.filter((w) => !walked.current.step.has(w.edge))
+  const firstFresh = fresh.length === 0 ? 0 : Math.min(...fresh.map((w) => w.step))
+  for (const w of fresh) walked.current.step.set(w.edge, w.step - firstFresh)
+  const flowStep = walked.current.step
+  // M259. The run timeline, read back onto the blocks.
+  const timeline = useMemo(() => (selectedRun === undefined ? [] : runTimeline(selectedRun)), [selectedRun])
+  const timelineTotal = selectedRun === undefined ? 1 : Math.max(1, (selectedRun.endedAt ?? Math.max(selectedRun.startedAt, ...timeline.map((r) => selectedRun.startedAt + r.offset + (r.span ?? 0)))) - selectedRun.startedAt)
+  const labelOf = (key: string): string => diagram?.blocks.find((b) => b.key === key)?.label ?? key
+  // The one status word the toolbar shows at rest: unsaved beats incomplete, and nothing is said when neither holds (the rest rule — never a zero-value statement).
+  const statusWord = dirty ? 'Unsaved' : issueCount > 0 ? `${issueCount} to finish` : null
+
+  // Every verb is BUILT here, before the JSX: `verb()` records its reason as
+  // it runs, and the status popover renders ahead of the overflow menu in the
+  // tree — built inline, Stop/Save/Delete would register after the popover
+  // had already read the list, and their reasons would never reach it
+  // (verify:panels workflow.save.1 caught exactly that).
+  const runVerb = verb('run', 'Run', props.runReason, () => props.onRun(id))
+  // M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence.
+  const triggerVerb = verb('triggers', 'Edit trigger', props.runReason, () => props.onTrigger(id), <Trigger size={13} />)
+  // M184. Stop is the SELECTED run's when one is selected, and every open run of this workflow otherwise. Present always, disabled by name.
+  const stopVerb = verb('stop', 'Stop', stoppable ? null : REASON_NOTHING_RUNNING, () => { const r = props.onStopRun(id, runId ?? undefined); if (r.kind === 'refused') say(r.reason) })
+  // M184. Save is enabled while the draft is dirty and says so otherwise; a built-in saves as a COPY (M80's rule), which is also the way out of a stale save.
+  const saveVerb = isBuiltIn
+    ? verb('save', 'Save a copy', null, () => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason) }) })
+    : verb('save', 'Save', dirty ? null : REASON_NOTHING_TO_SAVE, () => { void props.onSave(id).then((r) => { if (r.kind === 'stale') setStale(r.reason); else if (r.kind === 'refused') say(r.reason); else setStale(null) }) })
+  const deleteVerb = verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))
+  const buildVerb = verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))
 
   return (
     <PanelFrame
@@ -405,196 +488,275 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                 </div>
               )
             })()}
-            <div className="workflow-node__verbs" data-workflow-verbs>
-              {verb('run', 'Run', props.runReason, () => props.onRun(id))}
-              <button type="button" className="pf__verb pf__verb--word workflow-node__more" data-workflow-more
-                aria-expanded={actionsOpen} title={actionsOpen ? 'Hide workflow actions' : 'Show triggers, stop, save, delete and build actions'}
-                onMouseDown={press(() => setActionsOpen((v) => !v))}>{actionsOpen ? 'Fewer actions' : 'More actions…'}</button>
+            {/* M259. ONE toolbar: Run, Add node, Edit trigger, History — the
+                four things a person does to a workflow — then the status and
+                one overflow for the rest. It replaces two rows (verbs, then
+                tabs) and the column of reasons that sat between them. */}
+            <div className="workflow-node__verbs" data-workflow-verbs role="toolbar" aria-label="Workflow">
+              {runVerb}
+              {!readOnly && (
+                <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__library-toggle" data-workflow-library-toggle aria-expanded={libraryOpen} aria-pressed={libraryOpen}
+                  title={libraryOpen ? 'Hide the node library' : 'Show the node library — drag a kind onto the diagram'}
+                  onMouseDown={press(() => setLibraryOpen((v) => !v))}><Plus size={13} /><span>Add node</span></button>
+              )}
+              {triggerVerb}
+              <button type="button" className="pf__verb pf__verb--word workflow-node__tool workflow-node__tab" data-workflow-tab="runs" aria-pressed={historyOpen} aria-expanded={historyOpen}
+                title={historyOpen ? 'Hide the run history' : 'Show the run history and its timeline'}
+                onMouseDown={press(() => setHistoryOpen((v) => !v))}><History size={13} /><span>{mine.length === 0 ? 'History' : `History (${mine.length})`}</span></button>
+              <span className="workflow-node__spacer" />
+              {/* M259. The status: one word at rest when there is one to say,
+                  and the popover of every reason and every unfinished block
+                  on hover or focus — the prose that used to sit above the graph. */}
+              <span className="workflow-node__status" data-workflow-status={dirty ? 'unsaved' : issueCount > 0 ? 'incomplete' : 'clean'} tabIndex={0}
+                aria-label={statusWord ?? 'Workflow status'}>
+                {statusWord === null ? <span className="workflow-node__status-dot" /> : <span className="workflow-node__status-word">{statusWord}</span>}
+                <span className="workflow-node__why" data-workflow-why role="note">
+                  {Object.entries(issues).map(([key, list]) => list.map((s) => (
+                    <span key={`${key}:${s}`} className="pf__note workflow-node__why-line workflow-node__why-line--issue" data-workflow-why-issue={key}>{`${labelOf(key)} — ${s}`}</span>
+                  )))}
+                  {disabled.map((d) => (
+                    <span key={d.label} className="pf__note workflow-node__why-line" data-workflow-why-verb={d.label}>{`${d.label} — ${d.why}`}</span>
+                  ))}
+                  {issueCount === 0 && disabled.length === 0 && <span className="pf__note workflow-node__why-line">Every block is complete and every action can run.</span>}
+                </span>
+              </span>
+              <button type="button" className="pf__verb workflow-node__more" data-workflow-more
+                aria-expanded={actionsOpen} aria-label={actionsOpen ? 'Hide workflow actions' : 'More workflow actions'} title={actionsOpen ? 'Hide workflow actions' : 'Stop, save, delete and build actions'}
+                onMouseDown={press(() => setActionsOpen((v) => !v))}><More size={14} /></button>
               <div className="workflow-node__more-actions" data-workflow-more-actions hidden={!actionsOpen}>
-              {/* M137. A trigger on a shape that cannot run would fire into a refusal every tick; it is disabled with Run's own sentence. */}
-              {verb('triggers', 'Triggers', props.runReason, () => props.onTrigger(id))}
-              {/* M184. Stop is the SELECTED run's when one is selected, and
-                  every open run of this workflow otherwise: its pools and its
-                  chats, interrupted. Present always, disabled by name. */}
-              {verb('stop', 'Stop', stoppable ? null : REASON_NOTHING_RUNNING, () => { const r = props.onStopRun(id, runId ?? undefined); if (r.kind === 'refused') say(r.reason) })}
-              {/* M184. Save is enabled while the draft is dirty and says so
-                  otherwise; a built-in saves as a COPY (the built-ins are code,
-                  M80's rule), which is also the way out of a stale save. */}
-              {isBuiltIn
-                ? verb('save', 'Save a copy', null, () => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason) }) })
-                : verb('save', 'Save', dirty ? null : REASON_NOTHING_TO_SAVE, () => { void props.onSave(id).then((r) => { if (r.kind === 'stale') setStale(r.reason); else if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}
-              {verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))}
-              {verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))}
+              {stopVerb}
+              {saveVerb}
+              {deleteVerb}
+              {buildVerb}
               </div>
             </div>
             {stale !== null && (
               <div className="workflow-node__stale" data-workflow-stale role="status">
-                <p className="pf__note workflow-node__why-line">{stale}</p>
-                <p className="pf__note workflow-node__why-line">{STALE_VERBS}</p>
+                <p className="pf__note workflow-node__stale-line">{stale}</p>
+                <p className="pf__note workflow-node__stale-line">{STALE_VERBS}</p>
                 <button type="button" className="pf__verb pf__verb--word" data-workflow-verb="reload" onMouseDown={press(() => { props.onReload(id); setStale(null) })}>Reload</button>
                 <button type="button" className="pf__verb pf__verb--word" data-workflow-verb="save-copy" onMouseDown={press(() => { void props.onSaveCopy(id).then((r) => { if (r.kind === 'refused') say(r.reason); else setStale(null) }) })}>Save a copy</button>
               </div>
             )}
-            {/* M191 (the golden audit, 3). The reasons are REVEALED, not
-                permanent: they appear while the panel is hovered or focused,
-                the same rule every other chrome verb follows, so a diagram at
-                rest is a diagram. Each disabled control also carries its own
-                reason in `title`, which is what a pointer and a screen reader
-                both reach. */}
-            {disabled.length > 0 && (
-              <div className="workflow-node__why" data-workflow-why>
-                {disabled.map((d) => (
-                  <p key={d.label} className="pf__note workflow-node__why-line" data-workflow-why-verb={d.label}>{`${d.label} — ${d.why}`}</p>
-                ))}
-              </div>
-            )}
-            <div className="workflow-node__tabs" role="tablist">
-              {!readOnly && (
-                <button type="button" className="pf__verb pf__verb--word workflow-node__library-toggle" data-workflow-library-toggle aria-expanded={libraryOpen}
-                  title={libraryOpen ? 'Hide the node library' : 'Show the node library — drag a kind onto the diagram'}
-                  onMouseDown={press(() => setLibraryOpen((v) => !v))}>{libraryOpen ? 'Hide nodes' : 'Add node…'}</button>
-              )}
-              {(['definition', 'runs'] as const).map((t) => (
-                <button key={t} type="button" role="tab" aria-selected={tab === t} className="pf__verb pf__verb--word workflow-node__tab"
-                  data-workflow-tab={t} onMouseDown={press(() => setTab(t))}>{t === 'definition' ? 'Definition' : (mine.length === 0 ? 'Runs' : `Runs (${mine.length})`)}</button>
-              ))}
-            </div>
-            <section className="workflow-node__pane workflow-node__editor" data-workflow-panel="definition" role="tabpanel" hidden={tab !== 'definition'}>
+            <div className="workflow-node__stage">
               {/* M183. THE LIBRARY: one entry per kind, dragged onto the diagram or
-                  added at the placement point through its control (keyboard reach). */}
+                  added at the placement point through its control (keyboard reach).
+                  M259: a left drawer with each kind's glyph, closed again by a placement. */}
               {!readOnly && libraryOpen && (
                 <ul className="workflow-node__library" data-workflow-library aria-label="Node library">
                   {LIBRARY.map((entry) => {
-                    // No glyph: `KIND_GLYPH` has no terminal key and one entry
-                    // wearing another kind's mark is worse than none (the critic).
+                    const Glyph = WORKFLOW_NODE_GLYPH[entry.kind]
                     return (
-                      <li key={entry.kind} className="workflow-node__entry" data-workflow-library-kind={entry.kind} title={`Drag onto the diagram, or Add: ${entry.example}`}
+                      <li key={entry.kind} className="workflow-node__entry" data-workflow-library-kind={entry.kind} data-family={KIND_FAMILY[entry.kind]} title={`Drag onto the diagram, or Add — for example: ${entry.example}`}
                         onMouseDown={(e) => beginLibraryDrag(entry.kind, e)}>
-                        <div className="workflow-node__entry-head">
+                        <span className="workflow-node__entry-glyph"><Glyph size={14} /></span>
+                        <span className="workflow-node__entry-text">
                           <span className="workflow-node__entry-name">{entry.name}</span>
-                          <button type="button" className="pf__verb pf__verb--word" data-workflow-library-add title={`Add a ${entry.name.toLowerCase()} node`} onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }} onClick={(e) => { e.stopPropagation(); addFromLibrary(entry.kind) }}>Add</button>
-                        </div>
-                        <span className="workflow-node__entry-sentence">{entry.sentence}</span>
-                        <span className="workflow-node__entry-example">{entry.example}</span>
+                          <span className="workflow-node__entry-sentence">{entry.sentence}</span>
+                        </span>
+                        <button type="button" className="pf__verb workflow-node__entry-add" data-workflow-library-add aria-label={`Add a ${entry.name.toLowerCase()} node`} title={`Add a ${entry.name.toLowerCase()} node`} onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }} onClick={(e) => { e.stopPropagation(); addFromLibrary(entry.kind) }}><Plus size={12} /></button>
                       </li>
                     )
                   })}
                 </ul>
               )}
-              {refusal !== null && <p className="pf__note workflow-node__refusal" data-workflow-refusal role="status">{refusal}</p>}
-              {/* The SVG is a sibling LAYER, not a canvas: it has a viewBox
-                  and nothing else — no pan, no zoom, no hit testing. */}
-              {/* M183. ROOM to drop and wire into: the diagram's extent plus one
-                  block and a gap on the right and below — the SVG was exactly its
-                  content's size, so a drop to the right of the rightmost block
-                  fell outside it. */}
-              <svg ref={svgRef} className="workflow-node__diagram" data-workflow-diagram viewBox={`0 0 ${diagram.width + (readOnly ? 0 : DROP_ROOM)} ${diagram.height + (readOnly ? 0 : DROP_ROOM)}`}
-                width={diagram.width + (readOnly ? 0 : DROP_ROOM)} height={diagram.height + (readOnly ? 0 : DROP_ROOM)} role="img" aria-label={`${template.name}, ${blockCount(template)} blocks`}
-                onMouseDown={(e) => { if (e.target === e.currentTarget) select(panel.workflow.templateId, null) }}>
-                {/* An edge has a DIRECTION and the record knows it; a plain
-                    line does not say it, so the reader had to guess which
-                    way `after a turn` ran. One marker, referenced by every
-                    edge, at the TARGET end. */}
-                <defs>
-                  <marker id={arrowId} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                    <path className="workflow-node__arrow" d="M 0 0 L 8 4 L 0 8 z" />
-                  </marker>
-                </defs>
-                {diagram.edges.map((e) => {
-                  const from = diagram.blocks.find((b) => b.key === e.from)
-                  const to = diagram.blocks.find((b) => b.key === e.to)
-                  if (from === undefined || to === undefined) return null
-                  // Border to border, never centre to centre: a line drawn
-                  // between centres passes UNDER both blocks and puts its
-                  // word on top of one of them — which is what the first
-                  // `workflow.png` showed.
-                  const rightward = to.x >= from.x
-                  const x1 = rightward ? from.x + from.w : from.x, y1 = from.y + from.h / 2
-                  const x2 = rightward ? to.x : to.x + to.w, y2 = to.y + to.h / 2
-                  // The label sits at the midpoint of ITS OWN segment, over a
-                  // ground rectangle in the pane's surface colour: a word
-                  // floating in open space between two diagonals belongs to
-                  // neither of them, and the shot showed exactly that. The
-                  // width is ESTIMATED from the character count — an SVG
-                  // cannot measure its own text before it lays out, and the
-                  // face is the mono one, so a per-character advance is the
-                  // honest approximation rather than a measurement.
-                  const word = edgeWord(e)
-                  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
-                  const wordW = word.length * 6.3 + 10
-                  const edgeKey = `${e.from}>${e.to}`
-                  return (
-                    <g key={`${e.from}:${e.to}`} data-workflow-edge={edgeKey} className={selectedEdge === edgeKey ? 'workflow-node__edgeg workflow-node__edgeg--selected' : 'workflow-node__edgeg'}
-                      onMouseDown={(ev) => { ev.stopPropagation(); ev.preventDefault(); select(panel.workflow.templateId, edgeKey); props.onFocus(panel.rect.id) }}>
-                      <line className="workflow-node__line" x1={x1} y1={y1} x2={x2} y2={y2} markerEnd={`url(#${arrowId})`} />
-                      <rect className="workflow-node__edge-ground" x={mx - wordW / 2} y={my - 9} width={wordW} height={16} rx={3} />
-                      <text className="workflow-node__edge-word" x={mx} y={my + 3} textAnchor="middle">{word}</text>
-                    </g>
-                  )
-                })}
-                {diagram.blocks.map((b) => {
-                  const off = dragging !== null && dragging.key === b.key ? dragging : { dx: 0, dy: 0 }
-                  return (
-                    <g key={b.key} data-workflow-block={b.key} data-workflow-block-selected={selectedBlock === b.key ? 'true' : undefined}
-                      data-workflow-block-kind={template.nodes.find((n) => n.key === b.key)?.kind}
-                      data-workflow-outcome={outcomes[b.key]?.word}
-                      data-tone={outcomes[b.key]?.tone}
-                      className={`workflow-node__blockg${selectedBlock === b.key ? ' workflow-node__blockg--selected' : ''}${wire !== null && wire.over === b.key ? (wire.allowed ? ' workflow-node__blockg--target' : ' workflow-node__blockg--refused') : ''}`}
-                      transform={off.dx === 0 && off.dy === 0 ? undefined : `translate(${off.dx} ${off.dy})`}
-                      onMouseDown={(e) => beginBlockDrag(b.key, e)}>
-                      <rect className="workflow-node__block" x={b.x} y={b.y} width={b.w} height={b.h} rx={8} />
-                      <text className="workflow-node__block-label" x={b.x + 12} y={b.y + 26}>{b.label}</text>
-                      {/* M184 (the critic, 12). The sublabel STAYS while a run
-                          is selected — the run view must not be less legible
-                          about the shape than the rest view — and the outcome
-                          word sits right-aligned beside it. */}
-                      <text className="workflow-node__block-sub" x={b.x + 12} y={b.y + BLOCK_H - 18}>{b.sublabel}</text>
-                      {outcomes[b.key] !== undefined && (
-                        <text className="workflow-node__block-outcome" x={b.x + b.w - 12} y={b.y + BLOCK_H - 18} textAnchor="end">{outcomes[b.key].word}</text>
+              <section className="workflow-node__pane workflow-node__editor" data-workflow-panel="definition">
+                {refusal !== null && <p className="pf__note workflow-node__refusal" data-workflow-refusal role="status">{refusal}</p>}
+                {/* M259. Auto layout, floating in the graph's corner: the
+                    contextual layer (revealed on hover), two directions. */}
+                {!readOnly && (
+                  <div className="workflow-node__layout" role="group" aria-label="Auto layout">
+                    {(['horizontal', 'vertical'] as const).map((dir) => (
+                      <button key={dir} type="button" className="pf__verb workflow-node__layout-btn" data-workflow-layout={dir} disabled={template.nodes.length < 2}
+                        aria-label={`Arrange ${dir === 'horizontal' ? 'left to right' : 'top to bottom'}`}
+                        title={template.nodes.length < 2 ? 'nothing to arrange — one block' : `Arrange ${dir === 'horizontal' ? 'left to right' : 'top to bottom'}`}
+                        onMouseDown={press(() => arrange(dir))}><span className={`workflow-node__layout-glyph workflow-node__layout-glyph--${dir}`}><AutoLayout size={13} /></span></button>
+                    ))}
+                  </div>
+                )}
+                {/* The SVG is a sibling LAYER, not a canvas: it has a viewBox
+                    and nothing else — no pan, no zoom, no hit testing.
+                    M183: ROOM to drop and wire into past the last block. */}
+                <div className="workflow-node__scroll" data-workflow-scroll>
+                <svg ref={svgRef} className={`workflow-node__diagram${wire !== null ? ' workflow-node__diagram--wiring' : ''}${litBlocks !== null ? ' workflow-node__diagram--focus' : ''}`} data-workflow-diagram viewBox={`0 0 ${diagram.width + (readOnly ? 0 : DROP_ROOM)} ${diagram.height + (readOnly ? 0 : DROP_ROOM)}`}
+                  width={diagram.width + (readOnly ? 0 : DROP_ROOM)} height={diagram.height + (readOnly ? 0 : DROP_ROOM)} role="img" aria-label={`${template.name}, ${blockCount(template)} blocks`}
+                  onMouseDown={(e) => { if (e.target === e.currentTarget) select(panel.workflow.templateId, null) }}>
+                  {/* An edge has a DIRECTION and the record knows it. One
+                      marker at the TARGET end, and a lit twin for a path. */}
+                  <defs>
+                    <marker id={arrowId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+                      <path className="workflow-node__arrow" d="M 0 1 L 9 5 L 0 9 z" />
+                    </marker>
+                    <marker id={arrowLitId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+                      <path className="workflow-node__arrow workflow-node__arrow--lit" d="M 0 1 L 9 5 L 0 9 z" />
+                    </marker>
+                  </defs>
+                  {diagram.edges.map((e) => {
+                    const from = diagram.blocks.find((b) => b.key === e.from)
+                    const to = diagram.blocks.find((b) => b.key === e.to)
+                    if (from === undefined || to === undefined) return null
+                    // M259. Border to border on a CURVE out of the facing
+                    // sides (workflow-graph's edgeGeometry), a dragged block's
+                    // offset applied so its edges follow the pointer, and the
+                    // trigger's word sitting ON the curve it names.
+                    const shift = (b: typeof from): typeof from => (dragging !== null && dragging.key === b.key ? { ...b, x: b.x + dragging.dx, y: b.y + dragging.dy } : b)
+                    const g = edgeGeometry(shift(from), shift(to))
+                    const word = edgeWord(e)
+                    // An SVG cannot measure its text before layout; the UI face's advance at --t-xs is ~5.9px.
+                    const wordW = word.length * 5.9 + 14
+                    const edgeKey = `${e.from}>${e.to}`
+                    const lit = litEdges?.has(edgeKey) === true || selectedEdge === edgeKey
+                    const isDone = walk.some((w) => w.edge === edgeKey)
+                    const flow = flowStep.get(edgeKey)
+                    return (
+                      <g key={`${e.from}:${e.to}`} data-workflow-edge={edgeKey}
+                        data-lit={lit ? 'true' : undefined} data-dim={litEdges !== null && !lit ? 'true' : undefined} data-done={isDone ? 'true' : undefined}
+                        className={selectedEdge === edgeKey ? 'workflow-node__edgeg workflow-node__edgeg--selected' : 'workflow-node__edgeg'}
+                        onMouseDown={(ev) => { ev.stopPropagation(); ev.preventDefault(); select(panel.workflow.templateId, edgeKey); props.onFocus(panel.rect.id) }}>
+                        {/* A wide invisible twin: a 2px curve is a hard thing to click. */}
+                        <path className="workflow-node__hit" d={g.d} />
+                        <path className="workflow-node__line" d={g.d} markerEnd={`url(#${lit || isDone ? arrowLitId : arrowId})`} />
+                        {flow !== undefined && (
+                          <path key={`${runId}:${edgeKey}`} className="workflow-node__flow" data-workflow-flow={edgeKey} d={g.d} pathLength={1}
+                            style={{ ['--wf-step' as string]: String(flow) }} />
+                        )}
+                        <rect className="workflow-node__edge-ground" x={g.mx - wordW / 2} y={g.my - 9} width={wordW} height={18} rx={9} />
+                        <text className="workflow-node__edge-word" x={g.mx} y={g.my + 3.5} textAnchor="middle">{word}</text>
+                      </g>
+                    )
+                  })}
+                  {diagram.blocks.map((b) => {
+                    const off = dragging !== null && dragging.key === b.key ? dragging : { dx: 0, dy: 0 }
+                    const node = drawn?.nodes.find((n) => n.key === b.key)
+                    const kind = node?.kind ?? 'terminal'
+                    const Glyph = WORKFLOW_NODE_GLYPH[kind]
+                    const own = issues[b.key]
+                    // The strip names the kind, so the sublabel's detail drops its own kind prefix rather than saying it twice.
+                    const detail = b.sublabel.includes(' · ') ? b.sublabel.slice(b.sublabel.indexOf(' · ') + 3) : ''
+                    const outcome = outcomes[b.key]
+                    const blockClass = ['workflow-node__blockg',
+                      selectedBlock === b.key ? 'workflow-node__blockg--selected' : '',
+                      wire !== null && wire.over === b.key ? (wire.allowed ? 'workflow-node__blockg--target' : 'workflow-node__blockg--refused') : '',
+                      hoverKey === b.key ? 'workflow-node__blockg--hover' : ''].filter((c) => c !== '').join(' ')
+                    return (
+                      <g key={b.key} data-workflow-block={b.key} data-workflow-block-selected={selectedBlock === b.key ? 'true' : undefined}
+                        data-workflow-block-kind={kind} data-family={KIND_FAMILY[kind]}
+                        data-workflow-outcome={outcome?.word}
+                        data-tone={outcome?.tone}
+                        data-workflow-done={done.has(b.key) ? 'true' : undefined}
+                        data-workflow-issue={own === undefined ? undefined : 'true'}
+                        data-lit={litBlocks?.has(b.key) === true ? 'true' : undefined} data-dim={litBlocks !== null && !litBlocks.has(b.key) ? 'true' : undefined}
+                        className={blockClass}
+                        transform={off.dx === 0 && off.dy === 0 ? undefined : `translate(${off.dx} ${off.dy})`}
+                        onMouseDown={(e) => beginBlockDrag(b.key, e)}>
+                        <rect className="workflow-node__block" x={b.x} y={b.y} width={b.w} height={b.h} rx={8} />
+                        {/* M259. The title strip: glyph and kind, in the family's quiet tint. */}
+                        <path className="workflow-node__strip" d={`M ${b.x} ${b.y + 18} V ${b.y + 8} a 8 8 0 0 1 8 -8 H ${b.x + b.w - 8} a 8 8 0 0 1 8 8 V ${b.y + 18} Z`} />
+                        <g className="workflow-node__glyph" transform={`translate(${b.x + 9} ${b.y + 3})`}><Glyph size={12} /></g>
+                        <text className="workflow-node__kind" x={b.x + 26} y={b.y + 13}>{KIND_NAME[kind] ?? kind}</text>
+                        {done.has(b.key) && <g className="workflow-node__done" data-workflow-check transform={`translate(${b.x + b.w - 21} ${b.y + 3})`}><Check size={12} /></g>}
+                        {own !== undefined && !done.has(b.key) && (
+                          <g className="workflow-node__issue" data-workflow-block-issue={b.key} transform={`translate(${b.x + b.w - 21} ${b.y + 3})`}>
+                            <title>{own.join('; ')}</title>
+                            <Warn size={12} />
+                          </g>
+                        )}
+                        <text className="workflow-node__block-label" x={b.x + 10} y={b.y + 37}>{b.label}</text>
+                        {/* M184 (the critic, 12). The sublabel STAYS while a run
+                            is selected, with the outcome word right-aligned beside it.
+                            The full sublabel (kind first) rides a title for a reader
+                            that never sees the strip. */}
+                        <text className="workflow-node__block-sub" x={b.x + 10} y={b.y + 54}><title>{b.sublabel}</title>{detail === '' && own !== undefined ? own[0] : detail}</text>
+                        {outcome !== undefined && (
+                          <text className="workflow-node__block-outcome" x={b.x + b.w - 10} y={b.y + 54} textAnchor="end">{outcome.word}</text>
+                        )}
+                        {/* M183. The port on the right edge: a wire starts here.
+                            M259: revealed on the block's hover and while wiring, never at rest. */}
+                        {!readOnly && <circle className="workflow-node__port" data-workflow-port cx={b.x + b.w} cy={b.y + b.h / 2} r={5} onMouseDown={(e) => beginWire(b.key, e)} />}
+                      </g>
+                    )
+                  })}
+                  {wire !== null && (
+                    <g className="workflow-node__wiring">
+                      <line className={`workflow-node__wire${wire.reason !== null ? ' workflow-node__wire--refused' : ''}`} data-workflow-wire x1={wire.x1} y1={wire.y1} x2={wire.x2} y2={wire.y2} />
+                      {/* M259. An invalid connection says so AT the pointer, before the release. */}
+                      {wire.reason !== null && (
+                        <g data-workflow-wire-reason>
+                          <rect className="workflow-node__wire-ground" x={wire.x2 + 10} y={wire.y2 - 22} width={wire.reason.length * 5.9 + 14} height={18} rx={9} />
+                          <text className="workflow-node__wire-word" x={wire.x2 + 17} y={wire.y2 - 9.5}>{wire.reason}</text>
+                        </g>
                       )}
-                      {/* M183. The port on the right edge: a wire starts here. */}
-                      {!readOnly && <circle className="workflow-node__port" data-workflow-port cx={b.x + b.w} cy={b.y + b.h / 2} r={5} onMouseDown={(e) => beginWire(b.key, e)} />}
                     </g>
+                  )}
+                  {ghost !== null && <rect className="workflow-node__ghost" data-workflow-ghost x={ghost.x - BLOCK_W / 2} y={ghost.y - BLOCK_H / 2} width={BLOCK_W} height={BLOCK_H} rx={8} />}
+                </svg>
+                </div>
+                {runNotice !== undefined && (() => {
+                  const [key, supervision] = runNotice
+                  const label = labelOf(key)
+                  return (
+                    <div className="workflow-node__blocker" data-workflow-run-state={key} data-workflow-run-blocker={supervision.blocker === undefined ? undefined : key} data-tone={supervision.tone} role="status">
+                      <p className="pf__note"><strong>{label}</strong> — {supervision.detail}</p>
+                      {supervision.approval !== undefined && supervision.panelId !== undefined && !readOnly && (
+                        <div className="workflow-node__blocker-verbs">
+                          <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="allow" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, true))}>Allow</button>
+                          <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="deny" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, false))}>Deny</button>
+                        </div>
+                      )}
+                    </div>
                   )
-                })}
-                {wire !== null && <line className="workflow-node__wire" data-workflow-wire x1={wire.x1} y1={wire.y1} x2={wire.x2} y2={wire.y2} />}
-                {ghost !== null && <rect className="workflow-node__ghost" data-workflow-ghost x={ghost.x - BLOCK_W / 2} y={ghost.y - BLOCK_H / 2} width={BLOCK_W} height={BLOCK_H} rx={8} />}
-              </svg>
-              {runNotice !== undefined && (() => {
-                const [key, supervision] = runNotice
-                const label = diagram.blocks.find((b) => b.key === key)?.label ?? key
-                return (
-                  <div className="workflow-node__blocker" data-workflow-run-state={key} data-workflow-run-blocker={supervision.blocker === undefined ? undefined : key} data-tone={supervision.tone} role="status">
-                    <p className="pf__note"><strong>{label}</strong> — {supervision.detail}</p>
-                    {supervision.approval !== undefined && supervision.panelId !== undefined && !readOnly && (
-                      <div className="workflow-node__blocker-verbs">
-                        <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="allow" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, true))}>Allow</button>
-                        <button type="button" className="pf__verb pf__verb--word" data-workflow-approval="deny" onMouseDown={press(() => props.onAnswer(supervision.panelId as string, supervision.approval?.requestId as string, false))}>Deny</button>
-                      </div>
+                })()}
+              </section>
+              <section className="workflow-node__pane workflow-node__history" data-workflow-panel="runs" aria-label="Run history" hidden={!historyOpen}>
+                {/* Three states, never two: nothing recorded yet is a SENTENCE,
+                    not an empty box — an empty box reads as a drawer that broke. */}
+                {/* M138. The pool blocks first: per item, what main said. */}
+                {poolKeys.map((k) => <PoolRows key={k} templateId={id} blockKey={k} />)}
+                {mine.length === 0 ? (
+                  <p className="pf__note workflow-node__empty" data-workflow-runs-empty>{RUNS_UNATTRIBUTED}</p>
+                ) : (
+                  <ul className="workflow-node__runs" data-workflow-runs>
+                    {mine.map((r) => (
+                      <li key={r.id} className={`workflow-node__run${runId === r.id ? ' workflow-node__run--selected' : ''}`} data-workflow-run={r.id} data-workflow-run-selected={runId === r.id ? 'true' : undefined}
+                        title={runId === r.id ? 'Show the definition again' : 'Show this run on the graph'}
+                        onMouseDown={press(() => setRunId((v) => (v === r.id ? null : r.id)))}>
+                        <span className="workflow-node__run-name">{r.name}{r.definition === undefined ? '' : ` · ${r.definition.revision < 0 ? 'unsaved' : `revision ${r.definition.revision}`}`}</span>
+                        <span className="workflow-node__run-facts">{r.panelIds.length} panel{r.panelIds.length === 1 ? '' : 's'} - {durationWord(r)}{r.costUsd === undefined ? '' : ` - $${r.costUsd.toFixed(2)}`}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {/* M259. THE TIMELINE: the selected run's events, each row a
+                    block — hover lights it on the graph, a press selects it. */}
+                {selectedRun !== undefined && (
+                  <div className="workflow-node__timeline" data-workflow-timeline={selectedRun.id}>
+                    <h4 className="workflow-node__timeline-title">Timeline</h4>
+                    {timeline.length === 0 ? (
+                      <p className="pf__note workflow-node__empty" data-workflow-timeline-empty>this run was recorded before runs kept their blocks — its events cannot be placed on the graph</p>
+                    ) : (
+                      <ol className="workflow-node__events">
+                        {timeline.map((row) => {
+                          const o = outcomes[row.key]
+                          const left = (row.offset / timelineTotal) * 100
+                          const width = row.span === undefined ? 100 - left : Math.max(1.5, (row.span / timelineTotal) * 100)
+                          return (
+                            <li key={`${row.key}:${row.offset}`} className="workflow-node__event" data-workflow-event={row.key} data-tone={o?.tone}
+                              data-open={row.span === undefined ? 'true' : undefined}
+                              onMouseEnter={() => setHoverKey(row.key)} onMouseLeave={() => setHoverKey((k) => (k === row.key ? null : k))}
+                              onMouseDown={press(() => { setSelectedBlock(row.key); props.onFocus(panel.rect.id) })}>
+                              <span className="workflow-node__event-name">{labelOf(row.key)}</span>
+                              <span className="workflow-node__event-word">{o?.word ?? row.outcome ?? 'running'}</span>
+                              <span className="workflow-node__event-track"><span className="workflow-node__event-bar" style={{ left: `${left}%`, width: `${width}%` }} /></span>
+                              <span className="workflow-node__event-when">{offsetWord(row.offset)}</span>
+                            </li>
+                          )
+                        })}
+                      </ol>
                     )}
                   </div>
-                )
-              })()}
-            </section>
-            <section className="workflow-node__pane" data-workflow-panel="runs" role="tabpanel" hidden={tab !== 'runs'}>
-              {/* Three states, never two: nothing recorded yet is a SENTENCE,
-                  not an empty box — an empty box reads as a tab that broke. */}
-              {/* M138. The pool blocks first: per item, what main said. */}
-              {poolKeys.map((k) => <PoolRows key={k} templateId={id} blockKey={k} />)}
-              {mine.length === 0 ? (
-                <p className="pf__note workflow-node__empty" data-workflow-runs-empty>{RUNS_UNATTRIBUTED}</p>
-              ) : (
-                <ul className="workflow-node__runs" data-workflow-runs>
-                  {mine.map((r) => (
-                    <li key={r.id} className={`workflow-node__run${runId === r.id ? ' workflow-node__run--selected' : ''}`} data-workflow-run={r.id} data-workflow-run-selected={runId === r.id ? 'true' : undefined}
-                      onMouseDown={press(() => { setRunId((v) => (v === r.id ? null : r.id)); setTab('definition') })}>
-                      <span className="workflow-node__run-name">{r.name}{r.definition === undefined ? '' : ` · ${r.definition.revision < 0 ? 'unsaved' : `revision ${r.definition.revision}`}`}</span>
-                      <span className="workflow-node__run-facts">{r.panelIds.length} panel{r.panelIds.length === 1 ? '' : 's'} - {durationWord(r)}{r.costUsd === undefined ? '' : ` - $${r.costUsd.toFixed(2)}`}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                )}
+              </section>
+            </div>
           </>
         )}
       </div>

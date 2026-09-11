@@ -3425,6 +3425,117 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M256. The Skills workspace's four words, the inspector's relevance cut and
+// the missing file's two stories — each a decision made once in a pure model,
+// so the surfaces that paint them cannot drift into a second rule.
+{
+  try {
+    const card = (over) => ({ installed: true, active: 'active', scope: 'user', ...over })
+    ok('skills-ws.1 the scope badge is Plugin before the scope a plugin was read under',
+      R.skillBadge({ scope: 'user', pluginId: 'superpowers@x' }) === 'Plugin' &&
+        R.skillBadge({ scope: 'user' }) === 'User' && R.skillBadge({ scope: 'project' }) === 'Project' &&
+        R.skillBadge({ scope: 'local' }) === 'Local',
+      'a User badge on a plugin skill sends a person to the wrong folder')
+    const states = [
+      R.skillState(card({}), false), R.skillState(card({}), true),
+      R.skillState(card({ active: 'disabled' }), true), R.skillState(card({ installed: false }), true)
+    ]
+    ok('skills-ws.2 four states, each with a reason: installed, on canvas, available-but-off, unavailable',
+      states.map((x) => x.kind).join(',') === 'installed,placed,available,unavailable' && states.every((x) => x.why.length > 0),
+      JSON.stringify(states))
+    ok('skills-ws.3 the purpose is the first sentence, empty stays empty, and a long one never cuts mid-word',
+      R.skillPurpose('Build a graph. Then more.') === 'Build a graph.' && R.skillPurpose('   ') === '' &&
+        /\S…$/.test(R.skillPurpose('word '.repeat(60))) && R.skillPurpose('word '.repeat(60)).length <= R.PURPOSE_MAX + 1,
+      R.skillPurpose('word '.repeat(60)))
+    ok('skills-ws.4 frontmatter is stripped only when it opens AND closes',
+      R.stripFrontmatter('---\nname: x\n---\n\n# Body') === '# Body' && R.stripFrontmatter('---\nunclosed') === '---\nunclosed',
+      JSON.stringify(R.stripFrontmatter('---\nname: x\n---\n\n# Body')))
+    const cols = R.buildSkillColumns([{ kind: 'skill', scope: 'project', name: 'a', description: 'd', sourcePath: '/r/.claude/skills/a/SKILL.md', active: { kind: 'disabled' } }],
+      { columns: [{ id: 'c', title: 't', keys: ['["user","ghost"]'] }] }, { kind: 'skill', query: '', scopes: null, placedOnly: false })
+    const all = cols.flatMap((c) => c.cards)
+    const real = all.find((c) => c.name === 'a'), ghost = all.find((c) => c.name === 'ghost')
+    ok('skills-ws.5 a card carries scope, active and sourcePath; a ghost carries no path key at all',
+      real.scope === 'project' && real.active === 'disabled' && real.sourcePath === '/r/.claude/skills/a/SKILL.md' &&
+        ghost.active === 'unknown' && !('sourcePath' in ghost),
+      JSON.stringify({ real, ghost }))
+  } catch (e) {
+    ok('skills-ws.1', false, 'threw: ' + String(e && e.message || e))
+  }
+  try {
+    const mk = (over) => invEntry({ id: over.name, ...over })
+    const entries = [mk({ name: 'global' }), mk({ name: 'used' }), mk({ name: 'mine', scope: 'project' }), { ...mk({ name: 'm' }), kind: 'mcp', command: 'x' }]
+    const cut = R.buildToolboxFields(inventory({ entries }), { used: ['used'] })
+    const whole = R.buildToolboxFields(inventory({ entries }))
+    ok('inspector-skills.1 with relevance, unused user skills are COUNTED, never listed; without it, every row',
+      cut.rows.map((r) => r.name).join(',') === 'used,mine,m' && cut.elsewhere === 1 &&
+        whole.rows.length === 4 && !('elsewhere' in whole),
+      JSON.stringify({ cut: cut.rows.map((r) => r.name), elsewhere: cut.elsewhere, whole: whole.rows.length }))
+  } catch (e) {
+    ok('inspector-skills.1', false, 'threw: ' + String(e && e.message || e))
+  }
+  try {
+    const gone = R.missingStory(true, 'plan.md'), never = R.missingStory(false, 'plan.md')
+    ok('file-missing.1 a file seen then lost and a file never found are two stories with two fixes',
+      gone.arm === 'gone' && never.arm === 'never' && /deleted or moved/.test(gone.headline) && /never found/.test(never.headline) &&
+        gone.detail !== never.detail,
+      JSON.stringify({ gone, never }))
+  } catch (e) {
+    ok('file-missing.1', false, 'threw: ' + String(e && e.message || e))
+  }
+}
+// M258 — last-active.1 / last-active.2. A dormant panel's "last active"
+// signal: a word from a KNOWN time only (absent stays absent — never
+// "idle NaN" and never a guessed "just now"), and the per-panel store that
+// holds it is cleared at every site that clears the last-line store, the
+// sibling it shadows (CLAUDE.md: every per-panel store is cleared at every
+// panel-removing call site, or a recycled id inherits a dead panel's time).
+{
+  const W = R.lastActiveWord
+  const now = Date.UTC(2026, 8, 11, 12, 0, 0)
+  const ago = (ms) => (typeof W === 'function' ? W({ at: now - ms, now, tone: 'asleep' }) : undefined)
+  ok('last-active.1 the word is paused/idle plus a coarse age (<1m, Nm, Nh, Nd) from a known time; an absent, zero or future time says nothing',
+    typeof W === 'function' && ago(20e3) === 'paused <1m' && ago(3 * 60e3) === 'paused 3m' && ago(5 * 3600e3) === 'paused 5h' && ago(2 * 86400e3) === 'paused 2d' &&
+      W({ at: now - 60e3 * 7, now, tone: 'idle' }) === 'idle 7m' &&
+      W({ now, tone: 'asleep' }) === undefined && W({ at: 0, now, tone: 'asleep' }) === undefined && W({ at: now + 60e3, now, tone: 'asleep' }) === undefined,
+    typeof W === 'function' ? JSON.stringify([ago(20e3), ago(3 * 60e3), ago(5 * 3600e3), ago(2 * 86400e3)]) : 'no lastActiveWord export')
+  const { readFileSync, readdirSync, statSync } = require('node:fs')
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(n) ? [p] : [] })
+  const files = walk(join(__dirname, '..', 'src', 'renderer')).filter((f) => !/session[\\/](last-line|last-active)-store\.ts$/.test(f))
+  const count = (text, re) => (text.match(re) || []).length
+  const drift = files.map((f) => { const t = readFileSync(f, 'utf8'); return { f, line: count(t, /\bclearLastLine\(/g), active: count(t, /\bclearLastActive\(/g) } }).filter((x) => x.line !== x.active)
+  const sites = files.reduce((n, f) => n + count(readFileSync(f, 'utf8'), /\bclearLastActive\(/g), 0)
+  ok('last-active.2 clearLastActive is called beside every clearLastLine, file for file',
+    sites > 0 && drift.length === 0, JSON.stringify({ sites, drift }))
+}
+
+// M259 — boardx.*. One state vocabulary across the board, GitHub, Jira and
+//     the canvas (providerState, in panel-state.ts because state.2 keeps the
+//     words there), and sync freshness in words (syncWord). The readable
+//     audit activity is the Integrations redesign's describeCall. Written before the functions existed and watched red.
+try {
+  const S = R.WORK_ITEM_STATES
+  const g = (raw) => R.providerState('github', raw).state
+  const j = (raw) => R.providerState('jira', raw).state
+  ok('boardx.state.1 GitHub and Jira states land on the board\'s OWN four words — a review request and a PR are review, open is todo, closed and merged are done; Jira by its status name',
+    g('review requested') === S[2] && g('pull request') === S[2] && g('open') === S[0] && g('closed') === S[3] && g('merged') === S[3] &&
+      j('To Do') === S[0] && j('Backlog') === S[0] && j('In Progress') === S[1] && j('In Review') === S[2] && j('Code Review') === S[2] && j('Done') === S[3] && j('Resolved') === S[3],
+    JSON.stringify({ gh: ['review requested', 'pull request', 'open', 'closed'].map(g), jira: ['To Do', 'In Progress', 'In Review', 'Done'].map(j) }))
+  const odd = R.providerState('jira', 'Waiting on vendor')
+  const none = R.providerState('jira', null)
+  const mapped = R.providerState('jira', 'In Progress')
+  ok('boardx.state.2 a status the map does not know keeps its own words at the kind tone and claims no board state; no status says so; a mapped one wears the board word and its tone',
+    odd.state === undefined && odd.word === 'Waiting on vendor' && odd.tone === 'kind' && none.state === undefined && /no status/.test(none.word) &&
+      mapped.word === S[1] && mapped.tone === R.panelState({ kind: 'work', work: { state: S[1] } }).tone,
+    JSON.stringify({ odd, none, mapped }))
+  const now = 10 * 60 * 60 * 1000
+  const fresh = R.syncWord(now - 4000, now), mins = R.syncWord(now - 3 * 60 * 1000, now), old = R.syncWord(now - 2 * 60 * 60 * 1000, now), never = R.syncWord(undefined, now)
+  ok('boardx.fresh.1 freshness is a word, not a timestamp — just now, minutes, hours — stale past ten minutes, and never-read is its own third answer',
+    /just now/.test(fresh.word) && fresh.stale === false && /3m ago/.test(mins.word) && mins.stale === false && /2h ago/.test(old.word) && old.stale === true && never.stale === true && /not read/.test(never.word),
+    JSON.stringify({ fresh, mins, old, never }))
+} catch (e) {
+  ok('boardx (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

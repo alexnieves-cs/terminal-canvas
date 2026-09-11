@@ -1343,6 +1343,29 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         rang !== false && others === true && othersAreReal === true,
         `target=${target} before=${JSON.stringify(before)} after=${JSON.stringify(rang)} ` +
           `others=${others} othersAreReal=${othersAreReal}`)
+      // M257. The filter reads each row's live attributes, then the section
+      // fold persists through the same settings map as the rest of the shell.
+      const filterAndFold = await wc.executeJavaScript(`(async () => {
+        const filters = [...document.querySelectorAll('.navigator__filter')]
+        const needs = filters.find((b) => b.textContent.trim() === 'Needs you')
+        needs?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 80))
+        const visible = [...document.querySelectorAll('.rail-list--panels [data-rail-row]')]
+          .filter((row) => getComputedStyle(row).display !== 'none')
+          .map((row) => row.getAttribute('data-rail-row'))
+        const heading = document.querySelector('[data-rail-group="agents"] .rail-heading__button')
+        heading?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        await new Promise((r) => setTimeout(r, 80))
+        const folded = [...document.querySelectorAll('[data-rail-group-row="agents"]')].every((row) => row.hidden)
+        const stored = (await window.canvas.settings.list()).find((row) => row.id === 'shell.collapsedRailGroups')?.value
+        heading?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        filters.find((b) => b.textContent.trim() === 'All')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        return { visible, folded, stored }
+      })()`)
+      ok('shell.recommendations.2 Needs you filters the live rows and a folded section persists',
+        filterAndFold.visible.length === 1 && filterAndFold.visible[0] === target &&
+          filterAndFold.folded === true && Array.isArray(filterAndFold.stored) && filterAndFold.stored.includes('agents'),
+        JSON.stringify(filterAndFold))
       // What 83 LEAVES BEHIND: an extra sh panel in wants-you, in main's
       // store and on its row, alongside renamedId (still 'starting', untouched
       // by this check). Nothing below acknowledges either; check 86 closes

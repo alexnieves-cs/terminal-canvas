@@ -425,6 +425,17 @@ const FACTS = {
     })
     ok('closure.v9.1 every v9 verb names a real palette row, an agent line that binds to it, a canvas gesture (or an owed one with its due milestone) and a WORKFLOW door — an action node whose line binds to the same verb, with `action` a kind the library offers — or, for node-test alone, an owned omission with its reason',
       ids.length > 0 && verdicts.every((v) => v.paletteRow && v.agentBinds && v.canvas && v.workflowOwed), JSON.stringify(verdicts))
+    // M258 — fit-task.doors.1. Fit task is a VERB, so it takes all four
+    // doors: the HUD's Fit task button, the `task.fit` palette row, `tc plan
+    // fit-task` and an action node holding the same line. Named apart from
+    // closure.v9.1 so a missing verb reads as its own red, not as a long
+    // verdict list with one false in it.
+    const fitDoor = doors?.['fit-task']
+    const fitBound = V.VERBS.some((v) => v.id === 'fit-task') ? P.buildPlan(P.parsePlanLine('fit-task'), facts) : null
+    ok('fit-task.doors.1 fit-task is a verb with a real HUD gesture, the task.fit palette row, an agent line and an action-node line that bind',
+      fitDoor !== undefined && typeof fitDoor.canvas === 'string' && /HUD/.test(fitDoor.canvas) && fitDoor.palette === 'task.fit' &&
+        commandsSrc.includes("id: 'task.fit'") && fitBound?.kind === 'plan' && fitBound.plan.steps[0]?.verb === 'fit-task' && fitDoor.workflow === 'an action node whose line is: fit-task',
+      JSON.stringify({ fitDoor, fitBound }))
   }
 
   // M190 (the Acts V-VII critic, 1 and 3) — agent-door.7. THE ACTION NODE'S

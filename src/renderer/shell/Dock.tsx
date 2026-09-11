@@ -3,7 +3,7 @@ import type { RailAttention } from './rail-sections'
 import type { NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, Folder, Grid, KindNote, KindToolbox, KindWork, Layers, Link } from '@renderer/icons'
+import { Bell, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 
 export interface DockProps {
@@ -18,11 +18,12 @@ export interface DockProps {
   onGoToPanel: (id: string) => void
   /** M76. Answer a chat's pending request from the popover, without going to it. */
   onAnswer: (id: string, requestId: string, allow: boolean) => void
+  onSettings: () => void
 }
 
 /**
- * M46. The dock: a 48px icon column, the only permanently resident chrome
- * besides the top bar. Each icon selects the navigator pane; clicking the
+ * M46/M257. The dock: a compact icon column that becomes a labelled rail at
+ * wide breakpoints, the only permanently resident chrome besides the top bar. Each icon selects the navigator pane; clicking the
  * active one collapses the pane. This is what makes a fifth navigator cheap
  * — a row in this array, not a negotiation over a column's height.
  *
@@ -35,25 +36,29 @@ export interface DockProps {
  *
  * Every control mounts shellControl(): focus never leaves the terminal.
  */
-function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer }: DockProps): JSX.Element {
-  const entries: Array<{ id: NavigatorPane; label: string; icon: JSX.Element }> = [
-    { id: 'panels', label: 'Panels', icon: <Grid /> },
-    { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
-    { id: 'files', label: 'Files', icon: <Folder /> },
-    // M85. The fourth pane the dock's own comment said would be cheap.
-    { id: 'vault', label: 'Vault', icon: <KindNote /> },
-    // M89. Every service on one page.
-    { id: 'integrations', label: 'Connections', icon: <Link /> },
-    // M100. The roster: identities with a brief, their own memory and explicit places.
-    { id: 'teammates', label: 'Teammates', icon: <Grid /> },
-    // M116. The board: four columns over the workspace's work items.
-    { id: 'board', label: 'Board', icon: <KindWork /> },
-    // M127. The shelf: what this agent can do, in columns.
-    { id: 'skills', label: 'Skills', icon: <KindToolbox /> }
+function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onSettings }: DockProps): JSX.Element {
+  const groups: Array<{ label: string; entries: Array<{ id: NavigatorPane; label: string; shortcut?: string; icon: JSX.Element }> }> = [
+    { label: 'Work', entries: [
+      { id: 'panels', label: 'Canvas', shortcut: '⌘\\', icon: <Grid /> },
+      { id: 'workspaces', label: 'Workspaces', icon: <Layers /> },
+      { id: 'board', label: 'Tasks', icon: <KindWork /> }
+    ] },
+    { label: 'Content', entries: [
+      { id: 'files', label: 'Files', shortcut: '⌘B', icon: <Folder /> },
+      { id: 'vault', label: 'Notes', icon: <KindNote /> },
+      { id: 'skills', label: 'Skills', icon: <KindToolbox /> }
+    ] },
+    { label: 'Connections', entries: [
+      { id: 'integrations', label: 'Integrations', icon: <Link /> },
+      { id: 'teammates', label: 'Teammates', icon: <People /> }
+    ] }
   ]
   return (
     <nav className="shell__dock" aria-label="Dock">
-      {entries.map((e) => {
+      <span className="dock__product" aria-hidden="true"><ProductMark /></span>
+      {groups.map((group) => <div className="dock__group" data-dock-group={group.label.toLowerCase()} key={group.label}>
+        <div className="dock__group-label">{group.label}</div>
+        {group.entries.map((e) => {
         const pressed = navVisible && navigator === e.id
         return (
           <button
@@ -63,26 +68,30 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
             data-dock={e.id}
             aria-pressed={pressed}
             aria-label={e.label}
-            title={pressed ? `Hide ${e.label.toLowerCase()}` : `Show ${e.label.toLowerCase()}`}
+            title={`${pressed ? 'Hide' : 'Show'} ${e.label}${e.shortcut === undefined ? '' : ` (${e.shortcut})`}`}
             {...shellControl(() => onChoose(e.id))}
           >
             {e.icon}
-            {/* M172. The place's NAME, revealed on hover or focus as a tag beside the icon (the dock stays one icon wide). */}
-            <span className="dock__label" aria-hidden="true">{e.label}</span>
+            {/* M172/M257. The name is always a tooltip and becomes a persistent label at wide widths. */}
+            <span className="dock__label" aria-hidden="true">{e.label}{e.shortcut !== undefined && <kbd>{e.shortcut}</kbd>}</span>
           </button>
         )
       })}
-      <div className="dock__attention">
+      </div>)}
+      <div className="dock__group dock__group--system" data-dock-group="system">
+        <div className="dock__group-label">System</div>
+        <div className="dock__attention">
         <button
           type="button"
           className={`dock__button icon-button${attentionOpen ? ' dock__button--on' : ''}`}
           data-dock="attention"
           aria-pressed={attentionOpen}
           aria-label={attention.length === 0 ? 'Attention: nothing waiting' : `Attention: ${attention.length} waiting`}
-          title="Panels that want you"
+          title="Notifications: panels that need you (⌘J)"
           {...shellControl(onToggleAttention)}
         >
           <Bell />
+          <span className="dock__label" aria-hidden="true">Notifications <kbd>⌘J</kbd></span>
         </button>
         {/* Always mounted, so the live region exists before the first bell;
             empty text when nothing waits, which a screen reader reads as
@@ -134,6 +143,9 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
             </ul>
           </div>
         )}
+      </div>
+        <button type="button" className="dock__button shell__settings icon-button" data-dock="settings"
+          aria-label="Settings" title="Settings" {...shellControl(onSettings)}><Gear /><span className="dock__label" aria-hidden="true">Settings</span></button>
       </div>
       {/* M172. The `N live / N quiet` capsules left the dock (the metrics rule): the count is the rail's `Agents · N` heading. */}
     </nav>

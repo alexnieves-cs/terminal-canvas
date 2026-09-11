@@ -4984,6 +4984,71 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect', 'a
     JSON.stringify({ whenUnread: whenUnread.id, whenRead: whenRead.id }))
 }
 
+// M259 — wfx.*. The workflow editor's PURE graph reading (workflow-graph.ts):
+//      which blocks sit upstream and downstream of a selection, what is
+//      incomplete on the graph, the arrangement Auto layout commits, the
+//      curve an edge is drawn on, and the run timeline mapped back to blocks.
+//      Written before the module existed and watched red.
+try {
+  const n = (key, kind, dx, dy, over = {}) => ({ key, kind, cwd: '~', dx, dy, ...over })
+  const t = {
+    id: 'wx', name: 'graph', nodes: [
+      n('a', 'terminal', 0, 0), n('b', 'chat', 300, 0), n('c', 'collect', 600, 0, { target: 'out.md' }),
+      n('d', 'terminal', 300, 200), n('e', 'http', 0, 400, { url: '', method: 'POST' })
+    ],
+    edges: [{ from: 'a', to: 'b', trigger: 'exit' }, { from: 'b', to: 'c', trigger: 'idle' }, { from: 'a', to: 'd', trigger: 'exit-ok' }]
+  }
+  const hood = L.neighbourhood(t.edges, 'b')
+  ok('wfx.path.1 a selection lights its whole upstream and downstream, and the edges on those paths only',
+    hood.up.join(',') === 'a' && hood.down.join(',') === 'c' && hood.edges.slice().sort().join(',') === 'a>b,b>c',
+    JSON.stringify(hood))
+
+  const issues = L.diagramIssues(t)
+  ok('wfx.issue.1 an unconnected block, an empty required field and a write method are each named on the block they belong to; a complete block has none',
+    (issues.e ?? []).some((s) => /not connected/.test(s)) && (issues.e ?? []).some((s) => /address/.test(s)) &&
+      (issues.e ?? []).some((s) => /GET/.test(s)) && issues.a === undefined && issues.b === undefined && issues.c === undefined,
+    JSON.stringify(issues))
+  const lonelyCollect = L.diagramIssues({ ...t, nodes: [n('a', 'terminal', 0, 0), n('c', 'collect', 300, 0, { target: 'x' })], edges: [{ from: 'c', to: 'a', trigger: 'exit' }] })
+  ok('wfx.issue.2 a collect block nothing hands off to says it collects nothing; a single block is never called unconnected',
+    (lonelyCollect.c ?? []).some((s) => /collects nothing/.test(s)) &&
+      L.diagramIssues({ ...t, nodes: [n('a', 'terminal', 0, 0)], edges: [] }).a === undefined,
+    JSON.stringify(lonelyCollect))
+
+  const h = L.autoLayout(t, 'horizontal')
+  const at = Object.fromEntries(h.map((m) => [m.key, m]))
+  const v = L.autoLayout(t, 'vertical')
+  const vat = Object.fromEntries(v.map((m) => [m.key, m]))
+  ok('wfx.layout.1 Auto layout ranks by longest path — horizontal steps right per rank, vertical steps down — and never stacks two blocks on one spot',
+    h.length === 5 && at.a.dx < at.b.dx && at.b.dx < at.c.dx && at.b.dx === at.d.dx && at.b.dy !== at.d.dy &&
+      vat.a.dy < vat.b.dy && vat.b.dy < vat.c.dy && vat.b.dy === vat.d.dy &&
+      new Set(h.map((m) => `${m.dx},${m.dy}`)).size === 5 && new Set(v.map((m) => `${m.dx},${m.dy}`)).size === 5,
+    JSON.stringify({ h, v }))
+
+  const A = { x: 0, y: 0, w: 168, h: 64 }, B = { x: 400, y: 0, w: 168, h: 64 }, C = { x: 0, y: 300, w: 168, h: 64 }
+  const right = L.edgeGeometry(A, B), down = L.edgeGeometry(A, C)
+  ok('wfx.edge.1 an edge leaves and enters on the facing borders — sideways for a block beside, top and bottom for a block below — and its label sits ON the curve',
+    right.x1 === 168 && right.x2 === 400 && right.y1 === 32 && right.mx === 284 && right.my === 32 && /^M /.test(right.d) && / C /.test(right.d) &&
+      down.y1 === 64 && down.y2 === 300 && down.x1 === 84 && down.mx === 84,
+    JSON.stringify({ right, down }))
+
+  const run = {
+    id: 'r1', name: 'graph', panelIds: ['pa', 'pb', 'pd'], edges: [], startedAt: 1000, endedAt: 9000,
+    entries: [{ panelId: 'pa', startedAt: 1000, endedAt: 3000, outcome: 'exit 0' }, { panelId: 'pb', startedAt: 3000, endedAt: 8000, outcome: 'a turn' }, { panelId: 'pd', startedAt: 3200 }],
+    definition: { templateId: 'wx', revision: 1, nodes: t.nodes, edges: t.edges }, mapping: { a: 'pa', b: 'pb', d: 'pd', c: 'pc' }
+  }
+  const tl = L.runTimeline(run)
+  ok('wfx.timeline.1 the run timeline is one row per block that started, in start order, with its offset and span, read back to the block key',
+    tl.map((r) => r.key).join(',') === 'a,b,d' && tl[0].offset === 0 && tl[0].span === 2000 && tl[1].offset === 2000 && tl[2].span === undefined && tl.every((r) => typeof r.outcome === 'string' || r.outcome === undefined),
+    JSON.stringify(tl))
+  const walk = L.completedWalk(t.edges, new Set(['a', 'b']))
+  ok('wfx.walk.1 the traveling highlight walks ONLY edges whose both ends completed, in path order, each step one rank later',
+    walk.map((w) => w.edge).join(',') === 'a>b' && walk[0].step === 0 &&
+      L.completedWalk(t.edges, new Set(['a', 'b', 'c'])).map((w) => `${w.edge}@${w.step}`).join(',') === 'a>b@0,b>c@1',
+    JSON.stringify(walk))
+} catch (e) {
+  ok('wfx (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

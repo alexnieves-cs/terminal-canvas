@@ -21,38 +21,23 @@ at exit 0 before any work is called done. `npm run verify:visual` (goldens) and
 act close. `npm run dev` unsets `ELECTRON_RUN_AS_NODE` first; if you see
 `Cannot read properties of undefined (reading 'whenReady')` your shell exports it.
 
-## Rules that are Codex-specific or easy to miss
+## Rules that are Codex-specific
+
+Every other rule — check-id scoping, goldens, the four doors, absent/malformed/unknown,
+the two lifetimes, the IPC diagram's dual pin, restyle-class stability, the no-styling-
+dependency rule, commit format — is stated once, in CLAUDE.md or the doc its table names
+(product-rules.md for anything UI/token/golden). It is not repeated here: read it there, and
+if it ever seems to disagree with something below, CLAUDE.md wins. Restating it here would
+just be a second copy to forget to update.
+
+What's actually specific to running as Codex in this repo:
 
 - **Never push to `origin`, never create a remote object, never modify anything outside this
-  repository.** The user's answers to this run's setup make those the fixed boundary.
-- **A check id is a scoped string** (`ok('preview.1 …')`), never the next integer;
-  `verify:meta` 22 fails two computed checks sharing an id.
-- **A golden changes on purpose or not at all.** Each changed scene gets a critic's sentence
-  in the ledger before `UPDATE_GOLDENS=1` runs. A blind re-baseline is a regression nobody
-  can see.
-- **A verb needs four doors** (canvas gesture, palette row, workflow node, agent-askable
-  through `shared/verb-table.ts`), or its omission is written in the ledger.
-- **Absent vs malformed vs unknown** in every parser; three-state results, never two; a
-  disappearing affordance is disabled with a named reason, never removed.
-- **Two lifetimes**: a panel's session (xterm plus PTY) lives in `session-registry.ts`
-  outside React; the component owns nothing. `pty.kill` keeps exactly two callers.
-- **The IPC diagram in `README.md` is the one `verify:meta` 19 pins**; the copy in
-  `CLAUDE.md` must be edited with it; `src/shared/ipc-contract.ts` is the authority for both.
-- **Restyle classes, never rename them**: the `.panel__*` and `*-node__*` aliases are what
-  roughly two hundred checks select on.
-- **Dependencies** may be added with a written reason in the plan and ledger; never a
-  styling dependency (no Tailwind, no component library, no icon font).
-- **Commits** are conventional and scoped by milestone: `feat(m181): …`, `fix(m181): …`.
+  repository.** The user's answers to this run's setup make those the fixed boundary — this
+  is a Codex sandbox constraint, not a rule CLAUDE.md states for "any engineer."
 - **Minimal changes.** Targeted fixes over comprehensive rewrites; no unrelated cleanup. The
   repository answers questions about itself; read its docs before searching the web.
 
-## Where things are
-
-- `docs/build-log/` — one log per milestone or act, and the ledgers; the ledger is the state
-  of a run.
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` — every milestone's spec and plan.
-- `docs/ideas-backlog.md` — open and deferred ideas, each with a reason;
-  `docs/ideas-backlog-closed.md` — the ones marked DONE or declined.
-- `verify/visual/goldens/` — the visual register; `scripts/verify-*.cjs` — every suite.
-- The current run's guide and ledger — named in ONE place, CLAUDE.md's index table, so a
-  finished run cannot be left named as current here.
+Where anything else lives — build logs, ledgers, specs, plans, the backlog, the visual
+register — is CLAUDE.md's index table. It is the one place that mapping is kept, so a
+finished run can't be left named as current in a second copy here.

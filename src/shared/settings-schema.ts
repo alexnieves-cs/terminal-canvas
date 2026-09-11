@@ -222,6 +222,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: ACCESSIBILITY_CATEGORY
   },
   {
+    id: 'accessibility.highContrast',
+    label: 'High contrast',
+    description: 'stronger borders and less translucency, independent of light or dark — off by default',
+    keywords: ['contrast', 'accessibility', 'a11y', 'wcag', 'borders', 'translucency', 'glass'],
+    type: 'boolean',
+    default: false,
+    category: ACCESSIBILITY_CATEGORY
+  },
+  {
     id: 'appearance.theme',
     planWritable: true,
     label: 'Theme',
@@ -301,6 +310,38 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    // (this redesign) The inspector's width, dragged from its own left edge; a `number`
+    // setting like `terminal.fontSize` rather than a bespoke store, so the
+    // one persisted-settings home covers it too. Bounds: 220 is the
+    // narrowest the action bar's primary button and ⋯ menu stay usable at,
+    // 480 is wide enough that the canvas underneath would otherwise
+    // disappear on a small window.
+    id: 'shell.inspectorWidth',
+    label: 'Inspector width',
+    description: 'how wide the right inspector opens — drag its left edge, or set a number here',
+    keywords: ['inspector', 'width', 'resize', 'wide', 'panel', 'sidebar', 'shell'],
+    type: 'number',
+    default: 260,
+    min: 220,
+    max: 480,
+    category: SHELL_CATEGORY
+  },
+  {
+    // (this redesign) "Pin" the inspector open through the auto-collapse the Compact
+    // breakpoint already applies to both side panes (`.shell[data-bp="compact"]`
+    // zeroes `--shell-ctx-w`) — the meaning `Let users … pin the inspector`
+    // (#17) has in an app that already narrows the window automatically.
+    // `shell.inspectorOpen` is a separate, coarser on/off; this only overrides
+    // the compact-width auto-collapse for a user who wants it open anyway.
+    id: 'shell.inspectorPinned',
+    label: 'Keep the inspector open when the window narrows',
+    description: 'override the automatic collapse at a narrow window width, so the inspector stays open',
+    keywords: ['inspector', 'pin', 'pinned', 'compact', 'narrow', 'collapse', 'sidebar', 'shell'],
+    type: 'boolean',
+    default: false,
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'shell.contextTab',
     label: 'Context tab',
     description: 'open the context pane on Detail (what this panel is), Work (what it did and cost), or Tools (what it can do)',
@@ -308,6 +349,15 @@ export const SETTINGS: readonly SettingDef[] = [
     type: 'enum',
     values: ['detail', 'work', 'tools'],
     default: 'detail',
+    category: SHELL_CATEGORY
+  },
+  {
+    id: 'shell.collapsedRailGroups',
+    label: 'Collapsed navigator sections',
+    description: 'remember which Canvas navigator sections you folded closed',
+    keywords: ['navigator', 'sections', 'groups', 'collapse', 'fold'],
+    type: 'list',
+    default: [],
     category: SHELL_CATEGORY
   },
   {

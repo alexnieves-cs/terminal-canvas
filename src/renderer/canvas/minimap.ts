@@ -72,3 +72,36 @@ export function viewportCentredAt(world: Point, vp: Viewport, size: Size): Viewp
   const atOrigin = screenToWorld({ x: size.width / 2, y: size.height / 2 }, probe)
   return { x: (atOrigin.x - world.x) * vp.scale, y: (atOrigin.y - world.y) * vp.scale, scale: vp.scale }
 }
+
+/**
+ * M258. THE CAMERA'S RECTANGLE IS A HANDLE. A drag that starts on it keeps
+ * the grab offset — the rectangle slides under the pointer rather than
+ * jumping to centre on it — and is computed from the ORIGIN camera and the
+ * ORIGIN projection every frame (applyDrag's rule: accumulating per-frame
+ * deltas drifts). The thumb delta goes through the inverse as
+ * toWorld(to) − toWorld(from), never toWorld(to − from): the latter
+ * subtracts the projection's offset, which must cancel. The caller still
+ * moves the camera only through goToViewport (the minimap's load-bearing
+ * rule): this names the camera, it does not set it.
+ */
+export function minimapPanViewport(origin: Viewport, from: Point, to: Point, pr: MinimapProjection): Viewport {
+  const a = minimapToWorld(from, pr), b = minimapToWorld(to, pr)
+  const dx = b.x - a.x, dy = b.y - a.y
+  return { x: origin.x - dx * origin.scale, y: origin.y - dy * origin.scale, scale: origin.scale }
+}
+
+/** M258. Is a thumb point on the camera's rectangle? `slop` px of grace at its edge, so a thin rectangle is still grabbable. */
+export function minimapViewHit(p: Point, pr: MinimapProjection, slop = 3): boolean {
+  const v = pr.view
+  return p.x >= v.x - slop && p.x <= v.x + v.w + slop && p.y >= v.y - slop && p.y <= v.y + v.h + slop
+}
+
+/**
+ * M258. THE ZOOM READOUT IS NEWS, NOT FURNITURE: shown while a zoom is under
+ * way, and at rest only when the scale differs materially from 100%. "100%"
+ * printed permanently is a zero-value statement.
+ */
+export const ZOOM_READOUT_BAND = 0.05
+export function zoomReadoutShown(scale: number, zooming: boolean): boolean {
+  return zooming || Math.abs(scale - 1) > ZOOM_READOUT_BAND
+}

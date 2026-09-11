@@ -263,3 +263,17 @@ export function simplifyStroke(points: ReadonlyArray<readonly [number, number]>,
   for (let i = 0; i < points.length; i++) if (keep[i]) out.push([points[i]![0], points[i]![1]])
   return out
 }
+
+/**
+ * M256. The reading surface a document-focused file is shown at: at least
+ * DOC_FOCUS_MIN, never smaller than the panel already is, and grown about the
+ * panel's own CENTRE so the file widens in place rather than sliding right.
+ * Pure and display-only — Canvas hands it to the one focused panel and never
+ * writes it to the layout.
+ */
+export const DOC_FOCUS_MIN = { w: 920, h: 720 }
+export function docFocusRect(rect: WorldRect): WorldRect {
+  const w = Math.max(rect.w, DOC_FOCUS_MIN.w)
+  const h = Math.max(rect.h, DOC_FOCUS_MIN.h)
+  return { id: rect.id, x: rect.x - (w - rect.w) / 2, y: rect.y - (h - rect.h) / 2, w, h }
+}

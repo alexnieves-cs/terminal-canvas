@@ -748,6 +748,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       if (entry && svgBox) await dragTo(entry, svgBox)
       const afterDrop = await waitUntil(() => wc.executeJavaScript(`(() => { const g = document.querySelector('[data-workflow-block="n3"]'); if (!g) return false; const r = g.querySelector('rect').getBoundingClientRect(); return { x: r.left, y: r.top, kind: g.getAttribute('data-workflow-block-kind') } })()`), 3000)
       const n1Box = await centreOf('[data-workflow-block="n1"] rect')
+      // M259. The library COLLAPSES after a placement — so the Add below
+      // reopens it the way a person would, through its own toggle.
+      const collapsed = await wc.executeJavaScript(`document.querySelector('[data-workflow-library]') === null && document.querySelector('[data-workflow-library-toggle]')?.getAttribute('aria-pressed') === 'false'`)
+      await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-workflow-library-toggle]'); if (t) t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="terminal"] [data-workflow-library-add]') !== null`), 3000)
       // Add through the keyboard-reachable control on the terminal entry.
       await wc.executeJavaScript(`document.querySelector('[data-workflow-library-kind="terminal"] [data-workflow-library-add]').click(); true`)
       // The placement, not just the presence: a regression to dx 0 would stack the new block on an existing one, which is what placementFor exists to prevent.
@@ -755,8 +760,9 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const dirty = await wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="wfl"]')?.getAttribute('data-workflow-dirty')`)
       flushLayoutStore()
       const onDisk = layoutStore.current().templates.find((t) => t.id === TPL)
-      ok(ids[0], afterDrop && afterDrop.kind === 'chat' && n1Box && afterDrop.x > n1Box.x + 100 && added && added.ax >= added.rightmost && dirty === 'true' && onDisk && onDisk.nodes.length === 2,
-        JSON.stringify({ entry, svgBox, afterDrop, n1Box, added, dirty, diskNodes: onDisk && onDisk.nodes.length }))
+      const collapsedAgain = await wc.executeJavaScript(`document.querySelector('[data-workflow-library]') === null`)
+      ok(ids[0], afterDrop && afterDrop.kind === 'chat' && n1Box && afterDrop.x > n1Box.x + 100 && added && added.ax >= added.rightmost && dirty === 'true' && onDisk && onDisk.nodes.length === 2 && collapsed === true && collapsedAgain === true,
+        JSON.stringify({ entry, svgBox, afterDrop, n1Box, added, dirty, diskNodes: onDisk && onDisk.nodes.length, collapsed, collapsedAgain }))
       // wire.1: port of n1 → block n2 wires n1 → n2; then n2's port → n1 would close a cycle.
       const port1 = await centreOf('[data-workflow-block="n1"] [data-workflow-port]')
       const block2 = await centreOf('[data-workflow-block="n2"] rect')
@@ -765,11 +771,31 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const edgeWord = await wc.executeJavaScript(`document.querySelector('[data-workflow-edge="n1>n2"] .workflow-node__edge-word')?.textContent`)
       const port2 = await centreOf('[data-workflow-block="n2"] [data-workflow-port]')
       const block1 = await centreOf('[data-workflow-block="n1"] rect')
-      if (port2 && block1) await dragTo(port2, block1)
+      // M259 — wfx.ui.1 (first half). The cycle is REFUSED AT THE POINTER
+      // while the wire is still held, before any release: read mid-gesture.
+      let heldReason = null
+      if (port2 && block1) {
+        wc.focus()
+        wc.sendInputEvent({ type: 'mouseDown', x: port2.x, y: port2.y, button: 'left', clickCount: 1 }); await settle()
+        for (let i = 1; i <= 5; i++) { wc.sendInputEvent({ type: 'mouseMove', x: Math.round(port2.x + (block1.x - port2.x) * i / 5), y: Math.round(port2.y + (block1.y - port2.y) * i / 5), button: 'left', buttons: 1 }); await settle() }
+        heldReason = await wc.executeJavaScript(`document.querySelector('[data-workflow-wire-reason]')?.textContent ?? null`)
+        wc.sendInputEvent({ type: 'mouseUp', x: block1.x, y: block1.y, button: 'left', clickCount: 1 }); await settle()
+      }
       const refusal = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-workflow-refusal]')?.textContent || false`), 3000)
       const edgesNow = await wc.executeJavaScript(`document.querySelectorAll('[data-workflow-edge]').length`)
       ok(ids[1], wired === true && typeof edgeWord === 'string' && edgeWord.length > 0 && typeof refusal === 'string' && /cycle/.test(refusal) && edgesNow === 1,
         JSON.stringify({ port1, block2, wired, edgeWord, refusal, edgesNow }))
+      // M259 — wfx.ui.1 (second half). Selecting n1 lights its lineage — n2
+      // and the edge between them — and quiets the unconnected blocks; then
+      // Auto layout (top to bottom) is ONE draft step that puts n2 under n1.
+      const n1c = await centreOf('[data-workflow-block="n1"] rect')
+      if (n1c) { wc.sendInputEvent({ type: 'mouseDown', x: n1c.x, y: n1c.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: n1c.x, y: n1c.y, button: 'left', clickCount: 1 }); await settle() }
+      const lineage = await wc.executeJavaScript(`(() => ({ n2: document.querySelector('[data-workflow-block="n2"]')?.getAttribute('data-lit'), edge: document.querySelector('[data-workflow-edge="n1>n2"]')?.getAttribute('data-lit'), n3: document.querySelector('[data-workflow-block="n3"]')?.getAttribute('data-dim') }))()`)
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-workflow-layout="vertical"]'); if (b && !b.disabled) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+      const arranged = await waitUntil(() => wc.executeJavaScript(`(() => { const r = (k) => { const g = document.querySelector('[data-workflow-block="' + k + '"] rect'); return g ? { x: Number(g.getAttribute('x')), y: Number(g.getAttribute('y')) } : null }; const a = r('n1'), b = r('n2'); return a && b && b.y > a.y && Math.abs(b.x - a.x) < 1 ? { a, b } : false })()`), 3000)
+      ok('wfx.ui.1 a wire that would close a loop is refused at the pointer while held; a selected block lights its downstream block and edge and quiets the unconnected; Auto layout top-to-bottom puts the downstream block directly under its source',
+        typeof heldReason === 'string' && /loop/.test(heldReason) && lineage.n2 === 'true' && lineage.edge === 'true' && lineage.n3 === 'true' && arranged !== false,
+        JSON.stringify({ heldReason, lineage, arranged }))
       // inspect.1: click n2 (the pool) → the inspector shows its fields; rename via title? a pool has no title — use n1 (terminal): click it, edit title.
       // The context pane may be CLOSED here (it sits just past the window's right edge then): open it through the top bar's own toggle, the way a person does.
       await wc.executeJavaScript(`(() => { const t = document.querySelector('.shell__inspector-toggle'); if (t && t.getAttribute('aria-pressed') !== 'true') { t.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); t.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return true })()`); await settle()
@@ -3561,6 +3587,26 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
         const menuClosed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
         ok(IDS[2], menuOpenedNow === true && menuInside === true && menuClosed === true, JSON.stringify({ menuOpened, menuInside, menuClosed }))
+        // M258 — menu.keys.1. THE ⋯ MENU WITH NO POINTER: opening moves focus
+        // to its first row, ArrowDown walks to the next, the frame's common
+        // action (Fill view) is one of the rows, and Escape closes the menu
+        // AND hands focus back to the ⋯ button, so the route is complete.
+        const menuKeys = await (async () => {
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]'); if (b) { b.focus(); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return !!b })()`)
+          const open = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') !== null`), 3000)
+          const focusFirst = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); return m !== null && m.contains(document.activeElement) && m.querySelector('button:not(:disabled)') === document.activeElement })()`), 2000)
+          const walked = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); if (!m) return 'no menu'
+            const rows = [...m.querySelectorAll('button:not(:disabled)')]
+            document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+            return { second: rows.length > 1 && document.activeElement === rows[1], fill: m.querySelector('[data-panel-menu-maximise]')?.textContent ?? null } })()`)
+          await wc.executeJavaScript(`document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+          const closed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
+          const back = await wc.executeJavaScript(`document.activeElement === document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]')`)
+          return { open, focusFirst, walked, closed, back }
+        })()
+        ok('menu.keys.1 the ⋯ menu is keyboard-reachable: opening focuses its first row, ArrowDown walks, Fill view is a row, Escape closes it and returns focus to the ⋯ button',
+          menuKeys.open === true && menuKeys.focusFirst === true && menuKeys.walked?.second === true && menuKeys.walked?.fill === 'Fill view' && menuKeys.closed === true && menuKeys.back === true,
+          JSON.stringify(menuKeys))
         // Wake hdB so the flip is measured on a LIVE panel: the first version of
         // this check passed on two dormant (carded) panels while a running
         // terminal did not turn over at all.
@@ -5045,7 +5091,8 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             opened.blocks.join(',') === 'sweep,pool' &&
             opened.sublabels.every((s) => !/›/.test(s)) && opened.sublabels.some((s) => /6 AT A TIME/i.test(s)) &&
             opened.edges.join(',') === 'sweep>pool' &&
-            opened.tabs.join(',') === 'definition,runs' &&
+            // M259. History is a drawer beside the graph, reached by ONE toolbar control; the graph is never behind a tab.
+            opened.tabs.join(',') === 'runs' &&
             opened.verbs.length >= 5 && opened.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             runVerb !== false && runVerb.disabled === false &&
             afterPress > before && blockedCalls === 1 &&

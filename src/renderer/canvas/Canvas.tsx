@@ -54,11 +54,11 @@ import {
 import { useViewport } from './useViewport'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
-import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
+import { arrangePlan, fitTaskTarget, FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -149,6 +149,11 @@ import { WorkNode, WORK_ITEM_GONE } from '@renderer/work/WorkNode'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
 /** M202. How much of the agent's own account the task section carries. Its last words, not its transcript. */
 const ACCOUNT_MAX = 400
+// How long an attention landing stays lit. Matches `.landing-halo`'s
+// animation in styles.css: the timer only unmounts what the CSS has already
+// faded, and under reduced motion (animation forced off) it is the whole
+// signal — a still ring shown for this long, then gone.
+const LANDING_LIT_MS = 900
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
@@ -191,6 +196,7 @@ import type { ApprovalRow } from '@renderer/palette/commands'
 import { claudeAvailable, codexAvailable, backendAvailable } from '@renderer/palette/commands'
 import { onChatSession, onChatAuto, onChatTurnEnd, onChatSeeded, lastAssistantText } from '@renderer/chat/chat-store'
 import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/session/last-line-store'
+import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { lastLineOf } from '../shell/rail-rows'
 import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
@@ -213,7 +219,7 @@ import type { StartWorkOutcome } from '@renderer/palette/start-work'
 import { sendRefusalSentence } from '@shared/agent-session'
 import { AnnotationLayer } from './AnnotationLayer'
 import { SkillTrailLane } from '@renderer/skills/SkillTrailLane'
-import { applyTrail, clearTrail } from '@renderer/skills/skill-trail-store'
+import { applyTrail, clearTrail, recentSkillUses } from '@renderer/skills/skill-trail-store'
 import type { SnapshotMeta } from '@shared/ipc-contract'
 import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFrame'
 // M8a. The frame is rendered here rather than in App.tsx because every verb it
@@ -225,6 +231,7 @@ import { TopBar } from '../shell/TopBar'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
+import { useAttentionAnnouncer } from '../shell/useAttentionAnnouncer'
 import { useShellBreakpoint } from '../shell/useShellBreakpoint'
 import { Dock } from '../shell/Dock'
 import { Navigator } from '../shell/Navigator'
@@ -362,7 +369,7 @@ export function Canvas({
   const retainedOutcomesRef = useRef(retainedOutcomes)
   retainedOutcomesRef.current = retainedOutcomes
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     const item = workItemsRef.current.find((candidate) => candidate.panelId === chatId)
     if (item !== undefined) {
@@ -972,6 +979,7 @@ export function Canvas({
         // inherits a dead edge's fire.
         forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
         clearLastLine(panel.rect.id)
+        clearLastActive(panel.rect.id)
         clearLiveSession(panel.rect.id)
         clearSubagents(panel.rect.id)
         clearTrail(panel.rect.id)
@@ -1254,6 +1262,11 @@ export function Canvas({
   // logic is assigned into the ref once centreOn and selectAndRaise exist and
   // is refreshed every render so it never runs against a stale closure.
   const jumpAttentionImplRef = useRef<(direction: JumpDirection) => void>(() => {})
+  // The panel an ATTENTION jump is flying to, until the camera settles. Only
+  // attention navigation arms it — a bookmark, the trail or fit-all lands on
+  // a place, not on a panel that asked for you, and lighting whatever sits
+  // there would teach the eye that the glow means nothing.
+  const landingTargetRef = useRef<string | null>(null)
   const onJumpAttention = useCallback((direction: JumpDirection) => {
     jumpAttentionImplRef.current(direction)
   }, [])
@@ -1310,7 +1323,7 @@ export function Canvas({
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
     beginPanDrag, panning,
-    goToViewport, cameraBack, cameraForward, trail, flying
+    goToViewport, cameraBack, cameraForward, trail, flying, landing
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
@@ -1535,8 +1548,29 @@ export function Canvas({
   // than a third copy of "go to a waiting panel". Stable identity: it reads
   // the actions through their ref.
   const jumpToAttention = useCallback((panelId: string) => {
+    landingTargetRef.current = panelId
     paletteActionsRef.current?.goToPanel(panelId)
   }, [])
+
+  // Attention navigation's arrival: after the camera lands, the destination
+  // frame is briefly lit, or a person flown across a busy canvas has to
+  // hunt for which of the panels now on screen is the one that wanted them.
+  // Keyed on the settle, never on `flying` turning false — a reduced-motion
+  // or already-framed jump never flies at all, and is still an arrival.
+  // A settle that did not land (a gesture grabbed the camera) disarms: the
+  // person has already chosen to look somewhere else.
+  const [landingLit, setLandingLit] = useState<{ id: string; seq: number } | null>(null)
+  useEffect(() => {
+    const id = landingTargetRef.current
+    if (landing.seq === 0 || id === null) return
+    landingTargetRef.current = null
+    if (landing.landed) setLandingLit({ id, seq: landing.seq })
+  }, [landing])
+  useEffect(() => {
+    if (landingLit === null) return
+    const timer = setTimeout(() => setLandingLit(null), LANDING_LIT_MS)
+    return () => clearTimeout(timer)
+  }, [landingLit])
   useEffect(() => window.canvas.agent.onAttentionJump(jumpToAttention), [jumpToAttention])
 
   // One subscription for the whole canvas, like agent.onState above and for the
@@ -1772,6 +1806,7 @@ export function Canvas({
       clearAgentState(panel.rect.id)
       forgetEdgesFor(panel.rect.id); forgetAgentLinksFor(panel.rect.id)
       clearLastLine(panel.rect.id)
+      clearLastActive(panel.rect.id)
       clearLiveSession(panel.rect.id)
       clearSubagents(panel.rect.id)
       clearTrail(panel.rect.id)
@@ -2292,6 +2327,7 @@ export function Canvas({
     clearAgentState(id)
     forgetEdgesFor(id); forgetAgentLinksFor(id)
     clearLastLine(id)
+    clearLastActive(id)
     clearLiveSession(id)
     clearSubagents(id)
     clearTrail(id)
@@ -2342,6 +2378,31 @@ export function Canvas({
       return next
     })
   }, [addToSelection, commitHistory, selectOnly])
+
+  /**
+   * M256. DOCUMENT FOCUS — one file at a time, centred, widened and the only
+   * object at full strength. A VIEW state, never a layout one: the widening is
+   * a display rect handed to the one panel (`docFocusRect`), so nothing is
+   * written to the layout, the history or the undo stack, and leaving puts
+   * the panel back exactly where it was. Entering is a camera JUMP onto the
+   * trail, so leaving by the panel's own control is a Camera Back.
+   *
+   * Left implicitly when the panel stops being the selection (a background
+   * click, another panel) — quietening the canvas around a file nobody has
+   * selected would hide the thing the person just chose.
+   */
+  const [docFocusId, setDocFocusId] = useState<string | null>(null)
+  const onDocFocus = useCallback((id: string, on: boolean) => {
+    if (!on) { setDocFocusId(null); cameraBack(); return }
+    const panel = panelsRef.current.find((p) => p.rect.id === id)
+    if (panel === undefined) return
+    selectAndRaise(id)
+    setDocFocusId(id)
+    frameRects([docFocusRect(panel.rect)])
+  }, [selectAndRaise, frameRects, cameraBack])
+  useEffect(() => {
+    if (docFocusId !== null && (!selectedIds.has(docFocusId) || selectedIds.size !== 1)) setDocFocusId(null)
+  }, [docFocusId, selectedIds])
 
   // Which panel the jump key last visited. A ref, not state: it is a cursor
   // for a keydown handler and nothing renders from it, so putting it in state
@@ -2394,6 +2455,7 @@ export function Canvas({
     // between the user and a working key, which is why the filter exists.
     if (!panel) return
     jumpCursorRef.current = id
+    landingTargetRef.current = id
     centreOn(panel.rect)
     selectAndRaise(id)
   }
@@ -2962,6 +3024,61 @@ export function Canvas({
     const off = window.canvas.settings.onChanged(read)
     return () => { live = false; off() }
   }, [settingRows])
+  // (this redesign) The inspector's width and pinned-through-compact setting, read the
+  // same way `globalFontSize` is — `shell.inspectorWidth`/`shell.inspectorPinned`
+  // are ordinary settings, so a write from the palette or from this pane's own
+  // resize handle must both apply, and only `settings:list` sees both.
+  const [inspectorWidth, setInspectorWidth] = useState(260)
+  const [inspectorPinned, setInspectorPinned] = useState(false)
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const w = rows.find((r) => r.id === 'shell.inspectorWidth')
+        if (w && typeof w.value === 'number') setInspectorWidth(w.value)
+        const p = rows.find((r) => r.id === 'shell.inspectorPinned')
+        if (p && typeof p.value === 'boolean') setInspectorPinned(p.value)
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [settingRows])
+  // (this redesign) THE DRAG. Imperative, on `shellRef` directly — never React state per
+  // mousemove — for the same reason `applyDrag`'s own doc comment gives for
+  // panel dragging: recomputing from a per-frame delta through a re-render
+  // is the path that drifts and stutters. The CSS var IS the resize; commit
+  // to the setting only once, on mouseup, clamped to the schema's own bounds.
+  const onInspectorResizeDown = useCallback((event: ReactMouseEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    const shell = shellRef.current
+    if (shell === null) return
+    const startX = event.clientX
+    const startWidth = inspectorWidth
+    const min = 220, max = 480
+    // `MouseEvent` alone resolves to React's `MouseEvent<T>` in this file
+    // (imported for JSX handler props above) — `globalThis.MouseEvent` is
+    // the real DOM type a `document.addEventListener` callback receives.
+    const onMove = (e: globalThis.MouseEvent): void => {
+      // The inspector sits on the RIGHT edge, so dragging left (negative dx) widens it.
+      const next = Math.min(max, Math.max(min, startWidth - (e.clientX - startX)))
+      shell.style.setProperty('--shell-ctx-w', `${next}px`)
+    }
+    const onUp = (e: globalThis.MouseEvent): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const next = Math.min(max, Math.max(min, startWidth - (e.clientX - startX)))
+      setInspectorWidth(next)
+      void window.canvas.settings.set('shell.inspectorWidth', next)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [inspectorWidth])
+  const onToggleInspectorPinned = useCallback((): void => {
+    setInspectorPinned((v) => { const next = !v; void window.canvas.settings.set('shell.inspectorPinned', next); return next })
+  }, [])
   const fontOverridesSig = panels.map((p) => (isTerminalPanel(p) && p.fontSize !== undefined ? `${p.rect.id}=${p.fontSize}` : '')).filter(Boolean).join(',')
   useEffect(() => {
     const overrides: Record<string, number> = {}
@@ -3754,6 +3871,7 @@ export function Canvas({
       clearAgentState(id)
       forgetEdgesFor(id); forgetAgentLinksFor(id)
       clearLastLine(id)
+      clearLastActive(id)
       clearLiveSession(id)
       clearSubagents(id)
       clearTrail(id)
@@ -4861,6 +4979,26 @@ export function Canvas({
     const target = showTaskTarget(panelId, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
     return target.kind === 'refused' ? target : arrangeItem(target.itemId)
   }
+  // M258. FIT TASK — the four doors' landing point (the HUD button, the
+  // `task.fit` row, `tc plan fit-task`, an action node). The ACTIVE task is
+  // the lens's when one is lit, else the one task of the single selected
+  // panel (or the focused one). A camera move through the trail and nothing
+  // else, exactly as Show this task: no selection, focus, tier or geometry.
+  boardVerbsRef.current.fitTask = () => {
+    const shown = displayPanelsRef.current
+    const items = workItemsRef.current
+    const selected = selectedIdsRef.current
+    const panelId = selected.size === 1 ? [...selected][0] : (focusedIdRef.current ?? undefined)
+    const target = fitTaskTarget({ lensItemId: relatedItemId, ...(panelId === undefined ? {} : { panelId }), panels: shown, memberships: taskMemberships(shown, items), titles: Object.fromEntries(items.map((i) => [i.id, i.title])) })
+    if (target.kind === 'refused') return target
+    frameRects(target.rects)
+    const title = items.find((i) => i.id === target.itemId)?.title ?? target.itemId
+    return { kind: 'ran', note: `fitted ${target.rects.length} panel${target.rects.length === 1 ? '' : 's'} of ${title}` }
+  }
+  // The HUD's disabled state is the CHEAP half of that decision — is there
+  // any task context at all — so no membership is derived per render; a
+  // panel in no task still refuses by name on press.
+  const fitTaskContext = relatedItemId !== null || selectedIds.size === 1 || focusedId !== null
   // M74. Terminal → chat. main is asked FIRST (`agent:import` validates the
   // pin, the live process and the CLI's file, and writes the turns under the
   // NEW id); a refusal is shown by name in the palette's line and nothing
@@ -6531,8 +6669,11 @@ export function Canvas({
     // line, as the credential rows already do it.
     onVerify: (service: string) => { void window.canvas.credential.verify(service).then((res) => { if (!res.ok) paletteActions.verifyCredential(service); reloadIntegrations() }).catch(() => reloadIntegrations()) },
     onRefresh: reloadIntegrations,
-    // M102. The roster's grants per service, by teammate name.
-    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => t.name)]))
+    // M102. The roster's grants per service, by teammate name, with the
+    // folders each may act from — a teammate's `places`, empty meaning it is
+    // granted the service but has nowhere yet to spend it (this redesign's permission
+    // line: who may use it, and from which workspace).
+    grants: Object.fromEntries(SERVICES.map((svc) => [svc.id, (teammates ?? []).filter((t) => t.services.includes(svc.id)).map((t) => ({ name: t.name, places: t.places }))]))
   }), [chrome.toggleNavigator, integrationRows, integrationAudit.state, integrationAudit.failure, integrationAudit.skipped, openCredentials, paletteActions, reloadIntegrations, teammates])
 
   // M150. A note's chip asks the pane to filter: the request rides to the
@@ -6724,6 +6865,11 @@ export function Canvas({
     if (cwd === undefined || cwd === '') return []
     return [{ panelId: p.rect.id, cwd, label: railRows.find((r) => r.id === p.rect.id)?.label ?? p.rect.id }]
   }), [panels, railRows])
+  // M256. Keyed on a SIGNATURE of the skill panels, never on `panels`: the
+  // array changes identity on every drag frame, and the Skills pane's props
+  // must not rebuild at 60Hz for a fact that changes when a panel opens.
+  const placedSkillSig = panels.filter(isSkillPanel).map((p) => skillKey(p.skill.scope, p.skill.name)).sort().join('\n')
+  const placedSkillKeys = useMemo<ReadonlySet<SkillKey>>(() => new Set(placedSkillSig === '' ? [] : placedSkillSig.split('\n')), [placedSkillSig])
   const skillsPaneProps = useMemo(() => {
     const entries = skillsInventory?.kind === 'inventory' ? skillsInventory.inventory.entries : []
     const state: SkillsInventoryState =
@@ -6832,6 +6978,11 @@ export function Canvas({
           .catch(() => setNewSkillResult('the create did not answer'))
       },
       columns: paneColumns,
+      // M256. The workspace's canvas facts: which skills already have a panel,
+      // the one door that opens one, and a usage snapshot read on open.
+      placedKeys: placedSkillKeys,
+      onPlaceOnCanvas: (scope: ToolScope, name: string) => { paletteActionsRef.current?.openSkillPanel(scope, name, worldCentre()) },
+      readUsage: () => recentSkillUses(panelsRef.current.map((p) => ({ id: p.rect.id, kind: p.kind, label: railRows.find((r) => r.id === p.rect.id)?.label ?? p.rect.id }))),
       teammates: teammates ?? [],
       assignNotice: skillAssignNotice,
       onAssignColumn: (columnId: string, teammateId: string) => {
@@ -6868,7 +7019,7 @@ export function Canvas({
       },
       onNewColumn: () => {
         const id = `col-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-        writeShelf({ columns: [...shelf.columns.map(carryOneColumn), { id, title: `column ${shelf.columns.length + 1}`, keys: [] }] })
+        writeShelf({ columns: [...shelf.columns.map(carryOneColumn), { id, title: `collection ${shelf.columns.length + 1}`, keys: [] }] })
       },
       onDeleteColumn: (id: string) => {
         // Ungrouped refuses in the model AND here: the pane's control is
@@ -6883,7 +7034,7 @@ export function Canvas({
   // Omitting it left the lane refusal frozen at whatever it was when another
   // dep last changed — the kind of staleness that shows up as a door that is
   // enabled when it should not be, only sometimes.
-  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, worktreeRows, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice])
+  }, [chrome.toggleNavigator, shelf, shelfState, newSkillResult, skillsInventory, skillsCwd, worktreeRows, skillKindTab, skillQuery, skillScopes, skillPlacedOnly, writeShelf, teammates, reloadTeammates, skillAssignNotice, placedSkillKeys, railRows, worldCentre])
 
   const teammatesPaneProps = useMemo(() => ({
     onToggle: chrome.toggleNavigator,
@@ -6954,6 +7105,8 @@ export function Canvas({
     selectedSpawned: selectedId !== null && (registry.get(selectedId)?.status.kind === 'running' || getChat(selectedId).snapshot?.pid !== undefined)
   })
 
+  const attentionAnnouncement = useAttentionAnnouncer(railAttention)
+
   return (
     <div
       ref={shellRef}
@@ -6964,7 +7117,16 @@ export function Canvas({
       className={`shell${chrome.navVisible ? '' : ' shell--rail-collapsed'}${
         chrome.ctxVisible ? '' : ' shell--inspector-collapsed'}${
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
-        chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}`}
+        chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
+        inspectorPinned ? ' shell--inspector-pinned' : ''}`}
+      // (this redesign) The resize handle sets this same custom property live, imperatively,
+      // during a drag; this inline value is only what REACT last committed —
+      // the source of truth between drags, not during one. Set ONLY outside
+      // Compact (or when pinned): an inline style beats every stylesheet
+      // rule including `.shell[data-bp="compact"]`'s own zeroing, so setting
+      // it unconditionally would silently defeat the compact collapse for
+      // every user, not only a pinned one.
+      style={(chrome.bp !== 'compact' || inspectorPinned) ? ({ '--shell-ctx-w': `${inspectorWidth}px` } as CSSProperties) : undefined}
       data-bp={chrome.bp}
       onMouseDownCapture={(event) => {
         onMouseDownCapture(event)
@@ -6986,6 +7148,18 @@ export function Canvas({
           statement, and it undercuts the whole premise. Same attribute, same
           value, one source. */}
       <div className="shell__aura" aria-hidden="true" data-activity={canvasActivity} />
+      {/* M256 (spec §19). The polite live region for "a panel just started
+          wanting you" — see useAttentionAnnouncer's own comment for why this
+          is not the dock badge's aria-live (a count, not a sentence). */}
+      <div className="sr-only" aria-live="polite">{attentionAnnouncement}</div>
+      {/* M256 (spec §18). A genuine scrim under a Compact drawer: the panels
+          under it are still there in world space (the column is 0 width, not
+          display:none — see the frame comment above), so the scrim is purely
+          visual and takes no pointer handler of its own. The dismissal is the
+          existing outside-mousedown-capture listener above, which already
+          fires on any target that is not the drawer or the dock; the scrim
+          just needs to not be in that exclusion list, and it isn't. */}
+      {(chrome.navDrawer || chrome.ctxDrawer) && <div className="shell__scrim" aria-hidden="true" />}
       {/* DOM order is screen order for a screen reader: dock, then the top
           bar, then the navigator. */}
       <Dock
@@ -6997,17 +7171,22 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
+        onSettings={openSettingsScope}
       />
       <TopBar
         presets={presetRows}
         onOpenSheet={paletteActions.beginSpawnSheet}
         workspaceName={workspaceRows.find((w) => w.active)?.name}
+        taskName={selectedId === null ? undefined : (() => { const task = taskMenuRef.current(selectedId); return task.kind === 'one' ? task.title : undefined })()}
         onSearch={palette.openPalette}
-        onSettings={openSettingsScope}
+        theme={(() => { const value = settingRows.find((row) => row.id === 'appearance.theme')?.value; return value === 'light' || value === 'dark' ? value : 'system' })()}
+        onSetTheme={(value) => { void window.canvas.settings.set('appearance.theme', value) }}
         merged={merged}
         onToggleMerged={toggleMerged}
         contextOpen={chrome.ctxVisible}
         onToggleContext={chrome.toggleContext}
+        inspectorPinned={inspectorPinned}
+        onToggleInspectorPinned={onToggleInspectorPinned}
       />
       <Navigator
         hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
@@ -7076,7 +7255,7 @@ export function Canvas({
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
         data-cluster-arrival={clusterArrival ? '' : undefined}
-        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
@@ -7270,11 +7449,16 @@ export function Canvas({
               return (
                 <FileNode
                   key={panel.rect.id}
-                  panel={panel}
+                  // M256. The widened DISPLAY rect while in document focus —
+                  // and a drag on it leaves focus instead of moving it, so the
+                  // widened size can never be committed to the layout.
+                  panel={docFocusId === panel.rect.id ? { ...panel, rect: docFocusRect(panel.rect) } : panel}
+                  docFocused={docFocusId === panel.rect.id}
+                  onDocFocus={onDocFocus}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
                   onFocus={onFocusPanel}
-                  onBeginDrag={onBeginDrag}
+                  onBeginDrag={docFocusId === panel.rect.id ? () => onDocFocus(panel.rect.id, false) : onBeginDrag}
                   onClose={onClosePanel}
                   // The editor textarea is a third surface that takes DOM
                   // focus off xterm, so it inherits usePalette's rule 4 —
@@ -7564,6 +7748,19 @@ export function Canvas({
               it is already outside this array for the identical reason it is
               outside assignTiers' input. */}
           <SubagentLayer panels={terminalPanels} />
+          {/* Inside .world for SubagentLayer's reason: it marks a place on
+              the canvas and must pan and zoom with the panel it lights. An
+              overlay rather than a class on the panel, because each kind
+              renders its own .panel and tiering may remount it at the very
+              moment the flight ends — a class would be lost with it. Keyed
+              on the settle so a second arrival restarts the light. */}
+          {landingLit && (() => {
+            const lit = displayPanels.find((p) => p.rect.id === landingLit.id)
+            return lit
+              ? <div key={landingLit.seq} className="landing-halo" data-landing-for={lit.rect.id} aria-hidden
+                  style={{ left: lit.rect.x, top: lit.rect.y, width: lit.rect.w, height: lit.rect.h, zIndex: lit.z + 1 }} />
+              : null
+          })()}
         </div>
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
@@ -7574,7 +7771,7 @@ export function Canvas({
             corner, hidden while merged (the merged view's geometry is not this
             canvas's) and by `canvas.minimap`. */}
         {minimapEnabled && !merged && (
-          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} />
+          <Minimap rects={rects} rows={railRows} viewport={viewport} goTo={goToViewport} marks={annotationMarks} selected={selectedIds} />
         )}
         {/* M66. Lane HEADERS in screen space — chrome, like the pips: a lane
             name inside .world scaled to 4px text at the zoom the merged view
@@ -7720,11 +7917,18 @@ export function Canvas({
           viewport={viewport}
           onZoomBy={zoomBy}
           onFit={fitAll}
+          fitTask={{ disabledReason: fitTaskContext ? undefined : FIT_TASK_NO_CONTEXT, run: () => { const r = boardVerbsRef.current.fitTask?.(); if (r !== undefined && r.kind === 'refused') paletteActionsRef.current?.say(r.reason) } }}
           agentLinks={{ on: agentLinksOn, onToggle: toggleAgentLinks }}
         />
         {packPreview !== null && (
           <PackPreview preview={packPreview} onAdd={addPack} onClose={() => setPackPreview(null)} />
         )}
+        {/* A flat, non-interactive scrim: no blur (a composited layer over a
+            canvas that repaints on every pan frame is the cost .palette's own
+            comment already declines to pay) and no pointer-events, so the
+            outside-click exit stays exactly where it was — .shell's capture
+            handler, never here. */}
+        {palette.open && <div className="palette__scrim" aria-hidden="true" />}
         {palette.open && (
           <Palette
             controller={palette}
@@ -7799,6 +8003,7 @@ export function Canvas({
         repository={repository}
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}
+        onResizeHandleDown={onInspectorResizeDown}
       />
     </div>
   )

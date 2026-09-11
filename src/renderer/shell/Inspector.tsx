@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type JSX } from 'react'
+import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machine-cost-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
@@ -10,10 +10,11 @@ import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
-import { Close, Pencil, RotateCw } from '@renderer/icons'
+import { Close, More, Pencil, RotateCw } from '@renderer/icons'
 import type { PersistedTemplate } from '@shared/templates'
 import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from '@renderer/workflow/template-draft-store'
 import { fieldsOf } from '@shared/template-edit'
+import { LIBRARY } from '@shared/template-library'
 import { HANDOFF_TRIGGERS } from '@shared/handoff'
 import type { ContextTab } from './useShellChrome'
 import type { RunRow } from '@shared/run-ledger'
@@ -138,6 +139,8 @@ export interface InspectorProps {
    */
   toolbox: ToolboxFieldModel | null
   onOpenToolbox: (id: string) => void
+  /** (this redesign) Mousedown on the pane's own left-edge handle; Canvas owns the drag itself (it holds `shellRef`), this only starts it. */
+  onResizeHandleDown: (event: ReactMouseEvent) => void
 }
 
 /**
@@ -161,12 +164,16 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
   return (
     <aside className="shell__inspector" aria-label="Context">
+      {/* (this redesign) Resize, from the pane's own left edge — the side that borders
+          the canvas. Mousedown only; Canvas does the drag math on `shellRef`
+          and commits the setting on mouseup. */}
+      <div className="inspector__resize-handle" onMouseDown={onResizeHandleDown} title="Drag to resize the inspector" />
       {model === null && selectedEdge != null
         ? <EdgePanel edge={selectedEdge} onSetLinkAutomation={onSetLinkAutomation} onRemoveLink={onRemoveLink} onRelabelLink={onRelabelLink} />
         : model === null
@@ -225,16 +232,12 @@ function RunsSection({ panelId, active }: { panelId: string; active: boolean }):
     void window.canvas.ledger.list(panelId, 20).then((r) => { if (live) setRows(r) }).catch(() => {})
     return () => { live = false }
   }, [panelId, active])
-  // M68. The empty arm is a line, not an absent heading.
-  if (rows.length === 0) {
-    return (
-      <section className="inspector__section" data-work-section="runs">
-        {/* M79: `Commands`, since a RUN is now the graph's execution (its own section above). */}
-        <h3 className="inspector__section-heading">Commands</h3>
-        <p className="inspector__arm" data-work-arm="runs">no commands yet</p>
-      </section>
-    )
-  }
+  // (this redesign) Absent, not a heading over "no commands yet": this doc comment
+  // always claimed the empty arm was hidden entirely, but the arm below
+  // rendered a heading regardless — the exact "empty section with nothing
+  // actionable" #17's brief names. A panel that has never run a command has
+  // nothing here to act on; the section simply is not part of the page.
+  if (rows.length === 0) return null
   return (
     <section className="inspector__section" data-runs-section>
       <h3 className="inspector__section-heading">Commands</h3>
@@ -470,8 +473,27 @@ function InspectorPanel({
   // holds here. Disarms when the selection changes: an armed Close carried
   // to the NEXT panel would close a panel the user never armed.
   const [closeArmed, setCloseArmed] = useState(false)
-  const [actionsOpen, setActionsOpen] = useState(false)
-  useEffect(() => { setCloseArmed(false); setActionsOpen(false) }, [model.id])
+  // (this redesign) THE ⋯ MENU, replacing the persistent two-column action matrix: one
+  // primary button stays in the bar (Restart, or Allow/Deny on a pending
+  // chat) and everything else — layout, naming, linking, and Close last and
+  // visually separated — moves into a dropdown, the exact `pf__menu` pattern
+  // PanelFrame.tsx already uses for its own ⋯. Outside click closes it via a
+  // document-level, CAPTURE-phase listener (PanelFrame's own comment explains
+  // why: a bubble-phase listener would still miss a mousedown a panel body
+  // swallows, and capture sees every one regardless).
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuHostRef = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDown = (event: MouseEvent): void => {
+      const host = menuHostRef.current
+      if (host !== null && event.target instanceof Node && host.contains(event.target)) return
+      setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown, true)
+    return () => document.removeEventListener('mousedown', onDown, true)
+  }, [menuOpen])
+  useEffect(() => { setCloseArmed(false); setMenuOpen(false) }, [model.id])
   const pid = model.fields.find((f) => f.key === 'pid')?.value
   const TABS: Array<{ id: ContextTab; label: string }> = [
     { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }
@@ -792,12 +814,11 @@ function InspectorPanel({
           </div>
         ) : <p className="inspector__arm" data-work-run>not part of a run</p>}
       </section>
-      {model.kind === 'terminal' ? <RunsSection panelId={model.id} active={tab === 'work'} /> : (
-        <section className="inspector__section" data-work-section="runs">
-          <h3 className="inspector__section-heading">Commands</h3>
-          <p className="inspector__arm" data-work-arm="runs">{KIND_NOUN[model.kind]} runs nothing</p>
-        </section>
-      )}
+      {/* (this redesign) A kind that never runs a command (every non-terminal kind) gets
+          no Commands section at all — it was permanently non-actionable
+          rather than merely empty-for-now, which is the stronger case for
+          #17's "avoid empty sections" rule. */}
+      {model.kind === 'terminal' && <RunsSection panelId={model.id} active={tab === 'work'} />}
       {model.usage.hidden && (
         /*
           M68. `hidden` is a panel whose preset declared no agent — a login
@@ -876,6 +897,14 @@ function InspectorPanel({
           {toolbox.more > 0 && (
             <p className="inspector__review-more" data-toolbox-more>+{toolbox.more} more</p>
           )}
+          {/* M256. The skills this selection has not used, counted — a
+              person reading the list must not take "not here" for "not
+              installed". The Skills view lists every one. */}
+          {toolbox.elsewhere !== undefined && (
+            <p className="inspector__review-note" data-toolbox-elsewhere={String(toolbox.elsewhere)}>
+              {toolbox.elsewhere} user or plugin skill{toolbox.elsewhere === 1 ? '' : 's'} not used here - see Skills
+            </p>
+          )}
           {/* Present whenever the section renders, because a toolbox needs
               only a DIRECTORY — and, since M194, DISABLED WITH A REASON when
               that directory cannot be used, rather than a control that opens a
@@ -904,10 +933,17 @@ function InspectorPanel({
       )}
       </section>
       </div>
-      {/* PINNED action bar, three ranks: primary (Restart), secondary
-          (Rename, Save as preset, Link), destructive (Close, gated). Every
-          verb stays VISIBLE and disabled-with-a-reason where it does not
-          apply — a control that vanishes reads as a feature never built. */}
+      {/*
+        (this redesign) ONE primary button plus a ⋯ menu, replacing the persistent
+        two-column matrix: the single most relevant action stays in the bar
+        (Allow/Deny on a pending chat, otherwise Restart), and every other
+        verb — layout, naming, linking — lives in the dropdown, Close last
+        and set off by a divider as its own destructive footer. Every verb
+        still MOUNTS unconditionally and disables by name rather than
+        vanishing (M207's rule, kept); the dropdown is reached by a real Tab
+        too — the trigger opens it on focus, not only on click — so
+        verify:panels `reach.1` still walks every action in DOM order.
+      */}
       <div className="inspector__actions context__actions">
         {/* M76. On a chat, Allow and Deny lead — the only two verbs whose delay
             costs something — enabled while a request is pending and disabled
@@ -963,91 +999,136 @@ function InspectorPanel({
         >
           Restart
         </button>
-        {/* M207. Layout/configuration verbs remain mounted (and therefore
-            discoverable to checks and assistive technology) but no longer
-            compete permanently with the selected kind's next action. */}
-        <button type="button" className="inspector__action inspector__action--secondary" data-inspector-action="more"
-          aria-expanded={actionsOpen} title={actionsOpen ? 'Hide panel actions' : 'Show layout, naming and linking actions'}
-          {...shellControl(() => setActionsOpen((v) => !v))}>{actionsOpen ? 'Fewer actions' : 'More actions…'}</button>
-        <div className="context__more-actions" data-inspector-more-actions hidden={!actionsOpen}>
-        {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
-        <button type="button" className="inspector__action" data-inspector-action={model.marks?.locked ? 'unlock' : 'lock'}
-          title={model.marks?.locked ? 'Unlock — drag and resize work again' : 'Lock — drag and resize refuse; close still works'}
-          {...shellControl(() => (model.marks?.locked ? onUnlock : onLock)(model.id))}>{model.marks?.locked ? 'Unlock' : 'Lock'}</button>
-        <button type="button" className="inspector__action" data-inspector-action={model.marks?.pinned ? 'unpin' : 'pin'}
-          disabled={!model.marks?.pinned && pinRefusal(model.kind, false, pinnedCount ?? 0) !== undefined}
-          title={model.marks?.pinned ? 'Unpin — tiering decides again' : (pinRefusal(model.kind, false, pinnedCount ?? 0) ?? 'Pin — kept live wherever the camera is, inside the live budget')}
-          {...shellControl(() => (model.marks?.pinned ? onUnpin : onPin)(model.id))}>{model.marks?.pinned ? 'Unpin' : 'Pin'}</button>
-        <button type="button" className="inspector__action" data-inspector-action={model.marks?.maximised ? 'restore' : 'maximise'}
-          title={model.marks?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
-          {...shellControl(() => (model.marks?.maximised ? onRestore : onMaximise)(model.id))}>{model.marks?.maximised ? 'Restore' : 'Fill'}</button>
-        {/* M74. The front-end verb — present only on the two kinds that have
-            a conversation, disabled by name when it cannot apply. */}
-        {model.frontEnd !== undefined && (
+        <span className="inspector__menu-host" ref={menuHostRef} onBlur={(event) => {
+          const host = menuHostRef.current
+          if (host !== null && event.relatedTarget instanceof Node && host.contains(event.relatedTarget)) return
+          setMenuOpen(false)
+        }}>
+          {/*
+            reach.1. This carries `data-inspector-action="menu"` — the
+            SAME attribute every sibling verb carries — for a reason that is
+            not cosmetic: `verify:panels reach.1` finds "the bar's first
+            enabled action" by querying `[data-inspector-action]` and calling
+            `.focus()` on it directly (never a real Tab-in) to seed its walk.
+            Restart is disabled until a panel has actually started, and this
+            trigger — never disabled, and first in DOM order among what is
+            left once Restart is out — is exactly what that seed must land
+            on: a real, always-visible, always-focusable control. Land
+            `.focus()` on anything inside the menu itself instead (Lock,
+            Pin, …) and it fails outright, because those stay `display: none`
+            until this button's own `onFocus` below opens them — which is
+            what a `.focus()` aimed past this button skips.
+          */}
           <button
             type="button"
-            className="inspector__action"
-            data-inspector-action="front-end"
-            data-front-end={model.frontEnd.verb}
-            disabled={!model.frontEnd.enabled}
-            title={model.frontEnd.enabled
-              ? (model.frontEnd.verb === 'open-as-chat' ? `Open ${model.heading} as a chat — the same session, rendered as a transcript` : `Open ${model.heading} in a terminal — claude --resume this session`)
-              : (model.frontEnd.reason ?? '')}
-            {...shellControl(() => onFrontEnd(model.id))}
+            className="inspector__action inspector__action--secondary inspector__menu-open"
+            data-inspector-action="menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            title={menuOpen ? 'Hide panel actions' : 'Layout, naming and linking actions'}
+            onFocus={() => setMenuOpen(true)}
+            {...shellControl(() => setMenuOpen((v) => !v))}
           >
-            {model.frontEnd.verb === 'open-as-chat' ? 'Open as chat' : 'Open in terminal'}
+            <More size={14} />
           </button>
-        )}
-        <button
-          type="button"
-          className="inspector__action inspector__action--secondary"
-          data-inspector-action="rename"
-          title={`Rename ${model.heading}`}
-          {...shellControl(() => onRename(model.id, model.title ?? ''))}
-        >
-          Rename…
-        </button>
-        <button
-          type="button"
-          className="inspector__action inspector__action--secondary"
-          data-inspector-action="save-preset"
-          disabled={model.kind !== 'terminal'}
-          title={model.kind === 'terminal'
-            ? `Save ${model.heading} as a preset`
-            : `${KIND_NOUN[model.kind]} is not a spawnable panel`}
-          {...shellControl(() => onSavePreset(model.id))}
-        >
-          Save as preset
-        </button>
-        </div>
-        {/*
-          M13. Arms the one-shot link mode with THIS panel as the source; the
-          next click on the canvas completes or cancels it. Present for both
-          kinds — a review node is an ordinary link endpoint, since `links`
-          lives on PanelBase — so unlike Save-as-preset it carries no
-          kind-based disable.
-        */}
-        <button
-          type="button"
-          className="inspector__action inspector__action--secondary"
-          data-inspector-action="link"
-          title={`Link ${model.heading} to another panel`}
-          {...shellControl(() => onLink(model.id))}
-        >
-          Link to…
-        </button>
-        <button
-          type="button"
-          className={`inspector__action inspector__action--destructive${closeArmed ? ' inspector__action--armed' : ''}`}
-          data-inspector-action="close"
-          {...(closeArmed ? { 'data-close-armed': '' } : {})}
-          title={closeArmed ? `Click again to close ${model.heading}` : `Close ${model.heading} (click twice)`}
-          {...shellControl(() => {
-            if (closeArmed) { setCloseArmed(false); onClose(model.id) } else setCloseArmed(true)
-          })}
-        >
-          {closeArmed ? 'close?' : 'Close'}
-        </button>
+          {/* M207's rule kept: every verb below stays MOUNTED (only `hidden`
+              toggles), so it is discoverable to checks and assistive
+              technology whether or not the menu has ever been opened. */}
+          <div
+            className="inspector__menu"
+            role="menu"
+            data-inspector-menu
+            hidden={!menuOpen}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}
+          >
+            {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
+            <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.locked ? 'unlock' : 'lock'}
+              title={model.marks?.locked ? 'Unlock — drag and resize work again' : 'Lock — drag and resize refuse; close still works'}
+              {...shellControl(() => { (model.marks?.locked ? onUnlock : onLock)(model.id); setMenuOpen(false) })}>{model.marks?.locked ? 'Unlock' : 'Lock'}</button>
+            <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.pinned ? 'unpin' : 'pin'}
+              disabled={!model.marks?.pinned && pinRefusal(model.kind, false, pinnedCount ?? 0) !== undefined}
+              title={model.marks?.pinned ? 'Unpin — tiering decides again' : (pinRefusal(model.kind, false, pinnedCount ?? 0) ?? 'Pin — kept live wherever the camera is, inside the live budget')}
+              {...shellControl(() => { (model.marks?.pinned ? onUnpin : onPin)(model.id); setMenuOpen(false) })}>{model.marks?.pinned ? 'Unpin' : 'Pin'}</button>
+            <button type="button" className="inspector__action" role="menuitem" data-inspector-action={model.marks?.maximised ? 'restore' : 'maximise'}
+              title={model.marks?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
+              {...shellControl(() => { (model.marks?.maximised ? onRestore : onMaximise)(model.id); setMenuOpen(false) })}>{model.marks?.maximised ? 'Restore' : 'Fill'}</button>
+            {/* M74. The front-end verb — present only on the two kinds that have
+                a conversation, disabled by name when it cannot apply. */}
+            {model.frontEnd !== undefined && (
+              <button
+                type="button"
+                className="inspector__action"
+                role="menuitem"
+                data-inspector-action="front-end"
+                data-front-end={model.frontEnd.verb}
+                disabled={!model.frontEnd.enabled}
+                title={model.frontEnd.enabled
+                  ? (model.frontEnd.verb === 'open-as-chat' ? `Open ${model.heading} as a chat — the same session, rendered as a transcript` : `Open ${model.heading} in a terminal — claude --resume this session`)
+                  : (model.frontEnd.reason ?? '')}
+                {...shellControl(() => { onFrontEnd(model.id); setMenuOpen(false) })}
+              >
+                {model.frontEnd.verb === 'open-as-chat' ? 'Open as chat' : 'Open in terminal'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="inspector__action inspector__action--secondary"
+              role="menuitem"
+              data-inspector-action="rename"
+              title={`Rename ${model.heading}`}
+              {...shellControl(() => { onRename(model.id, model.title ?? ''); setMenuOpen(false) })}
+            >
+              Rename…
+            </button>
+            <button
+              type="button"
+              className="inspector__action inspector__action--secondary"
+              role="menuitem"
+              data-inspector-action="save-preset"
+              disabled={model.kind !== 'terminal'}
+              title={model.kind === 'terminal'
+                ? `Save ${model.heading} as a preset`
+                : `${KIND_NOUN[model.kind]} is not a spawnable panel`}
+              {...shellControl(() => { onSavePreset(model.id); setMenuOpen(false) })}
+            >
+              Save as preset
+            </button>
+            {/*
+              M13. Arms the one-shot link mode with THIS panel as the source; the
+              next click on the canvas completes or cancels it. Present for both
+              kinds — a review node is an ordinary link endpoint, since `links`
+              lives on PanelBase — so unlike Save-as-preset it carries no
+              kind-based disable.
+            */}
+            <button
+              type="button"
+              className="inspector__action inspector__action--secondary"
+              role="menuitem"
+              data-inspector-action="link"
+              title={`Link ${model.heading} to another panel`}
+              {...shellControl(() => { onLink(model.id); setMenuOpen(false) })}
+            >
+              Link to…
+            </button>
+            {/* Item 7 of the anatomy: destructive actions, separated — a
+                divider and its own footer role within the same menu. */}
+            <div className="inspector__menu-divider" role="separator" />
+            <button
+              type="button"
+              className={`inspector__action inspector__action--destructive${closeArmed ? ' inspector__action--armed' : ''}`}
+              role="menuitem"
+              data-inspector-action="close"
+              {...(closeArmed ? { 'data-close-armed': '' } : {})}
+              title={closeArmed ? `Click again to close ${model.heading}` : `Close ${model.heading} (click twice)`}
+              {...shellControl(() => {
+                if (closeArmed) { setCloseArmed(false); setMenuOpen(false); onClose(model.id) } else setCloseArmed(true)
+              })}
+            >
+              {closeArmed ? 'close?' : 'Close'}
+            </button>
+          </div>
+        </span>
       </div>
     </div>
   )
@@ -1065,8 +1146,31 @@ function InspectorPanel({
  * re-adds the edge under the new trigger. Nothing selected: nothing here —
  * the panel's own fields below are M133's.
  */
-/** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them). */
-const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target', line: 'verb line', url: 'address', method: 'method' }
+/** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them).
+ *  M259. Sentence-case LABELS a person would say, each with a one-line HINT, grouped by the question they answer — the flat run of lower-case codes read as a config file. */
+const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'Folder', title: 'Name', command: 'Command', args: 'Arguments', presetId: 'Preset', message: 'First message', width: 'Workers at once', list: 'List of items', prompt: 'Instructions', target: 'Write results to', line: 'Canvas verb', url: 'Address', method: 'Method' }
+const NODE_FIELD_HINTS: Record<string, string> = {
+  cwd: 'Where it works — its terminal or chat opens here.',
+  title: 'What the block is called on the graph.',
+  command: 'The program to run; empty is your login shell.',
+  args: 'Words passed to the command, separated by spaces.',
+  presetId: 'A saved launch preset to start from instead of a command.',
+  message: 'Sent to the agent as soon as it starts.',
+  width: 'How many items run in parallel.',
+  list: 'A file with one item per line.',
+  prompt: 'What every worker is told, with its item below it.',
+  target: 'The file the collected results are written to.',
+  line: 'One line, run through the same executor the palette uses.',
+  url: 'Read with a GET when the block runs.',
+  method: 'Only GET runs — a write is refused by name.'
+}
+/** The groups, in reading order; a field no group names falls into the last. */
+const NODE_FIELD_GROUPS: ReadonlyArray<{ title: string; fields: readonly string[] }> = [
+  { title: 'Basics', fields: ['title'] },
+  { title: 'What it does', fields: ['command', 'args', 'presetId', 'message', 'prompt', 'line', 'url', 'method'] },
+  { title: 'Where it works', fields: ['cwd', 'list', 'target'] },
+  { title: 'Capacity', fields: ['width'] }
+]
 const HIDDEN_NODE_FIELDS = new Set(['dx', 'dy', 'w', 'h'])
 
 function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined; onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> }): JSX.Element | null {
@@ -1081,15 +1185,18 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
   // typed value the refusal promised to keep (the M183 critic).
   useEffect(() => { setDrafts({}); setReasons({}) }, [templateId])
   if (template === undefined || selected === null) return null
+  // M259. A block by the name the graph shows, never its bare key.
+  const nameOf = (key: string): string => { const n = template.nodes.find((x) => x.key === key); return n !== undefined && 'title' in n && typeof n.title === 'string' && n.title.trim() !== '' ? n.title : key }
   if (selected.includes('>')) {
     const [from, to] = selected.split('>') as [string, string]
     const edge = template.edges.find((e) => e.from === from && e.to === to)
     if (edge === undefined) return null
     return (
       <section className="inspector__section inspector__section--node" data-inspector-node="edge" data-inspector-node-edge={selected}>
-        <h3 className="inspector__section-heading inspector__section-heading--node">Edge · {from} to {to}</h3>
-        <div className="inspector__field" data-inspector-node-field-row="trigger">
-          <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>trigger</label>
+        <h3 className="inspector__section-heading inspector__section-heading--node">Handoff · {nameOf(from)} to {nameOf(to)}</h3>
+        <div className="inspector__field inspector__node-field" data-inspector-node-field-row="trigger">
+          <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>{`${nameOf(to)} starts`}</label>
+          <span className="inspector__node-hint">{`When ${nameOf(from)} reaches this point, ${nameOf(to)} begins.`}</span>
           <select id={`edge-trigger-${templateId}`} className="inspector__input" data-inspector-node-field="trigger" value={edge.trigger}
             // ONE operation, in place: an unedge-then-re-add is two undo steps and loses the edge if the second refuses (the critic).
             onChange={(e) => { const r = applyDraftOp(templateId, saved, { type: 'retrigger', from, to, trigger: e.target.value as typeof edge.trigger }); if (r.kind === 'refused') setReasons({ trigger: r.reason }) }}>
@@ -1115,26 +1222,41 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
     if (r.kind === 'refused') setReasons((rs) => ({ ...rs, [name]: r.reason }))
     else { setReasons((rs) => { const { [name]: _gone, ...rest } = rs; return rest }); setDrafts((ds) => { const { [name]: _gone, ...rest } = ds; return rest }) }
   }
+  const visible = fields.filter((f) => !HIDDEN_NODE_FIELDS.has(f.name))
+  const grouped = NODE_FIELD_GROUPS.map((g) => ({ title: g.title, fields: visible.filter((f) => g.fields.includes(f.name)) }))
+  const rest = visible.filter((f) => !NODE_FIELD_GROUPS.some((g) => g.fields.includes(f.name)))
+  if (rest.length > 0) grouped.push({ title: 'More', fields: rest })
+  const fieldRow = (f: (typeof fields)[number]): JSX.Element => (
+    <div className="inspector__field inspector__node-field" key={f.name} data-inspector-node-field-row={f.name}>
+      <label className="inspector__label" htmlFor={`node-${templateId}-${f.name}`}>{NODE_FIELD_LABELS[f.name] ?? f.name}</label>
+      <input id={`node-${templateId}-${f.name}`} className={`inspector__input${f.name === 'cwd' || f.name === 'command' || f.name === 'args' || f.name === 'list' || f.name === 'target' ? ' inspector__value--mono' : ''}`}
+        data-inspector-node-field={f.name} type={f.type === 'number' ? 'number' : 'text'}
+        aria-describedby={NODE_FIELD_HINTS[f.name] === undefined ? undefined : `node-${templateId}-${f.name}-hint`}
+        // The path rule: the field must hold the real value (it is editable), so the whole of it rides the title.
+        title={drafts[f.name] ?? current(f.name)}
+        value={drafts[f.name] ?? current(f.name)}
+        onChange={(e) => { setDrafts((ds) => ({ ...ds, [f.name]: e.target.value })); setReasons((rs) => { const { [f.name]: _gone, ...rest } = rs; return rest }) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(f.name, f.type) } e.stopPropagation() }}
+        onBlur={() => commit(f.name, f.type)}
+        // Focus EXPLICITLY: the pane's own mousedown rule keeps focus on the canvas (shellControl), and an input that never takes it swallows the typing.
+        onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.focus() }}
+        onMouseUp={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); e.currentTarget.focus() }} />
+      {NODE_FIELD_HINTS[f.name] !== undefined && <span className="inspector__node-hint" id={`node-${templateId}-${f.name}-hint`}>{NODE_FIELD_HINTS[f.name]}</span>}
+      {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
+    </div>
+  )
+  const kindName = LIBRARY.find((e) => e.kind === node.kind)?.name ?? node.kind
   return (
     <section className="inspector__section inspector__section--node" data-inspector-node="block" data-inspector-node-key={node.key}>
-      <h3 className="inspector__section-heading inspector__section-heading--node">{node.kind} · {'title' in node && typeof node.title === 'string' && node.title.trim() !== '' ? node.title : node.key}</h3>
-      {fields.filter((f) => !HIDDEN_NODE_FIELDS.has(f.name)).map((f) => (
-        <div className="inspector__field" key={f.name} data-inspector-node-field-row={f.name}>
-          <label className="inspector__label" htmlFor={`node-${templateId}-${f.name}`}>{NODE_FIELD_LABELS[f.name] ?? f.name}</label>
-          <input id={`node-${templateId}-${f.name}`} className={`inspector__input${f.name === 'cwd' || f.name === 'command' || f.name === 'args' || f.name === 'list' || f.name === 'target' ? ' inspector__value--mono' : ''}`}
-            data-inspector-node-field={f.name} type={f.type === 'number' ? 'number' : 'text'}
-            // The path rule: the field must hold the real value (it is editable), so the whole of it rides the title.
-            title={drafts[f.name] ?? current(f.name)}
-            value={drafts[f.name] ?? current(f.name)}
-            onChange={(e) => { setDrafts((ds) => ({ ...ds, [f.name]: e.target.value })); setReasons((rs) => { const { [f.name]: _gone, ...rest } = rs; return rest }) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(f.name, f.type) } e.stopPropagation() }}
-            onBlur={() => commit(f.name, f.type)}
-            // Focus EXPLICITLY: the pane's own mousedown rule keeps focus on the canvas (shellControl), and an input that never takes it swallows the typing.
-            onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.focus() }}
-            onMouseUp={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); e.currentTarget.focus() }} />
-          {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
-        </div>
+      <h3 className="inspector__section-heading inspector__section-heading--node">{kindName} · {nameOf(node.key)}</h3>
+      {/* M259. GROUPED by the question each set answers, in the UI face,
+          every field with a label a person would say and a one-line hint. */}
+      {grouped.filter((g) => g.fields.length > 0).map((g) => (
+        <fieldset key={g.title} className="inspector__node-group" data-inspector-node-group={g.title}>
+          <legend className="inspector__node-legend">{g.title}</legend>
+          {g.fields.map(fieldRow)}
+        </fieldset>
       ))}
       {/* M188. Test this node: ONE block, on its own, with its duration and a
           named failure — its neighbours are not started. Present for every

@@ -589,9 +589,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           }
           return out })()`)
         const dockClickT = (name) => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
         const targetsA = await measure(['.rail-row__start', '.rail-row__close', '.panel__close',
           '.shell__settings', '[data-hud-zoom-in]', '[data-hud-zoom-out]',
           '[data-dock]', '.shell__rail-toggle', '.shell__inspector-toggle', '.shell__merge'])
+        await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
         await dockClickT('workspaces'); await settle()
         const targetsB = await measure(['.rail-row__rename', '.shell__region-add'])
         await dockClickT('panels'); await settle()
@@ -843,7 +845,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[5],
           hud.inTopBar === 0 && hud.inHud === true && scaleAfter > scaleBefore &&
             vpH1.x === vpH2.x && vpH1.y === vpH2.y && vpH1.scale === vpH2.scale &&
-            hud.mergePressed === 'false' && hud.mergeText === '',
+            hud.mergePressed === 'false' && hud.mergeText.includes('Merged view'),
           JSON.stringify({ hud, scaleBefore, scaleAfter, vpH1, vpH2 }))
 
         // empty.1. Close the last panel through the rail; the pane must say so.
@@ -1388,7 +1390,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`window.canvas.settings.set('shell.inspectorOpen', false)`)
         await settle()
         const seeded = await waitUntil(() => wc.executeJavaScript(`['gA', 'gB', 'gC', 'gD', 'gT', 'gS', 'gH', 'gK'].every((id) => document.querySelector('.panel[data-panel-id="' + id + '"]') !== null)`), 10000)
-        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
+        // M258. The first point of the panel that is actually ITS topmost pixel — the centre, else a quarter point: on a wide window the navigation cluster (minimap over the zoom pill) owns the bottom-right corner, and a real click there lands on the map.
+        const cardPoint = (id) => wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${id}"]'); if (!p) return null; const r = p.getBoundingClientRect(); for (const [fx, fy] of [[.5, .5], [.25, .5], [.5, .25], [.25, .25], [.75, .5]]) { const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height * fy); const top = document.elementFromPoint(x, y); if (top && p.contains(top)) return { x, y } } return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } })()`)
         const wakeG = async (id) => {
           const pt = await cardPoint(id); if (!pt) return false
           wc.sendInputEvent({ type: 'mouseDown', x: pt.x, y: pt.y, button: 'left', clickCount: 1 }); wc.sendInputEvent({ type: 'mouseUp', x: pt.x, y: pt.y, button: 'left', clickCount: 1 })
@@ -1582,8 +1585,13 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const clickedEdit = await clickDiff('Edit')
         const editDiff = await stateOf('Edit', 'diff')
         const groupAfter = await wc.executeJavaScript(`(() => { const g = ${sel('[data-chat-tools]')}; if (!g) return null; const row = g.querySelector('[data-chat-tool="Edit"]'); return { open: g.getAttribute('data-chat-tools-open'), rowDisplay: row ? getComputedStyle(row).display : null } })()`)
-        ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
-          groupBefore !== null && Number(groupBefore.tools) >= 2 && groupBefore.open === 'false' && new RegExp(`^${groupBefore.tools} tools$`).test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
+        // M260. The header names WHAT ran, not how many rows: Read/other.txt,
+        // Edit/seed.txt and Bash all land in one group, so the label reads
+        // "Read 1 file · Edited 1 file · Ran 1 command" — a meaningful
+        // summary, never the bare "3 tools" this check used to require.
+        ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), its label names what ran, and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
+          groupBefore !== null && Number(groupBefore.tools) >= 2 && groupBefore.open === 'false' &&
+            /Read 1 file/.test(groupBefore.head) && /Edited 1 file/.test(groupBefore.head) && /Ran 1 command/.test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
             groupAfter !== null && groupAfter.open === 'true' && groupAfter.rowDisplay !== 'none',
           JSON.stringify({ groupBefore, groupAfter }))
         const clickedRead = await clickDiff('Read')
@@ -2063,8 +2071,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const home = require('node:os').homedir()
         layoutStore.setPreference('terminal.fontSize', 13)
         layoutStore.save({ panels: fromPanels([
-          { kind: 'terminal', rect: { id: 'tA', x: 60, y: 60, w: 520, h: 320 }, z: 1, spec: { panelId: 'tA', cwd: home, command: '/bin/sh', args: [] } },
-          { kind: 'terminal', rect: { id: 'tB', x: 640, y: 60, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
+          // M257's two-line resting creation row owns the top of the canvas;
+          // keep this pointer-metrics fixture below that chrome.
+          { kind: 'terminal', rect: { id: 'tA', x: 60, y: 160, w: 520, h: 320 }, z: 1, spec: { panelId: 'tA', cwd: home, command: '/bin/sh', args: [] } },
+          { kind: 'terminal', rect: { id: 'tB', x: 640, y: 160, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
         ]), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
         const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -3183,8 +3193,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     }
 
     // -------------------------------------------------------------------
-    // M66 — labels.3 / labels.4. EVERY CONTROL SAYS WHAT IT IS. The merged
-    // view names itself in the top bar while it is on and its lane headers
+    // M66/M257 — labels.3 / labels.4. EVERY CONTROL SAYS WHAT IT IS. The merged
+    // view names itself in View while it is on and its lane headers
     // are chrome-sized screen-space elements naming the workspace (labels.3);
     // an attention pip carries a chip naming its panel and the state word
     // (labels.4) — an amber wedge at the canvas edge with no name was M61's
@@ -3195,7 +3205,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onL = (_e, level, message) => { if (level >= 2) lLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onL)
       const IDS = [
-        'labels.3 the merged view names itself in the top bar and its lane headers are chrome-sized and name the workspace',
+        'labels.3 the merged view names itself in View and its lane headers are chrome-sized and name the workspace',
         'labels.4 an off-screen panel that needs you gets a pip with a chip naming it and its state word'
       ]
       try {
@@ -3210,17 +3220,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reL
         await settle()
-        // Merged view: the button, then the label and the headers.
+        // Merged view: the mounted View-menu button, then its pressed label and the headers.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
         const merged = await wc.executeJavaScript(`(() => {
-          const label = document.querySelector('[data-merge-label]')
+          const label = document.querySelector('.shell__view-menu .shell__merge')
           const headers = [...document.querySelectorAll('[data-lane-header]')].map((h) => ({ name: h.querySelector('.lane-header__name')?.textContent, size: getComputedStyle(h.querySelector('.lane-header__name')).fontSize, inWorld: h.closest('.world') !== null }))
-          return { label: label ? label.textContent : null, headers }
+          return { label: label ? label.textContent.trim() : null, pressed: label?.getAttribute('aria-pressed') ?? null, headers }
         })()`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
-        ok(IDS[0], merged.label === 'merged view · read-only' && merged.headers.length >= 1 && merged.headers.every((h) => typeof h.name === 'string' && h.name.length > 0 && !h.inWorld && parseFloat(h.size) >= 11),
+        ok(IDS[0], merged.label === 'Merged view' && merged.pressed === 'true' && merged.headers.length >= 1 && merged.headers.every((h) => typeof h.name === 'string' && h.name.length > 0 && !h.inWorld && parseFloat(h.size) >= 11),
           JSON.stringify({ merged, log: lLog.slice(-3) }))
 
         // The near panel wakes (a dormant off-screen panel is never spawned,
@@ -3263,7 +3273,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onC = (_e, level, message) => { if (level >= 2) cLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onC)
       const IDS = [
-        'context.2 the Work tab renders Changes, Run, Commands and Cost with a first-arm line each for a plain shell outside a repository',
+        'context.2 the Work tab renders Changes, Run and Cost with a first-arm line each for a plain shell outside a repository, and Commands stays absent — an empty section is not actionable',
         'context.3 the Jira panel with no credential offers Connect Jira…, which opens the palette in its Credentials scope',
         'context.4 the Files pane names the panel its root belongs to, and the Workspaces pane\'s merged row toggles the merged view'
       ]
@@ -3300,10 +3310,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           work = await wc.executeJavaScript(`(() => { const arm = (k) => document.querySelector('[data-work-arm="' + k + '"]')?.textContent ?? null
             const heads = [...document.querySelectorAll('[data-context-panel="work"] .inspector__section-heading')].map((h) => h.textContent)
             return { heads, changes: arm('changes'), runs: arm('runs'), run: document.querySelector('[data-work-run]')?.textContent ?? null, cost: arm('cost'), heading: document.querySelector('[data-inspector-heading]')?.textContent ?? null, tab: document.querySelector('.context__tab--on')?.textContent ?? null, summary: document.querySelector('[data-review-summary]')?.textContent ?? null } })()`)
-          if (work && work.changes !== null && work.runs !== null && work.cost !== null) break
+          // (this redesign) Commands is now HIDDEN rather than a heading over "no
+          // commands yet" — an absent section is not actionable, and #17's
+          // brief names this exact pattern — so `work.runs` never resolves;
+          // the wait no longer gates on it.
+          if (work && work.changes !== null && work.cost !== null) break
           await sleep(100)
         }
-        ok(IDS[0], work !== null && work.changes !== null && work.runs !== null && work.run !== null && work.cost !== null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Commands', 'Cost']) && /not a repository/.test(work.changes) && work.runs === 'no commands yet' && /no agent on this panel/.test(work.cost),
+        ok(IDS[0], work !== null && work.changes !== null && work.run !== null && work.cost !== null && work.runs === null && JSON.stringify(work.heads) === JSON.stringify(['Changes', 'Run', 'Cost']) && /not a repository/.test(work.changes) && /no agent on this panel/.test(work.cost),
           JSON.stringify({ work, log: cLog.slice(-3) }))
 
         // The Jira panel: the verb, then the scope it opens.

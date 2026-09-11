@@ -40,6 +40,7 @@ import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
 import { clearAgentState, getAgentState } from '@renderer/session/agent-state-store'
 import { clearLastLine } from '@renderer/session/last-line-store'
+import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } from '@renderer/session/update-store'
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
@@ -227,7 +228,7 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
 }
 
 /**
@@ -392,6 +393,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'show-task': return self.showTask(step.args.panel as string)
           case 'show-related': return self.showRelated(step.args.panel as string)
           case 'arrange-task': return self.arrangeTask(step.args.panel as string)
+          case 'fit-task': return self.fitTask()
           case 'preview-width': return self.setPreviewWidth(a.device!)
           case 'preview-capture': return self.capturePreview()
           case 'preview-dev': return self.startDevServer(a.script)
@@ -1479,6 +1481,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     registry.dispose(panelId)
                     clearAgentState(panelId)
                     clearLastLine(panelId)
+                    clearLastActive(panelId)
                     clearLiveSession(panelId)
                     clearSubagents(panelId)
                     clearTrail(panelId)
@@ -2176,6 +2179,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M204 (D08). The same delegation, for the same reason.
     showRelated: (panelId) => boardVerbsRef.current?.related?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     arrangeTask: (panelId) => boardVerbsRef.current?.arrange?.(panelId) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    // M258. Fit task reads the lens and the selection, both Canvas's.
+    fitTask: () => boardVerbsRef.current?.fitTask?.() ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     setPreviewWidth: (device) => setPreviewWidthNow(device),
     capturePreview: () => capturePreviewNow(),
     startDevServer: (script) => startDevServerNow(script),

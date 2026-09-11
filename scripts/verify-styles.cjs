@@ -507,7 +507,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined }))
 
   const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
-  const OVERLAY = /\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  // M258. The navigation cluster — the minimap and the zoom HUD — floats over
+  // the canvas as one instrument and wears the overlay elevation (the brief's
+  // "stronger separation"); both are named here rather than let --e-3 loose.
+  const OVERLAY = /\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1054,15 +1057,14 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rounded && ring && interruptRest && interruptLive && sendLive && chips && approval, JSON.stringify({ rounded, ring, interruptRest, interruptLive, sendLive, chips, approval }))
 }
 
-// M171 — rail.1. THE RAIL AS PLACES: a quiet heading rule (`.rail-heading`,
-// the caps tracking, never `.rail-row` — empty.1 counts rows); the kind glyph
+// M171/M257 — rail.1. THE RAIL AS PLACES: a direct title-case heading rule
+// (`.rail-heading`, never `.rail-row` — empty.1 counts rows); the kind glyph
 // in a soft tint; a state DOT slot on every stateful row with the word kept
 // in the tail but clipped (the checks read its text; a person reads the dot
 // and the title); `start` at opacity 0 revealed on the row's hover /
 // focus-within (the rest rule); the selected row a soft filled pill.
 {
-  const heading = all.find((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel))
-  const headingOk = heading ? /letter-spacing:\s*var\(--track-caps\)/.test(heading.body) && /text-transform:\s*uppercase/.test(heading.body) : false
+  const headingOk = all.some((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel) && /text-transform:\s*none/.test(r.body))
   const tint = all.some((r) => /(^|,)\s*\.rail-row__kind\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
   // `some`, not `find`: these subjects have an M46/M66 rule earlier in the file and the M171 rule later.
   const clipped = all.some((r) => /\.rail-list--panels \.rail-row__tail\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body)) && !all.some((r) => /(^|,)\s*\.rail-row__tail\s*(,|$)/.test(r.sel) && /clip/.test(r.body)) // scoped to the Panels list: other lists' tails are facts
@@ -1070,13 +1072,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const startHidden = all.some((r) => /(^|,)\s*\.rail-row__start\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const startReveal = all.some((r) => /\.rail-row:hover \.rail-row__start/.test(r.sel) && /\.rail-row:focus-within \.rail-row__start/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
   const pill = all.some((r) => /(^|,)\s*\.rail-row--selected\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body) && /border-radius:\s*var\(--r-md\)/.test(r.body))
-  ok('rail.1', 'a caps heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
+  ok('rail.1', 'a direct title-case heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
     headingOk && tint && clipped && dot && startHidden && startReveal && pill, JSON.stringify({ headingOk, tint, clipped, dot, startHidden, startReveal, pill }))
 }
 
-// M172 — dock.1. THE DOCK AS NAMED PLACES: each button carries a `.dock__label`
-// at opacity 0 that reveals on the button's :hover / :focus-visible (a tag
-// beside the icon, never a wider dock); the current place is a filled pill
+// M172/M257 — dock.1. THE DOCK AS NAMED PLACES: each button carries a
+// `.dock__label` hidden in the icon dock and revealed on hover/focus-visible;
+// Wide turns those same labels into a persistent grouped rail. The current place is a filled pill
 // (--iris-dim); the `N live / N quiet` capsules are gone from the dock (the
 // metrics rule — the count lives in the rail's `Agents · N` heading), so no
 // `.dock__capsule` rule remains and `Dock.tsx` renders no `data-dock-capsules`;
@@ -1085,13 +1087,34 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const label = all.some((r) => /(^|,)\s*\.dock__label\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const reveal = all.some((r) => /\.dock__button:hover \.dock__label/.test(r.sel) && /\.dock__button:focus-visible \.dock__label/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const wide = all.some((r) => /\.shell\[data-bp="wide"\]/.test(r.sel) && /--shell-dock-w:\s*156px/.test(r.body)) && all.some((r) => /\.shell\[data-bp="wide"\] \.dock__label/.test(r.sel) && /position:\s*static/.test(r.body) && /opacity:\s*1/.test(r.body))
   const on = all.some((r) => /(^|,)\s*\.dock__button--on\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
   const noCapsule = !all.some((r) => /\.dock__capsule/.test(r.sel))
   const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
   const noCapsuleDom = !/data-dock-capsules/.test(dockSrc)
   const search = all.some((r) => /\.shell__top \.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body)) // (0,2,0): the bar's generic button rule must not win
-  ok('dock.1', 'the dock buttons carry a hidden label revealed on hover/focus-visible, the current place is a filled pill, the capsules are gone from the dock and its CSS, and the top bar\'s search is a field-shaped button',
-    label && reveal && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, on, noCapsule, noCapsuleDom, search }))
+  ok('dock.1', 'the dock buttons carry tooltip labels, Wide expands them into a persistent grouped rail, the current place is filled, capsules stay gone, and Search is field-shaped',
+    label && reveal && wide && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, wide, on, noCapsule, noCapsuleDom, search }))
+}
+
+// M257 — the recommendations are a connected shell contract, not independent copy edits.
+{
+  const top = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'TopBar.tsx'), 'utf8')
+  const dock = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
+  const nav = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Navigator.tsx'), 'utf8')
+  const row = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'RailPanelRow.tsx'), 'utf8')
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'settings-schema.ts'), 'utf8')
+  const topOk = /\+ Create/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
+  const dockOk = ['Work', 'Content', 'Connections', 'System', 'Canvas', 'Tasks', 'Notes', 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
+  const state = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
+  const filters = ['All', 'Running', 'Needs you', 'Changed', 'Asleep'].every((word) => state.includes(word)) && /PANEL_FILTERS/.test(nav) && /data-rail-filter/.test(nav)
+  const collapse = /shell\.collapsedRailGroups/.test(nav) && /aria-expanded/.test(nav) && /group\.label}\s*{group\.rows\.length}/.test(nav)
+  const rowOk = /data-needs-you/.test(row) && /rail-row__mark/.test(row)
+  const stylesOk = all.some((r) => /\.rail-row\[data-needs-you="true"\]/.test(r.sel) && /var\(--amber-dim\)/.test(r.body)) && all.some((r) => /\.rail-row__mark/.test(r.sel) && /opacity:\s*0/.test(r.body))
+  const settingOk = /id:\s*'shell\.collapsedRailGroups'/.test(settings) && /type:\s*'list'/.test(settings)
+  ok('shell.recommendations.1', 'top bar, grouped dock and filtered collapsible navigator land as one contract',
+    topOk && dockOk && filters && collapse && rowOk && stylesOk && settingOk,
+    JSON.stringify({ topOk, dockOk, filters, collapse, rowOk, stylesOk, settingOk }))
 }
 
 // M173 — hud.2. THE STATUS BAR AT REST SAYS NOTHING: `.canvas-hud` is a
@@ -1168,13 +1191,44 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
   // edge-waiting: M232's join breath — a MOMENT like the others, three breaths
   // and then rest, never a heartbeat (pulse.1's rule, applied to an edge).
+  // pill-expand: the command pill's panel growing from the rest pill — the
+  // one arrival this surface gets, the same family as palette-enter.
+  // palette-scrim-in: the dim behind the palette, arriving with it.
+  // context-panel-enter: the Inspector redesign's restrained tab crossfade —
+  // the incoming `.context__panel` alone, since the outgoing one is already
+  // `display: none` the same tick (`[hidden]` cannot itself transition).
+  // integration-verified-pop: the Integrations redesign's success
+  // transition — one breath on a service's state pill the instant Verify
+  // succeeds.
+  // wf-flow: M259's traveling highlight — one bright segment walks each
+  // finished edge of a selected run ONCE and ends invisible; a moment, never a loop.
+  // drawer-in-left / drawer-in-right / drawer-scrim-in: a compact drawer
+  // sliding from its own edge on --dur-drawer, over a scrim fading with it.
+  // landing-halo: attention navigation's arrival — one swell around the
+  // destination frame after the camera lands, then gone (landing.1).
   // cluster-arrive: M262's first-start arrival — the card and its agent rise
   // in turn, ONCE, on the canvas flag that clears after it; a rise like
   // panel-enter's, never a scale.
-  const allowed = ['chat-caret', 'cluster-arrive', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  const allowed = ['chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
+}
+
+// drawer-motion.1. A compact drawer slides from ITS edge (nav from the left,
+// context from the right) on --dur-drawer (~200ms), over a scrim that fades
+// in and passes clicks through — without pointer-events: none the scrim would
+// eat the outside click that dismisses the drawer.
+{
+  const tok = /--dur-drawer:\s*200ms/.test(bare)
+  const nav = all.some((r) => /\.shell--nav-drawer \.shell__rail/.test(r.sel) && /animation:[^;]*drawer-in-left[^;]*var\(--dur-drawer\)/.test(r.body))
+  const ctx = all.some((r) => /\.shell--ctx-drawer \.shell__inspector/.test(r.sel) && /animation:[^;]*drawer-in-right[^;]*var\(--dur-drawer\)/.test(r.body))
+  const left = /@keyframes\s+drawer-in-left\s*\{[^}]*translateX\(-100%\)/.test(bare)
+  const right = /@keyframes\s+drawer-in-right\s*\{[^}]*translateX\(100%\)/.test(bare)
+  const scrim = all.find((r) => /\.shell--nav-drawer::after/.test(r.sel) && /\.shell--ctx-drawer::after/.test(r.sel))
+  const scrimOk = !!scrim && /pointer-events:\s*none/.test(scrim.body) && /drawer-scrim-in[^;]*var\(--dur-drawer\)/.test(scrim.body) && /background:\s*var\(--scrim\)/.test(scrim.body)
+  ok('drawer-motion.1', 'the compact drawers slide from their own edges on --dur-drawer (200ms) over a fading, click-through scrim',
+    tok && nav && ctx && left && right && scrimOk, JSON.stringify({ tok, nav, ctx, left, right, scrimOk }))
 }
 
 // M177 — empty.1. EMPTY STATES AS PLACES: one `.empty-state` rule — centred,
@@ -1222,12 +1276,83 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ more: more?.body, hidden: hidden?.body, github: github?.body }))
 }
 
+// (this redesign) The inspector's generic layout and configuration controls moved from
+// a full-width push-down disclosure to a real ⋯ dropdown menu — one primary
+// button in the bar, everything else floating over the canvas rather than
+// shoving the pane's own content down. `.inspector__menu` is positioned
+// (never `static`) and hidden by `display: none` while closed, and the
+// destructive footer (Close) is set off by its own divider rule.
 {
-  const more = all.find((r) => r.sel.trim() === '.context__more-actions')
-  const hidden = all.find((r) => r.sel.trim() === '.context__more-actions[hidden]')
-  ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one full-width disclosure that leaves no empty grid while closed',
-    more !== undefined && /grid-column:\s*1\s*\/\s*-1/.test(more.body) && /display:\s*grid/.test(more.body) && hidden !== undefined && /display:\s*none/.test(hidden.body),
-    JSON.stringify({ more: more?.body, hidden: hidden?.body }))
+  const menu = all.find((r) => r.sel.trim() === '.inspector__menu')
+  const hidden = all.find((r) => r.sel.trim() === '.inspector__menu[hidden]')
+  const divider = all.find((r) => r.sel.trim() === '.inspector__menu-divider')
+  ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one floating ⋯ menu, absent from layout while closed, with its destructive action set off by a divider',
+    menu !== undefined && /position:\s*absolute/.test(menu.body) && hidden !== undefined && /display:\s*none/.test(hidden.body) && divider !== undefined,
+    JSON.stringify({ menu: menu?.body, hidden: hidden?.body, divider: divider?.body }))
+}
+
+// M258 — nav.* / frame-identity.* / dormant.1. Navigation and object
+// identity, as stylesheet facts. Each reads the LAST rule for its selector,
+// because the M258 block is appended and wins on source order.
+{
+  const last = (sel) => all.filter((r) => r.sel.trim() === sel).pop()
+  const has = (sel, re) => all.filter((r) => r.sel.trim() === sel).some((r) => re.test(r.body))
+  ok('nav.separation.1', 'the minimap sits on an opaque raised surface with a strong boundary, the overlay elevation and a ground-colour moat',
+    has('.minimap', /background:\s*var\(--s-3\)/) && has('.minimap', /border-color:\s*var\(--line-strong\)/) && has('.minimap', /box-shadow:\s*var\(--e-3\)/) && has('.minimap', /outline:[^;]*var\(--nav-moat\)/),
+    JSON.stringify(last('.minimap')))
+  ok('nav.legend.1', 'the minimap legend rests at opacity 0 (a --dur-1 transition) and shows at 1 on the map\'s hover, taking no pointer',
+    has('.minimap__legend', /(^|;|\s)opacity:\s*0\s*(;|$)/) && has('.minimap__legend', /transition:[^;]*var\(--dur-1\)/) && has('.minimap__legend', /pointer-events:\s*none/) && has('.minimap:hover .minimap__legend', /opacity:\s*1/),
+    JSON.stringify(last('.minimap__legend')))
+  ok('nav.view.1', 'the camera rectangle is a 2px iris ring and grabbable; a selected block is a neutral ink outline, never iris',
+    has('.minimap__view', /border-width:\s*2px/) && has('.minimap__view', /cursor:\s*grab/) && has('.minimap__view', /pointer-events:\s*auto/) &&
+      has('.minimap__block[data-selected]', /outline:[^;]*var\(--fg\)/) && !has('.minimap__block[data-selected]', /iris/),
+    JSON.stringify({ view: last('.minimap__view'), sel: last('.minimap__block[data-selected]') }))
+  const wide = /@media\s*\(min-width:\s*\d+px\)\s*\{\s*\.minimap\s*\{[^}]*top:\s*auto[^}]*bottom:\s*calc\([^}]*var\(--nav-hud-h\)/.test(bare)
+  ok('nav.cluster.1', 'on a wide window the minimap stacks directly above the zoom HUD (bottom-anchored over --nav-hud-h); narrow it keeps its own corner',
+    wide && has('.minimap', /top:\s*var\(--sp-5\)/), String(wide))
+  ok('nav.readout.1', 'the zoom readout fades to 0 at rest and keeps its box (opacity only, never display)',
+    has('.canvas-hud__readout[data-hud-readout="rest"]', /opacity:\s*0/) && !has('.canvas-hud__readout[data-hud-readout="rest"]', /display:|width:/),
+    JSON.stringify(last('.canvas-hud__readout[data-hud-readout="rest"]')))
+  ok('frame-identity.glyph.1', 'the kind glyph sits in a fixed 16px column',
+    has('.pf__state--kind', /flex:\s*0\s+0\s+16px/) && has('.pf__state--kind', /width:\s*16px/), JSON.stringify(last('.pf__state--kind')))
+  // The slop is the CHROME's pseudo-element, absolutely positioned (no box
+  // resizes, so nothing refits) and switched off on the chromeless kinds,
+  // whose first row belongs to xterm or to the note's text.
+  ok('frame-identity.slop.1', 'the header\'s drag hit-slop is an absolutely positioned pseudo-element below it, and absent on terminal and note frames',
+    has('.pf__chrome::after', /position:\s*absolute/) && has('.pf__chrome::after', /top:\s*100%/) && has('.pf__chrome::after', /z-index:\s*-1/) &&
+      all.some((r) => /\.pf--kind-terminal \.pf__chrome::after/.test(r.sel) && /\.pf--kind-note \.pf__chrome::after/.test(r.sel) && /content:\s*none/.test(r.body)),
+    JSON.stringify(last('.pf__chrome::after')))
+  ok('frame-identity.interior.1', 'each kind has its interior: an editorial measure in ch for file prose, graph paper for a workflow, lanes for a board, a floating address pill for a browser',
+    has('.pf--kind-file .file-node__prose', /max-width:\s*var\(--measure-read\)/) && /--measure-read:\s*\d+ch/.test(bare) &&
+      has('.pf--kind-workflow .workflow-node__body', /background-size:\s*var\(--grid-pitch\)/) &&
+      has('.pf--kind-work .work-node__body', /var\(--lane-line\)/) &&
+      has('.pf--kind-browser .browser-node__bar', /border-radius:\s*var\(--r-full\)/),
+    'interior rules')
+  // Visual only: a dormant frame changes paint and the card's inner layout,
+  // never the .panel box (width/height/inset), so the stored rect is what
+  // the canvas still draws around it.
+  const dormant = all.filter((r) => /\.panel\[data-dormant\]/.test(r.sel))
+  ok('dormant.1', 'a dormant panel is a dashed ghost with a compact summary card, and no dormant rule touches the frame box geometry',
+    dormant.length >= 2 && has('.panel[data-dormant]', /border-style:\s*dashed/) && has('.panel__card-dormant', /border-radius/) &&
+      dormant.every((r) => !/(^|;|\s)(width|height|top|left|right|bottom|inset|transform):/.test(r.body)),
+    JSON.stringify(dormant.map((r) => r.sel)))
+}
+
+// Attention navigation's arrival glow. Three facts that fail silently: the
+// CSS duration and Canvas.tsx's unmount timer must agree (shorter cuts the
+// fade off mid-swell, longer leaves a dead overlay); a STATIC ring must be
+// declared, or reduced-motion users — whose animations the global block
+// forces off — get no signal at all; and it must never take a click meant
+// for the panel under it.
+{
+  const halo = all.find((r) => r.sel.trim() === '.landing-halo')
+  const canvasSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+  const timer = (canvasSrc.match(/const LANDING_LIT_MS = (\d+)/) || [])[1]
+  const cssMs = halo && /animation:\s*landing-halo\s+var\(--dur-land\)/.test(halo.body) ? (bare.match(/--dur-land:\s*(\d+)ms/) || [])[1] : undefined
+  ok('landing.1', 'the landing halo has a static ring, takes no pointer, and fades over exactly LANDING_LIT_MS',
+    !!halo && /box-shadow:\s*0 0 0 3px var\(--amber\)/.test(halo.body) && /pointer-events:\s*none/.test(halo.body) &&
+      timer !== undefined && timer === cssMs,
+    JSON.stringify({ found: !!halo, timer, cssMs }))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

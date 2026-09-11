@@ -2,7 +2,8 @@ import { useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { WorkPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { panelState } from '@renderer/panels/panel-state'
+import { panelState, providerState } from '@renderer/panels/panel-state'
+import { useNow } from '@renderer/components/useNow'
 import { shellControl } from '@renderer/shell/shell-control'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
@@ -90,10 +91,14 @@ export const REASON_NO_TEAMMATES = 'no teammates yet — ⌘K, then Manage teamm
 
 const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
 
+/** M259. Past this, a card's copy of the provider's state is called stale. */
+const REMOTE_COPY_STALE_MS = 60 * 60 * 1000
+
 export function WorkNode(props: WorkNodeProps): JSX.Element {
   const { panel, item } = props
   const [assignOpen, setAssignOpen] = useState(false)
   const readOnly = props.readOnly === true
+  const now = useNow(item?.remoteState !== undefined, 60_000)
   const state = panelState({ kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, undefined)
   // The teammate's NAME when the roster still holds them, else the id: a card
   // must not lose its assignment because a teammate was deleted.
@@ -170,7 +175,19 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                 <span className="work-node__key work-node__key--plain" data-work-key>{item.key ?? item.source}</span>
               )}
               {/* The provider's own word rides beside, MUTED: it is GitHub's or Jira's, display only, and painting it in the tone would lend it a meaning it does not have. */}
-              {item.remoteState !== undefined && <span className="work-node__remote" data-work-remote>{item.remoteState} on {item.source}</span>}
+              {/* M259. In the board's OWN words (providerState), so this card and the GitHub/Jira row never name one fact two ways; the
+                  provider's raw word rides the title. It is a COPY taken when the item was added — said so, and called stale only when
+                  that is certain: `updatedAt` is the latest the copy can be, so past an hour of it the copy is at least that old. */}
+              {item.remoteState !== undefined && (() => {
+                const remote = providerState(item.source, item.remoteState)
+                const stale = now - item.updatedAt > REMOTE_COPY_STALE_MS
+                return (
+                  <span className="work-node__remote" data-work-remote data-sync-stale={stale ? 'true' : 'false'}
+                    title={`${item.source === 'github' ? 'GitHub' : 'Jira'} said “${item.remoteState}” when this item was added — a copy, not live. Add it to the board again to refresh it.`}>
+                    {remote.word} on {item.source}{stale ? ' · copy may be stale' : ' · copy'}
+                  </span>
+                )
+              })()}
             </div>
             {/* The title is the chrome's; the body shows the description's first line, the GitHub row's own pattern. */}
             {item.description !== undefined && item.description !== '' && <p className="work-node__title" data-work-description>{item.description.split('\n')[0]}</p>}

@@ -256,3 +256,31 @@ export function missingSentence(missing: readonly MissingMember[]): string {
   const parts = missing.map((m) => (m.reason === 'conversation' ? 'its conversation is closed' : 'the panel that opened its lane is gone'))
   return parts.length === 0 ? '' : `${parts.join(', and ')} — the rest is shown`
 }
+
+/**
+ * M258. FIT TASK — the camera verb over the ACTIVE task, distinct from Fit
+ * all. The active task is the lens's when one is lit (the lens bar names it,
+ * so it outranks whatever happens to be selected), else the one task the
+ * selected or focused panel belongs to, resolved exactly as Show this task
+ * resolves it. With neither there is no task context, and the refusal is a
+ * NAMED reason the HUD's disabled button carries — never a hidden control.
+ */
+export const FIT_TASK_NO_CONTEXT = 'no task is active — select a panel of a task, or Show related on one'
+export function fitTaskTarget(input: {
+  lensItemId: string | null
+  panelId?: string
+  panels: readonly MemberPanel[]
+  memberships: readonly TaskMembership[]
+  titles: Readonly<Record<string, string>>
+}): ShowTaskTarget {
+  if (input.lensItemId !== null) {
+    const membership = input.memberships.find((m) => m.itemId === input.lensItemId)
+    if (membership === undefined) return { kind: 'refused', reason: 'the task being shown is no longer on the board' }
+    const ids = new Set(membership.members.map((m) => m.panelId))
+    const rects = input.panels.filter((p) => ids.has(p.rect.id)).map((p) => p.rect)
+    if (rects.length === 0) return { kind: 'refused', reason: 'no panel of this task is on the canvas' }
+    return { kind: 'frame', itemId: membership.itemId, rects, missing: membership.missing }
+  }
+  if (input.panelId === undefined) return { kind: 'refused', reason: FIT_TASK_NO_CONTEXT }
+  return showTaskTarget(input.panelId, input.panels, input.memberships, input.titles)
+}

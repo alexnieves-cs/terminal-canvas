@@ -4640,6 +4640,21 @@ must clear the RECORD, the renderer's `templateRowsRef` and the DRAFT at once, t
 lands: Run reads the draft-or-rows copy, and clearing only main's record left the next Run refused
 for a window a check could hit (`verify:panels tool.2`, found by its own diagnostic detail).
 
+**The dock has ONE destination model at two densities (`shell/Dock.tsx`, `styles.css`, M257).**
+Compact and standard render its accessible names as hover/focus tags; wide turns those same
+buttons into a real 156px labelled rail grouped as Work, Content, Connections and System. Do not
+fork the destination list or make the wide rail an overlay: the shell grid column is the source of
+truth, so canvas measurements and transient popover placement stay honest at every breakpoint.
+
+**Navigator filters read ROW ATTRIBUTES; they do not subscribe the parent to every session
+(`shell/Navigator.tsx`, `shell/RailPanelRow.tsx`, `panels/panel-state.ts`, M257).** Running,
+Needs you and Asleep are shared tone predicates, while Changed is an explicitly broader unread or
+review-backed signal. Each row owns its live session subscription and publishes the small state as
+data attributes for CSS filtering. Moving those subscriptions into Navigator makes every streamed
+token re-render the entire rail. Collapsed section names persist in
+`settings.shell.collapsedRailGroups`; unknown names are harmless because the schema keeps a string
+list and the renderer only consults headings it actually owns.
+
 **A folder dropped on the launcher STOPS at the launcher, and the gesture hints are observed, never
 handled (`canvas/Launcher.tsx`, `canvas/hints.ts`'s `attemptOf`, `Canvas.tsx`'s attempt listener,
 M262).** The launcher sits inside `.canvas`, whose drop handler turns a dropped file into a panel;

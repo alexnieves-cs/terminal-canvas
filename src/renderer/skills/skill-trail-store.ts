@@ -111,3 +111,23 @@ export function useTrailFor(id: string, kind: Panel['kind']): Trail {
   // every frame for a walk over at most a few hundred blocks.
   return kind === 'chat' ? trailFromTurns(chat) : stored
 }
+
+/**
+ * M256. EVERY SKILL USE THIS CANVAS CAN SEE, newest first — the Skills
+ * workspace's "recent usage". A SNAPSHOT read when asked, never a
+ * subscription: the workspace is a view a person opens to look, and a list
+ * that reshuffled under the cursor as agents ran would be harder to read than
+ * one refreshed on the next open. Both trail sources, through the same rule
+ * `useTrailFor` uses: a chat derives from its turns, everything else from the
+ * stored answer.
+ */
+export interface SkillUse { name: string; at: number; panelId: string; where: string }
+export function recentSkillUses(panels: ReadonlyArray<{ id: string; kind: Panel['kind']; label: string }>): SkillUse[] {
+  const out: SkillUse[] = []
+  for (const p of panels) {
+    const trail = p.kind === 'chat' ? trailFromTurns(getChat(p.id).turns) : trails.get(p.id)
+    if (trail === undefined || trail.kind !== 'entries') continue
+    for (const e of trail.entries) out.push({ name: e.name, at: e.at, panelId: p.id, where: p.label })
+  }
+  return out.sort((a, b) => b.at - a.at)
+}

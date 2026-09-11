@@ -228,6 +228,8 @@ export const VERBS: readonly VerbDef[] = [
   { id: 'restore', label: 'Restore', args: [panel()], destructive: false, actions: ['restorePanel'], target: 'panel', hint: 'put a maximised panel back' },
   { id: 'tidy', label: 'Tidy', args: [], destructive: false, actions: ['tidyPanels'], target: 'canvas', hint: 'compact without reordering — one undo' },
   { id: 'zoom-fit', label: 'Zoom to fit', args: [], destructive: false, actions: ['zoomToFit'], target: 'canvas', hint: 'the selected panels, or every panel, in view' },
+  // M258. Fit task: the ACTIVE task's panels — the lens's task, else the selected panel's one task. Distinct from zoom-fit (the selection or everything).
+  { id: 'fit-task', label: 'Fit task', args: [], destructive: false, actions: ['fitTask'], target: 'canvas', hint: 'frame the active task — the one Show related lit, else the selected panel\'s task' },
   { id: 'workspace-from-template', label: 'New workspace from template', args: [{ name: 'template', kind: 'key' }], destructive: false, actions: ['workspaceFromTemplate'], target: 'canvas', hint: 'a fresh workspace holding the shape' },
   { id: 'zoom-reset', label: 'Reset zoom', args: [], destructive: false, actions: ['resetZoom'], target: 'canvas', hint: 'the initial camera' },
   { id: 'workspace', label: 'Switch workspace', args: [{ name: 'workspace', kind: 'key' }], destructive: false, actions: ['switchWorkspace'], target: 'canvas', hint: 'switch to a workspace by id' },
@@ -443,6 +445,7 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'preview-width': { canvas: 'the four width chips on the preview pane', palette: 'preview.width', agent: 'tc plan preview-width phone', workflow: 'an action node whose line is: preview-width phone' },
   'preview-capture': { canvas: 'Capture on the preview pane', palette: 'preview.capture', agent: 'tc plan preview-capture', workflow: 'an action node whose line is: preview-capture' },
   'preview-bind': { canvas: 'Bind source / Change source on the preview pane', palette: 'preview.bind', agent: 'tc plan preview-bind', workflow: 'an action node whose line is: preview-bind' },
+  'fit-task': { canvas: 'Fit task in the canvas HUD\'s zoom cluster', palette: 'task.fit', agent: 'tc plan fit-task', workflow: 'an action node whose line is: fit-task' },
   'show-task': { canvas: 'Show on a work card', palette: 'task.show', agent: 'tc plan show-task wk1', workflow: 'an action node whose line is: show-task wk1' },
   'show-related': { canvas: 'Show related in the ⋯ menu of any panel of a task, and Related in the command pill with one panel of a task selected', palette: 'task.related', agent: 'tc plan show-related wk1', workflow: 'an action node whose line is: show-related wk1' },
   'arrange-task': { canvas: 'Arrange this task in the ⋯ menu of any panel of a task, Arrange on the lens bar, and Arrange task in the command pill with one panel of a task selected', palette: 'task.arrange', agent: 'tc plan arrange-task wk1', workflow: 'an action node whose line is: arrange-task wk1' },

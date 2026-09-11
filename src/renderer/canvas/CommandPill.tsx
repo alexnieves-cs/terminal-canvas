@@ -4,7 +4,7 @@ import { isChatPanel, isTerminalPanel, type Panel } from '@renderer/panels/panel
 import { getChat, useChatsVersion } from '@renderer/chat/chat-store'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
 import { shellControl } from '../shell/shell-control'
-import { Bell, Close, Grid, KindChat, Layers, Lanes, Link, Maximize } from '@renderer/icons'
+import { Bell, ChevronDown, Close, Grid, KindChat, Layers, Lanes, Link, Maximize, More, Send } from '@renderer/icons'
 import { pillRestState, runningAgents, type OrchestratorCandidate } from './command-pill'
 
 /**
@@ -25,6 +25,12 @@ import { pillRestState, runningAgents, type OrchestratorCandidate } from './comm
  *  - the menu accelerators (Cmd+C/V/Z/Shift+Z) are served here, only while
  *    the input holds activeElement, and Canvas stands down through
  *    pillFocused() in shouldIgnoreKeys — the Palette.tsx precedent.
+ *
+ * The expanded surface is three zones, top to bottom: Ask (the input, and
+ * WHO it sends to — never a silent destination), Attention/Running (what is
+ * waiting or in flight, as rows rather than a toggle button), and Actions
+ * (at most `MAX_VISIBLE_ACTIONS`, the rest behind More — a pill that grows a
+ * seventh button every milestone stops reading as "compact").
  */
 
 export type PillActions = Pick<PaletteActions, 'zoomToFit' | 'goToPanel' | 'tidyPanels' | 'showRelated' | 'arrangeTask' | 'beginCreateGroup' | 'closePanel' | 'say'>
@@ -56,11 +62,15 @@ export function orchestratorCandidates(panels: readonly Panel[]): OrchestratorCa
 const NO_ORCHESTRATOR = 'no orchestrator yet — first send creates a supervisor chat'
 const HISTORY_CAP = 50
 const NOTE_MS = 8000
+/** Never more than five contextual actions on screen at once; the rest live behind More. */
+const MAX_VISIBLE_ACTIONS = 5
+/** Rows shown in the Attention/Running zone before it switches to "+N more". */
+const MAX_VISIBLE_RUNNING = 4
 
 export function CommandPill(props: CommandPillProps): JSX.Element {
   const { actions, panels, attentionCount, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
   const [expanded, setExpanded] = useState(false)
-  const [runningOpen, setRunningOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
   // The send's outcome, shown IN the pill (role=status) rather than through
   // the palette, which would take the keyboard; cleared on the next open or
@@ -95,7 +105,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
 
   const collapse = (restore: boolean): void => {
     setExpanded(false)
-    setRunningOpen(false)
+    setMoreOpen(false)
     const back = returnFocusRef.current
     returnFocusRef.current = null
     if (document.activeElement === inputRef.current) inputRef.current?.blur()
@@ -203,70 +213,145 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     </button>
   )
 
+  // Every action, in the one priority order — Fit first (it never depends on
+  // a selection), the selection-scoped ones after. Sliced below rather than
+  // rendered inline: the cap has to see the WHOLE list to know what overflows.
+  const allActions: Array<{ key: string; label: string; icon: JSX.Element; run: () => void; reason?: string }> = [
+    { key: 'fit', label: 'Fit', icon: <Maximize />, run: () => actions.zoomToFit() },
+    ...(selectedIds.length > 0
+      ? [
+          { key: 'tidy', label: 'Tidy', icon: <Grid />, run: () => actions.tidyPanels([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy' },
+          { key: 'arrange', label: 'Arrange task', icon: <Lanes />, run: () => { if (single !== undefined) refusedSaid(actions.arrangeTask(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
+          { key: 'related', label: 'Related', icon: <Link />, run: () => { if (single !== undefined) refusedSaid(actions.showRelated(single)) }, reason: single !== undefined ? undefined : 'select one panel of a task' },
+          { key: 'group', label: 'Group', icon: <Layers />, run: () => actions.beginCreateGroup([...selectedIds]), reason: selectedIds.length >= 2 ? undefined : REASON_GROUP_NEEDS_TWO },
+          { key: 'close', label: 'Close', icon: <Close />, run: () => { if (single !== undefined) actions.closePanel(single) }, reason: single !== undefined ? undefined : 'select one panel to close — the pill never closes several at once' }
+        ]
+      : [])
+  ]
+  const visibleActions = allActions.slice(0, MAX_VISIBLE_ACTIONS)
+  const overflowActions = allActions.slice(MAX_VISIBLE_ACTIONS)
+
+  // The one panel a single selection puts "in focus" for the ask box's
+  // placeholder — never the orchestrator's own name, which the destination
+  // line below already carries.
+  const activeTaskTitle = single !== undefined ? titleOf(single) : undefined
+  const destinationLabel = orchestratorId === null ? 'Supervisor' : titleOf(orchestratorId)
+  const placeholder = orchestratorId === null
+    ? NO_ORCHESTRATOR
+    : activeTaskTitle !== undefined
+      ? `Ask about ${activeTaskTitle}…`
+      : `Ask ${destinationLabel}…`
+
   return (
     <div className="command-pill" data-command-pill="" data-pill-expanded={expanded ? '' : undefined}
       onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
       {expanded && (
         <div className="command-pill__panel" role="group" aria-label="Act on this canvas">
-          {runningOpen && running.length > 0 && (
-            <ul className="command-pill__running" aria-label="Running agents">
-              {running.map((id) => (
-                <li key={id}>
-                  <button type="button" className="command-pill__row" data-pill-running-row={id} aria-label={`Go to ${titleOf(id)}`}
-                    {...shellControl(() => { setRunningOpen(false); actions.goToPanel(id) })}>{titleOf(id)}</button>
-                </li>
-              ))}
-            </ul>
+          {/* Zone 1 — Ask the workspace. The destination is stated, never
+              implied: a person about to hand text to an agent gets to see
+              which one before it leaves the box. */}
+          <div className="command-pill__zone command-pill__zone--ask">
+            <div className="command-pill__ask-row">
+              <input ref={inputRef} className="command-pill__input" data-command-pill-input="" type="text" value={draft}
+                // NEVER disabled on the readiness report: an existing orchestrator
+                // needs no engine lookup, and with none the supervisor path refuses
+                // BY NAME (the pill says it). A disabled input also cannot take
+                // Cmd+Shift+Space's focus — the first pill.paste.1 run found both.
+                title={orchestratorId === null ? engineReason ?? NO_ORCHESTRATOR : undefined}
+                placeholder={placeholder}
+                aria-label="Message the orchestrator"
+                // WHERE THE KEYBOARD GOES BACK TO is decided by focus events, not
+                // by the moment the pill opened (the critic's finding 1 and 5):
+                // entering the input from outside the pill records that element
+                // (a terminal's textarea, on a click-open too), and leaving it for
+                // somewhere outside forgets it — so a person who clicked terminal
+                // B between opening and Escape is handed back to B, never to A.
+                onFocus={(e) => {
+                  const from = e.relatedTarget
+                  if (from instanceof HTMLElement && from.closest('[data-command-pill]') === null) returnFocusRef.current = from
+                }}
+                onBlur={(e) => {
+                  const to = e.relatedTarget
+                  if (to instanceof HTMLElement && to.closest('[data-command-pill]') === null) returnFocusRef.current = null
+                }}
+                onChange={(e) => setDraftTracked(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); send() }
+                  else if (e.key === 'Escape') { e.preventDefault(); collapse(true) }
+                }} />
+              <button type="button" className="command-pill__send" data-pill-send="" aria-label={`Send to ${destinationLabel}`}
+                title={`Send to ${destinationLabel}`} disabled={draft.trim() === ''} {...shellControl(send)}>
+                <Send />
+              </button>
+            </div>
+            <span className="command-pill__destination">Send to <strong>{destinationLabel}</strong></span>
+          </div>
+
+          {/* Zone 2 — attention/running. Rows, not a toggle: what is waiting or
+              in flight is worth seeing without an extra click, and a zero of
+              either simply removes the zone rather than saying so. */}
+          {(attentionCount > 0 || running.length > 0) && (
+            <div className="command-pill__zone command-pill__zone--status">
+              {/* attentionCount > 0 always puts pillRestState into its 'attention'
+                  arm first (see command-pill.ts's priority order), so rest.text
+                  is always the right sentence here. */}
+              {attentionCount > 0 && (
+                <button type="button" className="command-pill__status-row command-pill__status-row--attention" data-pill-action="jump"
+                  aria-label={rest.text} {...shellControl(onJump)}>
+                  <Bell /><span>{rest.text}</span>
+                </button>
+              )}
+              {running.length > 0 && (
+                <ul className="command-pill__running" aria-label="Running agents">
+                  {running.slice(0, MAX_VISIBLE_RUNNING).map((id) => (
+                    <li key={id}>
+                      <button type="button" className="command-pill__row" data-pill-running-row={id} aria-label={`Go to ${titleOf(id)}`}
+                        {...shellControl(() => actions.goToPanel(id))}><KindChat />{titleOf(id)}</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {running.length > MAX_VISIBLE_RUNNING && (
+                <span className="command-pill__more-note">+{running.length - MAX_VISIBLE_RUNNING} more running</span>
+              )}
+            </div>
           )}
-          <input ref={inputRef} className="command-pill__input" data-command-pill-input="" type="text" value={draft}
-            // NEVER disabled on the readiness report: an existing orchestrator
-            // needs no engine lookup, and with none the supervisor path refuses
-            // BY NAME (the pill says it). A disabled input also cannot take
-            // Cmd+Shift+Space's focus — the first pill.paste.1 run found both.
-            title={orchestratorId === null ? engineReason ?? NO_ORCHESTRATOR : undefined}
-            placeholder={orchestratorId === null ? NO_ORCHESTRATOR : `Ask ${titleOf(orchestratorId)}…`}
-            aria-label="Message the orchestrator"
-            // WHERE THE KEYBOARD GOES BACK TO is decided by focus events, not
-            // by the moment the pill opened (the critic's finding 1 and 5):
-            // entering the input from outside the pill records that element
-            // (a terminal's textarea, on a click-open too), and leaving it for
-            // somewhere outside forgets it — so a person who clicked terminal
-            // B between opening and Escape is handed back to B, never to A.
-            onFocus={(e) => {
-              const from = e.relatedTarget
-              if (from instanceof HTMLElement && from.closest('[data-command-pill]') === null) returnFocusRef.current = from
-            }}
-            onBlur={(e) => {
-              const to = e.relatedTarget
-              if (to instanceof HTMLElement && to.closest('[data-command-pill]') === null) returnFocusRef.current = null
-            }}
-            onChange={(e) => setDraftTracked(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); send() }
-              else if (e.key === 'Escape') { e.preventDefault(); collapse(true) }
-            }} />
-          <div className="command-pill__actions">
-            {button('fit', 'Fit', <Maximize />, () => actions.zoomToFit())}
-            {button('jump', 'Jump', <Bell />, onJump, attentionCount > 0 ? undefined : 'nothing is waiting for you')}
-            {button('running', 'Running', <KindChat />, () => setRunningOpen((v) => !v), running.length > 0 ? undefined : 'no agent is running')}
-            {selectedIds.length > 0 && (
-              <>
-                {button('tidy', 'Tidy', <Grid />, () => actions.tidyPanels([...selectedIds]), selectedIds.length >= 2 ? undefined : 'select at least two panels to tidy')}
-                {button('arrange', 'Arrange task', <Lanes />, () => { if (single !== undefined) refusedSaid(actions.arrangeTask(single)) }, single !== undefined ? undefined : 'select one panel of a task')}
-                {button('related', 'Related', <Link />, () => { if (single !== undefined) refusedSaid(actions.showRelated(single)) }, single !== undefined ? undefined : 'select one panel of a task')}
-                {button('group', 'Group', <Layers />, () => actions.beginCreateGroup([...selectedIds]), selectedIds.length >= 2 ? undefined : REASON_GROUP_NEEDS_TWO)}
-                {button('close', 'Close', <Close />, () => { if (single !== undefined) actions.closePanel(single) }, single !== undefined ? undefined : 'select one panel to close — the pill never closes several at once')}
-              </>
+
+          {/* Zone 3 — contextual actions, capped at MAX_VISIBLE_ACTIONS with
+              the remainder behind More. */}
+          <div className="command-pill__zone command-pill__zone--actions">
+            <div className="command-pill__actions">
+              {visibleActions.map((a) => button(a.key, a.label, a.icon, a.run, a.reason))}
+              {overflowActions.length > 0 && (
+                <button type="button" className="command-pill__action command-pill__more-toggle" data-pill-action="more"
+                  aria-expanded={moreOpen} aria-label="More actions" title="More actions"
+                  {...shellControl(() => setMoreOpen((v) => !v))}>
+                  <More /><span>More</span><ChevronDown />
+                </button>
+              )}
+            </div>
+            {moreOpen && overflowActions.length > 0 && (
+              <div className="command-pill__more-panel" role="group" aria-label="More actions">
+                {overflowActions.map((a) => button(a.key, a.label, a.icon, a.run, a.reason))}
+              </div>
             )}
           </div>
         </div>
       )}
-      {note !== null && !expanded && <span className="command-pill__note" role="status" data-pill-note="">{note}</span>}
-      <button type="button" className="command-pill__rest" data-pill-rest="" data-pill-state={rest.kind}
-        aria-expanded={expanded} aria-label={rest.text === '' ? 'Canvas actions' : `Canvas actions — ${rest.text}`}
+      <button type="button" className="command-pill__rest" data-pill-rest="" data-pill-state={note !== null && !expanded ? 'result' : rest.kind}
+        aria-expanded={expanded} aria-label={note !== null && !expanded ? note : rest.text === '' ? 'Canvas actions' : `Canvas actions — ${rest.text}`}
         {...shellControl(() => { if (expanded) collapse(true); else { focusOnOpenRef.current = false; setNote(null); setExpanded(true) } })}>
-        {rest.kind === 'attention' ? <Bell /> : <Layers />}
-        {rest.text !== '' && <span className="command-pill__text">{rest.text}</span>}
+        {/* A completed send briefly REPLACES the pill's own content with its
+            outcome, in place, rather than opening a second, detached surface
+            to say the same thing. */}
+        {note !== null && !expanded
+          ? <span className="command-pill__text" role="status" data-pill-note="">{note}</span>
+          : (
+            <>
+              {rest.kind === 'attention' ? <Bell /> : <Layers />}
+              {rest.text !== '' && <span className="command-pill__text">{rest.text}</span>}
+            </>
+          )}
       </button>
     </div>
   )

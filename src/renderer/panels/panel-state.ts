@@ -45,6 +45,21 @@ export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'wo
 export const TONE_WORKING: Tone = 'working'
 export const TONE_NEEDS_YOU: Tone = 'needs-you'
 
+/** M257. Navigator filters name the same vocabulary without respelling it in a view. */
+export const PANEL_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'running', label: 'Running' },
+  { id: 'needs-you', label: 'Needs you' },
+  { id: 'changed', label: 'Changed' },
+  { id: 'asleep', label: 'Asleep' }
+] as const
+export type PanelFilter = typeof PANEL_FILTERS[number]['id']
+export function toneIsRunning(tone: Tone): boolean {
+  return tone === 'working' || tone === 'idle' || tone === 'starting' || tone === 'needs-you'
+}
+export function toneNeedsYou(tone: Tone): boolean { return tone === 'needs-you' }
+export function toneIsAsleep(tone: Tone): boolean { return tone === 'asleep' }
+
 export interface StateInput {
   kind: StateKind
   status: PanelStatus | undefined
@@ -222,6 +237,44 @@ function workState(work: { state: WorkItemState } | undefined): PanelStateWord {
   return word === undefined || tone === undefined ? { word: 'work', tone: 'kind' } : { word, tone }
 }
 
+/**
+ * M259. A PROVIDER's state in the board's own four words, so a GitHub row, a
+ * Jira ticket, a board card and a canvas card never name one fact two ways.
+ * Here because `verify:rail state.2` keeps the state words in this file; the
+ * four are read by INDEX off `WORK_ITEM_STATES`, as `workState` reads them.
+ *
+ * GitHub's words are main's (`github-client.ts`: `review requested`,
+ * `pull request`, else the API's own `open`/`closed`). Jira's are free text a
+ * workflow admin chose, so they are matched by the four families every Jira
+ * scheme draws from; a status the map does not recognise keeps ITS OWN words
+ * at the kind tone and claims no board state — a guessed column is worse
+ * than an honest unknown. Absent is the third answer, said in words.
+ */
+const JIRA_FAMILIES: ReadonlyArray<readonly [RegExp, number]> = [
+  [/\b(done|closed|resolved|complete[d]?|released|shipped|won'?t (do|fix)|cancel(l)?ed)\b/i, 3],
+  [/\b(review|qa|test(ing)?|verif(y|ication)|approval)\b/i, 2],
+  [/\b(in progress|doing|in development|started|implementing|active)\b/i, 1],
+  [/\b(to ?do|open|backlog|new|selected( for development)?|ready|triage)\b/i, 0]
+]
+export function providerState(source: string, raw: string | null | undefined): PanelStateWord & { state?: WorkItemState } {
+  if (raw === null || raw === undefined || raw.trim() === '') return { word: 'no status', tone: 'kind' }
+  const at = (i: number): PanelStateWord & { state?: WorkItemState } => {
+    const state = WORK_ITEM_STATES[i]
+    return state === undefined ? { word: raw, tone: 'kind' } : { ...workState({ state }), state }
+  }
+  const own = WORK_ITEM_STATES.indexOf(raw as WorkItemState)
+  if (own >= 0) return at(own)
+  if (source === 'github') {
+    const w = raw.trim().toLowerCase()
+    if (w === 'review requested' || w === 'pull request') return at(2)
+    if (w === 'open') return at(0)
+    if (w === 'closed' || w === 'merged') return at(3)
+    return { word: raw, tone: 'kind' }
+  }
+  for (const [re, i] of JIRA_FAMILIES) if (re.test(raw)) return at(i)
+  return { word: raw, tone: 'kind' }
+}
+
 function chatState(chat: ChatStateInput | undefined): PanelStateWord {
   if (chat === undefined) return { word: 'not started', tone: 'none' }
   if (chat.pending > 0) return { word: 'needs you', tone: 'needs-you' }
@@ -252,4 +305,27 @@ export function autoTone(state: 'running' | 'done' | 'stuck' | 'stopped'): Tone 
     case 'stuck': return 'needs-you'
     case 'stopped': return 'exited'
   }
+}
+
+/**
+ * M258. THE MINIMAP'S LEGEND, in this file's vocabulary (state.2: no state
+ * word is a literal outside panel-state.ts). The four block styles a person
+ * meets on the map, each with the word the rail and the frame already say.
+ */
+export const MINIMAP_LEGEND: readonly { tone: Tone; word: string }[] = [
+  { tone: 'working', word: 'working' }, { tone: 'needs-you', word: 'needs you' }, { tone: 'idle', word: 'idle' }, { tone: 'asleep', word: 'asleep' }
+]
+
+/**
+ * M258. A DORMANT PANEL'S "LAST ACTIVE" SIGNAL — `paused 3m`, `idle 2d`.
+ * Only from a KNOWN time: an absent, zero or future `at` is no answer and
+ * says nothing (the three-state rule — a guessed "just now" would be a
+ * confident wrong fact). `asleep` pauses; every other tone idles.
+ */
+export function lastActiveWord(input: { at?: number; now: number; tone: string }): string | undefined {
+  const at = input.at
+  if (at === undefined || !Number.isFinite(at) || at <= 0 || at > input.now) return undefined
+  const s = (input.now - at) / 1000
+  const age = s < 60 ? '<1m' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : `${Math.floor(s / 86400)}d`
+  return `${input.tone === 'asleep' ? 'paused' : 'idle'} ${age}`
 }

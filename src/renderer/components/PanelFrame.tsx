@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
 import type { DragState } from '@renderer/canvas/panel-interaction'
@@ -7,10 +7,11 @@ import type { Panel } from '@renderer/panels/panels'
 import type { PanelStateWord } from '@renderer/panels/panel-state'
 import type { AgentState } from '@shared/types'
 import { PanelPorts } from './PanelPorts'
-import { Close, KIND_GLYPH, Lock, Pin } from '@renderer/icons'
+import { Close, KIND_GLYPH, Lock, Maximize, Pin, Restore } from '@renderer/icons'
 import { shellControl } from '@renderer/shell/shell-control'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
+import { useLastLine } from '@renderer/session/last-line-store'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -131,6 +132,14 @@ export function PanelFrame({
   // arrivals and nobody else's — the same per-id discipline agent-state-store
   // uses, and the reason edge activity does not ride registry.version().
   const arriving = useEdgeArriving(id)
+  // M260. THE UNREAD MARK, centrally: `last-line-store` already carries a
+  // per-panel unread boolean (M105), written only for a chat whose turn ended
+  // off-screen, but nothing painted it anywhere but the rail row. Reading it
+  // here — once, for every kind — puts a rest-layer fact on the frame a chat
+  // already wears (so it is visible at a zoomed-out card face too) without a
+  // second unread-tracking mechanism: a kind nothing ever calls setLastLine
+  // for reads the frozen EMPTY sentinel and paints nothing.
+  const unread = useLastLine(id).unread
   const [menuOpen, setMenuOpen] = useState(false)
   // M121. The outside click. Installed only while the menu is open, on the
   // DOCUMENT in the capture phase — the canvas host's own mousedown starts a
@@ -140,6 +149,28 @@ export function PanelFrame({
   // menu's own verbs are mousedown-then-click, and closing on their mousedown
   // would unmount the button before its click could run.
   const menuHostRef = useRef<HTMLSpanElement | null>(null)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  // M258. THE ⋯ MENU IS KEYBOARD-REACHABLE: opening it moves focus to its
+  // first row, ArrowUp/ArrowDown/Home/End walk the rows, and Escape closes it
+  // and hands focus back to the ⋯ button — so Tab, Enter, arrows, Escape is
+  // a complete route with no pointer.
+  useEffect(() => {
+    if (!menuOpen) return
+    const first = menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    first?.focus({ preventScroll: true })
+  }, [menuOpen])
+  const onMenuKey = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const rows = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
+    const at = rows.indexOf(document.activeElement as HTMLButtonElement)
+    const go = (i: number): void => { event.preventDefault(); event.stopPropagation(); rows[(i + rows.length) % rows.length]?.focus({ preventScroll: true }) }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setMenuOpen(false); menuButtonRef.current?.focus({ preventScroll: true }); return }
+    if (rows.length === 0) return
+    if (event.key === 'ArrowDown') go(at + 1)
+    else if (event.key === 'ArrowUp') go(at < 0 ? rows.length - 1 : at - 1)
+    else if (event.key === 'Home') go(0)
+    else if (event.key === 'End') go(rows.length - 1)
+  }
   useEffect(() => {
     if (!menuOpen) return
     const onDown = (event: MouseEvent): void => {
@@ -220,6 +251,10 @@ export function PanelFrame({
              the rail row shows, says what the panel is instead. */
           <span className="pf__state pf__state--kind" data-tone="kind" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind]; return <G /> })()}</span>
         )}
+        {/* M260. A rest-layer fact, not a hover-revealed verb: present in the
+            DOM only while true, never opacity-gated like the chrome's other
+            marks, so it is legible at a glance and at a zoomed-out card face. */}
+        {unread && <span className="pf__unread" data-panel-unread title="changed while you were elsewhere" aria-label="unread" />}
         {/* M106. The title is what gives (see styles.css's header rule); the FULL
             title lives here and at the top of the ⋯ menu, never truncated to
             `Revie…` with nowhere to read the rest. */}
@@ -227,10 +262,10 @@ export function PanelFrame({
         {/* M106. The one menu the frame grows: the full title, the kind, and the
             door to every verb the palette holds for this panel. */}
         <span className="pf__menu-host" ref={menuHostRef}>
-          <button type="button" className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
+          <button type="button" ref={menuButtonRef} className="pf__verb pf__verb--word pf__menu-open" data-panel-more aria-haspopup="menu" aria-expanded={menuOpen} title="More — the full title and every verb for this panel"
             {...shellControl(() => setMenuOpen((v) => !v))}>⋯</button>
           {menuOpen && (
-            <div className="pf__menu" role="menu" data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}>
+            <div className="pf__menu" role="menu" ref={menuRef} data-panel-menu onMouseDown={(e) => e.stopPropagation()} onKeyDown={onMenuKey}>
               <div className="pf__menu-title" data-panel-menu-title>{title}</div>
               <div className="pf__note">{kind}</div>
               {/* M204 (D08). The contextual door onto the task verbs, on EVERY
@@ -246,14 +281,22 @@ export function PanelFrame({
                 return (
                   <div className="pf__menu-task" data-panel-menu-task="one">
                     <div className="pf__note">task · {t.title}</div>
-                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
-                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
-                    <button type="button" className="pf__verb pf__verb--word" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
+                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="show" title="Frame this task — nothing moves" {...shellControl(() => { setMenuOpen(false); task.show(id) })}>Show this task</button>
+                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="related" title={t.related ? 'Turn the lens off' : 'Ring this task\'s panels and dim the rest — nothing moves'} {...shellControl(() => { setMenuOpen(false); task.related(id) })}>{t.related ? 'Stop showing related' : 'Show related'}</button>
+                    <button type="button" className="pf__verb pf__verb--word" role="menuitem" data-panel-menu-task-verb="arrange" disabled={marks.readOnly} title={marks.readOnly ? 'the merged view is read-only' : 'Compact this task\'s panels in reading order, clear of everything else — one undo'} {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); task.arrange(id) })}>Arrange this task</button>
                   </div>
                 )
               })()}
-              {more !== undefined && <button type="button" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
-              <button type="button" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
+              {/* M258. The frame's common actions, in the one menu: Fill view /
+                  Restore size beside the palette's door. The header's icon
+                  control stays as the contextual shortcut. */}
+              {close !== null && (
+                <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-maximise={mark?.maximised ? 'restore' : 'maximise'} disabled={marks.readOnly}
+                  title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore this panel to where it was' : 'Fill the view with this panel'}
+                  {...shellControl(() => { if (marks.readOnly) return; setMenuOpen(false); (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? 'Restore size' : 'Fill view'}</button>
+              )}
+              {more !== undefined && <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-palette title="Every verb for this panel, in the palette" {...shellControl(() => { setMenuOpen(false); more(id) })}>Verbs in ⌘K…</button>}
+              <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-panel-menu-close title="Close this menu" {...shellControl(() => setMenuOpen(false))}>close menu</button>
             </div>
           )}
         </span>
@@ -275,9 +318,9 @@ export function PanelFrame({
         {close !== null && (
           <button type="button" className="pf__verb pf__verb--word pf__maximise" data-panel-maximise={mark?.maximised ? 'restore' : 'maximise'}
             disabled={marks.readOnly}
-            title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore this panel to where it was' : 'Fill the window with this panel'}
-            aria-label={mark?.maximised ? 'Restore panel' : 'Maximise panel'}
-            {...shellControl(() => { if (!marks.readOnly) (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? 'restore' : 'fill'}</button>
+            title={marks.readOnly ? 'the merged view is read-only' : mark?.maximised ? 'Restore size — back to where it was' : 'Fill view — this panel fills the window'}
+            aria-label={mark?.maximised ? 'Restore size' : 'Fill view'}
+            {...shellControl(() => { if (!marks.readOnly) (mark?.maximised ? marks.restore : marks.maximise)(id) })}>{mark?.maximised ? <Restore /> : <Maximize />}</button>
         )}
         {close !== null && (
           <button

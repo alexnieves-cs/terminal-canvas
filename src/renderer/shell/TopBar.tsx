@@ -1,7 +1,7 @@
-import type { JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import { shellControl } from './shell-control'
-import { Gear, Lanes, PanelRight, Search  } from '@renderer/icons'
+import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -10,13 +10,19 @@ export interface TopBarProps {
   /** M66. The active workspace's name, for the merged toggle's "back to …". */
   workspaceName?: string
   onSearch: () => void
-  onSettings: () => void
+  /** M257. The selected object's one task, when its ownership is unambiguous. */
+  taskName?: string
+  theme: 'system' | 'light' | 'dark'
+  onSetTheme: (theme: 'system' | 'light' | 'dark') => void
   /** Whether M14's merged view is currently showing. */
   merged: boolean
   onToggleMerged: () => void
   /** M46. The context pane is on screen (a column, or a Compact drawer). */
   contextOpen: boolean
   onToggleContext: () => void
+  /** (this redesign) Keeps the inspector open through the Compact breakpoint's own auto-collapse (`shell.inspectorPinned`). */
+  inspectorPinned: boolean
+  onToggleInspectorPinned: () => void
 }
 
 
@@ -38,7 +44,8 @@ export interface TopBarProps {
  * the next keystroke would go nowhere.
  */
 export function TopBar({
-  presets, onOpenSheet, onSearch, onSettings, merged, onToggleMerged, contextOpen, onToggleContext, workspaceName
+  presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
+  workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -47,6 +54,20 @@ export function TopBar({
   // being on PATH.
   const fallback = presets.find((p) => p.available)
   const preferred = presets.find((p) => p.isDefault && p.available) ?? fallback
+  const [viewOpen, setViewOpen] = useState(false)
+  const viewRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!viewOpen) return
+    const close = (event: MouseEvent): void => {
+      if (!viewRef.current?.contains(event.target as Node)) setViewOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [viewOpen])
+  const chooseTheme = (value: 'system' | 'light' | 'dark'): void => {
+    onSetTheme(value)
+    setViewOpen(false)
+  }
 
   return (
     <header className="shell__top" aria-label="Toolbar">
@@ -58,7 +79,7 @@ export function TopBar({
         pays for itself, so it occupies space that was previously dead).
         aria-hidden: it is decoration, and the window already has a title.
       */}
-      <span className="shell__mark" aria-hidden="true">terminal<span>.</span></span>
+      <span className="shell__mark" aria-hidden="true"><ProductMark /><span>canvas</span></span>
 
       <button
         type="button"
@@ -66,52 +87,46 @@ export function TopBar({
         // M65. The button is the considered door (the sheet); ⌘N — the menu's
         // accelerator — stays the instant default. Never disabled: the sheet
         // can always take a typed command.
-        title={preferred ? `New panel… (⌘⇧N) — ⌘N starts ${preferred.name} at once` : 'New panel… (⌘⇧N)'}
+        title={preferred ? `Create… (⌘⇧N) — ⌘N starts ${preferred.name} at once` : 'Create… (⌘⇧N)'}
         {...shellControl(onOpenSheet)}
       >
-        New panel… <kbd>⌘⇧N</kbd>
+        <span>+ Create</span> <kbd>⌘⇧N</kbd>
       </button>
 
-      {/* M46: the zoom cluster moved to the canvas HUD — a VIEW control
-          belongs with the view readout, in the corner that already holds
-          one. */}
+      <div className="shell__workspace" title={taskName === undefined ? workspaceName : `${workspaceName} / ${taskName}`}>
+        <span>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span>
+        {taskName !== undefined && <><span className="shell__breadcrumb-separator">/</span><span className="shell__task">{taskName}</span></>}
+      </div>
 
-      {/* The merged view's discoverable door. `aria-pressed` and the --on
-          modifier both carry the same fact, because the two audiences are
-          different: a screen reader needs the state named, and the button has
-          to LOOK held down or the only way to tell which mode you are in is
-          to recognise the canvas. It is a toggle rather than an enter/leave
-          pair for the reason PaletteActions.toggleMerged is one. */}
-      <button
-        type="button"
-        className={`shell__merge${merged ? ' shell__merge--on' : ' icon-button'}`}
-        aria-pressed={merged}
-        aria-label={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
-        title={merged ? `back to ${workspaceName ?? 'this workspace'}` : 'Merged view: every workspace at once, read-only'}
-        {...shellControl(onToggleMerged)}
-      >
-        <Lanes />
-        {/* M66. While the mode is on, the BUTTON says so — the label is
-            inside it, so the pressed control and the words are one thing and
-            the door out is the thing that names the mode. The glyph alone
-            read as a duplicate of the dock's Workspaces (M61's critic), and a
-            label beside a bare glyph read as loose text (M66's critic). */}
-        {merged && <span className="shell__merge-label" data-merge-label>merged view · read-only</span>}
-      </button>
-
-      <div className="shell__spacer" />
-
-      <button type="button" className="shell__search" title="Search commands (⌘K)"
-        {...shellControl(onSearch)}><Search /> Search <kbd>⌘K</kbd></button>
-      <button type="button" className="shell__settings icon-button" title="Settings"
-        aria-label="Settings" {...shellControl(onSettings)}><Gear /></button>
-      {/* M46. The context pane's toggle lives here, not in the pane: when
-          the pane is hidden there is no pane to hold it, and the old 22px
-          strip was a column of nothing. aria-pressed names the state. */}
-      <button type="button" className={`shell__inspector-toggle icon-button${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
-        title={contextOpen ? 'Hide the context pane (⇧⌘\\)' : 'Show the context pane (⇧⌘\\)'}
-        aria-label={contextOpen ? 'Hide the context pane' : 'Show the context pane'}
-        aria-pressed={contextOpen} {...shellControl(onToggleContext)}><PanelRight /></button>
+      <button type="button" className="shell__search" title="Search panels, files, tasks, commands… (⌘K)"
+        {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
+      <div className="shell__view" ref={viewRef}>
+        <button type="button" className="shell__view-trigger" aria-haspopup="menu" aria-expanded={viewOpen}
+          {...shellControl(() => setViewOpen((open) => !open))}>View <ChevronDown /></button>
+        <div className="shell__view-menu" role="menu" aria-label="View" hidden={!viewOpen}>
+          <div className="shell__view-heading">Appearance</div>
+          {(['system', 'light', 'dark'] as const).map((value) => (
+            <button key={value} type="button" role="menuitemradio" aria-checked={theme === value}
+              {...shellControl(() => chooseTheme(value))}><span className="shell__view-check">{theme === value && <Check />}</span>{value === 'system' ? 'System theme' : `${value[0]!.toUpperCase()}${value.slice(1)} theme`}</button>
+          ))}
+          <div className="shell__view-heading">Layout</div>
+          <button type="button" role="menuitemcheckbox" aria-checked={contextOpen}
+            className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
+            {...shellControl(onToggleContext)}><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>⇧⌘\\</kbd></button>
+          {/* (this redesign) Pin the inspector open THROUGH the Compact
+              breakpoint's own auto-collapse — a separate axis from
+              contextOpen above (open/closed at all), the way
+              `shell--inspector-pinned` is a separate class from
+              `shell--inspector-collapsed` in the stylesheet. */}
+          <button type="button" role="menuitemcheckbox" aria-checked={inspectorPinned}
+            className={`shell__inspector-pin${inspectorPinned ? ' shell__inspector-pin--on' : ''}`}
+            title={inspectorPinned ? 'Stop keeping the inspector open on a narrow window' : 'Keep the inspector open even when the window narrows'}
+            {...shellControl(onToggleInspectorPinned)}><span className="shell__view-check">{inspectorPinned && <Check />}</span>{Pin} Pin inspector open</button>
+          <button type="button" role="menuitemcheckbox" aria-checked={merged} aria-pressed={merged}
+            className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
+            {...shellControl(onToggleMerged)}><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</button>
+        </div>
+      </div>
     </header>
   )
 }
