@@ -2322,7 +2322,7 @@ await (async () => {
   }
 }
 
-// M251 — pack.*. A PACK IS A DISCIPLINE'S LIBRARY OBJECTS, READ BEFORE ADDED.
+// M253 — pack.*. A PACK IS A DISCIPLINE'S LIBRARY OBJECTS, READ BEFORE ADDED.
 //      The manifest is what a person reads before agreeing, so its parser
 //      holds the repo's three arms per key: ABSENT optional keys warn nothing
 //      and stay absent (never `key: undefined`); PRESENT-but-malformed values

@@ -96,7 +96,7 @@ export interface PaletteActionsDeps {
   /** M189. The portable file's two verbs — the renderer builds it and decides what to make of one. */
   exportCanvasFile: (path?: string, withPixels?: boolean) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvasFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
-  /** M251. A pack's two doors, and the two "I've read this" statements. */
+  /** M253. A pack's two doors, and the two "I've read this" statements. */
   exportPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   markPresetReadNow: (id: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>

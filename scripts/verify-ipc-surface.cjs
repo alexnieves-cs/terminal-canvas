@@ -250,7 +250,7 @@ app.whenReady().then(() => {
   // M188 node:fetch (131) — a fetch node's one GET, capped and gated in main.
   // M189 portable:export (132) / portable:import (133) — one portable canvas
   // file written and read by main; what to make of a parse is the renderer's.
-  // M251 pack:read / pack:add / pack:export and preset:mark-reviewed (135-138)
+  // M253 pack:read / pack:add / pack:export and preset:mark-reviewed (135-138)
   // — a pack is read and held by main, added by token, and a pack preset is
   // spawned only after "I've read this".
   const EXPECTED_CHANNELS = 138

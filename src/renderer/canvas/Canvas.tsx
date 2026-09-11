@@ -3134,7 +3134,7 @@ export function Canvas({
   const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
-    // M251. An unread workflow carries its action LINES to its read row — the
+    // M253. An unread workflow carries its action LINES to its read row — the
     // verb lines somebody else wrote are exactly what a person is agreeing to.
     const lines = t.reviewed === false ? t.nodes.map((n) => (n as { line?: unknown }).line).filter((l): l is string => typeof l === 'string' && l !== '').join(' · ') : ''
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }), ...(t.reviewed === false ? { reviewed: false as const, lines } : {}) }
@@ -5415,7 +5415,7 @@ export function Canvas({
   }, [commitHistory, reloadTemplates, switchWorkspace])
 
   /**
-   * M251. PACKS. Import READS: main parses, holds the parse under a token and
+   * M253. PACKS. Import READS: main parses, holds the parse under a token and
    * answers requirements, and this only SHOWS it — nothing is added until the
    * preview's Add sends that token back. Main does the adding (a pack's
    * objects are library records only main can mint ids for), so the renderer

@@ -245,7 +245,7 @@ export function resolveAvailability(
 
 /** Says WHY it is disabled. A greyed-out row with no reason is a bug report. */
 export function menuLabel(entry: PresetAvailability): string {
-  // M251. Before availability: an unread preset will not spawn even when its
+  // M253. Before availability: an unread preset will not spawn even when its
   // command is on the PATH, and the reason a person can act on is "read it".
   if (entry.preset.reviewed === false) return `${entry.preset.name} — from a pack, not read yet`
   return entry.available ? entry.preset.name : `${entry.preset.name} — not found on PATH`
@@ -277,14 +277,14 @@ export function presetRows(entries: PresetAvailability[], defaultId: string): Pr
     // M37. Absent stays absent, so the palette's toggle row can say "off"
     // for a preset that never asked and "on" for one that did.
     ...(preset.worktree !== undefined ? { worktree: preset.worktree } : {}),
-    // M251. Carried so the palette can say WHY a row will not spawn and offer
+    // M253. Carried so the palette can say WHY a row will not spawn and offer
     // "I've read this" beside it, rather than a row that silently does nothing.
     ...(preset.reviewed === false ? { reviewed: false as const } : {})
   }))
 }
 
 /**
- * M251. THE one refusal sentence for a preset that arrived in a pack and has
+ * M253. THE one refusal sentence for a preset that arrived in a pack and has
  * not been read. Every spawn path that resolves a user preset asks this —
  * the menu, the palette, the spawn sheet and `tc spawn` — so none can reach
  * a stranger's command by a door the others guard.

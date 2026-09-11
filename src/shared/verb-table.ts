@@ -117,7 +117,7 @@ export const VERBS: readonly VerbDef[] = [
   // palette and is refused outright at the agent door (M190's critic, 3).
   { id: 'export-canvas', label: 'Canvas: export', args: [{ name: 'path', kind: 'text', optional: true }, { name: 'pictures', kind: 'value', optional: true }], destructive: true, actions: ['exportCanvas'], target: 'canvas', hint: 'write this canvas as one portable file; add with-pictures to include the pixels' },
   { id: 'import-canvas', label: 'Canvas: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importCanvas'], target: 'canvas', hint: 'read a portable file into a NEW workspace; nothing in it is started' },
-  // M251. Packs. Import READS and shows the manifest — nothing is added until
+  // M253. Packs. Import READS and shows the manifest — nothing is added until
   // a person chooses Add on the preview, so the verb itself adds nothing.
   // Export is DESTRUCTIVE for export-canvas's reason: a named path skips the
   // save dialog. The pack is named after the active workspace.
@@ -228,7 +228,7 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // fire is a beacon on a schedule; the setting that automates it is not
   // planWritable for the same reason.
   checkForUpdates: 'a network call the user makes by hand — never a plan',
-  // M251. "I've read this" is a PERSON's statement about a stranger's command
+  // M253. "I've read this" is a PERSON's statement about a stranger's command
   // or verb lines. A plan that could make it would undo the very gate it
   // clears, so neither has a verb.
   markPresetRead: 'a person\'s statement that they read a pack preset\'s command — never a plan',
@@ -378,10 +378,10 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   feedback: { canvas: 'Help ▸ Prepare feedback… in the menu bar', palette: 'feedback.open', agent: 'tc plan feedback', workflow: 'an action node whose line is: feedback' },
   'export-canvas': { canvas: { reason: 'export needs a canvas with something on it, so the launcher (an empty canvas) is the wrong home for it and the frame has no room at rest', due: 'M191' }, palette: 'portable.export', agent: 'tc plan export-canvas', workflow: 'an action node whose line is: export-canvas' },
   'import-canvas': { canvas: 'the launcher\'s Import a canvas… line', palette: 'portable.import', agent: 'tc plan import-canvas', workflow: 'an action node whose line is: import-canvas' },
-  // M251. A pack is the LIBRARY, not what is on this canvas, so neither verb
+  // M253. A pack is the LIBRARY, not what is on this canvas, so neither verb
   // has a canvas object to live on yet; each canvas door is owed by name.
-  'export-pack': { canvas: { reason: 'a pack is the library — workflows, prompts, presets — not what is on this canvas, so no canvas object is its home', due: 'M252' }, palette: 'pack.export', agent: 'tc plan export-pack', workflow: 'an action node whose line is: export-pack' },
-  'import-pack': { canvas: { reason: 'the launcher\'s import line reads a canvas file; a pack line beside it is owed with the launcher\'s next pass', due: 'M252' }, palette: 'pack.import', agent: 'tc plan import-pack', workflow: 'an action node whose line is: import-pack' },
+  'export-pack': { canvas: { reason: 'a pack is the library — workflows, prompts, presets — not what is on this canvas, so no canvas object is its home', due: 'M254' }, palette: 'pack.export', agent: 'tc plan export-pack', workflow: 'an action node whose line is: export-pack' },
+  'import-pack': { canvas: { reason: 'the launcher\'s import line reads a canvas file; a pack line beside it is owed with the launcher\'s next pass', due: 'M254' }, palette: 'pack.import', agent: 'tc plan import-pack', workflow: 'an action node whose line is: import-pack' },
   'node-test': { canvas: 'Test this node on the workflow panel\'s selected block', palette: 'node.test', agent: 'tc plan node-test t1 n1', workflow: { reason: 'a node that tests a node is a loop with no stop', due: WORKFLOW_EXECUTOR_DUE } },
   'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: 'an action node whose line is: note-add sticky' },
   'note-set': { canvas: "the note's own editor, committed on blur or Escape", palette: 'note.tint', agent: 'tc plan note-set nt1 hello', workflow: 'an action node whose line is: note-set nt1 hello' },

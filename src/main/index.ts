@@ -527,7 +527,7 @@ function onSpawnPreset(id: string): string | null {
     console.warn(`[presets] a pick named ${id}, which no longer exists`)
     return 'that preset no longer exists'
   }
-  // M251. A pack's preset is a stranger's command until a person reads it.
+  // M253. A pack's preset is a stranger's command until a person reads it.
   const unread = unreviewedPresetReason(found)
   if (unread !== null) return unread
   mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
@@ -2257,7 +2257,7 @@ app.whenReady().then(async () => {
         return { kind: 'read' as const, path, parse: parsePortable(text) }
       }
     },
-    // M251. Packs — the ONE factory production and the panels harness both
+    // M253. Packs — the ONE factory production and the panels harness both
     // build (main/pack-handlers.ts), so the suite drives this code and not a
     // copy. Only the choosers are this file's: the system's own dialogs.
     createPackHandlers({

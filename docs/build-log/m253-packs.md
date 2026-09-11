@@ -1,12 +1,18 @@
-# M251 — packs, Phase A
+# M253 — packs, Phase A
 
-Spec: `docs/superpowers/specs/2026-09-10-m251-packs.md`.
-Plan: `docs/superpowers/plans/2026-09-10-m251-packs.md`.
+Spec: `docs/superpowers/specs/2026-09-10-m253-packs.md`.
+Plan: `docs/superpowers/plans/2026-09-10-m253-packs.md`.
 
 A pack is one discipline's library objects — workflows, saved prompts, presets — plus the credentials
 and external tools that work needs, in one `.tcpack` file. Its import is read-first and inert. Phase B
 (a dev-relations integration pack on the existing `github` credential) is sketched in the spec and
 **not built**.
+
+**Numbered M253, not M251.** This milestone first took M251, which branch `m246-deck-tools` had
+already committed (`feat(m251)` deck → .pptx, `feat(m252)` describe a tool, both numbers the user
+chose). It was renumbered before merging, and its owed canvas doors are dated M254. That branch
+also adds a seventh `redactSecrets` caller (`main/deck-export.ts`) to `verify:verbs gate.2`, as
+this one does (`shared/pack.ts`). Whichever reaches main second re-pins that list to eight.
 
 ## What landed
 
@@ -29,7 +35,7 @@ and external tools that work needs, in one `.tcpack` file. Its import is read-fi
     `REASON_UNREAD_PRESET`) and for an unread workflow. This also closes M190's gap: until now,
     nothing ever cleared a template's `reviewed: false`.
 - Verbs `import-pack` and `export-pack` (destructive). Both are refused to a teammate's plan, and
-  their canvas doors are owed by name (M252). The two read statements are in `EXCLUDED_ACTIONS`.
+  their canvas doors are owed by name (M254). The two read statements are in `EXCLUDED_ACTIONS`.
 
 ## Evidence
 
@@ -46,7 +52,7 @@ and external tools that work needs, in one `.tcpack` file. Its import is read-fi
 
 ## Owed
 
-- A canvas door for each pack verb (M252).
+- A canvas door for each pack verb (M254).
 - Picking individual items on export; Phase A exports the whole user library.
 - An inspector "I've read this" control. Phase A's door is the palette row.
 - The tool probe's `unanswered` arm is reachable only when no probe runs. Main's `which` answers

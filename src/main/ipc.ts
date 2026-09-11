@@ -83,11 +83,11 @@ export interface PaletteHandlers {
   setDefault(id: string): void
   /**
    * A palette pick. Main answers by sending PRESET_SPAWN, exactly as a menu
-   * pick does, so the two cannot drift apart. M251: answers the refusal
+   * pick does, so the two cannot drift apart. M253: answers the refusal
    * sentence when it spawns nothing (an unread pack preset), null when it sent.
    */
   spawn(id: string): string | null
-  /** M251. "I've read this": drops an imported preset's mark and rebuilds the menu. */
+  /** M253. "I've read this": drops an imported preset's mark and rebuilds the menu. */
   markPresetReviewed(id: string): boolean
   /**
    * The inspector's save. Handed in for the same reason `spawn` is: minting a
@@ -294,7 +294,7 @@ const INERT_PORTABLE: PortableHandlers = {
   read: async () => ({ kind: 'refused', reason: 'import is not available here' })
 }
 
-/** M251. A pack's three doors; the one implementation is main/pack-handlers.ts. */
+/** M253. A pack's three doors; the one implementation is main/pack-handlers.ts. */
 const INERT_PACK: PackHandlers = {
   read: async () => ({ kind: 'refused', reason: 'packs are not available here' }),
   add: async () => ({ kind: 'refused', reason: 'packs are not available here' }),
@@ -492,7 +492,7 @@ export function registerIpcHandlers(
   nodes: NodeHandlers = INERT_NODES,
   /** M189. Appended last, like every collaborator before it. */
   portable: PortableHandlers = INERT_PORTABLE,
-  /** M251. Appended last, like every collaborator before it. */
+  /** M253. Appended last, like every collaborator before it. */
   pack: PackHandlers = INERT_PACK
 ): void {
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
@@ -549,7 +549,7 @@ export function registerIpcHandlers(
   // renderer's, which is the same division M113's board keeps.
   ipcMain.handle(IPC.PORTABLE_EXPORT, (_event, req: { path?: string; file: unknown; suggested?: string }) => portable.write(req))
   ipcMain.handle(IPC.PORTABLE_IMPORT, (_event, req: { path?: string }) => portable.read(req))
-  // M251. Read answers and adds nothing; add takes a TOKEN, never a payload,
+  // M253. Read answers and adds nothing; add takes a TOKEN, never a payload,
   // so what is added is exactly what main parsed and the person was shown.
   ipcMain.handle(IPC.PACK_READ, (_event, req: { path?: string }) => pack.read(req))
   ipcMain.handle(IPC.PACK_ADD, (_event, req: { token: string }) => pack.add(req))

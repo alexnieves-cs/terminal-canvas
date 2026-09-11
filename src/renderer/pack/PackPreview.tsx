@@ -3,7 +3,7 @@ import type { PackFile, PackRequirements } from '@shared/pack'
 import type { PackAddResult } from '@shared/ipc-contract'
 
 /**
- * M251. THE PACK PREVIEW — what a pack holds and what it needs, shown BEFORE
+ * M253. THE PACK PREVIEW — what a pack holds and what it needs, shown BEFORE
  * anything is added. Main already holds the parse under `token`; Add sends
  * only that token, so this sheet can confirm what it shows and nothing else.
  *

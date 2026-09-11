@@ -92,7 +92,7 @@ export interface LayoutStore {
   addPreset(preset: Preset): void
   /** Rename one user preset. False when the id names nothing. */
   renamePreset(id: string, name: string): boolean
-  /** M251. A person read an imported preset's command: drop the mark. False when the id names nothing. */
+  /** M253. A person read an imported preset's command: drop the mark. False when the id names nothing. */
   markPresetReviewed(id: string): boolean
   /**
    * Remove one user preset. False when the id names nothing — including every

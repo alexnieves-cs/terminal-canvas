@@ -3209,7 +3209,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       } catch { /* the checks below will say so */ }
     }
 
-    // M251 — pack.import.1 / .2. A PACK IS READ BEFORE ANYTHING IS ADDED, and
+    // M253 — pack.import.1 / .2. A PACK IS READ BEFORE ANYTHING IS ADDED, and
     //     what it adds is inert. Driven through the PRODUCTION pack factory
     //     (createPackHandlers — only the chooser is the harness's). Reading
     //     shows the manifest and adds NOTHING and spawns NOTHING; Add makes one

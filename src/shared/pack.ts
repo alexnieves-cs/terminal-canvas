@@ -4,7 +4,7 @@ import { parsePresets, parsePrompts, parseTemplates, type Preset, type Prompt } 
 import type { PersistedTemplate } from './templates'
 
 /**
- * M251. A PACK: one discipline's library objects — workflows, saved prompts
+ * M253. A PACK: one discipline's library objects — workflows, saved prompts
  * and object presets — plus the credentials and external tools that work
  * needs, in one file a person was given and reads before anything is added.
  *

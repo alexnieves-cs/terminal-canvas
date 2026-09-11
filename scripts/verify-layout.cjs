@@ -4900,9 +4900,9 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect', 'a
     JSON.stringify({ ids: runs.map((x) => x.id), plain, good, badrev, badneg, unsaved, badnodes, badmapentry, badmap, plainHasKey: /"definition"|"mapping"/.test(plainText), warnings: r.warnings }))
 }
 
-// M251 — preset.reviewed.1. AN IMPORTED PRESET IS A STRANGER'S COMMAND, so it
+// M253 — preset.reviewed.1. AN IMPORTED PRESET IS A STRANGER'S COMMAND, so it
 //      carries M190's mark. Absent means reviewed (every preset this machine
-//      saved, and every pre-M251 file) and stays ABSENT — never `reviewed:
+//      saved, and every pre-M253 file) and stays ABSENT — never `reviewed:
 //      undefined`, which survives IPC and reads as present. `false` is kept.
 //      A non-boolean is malformed and costs the FIELD, failing SAFE: the
 //      preset is kept and read as unreviewed, and the warning names it.

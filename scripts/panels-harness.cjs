@@ -1531,7 +1531,7 @@ app.whenReady().then(async () => {
       return { kind: 'read', path, parse: parsePortable(text) }
     }
   },
-  // M251. The PRODUCTION pack factory, not a copy: only the choosers are the
+  // M253. The PRODUCTION pack factory, not a copy: only the choosers are the
   // harness's (`state.packPath` stands in for both dialogs), and the credential
   // store is the harness's real one — metadata only, exactly as in main.
   createPackHandlers({

@@ -203,10 +203,10 @@ const FACTS = {
     // export is a structure scrubbed field by field whose count is part of the
     // file. `shared/feedback.ts` scrubs a draft whose count is stated IN the
     // draft, so the person can see what was taken out before they send it.
-    // M251 adds the SEVENTH: `shared/pack.ts` scrubs a pack's workflows,
+    // M253 adds the SEVENTH: `shared/pack.ts` scrubs a pack's workflows,
     // prompts and presets field by field for the same reason portable.ts
     // does — the count is part of the file.
-    ok('gate.2 redactSecrets has exactly seven callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, and M251\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+    ok('gate.2 redactSecrets has exactly seven callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
       JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
@@ -424,7 +424,7 @@ const FACTS = {
     }
     return null
   }
-  // M251 adds both pack verbs: a teammate chooses neither where this app
+  // M253 adds both pack verbs: a teammate chooses neither where this app
   // writes a pack nor what a person is asked to add to their library.
   const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x']
     .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))

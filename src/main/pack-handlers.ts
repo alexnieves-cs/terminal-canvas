@@ -8,7 +8,7 @@ import type { LayoutStore } from './layout-store'
 import { mintPresetId, mintPromptId } from './presets'
 
 /**
- * M251. A PACK'S THREE DOORS, as one factory production and the panels
+ * M253. A PACK'S THREE DOORS, as one factory production and the panels
  * harness both build — so `verify:panels:product pack.import.*` drives THIS
  * code, not a harness copy that would prove the harness right and production
  * still unchecked (the rule `pushDefaultPreset` lives in presets.ts for).
