@@ -97,7 +97,7 @@ export interface NavigatorProps {
  */
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
-  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Integrations' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
+  const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Connections' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
       {navigator === 'skills' ? (

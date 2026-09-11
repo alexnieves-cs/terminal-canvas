@@ -128,7 +128,7 @@ function TeammatesPaneImpl(props: TeammatesPaneProps): JSX.Element {
                     {/* M191 (the golden audit, second half, 16). One sentence, not two states
                         that read as a contradiction, and it names the next step: a grant
                         without a credential is a permission waiting for a token. */}
-                    <span>{svc.label}{granted && !svc.connected ? ' — granted, but no credential yet: add one in Integrations' : granted ? ' — granted' : svc.connected ? '' : ' — not connected'}</span>
+                    <span>{svc.label}{granted && !svc.connected ? ' — granted, but no credential yet: add one in Connections' : granted ? ' — granted' : svc.connected ? '' : ' — not connected'}</span>
                     <button type="button" className="pf__verb pf__verb--word" data-teammate-service-toggle={svc.id}
                       title={granted ? `Revoke ${svc.label} from this teammate` : `Grant ${svc.label} to this teammate — it spends the app's credential through the broker`}
                       {...shellControl(() => props.onSave({ ...selected, services: granted ? selected.services.filter((x) => x !== svc.id) : [...selected.services, svc.id] }))}>{granted ? 'revoke' : 'grant'}</button>

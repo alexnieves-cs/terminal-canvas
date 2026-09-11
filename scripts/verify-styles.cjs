@@ -1202,5 +1202,26 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rootFixed && ceiling && panelGives, JSON.stringify({ rootFixed, ceiling, panelGives }))
 }
 
+// M208 — hierarchy.1. The workflow's secondary actions have one disclosure
+// container that is genuinely absent from layout while closed, while GitHub's
+// kind/state phrase is a quiet UI-face pill rather than uppercase code.
+{
+  const more = all.find((r) => r.sel.trim() === '.workflow-node__more-actions')
+  const hidden = all.find((r) => r.sel.trim() === '.workflow-node__more-actions[hidden]')
+  const github = all.find((r) => r.sel.trim() === '.github-item__state')
+  ok('m208.hierarchy.1', 'workflow secondary actions form one hidden disclosure and a GitHub item presents its kind and state as a quiet UI-face pill',
+    more !== undefined && /display:\s*flex/.test(more.body) && hidden !== undefined && /display:\s*none/.test(hidden.body) &&
+      github !== undefined && /font-family:\s*var\(--font-ui\)/.test(github.body) && /border-radius:\s*var\(--r-full\)/.test(github.body) && !/text-transform:\s*uppercase/.test(github.body),
+    JSON.stringify({ more: more?.body, hidden: hidden?.body, github: github?.body }))
+}
+
+{
+  const more = all.find((r) => r.sel.trim() === '.context__more-actions')
+  const hidden = all.find((r) => r.sel.trim() === '.context__more-actions[hidden]')
+  ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one full-width disclosure that leaves no empty grid while closed',
+    more !== undefined && /grid-column:\s*1\s*\/\s*-1/.test(more.body) && /display:\s*grid/.test(more.body) && hidden !== undefined && /display:\s*none/.test(hidden.body),
+    JSON.stringify({ more: more?.body, hidden: hidden?.body }))
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`)
 process.exit(failures === 0 ? 0 : 1)

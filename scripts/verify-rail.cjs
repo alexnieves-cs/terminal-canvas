@@ -2494,19 +2494,19 @@ const session = (id, over = {}) => ({
     JSON.stringify({ restored: live(restored), queued: live(queued), fresh: live(fresh), sendRestored: cs(restored, true).send.enabled }))
 }
 
-// M171 — groups.1. THE RAIL AS PLACES: every row lands in exactly one group
-//     (agents · files · reviews · boards · integrations · workflows), in array
+// M206 — groups.1. THE RAIL AS OBJECTS AND TASK ROLES: every row lands in exactly one group
+//     (agents · files · reviews · work · workflows · capabilities), in array
 //     order within it; an empty group is omitted; the group order is fixed;
-//     a kind the table does not name lands with the integrations rather than
+//     a kind the table does not name lands with capabilities rather than
 //     vanishing (a row that disappears is indistinguishable from a feature
 //     that was never built).
 {
   const groups = typeof R.railGroups === 'function' ? R.railGroups : () => null
   const row = (id, kind) => ({ id, state: { kind } })
-  const g = groups([row('a', 'chat'), row('b', 'file'), row('c', 'terminal'), row('d', 'work'), row('e', 'note'), row('f', 'workflow'), row('g', 'mystery'), row('h', 'review')])
+  const g = groups([row('a', 'chat'), row('b', 'file'), row('c', 'terminal'), row('d', 'work'), row('e', 'watcher'), row('f', 'workflow'), row('g', 'browser'), row('h', 'review'), row('i', 'memory'), row('j', 'toolbox'), row('k', 'skill'), row('l', 'mystery')])
   const ids = g ? g.map((x) => `${x.id}:${x.rows.map((r) => r.id).join('')}`).join(' ') : null
-  ok('groups.1 railGroups: one group per row in a fixed order, array order within, empty groups omitted, an unknown kind with the integrations',
-    ids === 'agents:ac files:be reviews:h boards:d integrations:g workflows:f' && groups([]).length === 0 && g.every((x) => typeof x.label === 'string' && x.label !== ''),
+  ok('m206.groups.1 railGroups uses object and task language: browser and memory are readable Files, a watcher is a Workflow, toolbox and skill are Capabilities, and an unknown future kind stays discoverable there',
+    ids === 'agents:ac files:bgi reviews:h work:d workflows:ef capabilities:jkl' && groups([]).length === 0 && g.every((x) => typeof x.label === 'string' && x.label !== ''),
     JSON.stringify({ ids }))
 }
 

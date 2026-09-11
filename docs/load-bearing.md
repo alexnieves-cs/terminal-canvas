@@ -10,6 +10,12 @@
 > CLAUDE.md" about a specific invariant mean this file — every entry's bold
 > first sentence is unchanged, so `grep` still finds them.
 
+The tail of the old module tree, left here by the split (the whole tree is in
+[architecture-map.md](architecture-map.md)). Its opening fence was lost in the split, so the
+closing fence below was unmatched and every Markdown viewer rendered the rest of this file as
+one code block; `npm run lb` found no entries at all until it was restored.
+
+```
   GroupLayer.tsx        the frame, label and collapse control, inside .world beneath the
                         panels — LinkLayer's position, and deaf to the pointer for the
                         same reason everywhere but its own header controls
@@ -45,8 +51,12 @@ Each of these exists because the naive version fails *silently*. Don't undo them
 > entry are bold too. Entries are in rough milestone order, not subsystem order.
 >
 > **So search it, don't scroll it, and search for the FILE rather than the
-> symptom.** Nearly every entry names its own module, so `grep -n 'pty-manager'`
-> or `grep -n 'session-registry'` over this file is the reliable way in; the
+> symptom.** `npm run lb -- pty-manager` lists every entry in this file and its
+> -recovered sibling that names the module, as whole entries with a file:line
+> (`--full` for the bodies, `--modules` for the index of cited files). A raw
+> `grep -n 'pty-manager'` still works, but returns one long line with no entry
+> boundary. Nearly every entry names its own module, which is why this is the
+> reliable way in; the
 > subsystem keyword clusters worth knowing are `pty-manager`/`tmux`/`shell-env`,
 > `Canvas.tsx`/`viewport`/`lod`, `panels.ts`/panel kinds, `palette`,
 > `layout-store`/`layout-schema`, `review-`/`git-`, `rail-`/`inspector-`,
