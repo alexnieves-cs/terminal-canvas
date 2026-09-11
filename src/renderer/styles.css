@@ -67,6 +67,8 @@
   --dur-1: 90ms; --dur-2: 160ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
+  /* Attention navigation's arrival glow — one swell after the camera lands. Canvas.tsx's LANDING_LIT_MS unmounts it; landing.1 pins the two together. */
+  --dur-land: 900ms;
   --dur-stagger: 30ms; /* M179: the ⌘G grid's per-cell delay — motion.2 reads the longhands too */
   --ease: cubic-bezier(.2, .8, .2, 1);
 
@@ -2602,6 +2604,28 @@ body {
   animation: wants-you-pulse var(--dur-breath) ease-in-out 2;
 }
 .panel--agent-exited { border-color: var(--frame-line); }
+
+/* Attention navigation's arrival. After the camera lands on a panel that
+   asked for you, one swell of the needs-you amber around its frame and then
+   nothing: the eye is told WHICH of the panels now on screen it came for,
+   and nothing is left behind to compete with the panel's own ring.
+   An overlay beside the panel, never a style on it — see Canvas.tsx. The
+   declared box-shadow is the reduced-motion signal for the same reason
+   .panel--agent-wants-you declares its static ring: when the global block
+   forces the animation off, this is what paints until the timer unmounts it.
+   --dur-land matches LANDING_LIT_MS. */
+@keyframes landing-halo {
+  0%   { opacity: 0; box-shadow: 0 0 0 0 var(--amber), 0 0 0 0 var(--amber-dim); }
+  25%  { opacity: 1; box-shadow: 0 0 0 3px var(--amber), 0 0 40px 8px var(--amber-dim); }
+  100% { opacity: 0; box-shadow: 0 0 0 10px transparent, 0 0 56px 12px transparent; }
+}
+.landing-halo {
+  position: absolute;
+  pointer-events: none;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 3px var(--amber), 0 0 40px 8px var(--amber-dim);
+  animation: landing-halo var(--dur-land) var(--ease) forwards;
+}
 
 /* .panel--selected must still win: selection is where the USER is, and a
    border that stopped tracking the click would make the canvas feel broken

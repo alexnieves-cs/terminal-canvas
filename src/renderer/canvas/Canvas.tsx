@@ -149,6 +149,11 @@ import { WorkNode, WORK_ITEM_GONE } from '@renderer/work/WorkNode'
 import type { ReviewTaskContext } from '@renderer/review/ReviewNode'
 /** M202. How much of the agent's own account the task section carries. Its last words, not its transcript. */
 const ACCOUNT_MAX = 400
+// How long an attention landing stays lit. Matches `.landing-halo`'s
+// animation in styles.css: the timer only unmounts what the CSS has already
+// faded, and under reduced motion (animation forced off) it is the whole
+// signal — a still ring shown for this long, then gone.
+const LANDING_LIT_MS = 900
 import { WorkflowNode } from '@renderer/workflow/WorkflowNode'
 import { projectSession, type RunLiveFact } from '@shared/run-outcome'
 import { workflowWatch, workflowFireRefusal } from '@renderer/workflow/workflow-diagram'
@@ -1256,6 +1261,11 @@ export function Canvas({
   // logic is assigned into the ref once centreOn and selectAndRaise exist and
   // is refreshed every render so it never runs against a stale closure.
   const jumpAttentionImplRef = useRef<(direction: JumpDirection) => void>(() => {})
+  // The panel an ATTENTION jump is flying to, until the camera settles. Only
+  // attention navigation arms it — a bookmark, the trail or fit-all lands on
+  // a place, not on a panel that asked for you, and lighting whatever sits
+  // there would teach the eye that the glow means nothing.
+  const landingTargetRef = useRef<string | null>(null)
   const onJumpAttention = useCallback((direction: JumpDirection) => {
     jumpAttentionImplRef.current(direction)
   }, [])
@@ -1312,7 +1322,7 @@ export function Canvas({
   const {
     viewport, resetViewport, worldCentre, centreOn, restoreCamera, zoomBy, fitAll, fitSelection, frameRects,
     beginPanDrag, panning,
-    goToViewport, cameraBack, cameraForward, trail, flying
+    goToViewport, cameraBack, cameraForward, trail, flying, landing
   } = useViewport(
     hostRef, rects, onSpawn, shouldYieldWheel, initial.camera, shouldIgnoreKeys, onJumpAttention,
     onStepWorkspace, onToggleMerged
@@ -1537,8 +1547,29 @@ export function Canvas({
   // than a third copy of "go to a waiting panel". Stable identity: it reads
   // the actions through their ref.
   const jumpToAttention = useCallback((panelId: string) => {
+    landingTargetRef.current = panelId
     paletteActionsRef.current?.goToPanel(panelId)
   }, [])
+
+  // Attention navigation's arrival: after the camera lands, the destination
+  // frame is briefly lit, or a person flown across a busy canvas has to
+  // hunt for which of the panels now on screen is the one that wanted them.
+  // Keyed on the settle, never on `flying` turning false — a reduced-motion
+  // or already-framed jump never flies at all, and is still an arrival.
+  // A settle that did not land (a gesture grabbed the camera) disarms: the
+  // person has already chosen to look somewhere else.
+  const [landingLit, setLandingLit] = useState<{ id: string; seq: number } | null>(null)
+  useEffect(() => {
+    const id = landingTargetRef.current
+    if (landing.seq === 0 || id === null) return
+    landingTargetRef.current = null
+    if (landing.landed) setLandingLit({ id, seq: landing.seq })
+  }, [landing])
+  useEffect(() => {
+    if (landingLit === null) return
+    const timer = setTimeout(() => setLandingLit(null), LANDING_LIT_MS)
+    return () => clearTimeout(timer)
+  }, [landingLit])
   useEffect(() => window.canvas.agent.onAttentionJump(jumpToAttention), [jumpToAttention])
 
   // One subscription for the whole canvas, like agent.onState above and for the
@@ -2423,6 +2454,7 @@ export function Canvas({
     // between the user and a working key, which is why the filter exists.
     if (!panel) return
     jumpCursorRef.current = id
+    landingTargetRef.current = id
     centreOn(panel.rect)
     selectAndRaise(id)
   }
@@ -7657,6 +7689,19 @@ export function Canvas({
               it is already outside this array for the identical reason it is
               outside assignTiers' input. */}
           <SubagentLayer panels={terminalPanels} />
+          {/* Inside .world for SubagentLayer's reason: it marks a place on
+              the canvas and must pan and zoom with the panel it lights. An
+              overlay rather than a class on the panel, because each kind
+              renders its own .panel and tiering may remount it at the very
+              moment the flight ends — a class would be lost with it. Keyed
+              on the settle so a second arrival restarts the light. */}
+          {landingLit && (() => {
+            const lit = displayPanels.find((p) => p.rect.id === landingLit.id)
+            return lit
+              ? <div key={landingLit.seq} className="landing-halo" data-landing-for={lit.rect.id} aria-hidden
+                  style={{ left: lit.rect.x, top: lit.rect.y, width: lit.rect.w, height: lit.rect.h, zIndex: lit.z + 1 }} />
+              : null
+          })()}
         </div>
         </PanelMarksContext.Provider>
         </CardDetailContext.Provider>
