@@ -50,7 +50,34 @@ this one does (`shared/pack.ts`). Whichever reaches main second re-pins that lis
 - `verify:verbs gate.2` names `shared/pack.ts` as the seventh `redactSecrets` caller, and
   `agent-door.7` refuses both pack verbs.
 
+## The critic
+
+A fresh-context review of the feature commit found two more doors onto an unread pack preset,
+beyond the four the first cut guarded. Both are fixed.
+
+1. **A workflow node bound to a preset.** `presetTemplate` (`preset:template`) handed back the
+   template unchecked, and `instantiateTemplate` minted a panel straight from it. It now answers
+   `{ refused }` with `unreviewedPresetReason`'s sentence. The renderer shows that sentence
+   instead of "names a preset that no longer exists".
+2. **Cmd+N.** The set-default row was not gated, and Cmd+N spawns from a template pushed ahead of
+   time, which never passes a spawn-time refusal. The row is now disabled with
+   `REASON_UNREAD_PRESET`, and `resolveDefault` never answers an unread preset: it falls back to
+   the first built-in, however that preset came to be named the default.
+
+`verify:layout preset.reviewed.2` pins the second fix. It was written after the fix, so it was not
+watched red. The first fix has no dedicated check yet; one is owed below.
+
+The critic confirmed as correct:
+- the parser's three arms;
+- the scrub and the `env` omission;
+- the single-use token;
+- both absent-key rebuilds;
+- the four original doors.
+
 ## Owed
+
+- A check that a workflow node bound to an unread pack preset is refused by name, not minted
+  (the critic's first finding, fixed but not pinned).
 
 - A canvas door for each pack verb (M254).
 - Picking individual items on export; Phase A exports the whole user library.

@@ -83,7 +83,13 @@ export function allPresets(user: Preset[]): Preset[] {
  * nothing at all is the worse failure.
  */
 export function resolveDefault(user: Preset[], id: string): Preset {
-  return allPresets(user).find((p) => p.id === id) ?? BUILT_IN_PRESETS[0]
+  const found = allPresets(user).find((p) => p.id === id)
+  // M253 (the critic, 2). Cmd+N spawns from the template this resolves, pushed
+  // ahead of time — it never passes through `unreviewedPresetReason`. So an
+  // unread pack preset is never the resolved default, however it came to be
+  // named one (the palette row is disabled too, but a hand-edited layout or
+  // an older build could still name it).
+  return found !== undefined && found.reviewed !== false ? found : BUILT_IN_PRESETS[0]
 }
 
 /**

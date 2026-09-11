@@ -2004,7 +2004,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
           hiddenAtRest: true,
           run: () => actions.setDefaultPreset(preset.id)
         },
-        preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
+        // M253 (the critic, 2). Unread first: Cmd+N would otherwise spawn a
+        // stranger's command with no refusal anywhere on its path.
+        preset.reviewed === false ? REASON_UNREAD_PRESET : preset.isDefault ? REASON_ALREADY_DEFAULT : undefined
       )
     )
     // M37. A toggle that names its CURRENT state rather than a pair of rows:

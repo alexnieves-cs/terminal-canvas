@@ -1731,7 +1731,12 @@ app.whenReady().then(async () => {
       // needs that answer before it mints anything.
       presetTemplate: (id) => {
         const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
-        return found === undefined ? null : templateOf(found)
+        if (found === undefined) return null
+        // M253 (the critic, 1). A workflow node bound to a preset mints a
+        // panel straight from this template — the fifth door, and it must
+        // refuse an unread pack preset like the other four, by name.
+        const unread = unreviewedPresetReason(found)
+        return unread === null ? templateOf(found) : { refused: unread }
       },
       // M83. The ROOT is resolved HERE, in one place, for every door — the
       // node, the chat's first-send context and the control verb. A chat

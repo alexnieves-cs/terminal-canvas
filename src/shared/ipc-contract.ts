@@ -1490,7 +1490,8 @@ export interface CanvasBridge {
     /** M253. "I've read this" for a preset that arrived in a pack. False when the id names nothing. */
     markReviewed(id: string): Promise<boolean>
     /** M80. The preset's resolved template, or null when the id names nothing. */
-    template(id: string): Promise<PresetTemplate | null>
+    /** M253: `{ refused }` names why an unread pack preset resolves to nothing; `null` is still "no such preset". */
+    template(id: string): Promise<PresetTemplate | null | { refused: string }>
     /** Save THIS panel as a preset. See PRESET_SAVE_PANEL. */
     savePanel(captured: CapturedPanel): Promise<void>
     /** M37. See PRESET_SET_WORKTREE. False for a built-in or an unknown id. */

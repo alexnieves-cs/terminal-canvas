@@ -111,7 +111,7 @@ export interface PaletteHandlers {
   savePrompt(name: string, body: string): void
   /** M80. Templates: the list (built-ins first), a save, a delete that refuses a built-in. */
   /** M80. The preset's resolved template, or null. */
-  presetTemplate(id: string): PresetTemplate | null
+  presetTemplate(id: string): PresetTemplate | null | { refused: string }
   /** M83. The project memory, for the node and the chat's context. */
   /** M89. The broker's audit rows, newest first. */
   brokerAudit(limit: number, service?: string): { rows: unknown[]; skipped: number }

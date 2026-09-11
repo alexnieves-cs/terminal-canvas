@@ -4918,6 +4918,22 @@ const LIBRARY_KINDS = ['terminal', 'chat', 'pool', 'orchestrator', 'collect', 'a
     JSON.stringify({ got, w }))
 }
 
+// M253 (the critic, 2) — preset.reviewed.2. CMD+N NEVER RESOLVES AN UNREAD
+//      PACK PRESET. Cmd+N spawns from a template main pushed AHEAD of time,
+//      so no spawn-time refusal is on its path; the guard has to be in
+//      resolveDefault itself. A default naming an unread preset falls back to
+//      the first built-in; the same preset once read is honoured. Written
+//      after the fix (the critic found the door), so not watched red.
+{
+  const unread = { id: 'u9', name: 'from a pack', cwd: '/w', args: [], command: 'gh', reviewed: false }
+  const read = { id: 'u9', name: 'from a pack', cwd: '/w', args: [], command: 'gh' }
+  const whenUnread = L.resolveDefault([unread], 'u9')
+  const whenRead = L.resolveDefault([read], 'u9')
+  ok('preset.reviewed.2 resolveDefault never answers an unread pack preset — it falls back to the first built-in — and answers the same preset once it is read',
+    whenUnread.id !== 'u9' && whenUnread.id === L.BUILT_IN_PRESETS[0].id && whenRead.id === 'u9',
+    JSON.stringify({ whenUnread: whenUnread.id, whenRead: whenRead.id }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

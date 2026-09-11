@@ -4048,6 +4048,9 @@ export function Canvas({
       if (node.presetId !== undefined) {
         const resolved = await window.canvas.preset.template(node.presetId)
         if (resolved === null) { undoCreated(); return { kind: 'refused', reason: `${node.key} names a preset that no longer exists` } }
+        // M253. Main's own sentence for an unread pack preset — never the
+        // "no longer exists" arm, which would tell the person the wrong fix.
+        if ('refused' in resolved) { undoCreated(); return { kind: 'refused', reason: `${node.key}: ${resolved.refused}` } }
         spec = {
           panelId: '', cwd: node.cwd, args: [...resolved.args],
           ...(resolved.command === undefined ? {} : { command: resolved.command }),
