@@ -121,6 +121,7 @@ teammate:choose-place routine:list routine:save routine:delete routine:run shelf
 shelf:save plugin:details skill:write skill:create skill:rename skill:delete skill:trail
 browser:read preview:discover preview:capture asset:put asset:choose node:fetch
 portable:export portable:import pack:read pack:add pack:export preset:mark-reviewed
+pack:sample github:publish
 board:lane board:lane-status board:open-pr board:comment-pr
 board:repositories update:check image:read starter:prepare docx:import pty:data pty:exit edit:copy
 edit:paste edit:undo edit:redo canvas:counts canvas:model canvas:reset preset:spawn

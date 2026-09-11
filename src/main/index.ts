@@ -15,6 +15,7 @@ import { createFile } from './file-create'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
 import { parsePortable } from '@shared/portable'
 import { createPackHandlers } from './pack-handlers'
+import { parsePublishRequest, publish } from './github-publish'
 import { buildAppMenu } from './menu'
 import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
 import { skillWriteHandlers } from './skill-write'
@@ -50,7 +51,7 @@ import { createControlHandler } from './control-handler'
 import { createMemoryStore } from './memory-store'
 import { createMemoryScope, createScopeResolver } from './work-scope'
 import { laneOfPath } from '../shared/work-scope'
-import { createBroker } from './broker'
+import { brokerCardTool, createBroker } from './broker'
 import { listAssignedWorkItems as listGithubWorkItems, openPullRequest, commentIssue } from './github-client'
 import { createHttpsBrokerFetcher } from './credential-verify'
 import { createBrokerAudit } from './broker-audit'
@@ -775,7 +776,9 @@ const broker = createBroker({
   approve: async (ask) => {
     const chatId = chatOfTeammate(ask.teammateId, ask.panelId)
     if (chatId === undefined || agentSessions === null) return false
-    return agentSessions.askExternal(chatId, ask.service, { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost} (as stated by the caller)`)
+    // M255. Asked under a per-request name, so "Allow for session" answers
+    // THIS write only — never every later github write from the chat.
+    return agentSessions.askExternal(chatId, brokerCardTool(ask), { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost} (as stated by the caller)`)
   }
 })
 
@@ -2327,6 +2330,7 @@ app.whenReady().then(async () => {
       which,
       afterPresetChange,
       app: app.getVersion(),
+      sampleDir: join(app.getPath('userData'), 'packs'),
       chooseOpen: async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused', reason: 'there is no window to ask' }
         const answer = await dialog.showOpenDialog(mainWindow, { title: 'Read a pack', properties: ['openFile'], filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
@@ -2337,7 +2341,30 @@ app.whenReady().then(async () => {
         const answer = await dialog.showSaveDialog(mainWindow, { title: 'Export a pack', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
         return answer.canceled || answer.filePath === undefined ? { kind: 'cancelled' } : { kind: 'path', path: answer.filePath }
       }
-    })
+    }),
+    // M255. The publisher. The confirmation is the SYSTEM's own dialog, in
+    // main, defaulting to Cancel — the renderer cannot answer it, and it is
+    // asked on every publish (no session grant). The repository is the
+    // draft's own origin, read through the same git runner the lane uses.
+    {
+      publish: async (raw) => {
+        const req = parsePublishRequest(raw)
+        if (typeof req === 'string') return { kind: 'refused', reason: req }
+        return publish({
+          broker,
+          remoteOf: async (dir) => {
+            const answer = await gitRunner(['-C', dir, 'remote', 'get-url', 'origin'])
+            return answer.ok && answer.stdout.trim() !== '' ? answer.stdout.trim() : null
+          },
+          confirm: async (ask) => {
+            if (mainWindow === null || mainWindow.isDestroyed()) return false
+            const verb = ask.kind === 'release' ? 'Publish release' : ask.kind === 'comment' ? 'Post comment' : 'Post discussion'
+            const answer = await dialog.showMessageBox(mainWindow, { type: 'question', buttons: ['Cancel', verb], defaultId: 0, cancelId: 0, noLink: true, message: ask.message, detail: ask.detail })
+            return answer.response === 1
+          }
+        }, req)
+      }
+    }
   )
   createWindow()
 

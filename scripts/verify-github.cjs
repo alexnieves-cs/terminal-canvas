@@ -132,6 +132,141 @@ const served = (q) => ({ ok: true, status: 200, truncated: false, body: q.path.i
       JSON.stringify({ opened, post, exists, existsCalls: existsCalls.map((c) => [c.method, c.path]), noCred, rejected, down, junk, refused, commented }))
   }
 
+  // M255 — publish.*. PUBLISHING IS A PERSON'S ACT, WITH THE TEXT IN FRONT OF
+  //     THEM. main/github-publish.ts reads a DRAFT FILE, resolves the repo
+  //     from the file's own origin remote, passes the body through outward(),
+  //     asks `confirm` EVERY time (no memo) naming the repo, the target, the
+  //     title, the opening lines and the redaction count — and only then
+  //     calls the broker with personConfirmed. Driven over a fake broker, a
+  //     fake confirm and a fake remote, with REAL temp files for the draft.
+  {
+    const { mkdtempSync, writeFileSync, mkdirSync } = require('node:fs')
+    const { tmpdir } = require('node:os')
+    const psource = join(__dirname, '..', 'src', 'main', 'github-publish.ts')
+    const pout = join(__dirname, '..', 'out', 'verify', 'github-publish.cjs')
+    let P = {}
+    if (existsSync(psource)) {
+      execFileSync('npx', ['esbuild', psource, '--bundle', '--platform=node', '--outfile=' + pout], { stdio: 'inherit' })
+      P = require(pout)
+    }
+    const hasP = typeof P.publish === 'function' && typeof P.repoFromRemote === 'function'
+    const need = (name) => { if (!hasP) ok(name, false, 'github-publish.ts does not export publish / repoFromRemote'); return hasP }
+    const TOKEN = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const dir = mkdtempSync(join(tmpdir(), 'tc publish '))
+    const draft = join(dir, 'RELEASE_NOTES.md')
+    writeFileSync(draft, `# v1.2.0\n\nFaster canvas.\n\nDebug token: ${TOKEN}\n`)
+    const asks = []
+    let answer = true
+    const confirm = async (ask) => { asks.push(ask); return answer }
+    const origin = async () => 'git@github.com:acme/canvas.git'
+    const pubBroker = (reply) => broker((q) => reply(q))
+    const created = () => ({ ok: true, status: 201, truncated: false, body: JSON.stringify({ html_url: 'https://github.com/acme/canvas/releases/tag/v1.2.0' }) })
+
+    if (need('publish.1 the draft passes outward() before it leaves: a planted token is scrubbed from the body the broker receives, and the confirm names the redaction count, the repo, the target and the title')) {
+      asks.length = 0; answer = true
+      const b = pubBroker(created)
+      const r = await P.publish({ broker: b, confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1.2.0' })
+      const sent = b.calls[0] ? b.calls[0].body : ''
+      ok('publish.1 the draft passes outward() before it leaves: a planted token is scrubbed from the body the broker receives, and the confirm names the redaction count, the repo, the target and the title',
+        r.kind === 'published' && !sent.includes(TOKEN) && asks.length === 1 && asks[0].redacted === 1 &&
+          /acme\/canvas/.test(asks[0].detail) && /1 secret/.test(asks[0].detail) && /release/i.test(asks[0].message) && /v1\.2\.0/.test(asks[0].message) &&
+          asks[0].title === 'v1.2.0' && !JSON.stringify(asks[0]).includes(TOKEN),
+        JSON.stringify({ r, asks, sent: sent.slice(0, 120) }))
+    }
+
+    if (need('publish.2 a cancelled confirm sends nothing: zero broker calls, and the answer is cancelled — never a refusal')) {
+      asks.length = 0; answer = false
+      const b = pubBroker(created)
+      const r = await P.publish({ broker: b, confirm, remoteOf: origin }, { kind: 'comment', path: draft, number: 7 })
+      ok('publish.2 a cancelled confirm sends nothing: zero broker calls, and the answer is cancelled — never a refusal',
+        r.kind === 'cancelled' && b.calls.length === 0 && asks.length === 1,
+        JSON.stringify({ r, calls: b.calls.length }))
+    }
+
+    if (need('publish.3 confirmed, each target is exactly ONE POST with personConfirmed: a release to /repos/{r}/releases with tag_name, name and body, and a comment to /repos/{r}/issues/{n}/comments')) {
+      answer = true
+      const rb = pubBroker(created)
+      const rel = await P.publish({ broker: rb, confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1.2.0' })
+      const relBody = rb.calls[0] ? JSON.parse(rb.calls[0].body) : {}
+      const cb = pubBroker(() => ({ ok: true, status: 201, truncated: false, body: JSON.stringify({ html_url: 'https://github.com/acme/canvas/pull/7#issuecomment-1' }) }))
+      const com = await P.publish({ broker: cb, confirm, remoteOf: origin }, { kind: 'comment', path: draft, number: 7 })
+      ok('publish.3 confirmed, each target is exactly ONE POST with personConfirmed: a release to /repos/{r}/releases with tag_name, name and body, and a comment to /repos/{r}/issues/{n}/comments',
+        rb.calls.length === 1 && rb.calls[0].method === 'POST' && rb.calls[0].path === '/repos/acme/canvas/releases' && rb.calls[0].personConfirmed === true && rb.calls[0].service === 'github' &&
+          relBody.tag_name === 'v1.2.0' && relBody.name === 'v1.2.0' && /Faster canvas/.test(relBody.body) &&
+          rel.kind === 'published' && rel.url === 'https://github.com/acme/canvas/releases/tag/v1.2.0' &&
+          cb.calls.length === 1 && cb.calls[0].path === '/repos/acme/canvas/issues/7/comments' && cb.calls[0].personConfirmed === true &&
+          com.kind === 'published' && /issuecomment/.test(com.url),
+        JSON.stringify({ rel, com, relCalls: rb.calls, comCalls: cb.calls.map((c) => c.path) }))
+    }
+
+    if (need('publish.4 the repo comes from the file\'s own origin (ssh, https and ssh:// forms); a non-GitHub remote, no remote, a missing file and a directory are each refused BY NAME before anyone is asked; a missing credential is its own arm')) {
+      asks.length = 0; answer = true
+      const forms = ['git@github.com:acme/canvas.git', 'https://github.com/acme/canvas.git', 'https://github.com/acme/canvas', 'ssh://git@github.com/acme/canvas.git'].map((u) => P.repoFromRemote(u))
+      const gitlab = await P.publish({ broker: pubBroker(created), confirm, remoteOf: async () => 'https://gitlab.com/acme/canvas.git' }, { kind: 'release', path: draft, tag: 'v1' })
+      const noRemote = await P.publish({ broker: pubBroker(created), confirm, remoteOf: async () => null }, { kind: 'release', path: draft, tag: 'v1' })
+      const missing = await P.publish({ broker: pubBroker(created), confirm, remoteOf: origin }, { kind: 'release', path: join(dir, 'nope.md'), tag: 'v1' })
+      const sub = join(dir, 'sub'); mkdirSync(sub)
+      const directory = await P.publish({ broker: pubBroker(created), confirm, remoteOf: origin }, { kind: 'release', path: sub, tag: 'v1' })
+      const askedBeforeCred = asks.length
+      const noCred = await P.publish({ broker: pubBroker(() => ({ ok: false, code: 'not-connected', reason: 'not connected — add a GitHub token in ⌘K › Credentials' })), confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1' })
+      ok('publish.4 the repo comes from the file\'s own origin (ssh, https and ssh:// forms); a non-GitHub remote, no remote, a missing file and a directory are each refused BY NAME before anyone is asked; a missing credential is its own arm',
+        forms.every((f) => f === 'acme/canvas') && P.repoFromRemote('https://gitlab.com/acme/canvas.git') === null &&
+          gitlab.kind === 'refused' && /GitHub/.test(gitlab.reason) &&
+          noRemote.kind === 'refused' && /remote/.test(noRemote.reason) &&
+          missing.kind === 'refused' && /nope\.md/.test(missing.reason) &&
+          directory.kind === 'refused' && /not a file/.test(directory.reason) &&
+          askedBeforeCred === 0 &&
+          noCred.kind === 'no-credential' && /Credentials/.test(noCred.reason),
+        JSON.stringify({ forms, gitlab, noRemote, missing, directory, askedBeforeCred, noCred }))
+    }
+
+    if (need('publish.5 a Discussion asks FIRST, then looks up the repository and category; an unknown category is refused naming the ones that exist and NO mutation is sent; a known one sends createDiscussion with both ids')) {
+      asks.length = 0; answer = true
+      const graph = (q) => {
+        const body = JSON.parse(q.body)
+        if (/createDiscussion/.test(body.query)) return { ok: true, status: 200, truncated: false, body: JSON.stringify({ data: { createDiscussion: { discussion: { url: 'https://github.com/acme/canvas/discussions/9' } } } }) }
+        return { ok: true, status: 200, truncated: false, body: JSON.stringify({ data: { repository: { id: 'R_1', discussionCategories: { nodes: [{ id: 'C_ann', name: 'Announcements' }, { id: 'C_q', name: 'Q&A' }] } } } }) }
+      }
+      const bad = pubBroker(graph)
+      const unknown = await P.publish({ broker: bad, confirm, remoteOf: origin }, { kind: 'discussion', path: draft, category: 'Ideas' })
+      const good = pubBroker(graph)
+      const posted = await P.publish({ broker: good, confirm, remoteOf: origin }, { kind: 'discussion', path: draft, category: 'announcements' })
+      const mutation = good.calls.find((c) => /createDiscussion/.test(JSON.parse(c.body).query))
+      const vars = mutation ? JSON.parse(mutation.body).variables : {}
+      ok('publish.5 a Discussion asks FIRST, then looks up the repository and category; an unknown category is refused naming the ones that exist and NO mutation is sent; a known one sends createDiscussion with both ids',
+        asks.length === 2 &&
+          unknown.kind === 'refused' && /Ideas/.test(unknown.reason) && /Announcements/.test(unknown.reason) &&
+          !bad.calls.some((c) => /createDiscussion/.test(JSON.parse(c.body).query)) &&
+          bad.calls.every((c) => c.path === '/graphql' && c.personConfirmed === true) &&
+          posted.kind === 'published' && posted.url === 'https://github.com/acme/canvas/discussions/9' &&
+          mutation !== undefined && vars.repositoryId === 'R_1' && vars.categoryId === 'C_ann' && vars.title === 'v1.2.0' && !JSON.stringify(vars).includes(TOKEN),
+        JSON.stringify({ unknown, posted, calls: good.calls.map((c) => JSON.parse(c.body).query.slice(0, 30)), vars }))
+    }
+
+    if (need('publish.6 there is no memo: two publishes of the same draft to the same target ask twice')) {
+      asks.length = 0; answer = true
+      await P.publish({ broker: pubBroker(created), confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1.2.0' })
+      await P.publish({ broker: pubBroker(created), confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1.2.0' })
+      ok('publish.6 there is no memo: two publishes of the same draft to the same target ask twice', asks.length === 2, JSON.stringify({ asked: asks.length }))
+    }
+
+    // M255 (the critic's observation). The confirm shows the opening lines,
+    // but the WHOLE body is sent — so a long draft's confirm says how many
+    // lines it did not show and where to read them, rather than reading as
+    // the entire post.
+    if (need('publish.7 a long draft\'s confirm names how many lines it did not show and the file to read them in, while the whole body is sent')) {
+      asks.length = 0; answer = true
+      const long = join(dir, 'ANNOUNCEMENT.md')
+      writeFileSync(long, ['# v2', ...Array.from({ length: 20 }, (_, i) => `line ${i + 1}`)].join('\n'))
+      const b = pubBroker(created)
+      await P.publish({ broker: b, confirm, remoteOf: origin }, { kind: 'release', path: long, tag: 'v2' })
+      const sentBody = b.calls[0] ? JSON.parse(b.calls[0].body).body : ''
+      ok('publish.7 a long draft\'s confirm names how many lines it did not show and the file to read them in, while the whole body is sent',
+        asks.length === 1 && /12 more lines not shown/.test(asks[0].detail) && /ANNOUNCEMENT\.md/.test(asks[0].detail) && !/line 20/.test(asks[0].detail) && /line 20/.test(sentBody),
+        JSON.stringify({ detail: asks[0] && asks[0].detail }))
+    }
+  }
+
   const failed = results.filter((r) => !r.pass)
   console.log(`${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

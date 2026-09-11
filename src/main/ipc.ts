@@ -3,6 +3,7 @@ import type { UsageRow } from '@shared/run-ledger'
 import type { SkillWriteRequest, SkillCreateRequest, SkillRenameRequest, SkillDeleteRequest } from '@shared/ipc-contract'
 import type { PreviewCaptureResult, AssetPutResult, NodeFetchResult, PortableWriteResult, PortableReadResult } from '@shared/ipc-contract'
 import type { PackHandlers } from './pack-handlers'
+import type { GithubPublishResult } from '@shared/ipc-contract'
 import type { Discovery as PreviewDiscovery } from '@shared/preview'
 import type { Trail } from '@shared/skill-trail'
 import type { SkillWriteResult } from '@shared/skill-edit'
@@ -308,7 +309,16 @@ const INERT_PORTABLE: PortableHandlers = {
 const INERT_PACK: PackHandlers = {
   read: async () => ({ kind: 'refused', reason: 'packs are not available here' }),
   add: async () => ({ kind: 'refused', reason: 'packs are not available here' }),
-  write: async () => ({ kind: 'refused', reason: 'packs are not available here' })
+  write: async () => ({ kind: 'refused', reason: 'packs are not available here' }),
+  sample: async () => ({ kind: 'refused', reason: 'packs are not available here' })
+}
+
+/** M255. The publisher's one door; the implementation is main/github-publish.ts, wired in index.ts. */
+export interface PublishHandlers {
+  publish(req: unknown): Promise<GithubPublishResult>
+}
+const INERT_PUBLISH: PublishHandlers = {
+  publish: async () => ({ kind: 'refused', reason: 'publishing is not available here' })
 }
 
 /** M129. The four writers; see main/skill-write.ts for every rule they enforce. */
@@ -507,7 +517,9 @@ export function registerIpcHandlers(
   /** M252. Appended last, like every collaborator before it — a harness that does not wire it gets a named refusal, never a process. */
   tools: ToolHandlers = INERT_TOOLS,
   /** M253. Appended last, like every collaborator before it. */
-  pack: PackHandlers = INERT_PACK
+  pack: PackHandlers = INERT_PACK,
+  /** M255. Appended last, like every collaborator before it. */
+  publisher: PublishHandlers = INERT_PUBLISH
 ): void {
   ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
@@ -572,6 +584,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PACK_READ, (_event, req: { path?: string }) => pack.read(req))
   ipcMain.handle(IPC.PACK_ADD, (_event, req: { token: string }) => pack.add(req))
   ipcMain.handle(IPC.PACK_EXPORT, (_event, req: { path?: string; name: string; suggested?: string }) => pack.write(req))
+  ipcMain.handle(IPC.PACK_SAMPLE, () => pack.sample())
+  // M255. The request is `unknown` on purpose: the publisher parses it field
+  // by field and refuses a malformed one by name.
+  ipcMain.handle(IPC.GITHUB_PUBLISH, (_event, req: unknown) => publisher.publish(req))
   ipcMain.handle(IPC.BOARD_LANE, (_event, req: BoardLaneRequest) => board.lane(req))
   ipcMain.handle(IPC.BOARD_LANE_STATUS, (_event, req: { path: string; root: string }) => board.laneStatus(req))
   ipcMain.handle(IPC.BOARD_OPEN_PR, (_event, req: BoardOpenPrRequest) => board.openPr(req))

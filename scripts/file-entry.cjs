@@ -87,5 +87,7 @@ module.exports = {
   // M190. The feedback draft this app never submits.
   ...((() => { try { return require('../src/shared/feedback.ts') } catch { return {} } })()),
   // M253. The pack file: a discipline's library objects, read before added.
-  ...((() => { try { return require('../src/shared/pack.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/pack.ts') } catch { return {} } })()),
+  // M255. The sample dev-relations pack, built from its one source.
+  ...((() => { try { return require('../src/shared/devrel-pack.ts') } catch { return {} } })())
 }

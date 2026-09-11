@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs'
-import { basename } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import { DEVREL_PACK_FILE, devrelPackText } from '../shared/devrel-pack'
 import { randomUUID } from 'node:crypto'
 import { buildPack, packRequirements, packSentence, parsePack, remapPack, type PackParse } from '../shared/pack'
 import type { CredentialMeta } from '../shared/credential-schema'
-import type { PackAddResult, PackReadResult, PackWriteResult } from '../shared/ipc-contract'
+import type { PackAddResult, PackReadResult, PackSampleResult, PackWriteResult } from '../shared/ipc-contract'
 import type { LayoutStore } from './layout-store'
 import { mintPresetId, mintPromptId } from './presets'
 
@@ -32,12 +33,15 @@ export interface PackHandlerDeps {
   /** The menu labels and disables an unread preset, so an add that made presets must rebuild it. */
   afterPresetChange: () => void
   app: string
+  /** M255. Where the sample pack is written (userData/packs in production). */
+  sampleDir: string
 }
 
 export interface PackHandlers {
   read(req: { path?: string }): Promise<PackReadResult>
   add(req: { token: string }): Promise<PackAddResult>
   write(req: { path?: string; name: string; suggested?: string }): Promise<PackWriteResult>
+  sample(): Promise<PackSampleResult>
 }
 
 const named = (req: { path?: string } | undefined): string | undefined =>
@@ -128,6 +132,24 @@ export function createPackHandlers(deps: PackHandlerDeps): PackHandlers {
         return { kind: 'refused', reason: `that file could not be written: ${error instanceof Error ? error.message : String(error)}` }
       }
       return { kind: 'written', path, bytes: Buffer.byteLength(text, 'utf8'), sentence: packSentence(file) }
+    },
+
+    /**
+     * M255. The sample dev-relations pack, written ONCE (the starter's rule:
+     * a file the person may have edited is never overwritten) from its one
+     * source. The renderer then reads it through `read`, so the sample gets
+     * the same preview and inert add as a pack someone was given.
+     */
+    async sample() {
+      const path = join(deps.sampleDir, DEVREL_PACK_FILE)
+      if (existsSync(path)) return { kind: 'ready', path, wrote: false }
+      try {
+        mkdirSync(deps.sampleDir, { recursive: true })
+        writeFileSync(path, devrelPackText(), 'utf8')
+      } catch (error) {
+        return { kind: 'refused', reason: `the sample pack could not be written: ${error instanceof Error ? error.message : String(error)}` }
+      }
+      return { kind: 'ready', path, wrote: true }
     }
   }
 }

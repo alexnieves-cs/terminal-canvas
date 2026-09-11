@@ -2482,6 +2482,47 @@ await (async () => {
   }
 }
 
+// M255 — devrel.pack.*. THE SAMPLE DEV-RELATIONS PACK, and the one thing it
+//      may never carry: a command that WRITES to GitHub. A `gh` write uses
+//      gh's own login and would bypass both the broker's not-asked rule and
+//      the publisher's confirmation, so no preset and no terminal node may
+//      hold one — asserted on every executable surface. Every chat DRAFTS
+//      into a file and says so; publishing is ⌘K › Publish…, a person's act.
+//      The shipped file is generated from `devrelPack()` and must equal it.
+{
+  const has = typeof F.devrelPack === 'function' && typeof F.devrelPackText === 'function'
+  const WRITES = /\bgh\s+(release\s+(create|edit|delete|upload)|pr\s+(comment|merge|create|edit|close|review)|issue\s+(comment|create|edit|close)|api\b|repo\s+(create|edit|delete))|\btc\s+api\b|\bcurl\b/
+  if (!has) {
+    ok('devrel.pack.1 the sample pack parses with zero warnings, holds four workflows, four prompts and two read-only presets, needs the GitHub token and gh and git, carries no GitHub write in any preset or terminal node, and every chat drafts only', false, 'devrel-pack.ts does not export devrelPack / devrelPackText')
+    ok('devrel.pack.2 docs/packs/dev-relations.tcpack is exactly devrelPack() serialised — the shipped sample cannot drift from its source', false, 'devrel-pack.ts does not export devrelPack / devrelPackText')
+  } else {
+    const pack = F.devrelPack()
+    const parsed = F.parsePack(F.devrelPackText())
+    const m = parsed.kind === 'pack' ? parsed.pack.manifest : { contents: [] }
+    const count = (k) => m.contents.filter((c) => c.kind === k).length
+    const lines = []
+    for (const p of pack.presets) lines.push([p.command ?? '', ...p.args].join(' '))
+    for (const t of pack.templates) for (const n of t.nodes) if (n.kind === 'terminal') lines.push([n.command ?? '', ...(n.args ?? [])].join(' '))
+    const writes = lines.filter((l) => WRITES.test(l))
+    const chats = pack.templates.flatMap((t) => t.nodes.filter((n) => n.kind === 'chat'))
+    const needs = F.packRequirements(m, [], { gh: true, git: true })
+    ok('devrel.pack.1 the sample pack parses with zero warnings, holds four workflows, four prompts and two read-only presets, needs the GitHub token and gh and git, carries no GitHub write in any preset or terminal node, and every chat drafts only',
+      parsed.kind === 'pack' && parsed.warnings.length === 0 && m.name === 'dev relations' &&
+        count('workflow') === 4 && count('prompt') === 4 && count('preset') === 2 &&
+        needs.credentials.length === 1 && needs.credentials[0].service === 'github' && needs.credentials[0].field === 'token' &&
+        (m.tools ?? []).map((t) => t.command).sort().join(',') === 'gh,git' &&
+        lines.length >= 4 && writes.length === 0 &&
+        chats.length === 4 && chats.every((c) => typeof c.message === 'string' && /Draft only/.test(c.message) && /Publish/.test(c.message)) &&
+        pack.redacted === 0,
+      JSON.stringify({ warnings: parsed.kind === 'pack' ? parsed.warnings : parsed, contents: m.contents, tools: m.tools, writes, lines }))
+    const shipped = join(__dirname, '..', 'docs', 'packs', 'dev-relations.tcpack')
+    const onDisk = existsSync(shipped) ? readFileSync(shipped, 'utf8') : null
+    ok('devrel.pack.2 docs/packs/dev-relations.tcpack is exactly devrelPack() serialised — the shipped sample cannot drift from its source',
+      onDisk !== null && onDisk === F.devrelPackText(),
+      onDisk === null ? `missing ${shipped} — regenerate it from devrelPackText()` : 'the shipped file differs from devrelPackText() — regenerate it')
+  }
+}
+
 // M190 — feedback.1. THE DRAFT THIS APP NEVER SENDS. What travels is chosen
 //      by TYPE — a version, a platform, engine WORDS and panel COUNTS — so
 //      there is nowhere in the shape for a path, a command, a transcript or a

@@ -158,6 +158,9 @@ module.exports = {
   presetFromCapture: require('../src/main/presets').presetFromCapture,
   // M253. The ONE pack factory production builds, so pack.import.* drives it.
   createPackHandlers: require('../src/main/pack-handlers').createPackHandlers,
+  // M255. The PRODUCTION publisher, driven with a harness confirm and broker.
+  publish: require('../src/main/github-publish').publish,
+  parsePublishRequest: require('../src/main/github-publish').parsePublishRequest,
   // M253. The one unread-preset refusal, so the harness's palette spawn asks
   // production's function rather than restating its sentence.
   unreviewedPresetReason: require('../src/main/presets').unreviewedPresetReason,

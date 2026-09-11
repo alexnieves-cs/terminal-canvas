@@ -585,6 +585,24 @@ const ok = (n, pass, detail = '') => {
         plain.ok === true && callers[1] === undefined,
       JSON.stringify({ parsedToken, unknown, mate, plain, callers }))
   }
+
+  // M255 — control.gap.1. `tc api` CANNOT CLAIM A PERSON SAID YES. The
+  //     broker lets a teammate-less write through only with
+  //     `personConfirmed`, which main-side code sets after its own dialog.
+  //     The control handler builds its broker request field by field, so a
+  //     wire request that CLAIMS the flag reaches the broker without it —
+  //     asserted on the key, since a spread would carry it straight through.
+  {
+    const calls = []
+    const handler = C.createControlHandler({
+      presets: () => [], defaultId: () => null, exists: () => true, spawn: () => {}, list: () => [], focus: () => true,
+      broker: { call: async (req) => { calls.push(req); return { ok: false, reason: 'no one was asked', code: 'not-asked' } } }
+    })
+    const answered = await handler({ verb: 'api', service: 'github', method: 'POST', path: '/repos/o/r/releases', body: '{}', personConfirmed: true })
+    ok('control.gap.1 a tc api request claiming personConfirmed reaches the broker WITHOUT the flag, and the broker\'s not-asked refusal comes back as the error',
+      calls.length === 1 && !('personConfirmed' in calls[0]) && answered.ok === false && /no one was asked/.test(answered.error),
+      JSON.stringify({ calls, answered }))
+  }
   const failed = results.filter((r) => !r.pass)
   console.log(`\n${results.length - failed.length}/${results.length} passed`)
   process.exit(failed.length === 0 ? 0 : 1)

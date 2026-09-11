@@ -80,7 +80,10 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   // every agent by name (sheet-draft.ts's sheetReviewRefusal).
   // M253. The same as M189's for a pack: a teammate chooses neither where
   // this app writes nor what a person is asked to add to their library.
-  'export-pack', 'import-pack'
+  'export-pack', 'import-pack',
+  // M255. A teammate never publishes on a person's behalf, and never chooses
+  // what a person is asked to add: the three publish verbs and the sample.
+  'publish-release', 'publish-comment', 'publish-discussion', 'sample-pack'
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {

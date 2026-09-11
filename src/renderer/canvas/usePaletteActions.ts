@@ -31,7 +31,7 @@ import type { SettingValue } from '@shared/settings-schema'
 import { DENY_MESSAGE } from '@renderer/chat/chat-model'
 import { fillPlaceholders, askableHoles, fillBuiltIns } from '@renderer/chat/composer-model'
 import { allTemplates } from '@shared/templates'
-import type { SpawnResult } from '@shared/ipc-contract'
+import type { GithubPublishRequest, SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import { repoOfKey } from '@shared/work-items'
 import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
@@ -104,6 +104,8 @@ export interface PaletteActionsDeps {
   /** M253. A pack's two doors, and the two "I've read this" statements. */
   exportPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M255. The sample pack, written by main and read through the ordinary pack preview. */
+  importSamplePackFile: () => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   markPresetReadNow: (id: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M188. Test one node: the same executor the workflow's own run takes. */
   testNodeNow: (templateId: string, key?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -256,7 +258,7 @@ export interface PaletteActionsDeps {
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     createObjectNow,
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -269,6 +271,28 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip,
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
+
+  /**
+   * M255. The ONE selected panel's draft path, or the named reason there is
+   * none. Publishing is from a file a person can see on the canvas, never
+   * from whatever happened to be focused last.
+   */
+  const selectedDraftPath = (): string | { reason: string } => {
+    const ids = [...(selectedIdsRef.current ?? [])]
+    if (ids.length !== 1) return { reason: 'select the one draft file to publish first' }
+    const panel = (panelsRef.current ?? []).find((p) => p.rect.id === ids[0])
+    if (panel === undefined || !isFilePanel(panel)) return { reason: 'the selected panel is not a file — select the draft (RELEASE_NOTES.md, PR_COMMENT.md…) to publish it' }
+    return panel.source.path
+  }
+  /** M255. One publish, its three answers kept three: published, cancelled (never a refusal), refused by name. */
+  const publishDraft = async (target: { kind: 'release'; tag: string } | { kind: 'comment'; number: number } | { kind: 'discussion'; category: string }, file?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const path = file !== undefined && file.trim() !== '' ? file.trim() : selectedDraftPath()
+    if (typeof path !== 'string') return { kind: 'refused', reason: path.reason }
+    const result = await window.canvas.github.publish({ ...target, path } as GithubPublishRequest)
+    if (result.kind === 'published') return { kind: 'ran', note: `published${result.url === '' ? '' : ` — ${result.url}`}${result.redacted === 0 ? '' : ` · ${result.redacted} secret${result.redacted === 1 ? '' : 's'} redacted`}` }
+    if (result.kind === 'cancelled') return { kind: 'ran', note: 'nothing was published' }
+    return { kind: 'refused', reason: result.reason }
+  }
 
   // M147. `self` names the object being built, for the one verb that opens
   // another verb's door (workspaceFromTemplate → beginSpawnSheet); the shape
@@ -353,6 +377,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'import-docx': return a.path ? self.importDocx(a.path) : { kind: 'refused', reason: 'name the .docx to import — import-docx <path>; choosing one is the palette row\'s' }
           case 'export-pack': return self.exportPack(a.path)
           case 'import-pack': return self.importPack(a.path)
+          case 'sample-pack': return self.importSamplePack()
+          case 'publish-release': return self.publishRelease(a.tag!, a.file)
+          case 'publish-comment': return self.publishComment(a.number!, a.file)
+          case 'publish-discussion': return self.publishDiscussion(a.category!, a.file)
           case 'note-add': return self.addNote(a.form!, a.text)
           case 'note-set': return self.setNoteText(a.panel!, a.text ?? '')
           case 'note-tint': return self.setNoteTint(a.panel!, a.tint!)
@@ -2094,6 +2122,28 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     exportPack: (path) => exportPackFile(path),
     importPack: (path) => importPackFile(path),
+    importSamplePack: () => importSamplePackFile(),
+    // M255. Publishing. The file is the one on the line, else the SELECTED
+    // file panel's; main parses the request, reads the draft's own remote and
+    // asks the person with the text in front of them before anything leaves.
+    publishRelease: (tag, file) => publishDraft({ kind: 'release', tag }, file),
+    publishComment: (number, file) => publishDraft({ kind: 'comment', number: Number(String(number).replace(/^#/, '')) }, file),
+    publishDiscussion: (category, file) => publishDraft({ kind: 'discussion', category }, file),
+    beginPublish: (kind) => {
+      const path = selectedDraftPath()
+      if (typeof path !== 'string') { self.say(path.reason); return }
+      const label = kind === 'release' ? 'Publish as a release — the tag (e.g. v1.2.0)…' : kind === 'comment' ? 'Comment on pull request number…' : 'Post as a Discussion in category…'
+      setInputMode({
+        kind: 'text',
+        label,
+        initial: kind === 'discussion' ? 'Announcements' : '',
+        submit: (value) => {
+          setInputMode(null)
+          const run = kind === 'release' ? self.publishRelease(value.trim(), path) : kind === 'comment' ? self.publishComment(value.trim(), path) : self.publishDiscussion(value.trim(), path)
+          void run.then((result) => self.say(result.kind === 'ran' ? (result.note ?? 'published') : result.reason))
+        }
+      })
+    },
     markPresetRead: (id) => markPresetReadNow(id),
     addNote: (form, text) => addNote(form, text),
     setNoteText: (panelId, text) => setNoteText(panelId, text),
@@ -2478,7 +2528,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

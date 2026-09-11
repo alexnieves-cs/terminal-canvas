@@ -485,6 +485,14 @@ export interface PaletteActions {
   /** M253. Packs: import READS and shows the manifest, adding nothing; export writes the library as one pack. */
   exportPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M255. The sample dev-relations pack, through the same preview as any pack. */
+  importSamplePack(): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M255. Publish a draft file (absent: the selected file panel's). Main asks the person with the text shown. */
+  publishRelease(tag: string, file?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  publishComment(number: string, file?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  publishDiscussion(category: string, file?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M255. The palette row's step: ask for the tag, number or category, then publish the selected draft. */
+  beginPublish(kind: 'release' | 'comment' | 'discussion'): void
   /** M253. "I've read this" for a pack preset — a person's statement, so no verb reaches it (EXCLUDED_ACTIONS). A preset has no canvas object; its palette row is its home. */
   markPresetRead(id: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   testNode(templateId: string, key?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -2396,11 +2404,19 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M253. A pack's two rows. Import shows what the pack holds and needs FIRST
   // and adds nothing until Add; export writes the library — not this canvas.
   out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and presets in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })
+  out.push({ id: 'pack.sample', title: 'Import the sample dev-relations pack…', subtitle: 'release notes, changelog, announcement and PR-comment workflows — shown first, added only when you choose Add', group: 'canvas', searchText: 'sample pack dev relations devrel release notes changelog announcement github', run: () => { void actions.importSamplePack() } })
+  // M255. Publishing the SELECTED draft file. Disabled by name until exactly
+  // one panel is selected; the action then checks it is a file and says so.
+  // Main's own dialog shows the text and asks before anything is sent.
+  const oneSelected = ctx.selectedIds.length === 1 ? undefined : 'select the one draft file to publish first'
+  out.push(withReason({ id: 'publish.release', title: 'Publish as a GitHub release…', subtitle: 'the selected draft file becomes a release under the tag you type — you see the text before it is sent', group: 'canvas', searchText: 'publish github release notes tag draft', run: () => actions.beginPublish('release') }, oneSelected))
+  out.push(withReason({ id: 'publish.comment', title: 'Comment on a pull request…', subtitle: 'the selected draft file becomes a comment on the PR you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github comment pull request pr draft', run: () => actions.beginPublish('comment') }, oneSelected))
+  out.push(withReason({ id: 'publish.discussion', title: 'Post a GitHub Discussion…', subtitle: 'the selected draft file becomes a Discussion in the category you name — you see the text before it is sent', group: 'canvas', searchText: 'publish github discussion announcement post draft', run: () => actions.beginPublish('discussion') }, oneSelected))
   out.push({ id: 'pack.import', title: 'Import a pack…', subtitle: 'shows what it holds and needs; nothing is added until you choose Add', group: 'canvas', searchText: 'import pack bundle open discipline library add', run: () => { void actions.importPack() } })
-  // An imported workflow is marked read by the button ON its workflow panel
-  // (M252's `onMarkRead`), never by a palette row: M253's `workflow.read.<id>`
-  // rows would have cleared ANY unread template — a described tool's included —
-  // which `verify:verbs tool.door.1` forbids.
+  // M255 (merge). An imported workflow is marked read by the button ON its
+  // workflow panel (M252's `onMarkRead`), never by a palette row: M253's
+  // `workflow.read.<id>` rows would have cleared ANY unread template —
+  // a described tool's included — which `verify:verbs tool.door.1` forbids.
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
   // person choose twice. Each says what its form is FOR (the empty-state

@@ -227,10 +227,12 @@ const FACTS = {
     // structure like the portable file, so it scrubs title, bullets, body,
     // alt text and notes one field at a time and reports the count in its
     // export sentence — `outward`'s one-text-one-note answer cannot say that.
-    // M253 adds the EIGHTH: `shared/pack.ts` scrubs a pack's workflows,
+    // M253 adds the SEVENTH: `shared/pack.ts` scrubs a pack's workflows,
     // prompts and presets field by field for the same reason portable.ts
     // does — the count is part of the file.
-    ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export and M251\'s deck export, which each scrub field by field and report their count, and M190\'s feedback draft, whose count is stated in the draft itself, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+    // M255 (merge): M251's deck-export and M253's pack are BOTH the seventh on
+    // their own branches; merged, the list is eight, each named for its reason.
+    ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, M251\'s deck export to .pptx, scrubbed field by field with its count in the export sentence, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
       JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
@@ -450,7 +452,9 @@ const FACTS = {
   }
   // M253 adds both pack verbs: a teammate chooses neither where this app
   // writes a pack nor what a person is asked to add to their library.
-  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x']
+  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x',
+    // M255. A teammate never publishes on a person's behalf.
+    'publish-release v1.2.0 /tmp/RELEASE_NOTES.md', 'publish-comment 42 /tmp/PR_COMMENT.md', 'publish-discussion Announcements /tmp/ANNOUNCEMENT.md', 'sample-pack']
     .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))
   const exportVerb = V.VERBS.find((verb) => verb.id === 'export-canvas')
   const destructivePlan = P.buildPlan(P.parsePlanLine('export-canvas /tmp/x'), facts)

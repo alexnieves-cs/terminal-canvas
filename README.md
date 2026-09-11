@@ -402,6 +402,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        node:fetch
                        portable:export / portable:import
                        pack:read / pack:add / pack:export / preset:mark-reviewed
+                       pack:sample / github:publish
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        board:repositories
@@ -1033,6 +1034,7 @@ price of not killing something.
 | M251 | a Markdown deck exported to .pptx — built on M248's deck (`splitDeck` + `parseMarkdown`), never a second deck model; `deck-export-pptx` runs in main over the real pptxgenjs, headings to titles, lists to bullets, pictures (decided by magic number) embedded, `<!-- notes -->` to speaker notes; every string scrubbed field by field and counted, `main/deck-export.ts` the seventh named `redactSecrets` caller, and every construct a slide cannot hold named with its slide in the sentence; four doors — `docs/build-log/m251-deck-pptx-export.md` | ✅ done |
 | M252 | describe a tool — a description becomes a workflow of existing node kinds or a preview-backed mini app through ONE headless run given no tools (`--tools ""`, a JSON schema), whose answer is only data; what arrives is INERT — a workflow saved `reviewed: false` with its action blocks refused by name, an app's pane with no guest and its Open and dev server refused — until a person presses "I've read this", which has no verb, row, agent line or node; its reach (folder, addresses, commands) is shown on the object and in the inspector before the first run; four doors through one creatable kind — `docs/build-log/m252-describe-a-tool.md` | ✅ done |
 | M253 | Packs, Phase A — one discipline's workflows, saved prompts and presets in one `.tcpack` file, READ before anything is added. `pack:read` holds the parse under a token and `pack:add` takes only the token, so what is added is exactly what was shown; every workflow and preset arrives unread, and an unread preset is refused by name at every spawn door in main. The manifest names each credential by service and FIELD (never a value) and the preview says what is missing per field; an unknown service is kept, not dropped. Phase B (a dev-relations pack on the existing GitHub credential) is sketched, not built. |
+| M255 | Packs, Phase B — the dev-relations sample pack (`docs/packs/dev-relations.tcpack`, from `shared/devrel-pack.ts`): four workflows that DRAFT release notes, changelog entries, announcements and PR comments into files, four prompts, two read-only presets. Publishing is a person's act: `github:publish` resolves the repo from the draft's own origin, passes the body through `outward()`, and the system's own dialog asks every time before one broker call with `personConfirmed`. And the broker gap it exposed is closed: a write with no teammate's per-request card and no person's confirmation is refused `not-asked` before the token is read. |
 
 ### What's next — the v10 run (D01–D20)
 
