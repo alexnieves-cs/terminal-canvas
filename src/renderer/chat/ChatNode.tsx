@@ -76,6 +76,8 @@ export interface ChatNodeProps {
   onOpenAuto?: (id: string) => void
   /** M100. The teammate this chat speaks as, by name — absent for a plain chat. */
   teammateName?: string
+  /** D12: the dispatched task is provenance for an accepted decision, not its scope. */
+  taskId?: string
 }
 
 const shortInput = toolArgument
@@ -260,11 +262,23 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   const [refusal, setRefusal] = useState<string | null>(null)
   const [popup, setPopup] = useState<Popup | null>(null)
+  const [decision, setDecision] = useState<{ turnId: string; text: string } | null>(null)
+  const [decisionResult, setDecisionResult] = useState<string | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const stickRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const attachSeq = useRef(0)
   const popupSeq = useRef(0)
+
+  const acceptDecision = (): void => {
+    if (decision === null) return
+    void window.canvas.memory.add({ root: panel.chat.cwd, kind: 'decided', text: decision.text,
+      source: { conversationId: id, turnId: decision.turnId, ...(props.taskId === undefined ? {} : { taskId: props.taskId }) } }).then((answer) => {
+      if (answer.ok === false) { setDecisionResult(answer.reason); return }
+      setDecisionResult('remembered as a repository decision')
+      setDecision(null)
+    })
+  }
 
   // Auto-scroll to the newest row unless the user has scrolled away; the
   // decision is read from the scroll position BEFORE the rows change, so a
@@ -655,7 +669,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 return <div key={row.id} className="chat__row chat__row--user" data-chat-row="user" data-chat-row-id={row.id}><span className="chat__role">you</span><pre className="chat__text">{row.text}</pre>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}</div>
               case 'text':
                 /* M167. Unboxed PROSE at the measure, rendered from the markdown tree; `data-chat-assistant-text` stays on the element whose textContent is the answer (chat.2, chat.3). */
-                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><div className="chat__text chat__prose" data-chat-assistant-text><Markdown text={row.text} /></div>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}</div>
+                return <div key={row.id} className={`chat__row chat__row--assistant${row.live ? ' chat__row--live' : ''}`} data-chat-row="assistant" data-chat-row-id={row.id}><span className="chat__role">claude</span><div className="chat__text chat__prose" data-chat-assistant-text><Markdown text={row.text} /></div>{row.at !== undefined && <span className="chat__when" title={new Date(row.at).toLocaleString()}>{clockOf(row.at)}</span>}{!row.live && props.readOnly !== true && <button type="button" className="pf__verb pf__verb--word chat__remember" data-chat-remember title="Show this answer and its repository-memory scope before saving it as a decision" {...shellControl(() => { setDecision({ turnId: row.turnId, text: row.text }); setDecisionResult(null) })}>remember</button>}</div>
               case 'thinking':
                 return <ThinkingRow key={row.id} row={row} />
               case 'tool':
@@ -674,6 +688,16 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               claude exited{typeof snapshot.exitCode === 'number' ? ` with ${snapshot.exitCode}` : ''}{snapshot.exitSignal ? ` (${snapshot.exitSignal})` : ''} — the next message resumes the conversation
             </p>
           )}
+          {decision !== null && (
+            <section className="chat__decision" data-chat-decision aria-label="Remember decision">
+              <p className="pf__note">Remember this exact answer as a decision in this conversation’s repository memory?</p>
+              <pre className="chat__decision-text">{decision.text}</pre>
+              <p className="pf__note">Scope: repository memory{props.taskId === undefined ? '' : ' · linked to this task'}. It will be redacted before saving.</p>
+              <button type="button" className="pf__verb pf__verb--word" data-chat-decision-confirm {...shellControl(acceptDecision)}>Remember decision</button>
+              <button type="button" className="pf__verb pf__verb--word" data-chat-decision-cancel {...shellControl(() => setDecision(null))}>Cancel</button>
+            </section>
+          )}
+          {decisionResult !== null && <p className="pf__note" data-chat-decision-result>{decisionResult}</p>}
         </div>
         {/* M76. The question lives BETWEEN the well and the composer, never
             inside the scroll host: a block at the bottom of a long transcript

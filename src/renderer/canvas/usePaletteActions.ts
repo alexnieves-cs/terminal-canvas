@@ -891,7 +891,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               }
               // M181. The image panel's one field, by name — the fifteenth arm.
               if (isImagePanel(p)) {
-                return { kind: p.kind, rect: p.rect, image: { path: p.image.path }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them

@@ -3796,6 +3796,28 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// D12 — artifact.provenance.1. A title is mutable presentation; source is a
+// separate optional record. Old images retain no invented source, a capture
+// keeps its stable id/URL through serialisation, and a malformed or unknown
+// source costs itself rather than the picture.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'old', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 1, title: 'renamed', image: { path: '/w/old.png' } },
+      { id: 'cap', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 2, title: 'anything now', image: { path: '/w/capture.png', artifact: { kind: 'capture', id: '2026-page.png', url: 'http://localhost:5173/a', capturedAt: 42 } } },
+      { id: 'bad', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 3, image: { path: '/w/bad.png', artifact: { kind: 'future', value: 'x' } } }
+    ] }], activeWorkspaceId: 'w1'
+  }))
+  const by = (id) => out.snapshot.workspaces[0].panels.find((p) => p.id === id)
+  const round = L.parseLayout(L.serialiseLayout(out.snapshot)).snapshot.workspaces[0].panels.find((p) => p.id === 'cap')
+  ok('artifact.provenance.1 image artifact provenance: absent old images stay absent; a renamed capture retains its capture id, URL and time through a round-trip; malformed or unknown provenance is warned and dropped while its image remains',
+    by('old') && !('artifact' in by('old').image) &&
+      by('cap')?.image.artifact?.kind === 'capture' && by('cap').image.artifact.id === '2026-page.png' && by('cap').title === 'anything now' &&
+      round?.image.artifact?.kind === 'capture' && round.image.artifact.url === 'http://localhost:5173/a' &&
+      by('bad') && !('artifact' in by('bad').image) && out.warnings.some((w) => w.includes('bad') && w.includes('artifact')),
+    JSON.stringify({ panels: out.snapshot.workspaces[0].panels, warnings: out.warnings }))
+}
+
 // M186 — image.asset.1. THE ASSET IDENTITY ON DISK. `image.asset` is a
 // sha-256 of the picture's own bytes: absent on every pre-M186 record and on
 // any picture the person pointed at in place (and it serialises to NO key),

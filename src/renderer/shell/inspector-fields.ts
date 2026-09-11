@@ -836,7 +836,8 @@ export function buildInspectorModelBare(
   // path is the one field; the bytes are main's at render.
   if (isImagePanel(panel)) {
     return { kind: 'image', reviewable: false, state: { kind: 'image', status: undefined, dormant: false }, id: panel.rect.id, heading: railLabel(panel, undefined), ...(panel.title === undefined ? {} : { title: panel.title }), restartable: false, reattached: false, links, usage: NO_USAGE, fields: [
-      { key: 'image-path', label: 'file', value: panel.image.path }
+      { key: 'image-path', label: 'file', value: panel.image.path },
+      ...(panel.image.artifact?.kind === 'capture' ? [{ key: 'artifact-source', label: 'captured from', value: panel.image.artifact.url }, { key: 'artifact-id', label: 'capture', value: panel.image.artifact.id }] : [])
     ] }
   }
   if (isBrowserPanel(panel)) {

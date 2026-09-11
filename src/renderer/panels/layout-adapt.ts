@@ -113,7 +113,7 @@ export function toPanels(persisted: PersistedPanel[]): Panel[] {
     // M187. The sixteenth kind, both copy sites: an absent tint stays absent.
     if (p.kind === 'note') return { ...base, kind: 'note' as const, note: { form: p.note.form, text: p.note.text, ...(p.note.tint === undefined ? {} : { tint: p.note.tint }) } }
     // M186. An absent asset id stays absent through both copy sites.
-    if (p.kind === 'image') return { ...base, kind: 'image' as const, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }) } }
+    if (p.kind === 'image') return { ...base, kind: 'image' as const, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) } }
     // M128. The skill panel: two fields, copied BY NAME. A spread of
     // `p.skill` would share the persisted object with the live panel.
     if (p.kind === 'skill') return { ...base, kind: 'skill' as const, skill: { scope: p.skill.scope, name: p.skill.name } }
@@ -216,7 +216,7 @@ export function fromPanels(panels: Panel[]): PersistedPanel[] {
     if (isWorkPanel(panel)) return { ...base, kind: 'work' as const, work: { itemId: panel.work.itemId } }
     // M181. Same rule; the path is the record's whole identity.
     if (isNotePanel(panel)) return { ...base, kind: 'note' as const, note: { form: panel.note.form, text: panel.note.text, ...(panel.note.tint === undefined ? {} : { tint: panel.note.tint }) } }
-    if (isImagePanel(panel)) return { ...base, kind: 'image' as const, image: { path: panel.image.path, ...(panel.image.asset === undefined ? {} : { asset: panel.image.asset }) } }
+    if (isImagePanel(panel)) return { ...base, kind: 'image' as const, image: { path: panel.image.path, ...(panel.image.asset === undefined ? {} : { asset: panel.image.asset }), ...(panel.image.artifact === undefined ? {} : { artifact: panel.image.artifact }) } }
     // M128. Same rule; the pair is the record's whole identity.
     if (isSkillPanel(panel)) return { ...base, kind: 'skill' as const, skill: { scope: panel.skill.scope, name: panel.skill.name } }
     // M133. The template id alone, field by field like every sibling.

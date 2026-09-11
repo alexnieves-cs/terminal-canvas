@@ -98,6 +98,7 @@ export interface MemoryEntryRow {
   panelId?: string
   at: number
   redacted?: number
+  source?: { conversationId: string; turnId: string; taskId?: string; acceptedAt: number }
 }
 
 /** M81. The canvas model `tc status` answers with — the renderer's own words. */
@@ -1377,7 +1378,7 @@ export interface SettingRow {
 /** Shape of the bridge the preload exposes on window.canvas. */
 /** M185. What a capture answers: the file it wrote and the page it is of, or one named refusal. */
 export type PreviewCaptureResult =
-  | { kind: 'captured'; path: string; url: string; host: string; bytes: number }
+  | { kind: 'captured'; path: string; id: string; url: string; host: string; capturedAt: number; bytes: number }
   | { kind: 'refused'; reason: string }
 
 /** M186. What the asset store answers: the id and where the bytes are, or one named refusal. */
@@ -1517,7 +1518,7 @@ export interface CanvasBridge {
       unresolved?: string
     }>
     /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
-    add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
+    add(req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }): Promise<{ ok: true } | { ok: false; reason: string }>
   }
   /** M100. Teammates: the roster. `save` upserts by id and answers the record as saved; `remove` answers whether it held the id. */
   teammate: {

@@ -2622,6 +2622,25 @@ const session = (id, over = {}) => ({
     JSON.stringify({ pending: pending.approval, state: pending.state, rest: rest.approval, terminal: 'approval' in terminal }))
 }
 
+// D12 — decision.source.1. UI rows must carry the transcript turn's original
+// id separately from their display key: IDs are external and may contain ':'.
+{
+  const rows = R.chatRows([{ id: 'turn:external', role: 'assistant', blocks: [{ type: 'text', text: 'keep this' }], at: 1 }], null)
+  const text = rows.find((row) => row.kind === 'text')
+  ok('decision.source.1 an accepted assistant row retains the original transcript turn id even when that id contains the display-key separator',
+    text?.kind === 'text' && text.turnId === 'turn:external' && text.id === 'turn:external:0', JSON.stringify(text))
+}
+
+// D12 — artifact.inspector.1. A capture's mutable title is not its source:
+// the inspector exposes the stored URL and capture identity separately.
+{
+  const panel = { kind: 'image', rect: { id: 'img1', x: 0, y: 0, w: 1, h: 1 }, z: 1, title: 'renamed', image: { path: '/captures/a.png', artifact: { kind: 'capture', id: 'capture-a', url: 'http://localhost:5173/a', capturedAt: 1 } } }
+  const model = R.buildInspectorModel(panel)
+  const values = Object.fromEntries(model.fields.map((field) => [field.key, field.value]))
+  ok('artifact.inspector.1 an image inspector keeps a capture URL and immutable capture id separate from the image’s mutable title',
+    model.title === 'renamed' && values['artifact-source'] === 'http://localhost:5173/a' && values['artifact-id'] === 'capture-a', JSON.stringify(model))
+}
+
 // M77 — tools.1 / tools.2. TOOL CALLS AS OBJECTS, the pure half.
 //     tools.1: a chat tool row carries the file it names (and none for Bash);
 //     a review node row carries the number of tool calls that touched ITS path

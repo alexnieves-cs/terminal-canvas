@@ -126,7 +126,7 @@ export interface PaletteHandlers {
   starterPrepare(): StarterFiles
   snapshotRestore(at: number, afterId?: number): { kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
-  memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
+  memoryAdd(req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
   /** M100. */
   listTeammates(): PersistedTeammate[]
@@ -674,7 +674,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
   ipcMain.handle(IPC.PRESET_TEMPLATE, (_event, id: string) => palette.presetTemplate(id))
   ipcMain.handle(IPC.MEMORY_LIST, (_event, root: string, limit: number) => palette.memoryList(root, limit))
-  ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string }) => palette.memoryAdd(req))
+  ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }) => palette.memoryAdd(req))
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
   ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number) => palette.saveTemplate(template, typeof expectedRevision === 'number' ? expectedRevision : undefined))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
