@@ -1785,7 +1785,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const panelDirs = panelsRef.current.filter(isTerminalPanel).map((p) => getLiveSession(p.rect.id)?.cwd ?? p.spec.cwd)
       const presets = presetRows.map((p) => ({ id: p.id, name: p.name, available: p.available, ...(p.agent === undefined ? {} : { agent: p.agent }), ...(p.cwd === undefined ? {} : { cwd: p.cwd }), ...(p.agentOptions === undefined ? {} : { agentOptions: p.agentOptions }) }))
       const defaultPresetId = presetRows.find((p) => p.isDefault)?.id ?? presetRows[0]?.id ?? ''
-      void Promise.all([window.canvas.spawn.recent(), window.canvas.template.list()]).then(([recents, templateList]) => {
+      // M262. The times ride a separate read that may fail on its own: an old
+      // main without the handler costs the list its dates, never the sheet.
+      void Promise.all([window.canvas.spawn.recent(), window.canvas.template.list(), window.canvas.spawn.recentUsed().catch(() => ({}))]).then(([recents, templateList, recentUsed]) => {
         const claudeOk = claudeAvailable(presetRows)
         const templates = templateList.map((template) => {
           const refusal = templateRefusal(template, presetRows, claudeOk)
@@ -1797,7 +1799,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           initial: '',
           submit: () => {},
           sheet: {
-            presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, panelDirs,
+            presets, defaultPresetId, ...(focusedCwd === undefined ? {} : { focusedCwd }), recents, recentUsed, panelDirs,
+            // M262. Task first: the switch in the sheet's header. Not offered
+            // for a template or a new-workspace instantiation — both are a
+            // shape already chosen, and a task would drop it.
+            ...(templateId === undefined && into === undefined ? { startTask: () => self.beginStartWork() } : {}),
             claudeAvailable: claudeOk,
             codexAvailable: codexAvailable(presetRows),
             // M118. Every row's availability from the registry's order — a third row needs no new boolean.
@@ -2447,7 +2453,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               const outcome = await self.startWork(id, choice.teammateId, choice.root)
               return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }
             },
-            openTeammates: () => chooseNavigator('teammates')
+            openTeammates: () => chooseNavigator('teammates'),
+            // M262. The expert route, offered only on the TYPED door: a start
+            // from a card is about that card, and a raw panel would drop it.
+            ...(itemId === undefined ? { openPanel: () => self.beginSpawnSheet() } : {})
           }
         })
         palette.openPalette()

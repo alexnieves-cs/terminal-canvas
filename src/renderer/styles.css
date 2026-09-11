@@ -4131,7 +4131,11 @@ body {
 .sheet__how > * { flex: 1; min-width: 0; }
 .sheet__field { display: flex; align-items: center; gap: var(--sp-5); position: relative; }
 .sheet__field--where { align-items: flex-start; }
-.sheet__label { flex: none; width: 5em; font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-3); }
+/* M262. PLAIN LABELS — `Folder`, `Agent`, `Runtime` in sentence case at the
+   body's own tracking. The caps set read as a settings dialog's section
+   headings, and a form of five headings is the "settings form" the review
+   named. The column is a measure, not a shout. */
+.sheet__label { flex: none; width: 5.5em; font-size: var(--t-sm); font-weight: 500; color: var(--fg-2); }
 /* M197. The start sheet's own column: `repository` is ten characters under
    the caps tracking and was CLIPPED to `REPOSITOR` at the shared 5em — a
    label a person cannot read, which no DOM assertion can see. Scoped to this
@@ -4150,10 +4154,12 @@ body {
 }
 .sheet__input--mono { font-family: var(--font-mono); font-size: var(--t-sm); }
 .sheet__input:focus, .sheet__select:focus { outline: none; border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris); }
-.sheet__suggestions { position: absolute; left: calc(5em + var(--sp-5)); right: 0; top: 100%; margin: var(--sp-1) 0 0; padding: var(--sp-2) 0; list-style: none; background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--e-3); z-index: 2; max-height: 200px; overflow: auto; }
+.sheet__suggestions { position: absolute; left: calc(5.5em + var(--sp-5)); right: 0; top: 100%; margin: var(--sp-1) 0 0; padding: var(--sp-2) 0; list-style: none; background: var(--s-3); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--e-3); z-index: 2; max-height: 200px; overflow: auto; }
 .sheet__suggestion { display: flex; gap: var(--sp-4); padding: var(--sp-2) var(--sp-4); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); cursor: pointer; }
 .sheet__suggestion--on { background: var(--s-5); color: var(--fg); }
-.sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet__suggestion-name { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-weight: 600; color: var(--fg); }
+.sheet__suggestion-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); align-self: center; }
+.sheet__suggestion-why[data-sheet-suggestion-when] { color: var(--fg-4); }
 .sheet__suggestion-why { flex: none; color: var(--iris); font-family: var(--font-ui); font-size: var(--t-xs); }
 .sheet__foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); font-size: var(--t-xs); color: var(--fg-3); }
 /* M81. Its OWN row, and it WRAPS: this is the only text that says what a
@@ -5384,3 +5390,99 @@ body {
 .sheet-node__draft.is-conflict > span { color: var(--fg); }
 .sheet-node__draft.is-done > span { color: var(--fg-3); }
 .sheet-node__changes { margin-left: var(--sp-4); font-size: var(--t-xs); color: var(--fg); border: 1px solid var(--iris); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); white-space: nowrap; }
+
+/* M262. THE FIRST-RUN SEQUENCE. Four questions as a numbered THREAD — a
+   hairline joins the numerals, and an answered step's numeral fills with the
+   accent, so the card reads top to bottom as progress rather than as a form
+   of equal-weight fields. The face rule holds: sentences in the UI face, the
+   path and nothing else in mono. */
+.launcher__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-6); counter-reset: none; }
+.launcher__step { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: var(--sp-5); row-gap: var(--sp-3); align-items: start; }
+.launcher__step > :not(.launcher__step-num) { grid-column: 2; }
+.launcher__step:not(:last-child)::before { content: ""; position: absolute; left: 13.5px; top: 30px; bottom: calc(var(--sp-6) * -1 + 2px); width: 1px; background: var(--line); }
+.launcher__step-num { grid-column: 1; grid-row: 1 / span 3; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: var(--r-full); border: 1px solid var(--line-strong); background: var(--s-1); color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; font-variant-numeric: tabular-nums; transition: background var(--dur-2) var(--ease), color var(--dur-2) var(--ease), border-color var(--dur-2) var(--ease); }
+.launcher__step[data-answered] .launcher__step-num { background: var(--iris); border-color: transparent; color: var(--on-iris); }
+.launcher__step:focus-within .launcher__step-num { border-color: var(--iris); color: var(--fg); box-shadow: 0 0 0 3px var(--iris-dim); }
+.launcher__step[data-answered]:focus-within .launcher__step-num { color: var(--on-iris); }
+.launcher__step--agent .launcher__step-num { border-color: var(--amber); color: var(--fg); }
+.launcher__step-why { font-size: var(--t-sm); color: var(--fg-3); line-height: var(--lh-body); }
+.launcher__step--start .launcher__field { gap: var(--sp-3); }
+.launcher__label { font-size: var(--t-md); color: var(--fg); }
+
+/* The examples: sentences about THIS repository, one tap to fill. */
+.launcher__examples { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.launcher__example { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-2); padding: var(--sp-2) var(--sp-5); border: 1px dashed var(--line-strong); border-radius: var(--r-full); background: transparent; cursor: pointer; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease); }
+.launcher__example:hover { color: var(--fg); border-style: solid; border-color: var(--iris); background: var(--iris-dim); }
+.launcher__example[aria-pressed="true"] { color: var(--fg); border-style: solid; border-color: var(--iris); background: var(--iris-dim); }
+
+/* The recent folders: a LIST — name, short path, when. A row, not a chip,
+   because three facts do not fit in a pill and the name is the one a person
+   recognises. ↑/↓ walk it (Launcher.tsx). */
+.launcher__intent .launcher__recents { list-style: none; margin: 0; padding: var(--sp-1); display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.launcher__recents .launcher__recent { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: baseline; gap: var(--sp-5); width: 100%; text-align: left; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg-2); }
+.launcher__recents .launcher__recent:hover, .launcher__recents .launcher__recent:focus-visible { background: var(--s-3); color: var(--fg); outline: none; }
+.launcher__recents .launcher__recent[aria-pressed="true"] { background: var(--iris-dim); color: var(--fg); box-shadow: inset 2px 0 0 var(--iris); }
+.launcher__recent-name { font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.launcher__recent-path { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.launcher__recent-when { font-size: var(--t-xs); color: var(--fg-4); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* A folder held over the card: the whole card says it will take it. */
+.launcher[data-launcher-dropping] { box-shadow: 0 0 0 2px var(--iris), 0 0 0 8px var(--iris-dim); }
+.launcher[data-launcher-dropping] [data-onboarding-folder] { border-color: var(--iris); border-style: dashed; }
+
+/* THE PRIMARY IS FILLED AT REST. Disabled, it keeps its fill at reduced
+   strength (mixed toward the ground, never opacity — styles 3) — the shared `.is-primary:disabled` outline read as "not a
+   button", which is what the review measured. The reason is on its title and
+   in the summary line above it. */
+.launcher__actions .launcher__start { flex-direction: row; gap: var(--sp-4); min-height: 44px; }
+.launcher__start:disabled, .launcher__start.is-primary:disabled { background: color-mix(in srgb, var(--iris) 50%, var(--s-2)); color: var(--on-iris); border-color: transparent; box-shadow: none; cursor: not-allowed; }
+.launcher__kbd { font-family: var(--font-ui); font-size: var(--t-xs); padding: 0 var(--sp-3); border-radius: var(--r-sm); background: color-mix(in srgb, var(--on-iris) 18%, transparent); }
+.launcher__ask { color: var(--fg); }
+
+/* NOTICES under the action, quieter than it. */
+.launcher__notices { margin-top: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); }
+.launcher__notices:empty { display: none; }
+.launcher__notices .launcher__readiness { margin: 0; }
+.launcher__notices .launcher__banner { margin: 0; }
+.launcher__more { margin-top: var(--sp-5); }
+
+/* M262. THE STARTER CLUSTER. For one arrival the new panels rise from
+   further and in turn — never scaled: the keyframe runs on `.pf__motion`,
+   and nothing above the body may be transformed but by translation (the
+   panel-enter comment above, and `annot.1`). */
+@keyframes cluster-arrive {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.canvas[data-cluster-arrival] .panel__motion--entering { animation: cluster-arrive calc(var(--dur-2) * 3) var(--ease) both; }
+.canvas[data-cluster-arrival] .panel:nth-child(2) .panel__motion--entering { animation-delay: calc(var(--dur-stagger) * 4); }
+.canvas[data-cluster-arrival] .panel:nth-child(3) .panel__motion--entering { animation-delay: calc(var(--dur-stagger) * 8); }
+@media (prefers-reduced-motion: reduce) {
+  .canvas[data-cluster-arrival] .panel__motion--entering { animation: none; }
+  .launcher__step-num { transition: none; }
+}
+
+/* M262. THE CREATION SHEETS' SHAPE. A head with the Task | Panel switch —
+   task first, the panel labelled expert — a sentence under the Agent select
+   saying what that kind IS, the runtime's defaults said in words, environment
+   under Advanced, and a footer of real buttons with the keys beside them. */
+.sheet__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; margin-bottom: var(--sp-2); }
+.sheet__head .sheet__title { margin: 0; }
+.sheet__switch { display: inline-flex; padding: var(--sp-1); gap: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-1); }
+.sheet__switch-tab { display: inline-flex; align-items: baseline; gap: var(--sp-3); padding: var(--sp-2) var(--sp-5); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; cursor: pointer; transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.sheet__switch-tab:hover { color: var(--fg); }
+.sheet__switch-tab[aria-selected="true"] { background: var(--s-4); color: var(--fg); box-shadow: inset 0 1px 0 var(--edge-light); }
+.sheet__switch-hint { font-weight: 400; font-size: var(--t-xs); color: var(--fg-4); }
+.sheet__explain { margin: calc(var(--sp-2) * -1) 0 0 calc(5.5em + var(--sp-5)); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--fg-3); }
+.sheet__defaults { flex: 1 1 100%; font-size: var(--t-sm); color: var(--fg); padding: var(--sp-2) 0; }
+[data-start-sheet] .sheet__defaults { flex: 1; }
+.sheet__advanced { margin: 0; }
+.sheet__advanced-toggle { cursor: pointer; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); padding: var(--sp-2) 0; }
+.sheet__advanced-toggle:hover { color: var(--fg); }
+.sheet__advanced[open] .sheet__advanced-toggle { margin-bottom: var(--sp-3); }
+.sheet__actions { flex: 1 1 100%; display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-4); }
+.sheet__actions .sheet__keys { flex: 1 1 auto; color: var(--fg-4); }
+.sheet__button { min-height: 32px; padding: 0 var(--sp-6); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-1); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 500; cursor: pointer; }
+.sheet__button:hover:not(:disabled) { background: var(--s-3); }
+.sheet__button.is-primary { font-weight: 600; }
+.sheet__button.is-primary:disabled { background: color-mix(in srgb, var(--iris) 50%, var(--s-2)); color: var(--on-iris); border-color: transparent; box-shadow: none; cursor: not-allowed; }

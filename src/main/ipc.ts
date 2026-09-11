@@ -108,6 +108,8 @@ export interface PaletteHandlers {
   spawnWith(req: SpawnRequest): SpawnResult
   /** M65. The last twelve spawn directories, newest first. */
   recentDirectories(): string[]
+  /** M262. When each of those was last used; absent for one recorded before M262. */
+  recentDirectoryUsed?(): Record<string, number>
   requestReset(): void
   listPrompts(cwd: string | null): PromptListRow[]
   savePrompt(name: string, body: string): void
@@ -634,6 +636,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PRESET_SET_WORKTREE, (_event, id: string, on: boolean) => palette.setWorktree(id, on))
   ipcMain.handle(IPC.SPAWN_SHEET, (_event, req: SpawnRequest) => palette.spawnWith(req))
   ipcMain.handle(IPC.SPAWN_RECENT, () => palette.recentDirectories())
+  ipcMain.handle(IPC.SPAWN_RECENT_USED, () => palette.recentDirectoryUsed?.() ?? {})
 
   ipcMain.handle(IPC.PTY_WRITE, (_event, req: PtyWriteRequest) => {
     ptyManager.write(req.panelId, req.data)

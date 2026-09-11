@@ -3,6 +3,8 @@ import type { PersistedTeammate } from '@shared/teammates'
 import { teammateWord } from '@shared/teammates'
 import type { BoardRepositoriesResult } from '@shared/ipc-contract'
 import { shortPath } from './panel-name'
+import { SheetHeader } from './SpawnSheet'
+import { runtimeDefaultsLine } from '@shared/first-run'
 import { startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, type StartWorkRepo } from './start-work'
 
 /**
@@ -47,6 +49,8 @@ export interface StartWorkSheetModel {
   submit(choice: { title: string; teammateId: string; root: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
   /** The named route to the grant. */
   openTeammates(): void
+  /** M262. The expert route: close this sheet and open New panel. Absent hides the switch. */
+  openPanel?(): void
 }
 
 export interface StartWorkSheetProps {
@@ -109,15 +113,20 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   // and start twice — the spawn sheet's own first-run defect, not repeated.
   const onKey = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); return }
+    // M262. Enter on a focused BUTTON is that button's own click — Cancel,
+    // a Task | Panel tab. Before the footer had buttons every focusable was a
+    // field; now Enter-anywhere would make a panel from Cancel (the
+    // launcher's M205 critic, met again).
+    if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.tagName === 'BUTTON') return
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit() }
   }
 
   return (
     <div className="sheet" data-start-sheet role="form" aria-label="Start work" onKeyDown={onKey}>
-      <div className="sheet__title">Start work…</div>
+      <SheetHeader current="task" onPanel={model.openPanel} />
 
       <label className="sheet__field">
-        <span className="sheet__label">task</span>
+        <span className="sheet__label">Task</span>
         {model.titleFixed ? (
           <span className="sheet__input sheet__input--fixed" data-start-task data-start-task-fixed title={model.title}>{model.title}</span>
         ) : (
@@ -127,7 +136,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       </label>
 
       <label className="sheet__field">
-        <span className="sheet__label">agent</span>
+        <span className="sheet__label">Agent</span>
         <select ref={(el) => { if (model.titleFixed) firstRef.current = el }} className="sheet__select" data-start-agent value={teammateId} aria-label="teammate"
           onChange={(e) => { setTeammateId(e.target.value); setRefusal(null) }}>
           <option value="">choose a teammate…</option>
@@ -143,7 +152,7 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
       </label>
 
       <label className="sheet__field">
-        <span className="sheet__label">repository</span>
+        <span className="sheet__label">Repository</span>
         <select className="sheet__select sheet__select--mono" data-start-repo value={root} aria-label="repository"
           disabled={teammateId === '' || repos === undefined || repos.length === 0}
           onChange={(e) => { setRoot(e.target.value); setRefusal(null) }}>
@@ -156,6 +165,14 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           ))}
         </select>
       </label>
+
+      {/* M262. What runs, said: a lane is Claude Code with the CLI's own
+          defaults — nothing on this sheet changes them, and saying so is
+          what stops a person hunting for a knob that is not here. */}
+      <div className="sheet__field sheet__field--how">
+        <span className="sheet__label">Runtime</span>
+        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine('Claude Code', {})} · in its own worktree</span>
+      </div>
 
       <div className="sheet__foot">
         {/* The triple, before anything is minted. */}
@@ -180,7 +197,18 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
             is the STATE vocabulary's own word (`verify:rail state.2` pins it
             to `panel-state.ts`, and a panel's state is not what this line is
             about). What is in flight is the lane, and that is what it says. */}
-        <span className="sheet__keys">↵ start · esc close{busy ? ' · making the lane…' : ''}</span>
+        {/* M262. Explicit verbs beside the keys: Cancel, and a filled Start
+            task that is disabled — never hidden — until the triple is answered. */}
+        <div className="sheet__actions">
+          <span className="sheet__keys">↵ · esc{busy ? ' · making the lane…' : ''}</span>
+          <button type="button" className="sheet__button" data-start-cancel
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
+          <button type="button" className="sheet__button is-primary" data-start-submit disabled={busy || blocking !== null || needs.length > 0 || chosenRoot === null}
+            title={needs[0]?.why ?? blocking ?? undefined}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); submit() }}>{busy ? 'Starting the lane…' : 'Start task'}</button>
+        </div>
       </div>
     </div>
   )

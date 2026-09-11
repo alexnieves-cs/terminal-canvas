@@ -4639,3 +4639,20 @@ an agent un-inert its own answer (`verify:verbs tool.door.1` reads the door file
 must clear the RECORD, the renderer's `templateRowsRef` and the DRAFT at once, the moment the save
 lands: Run reads the draft-or-rows copy, and clearing only main's record left the next Run refused
 for a window a check could hit (`verify:panels tool.2`, found by its own diagnostic detail).
+
+**A folder dropped on the launcher STOPS at the launcher, and the gesture hints are observed, never
+handled (`canvas/Launcher.tsx`, `canvas/hints.ts`'s `attemptOf`, `Canvas.tsx`'s attempt listener,
+M262).** The launcher sits inside `.canvas`, whose drop handler turns a dropped file into a panel;
+a person answering "which repository?" by dragging one in asked for no panel, so the card's
+`onDrop` fills the field and calls `stopPropagation`. The contextual-hint listener is the opposite
+shape on purpose: CAPTURE phase, `passive`, and it never prevents or stops anything — it only
+records which gesture a person reached for on the EMPTY canvas (a mouse drag → pan, a line-mode
+wheel → zoom, typing into nothing → the palette, a double-click → a new panel), so no gesture
+handler below it can change behaviour because a hint exists. The rail then shows that ONE hint;
+four at rest were four instructions before anything was tried (`verify:panels firstrun.3`).
+**Recent-folder times are a SIBLING of the list (`recentDirectoryUsed`, `spawn:recent-used`),
+never a reshape of `spawn:recent`'s `string[]`**, which three readers take as-is; a directory
+recorded before M262 has no time and the row says nothing rather than inventing one
+(`verify:first-run` `fr.pure.1`, `fr.recent.1`; `verify:layout` `recent.3`). **The launcher's
+primary stays FILLED while disabled** — the shared `.is-primary:disabled` outline is what read as
+"not a button" — and is dimmed by mixing toward the ground, never `opacity` (`verify:styles` 3).

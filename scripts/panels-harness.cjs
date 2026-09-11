@@ -1217,6 +1217,7 @@ app.whenReady().then(async () => {
       return { kind: 'spawned' }
     },
     recentDirectories: () => layoutStore.recentDirectories(),
+    recentDirectoryUsed: () => layoutStore.recentDirectoryUsed(),
     // main/index.ts's listPrompts, project half included — check 43 is the
     // only end-to-end exercise of readProjectPrompts anywhere, and a stub
     // with `[]` for that half (which this was until the M5b fix wave) leaves

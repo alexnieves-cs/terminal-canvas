@@ -657,6 +657,14 @@ export interface LayoutSnapshot {
   worktrees: WorktreeRecord[]
   /** M65. The last twelve spawn directories, newest first. Optional on disk for every earlier layout. */
   recentDirectories: string[]
+  /**
+   * M262. When each recent directory was last spawned into, epoch ms, keyed
+   * by the path. A SIBLING of the list, never a reshape of it: `spawn:recent`
+   * keeps its `string[]` answer for its three readers, and a directory
+   * recorded before M262 simply has no time — the sheet says nothing rather
+   * than inventing one.
+   */
+  recentDirectoryUsed: Record<string, number>
 }
 
 export function defaultSettings(): RestoreSettings {
@@ -702,7 +710,8 @@ export function defaultSnapshot(): LayoutSnapshot {
     baselines: {},
     sessions: {},
     worktrees: [],
-    recentDirectories: []
+    recentDirectories: [],
+    recentDirectoryUsed: {}
   }
 }
 
@@ -1610,6 +1619,28 @@ export const RECENT_DIRECTORIES_CAP = 12
  * entry; duplicates keep their first (newest) position; capped so the spawn
  * sheet never scrolls a list of temp directories.
  */
+/**
+ * M262. Absent is every layout before M262 and warns nothing; a non-object
+ * warns and is dropped; an entry whose key is empty or whose value is not a
+ * finite positive number costs that entry only.
+ */
+export function parseRecentDirectoryUsed(raw: unknown, warnings: string[]): Record<string, number> {
+  if (raw === undefined) return {}
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    warnings.push('recentDirectoryUsed was not an object; ignoring it')
+    return {}
+  }
+  const out: Record<string, number> = {}
+  for (const [dir, at] of Object.entries(raw as Record<string, unknown>)) {
+    if (dir === '' || typeof at !== 'number' || !Number.isFinite(at) || at <= 0) {
+      warnings.push(`dropped a recent-directory time that was not a time: ${JSON.stringify(dir)}`)
+      continue
+    }
+    out[dir] = at
+  }
+  return out
+}
+
 export function parseRecentDirectories(raw: unknown, warnings: string[]): string[] {
   if (raw === undefined) return []
   if (!Array.isArray(raw)) {
@@ -2291,7 +2322,8 @@ export function parseLayout(raw: string): {
       baselines: parseBaselines(parsed.baselines, warnings),
       sessions: parseSessions(parsed.sessions, warnings),
       worktrees: parseWorktrees(parsed.worktrees, warnings),
-      recentDirectories: parseRecentDirectories(parsed.recentDirectories, warnings)
+      recentDirectories: parseRecentDirectories(parsed.recentDirectories, warnings),
+      recentDirectoryUsed: parseRecentDirectoryUsed(parsed.recentDirectoryUsed, warnings)
     },
     warnings,
     futureVersion: false

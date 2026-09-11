@@ -25,3 +25,26 @@ export function hintsLeft(seen: ReadonlySet<string>, where?: Hint['where']): Hin
 
 /** The tmux notice's own sentence, the launcher's banner text. A dismissal outlives an install: the Environment report still states the backend, and a notice that came back after every relaunch would be a strip again. */
 export const TMUX_HINT: Hint = HINTS[4]
+
+/**
+ * M262. TAUGHT AFTER AN ATTEMPT, ONE AT A TIME. Four sentences at rest were
+ * four instructions before a person had tried anything — the review's
+ * complaint. The rail now carries a hint only once the person has reached
+ * for its gesture the wrong way (Canvas.tsx's attempt listener: a mouse drag
+ * on the empty canvas is a reach for pan, a mouse wheel for zoom, typing into
+ * nothing for the palette, a double-click for a new panel), and only that
+ * one. A seen id still never comes back.
+ */
+export function contextualHint(seen: ReadonlySet<string>, attempted: HintId | null): Hint[] {
+  if (attempted === null) return []
+  return hintsLeft(seen, 'rail').filter((h) => h.id === attempted)
+}
+
+/** What an input on the empty canvas was reaching for, or null. Pure — the listener hands it the facts. */
+export function attemptOf(e: { type: string; button?: number; deltaMode?: number; ctrlKey?: boolean; metaKey?: boolean; key?: string }): HintId | null {
+  if (e.type === 'mousedown' && e.button === 0) return 'pan'
+  if (e.type === 'wheel' && e.ctrlKey !== true && e.deltaMode === 1) return 'zoom'
+  if (e.type === 'dblclick') return 'new-panel'
+  if (e.type === 'keydown' && e.metaKey !== true && e.ctrlKey !== true && typeof e.key === 'string' && e.key.length === 1) return 'palette'
+  return null
+}

@@ -266,13 +266,14 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       flushLayoutStore()
       await reload()
       // M205 (D09). The conversation door is now the launcher's ONE
-      // alternative, `Ask without a folder` — the primary is Start work, which
+      // alternative, `Start a general chat` (M262; `Ask without a folder`
+      // before it) — the primary is Start work, which
       // needs a repository (`onboarding.intent.e2e.1`). The property is
       // unchanged: a beginner reaches a real composer and a recorded reply
       // with no terminal.
       const primary = await waitUntil(() => wc.executeJavaScript(`(() => {
         const b = document.querySelector('[data-onboarding-ask]')
-        return b && !b.disabled && b.textContent.includes('Ask without a folder') ? true : false
+        return b && !b.disabled && b.textContent.includes('Start a general chat') ? true : false
       })()`), 1500)
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
       const started = primary === true && await clickVisible('[data-onboarding-ask]')

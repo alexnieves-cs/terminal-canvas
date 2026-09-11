@@ -243,7 +243,7 @@ try {
   const more = html.match(/<details\b[^>]*\bdata-launcher-more[^>]*>[\s\S]*<\/details>/)?.[0] ?? ''
   const moreOpen = /<details\b[^>]*\bopen\b/.test(more)
   const legacy = ['data-launcher-sheet', 'data-launcher-open-file', 'data-launcher-new-chat', 'data-launcher-new-codex', 'data-launcher-starter', 'data-launcher-new-note'].map((a) => [a, buttonTag(more, a) !== undefined])
-  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Ask without a folder is live, and every legacy door is inside the closed disclosure',
+  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Start a general chat is live, and every legacy door is inside the closed disclosure',
     Boolean(start && disabled(start) && /Claude Code/.test(start) && ask && !disabled(ask) && !moreOpen &&
       legacy.every(([, found]) => found) && disabled(buttonTag(more, 'data-launcher-new-chat')) && !disabled(buttonTag(more, 'data-launcher-new-codex'))),
     JSON.stringify({ start: start ?? null, ask: ask ?? null, moreOpen, legacy }))
@@ -272,7 +272,7 @@ try {
       /optional/.test(claudeOnly.match(/<button\b[^>]*\bdata-launcher-starter[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '')),
     JSON.stringify({ summary: summary ? summary.slice(1) : null }))
 } catch (error) {
-  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Ask without a folder is live, and every legacy door is inside the closed disclosure', false, error.message)
+  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Start a general chat is live, and every legacy door is inside the closed disclosure', false, error.message)
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in', false, error.message)
   ok('onboarding.markup.3 readiness appears only as needed — one row with an engine found, every row and Check again with none — and no copy says process-per-turn', false, error.message)
   ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional', false, error.message)

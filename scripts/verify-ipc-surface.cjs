@@ -259,7 +259,9 @@ app.whenReady().then(() => {
   // spawned only after "I've read this".
   // M255 github:publish and pack:sample (139-140) — a publish is main's, after
   // its own dialog; the sample pack is written by main and read like any pack.
-  const EXPECTED_CHANNELS = 144
+  // M262 spawn:recent-used (145) — when each recent spawn directory was last
+  // used, a sibling read so spawn:recent keeps its string[] answer.
+  const EXPECTED_CHANNELS = 145
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

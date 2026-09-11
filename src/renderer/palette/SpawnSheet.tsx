@@ -9,6 +9,7 @@ import { shortPath } from './panel-name'
 import type { PersistedTemplate } from '@shared/templates'
 import { templateHoles } from './template-model'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
+import { KIND_EXPLANATIONS, engineDisplayName, lastUsedWords, runtimeDefaultsLine, type CreationKind } from '@shared/first-run'
 
 /**
  * M65. THE SPAWN SHEET — where, what, how, in the palette's overlay.
@@ -60,6 +61,10 @@ export interface SpawnSheetModel {
   reportedModels?: readonly string[]
   /** M81. One supervisor per canvas: the row says so rather than vanishing. */
   hasSupervisor?: boolean
+  /** M262. When each recent directory was last used (`spawn:recent-used`); a row with no entry says why it is offered instead. */
+  recentUsed?: Readonly<Record<string, number>>
+  /** M262. The task-first route: close this sheet and open Start work. Absent hides the switch. */
+  startTask?(): void
 }
 
 export interface SpawnSheetProps {
@@ -159,6 +164,11 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   // run spawned two panels per Enter.
   const onKey = (event: ReactKeyboardEvent<HTMLElement>): void => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel(); return }
+    // M262. Enter on a focused BUTTON is that button's own click — Cancel,
+    // a Task | Panel tab. Before the footer had buttons every focusable was a
+    // field; now Enter-anywhere would make a panel from Cancel (the
+    // launcher's M205 critic, met again).
+    if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.tagName === 'BUTTON') return
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit() }
   }
 
@@ -186,6 +196,11 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
   const isChat = backendOfWhatId(whatId) !== undefined || isSupervisor
   const isAgent = preset?.agent !== undefined || isChat
   const own = preset?.agentOptions ?? {}
+  const creationKind: CreationKind = chosenTemplate !== undefined ? 'template'
+    : parseLineupWhatId(whatId) !== null ? 'lineup'
+      : isSupervisor ? 'supervisor'
+        : isChat || parseTeammateWhatId(whatId) !== null ? 'chat'
+          : preset?.agent !== undefined ? 'agent' : 'terminal'
   const request = buildSpawnRequest(values(), model.presets)
   // M80. The shape, not only its arithmetic (the critic): the kinds it will
   // make and the trigger word its edge carries, in the edge's own vocabulary.
@@ -203,11 +218,11 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
   return (
     <div className="sheet" data-spawn-sheet role="form" aria-label="New panel" onKeyDown={onKey}>
-      <div className="sheet__title">New panel…</div>
+      <SheetHeader current="panel" onTask={model.startTask} />
 
       {chosenTemplate === undefined && (
       <label className="sheet__field sheet__field--where">
-        <span className="sheet__label">where</span>
+        <span className="sheet__label">Folder</span>
         <input ref={whereRef} className="sheet__input sheet__input--mono" data-sheet-where value={cwd} placeholder="a directory" spellCheck={false}
           onChange={(e) => { setCwd(e.target.value); setCwdTouched(true); setShowSuggestions(true); setHighlight(-1); setRefusal(null) }}
           onFocus={() => setShowSuggestions(true)}
@@ -224,8 +239,12 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
                     at full width beside a sibling that had been shortened.
                     The path rule's own answer is the last two segments; the
                     whole path stays on the title. */}
+                {/* M262. The repository's NAME leads — the thing a person
+                    recognises — then the short path, then when it was last
+                    used (or, with no recorded time, why it is offered). */}
+                <span className="sheet__suggestion-name">{s.dir.replace(/\/+$/, '').split('/').pop() || s.dir}</span>
                 <span className="sheet__suggestion-path" title={s.dir}>{shortPath(s.dir, 2)}</span>
-                <span className="sheet__suggestion-why">{s.why}</span>
+                <span className="sheet__suggestion-why" data-sheet-suggestion-when={model.recentUsed?.[s.dir] === undefined ? undefined : ''}>{model.recentUsed?.[s.dir] === undefined ? s.why : lastUsedWords(model.recentUsed[s.dir], Date.now())}</span>
               </li>
             ))}
           </ul>
@@ -234,7 +253,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
       )}
 
       <label className="sheet__field">
-        <span className="sheet__label">what</span>
+        <span className="sheet__label">Agent</span>
         <select className="sheet__select sheet__select--mono" data-sheet-what value={whatId} onChange={(e) => { setWhatId(e.target.value); setRefusal(null) }}>
           {model.presets.map((p) => (
             <option key={p.id} value={p.id} disabled={p.available === false}>{p.name}{p.available === false ? ' — not on PATH' : ''}</option>
@@ -267,6 +286,8 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
           ))}
         </select>
       </label>
+      {/* M262. What this KIND is, said at the moment of choosing it. */}
+      <p className="sheet__explain" data-sheet-kind={creationKind}>{KIND_EXPLANATIONS[creationKind]}</p>
 
       {/* M80. One field per parameter: the composer's fill step, in a form. */}
       {chosenTemplate !== undefined && holes.map((hole) => (
@@ -280,7 +301,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
       {whatId === COMMAND && (
         <label className="sheet__field">
-          <span className="sheet__label">command</span>
+          <span className="sheet__label">Command</span>
           <input className="sheet__input sheet__input--mono" data-sheet-command value={command} placeholder="npm test"
             spellCheck={false} onChange={(e) => { setCommand(e.target.value); setRefusal(null) }} />
         </label>
@@ -288,7 +309,7 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
 
       {chosenTemplate === undefined && (
       <label className="sheet__field">
-        <span className="sheet__label">title</span>
+        <span className="sheet__label">Name</span>
         <input className="sheet__input" data-sheet-title value={title} placeholder={isSupervisor ? 'supervisor' : whatId === COMMAND ? (command.trim() || 'the command') : 'optional'} onChange={(e) => setTitle(e.target.value)} />
       </label>
       )}
@@ -297,24 +318,35 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         // M147. Environment overrides for a preset or a command panel: one
         // KEY=value per line, merged over the preset's own and the login env in
         // MAIN. A line it cannot read is named beneath, never guessed at.
-        <label className="sheet__field sheet__field--env">
-          <span className="sheet__label">env</span>
-          <textarea className="sheet__input sheet__input--mono" data-sheet-env rows={2} value={envText} placeholder="KEY=value, one per line (optional)" onChange={(e) => setEnvText(e.target.value)} />
-          {parseEnvLines(envText).bad.length > 0 && <span className="sheet__hint" data-sheet-env-bad>{`not KEY=value: ${parseEnvLines(envText).bad.join(', ')}`}</span>}
-        </label>
+        // M262. Under ADVANCED: environment overrides are the rare case, and a
+        // KEY=value box at rest made every panel look like it needed one. Open
+        // by itself when it already holds something, so nothing is hidden
+        // that would change what starts.
+        <details className="sheet__advanced" data-sheet-advanced open={envText.trim() !== '' ? true : undefined}>
+          <summary className="sheet__advanced-toggle">Advanced</summary>
+          <label className="sheet__field sheet__field--env">
+            <span className="sheet__label">Environment</span>
+            <textarea className="sheet__input sheet__input--mono" data-sheet-env rows={2} value={envText} placeholder="KEY=value, one per line (optional)" onChange={(e) => setEnvText(e.target.value)} />
+            {parseEnvLines(envText).bad.length > 0 && <span className="sheet__hint" data-sheet-env-bad>{`not KEY=value: ${parseEnvLines(envText).bad.join(', ')}`}</span>}
+          </label>
+        </details>
       )}
       {parseLineupWhatId(whatId) !== null && (
         <label className="sheet__field sheet__field--how">
-          <span className="sheet__label">lanes</span>
+          <span className="sheet__label">Lanes</span>
           <span className="sheet__how"><input type="checkbox" data-sheet-worktree checked={worktree} onChange={(e) => setWorktree(e.target.checked)} /> agents in their own worktrees</span>
         </label>
       )}
       {isAgent && (
         <div className="sheet__field sheet__field--how">
-          <span className="sheet__label">how</span>
+          <span className="sheet__label">Runtime</span>
           <div className="sheet__how">
             {/* M118. A knob the row's CLI has no flag for is DISABLED with the reason, never a control that silently does nothing. */}
             {(() => { const presetKind = preset?.agent; const kind: AgentKind = backendOfWhatId(whatId) !== undefined ? PRESET_KIND_BY_BACKEND[backendOfWhatId(whatId) as AgentBackend] : (presetKind !== undefined && (AGENT_KINDS as readonly string[]).includes(presetKind) ? presetKind as AgentKind : 'claude-code'); const flags = AGENT_CAPABILITIES[kind].flags; const label = BACKENDS[backendOfWhatId(whatId) ?? 'claude'].label; return (<>
+            {/* M262. THE DEFAULTS, SAID — what starts if nothing here is touched,
+                then what each knob changes. The line re-reads the knobs, so it
+                is also the summary once they are set. */}
+            <span className="sheet__defaults" data-sheet-defaults>{runtimeDefaultsLine(engineDisplayName(backendOfWhatId(whatId) ?? kind, preset?.name), { effort: effort === '' ? own.effort : effort, model: modelName === '' ? own.model : modelName, mode: mode === '' ? own.permissionMode : mode, hasEffort: flags.effort !== undefined, hasMode: flags.permissionMode !== undefined })}</span>
             <select className="sheet__select" data-sheet-mode value={mode} aria-label="permission mode" disabled={flags.permissionMode === undefined} title={flags.permissionMode === undefined ? `${label} has no permission mode flag` : undefined} onChange={(e) => setMode(e.target.value as PermissionMode | '')}>
               <option value="">{flags.permissionMode === undefined ? 'no mode flag' : `${own.permissionMode ?? 'default'} mode`}</option>
               {flags.permissionMode !== undefined && PERMISSION_MODES.map((m) => <option key={m} value={m}>{m} mode</option>)}
@@ -366,8 +398,48 @@ export function SpawnSheet({ model, onDone, onCancel }: SpawnSheetProps): JSX.El
         {/* M80. The commit verb says what it will MAKE for a template: `start`
             is the state machine's word for one panel (the critic), and a
             template lays down a shape. */}
-        <span className="sheet__keys">↵ {chosenTemplate === undefined ? 'start' : `create ${chosenTemplate.template.nodes.length} panels`} · esc close · ⌘N starts the default without asking</span>
+        {/* M262. EXPLICIT VERBS: a filled primary that says what it makes and
+            a Cancel beside it. The keys stay, smaller — Enter is still the
+            fast path, but no longer the only visible way to submit. */}
+        <div className="sheet__actions">
+          <span className="sheet__keys">↵ · esc · ⌘N starts the default without asking</span>
+          <button type="button" className="sheet__button" data-sheet-cancel
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
+          <button type="button" className="sheet__button is-primary" data-sheet-submit
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+            onClick={(e) => { e.preventDefault(); submit() }}>{chosenTemplate === undefined ? 'Create panel' : `Create ${chosenTemplate.template.nodes.length} panels`}</button>
+        </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * M262. ONE CREATION SURFACE, TWO ROUTES. Start work and New panel share a
+ * header: `Task` first — the primary route, a task with an agent and a
+ * repository — and `Panel` second, the expert route to one raw panel. Each
+ * side is still its own sheet (its own model and keyboard rules); the switch
+ * closes one and opens the other through the palette's own verbs, so neither
+ * learns the other's fields.
+ */
+export function SheetHeader({ current, onTask, onPanel }: { current: 'task' | 'panel'; onTask?: () => void; onPanel?: () => void }): JSX.Element {
+  const other = current === 'task' ? onPanel : onTask
+  return (
+    <div className="sheet__head">
+      <div className="sheet__title">{current === 'task' ? 'Start a task' : 'New panel'}</div>
+      {other !== undefined && (
+        <div className="sheet__switch" role="tablist" aria-label="What to create" data-sheet-switch>
+          {(['task', 'panel'] as const).map((side) => (
+            <button key={side} type="button" role="tab" aria-selected={side === current} className="sheet__switch-tab" data-sheet-switch-to={side}
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+              onClick={(e) => { e.preventDefault(); if (side !== current) other() }}>
+              {side === 'task' ? 'Task' : 'Panel'}
+              <span className="sheet__switch-hint">{side === 'task' ? 'an agent on a repository' : 'expert — one raw panel'}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

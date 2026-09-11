@@ -29,7 +29,7 @@ import { useTheme } from './useTheme'
 import { Launcher } from './Launcher'
 import { SnapGuides } from './SnapGuides'
 import { snapRect, SNAP_PX, type SnapGuide } from './placement'
-import { hintsLeft } from './hints'
+import { attemptOf, contextualHint, hintsLeft, type HintId } from './hints'
 import type { EnvReport } from '@shared/env-report'
 import { terminalTheme } from '@renderer/terminal/themes'
 import { useLinkDraw } from './useLinkDraw'
@@ -3037,12 +3037,49 @@ export function Canvas({
   // M174. The launcher's recents row: asked once whenever the canvas is empty
   // (the only time the launcher shows), never polled.
   const [launcherRecents, setLauncherRecents] = useState<string[]>([])
+  // M262. When each was last used — a SEPARATE read so an old main (no
+  // handler) costs the times only, never the list.
+  const [launcherRecentUsed, setLauncherRecentUsed] = useState<Record<string, number>>({})
   useEffect(() => {
     if (panels.length !== 0) return
     let live = true
     void window.canvas.spawn.recent().then((r) => { if (live) setLauncherRecents(r) }).catch(() => { if (live) setLauncherRecents([]) })
+    void window.canvas.spawn.recentUsed().then((r) => { if (live) setLauncherRecentUsed(r) }).catch(() => { if (live) setLauncherRecentUsed({}) })
     return () => { live = false }
   }, [panels.length])
+  // M262. `Blank canvas`: the person put the card away. Session-only and per
+  // workspace-empty episode — the next time this canvas empties, the card is
+  // back, because an empty canvas with no way to start is the state M48 fixed.
+  const [launcherPutAway, setLauncherPutAway] = useState(false)
+  useEffect(() => { if (panels.length !== 0) setLauncherPutAway(false) }, [panels.length])
+  // M262. THE STARTER CLUSTER: a first start mints a card and its agent; for
+  // one arrival they rise in turn and the camera frames them TOGETHER, so the
+  // first thing a person sees is the pair, never one panel alone on a void.
+  const [clusterArrival, setClusterArrival] = useState(false)
+  // M262. The gesture a person last reached for on the EMPTY canvas — read
+  // by a passive capture listener that never prevents or stops anything, so
+  // no gesture handler below it changes. Only a background target counts: a
+  // drag inside a panel or the launcher is not a reach for the camera.
+  const [attemptedHint, setAttemptedHint] = useState<HintId | null>(null)
+  useEffect(() => {
+    const host = hostRef.current
+    if (host === null) return
+    const onInput = (e: Event): void => {
+      if (panelsRef.current.length !== 0) return
+      const target = e.target instanceof Element ? e.target : null
+      if (e.type !== 'keydown' && (target === null || target.closest('.panel, .launcher, .palette, button, input, textarea, select') !== null)) return
+      if (e.type === 'keydown' && document.activeElement !== null && document.activeElement !== document.body && document.activeElement !== host) return
+      const attempt = attemptOf(e as unknown as Parameters<typeof attemptOf>[0])
+      if (attempt !== null) setAttemptedHint(attempt)
+    }
+    const kinds = ['mousedown', 'wheel', 'dblclick'] as const
+    for (const k of kinds) host.addEventListener(k, onInput, { capture: true, passive: true })
+    window.addEventListener('keydown', onInput, { capture: true, passive: true })
+    return () => {
+      for (const k of kinds) host.removeEventListener(k, onInput, { capture: true })
+      window.removeEventListener('keydown', onInput, { capture: true })
+    }
+  }, [hostRef])
   const markHint = useCallback((id: string) => {
     if (!hintsLoadedRef.current) return
     setHintsSeen((prev) => {
@@ -6242,12 +6279,18 @@ export function Canvas({
     // focuses) — the launcher that held focus has just unmounted, and without
     // this the keyboard lands on nothing.
     void deliverToComposer(outcome.panelId, '', { focus: true })
+    // M262. The cluster arrival: framed once both have mounted (two frames —
+    // the card and the chat land in separate commits), then the flag clears
+    // so a later mint rises alone, as it always has.
+    setClusterArrival(true)
+    requestAnimationFrame(() => requestAnimationFrame(() => { fitAll() }))
+    window.setTimeout(() => setClusterArrival(false), 1200)
     // A later start of the same words in the same folder is a NEW task: the
     // conversation this one made may be closed by then, and reusing its item
     // would fold the second start into the first (the M205 critic).
     firstWorkItemRef.current = null
     return { kind: 'started' }
-  }, [reloadTeammates])
+  }, [reloadTeammates, fitAll])
   /** M205. The ONE alternative: M120's no-folder conversation, on the engine readiness found, the sentence in its composer — inserted, never sent (M80). */
   const askWithoutFolder = useCallback((intention: string): void => {
     const preferred = onboardingReadiness(envReportRef.current).preferred
@@ -6967,7 +7010,7 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
       />
       <Navigator
-        hints={hintsLoaded ? hintsLeft(hintsSeen, 'rail') : []}
+        hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
         board={boardPaneProps}
         runs={railRuns}
         onRunAgain={onRunAgain}
@@ -7032,6 +7075,7 @@ export function Canvas({
         // M121. The flip as a readable FACT on the host (verify:panels flip.1),
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
+        data-cluster-arrival={clusterArrival ? '' : undefined}
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}`}
         ref={hostRef}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
@@ -7604,11 +7648,14 @@ export function Canvas({
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}
-        {panels.length === 0 && !merged && (
+        {panels.length === 0 && !merged && !launcherPutAway && (
           <Launcher
             presets={presetRows}
             onImportCanvas={() => { void importCanvas() }}
             recents={launcherRecents}
+            recentUsed={launcherRecentUsed}
+            onCreateObject={(kind) => { void createObject(kind).then((r) => { if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }) }}
+            onBlankCanvas={() => setLauncherPutAway(true)}
             // M205 (D09). The intent form: D05's Start work, the one alternative, and the folder dialog.
             onStartWork={startFirstWork}
             onAsk={askWithoutFolder}

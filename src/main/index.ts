@@ -1706,6 +1706,7 @@ app.whenReady().then(async () => {
         return { kind: 'spawned' }
       },
       recentDirectories: () => layoutStore.recentDirectories(),
+      recentDirectoryUsed: () => layoutStore.recentDirectoryUsed(),
       savePanel: (captured) => {
         layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
         rebuildMenu()

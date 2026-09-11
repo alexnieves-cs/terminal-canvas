@@ -1919,7 +1919,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const IDS = [
         'firstrun.1 a canvas with zero panels shows the launcher, whose preset control spawns through preset:spawn-by-id, and the launcher leaves',
         'firstrun.2 a canvas restored with one dormant panel shows no launcher',
-        'firstrun.3 a gesture hint fades after its gesture and stays faded across a reload',
+        'firstrun.3 no gesture hint at rest; one appears ALONE after its attempt (M262), fades after its gesture, and stays faded across a reload',
         'env.1 a failed shell probe renders the banner, and the Environment scope names the cause'
       ]
       const reloadWith = async (panels) => {
@@ -1966,8 +1966,14 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         //             the palette fades the ⌘K hint; the fade survives a reload.
         //             (The strip that carried them over a panel is gone — with a
         //             panel on the canvas there is no hint to read, on purpose.)
+        // M262. TAUGHT AFTER AN ATTEMPT: nothing at rest; typing into nothing
+        //       (the launcher's field blurred — it takes focus on mount) is a
+        //       reach for the palette, and its hint appears ALONE.
         await reloadWith([])
-        const hintsAtRest = await wc.executeJavaScript(`[...document.querySelectorAll('.rail-empty [data-hint]')].map((h) => h.dataset.hint)`)
+        const hintList = `[...document.querySelectorAll('.rail-empty [data-hint]')].map((h) => h.dataset.hint)`
+        const hintsAtRest = await wc.executeJavaScript(hintList)
+        await wc.executeJavaScript(`(() => { document.activeElement?.blur?.(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true })); return true })()`)
+        const afterAttempt = await waitUntil(async () => { const h = await wc.executeJavaScript(hintList); return h.length > 0 ? h : false }, 4000)
         await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', metaKey: true, bubbles: true }))`)
         await settle()
         await wc.executeJavaScript(`(() => { const i = document.querySelector('.palette__input'); if (i) i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true })()`)
@@ -1977,11 +1983,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           return Array.isArray(v) && v.includes('palette') ? v : false
         }, 4000)
         await reloadWith([])
-        const afterReload = await wc.executeJavaScript(`[...document.querySelectorAll('.rail-empty [data-hint]')].map((h) => h.dataset.hint)`)
+        // After the reload: the seen palette hint does not come back on a second
+        // reach, and a mouse wheel over the empty canvas teaches zoom alone.
+        await wc.executeJavaScript(`(() => { document.activeElement?.blur?.(); window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true })); return true })()`)
+        await settle()
+        const afterReload = await wc.executeJavaScript(hintList)
+        await wc.executeJavaScript(`(() => { const c = document.querySelector('.canvas'); c.dispatchEvent(new WheelEvent('wheel', { deltaY: 3, deltaMode: 1, bubbles: true, cancelable: true })); return true })()`)
+        const zoomTaught = await waitUntil(async () => { const h = await wc.executeJavaScript(hintList); return h.length > 0 ? h : false }, 4000)
         ok(IDS[2],
-          hintsAtRest.includes('palette') && hintsAtRest.includes('pan') && hintsAtRest.includes('zoom') && hintsAtRest.includes('new-panel') &&
-            faded === true && seen !== false && !afterReload.includes('palette') && afterReload.includes('pan'),
-          JSON.stringify({ hintsAtRest, faded, seen, afterReload }))
+          hintsAtRest.length === 0 && Array.isArray(afterAttempt) && afterAttempt.join() === 'palette' &&
+            faded === true && seen !== false && afterReload.length === 0 && Array.isArray(zoomTaught) && zoomTaught.join() === 'zoom',
+          JSON.stringify({ hintsAtRest, afterAttempt, faded, seen, afterReload, zoomTaught }))
 
         // firstrun.4 (M173). THE TMUX NOTICE AS A FIRST-RUN BANNER: the harness
         //             runs the direct backend, so the launcher shows the banner;

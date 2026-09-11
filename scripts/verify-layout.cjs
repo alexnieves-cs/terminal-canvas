@@ -3262,6 +3262,12 @@ console.log('\n' + '='.repeat(60))
     for (const d of ['/one', '/two', '/one', '/three']) store.addRecentDirectory(d)
     const list = store.recentDirectories()
     ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', JSON.stringify(list) === JSON.stringify(['/three', '/one', '/two']), JSON.stringify(list))
+    // M262 — recent.3. The times ride BESIDE the list: a re-add re-stamps, and
+    // only directories still on the list answer (one past the cap has no row).
+    store.addRecentDirectory('/one', 5000)
+    const used = typeof store.recentDirectoryUsed === 'function' ? store.recentDirectoryUsed() : null
+    ok('recent.3 recentDirectoryUsed stamps each add and answers only for directories still on the list',
+      used !== null && used['/one'] === 5000 && typeof used['/three'] === 'number' && Object.keys(used).every((d) => store.recentDirectories().includes(d)), JSON.stringify(used))
   } else {
     ok('recent.2 addRecentDirectory puts the newest first and keeps one copy of a repeat', false, 'store has no addRecentDirectory')
   }

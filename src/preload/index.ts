@@ -268,6 +268,7 @@ const bridge: CanvasBridge = {
   spawn: {
     sheet: (req: SpawnRequest) => ipcRenderer.invoke(IPC.SPAWN_SHEET, req),
     recent: () => ipcRenderer.invoke(IPC.SPAWN_RECENT),
+    recentUsed: () => ipcRenderer.invoke(IPC.SPAWN_RECENT_USED),
     onOpenSheet: (listener) => subscribe<void>(IPC_EVENTS.SPAWN_OPEN_SHEET, () => listener())
   },
   links: {

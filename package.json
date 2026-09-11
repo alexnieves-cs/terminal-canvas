@@ -78,6 +78,7 @@
     "verify:panels:agents": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels-agents.cjs",
     "verify:panels:product": "unset ELECTRON_RUN_AS_NODE && node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/verify-panels-product.cjs",
     "verify:onboarding": "node scripts/verify-onboarding.cjs",
+    "verify:first-run": "node scripts/verify-first-run.cjs",
     "verify": "node scripts/verify-all.cjs",
     "verify:verbs": "node scripts/verify-verbs.cjs",
     "verify:teammates": "node scripts/verify-teammates.cjs",

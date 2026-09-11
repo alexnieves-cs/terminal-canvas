@@ -1137,8 +1137,12 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const section = all.some((r) => /(^|,)\s*\.palette__section\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
   const state = all.some((r) => /(^|,)\s*\.palette__state\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body))
   const dot = all.some((r) => /\.palette__state-dot\b/.test(r.sel) && /border-radius:\s*50%/.test(r.body))
-  const label = all.some((r) => /(^|,)\s*\.sheet__label\s*(,|$)/.test(r.sel) && /letter-spacing:\s*var\(--track-caps\)/.test(r.body))
-  ok('material.1', 'the palette and sheets: mono only on path rows and --mono inputs, caps section headings and sheet labels, the palette\'s state a dot with the word clipped',
+  // M262. The sheet labels went the OTHER way on purpose: plain sentence-case
+  // `Folder`, `Agent`, `Runtime` — the caps set read as a settings dialog. The
+  // pin is now that no rule re-uppercases them.
+  const label = all.some((r) => /(^|,)\s*\.sheet__label\s*(,|$)/.test(r.sel)) &&
+    !all.some((r) => /(^|,)\s*(\[data-start-sheet\]\s+)?\.sheet__label\s*(,|$)/.test(r.sel) && /text-transform:\s*uppercase|letter-spacing:\s*var\(--track-caps\)/.test(r.body))
+  ok('material.1', 'the palette and sheets: mono only on path rows and --mono inputs, caps section headings, sentence-case sheet labels (M262), the palette\'s state a dot with the word clipped',
     monoOk && section && state && dot && label, JSON.stringify({ monoRules, section, state, dot, label }))
 }
 
@@ -1164,7 +1168,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
   // edge-waiting: M232's join breath — a MOMENT like the others, three breaths
   // and then rest, never a heartbeat (pulse.1's rule, applied to an edge).
-  const allowed = ['chat-caret', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  // cluster-arrive: M262's first-start arrival — the card and its agent rise
+  // in turn, ONCE, on the canvas flag that clears after it; a rise like
+  // panel-enter's, never a scale.
+  const allowed = ['chat-caret', 'cluster-arrive', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))

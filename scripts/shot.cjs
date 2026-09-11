@@ -1073,7 +1073,7 @@ app.whenReady().then(async () => {
       runRoutine: () => false,
       saveTemplate: (t, expectedRevision) => layoutStore.saveTemplate({ ...t, id: t.id || `tpl-${Date.now().toString(36)}` }, expectedRevision),
       removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id)),
-      spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories(),
+      spawnWith: () => ({ kind: 'refused', reason: 'shot harness' }), recentDirectories: () => layoutStore.recentDirectories(), recentDirectoryUsed: () => layoutStore.recentDirectoryUsed(),
       // M127. The shelf, through the store and main's OWN parser. Without
       // these two the renderer's boot-time `shelf.list()` rejects, the pane
       // paints its `unavailable` sentence, and every scene under it is a

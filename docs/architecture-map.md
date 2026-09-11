@@ -50,7 +50,7 @@ renderer --invoke--> ledger:list / ledger:usage                                 
 renderer --invoke--> memory:list / memory:add / vault:read                        --> main
 renderer --invoke--> watcher:create / watcher:run / watcher:stop                   --> main
 renderer --invoke--> watcher:dispose / watcher:list                               --> main
-renderer --invoke--> spawn:sheet / spawn:recent                                   --> main
+renderer --invoke--> spawn:sheet / spawn:recent / spawn:recent-used                --> main
 renderer --invoke--> agent:create / agent:send / agent:interrupt / agent:dispose  --> main
 renderer --invoke--> agent:answer / agent:list / agent:transcript / agent:import  --> main
 renderer --invoke--> agent:clipboard-image                                       --> main

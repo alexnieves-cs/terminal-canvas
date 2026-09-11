@@ -559,6 +559,11 @@ export const IPC = {
   SPAWN_SHEET: 'spawn:sheet',
   SPAWN_RECENT: 'spawn:recent',
   /**
+   * M262. When each recent directory was last spawned into (epoch ms, keyed
+   * by path) — a sibling read, so `spawn:recent`'s answer keeps its shape.
+   */
+  SPAWN_RECENT_USED: 'spawn:recent-used',
+  /**
    * M73. The agent-session runtime (M71) reached from the chat panel. Every
    * verb is keyed by the PANEL id the renderer minted — main never mints one
    * — and every answer is a snapshot or a named refusal. `agent:transcript`
@@ -1700,6 +1705,8 @@ export interface CanvasBridge {
     sheet(req: SpawnRequest): Promise<SpawnResult>
     /** M65. The last twelve spawn directories, newest first. */
     recent(): Promise<string[]>
+    /** M262. See SPAWN_RECENT_USED. A directory with no entry has no known time. */
+    recentUsed(): Promise<Record<string, number>>
     /** M65. The menu's ⌘⇧N. */
     onOpenSheet(listener: () => void): () => void
   }

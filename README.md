@@ -385,7 +385,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        watcher:create / watcher:run / watcher:stop
                        watcher:dispose / watcher:list
                        env:report / link:open / ledger:list / ledger:usage
-                       spawn:sheet / spawn:recent
+                       spawn:sheet / spawn:recent / spawn:recent-used
                        agent:create / agent:send / agent:interrupt / agent:dispose
                        agent:answer / agent:list / agent:transcript / agent:import
                        agent:clipboard-image
@@ -1035,6 +1035,7 @@ price of not killing something.
 | M252 | describe a tool — a description becomes a workflow of existing node kinds or a preview-backed mini app through ONE headless run given no tools (`--tools ""`, a JSON schema), whose answer is only data; what arrives is INERT — a workflow saved `reviewed: false` with its action blocks refused by name, an app's pane with no guest and its Open and dev server refused — until a person presses "I've read this", which has no verb, row, agent line or node; its reach (folder, addresses, commands) is shown on the object and in the inspector before the first run; four doors through one creatable kind — `docs/build-log/m252-describe-a-tool.md` | ✅ done |
 | M253 | Packs, Phase A — one discipline's workflows, saved prompts and presets in one `.tcpack` file, READ before anything is added. `pack:read` holds the parse under a token and `pack:add` takes only the token, so what is added is exactly what was shown; every workflow and preset arrives unread, and an unread preset is refused by name at every spawn door in main. The manifest names each credential by service and FIELD (never a value) and the preview says what is missing per field; an unknown service is kept, not dropped. Phase B (a dev-relations pack on the existing GitHub credential) is sketched, not built. |
 | M255 | Packs, Phase B — the dev-relations sample pack (`docs/packs/dev-relations.tcpack`, from `shared/devrel-pack.ts`): four workflows that DRAFT release notes, changelog entries, announcements and PR comments into files, four prompts, two read-only presets. Publishing is a person's act: `github:publish` resolves the repo from the draft's own origin, passes the body through `outward()`, and the system's own dialog asks every time before one broker call with `personConfirmed`. And the broker gap it exposed is closed: a write with no teammate's per-request card and no person's confirmation is refused `not-asked` before the token is read. |
+| M262 | the first run as a sequence and one creation surface — the launcher asks what you are working on, which repository (picked, dropped, or from a dated recent list), an agent only when Claude Code cannot be used, then a filled Start task beside Start a general chat; notices under the action; examples about the chosen repository; the first start framed as a card-and-agent cluster; gesture hints taught one at a time after an attempt. Start work and New panel share a Task \| Panel header (task first), plain labels, per-kind explanations, the runtime's defaults said, environment under Advanced, Cancel beside a filled primary — `docs/build-log/m262-first-run-and-creation-forms.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

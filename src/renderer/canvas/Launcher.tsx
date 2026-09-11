@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { PresetRow } from '@renderer/palette/commands'
 import { REASON_NOT_ON_PATH } from '@renderer/palette/commands'
 import type { EnvReport } from '@shared/env-report'
@@ -7,6 +7,7 @@ import { probeOutcome } from '@shared/env-report'
 import type { UpdateState } from '@renderer/session/update-store'
 import { displayPath } from '@shared/display-path'
 import { TMUX_HINT } from './hints'
+import { agentStepNeeded, recentFolderRows, repositoryExamples } from '@shared/first-run'
 import { firstWorkPlan, onboardingReadiness, LANE_ENGINE, type FirstWorkContext, type FirstWorkOutcome, type FirstWorkRequest } from '@shared/onboarding'
 
 export interface LauncherProps {
@@ -38,6 +39,14 @@ export interface LauncherProps {
   onDismissTmux?: () => void
   /** M174. The last folders panels were started in (`spawn:recent`), newest first. M205: a chip FILLS the folder field. */
   recents?: string[]
+  /** M262. When each recent folder was last used (`spawn:recent-used`); a folder with no entry shows no time. */
+  recentUsed?: Record<string, number>
+  /** M262. The clock the recent list reads, injected so a fixture renders one answer. */
+  now?: number
+  /** M262. The expert doors by kind — a terminal or a workflow through `createObject`, the palette's own mint. Absent hides both. */
+  onCreateObject?: (kind: 'terminal' | 'workflow') => void
+  /** M262. Put the card away for this session and look at the empty canvas. Absent hides the door. */
+  onBlankCanvas?: () => void
   onSpawnPreset: (id: string) => void
   /** M65. Choose where and what. */
   onOpenSheet: () => void
@@ -81,6 +90,13 @@ export interface LauncherProps {
  * lays it out: before M205 the only way a new person reached a conversation
  * also minted five objects, which made the tour the definition of a workspace.
  *
+ * M262. A SEQUENCE, not a form: what you are working on, which repository
+ * (picked, typed, dropped or chosen from a dated list), an agent ONLY when
+ * the default cannot be used, then a filled Start task. Notices that block
+ * nothing sit under the action; examples are sentences about the chosen
+ * repository. Every M205 mark (`data-onboarding-*`, `data-launcher-*`) is
+ * unchanged, because the product suites read them.
+ *
  * Inside .canvas and outside .world, so it never scales with the camera.
  */
 const INSTALL: Record<string, string> = {
@@ -88,7 +104,7 @@ const INSTALL: Record<string, string> = {
   codex: 'install the Codex CLI so `codex` is on your PATH'
 }
 
-export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, recents, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
+export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux, recents, recentUsed, now, onCreateObject, onBlankCanvas, onSpawnPreset, onOpenSheet, onOpenFile, onNewNote, noteReason, onNewChat, chatReason, onNewCodexChat, codexReason, onCheckAgain, onOpenSetup, onStartWork, onAsk, onChatHere, onChooseFolder, teammates, onOpenStarter, starterReason, update, onOpenRelease }: LauncherProps): JSX.Element {
   const readiness = onboardingReadiness(report)
   const unanswered = readiness.rows.some((row) => row.discovery === 'unknown')
   const [intention, setIntention] = useState('')
@@ -173,93 +189,183 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
   }
   const edited = (set: (v: string) => void) => (value: string): void => { set(value); setAnswer(null) }
 
+  // M262. Step 3 is asked only when the lane engine cannot simply be used
+  // (missing, or discovery has not answered); otherwise its row is a status
+  // line under the action, and the steps renumber so none is skipped.
+  const agentStep = agentStepNeeded(readiness.rows)
+  const examples = repositoryExamples(folder)
+  const recentRows = recentFolderRows(recents ?? [], recentUsed ?? {}, now ?? Date.now())
+  const recentRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const [dropping, setDropping] = useState(false)
+  // ↑/↓ walk the recent list like a list, never Tab-through-five-buttons:
+  // the keyboard stays as fast as typing the path.
+  const onRecentKey = (i: number) => (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
+    const to = event.key === 'ArrowDown' ? i + 1 : event.key === 'ArrowUp' ? i - 1 : null
+    if (to === null) return
+    event.preventDefault()
+    if (to < 0) { folderRef.current?.focus({ preventScroll: true }); return }
+    recentRefs.current[Math.min(to, recentRows.length - 1)]?.focus({ preventScroll: true })
+  }
+  const onFolderKey = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'ArrowDown' && recentRows.length > 0) { event.preventDefault(); recentRefs.current[0]?.focus({ preventScroll: true }) }
+  }
+  // A folder dropped on the card FILLS the field and stops there: the canvas
+  // under the card turns a dropped file into a panel, and a person answering
+  // "which repository?" by dragging one in asked for no panel.
+  const dropHandlers = {
+    onDragOver: (e: ReactDragEvent<HTMLElement>): void => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); e.stopPropagation(); setDropping(true) } },
+    onDragLeave: (e: ReactDragEvent<HTMLElement>): void => { if (e.currentTarget === e.target) setDropping(false) },
+    onDrop: (e: ReactDragEvent<HTMLElement>): void => {
+      const file = e.dataTransfer.files[0]
+      if (file === undefined) return
+      e.preventDefault(); e.stopPropagation(); setDropping(false)
+      const path = typeof window === 'undefined' ? '' : window.canvas?.file?.pathForFile(file) ?? ''
+      if (path !== '') edited(setFolder)(path)
+    }
+  }
+  let n = 0
+  const step = (): number => { n += 1; return n }
+
+  const engineRows = (
+    <>
+      {shownRows.map((row) => <div key={row.backend} className="launcher__engine" data-onboarding-engine={row.backend} data-discovery={row.discovery}>
+        <span>{row.sentence}</span>
+        {row.discovery !== 'installed' && (
+          <button type="button" className="pf__verb pf__verb--word" disabled={onOpenSetup === undefined}
+            title={onOpenSetup === undefined ? 'Setup links are unavailable in this view' : row.setupUrl}
+            {...shellControl(() => onOpenSetup?.(row.setupUrl))}>Setup guide</button>
+        )}
+      </div>)}
+      {onCheckAgain !== undefined && needsCheck && (
+        <div className="launcher__engine launcher__engine--check">
+          <span>{unanswered ? 'The login shell did not answer in time — a slow ~/.zshrc; put PATH in ~/.zprofile.' : 'Installed something? Ask the login shell again.'}</span>
+          <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>
+        </div>
+      )}
+    </>
+  )
+
   return (
     // M65 (brief §5, The launcher): not a modal — a panel-shaped card in the
-    // frame family, a chrome row and a well, its verbs as prompt lines.
-    <div className="launcher pf" data-launcher data-tone="none" role="region" aria-label="Get started">
+    // frame family. M262: not a settings form either — a SEQUENCE, each
+    // question numbered and answered in order, the action filled.
+    <div className="launcher pf" data-launcher data-tone="none" data-launcher-dropping={dropping ? '' : undefined} role="region" aria-label="Get started" {...dropHandlers}>
       <div className="launcher__well">
+      <div className="launcher__hero" aria-hidden="true">
+        <span className="launcher__wordmark">terminal canvas</span>
+        <span className="launcher__tagline">every agent on one canvas, one person at the desk</span>
+      </div>
+      <div className="launcher__onboarding launcher__intent" data-onboarding role="form" aria-label="Start work" onKeyDown={onKey}>
+        <ol className="launcher__steps">
+        <li className="launcher__step" data-launcher-step="intent" data-answered={intention.trim() !== '' ? '' : undefined}>
+          <span className="launcher__step-num" aria-hidden="true">{step()}</span>
+          <label className="launcher__field">
+            <span className="launcher__label">What are you working on?</span>
+            <textarea ref={intentRef} className="launcher__input launcher__input--sentence" data-onboarding-intent rows={2} value={intention} spellCheck
+              placeholder="In plain language — for example, make the login test stop failing on CI"
+              onChange={(e) => edited(setIntention)(e.target.value)} />
+          </label>
+          {/* M262. Real sentences about the CHOSEN repository — shown once there
+              is one; a chip fills the sentence and sends nothing. */}
+          {examples.length > 0 && (
+            <div className="launcher__examples" data-launcher-examples>
+              {examples.map((ex) => (
+                <button key={ex.id} type="button" className="launcher__example" data-launcher-example={ex.id} title={ex.intention}
+                  aria-pressed={intention === ex.intention}
+                  {...shellControl(() => { edited(setIntention)(ex.intention); intentRef.current?.focus({ preventScroll: true }) })}>{ex.label}</button>
+              ))}
+            </div>
+          )}
+        </li>
+        <li className="launcher__step" data-launcher-step="folder" data-answered={folder.trim() !== '' ? '' : undefined}>
+          <span className="launcher__step-num" aria-hidden="true">{step()}</span>
+          <label className="launcher__field">
+            <span className="launcher__label">Pick or drop a repository</span>
+            <span className="launcher__folder-row">
+              <input ref={folderRef} className="launcher__input launcher__input--path" data-onboarding-folder value={folder} spellCheck={false}
+                placeholder="Drop a folder here, or type /Users/you/code/project" onKeyDown={onFolderKey} onChange={(e) => edited(setFolder)(e.target.value)} />
+              {onChooseFolder !== undefined && (
+                <button type="button" className="pf__verb pf__verb--word" data-onboarding-choose title="Choose a folder with the system dialog"
+                  {...shellControl(() => { void onChooseFolder().then((dir) => { if (dir !== null) edited(setFolder)(dir) }) })}>Choose…</button>
+              )}
+            </span>
+          </label>
+          {/* M174/M205/M262. The last folders as a LIST — the repository's name,
+              its short path, when it was last used. A row FILLS the field; the
+              launcher mints nothing on a click that only answers a question. */}
+          {recentRows.length > 0 && (
+            <ul className="launcher__recents" data-launcher-recents aria-label="Recent folders">
+              {recentRows.map((row, i) => (
+                <li key={row.dir}>
+                  <button ref={(el) => { recentRefs.current[i] = el }} type="button" className="launcher__recent" data-launcher-recent={row.dir} aria-pressed={folder === row.dir} title={`Work in ${row.dir}`}
+                    onKeyDown={onRecentKey(i)} {...shellControl(() => edited(setFolder)(row.dir))}>
+                    <span className="launcher__recent-name">{row.name}</span>
+                    <span className="launcher__recent-path">{row.short}</span>
+                    {row.when !== undefined && <span className="launcher__recent-when" data-launcher-recent-when>{row.when}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+        {agentStep && (
+          <li className="launcher__step launcher__step--agent" data-launcher-step="agent">
+            <span className="launcher__step-num" aria-hidden="true">{step()}</span>
+            <div className="launcher__field">
+              <span className="launcher__label">Choose an agent</span>
+              <span className="launcher__step-why">A task runs in Claude Code, and it is not ready yet{readiness.preferred !== undefined ? ' — a general chat can still use the engine that is' : ''}.</span>
+              <div className="launcher__readiness" aria-label="Conversation engines">{engineRows}</div>
+            </div>
+          </li>
+        )}
+        <li className="launcher__step launcher__step--start" data-launcher-step="start">
+          <span className="launcher__step-num" aria-hidden="true">{step()}</span>
+          <div className="launcher__field">
+            {/* What will happen — the grant included — before anything does; or the
+                one thing still missing. One sentence, never a list of three. */}
+            <p className="launcher__summary" data-onboarding-summary={plan.kind === 'start' ? 'start' : plan.field} title={plan.kind === 'start' ? plan.folder : undefined}>
+              {plan.kind === 'start' ? plan.summary : plan.reason}
+            </p>
+            {answer !== null && (
+              <p className="launcher__refusal" data-onboarding-refusal={answer.kind} role="alert">
+                {answer.reason}
+                {answer.kind === 'not-a-repository' && onChatHere !== undefined && (
+                  <button type="button" className="pf__verb pf__verb--word launcher__check" data-onboarding-chat-here
+                    title="A conversation in this folder, your sentence in its composer — nothing is sent"
+                    {...shellControl(() => onChatHere({ intention, folder }))}>Chat in this folder instead</button>
+                )}
+              </p>
+            )}
+            <div className="launcher__actions">
+              {/* M262. FILLED at rest, disabled or not: a primary that drew as an
+                  outline until both questions were answered read as decoration. */}
+              <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
+                disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'start' ? plan.summary : '')}
+                {...shellControl(start)}>
+                <span className="launcher__verb-name">{busy ? 'Making the lane…' : 'Start task'}</span>
+                {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
+              </button>
+              <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}
+                title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
+                {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
+                <span className="launcher__verb-name">Start a general chat</span>
+              </button>
+            </div>
+          </div>
+        </li>
+        </ol>
+      </div>
+      {/* M262. NOTICES UNDER THE ACTION: none of these blocks a start — the
+          engine row when it is fine, tmux's reload caveat — so none of them
+          is read before the question is. A blocking engine is step 3 above. */}
+      <div className="launcher__notices" data-launcher-notices>
+        {!agentStep && <div className="launcher__readiness" aria-label="Conversation engines">{engineRows}</div>}
         {tmux !== undefined && tmux !== null && (
           <p className="launcher__banner" data-launcher-tmux role="status" title={tmux}>
             {TMUX_HINT.text}
             <button type="button" className="pf__verb pf__verb--word launcher__banner-dismiss" data-launcher-tmux-dismiss title="Dismiss this notice" {...shellControl(() => onDismissTmux?.())}>Got it</button>
           </p>
         )}
-      <div className="launcher__hero" aria-hidden="true">
-        <span className="launcher__wordmark">terminal canvas</span>
-        <span className="launcher__tagline">every agent on one canvas, one person at the desk</span>
-      </div>
-      <div className="launcher__onboarding launcher__intent" data-onboarding role="form" aria-label="Start work" onKeyDown={onKey}>
-        <label className="launcher__field">
-          <span className="launcher__label">What do you want to work on?</span>
-          <textarea ref={intentRef} className="launcher__input launcher__input--sentence" data-onboarding-intent rows={2} value={intention} spellCheck
-            placeholder="In plain language — for example, make the login test stop failing on CI"
-            onChange={(e) => edited(setIntention)(e.target.value)} />
-        </label>
-        <label className="launcher__field">
-          <span className="launcher__label">In which repository?</span>
-          <span className="launcher__folder-row">
-            <input ref={folderRef} className="launcher__input launcher__input--path" data-onboarding-folder value={folder} spellCheck={false}
-              placeholder="/Users/you/code/project" onChange={(e) => edited(setFolder)(e.target.value)} />
-            {onChooseFolder !== undefined && (
-              <button type="button" className="pf__verb pf__verb--word" data-onboarding-choose title="Choose a folder with the system dialog"
-                {...shellControl(() => { void onChooseFolder().then((dir) => { if (dir !== null) edited(setFolder)(dir) }) })}>Choose…</button>
-            )}
-          </span>
-        </label>
-        {/* M174/M205. The last folders as chips; a chip FILLS the field — the
-            launcher mints nothing on a click that only answers a question. */}
-        {recents !== undefined && recents.length > 0 && (
-          <div className="launcher__recents" data-launcher-recents>
-            <span className="launcher__recents-label">Recent</span>
-            {recents.slice(0, 5).map((dir) => (
-              <button key={dir} type="button" className="launcher__recent" data-launcher-recent={dir} aria-pressed={folder === dir} title={`Work in ${dir}`}
-                {...shellControl(() => edited(setFolder)(dir))}>{displayPath(dir).short}</button>
-            ))}
-          </div>
-        )}
-        {/* What will happen — the grant included — before anything does; or the
-            one thing still missing. One sentence, never a list of three. */}
-        <p className="launcher__summary" data-onboarding-summary={plan.kind === 'start' ? 'start' : plan.field} title={plan.kind === 'start' ? plan.folder : undefined}>
-          {plan.kind === 'start' ? plan.summary : plan.reason}
-        </p>
-        {answer !== null && (
-          <p className="launcher__refusal" data-onboarding-refusal={answer.kind} role="alert">
-            {answer.reason}
-            {answer.kind === 'not-a-repository' && onChatHere !== undefined && (
-              <button type="button" className="pf__verb pf__verb--word launcher__check" data-onboarding-chat-here
-                title="A conversation in this folder, your sentence in its composer — nothing is sent"
-                {...shellControl(() => onChatHere({ intention, folder }))}>Chat in this folder instead</button>
-            )}
-          </p>
-        )}
-        <div className="launcher__actions">
-          <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
-            disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'start' ? plan.summary : '')}
-            {...shellControl(start)}>
-            <span className="launcher__verb-name">{busy ? 'Making the lane…' : 'Start work'}</span>
-          </button>
-          <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}
-            title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
-            {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
-            <span className="launcher__verb-name">Ask without a folder</span>
-          </button>
-        </div>
-        <div className="launcher__readiness" aria-label="Conversation engines">
-          {shownRows.map((row) => <div key={row.backend} className="launcher__engine" data-onboarding-engine={row.backend} data-discovery={row.discovery}>
-            <span>{row.sentence}</span>
-            {row.discovery !== 'installed' && (
-              <button type="button" className="pf__verb pf__verb--word" disabled={onOpenSetup === undefined}
-                title={onOpenSetup === undefined ? 'Setup links are unavailable in this view' : row.setupUrl}
-                {...shellControl(() => onOpenSetup?.(row.setupUrl))}>Setup guide</button>
-            )}
-          </div>)}
-          {onCheckAgain !== undefined && needsCheck && (
-            <div className="launcher__engine launcher__engine--check">
-              <span>{unanswered ? 'The login shell did not answer in time — a slow ~/.zshrc; put PATH in ~/.zprofile.' : 'Installed something? Ask the login shell again.'}</span>
-              <button type="button" className="pf__verb pf__verb--word launcher__check" data-launcher-check-again title="Ask the login shell again and report what it finds" {...shellControl(onCheckAgain)}>Check again</button>
-            </div>
-          )}
-        </div>
       </div>
       {/* M205. EVERY OTHER DOOR, one closed disclosure: progressive, never
           removed. A native <details> so the keyboard reaches its summary and
@@ -267,14 +373,33 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
       <details className="launcher__more" data-launcher-more>
         <summary className="launcher__more-toggle" data-launcher-more-toggle>More ways to start</summary>
       <div className="launcher__doors">
+        {/* M262. The EXPERT doors: raw panel creation is here, not the primary. */}
+        {onCreateObject !== undefined && (
+          <button type="button" className="launcher__verb launcher__verb--door" data-launcher-terminal title="A login shell, where the camera is" {...shellControl(() => onCreateObject('terminal'))}>
+            <span className="launcher__verb-name">Terminal</span>
+            <span className="launcher__verb-hint">a plain shell — nothing runs until you type</span>
+          </button>
+        )}
+        {onCreateObject !== undefined && (
+          <button type="button" className="launcher__verb launcher__verb--door" data-launcher-workflow title="An empty workflow to build" {...shellControl(() => onCreateObject('workflow'))}>
+            <span className="launcher__verb-name">Workflow</span>
+            <span className="launcher__verb-hint">nodes and triggers — agents and shells that hand work on</span>
+          </button>
+        )}
         <button type="button" className="launcher__verb launcher__verb--door launcher__verb--sheet" data-launcher-sheet title="New panel… (⌘⇧N)" {...shellControl(onOpenSheet)}>
-          <span className="launcher__verb-name">New panel…</span>
-          <span className="launcher__verb-hint">a directory, a preset or a command, the agent's mode</span>
+          <span className="launcher__verb-name">Custom panel…</span>
+          <span className="launcher__verb-hint">choose the folder, the agent or command, and its runtime</span>
         </button>
         <button type="button" className="launcher__verb launcher__verb--door" data-launcher-open-file title="Open a file as a panel" {...shellControl(onOpenFile)}>
           <span className="launcher__verb-name">Open a file…</span>
           <span className="launcher__verb-hint">a file panel, editable</span>
         </button>
+        {onBlankCanvas !== undefined && (
+          <button type="button" className="launcher__verb launcher__verb--door" data-launcher-blank title="Put this card away and start from the empty canvas — ⌘K has every verb" {...shellControl(onBlankCanvas)}>
+            <span className="launcher__verb-name">Blank canvas</span>
+            <span className="launcher__verb-hint">put this card away — ⌘K has every verb</span>
+          </button>
+        )}
       </div>
       <div className="launcher__verbs">
         {/* M181/M205. The starter as an OPTIONAL learning path — disabled by name once every key is applied or with no engine. */}

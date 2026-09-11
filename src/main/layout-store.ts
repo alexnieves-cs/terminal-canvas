@@ -218,7 +218,9 @@ export interface LayoutStore {
   worktrees(): WorktreeRecord[]
   /** M65. Newest first, capped at twelve. */
   recentDirectories(): string[]
-  addRecentDirectory(cwd: string): void
+  /** M262. When each CURRENT recent directory was last used, epoch ms; a directory recorded before M262 has no entry. */
+  recentDirectoryUsed(): Record<string, number>
+  addRecentDirectory(cwd: string, at?: number): void
   /**
    * M37. The record a panel id should spawn into, if one exists for it IN THIS
    * ROOT. The root clause is the whole guard: a recycled id in a different
@@ -940,9 +942,19 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     recentDirectories() {
       return [...snapshot.recentDirectories]
     },
-    addRecentDirectory(cwd) {
+    recentDirectoryUsed() {
+      // Only the directories still on the list: a time for one that fell off
+      // the cap would be a row nobody can see.
+      const out: Record<string, number> = {}
+      for (const d of snapshot.recentDirectories) { const at = snapshot.recentDirectoryUsed[d]; if (at !== undefined) out[d] = at }
+      return out
+    },
+    addRecentDirectory(cwd, at = Date.now()) {
       if (cwd === '') return
       snapshot.recentDirectories = [cwd, ...snapshot.recentDirectories.filter((d) => d !== cwd)].slice(0, RECENT_DIRECTORIES_CAP)
+      const used: Record<string, number> = {}
+      for (const d of snapshot.recentDirectories) { const t = d === cwd ? at : snapshot.recentDirectoryUsed[d]; if (t !== undefined) used[d] = t }
+      snapshot.recentDirectoryUsed = used
       scheduleWrite()
     },
     worktrees() {
