@@ -110,7 +110,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1184,8 +1184,16 @@ app.whenReady().then(async () => {
     // preload.
     spawn: (id) => {
       const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
-      if (found) win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+      if (!found) return 'that preset no longer exists'
+      // M253. Production's refusal, by production's function: an unread pack
+      // preset spawns nothing and says why (main/index.ts onSpawnPreset).
+      const unread = unreviewedPresetReason(found)
+      if (unread !== null) return unread
+      win.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
+      return null
     },
+    // M253. "I've read this", through the real store, as main/index.ts does.
+    markPresetReviewed: (id) => layoutStore.markPresetReviewed(id),
     // Real, mirroring main/index.ts's palette.savePanel: mints through
     // presetFromCapture, the same shared function check 90 exists to prove is
     // the only implementation. A stub here would leave check 90 exercising
