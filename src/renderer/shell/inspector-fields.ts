@@ -9,7 +9,7 @@ import type { AgentState } from '@shared/types'
 import type { ReviewResult } from '@shared/review'
 import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotals } from '@shared/cost'
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
-import type { PermissionCounts, ToolActive, ToolInventoryResult, ToolKind } from '@shared/toolbox'
+import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
@@ -1256,6 +1256,11 @@ export interface ToolboxFieldModel {
   /** The honest arms' explanation. Absent when there is nothing to explain. */
   note?: string
   rows: ToolboxFieldRow[]
+  /**
+   * M256. User and plugin skills this selection has not used — counted, not
+   * listed, and absent when there are none. The Skills workspace lists them.
+   */
+  elsewhere?: number
   /** Entries beyond the cap. Zero when everything fits. */
   more: number
 }
@@ -1309,7 +1314,20 @@ export function permissionsLine(counts: readonly PermissionCounts[]): string {
   return `${parts.join(' · ')} in ${carrying.length} file${carrying.length === 1 ? '' : 's'}`
 }
 
-export function buildToolboxFields(result: ToolInventoryResult | undefined): ToolboxFieldModel {
+/**
+ * M256. WHICH SKILLS THE INSPECTOR NAMES. Given, the section lists only the
+ * skills that belong to the selection — the directory's own (project and
+ * local scope) and any this agent has actually USED — and counts the rest
+ * rather than dropping them, so "not shown here" never reads as "not
+ * installed". Absent, every entry is a row, as before (the node's own model
+ * and every older caller).
+ */
+export interface ToolboxRelevance {
+  /** Skill names the selected agent's trail has invoked. */
+  used: readonly string[]
+}
+
+export function buildToolboxFields(result: ToolInventoryResult | undefined, relevance?: ToolboxRelevance): ToolboxFieldModel {
   // undefined is "the query has not answered yet" — every selection change,
   // and every panel before the first read.
   if (result === undefined) {
@@ -1345,7 +1363,12 @@ export function buildToolboxFields(result: ToolInventoryResult | undefined): Too
   // says nothing — most cwds have no .claude at all.
   const broken = inv.sources.filter((src) => src.status === 'unreadable' || src.status === 'malformed' || src.status === 'too-large')
 
-  const rows: ToolboxFieldRow[] = inv.entries.slice(0, TOOLBOX_ROW_CAP).map((entry) => ({
+  const used = new Set(relevance?.used ?? [])
+  const relevant = (entry: ToolEntry): boolean =>
+    relevance === undefined || entry.kind !== 'skill' || entry.scope !== 'user' || used.has(entry.name)
+  const shown = inv.entries.filter(relevant)
+  const elsewhere = inv.entries.length - shown.length
+  const rows: ToolboxFieldRow[] = shown.slice(0, TOOLBOX_ROW_CAP).map((entry) => ({
     id: entry.id,
     kind: entry.kind,
     name: entry.kind === 'hook' ? `${entry.event} ${entry.program}`.trim() : entry.name,
@@ -1369,7 +1392,8 @@ export function buildToolboxFields(result: ToolInventoryResult | undefined): Too
       ? { note: `${String(broken.length)} config source(s) could not be read` }
       : {}),
     rows,
-    more: Math.max(0, inv.entries.length - TOOLBOX_ROW_CAP)
+    more: Math.max(0, shown.length - TOOLBOX_ROW_CAP),
+    ...(elsewhere > 0 ? { elsewhere } : {})
   }
 }
 

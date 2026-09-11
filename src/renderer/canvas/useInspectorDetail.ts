@@ -5,6 +5,9 @@ import { useAgentState } from '@renderer/session/agent-state-store'
 import { getUsage } from '@renderer/session/usage-store'
 import type { Panel } from '@renderer/panels/panels'
 import { inspectionDirectory } from './inspection-directory'
+import { useTrailFor } from '@renderer/skills/skill-trail-store'
+
+const NO_USED: readonly string[] = []
 import type { PaletteController } from '@renderer/palette/usePalette'
 import type { ToolInventoryResult } from '@shared/toolbox'
 import {
@@ -59,6 +62,11 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
     registry, palette, panels, selectedId, selectedPanel,
     selectedIsSessionless, selectedSpawned, waitingIds
   } = deps
+  // M256. The skills the SELECTED agent has used, so the Toolbox section can
+  // name only the ones that belong to it. Subscribed per id through the trail
+  // store's one door; '' names no panel and answers `none`.
+  const trail = useTrailFor(selectedId ?? '', selectedPanel?.kind ?? 'terminal')
+  const usedSkills = trail.kind === 'entries' ? trail.entries.map((e) => e.name) : NO_USED
 
   // The Changes section's own data, queried through review:panel rather than
   // computed here — the engine (main-side, real git) is the sole authority,
@@ -206,7 +214,7 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
     ? directory.kind === 'absent' || directory.kind === 'unavailable'
       ? { hidden: false, summary: directory.reason, rows: [], more: 0, openReason: directory.reason }
       : null
-    : buildToolboxFields(toolbox?.subject === toolboxSubject ? toolbox.result : undefined)
+    : buildToolboxFields(toolbox?.subject === toolboxSubject ? toolbox.result : undefined, { used: usedSkills })
   // Its own signature and its own memo, never folded into inspectorSignature:
   // this arrives asynchronously on its own clock, exactly as `review` does.
   const toolboxSig = toolboxSignature(toolboxFields)

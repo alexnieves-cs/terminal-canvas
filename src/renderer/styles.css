@@ -5384,3 +5384,193 @@ body {
 .sheet-node__draft.is-conflict > span { color: var(--fg); }
 .sheet-node__draft.is-done > span { color: var(--fg-3); }
 .sheet-node__changes { margin-left: var(--sp-4); font-size: var(--t-xs); color: var(--fg); border: 1px solid var(--iris); border-radius: var(--r-full); padding: var(--sp-1) var(--sp-4); white-space: nowrap; }
+
+/* ── M256. Documents: focus, reading measure, edit state, save word ──────────
+   Every rule below reads a data attribute or class the kind renders, so the
+   STATE is decided in the component and only painted here. */
+
+/* Document focus. The canvas quiets — never hides — every other object:
+   a filter rather than a fractional opacity (verify:styles 3), so tokens keep
+   their measured contrast inside the one panel that stays at full strength. */
+.canvas--doc-focus .panel:not([data-doc-focus]) {
+  filter: grayscale(1) brightness(0.42);
+  transition: filter var(--dur-1) var(--ease);
+}
+.canvas--doc-focus .panel:not([data-doc-focus]):hover { filter: grayscale(0.6) brightness(0.7); }
+.panel[data-doc-focus] { outline: 2px solid var(--iris-dim); outline-offset: var(--sp-1); }
+.panel[data-doc-focus] .file-node__prose { font-size: var(--t-lg); }
+.file-node__focus--on { color: var(--iris); background: var(--iris-dim); }
+
+/* Prose reads as prose: a larger size, a longer line-height and a measure,
+   while the directory, gutter and code stay small and mono beside it. */
+.file-node__prose {
+  font-size: var(--t-md);
+  line-height: 1.7;
+  max-width: 68ch;
+  color: var(--fg);
+}
+[data-file-mode="view"] .file-node__directory { font-size: var(--t-xs); color: var(--fg-4); }
+.file-node__prose code, .file-node__pre { font-size: var(--t-sm); }
+
+/* EDITING is unmistakable: an iris rail down the left of the body, a tinted
+   ground, and the sticky action bar. VIEWING has none of the three. */
+[data-file-mode="edit"] {
+  box-shadow: inset 3px 0 0 var(--iris);
+  background: color-mix(in srgb, var(--iris-dim) 35%, var(--s-1));
+}
+.file-node__editbar {
+  position: sticky; top: calc(-1 * var(--inset)); z-index: 2;
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3);
+  margin: 0 calc(-1 * var(--inset)) var(--sp-3);
+  padding: var(--sp-2) var(--inset);
+  background: var(--s-2);
+  border-bottom: 1px solid var(--iris);
+}
+.file-node__editbar .file-node__modes { padding: 0; }
+.file-node__editbar-word {
+  font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600;
+  letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--iris);
+}
+.file-node__editbar-hint { flex: 1 1 auto; min-width: 0; font-size: var(--t-xs); color: var(--fg-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-node__editbar-done {
+  font: inherit; font-size: var(--t-xs); color: var(--fg-2);
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: var(--sp-1) var(--sp-3); cursor: pointer;
+}
+.file-node__editbar-done:hover { color: var(--fg); border-color: var(--line-strong); }
+
+/* The save, in words. Saving is quiet, Saved is green and brief, Couldn't
+   save is red and stays until the next attempt. */
+.file-node__save-state { flex: none; font-size: var(--t-xs); white-space: nowrap; color: var(--fg-3); }
+.file-node__save-state--saved { color: var(--green); }
+.file-node__save-state--failed { color: var(--red); font-weight: 600; }
+
+/* A missing file: the recovery CENTRED in the body, the story above it. */
+.file-node__missing {
+  min-height: 70%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--sp-3); text-align: center; padding: var(--sp-6) var(--sp-5);
+}
+.file-node__missing-head { margin: 0; font-size: var(--t-lg); font-weight: 600; color: var(--fg); letter-spacing: var(--track-tight); }
+.file-node__missing-detail { margin: 0; max-width: 44ch; font-size: var(--t-sm); line-height: var(--lh-body); color: var(--fg-2); }
+.file-node__missing-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-3); margin-top: var(--sp-2); }
+.file-node__missing-actions button {
+  font: inherit; font-size: var(--t-sm); color: var(--fg-2);
+  background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-4); cursor: pointer;
+}
+.file-node__missing-actions button:first-child { color: var(--on-iris); background: var(--iris); border-color: var(--iris); }
+.file-node__missing-actions button:disabled { color: var(--fg-4); cursor: default; }
+
+/* Backlinks and tags: a closed disclosure at the foot, the counts in its
+   summary, so the secondary layer never interrupts the document. */
+.file-node__backlinks > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--sp-2); }
+.file-node__backlinks > summary::-webkit-details-marker { display: none; }
+.file-node__backlinks > summary::before { content: ''; width: 0; height: 0; border-left: 4px solid var(--fg-4); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform var(--dur-1) var(--ease); }
+.file-node__backlinks[open] > summary::before { transform: rotate(90deg); }
+.file-node__backlinks[open] > summary { margin-bottom: var(--sp-2); }
+.file-node__backlinks-count { font-family: var(--font-mono); color: var(--fg-3); letter-spacing: normal; }
+.file-node__tags { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: 0 0 var(--sp-2); }
+
+/* ── M256. Checklists: completion as a progression, comfortable targets ── */
+.checklist-node__progress { display: flex; align-items: center; gap: var(--sp-4); margin-bottom: var(--sp-5); }
+.checklist-node__progress-track { flex: 1; height: 6px; border-radius: var(--r-full); background: var(--s-3); overflow: hidden; }
+.checklist-node__progress-fill { display: block; height: 100%; border-radius: var(--r-full); background: var(--iris); transition: width var(--dur-1) var(--ease); }
+.checklist-node__progress[data-complete] .checklist-node__progress-fill { background: var(--green); }
+.checklist-node__progress-word { flex: none; font-size: var(--t-sm); font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.checklist-node__progress[data-complete] .checklist-node__progress-word { color: var(--green); }
+.checklist-node__items label { align-items: center; cursor: pointer; min-height: 32px; font-size: var(--t-md); color: var(--fg); }
+.checklist-node__items input[type=checkbox] { flex: none; width: 20px; height: 20px; margin: 0; cursor: pointer; }
+.checklist-node__items li[data-checked] label > span { color: var(--fg-3); text-decoration: line-through; text-decoration-color: var(--fg-4); }
+
+/* ── M256. Sheets: a frozen header that looks frozen, a clear active cell ── */
+.sheet-node__colhead { box-shadow: 0 1px 0 var(--line-strong), 0 var(--sp-1) var(--sp-2) color-mix(in srgb, var(--s-0) 60%, transparent); background: var(--s-2); font-weight: 600; }
+.sheet-node__rowhead { box-shadow: 1px 0 0 var(--line-strong), var(--sp-1) 0 var(--sp-2) color-mix(in srgb, var(--s-0) 60%, transparent); background: var(--s-2); }
+.sheet-node__corner { background: var(--s-3); box-shadow: 1px 1px 0 var(--line-strong); }
+.sheet-node__colhead.is-active { color: var(--iris); background: var(--iris-dim); box-shadow: inset 0 -2px 0 var(--iris), 0 1px 0 var(--line-strong); }
+.sheet-node__rowhead.is-active { color: var(--iris); background: var(--iris-dim); box-shadow: inset -2px 0 0 var(--iris), 1px 0 0 var(--line-strong); }
+.sheet-node__cursor { box-shadow: inset 0 0 0 2px var(--iris), 0 0 0 1px var(--iris-dim); background: color-mix(in srgb, var(--iris-dim) 40%, transparent); border-radius: var(--r-sm); }
+
+/* ── M256. Decks: slides as media ─────────────────────────────────────────
+   A darker stage so a slide reads as a lit object, larger thumbnails, and a
+   presenter whose chrome stays out of the way until the pointer asks. */
+.deck-node__stage { background: var(--s-0); }
+.deck-node__stage .deck__slide { border-color: var(--line-strong); }
+.deck-node__thumb { flex-basis: 152px; }
+.deck-node__thumb[aria-current="true"] .deck__slide { border-color: var(--iris); box-shadow: 0 0 0 2px var(--iris); }
+.deck-node__strip { background: color-mix(in srgb, var(--s-0) 88%, transparent); backdrop-filter: blur(var(--blur)); }
+.deck-presenter { background: var(--s-0); }
+.deck-presenter__stage .deck__slide { border-color: transparent; }
+.deck-presenter__bar, .deck-presenter__notes { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.deck-presenter:hover .deck-presenter__bar, .deck-presenter:focus-within .deck-presenter__bar,
+.deck-presenter:hover .deck-presenter__notes, .deck-presenter:focus-within .deck-presenter__notes { opacity: 1; }
+
+/* ── M256. The Skills workspace ───────────────────────────────────────────
+   A dedicated view: list · detail · details, over the whole window below the
+   title bar. Reading type in the centre, facts small and quiet at the side. */
+.skills-ws {
+  position: fixed; inset: var(--titlebar-h, 0) 0 0 0; z-index: 900;
+  display: flex; flex-direction: column;
+  background: var(--s-1); color: var(--fg);
+  font-family: var(--font-ui);
+}
+.skills-ws__head { display: flex; align-items: center; gap: var(--sp-5); padding: var(--sp-4) var(--sp-6); border-bottom: 1px solid var(--line); }
+.skills-ws__title { margin: 0; font-size: var(--t-xl); font-weight: 600; letter-spacing: var(--track-tight); }
+.skills-ws__tabs { display: flex; gap: var(--sp-1); }
+.skills-ws__tab { font: inherit; font-size: var(--t-sm); text-transform: capitalize; color: var(--fg-3); background: none; border: 0; border-radius: var(--r-sm); padding: var(--sp-1) var(--sp-3); cursor: pointer; }
+.skills-ws__tab[aria-selected="true"] { color: var(--fg); background: var(--s-3); }
+.skills-ws__spacer { flex: 1; }
+.skills-ws__verb { font: inherit; font-size: var(--t-sm); color: var(--fg-2); background: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-4); cursor: pointer; }
+.skills-ws__verb:hover { color: var(--fg); border-color: var(--line-strong); }
+.skills-ws__grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr) minmax(15rem, 19rem); }
+.skills-ws__list, .skills-ws__detail, .skills-ws__meta { min-height: 0; overflow: auto; }
+.skills-ws__list { border-right: 1px solid var(--line); padding: var(--sp-4); background: var(--s-0); }
+.skills-ws__search { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-4); background: var(--well); border: 1px solid var(--line); border-radius: var(--r-md); color: var(--fg-3); }
+.skills-ws__search:focus-within { border-color: var(--iris); }
+.skills-ws__search input { flex: 1; min-width: 0; font: inherit; font-size: var(--t-base); color: var(--fg); background: none; border: 0; outline: none; }
+.skills-ws__group { margin-bottom: var(--sp-4); }
+.skills-ws__group-title { display: flex; justify-content: space-between; margin: 0 0 var(--sp-2); padding: 0 var(--sp-2); font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.skills-ws__group-count { font-family: var(--font-mono); font-weight: normal; }
+.skills-ws__rows { list-style: none; margin: 0; padding: 0; }
+.skills-ws__row { display: flex; flex-direction: column; gap: var(--sp-1); width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); cursor: pointer; }
+.skills-ws__row:hover { background: var(--s-2); }
+.skills-ws__row[aria-current="true"] { background: var(--s-3); border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--iris); }
+.skills-ws__row[data-state="unavailable"] .skills-ws__row-name { color: var(--fg-3); text-decoration: line-through; }
+.skills-ws__row-top { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.skills-ws__row-name { flex: 1; min-width: 0; font-size: var(--t-base); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skills-ws__row-purpose { font-size: var(--t-sm); color: var(--fg-3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.skills-ws__detail { padding: var(--sp-7) var(--sp-8); }
+.skills-ws__detail > * { max-width: 72ch; }
+.skills-ws__eyebrow { display: flex; gap: var(--sp-2); margin: 0 0 var(--sp-3); }
+.skills-ws__name { margin: 0 0 var(--sp-3); font-size: var(--t-2xl); font-weight: 600; letter-spacing: var(--track-tight); overflow-wrap: anywhere; }
+.skills-ws__purpose { margin: 0 0 var(--sp-3); font-size: var(--t-lg); line-height: 1.5; color: var(--fg); }
+.skills-ws__description { margin: 0 0 var(--sp-4); font-size: var(--t-base); line-height: var(--lh-body); color: var(--fg-2); }
+.skills-ws__actions { display: flex; gap: var(--sp-3); margin: var(--sp-5) 0 var(--sp-6); }
+.skills-ws__primary { font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--on-iris); background: var(--iris); border: 1px solid var(--iris); border-radius: var(--r-md); padding: var(--sp-2) var(--sp-5); cursor: pointer; }
+.skills-ws__primary:disabled { color: var(--fg-4); background: var(--s-2); border-color: var(--line); cursor: default; }
+.skills-ws__section { margin: 0 0 var(--sp-3); font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.skills-ws__preview { border-top: 1px solid var(--line); padding-top: var(--sp-5); }
+.skills-ws__prose { white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--t-base); line-height: 1.7; color: var(--fg-2); }
+.skills-ws__meta { border-left: 1px solid var(--line); padding: var(--sp-6) var(--sp-5); background: var(--s-0); font-size: var(--t-sm); }
+.skills-ws__facts { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-2) var(--sp-4); margin: 0 0 var(--sp-6); }
+.skills-ws__facts dt { color: var(--fg-4); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; padding-top: var(--sp-1); }
+.skills-ws__facts dd { margin: 0; color: var(--fg); min-width: 0; overflow-wrap: anywhere; }
+.skills-ws__why { display: block; font-size: var(--t-xs); color: var(--fg-3); }
+.skills-ws__mono { font-family: var(--font-mono); font-size: var(--t-xs); }
+.skills-ws__path { color: var(--fg-3); }
+.skills-ws__uses { list-style: none; margin: 0 0 var(--sp-6); padding: 0; }
+.skills-ws__uses li { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-1) 0; border-bottom: 1px solid var(--line); }
+.skills-ws__muted { color: var(--fg-3); font-size: var(--t-sm); }
+.skills-ws__empty { color: var(--fg-3); font-size: var(--t-sm); padding: var(--sp-3); }
+.skills-ws__advanced summary { cursor: pointer; color: var(--fg-3); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; margin-bottom: var(--sp-3); }
+
+/* One badge vocabulary for scope, one for state — the same words everywhere. */
+.skill-badge, .skill-state { flex: none; display: inline-block; font-size: var(--t-xs); font-weight: 600; letter-spacing: var(--track-caps); text-transform: uppercase; border-radius: var(--r-full); padding: 0 var(--sp-2); border: 1px solid currentColor; }
+.skill-badge--user { color: var(--blue); }
+.skill-badge--project { color: var(--green); }
+.skill-badge--local { color: var(--amber); }
+.skill-badge--plugin { color: var(--iris); }
+.skill-state--installed { color: var(--fg-2); }
+.skill-state--placed { color: var(--on-iris); background: var(--iris); border-color: var(--iris); }
+.skill-state--available { color: var(--amber); }
+.skill-state--unavailable { color: var(--red); }

@@ -4,9 +4,9 @@ import type { DragState } from '@renderer/canvas/panel-interaction'
 import { parseTags, parseWikiLinks, resolveWikiName, type VaultIndex } from '@shared/vault'
 import { FILE_MAX_LINES, type FileResult } from '@shared/file-panel'
 import { applyFileResult, useFileResult } from '@renderer/session/file-store'
-import { buildFileNodeModel } from './file-node-model'
+import { buildFileNodeModel, missingStory } from './file-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { Pencil, Refresh } from '@renderer/icons'
+import { Maximize, Pencil, Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
 import { importedNoteReason } from '@shared/imported-note'
 import { RichNoteEditor, type RichNoteHandle } from './RichNoteEditor'
@@ -217,7 +217,23 @@ export interface FileNodeProps {
    * props; Canvas's FileNode call site passes it.
    */
   onImportReviewed?: (id: string) => void
+  /**
+   * M256. Whether this file is the canvas's DOCUMENT FOCUS — centred, widened
+   * and the only object at full strength. Canvas owns the one id; the panel
+   * only asks to enter or leave. Optional because ChecklistNode shares these
+   * props and has no reading mode of its own.
+   */
+  docFocused?: boolean
+  onDocFocus?: (id: string, on: boolean) => void
 }
+
+/**
+ * M256. What the person is told about the last save, in words. `saved` is
+ * shown for a moment after a write lands and then goes quiet — a permanent
+ * "Saved" at rest is a zero-value statement (the rest-layer rule).
+ */
+type SaveState = 'idle' | 'saving' | 'saved' | 'failed'
+const SAVED_SHOWN_MS = 2400
 
 /**
  * A local file on the canvas.
@@ -236,7 +252,8 @@ export interface FileNodeProps {
  */
 function FileNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId,
-  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true, onImportReviewed
+  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true, onImportReviewed,
+  docFocused = false, onDocFocus
 }: FileNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -272,6 +289,14 @@ function FileNodeImpl({
   const [baseMtimeMs, setBaseMtimeMs] = useState<number | null>(null)
   const [conflict, setConflict] = useState<null | 'disk-changed' | 'refused'>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (savedTimerRef.current !== null) clearTimeout(savedTimerRef.current) }, [])
+  // M256. Whether this panel has EVER read text from its path — the one fact
+  // that separates "deleted or moved" from "never here" (`missingStory`).
+  const sawTextRef = useRef(false)
+  if (result?.kind === 'text') sawTextRef.current = true
+  const [recreateNote, setRecreateNote] = useState<string | null>(null)
   const editing = draft !== null
   // M250. Source | Rich — two views over the SAME draft. Source stays the
   // default, so every reader of `data-file-node-editor` keeps its surface.
@@ -522,7 +547,7 @@ function FileNodeImpl({
     // what was typed, and saving (then closing the draft) would unmount it and
     // lose that typing with the refusal never seen.
     const flushed = mode === 'rich' && richRef.current !== null ? richRef.current.flush() : { kind: 'ok' as const, text: draft }
-    if (flushed.kind === 'refused') { setSaveError(`Not saved — ${flushed.reason}. The block is open as source; keep or change it, then save.`); return }
+    if (flushed.kind === 'refused') { setSaveState('failed'); setSaveError(`Not saved — ${flushed.reason}. The block is open as source; keep or change it, then save.`); return }
     const content = flushed.text
     // THE GATE, ENFORCED WHERE THE WRITE IS ISSUED. `model.editable` was
     // checked only where edit mode is ENTERED, which is a different claim: a
@@ -540,9 +565,12 @@ function FileNodeImpl({
     // one — the rule buildFileNodeModel already states for `editableNote`.
     if (!model.editable) {
       setSaveError(model.editableNote ?? 'This file can no longer be saved from here.')
+      setSaveState('failed')
       return
     }
     setSaveError(null)
+    setSaveState('saving')
+    if (savedTimerRef.current !== null) { clearTimeout(savedTimerRef.current); savedTimerRef.current = null }
     void window.canvas.file
       // No panelId: FileWriteRequest is a plain request/response with
       // nothing to key on the panel that issues it — see its own doc
@@ -558,6 +586,8 @@ function FileNodeImpl({
           // waiting for a future reader to depend on).
           lastWriteRef.current = { content, mtimeMs: res.mtimeMs }
           setBaseMtimeMs(res.mtimeMs)
+          setSaveState('saved')
+          savedTimerRef.current = setTimeout(() => { savedTimerRef.current = null; setSaveState('idle') }, SAVED_SHOWN_MS)
           // Leave edit mode on success through the same door every other
           // exit uses, so focus comes back exactly once. The watcher's own
           // push will bring the saved content back through the store a
@@ -567,12 +597,13 @@ function FileNodeImpl({
           closeDraft()
           return
         }
+        setSaveState('failed')
         if (res.kind === 'stale') { setConflict('refused'); return }
         setSaveError(res.detail)
       })
       // MANDATORY, the rule the read effect already states: an unhandled
       // rejection leaves a draft that looks saved and is not.
-      .catch((error: unknown) => setSaveError(String(error)))
+      .catch((error: unknown) => { setSaveState('failed'); setSaveError(String(error)) })
   }
 
   // Escape on a DIRTY draft arms rather than discards — the textarea's rule,
@@ -593,6 +624,7 @@ function FileNodeImpl({
       readOnly={readOnly}
       title={model.heading}
       kindWord={model.prose ? 'note' : 'file'}
+      {...(docFocused ? { rootAttrs: { 'data-doc-focus': '' } } : {})}
       onSelect={onSelect}
       onBeginDrag={onBeginDrag}
       onBeginLink={onBeginLink}
@@ -640,6 +672,14 @@ function FileNodeImpl({
           // edited draft, and the marker must not vanish at the one moment
           // the unsaved work is most at risk.
           <span className="file-node__dirty" data-file-node-dirty title="Unsaved changes">●</span>
+        )}
+        {/* M256. The save, said in words: Saving…, Saved (for a moment), or
+            Couldn't save. Idle says nothing — "saved" at rest is a zero-value
+            statement, and the ● above already carries "unsaved". */}
+        {saveState !== 'idle' && (
+          <span className={`file-node__save-state file-node__save-state--${saveState}`} data-file-node-save-state={saveState} role="status">
+            {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : "Couldn't save"}
+          </span>
         )}
         <button
           type="button"
@@ -689,6 +729,20 @@ function FileNodeImpl({
             Save
           </button>
         )}
+        {onDocFocus !== undefined && !readOnly && (
+          // M256. The reading mode's one door on the panel: centre this file,
+          // widen it and quiet everything else. The same control leaves.
+          <button
+            type="button"
+            className={`file-node__focus icon-button${docFocused ? ' file-node__focus--on' : ''}`}
+            data-file-node-focus
+            aria-pressed={docFocused}
+            title={docFocused ? 'Leave reading mode (Esc)' : 'Read this file in focus - centred and widened'}
+            onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); onDocFocus(id, !docFocused) }}
+          >
+            <Maximize />
+          </button>
+        )}
         <button
           type="button"
           className="file-node__refresh icon-button"
@@ -717,6 +771,9 @@ function FileNodeImpl({
         // predicate — see Canvas.tsx's rule 3, which needed no edit for this
         // kind precisely because of that.
         data-scroll-host
+        // M256. Viewing and editing are two unmistakable states: the attribute
+        // the stylesheet paints the edit rail and the reading measure from.
+        data-file-mode={editing ? 'edit' : 'view'}
         onMouseDown={(event) => {
           event.stopPropagation()
           onFocus(id)
@@ -726,7 +783,12 @@ function FileNodeImpl({
         // component in the bubble path, so without this a Cmd+N pressed while
         // reading spawns a panel behind the file and a Cmd+K opens the palette
         // over it.
-        onKeyDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          event.stopPropagation()
+          // M256. Escape leaves reading mode — but never from inside a draft,
+          // where Escape already means "discard" and has its own arming.
+          if (event.key === 'Escape' && docFocused && !editing && onDocFocus !== undefined) onDocFocus(id, false)
+        }}
       >
         {/* M164. The path rule: the last two segments at rest (the file panel knows no repository root — the review engine resolves one; M164 records this), the full path on hover. */}
         <p className="file-node__directory" data-file-node-directory title={model.directory}>{displayPath(model.directory).short}</p>
@@ -783,6 +845,12 @@ function FileNodeImpl({
                 Press Escape again to discard your unsaved changes.
               </p>
             )}
+            {/* M256. The sticky action bar, present ONLY while editing: the
+                mode word, the source/rich toggle, and how to leave. It sticks
+                to the top of the scroller so the verbs stay in reach down a
+                long note; the read view has no bar at all. */}
+            <div className="file-node__editbar" data-file-node-editbar>
+              <span className="file-node__editbar-word">Editing</span>
             {model.prose && (
               <div className="file-node__modes" role="group" aria-label="Editing mode" data-file-node-modes>
                 {(['source', 'rich'] as const).map((m) => (
@@ -805,6 +873,15 @@ function FileNodeImpl({
                 ))}
               </div>
             )}
+              <span className="file-node__editbar-hint">⌘S saves · Esc leaves</span>
+              <button
+                type="button"
+                className="file-node__editbar-done"
+                data-file-node-discard
+                title={dirty ? (discardArmed ? 'Click again to discard your unsaved changes' : 'Stop editing - asks once if there are unsaved changes') : 'Stop editing'}
+                onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); onEditorEscape() }}
+              >{dirty ? (discardArmed ? 'Discard?' : 'Discard') : 'Done'}</button>
+            </div>
             {model.prose && mode === 'rich' ? (
               <RichNoteEditor text={draft} onChange={setDraft} handleRef={richRef} onSave={() => save(false)} onEscape={onEditorEscape} />
             ) : <textarea
@@ -839,7 +916,40 @@ function FileNodeImpl({
               }}
             />}
           </>
-        ) : model.note !== undefined ? (
+        ) : result?.kind === 'missing' ? (() => {
+          // M256. The missing file's recovery, CENTRED, with the story of what
+          // happened. The model's own note stays as the detail's first line
+          // (every reader of `data-file-node-note` keeps its sentence).
+          const name = path.split('/').pop() ?? path
+          const story = missingStory(sawTextRef.current, name)
+          return (
+            <div className="file-node__missing" data-file-node-missing={story.arm}>
+              <p className="file-node__missing-head">{story.headline}</p>
+              <p className="pf__note file-node__note" data-file-node-note>{model.note}</p>
+              <p className="file-node__missing-detail">{story.detail}</p>
+              <div className="file-node__missing-actions">
+                <button type="button" data-file-node-missing-retry
+                  onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); setRecreateNote(null); setRefreshToken((n) => n + 1) }}
+                >Look again</button>
+                <button type="button" data-file-node-missing-recreate disabled={readOnly}
+                  title={readOnly ? 'leave merged view to recreate this file' : `Create an empty ${name} at this path`}
+                  onMouseDown={(event) => {
+                    event.stopPropagation(); event.preventDefault()
+                    if (readOnly) return
+                    setRecreateNote('recreating…')
+                    void window.canvas.file.create({ root: model.directory, name, seed: '' })
+                      .then((r) => { setRecreateNote(r.kind === 'created' ? null : r.kind === 'exists' ? 'a file is already back at this path - reading it' : `could not recreate it - ${r.detail}`); setRefreshToken((n) => n + 1) })
+                      .catch((error: unknown) => setRecreateNote(`could not recreate it - ${String(error)}`))
+                  }}
+                >Recreate it here</button>
+                <button type="button" data-file-node-missing-close disabled={readOnly}
+                  onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); if (!readOnly) onClose(id) }}
+                >Close panel</button>
+              </div>
+              {recreateNote !== null && <p className="pf__note" data-file-node-recreate-note>{recreateNote}</p>}
+            </div>
+          )
+        })() : model.note !== undefined ? (
           <p className="pf__note file-node__note" data-file-node-note>{model.note}</p>
         ) : model.prose ? (
           /* M27. A note renders as WRAPPED PROSE with no gutter. It is the
@@ -885,9 +995,26 @@ function FileNodeImpl({
             : null
           if (rel === null) return null
           const rows = vault.index.backlinks[rel] ?? []
+          const tags = [...new Set(parseTags(model.lines.map((line) => line.text).join('\n')).map((t) => t.name.toLowerCase()))]
           return (
-            <div className="file-node__backlinks" data-file-backlinks={String(rows.length)}>
-              <p className="file-node__backlinks-head">Backlinks</p>
+            // M256. A DISCLOSURE, closed by default: backlinks and tags are
+            // the secondary layer and must not interrupt the document. The
+            // summary carries the counts, so a closed one still answers "does
+            // anything point here" without opening.
+            <details className="file-node__backlinks" data-file-backlinks={String(rows.length)}>
+              <summary className="file-node__backlinks-head">
+                Backlinks <span className="file-node__backlinks-count">{rows.length}</span>
+                {tags.length > 0 && <> · Tags <span className="file-node__backlinks-count">{tags.length}</span></>}
+              </summary>
+              {tags.length > 0 && (
+                <p className="file-node__tags" data-file-tags={tags.join(' ')}>
+                  {tags.map((t) => (
+                    <button key={t} type="button" className="file-node__tag" data-file-tag={t}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => { event.stopPropagation(); vault.onFilterTag(t) }}>#{t}</button>
+                  ))}
+                </p>
+              )}
               {rows.length === 0 ? (
                 <p className="pf__note" data-file-backlinks-arm="none">no note points here yet</p>
               ) : (
@@ -907,7 +1034,7 @@ function FileNodeImpl({
                   ))}
                 </ul>
               )}
-            </div>
+            </details>
           )
         })()}
       </div>

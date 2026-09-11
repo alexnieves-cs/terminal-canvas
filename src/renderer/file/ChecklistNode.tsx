@@ -123,9 +123,21 @@ export function ChecklistNode(props: FileNodeProps & {
         {reviewOpen && <><pre data-checklist-draft>{disk.content}</pre><button type="button" disabled={readOnly || state.busy || !!disk.truncatedLines} onClick={() => { void session.accept().then((ok) => { if (ok) setReviewOpen(false) }) }}>Accept reviewed draft</button></>}
       </section>}
       {disk === undefined ? <p>Reading checklist…</p> : disk.kind !== 'text' ? <p role="status">{disk.kind === 'unreadable' ? disk.detail : `File ${disk.kind} — restore the Markdown file, then refresh.`}</p> : disk.truncatedLines > 0 ? <p>File exceeds the viewing limit; editing is disabled.</p> : null}
+      {/* M256. Completion as a PROGRESSION: a bar and the count it fills to,
+          above the list it measures. Absent with no items — "0 of 0" is a
+          zero-value statement. */}
+      {items.length > 0 && (() => {
+        const done = items.filter((i) => i.checked).length
+        return <div className="checklist-node__progress" data-checklist-progress={`${done}/${items.length}`} data-complete={done === items.length ? '' : undefined}>
+          <div className="checklist-node__progress-track" role="progressbar" aria-label="Checklist progress" aria-valuemin={0} aria-valuemax={items.length} aria-valuenow={done}>
+            <span className="checklist-node__progress-fill" style={{ width: `${(done / items.length) * 100}%` }} />
+          </div>
+          <span className="checklist-node__progress-word">{done === items.length ? 'All done' : `${done} of ${items.length} done`}</span>
+        </div>
+      })()}
       {parsed.kind === 'document' && parsed.malformed.length > 0 && <p>{parsed.malformed.length} task-like line(s) could not be read; their text is preserved.</p>}
       <ul className="checklist-node__items">
-        {items.map((item, index) => <li key={item.line} data-checklist-line={item.line} draggable={editable} onDragStart={(e) => { e.stopPropagation(); drag.current = item.line; e.dataTransfer.setData('application/x-checklist-item', `${id}:${item.line}`) }} onDragEnd={() => { drag.current = null }}
+        {items.map((item, index) => <li key={item.line} data-checklist-line={item.line} data-checked={item.checked ? '' : undefined} draggable={editable} onDragStart={(e) => { e.stopPropagation(); drag.current = item.line; e.dataTransfer.setData('application/x-checklist-item', `${id}:${item.line}`) }} onDragEnd={() => { drag.current = null }}
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (editable && drag.current !== null && e.dataTransfer.getData('application/x-checklist-item') === `${id}:${drag.current}`) edit('move', `${drag.current} ${item.line}`); drag.current = null }}>
           <label><input type="checkbox" checked={item.checked} disabled={!editable} title={reason} onChange={() => edit('toggle', String(item.line))} /><span>{item.text || 'Untitled task'}</span></label>
           {state.view.runs?.[item.line] && <RunWord run={state.view.runs[item.line]} exists={agents.some((a) => a.id === state.view.runs![item.line].panelId)} />}

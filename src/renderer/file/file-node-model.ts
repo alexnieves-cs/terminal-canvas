@@ -182,3 +182,25 @@ export function buildFileNodeModel(input: {
       }
   }
 }
+
+/**
+ * M256. WHAT HAPPENED TO A MISSING FILE, told as far as this panel can know it.
+ *
+ * Two stories, and the difference is the fix. A file this panel READ earlier
+ * and can no longer find was deleted or moved out from under it — the app
+ * cannot tell those two apart (a rename and a delete look identical to a
+ * watcher that only knows the old path), so it says both rather than guess.
+ * A file never found at all was never available here: the path was wrong, or
+ * it was moved before this canvas was saved. Pure, so `verify:file` pins the
+ * sentences without a rendered panel.
+ */
+export interface MissingStory {
+  arm: 'gone' | 'never'
+  headline: string
+  detail: string
+}
+export function missingStory(seenText: boolean, name: string): MissingStory {
+  return seenText
+    ? { arm: 'gone', headline: `${name} was deleted or moved`, detail: 'It was here when this panel opened and is no longer at this path. If it was renamed, open it again from its new place; if it was deleted, recreate it here.' }
+    : { arm: 'never', headline: `${name} was never found here`, detail: 'Nothing has existed at this path since this panel opened — the path may be mistyped, or the file moved before this canvas was saved.' }
+}
