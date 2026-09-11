@@ -187,3 +187,41 @@ The integrator takes the union.
   (deck present/filmstrip/PDF, pill send/jump, Rich/Source toggle, a docx import). Separately,
   another session's `m246-deck-tools` (2396dc67) has an independent `FileSource.deck`/`deck.ts`, and
   its M246/M247 numbers collide with `m245-sheet`. Reconcile it with M248 before either reaches main.
+
+## Integration 2 — main merged in
+
+- Two merge commits, then one docs commit:
+  - **48d2b445** merges 35de9666: M205, M244 fixes, M245 sheet, M246 draft review, M247 agent links.
+  - **03c63d36** merges e94ad552: M206–M208 D10 hierarchy, plus agent-dx (`npm run affected`, `npm run lb`, `verify:meta ledger.1`). It merged clean.
+  - **ce9a629d** links this ledger from CLAUDE.md, because main's new `ledger.1` requires the newest run ledger to be linked there.
+- Reconciliations, in 48d2b445:
+  - **Unions at every registry and copy site.** Every FileSource copy site carries `sheet`, `imported` and `deck`, and so does `remapPortable`'s field-by-field gate.
+  - **Draft review: main's `draft-review.ts` verbatim.** The deck was ported onto it as follows:
+    - `hashText` moved into `deck.ts`. Main's `contentHash` has a `:length` suffix that `parseDeckView`'s baseHash grammar refuses, and a slide's hash is also its LCS key.
+    - `draftState` gets the outcome argument (`undefined`).
+    - `discardSlides` maps M246's `undefined` remaining to the deck's `null`.
+    - `verify:deck` `draft.*` now uses the new API shape (explicit empty in `diffItems`, `dropped`/`undefined` on discard). The per-slide keep, byte-identical discard, named conflict and LCS checks are unchanged.
+    - `draft.generic.1` still passes against main's file and is kept.
+  - **`execute(step, caller?, origin)`.** Main's caller stays the second parameter. `runAgentPlan` passes `caller, 'door'`, and `deck.origin.1` is re-pinned to that literal.
+  - **Palette order: main wins (69d987d5).** `verify-palette.cjs` is main's, so M249's `sheet.1` re-pin is gone.
+  - **Lockfile:** main's lock plus `npm install --package-lock-only`. jszip 3.10.2, mammoth 1.12.2 and xlsx 0.20.3 are pinned.
+  - **Channels:** 136, because main added none.
+- M206–M208 checked against our work:
+  - Canvas.tsx is untouched.
+  - The styles hunks are github/inspector/workflow disclosures only. Neither the frame-rule list nor the pill/deck blocks changed.
+  - M207's inspector "More actions…" disclosure is outside every pill/deck/notes check.
+- Gate on the final tree (ce9a629d's content), `TC_VERIFY_SUFFIX=integ2 npm run verify` under the lock:
+  - 660.5s, **42/46 suites**. Typecheck and build green, and every plain suite green.
+  - No foreign test Electron at start or end, only other apps' crashpad handlers.
+  - Scratch baseline: main at e94ad552 was built in a detached worktree and its failing parts run with the same lock.
+- The reds, classified. Each one is red on main-base e94ad552, or cleared on a rerun:
+  - `panels:shell`: 98/98b/106. Base is 77/98/98b/106/127 + headroom 94%.
+  - `panels:kinds`: `broadcast.1` + watchdog, same as base. In the pre-final run, `link-draw.1`/`.5` failed once; they passed in the final gate.
+  - `panels:agents`: `search.1`/`attention.1`/headroom.
+    - Base rerun: 79/82 with the same three reds. Ours rerun: 79/82 with the same three.
+    - In the full gate the part hit its watchdog, and the checks after it threw "Object has been destroyed". `keyboard.1–.4` failed at seeding in the contended full run and pass on the rerun.
+  - `panels:product`: watchdog at 230s before the pill checks. Rerun with `TC_WATCHDOG_SCALE=2`: 108/110.
+    - `pill.focus.1`, `.rects.1`, `.paste.1`, `.jump.1`, `.send.1` all PASS.
+    - `work.action.1`, `review.task.2`, `browser.1` and `onboarding.start.1` pass.
+    - `reach.1` and `reach.3` are red on base-product too (102/105): M207/M208 moved the inspector's and workflow's secondary verbs behind "More actions…". That is main's red, not ours.
+- Owed, unchanged from Integration 1: the goldens critic pass and the manual `npm run dev` pass. Main also owes its own `reach.1`/`.3` re-pin after the M207/M208 disclosures.
