@@ -14,6 +14,7 @@ import { Close, More, Pencil, RotateCw } from '@renderer/icons'
 import type { PersistedTemplate } from '@shared/templates'
 import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from '@renderer/workflow/template-draft-store'
 import { fieldsOf } from '@shared/template-edit'
+import { LIBRARY } from '@shared/template-library'
 import { HANDOFF_TRIGGERS } from '@shared/handoff'
 import type { ContextTab } from './useShellChrome'
 import type { RunRow } from '@shared/run-ledger'
@@ -1145,8 +1146,31 @@ function InspectorPanel({
  * re-adds the edge under the new trigger. Nothing selected: nothing here —
  * the panel's own fields below are M133's.
  */
-/** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them). */
-const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'folder', title: 'title', command: 'command', args: 'arguments', presetId: 'preset', message: 'first message', width: 'workers', list: 'list file', prompt: 'prompt', target: 'target', line: 'verb line', url: 'address', method: 'method' }
+/** M183. Words, not codes, for the node editor's labels; `w`/`h` are the minted panel's pixel geometry — the diagram's drag owns that, so they are not rendered (the agent verb keeps them).
+ *  M259. Sentence-case LABELS a person would say, each with a one-line HINT, grouped by the question they answer — the flat run of lower-case codes read as a config file. */
+const NODE_FIELD_LABELS: Record<string, string> = { cwd: 'Folder', title: 'Name', command: 'Command', args: 'Arguments', presetId: 'Preset', message: 'First message', width: 'Workers at once', list: 'List of items', prompt: 'Instructions', target: 'Write results to', line: 'Canvas verb', url: 'Address', method: 'Method' }
+const NODE_FIELD_HINTS: Record<string, string> = {
+  cwd: 'Where it works — its terminal or chat opens here.',
+  title: 'What the block is called on the graph.',
+  command: 'The program to run; empty is your login shell.',
+  args: 'Words passed to the command, separated by spaces.',
+  presetId: 'A saved launch preset to start from instead of a command.',
+  message: 'Sent to the agent as soon as it starts.',
+  width: 'How many items run in parallel.',
+  list: 'A file with one item per line.',
+  prompt: 'What every worker is told, with its item below it.',
+  target: 'The file the collected results are written to.',
+  line: 'One line, run through the same executor the palette uses.',
+  url: 'Read with a GET when the block runs.',
+  method: 'Only GET runs — a write is refused by name.'
+}
+/** The groups, in reading order; a field no group names falls into the last. */
+const NODE_FIELD_GROUPS: ReadonlyArray<{ title: string; fields: readonly string[] }> = [
+  { title: 'Basics', fields: ['title'] },
+  { title: 'What it does', fields: ['command', 'args', 'presetId', 'message', 'prompt', 'line', 'url', 'method'] },
+  { title: 'Where it works', fields: ['cwd', 'list', 'target'] },
+  { title: 'Capacity', fields: ['width'] }
+]
 const HIDDEN_NODE_FIELDS = new Set(['dx', 'dy', 'w', 'h'])
 
 function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string; templateOf: (id: string) => PersistedTemplate | undefined; onTestNode?: (templateId: string, key: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> }): JSX.Element | null {
@@ -1161,15 +1185,18 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
   // typed value the refusal promised to keep (the M183 critic).
   useEffect(() => { setDrafts({}); setReasons({}) }, [templateId])
   if (template === undefined || selected === null) return null
+  // M259. A block by the name the graph shows, never its bare key.
+  const nameOf = (key: string): string => { const n = template.nodes.find((x) => x.key === key); return n !== undefined && 'title' in n && typeof n.title === 'string' && n.title.trim() !== '' ? n.title : key }
   if (selected.includes('>')) {
     const [from, to] = selected.split('>') as [string, string]
     const edge = template.edges.find((e) => e.from === from && e.to === to)
     if (edge === undefined) return null
     return (
       <section className="inspector__section inspector__section--node" data-inspector-node="edge" data-inspector-node-edge={selected}>
-        <h3 className="inspector__section-heading inspector__section-heading--node">Edge · {from} to {to}</h3>
-        <div className="inspector__field" data-inspector-node-field-row="trigger">
-          <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>trigger</label>
+        <h3 className="inspector__section-heading inspector__section-heading--node">Handoff · {nameOf(from)} to {nameOf(to)}</h3>
+        <div className="inspector__field inspector__node-field" data-inspector-node-field-row="trigger">
+          <label className="inspector__label" htmlFor={`edge-trigger-${templateId}`}>{`${nameOf(to)} starts`}</label>
+          <span className="inspector__node-hint">{`When ${nameOf(from)} reaches this point, ${nameOf(to)} begins.`}</span>
           <select id={`edge-trigger-${templateId}`} className="inspector__input" data-inspector-node-field="trigger" value={edge.trigger}
             // ONE operation, in place: an unedge-then-re-add is two undo steps and loses the edge if the second refuses (the critic).
             onChange={(e) => { const r = applyDraftOp(templateId, saved, { type: 'retrigger', from, to, trigger: e.target.value as typeof edge.trigger }); if (r.kind === 'refused') setReasons({ trigger: r.reason }) }}>
@@ -1195,26 +1222,41 @@ function NodeFields({ templateId, templateOf, onTestNode }: { templateId: string
     if (r.kind === 'refused') setReasons((rs) => ({ ...rs, [name]: r.reason }))
     else { setReasons((rs) => { const { [name]: _gone, ...rest } = rs; return rest }); setDrafts((ds) => { const { [name]: _gone, ...rest } = ds; return rest }) }
   }
+  const visible = fields.filter((f) => !HIDDEN_NODE_FIELDS.has(f.name))
+  const grouped = NODE_FIELD_GROUPS.map((g) => ({ title: g.title, fields: visible.filter((f) => g.fields.includes(f.name)) }))
+  const rest = visible.filter((f) => !NODE_FIELD_GROUPS.some((g) => g.fields.includes(f.name)))
+  if (rest.length > 0) grouped.push({ title: 'More', fields: rest })
+  const fieldRow = (f: (typeof fields)[number]): JSX.Element => (
+    <div className="inspector__field inspector__node-field" key={f.name} data-inspector-node-field-row={f.name}>
+      <label className="inspector__label" htmlFor={`node-${templateId}-${f.name}`}>{NODE_FIELD_LABELS[f.name] ?? f.name}</label>
+      <input id={`node-${templateId}-${f.name}`} className={`inspector__input${f.name === 'cwd' || f.name === 'command' || f.name === 'args' || f.name === 'list' || f.name === 'target' ? ' inspector__value--mono' : ''}`}
+        data-inspector-node-field={f.name} type={f.type === 'number' ? 'number' : 'text'}
+        aria-describedby={NODE_FIELD_HINTS[f.name] === undefined ? undefined : `node-${templateId}-${f.name}-hint`}
+        // The path rule: the field must hold the real value (it is editable), so the whole of it rides the title.
+        title={drafts[f.name] ?? current(f.name)}
+        value={drafts[f.name] ?? current(f.name)}
+        onChange={(e) => { setDrafts((ds) => ({ ...ds, [f.name]: e.target.value })); setReasons((rs) => { const { [f.name]: _gone, ...rest } = rs; return rest }) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(f.name, f.type) } e.stopPropagation() }}
+        onBlur={() => commit(f.name, f.type)}
+        // Focus EXPLICITLY: the pane's own mousedown rule keeps focus on the canvas (shellControl), and an input that never takes it swallows the typing.
+        onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.focus() }}
+        onMouseUp={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); e.currentTarget.focus() }} />
+      {NODE_FIELD_HINTS[f.name] !== undefined && <span className="inspector__node-hint" id={`node-${templateId}-${f.name}-hint`}>{NODE_FIELD_HINTS[f.name]}</span>}
+      {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
+    </div>
+  )
+  const kindName = LIBRARY.find((e) => e.kind === node.kind)?.name ?? node.kind
   return (
     <section className="inspector__section inspector__section--node" data-inspector-node="block" data-inspector-node-key={node.key}>
-      <h3 className="inspector__section-heading inspector__section-heading--node">{node.kind} · {'title' in node && typeof node.title === 'string' && node.title.trim() !== '' ? node.title : node.key}</h3>
-      {fields.filter((f) => !HIDDEN_NODE_FIELDS.has(f.name)).map((f) => (
-        <div className="inspector__field" key={f.name} data-inspector-node-field-row={f.name}>
-          <label className="inspector__label" htmlFor={`node-${templateId}-${f.name}`}>{NODE_FIELD_LABELS[f.name] ?? f.name}</label>
-          <input id={`node-${templateId}-${f.name}`} className={`inspector__input${f.name === 'cwd' || f.name === 'command' || f.name === 'args' || f.name === 'list' || f.name === 'target' ? ' inspector__value--mono' : ''}`}
-            data-inspector-node-field={f.name} type={f.type === 'number' ? 'number' : 'text'}
-            // The path rule: the field must hold the real value (it is editable), so the whole of it rides the title.
-            title={drafts[f.name] ?? current(f.name)}
-            value={drafts[f.name] ?? current(f.name)}
-            onChange={(e) => { setDrafts((ds) => ({ ...ds, [f.name]: e.target.value })); setReasons((rs) => { const { [f.name]: _gone, ...rest } = rs; return rest }) }}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(f.name, f.type) } e.stopPropagation() }}
-            onBlur={() => commit(f.name, f.type)}
-            // Focus EXPLICITLY: the pane's own mousedown rule keeps focus on the canvas (shellControl), and an input that never takes it swallows the typing.
-            onMouseDown={(e) => { e.stopPropagation(); e.currentTarget.focus() }}
-            onMouseUp={(e) => e.stopPropagation()}
-            onClick={(e) => { e.stopPropagation(); e.currentTarget.focus() }} />
-          {reasons[f.name] !== undefined && <p className="inspector__arm inspector__reason" data-inspector-node-reason={f.name}>{reasons[f.name]}</p>}
-        </div>
+      <h3 className="inspector__section-heading inspector__section-heading--node">{kindName} · {nameOf(node.key)}</h3>
+      {/* M259. GROUPED by the question each set answers, in the UI face,
+          every field with a label a person would say and a one-line hint. */}
+      {grouped.filter((g) => g.fields.length > 0).map((g) => (
+        <fieldset key={g.title} className="inspector__node-group" data-inspector-node-group={g.title}>
+          <legend className="inspector__node-legend">{g.title}</legend>
+          {g.fields.map(fieldRow)}
+        </fieldset>
       ))}
       {/* M188. Test this node: ONE block, on its own, with its duration and a
           named failure — its neighbours are not started. Present for every

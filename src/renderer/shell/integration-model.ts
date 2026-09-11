@@ -127,3 +127,19 @@ function past(base: string): string {
   const verb = base.split(' ', 1)[0]
   return PAST[verb] === undefined ? base : `${PAST[verb]}${base.slice(verb.length)}`
 }
+
+/** Past this, a list read from a provider is called stale — it may no longer be what the provider says. */
+export const STALE_AFTER_MS = 10 * 60 * 1000
+
+/**
+ * M259. SYNC FRESHNESS IN WORDS. Three answers: never read (`not read yet`,
+ * stale by definition), a relative age, and whether that age is past
+ * `STALE_AFTER_MS`. `verb` names the act — a list is `updated`, a card's
+ * copy of a provider's state is `copied`.
+ */
+export function syncWord(at: number | undefined, now: number, verb = 'updated', staleAfter = STALE_AFTER_MS): { word: string; stale: boolean } {
+  if (at === undefined) return { word: 'not read yet', stale: true }
+  const s = Math.max(0, Math.round((now - at) / 1000))
+  const age = s < 10 ? 'just now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 48 * 3600 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`
+  return { word: `${verb} ${age}`, stale: now - at > staleAfter }
+}

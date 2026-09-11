@@ -237,6 +237,44 @@ function workState(work: { state: WorkItemState } | undefined): PanelStateWord {
   return word === undefined || tone === undefined ? { word: 'work', tone: 'kind' } : { word, tone }
 }
 
+/**
+ * M259. A PROVIDER's state in the board's own four words, so a GitHub row, a
+ * Jira ticket, a board card and a canvas card never name one fact two ways.
+ * Here because `verify:rail state.2` keeps the state words in this file; the
+ * four are read by INDEX off `WORK_ITEM_STATES`, as `workState` reads them.
+ *
+ * GitHub's words are main's (`github-client.ts`: `review requested`,
+ * `pull request`, else the API's own `open`/`closed`). Jira's are free text a
+ * workflow admin chose, so they are matched by the four families every Jira
+ * scheme draws from; a status the map does not recognise keeps ITS OWN words
+ * at the kind tone and claims no board state — a guessed column is worse
+ * than an honest unknown. Absent is the third answer, said in words.
+ */
+const JIRA_FAMILIES: ReadonlyArray<readonly [RegExp, number]> = [
+  [/\b(done|closed|resolved|complete[d]?|released|shipped|won'?t (do|fix)|cancel(l)?ed)\b/i, 3],
+  [/\b(review|qa|test(ing)?|verif(y|ication)|approval)\b/i, 2],
+  [/\b(in progress|doing|in development|started|implementing|active)\b/i, 1],
+  [/\b(to ?do|open|backlog|new|selected( for development)?|ready|triage)\b/i, 0]
+]
+export function providerState(source: string, raw: string | null | undefined): PanelStateWord & { state?: WorkItemState } {
+  if (raw === null || raw === undefined || raw.trim() === '') return { word: 'no status', tone: 'kind' }
+  const at = (i: number): PanelStateWord & { state?: WorkItemState } => {
+    const state = WORK_ITEM_STATES[i]
+    return state === undefined ? { word: raw, tone: 'kind' } : { ...workState({ state }), state }
+  }
+  const own = WORK_ITEM_STATES.indexOf(raw as WorkItemState)
+  if (own >= 0) return at(own)
+  if (source === 'github') {
+    const w = raw.trim().toLowerCase()
+    if (w === 'review requested' || w === 'pull request') return at(2)
+    if (w === 'open') return at(0)
+    if (w === 'closed' || w === 'merged') return at(3)
+    return { word: raw, tone: 'kind' }
+  }
+  for (const [re, i] of JIRA_FAMILIES) if (re.test(raw)) return at(i)
+  return { word: raw, tone: 'kind' }
+}
+
 function chatState(chat: ChatStateInput | undefined): PanelStateWord {
   if (chat === undefined) return { word: 'not started', tone: 'none' }
   if (chat.pending > 0) return { word: 'needs you', tone: 'needs-you' }

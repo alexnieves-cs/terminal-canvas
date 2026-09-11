@@ -243,3 +243,41 @@ export const Pin = (
     <path d="M9.5 2.5l4 4-2 1-1.5 3.5-3-3L3 12.5l3.5-4-3-3L7 4z" />
   </svg>
 )
+
+/* M259. The workflow editor's node glyphs — one per template kind that has
+   no canvas-kind glyph of its own (a terminal and a chat reuse theirs), so a
+   block says what it is before its label is read. */
+/** A pool: one list fanning out to three workers. */
+export const NodePool = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M2.5 8h3M5.5 8l3-4h5M5.5 8h8M5.5 8l3 4h5" /></Svg>
+)
+/** An orchestrator: a lead point above the two it directs. */
+export const NodeOrchestrator = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="8" cy="3.5" r="1.75" /><path d="M8 5.25V8M4 12.5V8h8v4.5" /></Svg>
+)
+/** A collect: three results funnelling into one. */
+export const NodeCollect = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M2.5 4h5l3 4h3M2.5 8h11M2.5 12h5l3-4" /></Svg>
+)
+/** An action: one canvas verb, fired — a bolt. */
+export const NodeAction = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M9 1.75L3.5 9H8l-1 5.25L12.5 7H8z" /></Svg>
+)
+/** Auto layout: three blocks stepping on a grid. */
+export const AutoLayout = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="1.5" y="2" width="4" height="3.5" rx="0.75" /><rect x="10.5" y="2" width="4" height="3.5" rx="0.75" /><rect x="10.5" y="10.5" width="4" height="3.5" rx="0.75" /><path d="M5.5 3.75h5M12.5 5.5v5" /></Svg>
+)
+/** History: a clock's face with its hand turned back. */
+export const History = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M2.75 8a5.25 5.25 0 1 0 1.6-3.8" /><path d="M2.5 2.75v2.5H5" /><path d="M8 5.25V8l1.75 1.25" /></Svg>
+)
+/** A trigger: a bolt inside a clock's ring — what starts a workflow. */
+export const Trigger = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="8" cy="8" r="5.75" /><path d="M8.75 4.5L6.25 8.5h3L7.5 11.5" /></Svg>
+)
+/** A warning: a triangle with its mark — an incomplete block. */
+export const Warn = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M8 2.25l6 11H2z" /><path d="M8 6.5v3M8 11.5h.01" /></Svg>
+)
+/** One glyph per workflow node kind, for the diagram's title strip and the library. */
+export const WORKFLOW_NODE_GLYPH = { terminal: KindTerminal, chat: KindChat, pool: NodePool, orchestrator: NodeOrchestrator, collect: NodeCollect, action: NodeAction, http: KindBrowser } as const

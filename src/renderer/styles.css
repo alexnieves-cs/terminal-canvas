@@ -1675,9 +1675,16 @@ body {
    closes it, so the pane reads "this node" then "this panel". */
 .inspector__section--node { border-bottom: 1px solid var(--border); padding-bottom: var(--sp-4); }
 .inspector__section-heading--node { color: var(--fg); font-size: var(--t-sm); font-weight: 600; letter-spacing: var(--track-tight); text-transform: none; }
-/* The disclosure is not a third tab: it sits apart from the two it neighbours. */
-.workflow-node__library-toggle { margin-right: var(--sp-3); }
 [data-inspector-node] .inspector__field { display: block; }
+/* M259. The node editor's GROUPS: a legend per question (Basics, What it
+   does, Where it works, Capacity), each field a sentence-case label, a
+   full-width input and a one-line hint — never a column of lower-case codes. */
+.inspector__node-group { margin: var(--sp-5) 0 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+.inspector__node-legend { padding: 0; margin: 0 0 var(--sp-2); font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--fg-3); }
+[data-inspector-node] .inspector__node-field { display: flex; flex-direction: column; gap: var(--sp-2); }
+.inspector__node-field .inspector__label { font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg); text-transform: none; letter-spacing: normal; }
+.inspector__node-field .inspector__input { width: 100%; min-height: 28px; }
+.inspector__node-hint { font-family: var(--font-ui); font-size: var(--t-xs); line-height: var(--lh-tight); color: var(--fg-3); }
 [data-inspector-node-deselect] { margin-top: var(--sp-2); }
 
 .inspector__label {
@@ -4931,92 +4938,216 @@ body {
 .skill-editor__result { font-size: var(--t-xs); color: var(--fg-3); }
 .skill-editor__result[data-skill-edit-result="failed"] { color: var(--red); }
 .skill-editor__note { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
-/* M133. The workflow panel: a verb row, a tab strip, and one of two panes.
-   The Definition pane holds an <svg> that is a sibling LAYER, not a canvas —
-   it has a viewBox and nothing else, so it scrolls inside its own pane the
-   way every other wide body in this app does (`overflow: auto`), and the
-   frame's own rule holds: no transform anywhere below `.pf__body`. */
-.workflow-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); min-height: 0; }
+/* M133, reshaped by M259. The workflow panel: ONE toolbar, then a stage of
+   up to three columns — the node library (a left drawer that closes after a
+   placement), the graph, and the History drawer with its run timeline.
+   The graph is an <svg> that is a sibling LAYER, not a canvas — a viewBox
+   and nothing else — so it scrolls inside its own pane the way every other
+   wide body in this app does (`overflow: auto`), and the frame's own rule
+   holds: no transform anywhere below `.pf__body`. */
+.workflow-node__body { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); min-height: 0; }
 .workflow-node__count { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
-.workflow-node__verbs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.workflow-node__more-actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+/* THE TOOLBAR. One row that never wraps its four tools onto a second line:
+   Run (the surface's one filled control), Add node, Edit trigger, History;
+   then the status and the overflow at the far end. `position: relative`
+   anchors the status popover and the overflow menu to the row. */
+.workflow-node__verbs { position: relative; display: flex; align-items: center; gap: var(--sp-2); flex-wrap: nowrap; min-width: 0; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.workflow-node__tool { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; }
+.workflow-node__tool svg { flex: 0 0 auto; color: var(--fg-3); }
+.workflow-node__tool[aria-pressed="true"] { background: var(--s-4); color: var(--fg); }
+.workflow-node__tool[aria-pressed="true"] svg { color: var(--iris); }
+.workflow-node__spacer { flex: 1 1 auto; min-width: var(--sp-4); }
+.workflow-node__more { display: inline-flex; align-items: center; justify-content: center; }
+/* The overflow is a MENU under its button, not a second row that shoves the
+   graph down while it is open. */
+.workflow-node__more-actions { display: flex; align-items: stretch; gap: var(--sp-1); flex-wrap: wrap; }
+.workflow-node__more-actions:not([hidden]) {
+  position: absolute; top: calc(100% + var(--sp-1)); right: 0; z-index: 3;
+  flex-direction: column; min-width: 160px; padding: var(--sp-2);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-3);
+}
+.workflow-node__more-actions:not([hidden]) .pf__verb { justify-content: flex-start; text-align: left; }
 .workflow-node__more-actions[hidden] { display: none; }
-.workflow-node__tabs { display: flex; align-items: center; gap: var(--sp-1); border-bottom: 1px solid var(--line); }
-.workflow-node__tab[aria-selected="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--iris); }
-.workflow-node__pane { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.workflow-node__diagram { display: block; max-width: none; flex: 0 0 auto; } /* M183. Never a shrinkable flex item beside the library: it collapsed to ~110 px and every drop landed at its left edge. */
-/* M183. THE LIBRARY beside the diagram: a quiet column of entries in the UI
-   face (a name, one sentence, an example), each with its Add control; the diagram takes the rest. A port is a small accent dot on the
-   block's right edge; the wire preview is the accent line; a refusal is one
-   sentence under the verbs, the M133 idiom. */
-.workflow-node__editor { display: flex; gap: var(--sp-3); min-height: 0; align-items: flex-start; }
-/* M191 (the golden audit, 4). The diagram SCROLLS rather than clipping: an
-   SVG wider than the panel used to slice a block mid-word with nothing to say
-   so. The pane's own overflow, never the body's (`.pf__body` is never
-   transformed and never scrolled by a kind). */
-.workflow-node__pane[data-workflow-panel="definition"] { overflow-x: auto; }
-.workflow-node__library { flex: 0 0 168px; align-self: stretch; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-.workflow-node__entry { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-2); cursor: grab; font-family: var(--font-ui); }
-.workflow-node__entry-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+/* THE STATUS. At rest: one word when there is one to say (`Unsaved`,
+   `2 to finish`), else a quiet dot — never a zero-value statement. Its
+   popover holds every reason and every unfinished block, revealed on hover
+   or focus at opacity 0 → 1 (the rest rule's mechanism: the box, the text and
+   a script's read all stay). */
+.workflow-node__status { position: relative; display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 22px; padding: 0 var(--sp-3); border-radius: var(--r-full); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); cursor: default; outline: none; }
+.workflow-node__status:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
+.workflow-node__status[data-workflow-status="unsaved"] { background: var(--iris-dim); color: var(--iris); }
+.workflow-node__status[data-workflow-status="incomplete"] { background: var(--amber-dim); color: var(--amber); }
+.workflow-node__status-dot { width: 6px; height: 6px; border-radius: var(--r-full); background: var(--line-strong); }
+.workflow-node__status-word { font-weight: 600; white-space: nowrap; }
+.workflow-node__why {
+  position: absolute; top: calc(100% + var(--sp-2)); right: 0; z-index: 3;
+  display: flex; flex-direction: column; gap: var(--sp-2); width: max-content; max-width: 300px; padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-3);
+  opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease);
+}
+.workflow-node__status:hover .workflow-node__why, .workflow-node__status:focus-within .workflow-node__why, .workflow-node__status:focus .workflow-node__why { opacity: 1; pointer-events: auto; }
+.workflow-node__why-line { display: block; margin: 0; font-size: var(--t-xs); line-height: var(--lh-body); color: var(--fg-2); }
+.workflow-node__why-line--issue { color: var(--amber); }
+.workflow-node__stale-line { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+/* THE STAGE: library | graph | history. The graph is the one column that gives. */
+.workflow-node__stage { display: flex; gap: var(--sp-4); flex: 1 1 auto; min-height: 0; }
+.workflow-node__pane { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; }
+/* M183. Never a shrinkable flex item: it collapsed to ~110 px beside the
+   library and every drop landed at its left edge. */
+.workflow-node__diagram { display: block; max-width: none; flex: 0 0 auto; }
+/* The graph pane does not scroll itself: its inner `__scroll` does, so the
+   refusal and Auto layout float over the graph's corners while the blocks
+   move under them. The ground is a dot grid in the hairline colour — the
+   surface says "arrange things here" without a word — attached to the
+   scroller (`local`) so it travels with the blocks. */
+.workflow-node__pane[data-workflow-panel="definition"] { position: relative; display: flex; flex-direction: column; gap: var(--sp-3); overflow: hidden; }
+.workflow-node__scroll {
+  flex: 1 1 auto; min-height: 0; overflow: auto; border-radius: var(--r-md);
+  background-color: var(--s-1);
+  background-image: radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 1.4px);
+  background-size: 16px 16px; background-attachment: local;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+/* THE LIBRARY: a left drawer of kinds, each a glyph tile, a name and one
+   sentence, with its Add control. It closes after a placement. */
+.workflow-node__library { flex: 0 0 208px; align-self: stretch; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-1); margin: 0; padding: 0 var(--sp-3) 0 0; list-style: none; border-right: 1px solid var(--line); }
+.workflow-node__entry { display: flex; align-items: flex-start; gap: var(--sp-4); padding: var(--sp-3) var(--sp-3); border-radius: var(--r-md); cursor: grab; font-family: var(--font-ui); }
+.workflow-node__entry:hover { background: var(--s-4); }
+.workflow-node__entry:active { cursor: grabbing; }
+.workflow-node__entry-glyph { flex: 0 0 auto; display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r-sm); background: var(--wf-tint); color: var(--wf-hue); }
+.workflow-node__entry-text { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; flex: 1 1 auto; }
 .workflow-node__entry-name { font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
 /* M256 (spec §19). A SENTENCE, per its own name — kept off --t-xs, which this
    file otherwise reserves for labels, counts and timestamps. */
 .workflow-node__entry-sentence { font-size: var(--t-sm); color: var(--fg-3); line-height: var(--lh-body); }
-.workflow-node__entry-example { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-4); } /* M183 (the verifier): the UI FACE — two of the five examples are English, and a mixed slot set in mono is prose in mono. */
-.workflow-node__port { fill: var(--iris); stroke: var(--s-1); stroke-width: 1.5; cursor: crosshair; }
-.workflow-node__wire { stroke: var(--iris); stroke-width: 2; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
-.workflow-node__ghost { fill: var(--iris-dim); stroke: var(--iris); stroke-dasharray: 4 3; pointer-events: none; }
+.workflow-node__entry-add { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.workflow-node__entry:hover .workflow-node__entry-add, .workflow-node__entry-add:focus-visible { opacity: 1; }
+/* A kind's FAMILY hue, from tokens both themes already declare: agents wear
+   the accent, workers over a list wear blue, the workflow's hands stay
+   neutral. Nothing here is a new colour. */
+[data-family="agent"] { --wf-hue: var(--iris); --wf-tint: var(--iris-dim); }
+[data-family="worker"] { --wf-hue: var(--blue); --wf-tint: var(--blue-dim); }
+[data-family="hand"] { --wf-hue: var(--fg-3); --wf-tint: var(--s-4); }
+/* AUTO LAYOUT, floating in the graph's corner — contextual, revealed with
+   the panel's other chrome. */
+.workflow-node__layout { position: absolute; top: var(--sp-3); right: var(--sp-5); z-index: 2; display: flex; gap: var(--sp-1); padding: var(--sp-1); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.panel:hover .workflow-node__layout, .panel:focus-within .workflow-node__layout, .panel--selected .workflow-node__layout { opacity: 1; }
+.workflow-node__layout-btn { display: inline-flex; align-items: center; justify-content: center; }
+.workflow-node__layout-glyph { display: inline-flex; }
+.workflow-node__layout-glyph--vertical svg { transform: rotate(90deg) scaleY(-1); }
+/* A sentence that shows for four seconds must not push the graph down under
+   the reader's pointer (the M183 verifier): out of the flow, at the top. */
+.workflow-node__refusal { position: absolute; top: var(--sp-3); left: var(--sp-3); z-index: 2; max-width: 60%; margin: 0; padding: var(--sp-2) var(--sp-4); border: 1px solid var(--red); border-radius: var(--r-full); background: var(--s-3); color: var(--red); font-family: var(--font-ui); font-size: var(--t-xs); }
+/* BLOCKS. A card in the pane's raised surface with a title strip in its
+   family's tint; the interior carries the faintest wash of the same hue, so
+   kinds read apart at a glance without seven saturated colours. */
+.workflow-node__blockg { cursor: grab; transition: opacity var(--dur-2) var(--ease); }
+.workflow-node__block { fill: color-mix(in srgb, var(--wf-hue) 4%, var(--s-3)); stroke: var(--line-strong); stroke-width: 1; }
+.workflow-node__strip { fill: var(--wf-tint); pointer-events: none; }
+.workflow-node__glyph { color: var(--wf-hue); pointer-events: none; }
+.workflow-node__kind { fill: var(--wf-hue); font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; pointer-events: none; }
+.workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; pointer-events: none; }
+/* M191. Sentence case, and no letter-spacing: the tracking was there to make an upper-case code legible, and the code is gone. */
+.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
+.workflow-node__blockg:hover .workflow-node__block { stroke: var(--fg-4); }
+/* M182. The selected block carries the accent stroke (one selection treatment, the brief). */
+.workflow-node__blockg--selected .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
+.workflow-node__blockg--hover .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
+/* INCOMPLETE on the graph: a dashed amber border and the warning glyph in the
+   strip; the reasons ride the glyph's title and the status popover. */
+.workflow-node__blockg[data-workflow-issue] .workflow-node__block { stroke: var(--amber); stroke-dasharray: 4 3; }
+.workflow-node__issue { color: var(--amber); }
+/* COMPLETED: a quiet check, and nothing else — the stroke is the rest stroke. */
+.workflow-node__done { color: var(--green); pointer-events: none; }
 /* M184. A selected run's outcome on the diagram, in the state vocabulary's own
-   tones — the block wears its panel's word, drawn from the run's SNAPSHOT so a
-   later edit of the template never moves a finished run's colours.
-   M184 (the critic, 15c). The tone comes from `data-tone` and the ONE tone
-   block above (`outcomeTone` stamps it); binding --blue/--green/--red here
-   made this the one surface a new state would not reach. It sits BEFORE the
-   wire's target/refusal rules so a drag's own signal still wins at equal
-   specificity while a run is selected. */
+   tones — drawn from the run's SNAPSHOT so a later edit never moves a finished
+   run's colours. The tone comes from `data-tone` and the ONE tone block above
+   (`outcomeTone` stamps it). It sits BEFORE the wire's target/refusal rules so
+   a drag's own signal still wins at equal specificity while a run is selected. */
 .workflow-node__blockg[data-workflow-outcome] .workflow-node__block { stroke: var(--tone); }
+.workflow-node__blockg[data-workflow-done] .workflow-node__block { stroke: var(--line-strong); stroke-dasharray: none; }
 .workflow-node__blockg[data-workflow-outcome="queued"] .workflow-node__block,
 .workflow-node__blockg[data-workflow-outcome="absent"] .workflow-node__block { stroke-dasharray: 4 3; }
 .workflow-node__block-outcome { fill: var(--tone); font-family: var(--font-ui); font-size: var(--t-xs); }
 .workflow-node__blockg--target .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
 .workflow-node__blockg--refused .workflow-node__block { stroke: var(--red); stroke-width: 2; }
-.workflow-node__run { cursor: pointer; }
-.workflow-node__run--selected { outline: 1px solid var(--iris); outline-offset: 2px; border-radius: var(--r-sm); }
-.workflow-node__stale { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin: var(--sp-2) 0; }
-.workflow-node__edgeg { cursor: pointer; }
-.workflow-node__edgeg--selected .workflow-node__line { stroke: var(--iris); stroke-width: 2.5; }
-/* Out of the FLOW: a sentence that shows for four seconds must not push the diagram down under the reader's pointer (the M183 verifier). */
-/* M191. The disabled verbs' reasons REVEAL with the panel's other chrome
-   (opacity 0 → 1, never display — the rest rule's own mechanism, so the box,
-   the text and the tab order stay and a script's click still lands). */
-.workflow-node__why { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
-.panel:hover .workflow-node__why, .panel:focus-within .workflow-node__why, .panel--selected .workflow-node__why { opacity: 1; }
-.workflow-node__editor { position: relative; }
-.workflow-node__refusal { position: absolute; top: 0; right: 0; z-index: 1; max-width: 60%; margin: 0; padding: var(--sp-1) var(--sp-2); border-radius: var(--r-sm); background: var(--s-1); color: var(--red); font-family: var(--font-ui); font-size: var(--t-xs); }
-/* M182. A block is a handle: grab, and the selected one carries the accent stroke (one selection treatment, the brief). */
-.workflow-node__blockg { cursor: grab; }
-.workflow-node__blockg--selected .workflow-node__block { stroke: var(--iris); stroke-width: 2; }
-.workflow-node__block { fill: var(--s-2); stroke: var(--line-strong); stroke-width: 1; }
-.workflow-node__block-label { fill: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); }
-/* M191. Sentence case, and no letter-spacing: the tracking was there to make an upper-case code legible, and the code is gone. */
-.workflow-node__block-sub { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
-.workflow-node__line { stroke: var(--line-strong); stroke-width: 1.5; }
-/* The arrowhead is the LINE's own colour: an edge that pointed in a
-   different tone would read as a second kind of edge. */
+/* PATHS. A selected block lights its lineage; everything else steps back —
+   by COLOUR, not opacity (styles 3: a fractional opacity is the dimmed-text
+   failure): hairline strokes, the quietest text, no tint. */
+.workflow-node__blockg[data-dim] .workflow-node__block { stroke: var(--line); fill: var(--s-2); }
+.workflow-node__blockg[data-dim] .workflow-node__strip { fill: transparent; }
+.workflow-node__blockg[data-dim] .workflow-node__glyph, .workflow-node__blockg[data-dim] .workflow-node__issue, .workflow-node__blockg[data-dim] .workflow-node__done { color: var(--fg-4); }
+.workflow-node__blockg[data-dim] text { fill: var(--fg-4); }
+.workflow-node__edgeg[data-dim] .workflow-node__line { stroke: var(--line); }
+.workflow-node__edgeg[data-dim] .workflow-node__edge-word { fill: var(--fg-4); }
+.workflow-node__blockg[data-lit] .workflow-node__block { stroke: var(--iris); }
+/* PORTS appear on the block's hover and while a wire is being drawn, never
+   at rest. Opacity, not display: a script's pointer still lands on one. */
+.workflow-node__port { fill: var(--iris); stroke: var(--s-3); stroke-width: 2; cursor: crosshair; opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.workflow-node__blockg:hover .workflow-node__port, .workflow-node__diagram--wiring .workflow-node__port { opacity: 1; }
+.workflow-node__wire { stroke: var(--iris); stroke-width: 2; stroke-dasharray: 6 4; fill: none; pointer-events: none; }
+.workflow-node__wire--refused { stroke: var(--red); }
+.workflow-node__wire-ground { fill: var(--s-3); stroke: var(--red); stroke-width: 1; pointer-events: none; }
+.workflow-node__wire-word { fill: var(--red); font-family: var(--font-ui); font-size: var(--t-xs); pointer-events: none; }
+.workflow-node__ghost { fill: var(--iris-dim); stroke: var(--iris); stroke-dasharray: 4 3; pointer-events: none; }
+/* EDGES: a 2px curve in the strong hairline, its arrowhead the line's own
+   colour (an edge pointing in another tone would read as a second kind of
+   edge), its trigger word in a pill ON the curve. */
+.workflow-node__edgeg { cursor: pointer; transition: opacity var(--dur-2) var(--ease); }
+.workflow-node__hit { fill: none; stroke: transparent; stroke-width: 12; }
+.workflow-node__line { fill: none; stroke: var(--line-strong); stroke-width: 2; }
 .workflow-node__arrow { fill: var(--line-strong); }
-/* The ground under an edge's word: the pane's own surface, so the word sits
-   ON the diagram rather than floating between two diagonals. */
-.workflow-node__edge-ground { fill: var(--s-1); }
-.workflow-node__edge-word { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
-/* A disabled verb's reason, on screen and dim: the row is absent when every
-   verb can act, never an empty box. */
-.workflow-node__why { display: flex; flex-direction: column; gap: var(--sp-1); }
-.workflow-node__why-line { margin: 0; font-size: var(--t-xs); color: var(--fg-3); }
+.workflow-node__arrow--lit { fill: var(--iris); }
+.workflow-node__edgeg:hover .workflow-node__line { stroke: var(--fg-4); }
+.workflow-node__edgeg[data-lit] .workflow-node__line, .workflow-node__edgeg[data-done] .workflow-node__line { stroke: var(--iris); }
+.workflow-node__edgeg--selected .workflow-node__line { stroke: var(--iris); stroke-width: 3; }
+.workflow-node__edge-ground { fill: var(--s-3); stroke: var(--line); stroke-width: 1; }
+.workflow-node__edgeg[data-lit] .workflow-node__edge-ground, .workflow-node__edgeg--selected .workflow-node__edge-ground { stroke: var(--iris); }
+.workflow-node__edge-word { fill: var(--fg-2); font-family: var(--font-ui); font-size: var(--t-xs); }
+/* THE TRAVELING HIGHLIGHT. A short bright segment runs the length of each
+   finished edge ONCE, each step a beat after the one before it, and ends
+   invisible — the finished path is then carried by the lit stroke and the
+   quiet checks, with nothing moving. A moment, like the join's breath, never
+   a loop. Under reduced motion the global block stops it and the lit stroke
+   still reports the handoff: the event is never lost, only the travel. */
+@keyframes wf-flow {
+  0%   { stroke-dashoffset: 1.2; opacity: 1; }
+  85%  { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+.workflow-node__flow {
+  fill: none; stroke: var(--iris); stroke-width: 4; stroke-linecap: round; pointer-events: none;
+  stroke-dasharray: .2 1.2; stroke-dashoffset: 1.2; opacity: 0;
+  /* --wf-step is set per edge from the render (its rank in the walk); 0 is the first. */
+  --wf-step: 0;
+  animation: wf-flow var(--dur-breath) var(--ease) 1 both;
+  animation-delay: calc(var(--wf-step) * var(--dur-breath) * .6);
+}
+@media (prefers-reduced-motion: reduce) { .workflow-node__flow { display: none; } }
+/* HISTORY: a right drawer beside the graph, never a tab over it. */
+.workflow-node__history { flex: 0 0 236px; display: flex; flex-direction: column; gap: var(--sp-4); padding-left: var(--sp-4); border-left: 1px solid var(--line); }
+.workflow-node__history[hidden] { display: none; }
 .workflow-node__empty { margin: 0; }
 .workflow-node__runs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-1); }
-.workflow-node__run { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); font-size: var(--t-xs); }
-.workflow-node__run-name { color: var(--fg-2); }
+.workflow-node__run { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-md); font-size: var(--t-xs); cursor: pointer; }
+.workflow-node__run:hover { background: var(--s-4); }
+.workflow-node__run--selected { background: var(--iris-dim); box-shadow: inset 2px 0 0 var(--iris); }
+.workflow-node__run-name { color: var(--fg); font-weight: 600; }
 .workflow-node__run-facts { font-family: var(--font-mono); color: var(--fg-3); }
+/* THE TIMELINE: one row per block that ran — name, word, a bar on the run's
+   own clock, its start offset. Hover lights the block; a press selects it. */
+.workflow-node__timeline { display: flex; flex-direction: column; gap: var(--sp-3); }
+.workflow-node__timeline-title { margin: 0; font-size: var(--t-xs); font-weight: 600; color: var(--fg-3); letter-spacing: var(--track-caps); }
+.workflow-node__events { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--sp-2); }
+.workflow-node__event { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: var(--sp-3); row-gap: var(--sp-1); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm); cursor: pointer; font-family: var(--font-ui); font-size: var(--t-xs); }
+.workflow-node__event:hover { background: var(--s-4); }
+.workflow-node__event-name { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-node__event-word { color: var(--tone, var(--fg-3)); text-align: right; }
+.workflow-node__event-track { position: relative; height: 4px; border-radius: var(--r-full); background: var(--s-4); align-self: center; }
+.workflow-node__event-bar { position: absolute; top: 0; bottom: 0; border-radius: var(--r-full); background: var(--iris); }
+.workflow-node__event[data-open] .workflow-node__event-bar { background: repeating-linear-gradient(90deg, var(--iris) 0 4px, var(--iris-dim) 4px 8px); }
+.workflow-node__event-when { font-family: var(--font-mono); color: var(--fg-4); text-align: right; }
+.workflow-node__stale { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--amber); border-radius: var(--r-md); background: var(--amber-dim); }
 
 /* M103. The browser pane: the app's chrome above a guest that fills the
    rest. The guest is `display: block` and sized to its host — a <webview>
@@ -6074,3 +6205,109 @@ body {
 .panel__card-dormant .panel__card-idle { margin-top: 0; }
 .panel[data-dormant] .panel__card-line--recorded:nth-last-child(n+6) { display: none; }
 .panel__card-since { align-self: flex-start; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+/* ======================================================================
+   M259. BOARD, GITHUB, JIRA AND CONNECTIONS — one state vocabulary, work
+   items as real cards, failures contained, activity in words. Late in the
+   cascade on purpose: it sharpens the M88/M89/M116 rules above at equal
+   specificity rather than renaming a hook any check selects on.
+   ====================================================================== */
+
+/* A STATE PILL in the board's words (providerState), painted in its tone;
+   the quiet tones (a document at rest, an unmapped status) read in the
+   secondary text colour, because their --tone is a hairline, not a hue. */
+.github-item__pill, .jira-node__pill, .board-row__remote {
+  display: inline-flex; align-items: center; min-height: 18px; padding: 0 var(--sp-3);
+  border-radius: var(--r-full); background: var(--tone-dim); color: var(--tone);
+  font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; white-space: nowrap;
+}
+.github-item__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]),
+.jira-node__pill:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]),
+.board-row__remote:is([data-tone="kind"], [data-tone="none"], [data-tone="starting"], [data-tone="asleep"]) { color: var(--fg-2); }
+/* A move Jira has not confirmed yet: the target, marked pending — never dressed as Jira's answer. */
+.jira-node__pill[data-pending] { background: transparent; border: 1px dashed var(--iris); color: var(--iris); }
+
+/* SYNC FRESHNESS: a word in the header; amber once the copy may be stale. */
+.sync-word { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); white-space: nowrap; }
+.sync-word[data-sync-stale="true"], .work-node__remote[data-sync-stale="true"] { color: var(--amber); }
+
+/* A CONNECTION FAILURE, CONTAINED: a bordered banner — amber when the fix is
+   a credential a person adds, red when the service itself failed — a
+   headline, the provider's reason, and one filled recovery. */
+.connection-banner { display: flex; gap: var(--sp-4); padding: var(--sp-4) var(--sp-5); border: 1px solid var(--red); border-radius: var(--r-md); background: var(--red-dim); }
+.connection-banner:is([data-connection-fault="no-credential"], [data-connection-fault="invalid-credential"]) { border-color: var(--amber); background: var(--amber-dim); }
+.connection-banner__glyph { flex: 0 0 auto; padding-top: 1px; color: var(--red); }
+.connection-banner:is([data-connection-fault="no-credential"], [data-connection-fault="invalid-credential"]) .connection-banner__glyph { color: var(--amber); }
+.connection-banner__text { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.connection-banner__headline { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.connection-banner__reason { margin: 0; color: var(--fg-2); }
+.connection-banner__verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-1); }
+.connection-banner__retry { display: inline-flex; align-items: center; gap: var(--sp-2); }
+
+/* GITHUB ROWS: status, kind and review first; the next action filled; the
+   id, the assignee and the body's first line are the quiet metadata line. */
+.github-item__head { flex-wrap: wrap; align-items: center; }
+.github-item__review { font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--amber); }
+.github-item__title { font-weight: 600; }
+.github-item__meta { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; margin: var(--sp-1) 0 0; }
+.github-item__meta .github-item__body { flex: 1 1 auto; min-width: 0; margin: 0; }
+.github-item__assignee { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); white-space: nowrap; }
+
+/* JIRA TICKETS: the same order — status and assignee, then the title, the
+   description at two lines until asked, then the verbs. */
+.jira-node__item { display: flex; flex-direction: column; gap: var(--sp-2); }
+.jira-node__head { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.jira-node__assignee { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-2); }
+.jira-node__key { margin-left: auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-4); }
+.jira-node__title { font-family: var(--font-ui); font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.jira-node__item p.jira-node__description { margin: 0; font-size: var(--t-xs); color: var(--fg-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.jira-node__item p.jira-node__description--open { display: block; }
+.jira-node__expand { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--iris); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.jira-node__item p.jira-node__move { margin: 0; font-family: var(--font-ui); font-size: var(--t-xs); font-weight: 600; color: var(--green); }
+.jira-node__item p.jira-node__move[data-jira-move-result="rolled-back"] { color: var(--red); }
+
+/* THE BOARD: while it is the navigator's pane the column WIDENS — a work
+   card needs a title, a repository, an assignee and a state side by side,
+   which the rail's 300px cannot hold — and its lanes read as lanes: tinted
+   wells with a tone mark, cards inside, not the rail's list rows. Compact
+   shells keep their drawer, at the same width. */
+.shell:has(.board-pane):not(.shell--rail-collapsed):not([data-bp="compact"]) { --shell-nav-w: 420px; }
+.shell--nav-drawer:has(.board-pane) .shell__rail { width: 420px; }
+.board-pane__columns { gap: var(--sp-4); padding: var(--sp-3) var(--sp-4); }
+.board-pane__column { gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-2); }
+.board-pane__column[data-board-drop] { border-top-style: solid; }
+.board-pane__heading { align-items: center; gap: var(--sp-3); justify-content: flex-start; padding: 0; text-transform: none; letter-spacing: normal; font-size: var(--t-sm); font-weight: 600; color: var(--fg); }
+.board-pane__heading::before { content: ''; width: 8px; height: 8px; border-radius: var(--r-full); background: var(--tone); }
+.board-pane__column[data-tone="kind"] .board-pane__heading::before { background: var(--fg-4); }
+.board-pane__count { margin-left: auto; font-weight: normal; color: var(--fg-3); }
+.board-pane__empty { margin: 0; }
+/* A CARD: title (two lines at most — the navigator is never the place for a
+   ticket's prose), the repository and the provider's word on top, the key,
+   assignee and lane at its foot. Grab to drag; its own lane marks it. */
+.rail-list--board { display: flex; flex-direction: column; gap: var(--sp-2); margin: 0; padding: 0; }
+.board-pane .board-row { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--s-3); cursor: grab; }
+.board-pane .board-row:hover { background: var(--s-3); border-color: var(--line-strong); }
+.board-pane .board-row:active { cursor: grabbing; }
+.board-pane .board-row[data-dragging] { border-style: dashed; border-color: var(--iris); background: var(--s-2); }
+.board-row__top { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.board-row__repo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+.board-row__top .board-row__pr { margin-left: auto; padding: 0; }
+.board-pane .board-row .rail-row__main { padding: 0; min-height: 0; text-align: left; }
+.board-pane .board-row .rail-row__label { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; font-size: var(--t-sm); font-weight: 600; color: var(--fg); line-height: var(--lh-tight); }
+.board-pane .board-row__facts { padding: 0; font-family: var(--font-ui); color: var(--fg-3); }
+.board-pane .board-row__note { padding: 0; }
+.board-pane .board-row__show { align-self: flex-start; margin: var(--sp-1) 0 0; }
+/* DROP TARGETS, visible for the whole drag: a lane that takes the card is
+   an accent-dashed well, the one under the pointer is solid; a lane the
+   runtime owns says so and takes nothing. */
+.board-pane__drop-hint { margin: 0; padding: var(--sp-3); border-radius: var(--r-md); font-family: var(--font-ui); font-size: var(--t-xs); text-align: center; }
+.board-pane__column[data-drop-state="allowed"] { border: 1px dashed var(--iris); background: var(--iris-dim); }
+.board-pane__column[data-drop-state="allowed"] .board-pane__drop-hint { color: var(--iris); }
+.board-pane__column[data-drop-state="over"] { border: 2px solid var(--iris); background: var(--iris-dim); }
+.board-pane__column[data-drop-state="over"] .board-pane__drop-hint { color: var(--iris); font-weight: 600; }
+.board-pane__column[data-drop-state="refused"] { background: var(--s-1); }
+.board-pane__column[data-drop-state="refused"] .board-pane__drop-hint { color: var(--fg-4); }
+/* THE MOVE'S RESULT: one compact line with Undo, then gone. */
+.board-pane__toast { display: flex; align-items: center; gap: var(--sp-3); margin: var(--sp-3) var(--sp-4) 0; padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--s-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg); }
+.board-pane__toast[data-board-moved="rolled-back"] { border-color: var(--red); color: var(--red); }
+.board-pane__toast-text { flex: 1 1 auto; min-width: 0; }
+

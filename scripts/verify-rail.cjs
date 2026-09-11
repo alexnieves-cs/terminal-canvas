@@ -3508,6 +3508,34 @@ console.log('\n' + '='.repeat(60))
     sites > 0 && drift.length === 0, JSON.stringify({ sites, drift }))
 }
 
+// M259 — boardx.*. One state vocabulary across the board, GitHub, Jira and
+//     the canvas (providerState, in panel-state.ts because state.2 keeps the
+//     words there), and sync freshness in words (syncWord). The readable
+//     audit activity is the Integrations redesign's describeCall. Written before the functions existed and watched red.
+try {
+  const S = R.WORK_ITEM_STATES
+  const g = (raw) => R.providerState('github', raw).state
+  const j = (raw) => R.providerState('jira', raw).state
+  ok('boardx.state.1 GitHub and Jira states land on the board\'s OWN four words — a review request and a PR are review, open is todo, closed and merged are done; Jira by its status name',
+    g('review requested') === S[2] && g('pull request') === S[2] && g('open') === S[0] && g('closed') === S[3] && g('merged') === S[3] &&
+      j('To Do') === S[0] && j('Backlog') === S[0] && j('In Progress') === S[1] && j('In Review') === S[2] && j('Code Review') === S[2] && j('Done') === S[3] && j('Resolved') === S[3],
+    JSON.stringify({ gh: ['review requested', 'pull request', 'open', 'closed'].map(g), jira: ['To Do', 'In Progress', 'In Review', 'Done'].map(j) }))
+  const odd = R.providerState('jira', 'Waiting on vendor')
+  const none = R.providerState('jira', null)
+  const mapped = R.providerState('jira', 'In Progress')
+  ok('boardx.state.2 a status the map does not know keeps its own words at the kind tone and claims no board state; no status says so; a mapped one wears the board word and its tone',
+    odd.state === undefined && odd.word === 'Waiting on vendor' && odd.tone === 'kind' && none.state === undefined && /no status/.test(none.word) &&
+      mapped.word === S[1] && mapped.tone === R.panelState({ kind: 'work', work: { state: S[1] } }).tone,
+    JSON.stringify({ odd, none, mapped }))
+  const now = 10 * 60 * 60 * 1000
+  const fresh = R.syncWord(now - 4000, now), mins = R.syncWord(now - 3 * 60 * 1000, now), old = R.syncWord(now - 2 * 60 * 60 * 1000, now), never = R.syncWord(undefined, now)
+  ok('boardx.fresh.1 freshness is a word, not a timestamp — just now, minutes, hours — stale past ten minutes, and never-read is its own third answer',
+    /just now/.test(fresh.word) && fresh.stale === false && /3m ago/.test(mins.word) && mins.stale === false && /2h ago/.test(old.word) && old.stale === true && never.stale === true && /not read/.test(never.word),
+    JSON.stringify({ fresh, mins, old, never }))
+} catch (e) {
+  ok('boardx (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))
