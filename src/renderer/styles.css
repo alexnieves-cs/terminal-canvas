@@ -4230,6 +4230,11 @@ body {
    call is one collapsed row, thinking is dim, the composer is pinned below a
    hairline. Every colour is a token; the state hues appear only on the frame's
    marks through [data-tone], never here. */
+/* M260. LESS CHROME AROUND THE WELL. The chat's own chrome row is shorter
+   than every other kind's — a conversation reads by its transcript, not its
+   header — scoped to `.pf--kind-chat` so the shared `.panel__chrome` every
+   other kind still uses is untouched. */
+.pf--kind-chat .panel__chrome { min-height: 30px; padding-block: var(--sp-1); }
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
 .chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
 /* M167. TURNS (the brief: the Claude desktop app's register). One column, no
@@ -4280,7 +4285,7 @@ body {
 .chat__tool-diff, .chat__tool-result, .chat__tool-result + .chat__tool-toggle { flex: 1 0 100%; }
 /* M111. The tool's name is a CHIP: an object you could pick up, which M77 says it is. */
 .chat__tool-name { font-weight: 600; }
-.chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
+.chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); }
 /* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 /* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
@@ -4304,11 +4309,19 @@ body {
    and is shown only while a turn runs, where it takes Send's place — by class
    and display, never by a fraction of opacity (check 3). The chips above the
    text are quiet; an approval is a sentence and two buttons in the well. */
-.chat__composer { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); box-shadow: inset 0 1px 2px var(--bezel); }
+.chat__composer { position: relative; display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); box-shadow: inset 0 1px 2px var(--bezel); }
 .chat__composer:focus-within { border-color: var(--iris); box-shadow: inset 0 1px 2px var(--bezel), 0 0 0 2px var(--iris-dim); }
 .chat__verb--interrupt { display: none; }
 .chat__composer--live .chat__verb--interrupt { display: inline-flex; }
 .chat__composer--live .chat__verb--send { display: none; }
+/* M260. ONE anchored circular control, bottom-right of the well, in place of
+   a full-width labelled button row: `position: relative` on `.chat__composer`
+   above is what this anchors to. The display toggle above (class, not
+   opacity) is UNCHANGED — only shape and content (an icon) are new here. */
+.chat__composer .chat__verbs { position: absolute; right: var(--sp-3); bottom: var(--sp-3); margin: 0; }
+.chat__verb--send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.chat__verb--interrupt { align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: var(--red-dim); color: var(--red); border-color: transparent; }
+.chat__verb--send svg, .chat__verb--interrupt svg { width: 16px; height: 16px; }
 .chat__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 /* `.chat__chips .chat__chip--quiet`: two classes, so the M75 attachment chip's mono rule later in the file does not win by source order (the first golden had the chips in mono). */
 .chat__chips .chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
@@ -4320,7 +4333,11 @@ body {
 /* M111. A RAISED FIELD: the one place in the panel that asks to be typed
    into looks like it — a hairline box on the raised surface, an iris ring
    on focus (the focus outline is relocated, not removed). */
-.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
+/* M260. Padding-right leaves room for the anchored circular Send/Interrupt
+   (below); the inset box-shadow is gone — the well's own shadow (above) is
+   the panel's one resting shadow, and a second one nested inside it read as
+   a stray extra border. */
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) calc(var(--sp-4) + 40px) var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); }
 .chat__input:focus { outline: none; } /* M169. The WELL wears the ring (:focus-within); the field inside it draws none */
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
@@ -4396,8 +4413,14 @@ body {
 .chat__fill-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
 .chat__fill-input { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); }
 .chat__attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.chat__chip { display: inline-flex; align-items: baseline; gap: var(--sp-2); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
-.chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+/* M260, reversing M75's "not a bordered pill": a horizontal strip reads as a
+   set of removable things when each is a compact token, the way the chip
+   idiom already works everywhere else in this app — not as a stacked list of
+   dim mono lines. `.chat__chips .chat__chip--quiet`'s own rule (above) still
+   wins for the destination/attach chips by specificity, unaffected. */
+.chat__chip { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 24px; padding: 0 var(--sp-1) 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-2); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); max-width: 240px; }
+.chat__chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; flex: 0 0 auto; }
 .chat__chip-remove:hover { color: var(--fg); }
 .chat__image { color: var(--fg-2); }
 
@@ -4785,7 +4808,11 @@ body {
 /* M105. The rail says what is happening: a second line with the agent's last
    line said (prose, cut from the right), an unread dot before the label, and
    the dock's two capsules. */
-.rail-row__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+/* M260. `.pf__unread` shares this exact shape — the frame's own chrome dot,
+   so "unread" is drawn one way whether it is read from the rail or the
+   panel's own header, never two competing definitions of the same mark. */
+.rail-row__unread, .pf__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.pf__unread { color: var(--iris); margin-right: var(--sp-1); }
 /* The row is a flex line; the last line said WRAPS beneath it (a full-width
    child ordered last) rather than sharing the line and squeezing the title
    to `c..` beside it. */

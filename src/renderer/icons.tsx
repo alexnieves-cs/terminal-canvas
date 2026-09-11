@@ -200,6 +200,15 @@ export const ToolOther = (p: IconProps): JSX.Element => (
 export const CopyIcon = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M3 10V3h7" /></Svg>
 )
+
+/** M260. The composer's Send: an arrow into the well's rim. */
+export const ArrowUp = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M8 13V3M4 7l4-4 4 4" /></Svg>
+)
+/** M260. The composer's Interrupt, in Send's own spot: a filled stop square. */
+export const Stop = (p: IconProps): JSX.Element => (
+  <Svg {...p}><rect x="4.5" y="4.5" width="7" height="7" rx="1" fill="currentColor" stroke="none" /></Svg>
+)
 export const TOOL_GLYPH: Record<string, (p: IconProps) => JSX.Element> = { Read: ToolRead, Edit: ToolEdit, Run: ToolRun, Search: ToolSearch }
 
 /** M181. The image kind: a frame with a horizon and a sun, the picture glyph every OS draws. */
