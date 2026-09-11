@@ -110,6 +110,9 @@ export const More = (p: IconProps): JSX.Element => (
 export const Maximize = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" /></Svg>
 )
+export const Send = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M2.5 8 13 3l-3.2 10.5-2.6-4.2L2.5 8Z" /><path d="M9.8 9.3 13 3" /></Svg>
+)
 
 /* M63. Kind glyphs for the rail's left column, 12px, so kind stops sharing
    the state slot. A terminal keeps the state DOT (its column is its state);
