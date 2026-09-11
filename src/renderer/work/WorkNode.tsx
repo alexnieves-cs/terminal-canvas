@@ -7,6 +7,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 import type { RunNodeSupervision } from '@shared/run-outcome'
+import { retainedNextAction, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { ReviewHandoff } from '@shared/review-readiness'
 
 /**
@@ -44,6 +45,8 @@ export interface WorkNodeProps {
   laneLabel: string | undefined
   /** Live execution is separate from the board item's human disposition. */
   execution?: RunNodeSupervision
+  /** D11's historical fact, present after its lane panel has been closed. */
+  retainedOutcome?: RetainedOutcome
   /**
    * M202 (D07). LOCAL REVIEW READINESS — a THIRD line, beside the board
    * disposition pill and the M200 execution word, and never a re-labelling of
@@ -77,6 +80,8 @@ export interface WorkNodeProps {
   onShow: (panelId: string) => void
   /** M115. Mark the item done. */
   onDone: (itemId: string) => void
+  /** Explicitly forget retained history, without deleting the task or lane. */
+  onClearHistory: (itemId: string) => void
 }
 
 export const REASON_MERGED_VIEW = 'leave merged view to act on the card'
@@ -129,6 +134,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
         return (
           <div className="work-node__far" data-work-far>
             {props.execution !== undefined && <span className="work-node__far-line" data-work-far-execution data-tone={props.execution.tone}>{props.execution.word}</span>}
+            {props.retainedOutcome !== undefined && <span className="work-node__far-line" data-work-far-outcome data-tone="none">{props.retainedOutcome.execution.replace('-', ' ')}</span>}
             {blocker !== undefined && <span className="work-node__far-line" data-work-far-blocker>waiting on {blocker.subject}</span>}
             {props.handoff !== undefined && <span className="work-node__far-line" data-work-far-readiness data-tone={props.handoff.tone}>{props.handoff.word}</span>}
             {files > 0 && <span className="work-node__far-line" data-work-far-evidence>{files} {files === 1 ? 'file' : 'files'} changed</span>}
@@ -177,6 +183,9 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   onClick={(e) => { e.preventDefault(); openLink((item.pr as { url: string }).url) }}>#{item.pr.number}</a></dd></div>
               )}
               {props.execution !== undefined && <div><dt>execution</dt><dd data-work-execution data-tone={props.execution.tone}>{props.execution.word}</dd></div>}
+              {props.retainedOutcome !== undefined && <div><dt>last outcome</dt><dd data-work-outcome={props.retainedOutcome.execution}>{props.retainedOutcome.execution.replace('-', ' ')}</dd></div>}
+              {props.retainedOutcome !== undefined && <div><dt>source</dt><dd data-work-outcome-source="unavailable">the closed lane is unavailable; no session was reopened</dd></div>}
+              {props.retainedOutcome !== undefined && <div><dt>next</dt><dd data-work-next-action>{retainedNextAction(props.retainedOutcome)}</dd></div>}
               {/* M202. Absent, never a zero-value word: a card whose lane has
                   not been read yet says nothing about review rather than
                   saying `unknown`, which the rest rule forbids. */}
@@ -212,7 +221,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   sometimes the right thing to press. `assign` also carries
                   the `start` arm's own label, so a lost lane says `Start work
                   again…` and never names a door that does not exist. */}
-              {verb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen, ...(props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : {}) })}
+              {verb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : props.retainedOutcome !== undefined && props.laneLabel === undefined ? 'Start work again…' : 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen, ...(props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : {}) })}
               {/* M202 (D07). Start / Resume / Review, the three the guide asks
                   the card to offer. `resume` is a new alias beside the four
                   that existed, never a rename of one: roughly two hundred
@@ -244,6 +253,7 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
               <button type="button" className="pf__verb pf__verb--word" data-work-verb="show"
                 title="Frame this task — its conversation, lane, reviews and links; nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
               {verb('done', 'Done', null, () => props.onDone(item.id))}
+              {props.retainedOutcome !== undefined && verb('clear-history', 'Clear history', null, () => props.onClearHistory(item.id))}
               {assignOpen && (
                 <ul className="work-node__menu" role="menu" data-work-assign-menu onMouseDown={(e) => e.stopPropagation()}>
                   {props.teammates.length === 0 ? (

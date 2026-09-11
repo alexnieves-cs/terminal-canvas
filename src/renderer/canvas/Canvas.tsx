@@ -93,6 +93,7 @@ import { applyMachineCosts, clearMachineCost } from '@renderer/session/machine-c
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
+import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   CapturedPanel,
@@ -346,9 +347,19 @@ export function Canvas({
   const [workItems, setWorkItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
   const workItemsRef = useRef(workItems)
   workItemsRef.current = workItems
+  // D11. This record is intentionally separate from the live panel graph:
+  // close removes geometry, never the task's retained meaning.
+  const [retainedOutcomes, setRetainedOutcomes] = useState<RetainedOutcome[]>(() => initial.retainedOutcomes ?? [])
+  const retainedOutcomesRef = useRef(retainedOutcomes)
+  retainedOutcomesRef.current = retainedOutcomes
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
+    const item = workItemsRef.current.find((candidate) => candidate.panelId === chatId)
+    if (item !== undefined) {
+      const captured = retainOutcome(item, runsRef.current, Date.now())
+      if (captured !== null) setRetainedOutcomes((current) => [captured, ...current.filter((outcome) => outcome.itemId !== item.id)].slice(0, 200))
+    }
     setWorkItems((current) => current.some((i) => i.panelId === chatId)
       ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
       : current)
@@ -1929,7 +1940,7 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter, retainedOutcomesRef, setRetainedOutcomes, workItemsRef, setWorkItems,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
@@ -2454,9 +2465,10 @@ export function Canvas({
       runs,
       ...(annotations.length === 0 ? {} : { annotations }),
       ...(workItems.length === 0 ? {} : { workItems }),
+      ...(retainedOutcomes.length === 0 ? {} : { retainedOutcomes }),
       ...(starter === undefined ? {} : { starter })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, starter])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -7151,7 +7163,8 @@ export function Canvas({
             if (isWorkPanel(panel)) {
               const item = workItems.find((i) => i.id === panel.work.itemId)
               const execution = item?.panelId === undefined || liveRunFacts[item.panelId] === undefined ? undefined : projectSession(item.panelId, liveRunFacts[item.panelId])
-              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval}
+              const retained = item === undefined ? undefined : retainedOutcomes.find((outcome) => outcome.itemId === item.id)
+              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval} retainedOutcome={retained}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
@@ -7178,6 +7191,7 @@ export function Canvas({
                   selectOnly(it.panelId)
                   onFocusPanel(it.panelId)
                 }}
+                onClearHistory={(itemId) => setRetainedOutcomes((current) => current.filter((outcome) => outcome.itemId !== itemId))}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
             }
             // M128. The skill panel: every OPEN panel that has a directory,

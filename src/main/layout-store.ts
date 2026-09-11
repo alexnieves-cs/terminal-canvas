@@ -407,6 +407,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       ...(layout && w.annotations !== undefined ? { annotations: w.annotations.map((a) => ({ ...a, anchor: { ...a.anchor } })) } : {}),
       // M113. Records, not layout — kept whatever the restore settings say, like bookmarks and runs.
       ...(w.workItems !== undefined ? { workItems: w.workItems.map(carryWorkItem) } : {}),
+      ...(w.retainedOutcomes !== undefined ? { retainedOutcomes: w.retainedOutcomes.map((o) => ({ ...o })) } : {}),
       // M181. The starter record: a record, kept whatever the restore settings say.
       ...carryStarter(w)
     }
@@ -449,6 +450,8 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
     // M113. The same absent-when-empty rule, for the same reader.
     if (incoming.workItems !== undefined && incoming.workItems.length > 0) w.workItems = incoming.workItems.map(carryWorkItem)
     else delete w.workItems
+    if (incoming.retainedOutcomes !== undefined && incoming.retainedOutcomes.length > 0) w.retainedOutcomes = incoming.retainedOutcomes.map((o) => ({ ...o }))
+    else delete w.retainedOutcomes
     // M181. Absent stays absent on disk: a canvas the starter never touched carries no record.
     if (incoming.starter !== undefined) w.starter = carryStarter(incoming).starter
     else delete w.starter
@@ -887,6 +890,7 @@ export function createLayoutStore(deps: LayoutStoreDeps): LayoutStore {
       w.focusedId = null
       delete w.annotations
       delete w.workItems
+      delete w.retainedOutcomes
       // M181. A reset is a first run again: the starter may lay itself out once more.
       delete w.starter
       scheduleWrite()

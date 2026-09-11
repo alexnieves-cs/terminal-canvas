@@ -8,6 +8,7 @@ import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
+import { parseRetainedOutcomes, type RetainedOutcome } from './retained-outcomes'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
@@ -566,6 +567,8 @@ export interface CanvasState {
   annotations?: Annotation[]
   /** M113. The board's records. ABSENT on every pre-M113 file and stays absent, for M93's reason. */
   workItems?: PersistedWorkItem[]
+  /** D11. Historical task meaning, independent of the live panel graph. */
+  retainedOutcomes?: RetainedOutcome[]
   /** M181. The starter's applied keys. ABSENT on every pre-M181 file and on a canvas the starter never touched. */
   starter?: PersistedStarter
 }
@@ -2100,6 +2103,7 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     // did not survive keeps its id (the note says `lane closed`), so the
     // parser takes no panel set — unlike annotations, whose anchor is geometry.
     ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })(),
+    ...(() => { const o = parseRetainedOutcomes(raw.retainedOutcomes, warnings); return o === undefined ? {} : { retainedOutcomes: o } })(),
     // M181. The starter record: absent stays absent; malformed dropped by name.
     ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })()
   }

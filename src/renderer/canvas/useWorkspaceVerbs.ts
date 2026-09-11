@@ -10,6 +10,8 @@ import { createHistory, type History } from '@renderer/panels/history'
 import { fromPanels, toPanels } from '@renderer/panels/layout-adapt'
 import type { PaletteActions } from '@renderer/palette/commands'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
+import type { RetainedOutcome } from '@shared/retained-outcomes'
+import type { PersistedWorkItem } from '@shared/work-items'
 import { sealAbandoned } from './run-model'
 import type { ActivateResult, MergedWorkspace } from '@shared/ipc-contract'
 import { EMPTY_SELECTION, retainSelection } from './canvas-constants'
@@ -38,6 +40,8 @@ export interface WorkspaceVerbsDeps {
   runsRef: RefObject<PersistedRun[]>
   /** M93. */
   annotationsRef: RefObject<Annotation[]>
+  retainedOutcomesRef: RefObject<RetainedOutcome[]>
+  workItemsRef: RefObject<PersistedWorkItem[]>
   viewportRef: RefObject<Viewport>
   nextIdRef: RefObject<number>
   toggleMergedImplRef: RefObject<() => void>
@@ -53,6 +57,8 @@ export interface WorkspaceVerbsDeps {
   setRuns: Dispatch<SetStateAction<PersistedRun[]>>
   /** M93. */
   setAnnotations: Dispatch<SetStateAction<Annotation[]>>
+  setRetainedOutcomes: Dispatch<SetStateAction<RetainedOutcome[]>>
+  setWorkItems: Dispatch<SetStateAction<PersistedWorkItem[]>>
   /** M181. The starter record travels with its workspace, like the notes. */
   starterRef: RefObject<PersistedStarter | undefined>
   setStarter: Dispatch<SetStateAction<PersistedStarter | undefined>>
@@ -111,9 +117,9 @@ export interface WorkspaceVerbs {
  */
 export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
   const {
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, retainedOutcomesRef, workItemsRef,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
-    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, starterRef, setStarter, forgetOpenRuns,
+    focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, setAnnotations, setRetainedOutcomes, setWorkItems, starterRef, setStarter, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
     setMergedData, setFlipped
   } = deps
@@ -228,6 +234,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
           bookmarks: bookmarksRef.current,
           runs: runsRef.current,
           ...(annotationsRef.current.length === 0 ? {} : { annotations: annotationsRef.current }),
+          ...(retainedOutcomesRef.current.length === 0 ? {} : { retainedOutcomes: retainedOutcomesRef.current }),
+          ...(workItemsRef.current.length === 0 ? {} : { workItems: workItemsRef.current }),
           ...(starterRef.current === undefined ? {} : { starter: starterRef.current }),
           // The pre-merge snapshot, for the reason the layout.save effect reads
           // the same one: while merged these three are lane-space or foreign.
@@ -301,6 +309,8 @@ export function useWorkspaceVerbs(deps: WorkspaceVerbsDeps): WorkspaceVerbs {
         setPanels(next)
         setGroups(result.state.groups ?? [])
         setRuns(sealAbandoned(result.state.runs ?? [], Date.now()))
+        setRetainedOutcomes(result.state.retainedOutcomes ?? [])
+        setWorkItems(result.state.workItems ?? [])
         forgetOpenRuns()
         // M121. A flipped canvas stayed flipped across a switch (verifier 12):
         // the incoming workspace's panels arrived as summaries with nothing on
