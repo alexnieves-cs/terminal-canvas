@@ -683,6 +683,10 @@ export const IPC = {
   PACK_EXPORT: 'pack:export',
   /** M253. "I've read this" for an imported preset: drops its reviewed mark so main will spawn it. */
   PRESET_MARK_REVIEWED: 'preset:mark-reviewed',
+  /** M255. Publish a draft file to GitHub — a release, a PR comment or a Discussion — after main's own confirmation shows the text. */
+  GITHUB_PUBLISH: 'github:publish',
+  /** M255. Write the sample dev-relations pack under userData (never overwriting) and answer its path, for the pack preview. */
+  PACK_SAMPLE: 'pack:sample',
   /** M114. The lane: the repository under the teammate's places, the gate on its root, the worktree. */
   BOARD_LANE: 'board:lane',
   /** M115. Where the lane stands against the root's branch: ahead by N, no fetch. */
@@ -1409,6 +1413,23 @@ export type PackWriteResult =
   | { kind: 'cancelled' }
   | { kind: 'refused'; reason: string }
 
+/** M255. One publish: the DRAFT file to send, and where. The repository is the file's own origin remote. */
+export type GithubPublishRequest =
+  | { kind: 'release'; path: string; tag: string }
+  | { kind: 'comment'; path: string; number: number }
+  | { kind: 'discussion'; path: string; category: string }
+
+/** M255. Published (with where), cancelled by the person (never a refusal), or refused by name. */
+export type GithubPublishResult =
+  | { kind: 'published'; url: string; redacted: number }
+  | { kind: 'cancelled' }
+  | { kind: 'no-credential' | 'refused' | 'unavailable'; reason: string }
+
+/** M255. The sample pack's path — `wrote` false when it was already there (never overwritten). */
+export type PackSampleResult =
+  | { kind: 'ready'; path: string; wrote: boolean }
+  | { kind: 'refused'; reason: string }
+
 /** M253. What the add made, counted; or why nothing was made. */
 export type PackAddResult =
   | { kind: 'added'; sentence: string; workflows: number; prompts: number; presets: number }
@@ -1768,6 +1789,8 @@ export interface CanvasBridge {
   github: {
     /** `panelId` names the asking panel in the broker's audit rows. */
     list(panelId?: string): Promise<GithubListResult>
+    /** M255. Publish a draft file. Main asks the person with the text in front of them, every time. */
+    publish(req: GithubPublishRequest): Promise<GithubPublishResult>
   }
   jira: {
     list(): Promise<JiraListResult>
@@ -1887,6 +1910,8 @@ export interface CanvasBridge {
     read(req: { path?: string }): Promise<PackReadResult>
     add(req: { token: string }): Promise<PackAddResult>
     write(req: { path?: string; name: string; suggested?: string }): Promise<PackWriteResult>
+    /** M255. The sample dev-relations pack, written once under userData; the renderer then reads it like any pack. */
+    sample(): Promise<PackSampleResult>
   }
   /** M114. The board's main-side verbs. */
   board: {

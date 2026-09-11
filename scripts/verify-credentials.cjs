@@ -427,9 +427,57 @@ rmSync(dir, { recursive: true, force: true })
       get.ok === true && askedAfterGet === 0 &&
       post.ok === true && askedAfterPost === 1 && asked[0].service === 'github' && asked[0].account === 'octocat' && asked[0].method === 'POST' && asked[0].path === '/repos/o/r/issues' && asked[0].cost === '1 issue' && asked[0].teammateId === 'ada' &&
       denied.ok === false && denied.code === mod.NOT_ANSWERED_CODE && seenBeforePlain === seenBeforeDenied && !seen.some((r) => r.method === 'DELETE') &&
-      plain.ok === true && seen.length === seenBeforePlain + 1 &&
+      // M255. CHANGED ON PURPOSE: a write with no teammate used to go out
+      // with no one asked — the gap a pack that publishes would have used.
+      // It is now refused `not-asked`, and it never reaches the fetcher.
+      plain.ok === false && plain.code === mod.NOT_ASKED_CODE && seen.length === seenBeforePlain &&
       rows.filter((r) => r.teammateId === 'ada').length === 3 && rows.filter((r) => r.teammateId === 'bo').length === 1 && !rows.some((r) => JSON.stringify(r).includes(TOKEN)),
     JSON.stringify({ has, ungranted, unknown, get: get.ok, post: post.ok, asked, denied, plain: plain.ok, rows: rows.map((r) => [r.method, r.teammateId, r.status]) }))
+}
+
+// M255 — broker.gap.1. NO WRITE WITHOUT A PERSON. A non-read-only request
+//      needs a teammate's per-request card OR `personConfirmed`, which only
+//      main-side code that has just shown its own confirmation sets (the
+//      publisher). With neither it is refused `not-asked` BEFORE the store is
+//      read — an unasked write never touches the token. A GET with no teammate
+//      still runs: reads were never the gap.
+{
+  // Its own directory: the suite's shared `dir` is removed before this block.
+  const store = mod.createCredentialStore({ filePath: join(mkdtempSync(join(tmpdir(), 'tc broker gap ')), 'gap.json'), crypto: fakeCrypto() })
+  store.set('github', TOKEN)
+  const reads = []
+  const countingStore = { read: (svc) => { reads.push(svc); return store.read(svc) }, markRejected: () => {} }
+  const seen = []
+  const has = typeof mod.createBroker === 'function' && typeof mod.NOT_ASKED_CODE === 'string'
+  const broker = has ? mod.createBroker({ store: countingStore, fetcher: async (req) => { seen.push(req); return { status: 201, body: '{}' } }, audit: { append: () => {} }, now: () => 1 }) : null
+  const call = async (req) => (broker ? broker.call(req) : { ok: false, reason: 'no broker' })
+  const unasked = await call({ service: 'github', method: 'POST', path: '/repos/o/r/releases', body: '{}' })
+  const readsAfterUnasked = reads.length
+  const seenAfterUnasked = seen.length
+  const confirmed = await call({ service: 'github', method: 'POST', path: '/repos/o/r/releases', body: '{}', personConfirmed: true })
+  const seenAfterConfirmed = seen.slice()
+  const read = await call({ service: 'github', method: 'GET', path: '/user' })
+  ok('broker.gap.1 a write with no teammate and no personConfirmed is refused not-asked, naming Publish, BEFORE the credential is read and without reaching the fetcher; the same write with personConfirmed runs; a GET with no teammate still runs',
+    has && unasked.ok === false && unasked.code === mod.NOT_ASKED_CODE && /Publish/.test(unasked.reason) &&
+      readsAfterUnasked === 0 && seenAfterUnasked === 0 &&
+      confirmed.ok === true && seenAfterConfirmed.length === 1 && seenAfterConfirmed[0].method === 'POST' &&
+      read.ok === true,
+    JSON.stringify({ has, unasked, readsAfterUnasked, confirmed: confirmed.ok, read: read.ok }))
+}
+
+// M255 — broker.gap.2. A CARD IS PER REQUEST. The broker's spend card is
+//      asked under a tool name, and a session grant ("Allow for session")
+//      answers every later ask with the SAME name — so one allowed github
+//      card used to allow every later github write from that chat. The name
+//      is minted per request, so a grant can never answer a later write.
+{
+  const has = typeof mod.brokerCardTool === 'function'
+  const ask = { teammateId: 'ada', service: 'github', method: 'POST', path: '/repos/o/r/issues/1/comments', account: 'octocat', cost: 'unknown' }
+  const a = has ? mod.brokerCardTool(ask) : ''
+  const b = has ? mod.brokerCardTool(ask) : ''
+  ok('broker.gap.2 two identical broker writes are asked under DIFFERENT tool names, each naming the service and the action, so a session grant on one never answers the other',
+    has && a !== b && /github/.test(a) && /POST/.test(a) && /github/.test(b),
+    JSON.stringify({ a, b }))
 }
 
 const failed = results.filter((r) => !r.pass)

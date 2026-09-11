@@ -253,7 +253,9 @@ app.whenReady().then(() => {
   // M253 pack:read / pack:add / pack:export and preset:mark-reviewed (135-138)
   // — a pack is read and held by main, added by token, and a pack preset is
   // spawned only after "I've read this".
-  const EXPECTED_CHANNELS = 138
+  // M255 github:publish and pack:sample (139-140) — a publish is main's, after
+  // its own dialog; the sample pack is written by main and read like any pack.
+  const EXPECTED_CHANNELS = 140
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

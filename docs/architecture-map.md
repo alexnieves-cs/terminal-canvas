@@ -68,6 +68,7 @@ renderer --invoke--> asset:put / asset:choose                                   
 renderer --invoke--> node:fetch                                                  --> main
 renderer --invoke--> portable:export / portable:import                           --> main
 renderer --invoke--> pack:read / pack:add / pack:export / preset:mark-reviewed   --> main
+renderer --invoke--> pack:sample / github:publish (main asks the person first)    --> main
 renderer --invoke--> board:lane / board:lane-status                              --> main
 renderer --invoke--> board:open-pr / board:comment-pr                            --> main
 renderer --invoke--> board:repositories                                          --> main

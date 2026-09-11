@@ -5433,6 +5433,14 @@ export function Canvas({
     setPackPreview({ token: answer.token, path: answer.path, pack: answer.parse.pack, warnings: answer.parse.warnings, requirements: answer.requirements ?? { credentials: [], tools: [] } })
     return { kind: 'ran', note: `${answer.parse.pack.manifest.name} — nothing is added until you choose Add` }
   }, [])
+  // M255. The sample dev-relations pack: main writes it once under userData
+  // and answers the path; it is then READ like any pack — same preview, same
+  // inert add — so the sample earns no door of its own past the file.
+  const importSamplePack = useCallback(async (): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const sample = await window.canvas.pack.sample()
+    if (sample.kind === 'refused') return { kind: 'refused', reason: sample.reason }
+    return importPack(sample.path)
+  }, [importPack])
   const addPack = useCallback(async (token: string) => {
     const added = await window.canvas.pack.add({ token })
     if (added.kind === 'added') { reloadTemplates(); reloadPresets() }
@@ -6122,6 +6130,7 @@ export function Canvas({
     importCanvasFile: importCanvas,
     exportPackFile: exportPack,
     importPackFile: importPack,
+    importSamplePackFile: importSamplePack,
     markPresetReadNow: markPresetRead,
     markWorkflowReadNow: markWorkflowRead,
     addNote,

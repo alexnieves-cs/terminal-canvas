@@ -122,6 +122,16 @@ export const VERBS: readonly VerbDef[] = [
   // Export is DESTRUCTIVE for export-canvas's reason: a named path skips the
   // save dialog. The pack is named after the active workspace.
   { id: 'export-pack', label: 'Pack: export', args: [{ name: 'path', kind: 'text', optional: true }], destructive: true, actions: ['exportPack'], target: 'canvas', hint: 'write your workflows, saved prompts and presets as one pack; secrets scrubbed, credentials named and never carried' },
+  // M255. Publishing a DRAFT FILE to GitHub. DESTRUCTIVE — a post other
+  // people read — and whichever door runs it, main's own dialog asks the
+  // person again with the text in front of them (github-publish.ts). A
+  // teammate's plan is refused all three by name. The file is LAST and takes
+  // the rest of the line, so a path may hold spaces; absent, the selected
+  // draft file on the canvas is used.
+  { id: 'publish-release', label: 'GitHub: publish a release', args: [{ name: 'tag', kind: 'value' }, { name: 'file', kind: 'text', optional: true, rest: true }], destructive: true, actions: ['publishRelease'], target: 'canvas', hint: 'publish a draft file as a GitHub release under the tag; you see the text before it is sent' },
+  { id: 'publish-comment', label: 'GitHub: comment on a pull request', args: [{ name: 'number', kind: 'value' }, { name: 'file', kind: 'text', optional: true, rest: true }], destructive: true, actions: ['publishComment'], target: 'canvas', hint: 'post a draft file as a comment on the pull request; you see the text before it is sent' },
+  { id: 'publish-discussion', label: 'GitHub: post a Discussion', args: [{ name: 'category', kind: 'value' }, { name: 'file', kind: 'text', optional: true, rest: true }], destructive: true, actions: ['publishDiscussion'], target: 'canvas', hint: 'post a draft file as a GitHub Discussion in the category; you see the text before it is sent' },
+  { id: 'sample-pack', label: 'Pack: the sample dev-relations pack', args: [], destructive: false, actions: ['importSamplePack'], target: 'canvas', hint: 'write the sample dev-relations pack and show its manifest; nothing is added until you choose Add' },
   { id: 'import-pack', label: 'Pack: import', args: [{ name: 'path', kind: 'text', optional: true }], destructive: false, actions: ['importPack'], target: 'canvas', hint: 'read a pack and show its manifest; nothing is added until you choose Add' },
   // M188. Test one node, by template and (optionally) key: with no key it is
   // the block the person has selected on the diagram.
@@ -232,6 +242,9 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   // or verb lines. A plan that could make it would undo the very gate it
   // clears, so neither has a verb.
   markPresetRead: 'a person\'s statement that they read a pack preset\'s command — never a plan',
+  // M255. The row-only step that asks for the tag, number or category; the
+  // verbs it leads to (publish-*) carry every argument on their line.
+  beginPublish: 'opens the text field asking for the tag, number or category — the publish-* verbs take them on the line',
   markWorkflowRead: 'a person\'s statement that they read an imported workflow\'s lines — never a plan',
   // M113/M115. The board's excluded three.
   beginNewWorkItem: 'opens the palette\'s text mode — a plan has no typist',
@@ -381,6 +394,14 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   // M253. A pack is the LIBRARY, not what is on this canvas, so neither verb
   // has a canvas object to live on yet; each canvas door is owed by name.
   'export-pack': { canvas: { reason: 'a pack is the library — workflows, prompts, presets — not what is on this canvas, so no canvas object is its home', due: 'M254' }, palette: 'pack.export', agent: 'tc plan export-pack', workflow: 'an action node whose line is: export-pack' },
+  // M255. The palette row on a SELECTED draft file is the person's door; a
+  // canvas gesture on the file panel itself is owed. The workflow door is an
+  // action node's line — safe by construction, because main's dialog asks
+  // the person before anything leaves, whoever ran the verb.
+  'publish-release': { canvas: { reason: 'publishing is offered on the selected draft file through the palette; a control on the file panel itself is owed', due: 'M256' }, palette: 'publish.release', agent: 'tc plan publish-release v1.2.0 /repo/RELEASE_NOTES.md', workflow: 'an action node whose line is: publish-release v1.2.0 /repo/RELEASE_NOTES.md' },
+  'publish-comment': { canvas: { reason: 'publishing is offered on the selected draft file through the palette; a control on the file panel itself is owed', due: 'M256' }, palette: 'publish.comment', agent: 'tc plan publish-comment 42 /repo/PR_COMMENT.md', workflow: 'an action node whose line is: publish-comment 42 /repo/PR_COMMENT.md' },
+  'publish-discussion': { canvas: { reason: 'publishing is offered on the selected draft file through the palette; a control on the file panel itself is owed', due: 'M256' }, palette: 'publish.discussion', agent: 'tc plan publish-discussion Announcements /repo/ANNOUNCEMENT.md', workflow: 'an action node whose line is: publish-discussion Announcements /repo/ANNOUNCEMENT.md' },
+  'sample-pack': { canvas: { reason: 'the launcher\'s import line reads a canvas file; the sample pack line beside it is owed with the launcher\'s next pass', due: 'M256' }, palette: 'pack.sample', agent: 'tc plan sample-pack', workflow: 'an action node whose line is: sample-pack' },
   'import-pack': { canvas: { reason: 'the launcher\'s import line reads a canvas file; a pack line beside it is owed with the launcher\'s next pass', due: 'M254' }, palette: 'pack.import', agent: 'tc plan import-pack', workflow: 'an action node whose line is: import-pack' },
   'node-test': { canvas: 'Test this node on the workflow panel\'s selected block', palette: 'node.test', agent: 'tc plan node-test t1 n1', workflow: { reason: 'a node that tests a node is a loop with no stop', due: WORKFLOW_EXECUTOR_DUE } },
   'note-add': { canvas: 'the three Add rows place one at the camera centre; a frame goes behind what it encloses', palette: 'note.add.sticky', agent: 'tc plan note-add sticky', workflow: 'an action node whose line is: note-add sticky' },

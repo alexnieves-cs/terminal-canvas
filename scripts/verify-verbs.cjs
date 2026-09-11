@@ -426,7 +426,9 @@ const FACTS = {
   }
   // M253 adds both pack verbs: a teammate chooses neither where this app
   // writes a pack nor what a person is asked to add to their library.
-  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x']
+  const editRefusals = ['workflow-add t1 terminal', 'workflow-set t1 n1 title x', 'workflow-save t1', 'workflow-run t1', 'node-test t1', 'export-canvas /tmp/x', 'import-canvas /tmp/x', 'export-pack /tmp/x', 'import-pack /tmp/x',
+    // M255. A teammate never publishes on a person's behalf.
+    'publish-release v1.2.0 /tmp/RELEASE_NOTES.md', 'publish-comment 42 /tmp/PR_COMMENT.md', 'publish-discussion Announcements /tmp/ANNOUNCEMENT.md', 'sample-pack']
     .map((line) => ({ line, teammate: refusalOf(line, teammate), person: refusalOf(line, undefined) }))
   const exportVerb = V.VERBS.find((verb) => verb.id === 'export-canvas')
   const destructivePlan = P.buildPlan(P.parsePlanLine('export-canvas /tmp/x'), facts)

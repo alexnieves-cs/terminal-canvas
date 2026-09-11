@@ -401,6 +401,7 @@ renderer  --invoke-->  pty:create / pty:write / pty:resize / pty:kill / pty:list
                        node:fetch
                        portable:export / portable:import
                        pack:read / pack:add / pack:export / preset:mark-reviewed
+                       pack:sample / github:publish
                        board:lane / board:lane-status
                        board:open-pr / board:comment-pr
                        board:repositories

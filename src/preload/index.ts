@@ -343,7 +343,8 @@ const bridge: CanvasBridge = {
     audit: (limit, service) => ipcRenderer.invoke(IPC.BROKER_AUDIT, limit, service)
   },
   github: {
-    list: (panelId) => ipcRenderer.invoke(IPC.GITHUB_LIST, panelId)
+    list: (panelId) => ipcRenderer.invoke(IPC.GITHUB_LIST, panelId),
+    publish: (req) => ipcRenderer.invoke(IPC.GITHUB_PUBLISH, req)
   },
   jira: {
     list: () => ipcRenderer.invoke(IPC.JIRA_LIST),
@@ -394,7 +395,8 @@ const bridge: CanvasBridge = {
   pack: {
     read: (req) => ipcRenderer.invoke(IPC.PACK_READ, req),
     add: (req) => ipcRenderer.invoke(IPC.PACK_ADD, req),
-    write: (req) => ipcRenderer.invoke(IPC.PACK_EXPORT, req)
+    write: (req) => ipcRenderer.invoke(IPC.PACK_EXPORT, req),
+    sample: () => ipcRenderer.invoke(IPC.PACK_SAMPLE)
   },
   board: {
     lane: (req) => ipcRenderer.invoke(IPC.BOARD_LANE, req),

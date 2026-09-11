@@ -110,7 +110,7 @@ const {
   FILE_MAX_LINES,
   AgentSessionManager, createAgentTranscriptLog, importClaudeTranscript, resolveAttachment,
   createWatchRunner,
-  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason,
+  createBrowserHandlers, discoverPreview, descendantsOf, capturePreview, putAsset, runHttpNode, parsePortable, parseLayout, createPackHandlers, unreviewedPresetReason, publish, parsePublishRequest,
   readVault,
   readImage, prepareStarter, STARTER_OBJECTS,
   createLayoutSnapshots, restoreFromSnapshot,
@@ -1549,8 +1549,24 @@ app.whenReady().then(async () => {
     afterPresetChange: () => {},
     app: 'harness',
     chooseOpen: async () => (state.packPath ? { kind: 'path', path: state.packPath } : { kind: 'cancelled' }),
-    chooseSave: async () => (state.packPath ? { kind: 'path', path: state.packPath } : { kind: 'cancelled' })
-  }))
+    chooseSave: async () => (state.packPath ? { kind: 'path', path: state.packPath } : { kind: 'cancelled' }),
+    // M255. The sample pack lands in a harness temp dir, never the real userData.
+    sampleDir: require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'tc harness packs '))
+  }),
+  // M255. The PRODUCTION publisher: only the confirm (answers
+  // `state.publishAnswer`, default CANCEL, and records every ask), the remote
+  // and the broker (records every call, reaches no network) are the harness's.
+  {
+    publish: async (raw) => {
+      const req = parsePublishRequest(raw)
+      if (typeof req === 'string') return { kind: 'refused', reason: req }
+      return publish({
+        broker: { call: async (q) => { (state.publishCalls = state.publishCalls || []).push(q); return { ok: false, reason: 'the harness broker reaches no network' } } },
+        remoteOf: async () => state.publishRemote || null,
+        confirm: async (ask) => { (state.publishAsks = state.publishAsks || []).push(ask); return state.publishAnswer === true }
+      }, req)
+    }
+  })
   ipcMain.handle = realIpcMainHandle
 
   // The same listener createWindow() installs, calling the same production

@@ -34,6 +34,13 @@ export interface BrokerRequest {
   teammateId?: string
   /** M102. What the caller says the call costs (credits, dollars, a quota) — shown on the card as said, `unknown` when absent. */
   cost?: string
+  /**
+   * M255. A person has JUST confirmed this exact write in main's own dialog
+   * (the publisher). The only way a teammate-less write passes. Set by
+   * main-side code alone: `tc api`'s handler builds its request field by
+   * field and never forwards it (`verify:control control.gap.1`).
+   */
+  personConfirmed?: true
 }
 
 /**
@@ -46,6 +53,24 @@ export const READ_ONLY_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'O
 
 export const NOT_GRANTED_CODE = 'not-granted'
 export const NOT_ANSWERED_CODE = 'not-answered'
+/**
+ * M255. A write nobody was asked about: no teammate whose card could ask,
+ * and no person who confirmed it in main. Before M255 such a write simply
+ * went out — a terminal, a workflow's chat or a bare `tc api` could POST.
+ */
+export const NOT_ASKED_CODE = 'not-asked'
+
+let cardSeq = 0
+/**
+ * M255. The tool name a spend card is asked under — minted PER REQUEST. A
+ * session grant ("Allow for session") answers every later ask with the same
+ * name, so a name shared by all github writes let one allowed card allow
+ * them all. A unique name makes a grant answer only the request it was for.
+ */
+export function brokerCardTool(ask: Pick<SpendApproval, 'service' | 'method' | 'path'>): string {
+  cardSeq += 1
+  return `${ask.service} ${ask.method} ${ask.path} (request ${cardSeq})`
+}
 
 /** M102. What the spend card names: service, account, action, target, cost. */
 export interface SpendApproval {
@@ -210,6 +235,13 @@ export function createBroker(deps: BrokerDeps): Broker {
         const granted = deps.services?.(req.teammateId)
         if (granted === undefined) return refuse(req, `no teammate is called ${req.teammateId}, or this window scopes no services — open the Teammates pane`, NOT_GRANTED_CODE)
         if (!granted.includes(req.service)) return refuse(req, `${req.service} is not granted to this teammate — grant ${req.service} to it in the Teammates pane`, NOT_GRANTED_CODE)
+      }
+      // M255. A write needs someone to have been asked: a teammate's card
+      // (below) or a person's confirmation in main. Checked BEFORE the
+      // credential is read, like the grant — an unasked write never touches
+      // the token.
+      if (req.teammateId === undefined && req.personConfirmed !== true && !READ_ONLY_METHODS.has(method)) {
+        return refuse(req, `${method} ${req.path} on ${req.service}: no one was asked — a write from outside a teammate's chat goes through ⌘K › Publish…, which shows you the text first`, NOT_ASKED_CODE)
       }
       const secret = deps.store.read(req.service)
       if (secret === undefined) return refuse(req, notConnectedReason(req.service), NOT_CONNECTED_CODE)

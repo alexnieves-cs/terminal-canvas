@@ -3289,6 +3289,66 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       for (const id of PACK_IDS) ok(id, false, 'threw: ' + String(packErr && packErr.stack || packErr))
     }
 
+    // M255 — devrel.1. THE SAMPLE PACK AND THE PUBLISH DOOR, in the real app,
+    //     through the PRODUCTION pack factory and publisher (only the harness's
+    //     chooser, confirm, remote and broker stand in). The sample opens the
+    //     same preview any pack does and adds everything unread. A publish
+    //     through the plan door is refused outright (destructive). Through the
+    //     bridge, a CANCELLED confirm asks once — naming the release and the
+    //     repository — and sends nothing; a CONFIRMED one reaches the broker
+    //     exactly once, a POST carrying personConfirmed, and the harness
+    //     broker's refusal comes back as a refusal, never as published.
+    const DEVREL_IDS = ['devrel.1 the sample dev-relations pack previews its manifest with ten objects and the GitHub need and adds every workflow and preset unread; the plan door refuses a publish outright; a cancelled publish asks once naming the release and repo and sends nothing; a confirmed one is exactly one POST with personConfirmed']
+    try {
+      flushLayoutStore()
+      const before = layoutStore.current()
+      const read = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'sample-pack' }, null, 10000)
+      const shown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-pack-preview]') !== null`), 5000)
+      const previewText = await wc.executeJavaScript(`(document.querySelector('[data-pack-preview]') || {}).textContent || ''`)
+      const needs = await wc.executeJavaScript(`[...document.querySelectorAll('[data-pack-need]')].map((e) => e.textContent).join(' | ')`)
+      const addLabel = await wc.executeJavaScript(`(document.querySelector('[data-pack-add]') || {}).textContent || ''`)
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-pack-add]'); if (b) b.click(); return true })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-pack-result]') !== null`), 5000)
+      flushLayoutStore()
+      const after = layoutStore.current()
+      const newTemplates = after.templates.filter((t) => !before.templates.some((b) => b.id === t.id))
+      const newPresets = after.presets.filter((p) => !before.presets.some((b) => b.id === p.id))
+      const newPrompts = after.prompts.filter((p) => !before.prompts.some((b) => b.id === p.id))
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-pack-close]'); if (b) b.click(); return true })()`)
+      // The publish door. A real draft file in a temp directory; the remote
+      // is planted, so the publisher resolves acme/canvas from it.
+      const draftDir = mkdtempSync(join(tmpdir(), 'tc devrel draft '))
+      const draft = join(draftDir, 'RELEASE_NOTES.md')
+      writeFileSync(draft, '# v9.9.9\n\nA harness release.\n')
+      state.publishRemote = 'git@github.com:acme/canvas.git'
+      state.publishAsks = []; state.publishCalls = []; state.publishAnswer = false
+      const viaPlan = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: `publish-release v9.9.9 ${draft}` }, null, 8000)
+      const cancelled = await wc.executeJavaScript(`window.canvas.github.publish(${JSON.stringify({ kind: 'release', path: draft, tag: 'v9.9.9' })})`)
+      const asksAfterCancel = state.publishAsks.slice()
+      const callsAfterCancel = state.publishCalls.length
+      state.publishAnswer = true
+      const confirmed = await wc.executeJavaScript(`window.canvas.github.publish(${JSON.stringify({ kind: 'release', path: draft, tag: 'v9.9.9' })})`)
+      const calls = state.publishCalls.slice()
+      ok(DEVREL_IDS[0],
+        read && read.kind === 'ran' && shown === true && /dev relations/.test(previewText) && /release notes/.test(previewText) &&
+          /Add 10 objects/.test(addLabel) && /GitHub · personal access token/.test(needs) &&
+          newTemplates.length === 4 && newTemplates.every((t) => t.reviewed === false) &&
+          newPresets.length === 2 && newPresets.every((p) => p.reviewed === false) && newPrompts.length === 4 &&
+          viaPlan && viaPlan.kind === 'refused' &&
+          cancelled.kind === 'cancelled' && asksAfterCancel.length === 1 && /release v9\.9\.9/.test(asksAfterCancel[0].message) && /acme\/canvas/.test(asksAfterCancel[0].message) && callsAfterCancel === 0 &&
+          calls.length === 1 && calls[0].method === 'POST' && calls[0].path === '/repos/acme/canvas/releases' && calls[0].personConfirmed === true &&
+          confirmed.kind === 'unavailable' && /no network/.test(confirmed.reason),
+        JSON.stringify({ read, shown, addLabel, needs, newTemplates: newTemplates.map((t) => [t.name, t.reviewed]), newPresets: newPresets.map((p) => [p.name, p.reviewed]), newPrompts: newPrompts.length, viaPlan, cancelled, asksAfterCancel, callsAfterCancel, calls, confirmed }))
+      state.publishRemote = undefined; state.publishAnswer = false
+      for (const t of newTemplates) layoutStore.deleteTemplate(t.id)
+      for (const p of newPresets) layoutStore.deletePreset(p.id)
+      for (const p of newPrompts) layoutStore.deletePrompt(p.id)
+      flushLayoutStore()
+      await settle()
+    } catch (devErr) {
+      for (const id of DEVREL_IDS) ok(id, false, 'threw: ' + String(devErr && devErr.stack || devErr))
+    }
+
     // M188 — node.1. THE WORKFLOW DOOR, AND TEST THIS NODE.
     //     (a) An `action` node holds a verb LINE, and running the workflow
     //         runs it through the same executor the palette and the agent door
