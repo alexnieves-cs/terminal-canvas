@@ -20,6 +20,8 @@ import { addEdge, addNode, configureNode, moveNode, removeEdge, removeNode, retr
 export type DraftOp =
   | { type: 'add'; node: Omit<TemplateNode, 'key'> }
   | { type: 'move'; key: string; dx: number; dy: number }
+  /** M259. Auto layout: every block's move as ONE operation, so a layout is one step of the draft and refuses whole. */
+  | { type: 'arrange'; moves: ReadonlyArray<{ key: string; dx: number; dy: number }> }
   | { type: 'set'; key: string; patch: Record<string, unknown> }
   | { type: 'remove'; key: string }
   | { type: 'edge'; from: string; to: string; trigger: HandoffTrigger }
@@ -53,6 +55,7 @@ export function applyDraftOp(id: string, saved: PersistedTemplate | undefined, o
   if (saved === undefined) { drafts.delete(id); return { kind: 'refused', reason: `no template is called ${id} — it was deleted` } }
   const base = drafts.get(id)?.template ?? saved
   const result = op.type === 'add' ? addNode(base, op.node)
+    : op.type === 'arrange' ? op.moves.reduce<EditResult>((r, m) => (r.kind === 'refused' ? r : moveNode(r.template, m.key, m.dx, m.dy)), { kind: 'ok', template: base })
     : op.type === 'move' ? moveNode(base, op.key, op.dx, op.dy)
       : op.type === 'set' ? configureNode(base, op.key, op.patch)
         : op.type === 'remove' ? removeNode(base, op.key)

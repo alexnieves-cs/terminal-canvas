@@ -3425,6 +3425,47 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M259 — boardx.*. One state vocabulary across the board, GitHub, Jira and
+//     the canvas (providerState, in panel-state.ts because state.2 keeps the
+//     words there); the Integrations audit as readable activity with its HTTP
+//     line kept as the disclosure (activityOf); and sync freshness in words
+//     (syncWord). Written before the functions existed and watched red.
+try {
+  const S = R.WORK_ITEM_STATES
+  const g = (raw) => R.providerState('github', raw).state
+  const j = (raw) => R.providerState('jira', raw).state
+  ok('boardx.state.1 GitHub and Jira states land on the board\'s OWN four words — a review request and a PR are review, open is todo, closed and merged are done; Jira by its status name',
+    g('review requested') === S[2] && g('pull request') === S[2] && g('open') === S[0] && g('closed') === S[3] && g('merged') === S[3] &&
+      j('To Do') === S[0] && j('Backlog') === S[0] && j('In Progress') === S[1] && j('In Review') === S[2] && j('Code Review') === S[2] && j('Done') === S[3] && j('Resolved') === S[3],
+    JSON.stringify({ gh: ['review requested', 'pull request', 'open', 'closed'].map(g), jira: ['To Do', 'In Progress', 'In Review', 'Done'].map(j) }))
+  const odd = R.providerState('jira', 'Waiting on vendor')
+  const none = R.providerState('jira', null)
+  const mapped = R.providerState('jira', 'In Progress')
+  ok('boardx.state.2 a status the map does not know keeps its own words at the kind tone and claims no board state; no status says so; a mapped one wears the board word and its tone',
+    odd.state === undefined && odd.word === 'Waiting on vendor' && odd.tone === 'kind' && none.state === undefined && /no status/.test(none.word) &&
+      mapped.word === S[1] && mapped.tone === R.panelState({ kind: 'work', work: { state: S[1] } }).tone,
+    JSON.stringify({ odd, none, mapped }))
+  const a1 = R.activityOf({ service: 'github', method: 'POST', path: '/repos/o/r/issues/12/comments', status: 201 })
+  const a2 = R.activityOf({ service: 'github', method: 'GET', path: '/search/issues?q=assignee%3A%40me', status: 200 })
+  const a3 = R.activityOf({ service: 'jira', method: 'POST', path: '/rest/api/3/issue/ABC-7/transitions', status: 0, reason: 'refused' })
+  const a4 = R.activityOf({ service: 'github', method: 'GET', path: '/repos/o/r/pulls/3', status: 404 })
+  const a5 = R.activityOf({ service: 'github', method: 'DELETE', path: '/some/thing', status: 204 })
+  ok('boardx.activity.1 an audit row reads as what was done in words — a comment on o/r#12, a search, a refused move of ABC-7, a failed read — with the HTTP line kept as its detail, and an unknown call still says a verb and its object',
+    /Commented on o\/r#12/.test(a1.sentence) && a1.outcome === 'ok' && a1.detail === 'POST /repos/o/r/issues/12/comments · 201' &&
+      /Searched/.test(a2.sentence) && !/%40/.test(a2.sentence) &&
+      /Moved ABC-7/.test(a3.sentence) && a3.outcome === 'refused' &&
+      a4.outcome === 'failed' && /o\/r#3/.test(a4.sentence) &&
+      /^Deleted /.test(a5.sentence) && a5.outcome === 'ok',
+    JSON.stringify([a1, a2, a3, a4, a5]))
+  const now = 10 * 60 * 60 * 1000
+  const fresh = R.syncWord(now - 4000, now), mins = R.syncWord(now - 3 * 60 * 1000, now), old = R.syncWord(now - 2 * 60 * 60 * 1000, now), never = R.syncWord(undefined, now)
+  ok('boardx.fresh.1 freshness is a word, not a timestamp — just now, minutes, hours — stale past ten minutes, and never-read is its own third answer',
+    /just now/.test(fresh.word) && fresh.stale === false && /3m ago/.test(mins.word) && mins.stale === false && /2h ago/.test(old.word) && old.stale === true && never.stale === true && /not read/.test(never.word),
+    JSON.stringify({ fresh, mins, old, never }))
+} catch (e) {
+  ok('boardx (threw)', false, String(e && e.stack || e))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

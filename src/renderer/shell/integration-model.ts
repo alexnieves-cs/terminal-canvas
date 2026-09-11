@@ -67,3 +67,69 @@ export function buildIntegrationRows(
     return { id: svc.id, label: svc.label, state: 'connected', who: meta.label, word: 'connected', sentence: `connected as ${meta.label}`, verb: 'verify', rows }
   })
 }
+
+/**
+ * M259. AN AUDIT ROW AS ACTIVITY — what the call DID, in words, with the
+ * HTTP line kept as its `detail` for the disclosure beneath it. The page used
+ * to print `POST /repos/o/r/issues/12/comments · 201`, a line a person has to
+ * decode; the same row now reads "Commented on o/r#12".
+ *
+ * The patterns are the calls this app and `tc api` actually make; anything
+ * else still gets a verb from its method and its last meaningful segment, so
+ * an unknown call is described, never dropped. Three outcomes, never two: a
+ * broker refusal (`status 0`) is not a failed request, and neither is a 2xx.
+ */
+export interface Activity {
+  sentence: string
+  outcome: 'ok' | 'refused' | 'failed'
+  /** `METHOD path · status` — the raw line, behind the disclosure. */
+  detail: string
+}
+
+const METHOD_VERB: Record<string, string> = { GET: 'Read', HEAD: 'Checked', POST: 'Wrote to', PUT: 'Changed', PATCH: 'Changed', DELETE: 'Deleted' }
+
+export function activityOf(row: Pick<AuditRowLike, 'service' | 'method' | 'path' | 'status'> & { reason?: string }): Activity {
+  const method = row.method.toUpperCase()
+  const bare = row.path.split('?')[0] ?? row.path
+  const outcome: Activity['outcome'] = row.status === 0 ? 'refused' : row.status >= 400 ? 'failed' : 'ok'
+  const detail = `${method} ${row.path} · ${row.status === 0 ? `refused${row.reason === undefined || row.reason === 'refused' ? '' : ` — ${row.reason}`}` : row.status}`
+  const say = (sentence: string): Activity => ({ sentence, outcome, detail })
+  let m: RegExpMatchArray | null
+  if (row.service === 'github') {
+    if (bare === '/user') return say('Checked who the token belongs to')
+    if (bare.startsWith('/search/')) return say(bare.includes('issues') ? 'Searched issues and pull requests' : 'Searched GitHub')
+    if ((m = bare.match(/^\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/comments$/)) !== null) return say(method === 'GET' ? `Read the comments on ${m[1]}/${m[2]}#${m[3]}` : `Commented on ${m[1]}/${m[2]}#${m[3]}`)
+    if ((m = bare.match(/^\/repos\/([^/]+)\/([^/]+)\/(?:issues|pulls)\/(\d+)(\/.*)?$/)) !== null) return say(`${METHOD_VERB[method] ?? method} ${m[1]}/${m[2]}#${m[3]}`)
+    if ((m = bare.match(/^\/repos\/([^/]+)\/([^/]+)\/pulls$/)) !== null) return say(method === 'POST' ? `Opened a pull request in ${m[1]}/${m[2]}` : `Read the pull requests in ${m[1]}/${m[2]}`)
+    if ((m = bare.match(/^\/repos\/([^/]+)\/([^/]+)\/issues$/)) !== null) return say(method === 'POST' ? `Created an issue in ${m[1]}/${m[2]}` : `Read the issues in ${m[1]}/${m[2]}`)
+    if ((m = bare.match(/^\/repos\/([^/]+)\/([^/]+)$/)) !== null) return say(`${METHOD_VERB[method] ?? method} ${m[1]}/${m[2]}`)
+  }
+  if (row.service === 'jira') {
+    if (/\/myself$/.test(bare)) return say('Checked who the token belongs to')
+    if (/\/search(\/jql)?$/.test(bare)) return say('Searched tickets')
+    if ((m = bare.match(/\/issue\/([A-Z][A-Z0-9_]*-\d+)\/transitions$/)) !== null) return say(method === 'POST' ? `Moved ${m[1]}` : `Read where ${m[1]} can move`)
+    if ((m = bare.match(/\/issue\/([A-Z][A-Z0-9_]*-\d+)\/comment$/)) !== null) return say(method === 'POST' ? `Commented on ${m[1]}` : `Read the comments on ${m[1]}`)
+    if ((m = bare.match(/\/issue\/([A-Z][A-Z0-9_]*-\d+)$/)) !== null) return say(`${METHOD_VERB[method] ?? method} ${m[1]}`)
+  }
+  // Unknown: the method's verb and the last segment that is not an id-ish number.
+  const segs = bare.split('/').filter((s) => s !== '')
+  const object = segs.length === 0 ? row.service : segs.slice(-2).join('/')
+  let named = object; try { named = decodeURIComponent(object) } catch { /* a malformed escape reads as written */ }
+  return say(`${METHOD_VERB[method] ?? method} ${named}`)
+}
+
+/** Past this, a list read from a provider is called stale — it may no longer be what the provider says. */
+export const STALE_AFTER_MS = 10 * 60 * 1000
+
+/**
+ * M259. SYNC FRESHNESS IN WORDS. Three answers: never read (`not read yet`,
+ * stale by definition), a relative age, and whether that age is past
+ * `STALE_AFTER_MS`. `verb` names the act — a list is `updated`, a card's
+ * copy of a provider's state is `copied`.
+ */
+export function syncWord(at: number | undefined, now: number, verb = 'updated', staleAfter = STALE_AFTER_MS): { word: string; stale: boolean } {
+  if (at === undefined) return { word: 'not read yet', stale: true }
+  const s = Math.max(0, Math.round((now - at) / 1000))
+  const age = s < 10 ? 'just now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : s < 48 * 3600 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`
+  return { word: `${verb} ${age}`, stale: now - at > staleAfter }
+}

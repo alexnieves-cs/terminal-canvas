@@ -1,7 +1,7 @@
 import { memo, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Refresh } from '@renderer/icons'
-import type { IntegrationRow } from './integration-model'
+import { activityOf, type IntegrationRow } from './integration-model'
 
 /**
  * M89. THE INTEGRATIONS PAGE — the navigator's fifth pane, and the seam
@@ -86,13 +86,27 @@ function IntegrationsPaneImpl(props: IntegrationsPaneProps): JSX.Element {
               {row.rows.length === 0 ? (
                 <p className="integration__empty" data-integration-audit-arm="empty">no calls yet — an agent reaches {row.label} with <code className="integration__code">tc api {row.id} &lt;path&gt;</code></p>
               ) : (
-                <ul className="integration__audit" aria-label={`${row.label} calls`}>
-                  {row.rows.map((r, i) => (
-                    <li key={i} className={`integration__row${r.status === 0 ? ' integration__row--refused' : ''}`} data-integration-row={`${r.method} ${r.path}`}>
-                      <span className="integration__row-call">{r.method} {r.path}</span>
-                      <span className="integration__row-meta">{r.status === 0 ? `refused${r.reason === undefined || r.reason === 'refused' ? '' : ` — ${r.reason}`}` : String(r.status)} · {r.panelId === undefined ? 'this app' : (props.panelLabel(r.panelId) ?? r.panelId)} · {when(r.at, now)}</span>
-                    </li>
-                  ))}
+                // M259. ACTIVITY, not a log: each call as what it DID ("Commented
+                // on o/r#12"), who did it and when, with its outcome as a word;
+                // the HTTP line — method, path, status — kept behind a disclosure
+                // for the person who needs it, never the row's first thing.
+                <ul className="integration__audit" aria-label={`${row.label} activity`}>
+                  {row.rows.map((r, i) => {
+                    const a = activityOf(r)
+                    return (
+                      <li key={i} className={`integration__row integration__row--${a.outcome}${r.status === 0 ? ' integration__row--refused' : ''}`} data-integration-row={`${r.method} ${r.path}`} data-integration-outcome={a.outcome}>
+                        <span className="integration__row-sentence">{a.sentence}</span>
+                        <span className="integration__row-meta">
+                          {a.outcome !== 'ok' && <span className="integration__row-outcome">{a.outcome === 'refused' ? 'refused' : 'failed'}</span>}
+                          {r.panelId === undefined ? 'this app' : (props.panelLabel(r.panelId) ?? r.panelId)} · {when(r.at, now)}
+                        </span>
+                        <details className="integration__row-details">
+                          <summary className="integration__row-summary">Request details</summary>
+                          <code className="integration__row-call">{a.detail}</code>
+                        </details>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </section>

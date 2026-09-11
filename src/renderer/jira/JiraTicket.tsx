@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { WorkItem, WorkItemTransition } from '@shared/work-item'
+import { providerState } from '@renderer/panels/panel-state'
 
 /**
  * One ticket, and the two writes aimed at it. It is its own component rather
@@ -32,6 +33,27 @@ export function JiraTicket(props: {
    */
   const [busy, setBusy] = useState<null | 'comment' | 'transitions' | 'transition'>(null)
   const [outcome, setOutcome] = useState<string | null>(null)
+  /**
+   * M259. AN OPTIMISTIC MOVE. The ticket shows where it is GOING the moment
+   * the move is pressed — marked pending, never as Jira's answer — and then
+   * one of two compact states: `moved` once the re-read confirms it, or a
+   * rollback that puts the old state back and says why. The screen still
+   * never claims a state the server has not confirmed: pending is its own
+   * visual, and the confirmed state is the re-read's (the rule below).
+   */
+  const [move, setMove] = useState<null | { to: string; from: string | null; phase: 'pending' | 'moved' | 'rolled-back'; reason?: string }>(null)
+  // The confirmation arrives as a NEW item.state from the re-read: that is when pending becomes moved.
+  useEffect(() => {
+    if (move === null || move.phase !== 'pending') return
+    if (item.state !== move.from) setMove({ ...move, phase: 'moved' })
+  }, [item.state])
+  // The compact result steps back after a few seconds; the ticket's own state carries the fact from then on.
+  useEffect(() => {
+    if (move === null || move.phase === 'pending') return
+    const t = setTimeout(() => setMove(null), 4000)
+    return () => clearTimeout(t)
+  }, [move])
+  const [expanded, setExpanded] = useState(false)
 
   /**
    * The panel that had the keyboard when the draft opened. Captured rather
@@ -92,19 +114,26 @@ export function JiraTicket(props: {
       .finally(() => setBusy(null))
   }
 
-  const runTransition = (transitionId: string): void => {
+  const runTransition = (t: WorkItemTransition): void => {
     if (busy !== null) return
     setBusy('transition')
-    void window.canvas.jira.transition({ itemId: item.id, transitionId })
+    const to = t.toState ?? t.name
+    setMove({ to, from: item.state, phase: 'pending' })
+    setTransitions(null)
+    void window.canvas.jira.transition({ itemId: item.id, transitionId: t.id })
       .then((result) => {
         setOutcome(result.kind === 'done' ? 'ticket moved' : result.reason)
-        setTransitions(null)
         // Re-read rather than patching the row in place: the rendered state
         // comes from Jira, so the screen cannot claim a state the server
-        // never confirmed.
-        if (result.kind === 'done') props.onWritten()
+        // never confirmed. The pending mark holds until that re-read lands.
+        if (result.kind === 'done') {
+          props.onWritten()
+          // Jira ACCEPTED the move; if the re-read never shows a new status
+          // (a transition onto the same-named status), pending must not stick.
+          setTimeout(() => setMove((m) => (m !== null && m.phase === 'pending' ? { ...m, phase: 'moved' } : m)), 8000)
+        } else setMove({ to, from: item.state, phase: 'rolled-back', reason: result.reason })
       })
-      .catch(() => setOutcome('the transition could not be sent'))
+      .catch(() => { setOutcome('the transition could not be sent'); setMove({ to, from: item.state, phase: 'rolled-back', reason: 'the transition could not be sent' }) })
       .finally(() => setBusy(null))
   }
 
@@ -112,13 +141,29 @@ export function JiraTicket(props: {
     event.stopPropagation(); event.preventDefault()
   }
 
-  return <article className="jira-node__item" data-jira-ticket={item.id}>
-    <strong>{item.id}: {item.title}</strong>
-    <small>{item.state ?? 'No state'}{item.assignee ? ` · ${item.assignee}` : ''}</small>
-    <p>{item.description || 'No description.'}</p>
+  // M259. STATUS FIRST, in the board's words; Jira's own status rides the title.
+  const shown = move !== null && move.phase === 'pending' ? move.to : item.state
+  const st = providerState('jira', shown)
+  const long = item.description.length > 160 || item.description.includes('\n')
+  return <article className="jira-node__item" data-jira-ticket={item.id} data-jira-move={move?.phase}>
+    <div className="jira-node__head">
+      <span className="jira-node__pill" data-tone={st.tone} data-jira-state={st.word} data-pending={move?.phase === 'pending' ? 'true' : undefined}
+        title={move?.phase === 'pending' ? `Moving to ${move.to} — waiting for Jira to confirm` : shown === null ? 'Jira gave no status' : `Jira says ${shown}`}>{move?.phase === 'pending' ? `moving to ${move.to}…` : st.word}</span>
+      <span className="jira-node__assignee" data-jira-assignee>{item.assignee ?? 'unassigned'}</span>
+      <span className="jira-node__key">{item.id}</span>
+    </div>
+    <strong className="jira-node__title">{item.title}</strong>
+    {move !== null && move.phase !== 'pending' && (
+      <p className="jira-node__move" data-jira-move-result={move.phase} role="status">
+        {move.phase === 'moved' ? `Moved to ${move.to}` : `Couldn't move to ${move.to} — still ${move.from ?? 'without a status'}${move.reason === undefined ? '' : `: ${move.reason}`}`}
+      </p>
+    )}
+    {/* The description is the deep-detail layer: two lines at rest, the rest on request. */}
+    <p className={`jira-node__description${expanded ? ' jira-node__description--open' : ''}`}>{item.description || 'No description.'}</p>
+    {long && <button type="button" className="jira-node__expand" aria-expanded={expanded} onMouseDown={(e) => { stop(e); setExpanded((v) => !v) }}>{expanded ? 'Show less' : 'Show more'}</button>}
 
     <div className="jira-node__actions">
-      <button type="button" onMouseDown={(e) => { stop(e); props.onSpawn(item) }}>Start session</button>
+      <button type="button" className="is-primary" onMouseDown={(e) => { stop(e); props.onSpawn(item) }}>Start session</button>
       <button type="button" data-work-add={item.id} title={`Put ${item.id} on the board — a second press updates it`} onMouseDown={(e) => { stop(e); props.onAddToBoard(item); setAdded(true) }}>{added ? 'Added' : props.boardKeys?.has(item.id) ? 'On board' : 'Add to board'}</button>
       <button
         type="button"
@@ -139,7 +184,7 @@ export function JiraTicket(props: {
       <div className="jira-node__transitions">
         {transitions.map((t) => <button
           key={t.id} type="button" disabled={busy !== null}
-          onMouseDown={(e) => { stop(e); runTransition(t.id) }}
+          onMouseDown={(e) => { stop(e); runTransition(t) }}
         >{t.name}{t.toState !== null && t.toState !== t.name ? ` → ${t.toState}` : ''}</button>)}
       </div>
     )}

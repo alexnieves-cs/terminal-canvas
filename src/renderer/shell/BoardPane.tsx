@@ -1,8 +1,9 @@
-import { memo, type DragEvent, type JSX } from 'react'
+import { memo, useEffect, useState, type DragEvent, type JSX } from 'react'
 import { shellControl } from './shell-control'
 import { ChevronLeft } from '@renderer/icons'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { USER_SET_STATES, WORK_ITEM_MIME, WORK_ITEM_STATES, type PersistedWorkItem, type WorkItemState } from '@shared/work-items'
+import { panelState, providerState } from '@renderer/panels/panel-state'
 
 /**
  * M116. THE BOARD PANE — the navigator's seventh pane: four columns over
@@ -39,6 +40,20 @@ export interface BoardPaneProps {
   onShowOnCanvas: (itemId: string) => void
 }
 
+/**
+ * M259. Where an item comes from, for the card's repository line: GitHub's
+ * `owner/repo#N` key names the repository, Jira's `PROJ-12` its project, and
+ * a typed item says so. Read off the key the record already keeps — never a
+ * second field that could disagree with it.
+ */
+export function repositoryOf(item: Pick<PersistedWorkItem, 'source' | 'key'>): string {
+  if (item.key === undefined) return item.source === 'typed' ? 'typed here' : item.source
+  const gh = /^([^#\s]+\/[^#\s]+)#\d+$/.exec(item.key)
+  if (gh !== null) return gh[1] as string
+  const jira = /^([A-Z][A-Z0-9_]*)-\d+$/.exec(item.key)
+  return jira !== null ? (jira[1] as string) : item.key
+}
+
 function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
   const byState = (state: WorkItemState): PersistedWorkItem[] =>
     props.items.filter((i) => i.state === state).sort((a, b) => b.updatedAt - a.updatedAt)
@@ -47,25 +62,65 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
     const t = props.teammates.find((x) => x.id === id)
     return t === undefined ? id : teammateWord(t)
   }
+  // M259. THE DRAG, as state the columns can see: while a card is in the air
+  // every lane says what a drop there would do — a user-set lane lights as a
+  // target, the card's own lane says it is where it already is, and a runtime
+  // lane says who sets it — and the lane under the pointer is the lit one.
+  const [dragging, setDragging] = useState<{ id: string; from: WorkItemState } | null>(null)
+  const [over, setOver] = useState<WorkItemState | null>(null)
+  // M259. THE MOVE, optimistic: the record write is local and immediate, so
+  // the card is already in its new lane when this says `Moved to …` with an
+  // Undo; if the record did NOT take the state (a refused write), it says so
+  // and names the lane the card stayed in — the rollback is the record's.
+  const [moved, setMoved] = useState<null | { id: string; title: string; from: WorkItemState; to: WorkItemState; phase: 'pending' | 'moved' | 'rolled-back' }>(null)
+  useEffect(() => {
+    if (moved === null || moved.phase !== 'pending') return
+    const it = props.items.find((i) => i.id === moved.id)
+    if (it !== undefined && it.state === moved.to) { setMoved({ ...moved, phase: 'moved' }); return }
+    const t = setTimeout(() => setMoved((m) => (m !== null && m.phase === 'pending' ? { ...m, phase: 'rolled-back' } : m)), 600)
+    return () => clearTimeout(t)
+  }, [moved, props.items])
+  useEffect(() => {
+    if (moved === null || moved.phase === 'pending') return
+    const t = setTimeout(() => setMoved(null), 5000)
+    return () => clearTimeout(t)
+  }, [moved])
+  const move = (id: string, to: WorkItemState): void => {
+    const it = props.items.find((i) => i.id === id)
+    if (it === undefined || it.state === to) return
+    setMoved({ id, title: it.title, from: it.state, to, phase: 'pending' })
+    props.onSetState(id, to)
+  }
   // The drag handlers exist only on a droppable column; a column that is
   // not one has NO handler, so the browser's default (a refused drop) holds.
-  const dropHandlers = (state: WorkItemState): { onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
-    onDragOver: (e) => { if (e.dataTransfer.types.includes(WORK_ITEM_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } },
+  const dropHandlers = (state: WorkItemState): { onDragOver: (e: DragEvent) => void; onDragLeave: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
+    onDragOver: (e) => { if (e.dataTransfer.types.includes(WORK_ITEM_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (over !== state) setOver(state) } },
+    onDragLeave: (e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) setOver((o) => (o === state ? null : o)) },
     onDrop: (e) => {
       const id = e.dataTransfer.getData(WORK_ITEM_MIME)
+      setOver(null); setDragging(null)
       if (id === '') return
       e.preventDefault()
-      props.onSetState(id, state)
+      move(id, state)
     }
   })
   return (
-    <div className="shell__tree board-pane" aria-label="Board" data-board-pane>
+    <div className="shell__tree board-pane" aria-label="Board" data-board-pane data-board-dragging={dragging === null ? undefined : 'true'}>
       <div className="shell__region-title shell__region-title--action navigator__header">
         <span className="shell__tree-root">Board</span>
         <span className="navigator__header-actions">
           <button type="button" className="shell__rail-toggle icon-button" title="Hide the navigator" aria-label="Hide the navigator" {...shellControl(props.onToggle)}><ChevronLeft /></button>
         </span>
       </div>
+      {moved !== null && moved.phase !== 'pending' && (
+        <div className="board-pane__toast" data-board-moved={moved.phase} role="status">
+          <span className="board-pane__toast-text">{moved.phase === 'moved' ? `Moved “${moved.title}” to ${moved.to}` : `Couldn't move “${moved.title}” — it stays in ${moved.from}`}</span>
+          {moved.phase === 'moved' && USER_SET_STATES.includes(moved.from) && (
+            <button type="button" className="pf__verb pf__verb--word board-pane__undo" data-board-undo title={`Put it back in ${moved.from}`}
+              {...shellControl(() => { props.onSetState(moved.id, moved.from); setMoved(null) })}>Undo</button>
+          )}
+        </div>
+      )}
       {props.items.length === 0 ? (
         <p className="pf__note board-pane__empty" data-board-empty>{BOARD_EMPTY}</p>
       ) : (
@@ -73,32 +128,48 @@ function BoardPaneImpl(props: BoardPaneProps): JSX.Element {
           {WORK_ITEM_STATES.map((state) => {
             const droppable = USER_SET_STATES.includes(state)
             const rows = byState(state)
+            const lane = panelState({ kind: 'work', status: undefined, dormant: false, work: { state } }, undefined)
+            // What a drop HERE would do, while a card is in the air.
+            const dropState = dragging === null ? undefined : dragging.from === state ? 'current' : droppable ? (over === state ? 'over' : 'allowed') : 'refused'
             return (
-              <section key={state} className="board-pane__column" data-board-column={state} {...(droppable ? { 'data-board-drop': '', ...dropHandlers(state) } : {})}>
+              <section key={state} className="board-pane__column" data-board-column={state} data-tone={lane.tone} data-drop-state={dropState}
+                {...(droppable ? { 'data-board-drop': '', ...dropHandlers(state) } : {})}>
                 <h3 className="board-pane__heading"><span className="board-pane__state">{state}</span><span className="board-pane__count">{rows.length}</span></h3>
+                {dropState !== undefined && dropState !== 'current' && (
+                  <p className="board-pane__drop-hint" data-board-drop-hint={dropState}>{dropState === 'refused' ? emptyColumnWord(state, false) : `Drop to move to ${state}`}</p>
+                )}
                 {/* M149 (F.7). An empty column says what it is for — a drop target that
                     looks like one, or the runtime's own rule — never a bare zero. */}
-                {rows.length === 0 && (
+                {rows.length === 0 && dropState === undefined && (
                   <p className="pf__note board-pane__empty" data-board-empty={state}>{emptyColumnWord(state, droppable)}</p>
                 )}
                 <ul className="rail-list rail-list--board">
                   {rows.map((item) => {
                     const carded = props.hasCard(item.id)
                     const teammate = teammateName(item.teammateId)
-                    const lane = item.panelId === undefined ? undefined : (props.laneLabelOf(item.panelId) ?? item.panelId)
+                    const laneLabel = item.panelId === undefined ? undefined : (props.laneLabelOf(item.panelId) ?? item.panelId)
+                    // The provider's word in the board's own vocabulary, shown only when it DISAGREES with the lane — agreement is not news.
+                    const remote = item.remoteState === undefined ? undefined : providerState(item.source, item.remoteState)
                     return (
-                      <li key={item.id} className="rail-row board-row" data-board-row={item.id} draggable
-                        onDragStart={(e) => { e.dataTransfer.setData(WORK_ITEM_MIME, item.id); e.dataTransfer.effectAllowed = 'move' }}>
+                      <li key={item.id} className="rail-row board-row" data-board-row={item.id} draggable data-dragging={dragging?.id === item.id ? 'true' : undefined}
+                        onDragStart={(e) => { e.dataTransfer.setData(WORK_ITEM_MIME, item.id); e.dataTransfer.effectAllowed = 'move'; setDragging({ id: item.id, from: item.state }) }}
+                        onDragEnd={() => { setDragging(null); setOver(null) }}>
+                        <div className="board-row__top">
+                          <span className="board-row__repo" data-board-repo title={item.url ?? item.key ?? item.source}>{repositoryOf(item)}</span>
+                          {remote !== undefined && remote.state !== undefined && remote.state !== item.state && (
+                            <span className="board-row__remote" data-tone={remote.tone} data-board-remote title={`${item.source} said “${item.remoteState}” when this item was added`}>{`${remote.word} on ${item.source}`}</span>
+                          )}
+                          {item.pr !== undefined && (
+                            <a className="board-row__pr" href={item.pr.url} data-board-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
+                              onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: item.panelId ?? '', target: (item.pr as { url: string }).url }) }}>#{item.pr.number}</a>
+                          )}
+                        </div>
                         <button type="button" className="rail-row__main" title={carded ? `Go to ${item.title}` : `${item.title} has no card on this canvas`}
                           {...shellControl(() => { if (carded) props.onGoTo(item.id) })}>
                           <span className="rail-row__label">{item.title}</span>
                         </button>
-                        {/* The key, the teammate and the lane as a SECOND line — three facts do not fit a one-line tail; each ABSENT when unknown, never a dash. */}
-                        <span className="board-row__facts" data-board-facts>{[item.key, teammate, lane].filter((x) => x !== undefined).join(' · ')}</span>
-                        {item.pr !== undefined && (
-                          <a className="board-row__pr" href={item.pr.url} data-board-pr onMouseDown={(e) => e.stopPropagation()} onAuxClick={(e) => e.preventDefault()}
-                            onClick={(e) => { e.preventDefault(); void window.canvas.links.open({ panelId: item.panelId ?? '', target: (item.pr as { url: string }).url }) }}>#{item.pr.number}</a>
-                        )}
+                        {/* The key, the teammate and the lane as the card's foot — each ABSENT when unknown, never a dash. */}
+                        <span className="board-row__facts" data-board-facts>{[item.key, teammate, laneLabel].filter((x) => x !== undefined).join(' · ')}</span>
                         {/* A working card's note is the one sentence the runtime left (`lane closed`, a refusal). */}
                         {item.note !== undefined && <span className="board-row__note" data-board-note>{item.note}</span>}
                         {!carded && (

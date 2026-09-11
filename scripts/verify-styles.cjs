@@ -1164,7 +1164,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
   // edge-waiting: M232's join breath — a MOMENT like the others, three breaths
   // and then rest, never a heartbeat (pulse.1's rule, applied to an edge).
-  const allowed = ['chat-caret', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse']
+  // wf-flow: M259's traveling highlight — one bright segment walks each
+  // finished edge of a selected run ONCE and ends invisible; a moment, never a loop.
+  const allowed = ['chat-caret', 'edge-waiting', 'navgrid-cell-enter', 'palette-enter', 'panel-enter', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))

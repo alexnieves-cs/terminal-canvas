@@ -19,6 +19,9 @@ module.exports = {
      the schema they project. Only "Run reaches M80's instantiation" needs a
      real renderer, and that lives in verify:panels. */
   ...require('../src/renderer/workflow/workflow-diagram'),
+  /* M259. The editor's graph reading over the same record — paths, issues,
+     auto layout, edge curves, the run timeline. Pure, so it lives here too. */
+  ...require('../src/renderer/workflow/workflow-graph'),
   /* M84's trigger words, so workflow.panel.1d can assert the round-tripped
      trigger still reads in the ONE vocabulary rather than restating it. */
   ...require('../src/shared/watch-trigger'),
