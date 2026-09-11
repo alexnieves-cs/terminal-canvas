@@ -428,6 +428,9 @@ body {
     "top top top top"
     "dock nav canvas context";
 }
+/* M257. Wide has room to teach the navigation model. This remains a real
+   column, so every canvas measurement keeps the inset identity above. */
+.shell[data-bp="wide"] { --shell-dock-w: 156px; }
 /* Not resident: a zero-width column, never display:none (see above). The
    hairline goes with it — a 1px border on a 0px column is a 1px column, and
    verify:panels shell.1 reads the width as exactly 0. */
@@ -506,8 +509,8 @@ body {
   overflow: hidden;
 }
 
-/* The dock. 48px, always resident, one icon per navigator; the badge sits on
-   the Attention icon and the popover opens beside it. */
+/* The dock is always resident: 48px through standard, then a labelled 156px
+   rail at wide. The Attention badge and popover stay attached to its icon. */
 .shell__dock {
   display: flex;
   flex-direction: column;
@@ -644,13 +647,17 @@ body {
    already has a title and the terminal is the thing on screen worth looking
    at. */
 .shell__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
   font-size: var(--t-sm);
   font-weight: 600;
   color: var(--fg-2);
   margin-right: var(--sp-2);
   -webkit-app-region: no-drag;
 }
-.shell__mark span { color: var(--iris); }
+.shell__mark svg { color: var(--iris); }
+.shell__mark span { color: var(--fg-2); }
 
 /* The top bar's controls. Small, quiet chrome: the canvas is the subject and
    a toolbar that competes with it for attention is worse than no toolbar. */
@@ -702,6 +709,52 @@ body {
   box-shadow: none;
 }
 .shell__spacer { flex: 1; }
+.shell__workspace {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  max-width: 34%;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  -webkit-app-region: no-drag;
+}
+.shell__workspace > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell__breadcrumb-separator { color: var(--fg-4); }
+.shell__task { color: var(--fg); }
+.shell__search { margin-left: auto; min-width: 280px; justify-content: flex-start; }
+.shell__search > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell__search kbd { margin-left: auto; }
+.shell__view { position: relative; -webkit-app-region: no-drag; }
+.shell__top .shell__view-trigger { padding-inline: var(--sp-3); }
+.shell__top { overflow: visible; z-index: 920; }
+.shell__view-menu {
+  position: absolute;
+  top: calc(100% + var(--sp-3));
+  right: 0;
+  width: 224px;
+  padding: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--glass-3);
+  box-shadow: var(--e-3);
+  z-index: 950;
+}
+.shell__view-menu[hidden] { display: none; }
+.shell__top .shell__view-menu button { width: 100%; justify-content: flex-start; }
+.shell__top .shell__view-menu button > kbd { margin-left: auto; }
+.shell__view-heading { padding: var(--sp-3) var(--sp-4) var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); font-weight: 600; }
+.shell__view-check { display: inline-flex; width: 16px; justify-content: center; color: var(--iris); }
+
+@media (max-width: 1220px) {
+  .shell__search { min-width: 0; }
+  .shell__search > span { max-width: 86px; }
+  .shell__workspace { max-width: 24%; }
+}
 
 /* M45. A shortcut chip, on exactly the two top-bar buttons whose shortcut
    is the way most people will reach them (New panel, Search). A chip on
@@ -1857,7 +1910,10 @@ body {
   top: var(--sp-5);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
+  /* M257. The top bar is a stacking context so its View menu can cross the
+     shell grid. A persistent mode's on-strip exit must still win hit testing
+     below that row; otherwise the bar's overflow catches the real Stop click. */
+  z-index: 930;
   padding: var(--sp-2) var(--sp-5);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-full);
@@ -4916,7 +4972,7 @@ body {
 .md__code-inline { font-family: var(--font-mono); font-size: var(--t-sm); padding: 0 var(--sp-1); border-radius: var(--r-sm); background: var(--s-2); }
 .md__link { color: var(--iris); text-decoration: underline; text-decoration-color: var(--iris-dim); }
 
-/* M171. THE RAIL AS PLACES. A quiet caps heading with its count (never a
+/* M171/M257. THE RAIL AS PLACES. A quiet direct heading with its count (never a
    `.rail-row`); the kind glyph in a soft tint on every row; the state a DOT
    after the label with the word on the row's title — the tail keeps the word
    for the checks, clipped; `start` rests at 0 and reveals with the row's hover
@@ -4933,9 +4989,8 @@ body {
 .rail-row--selected { background: var(--iris-dim); border-radius: var(--r-md); }
 @media (prefers-reduced-motion: reduce) { .rail-row__start { transition: none; } }
 
-/* M172. THE DOCK AND TOP BAR. A button's name is a tag beside it, at rest at
-   0 and revealed on hover or keyboard focus (the dock stays one icon wide —
-   the navigator is the wide thing); the current place is a soft filled pill;
+/* M172/M257. THE DOCK AND TOP BAR. A button's name is a tag beside it at
+   compact/standard and a persistent label at wide; the current place is a soft filled pill;
    the capsules are gone (the metrics rule). The top bar's search reads as a
    FIELD — a hairline and the pill radius — and stays a button (shell 78 opens
    the palette through it). */
@@ -4947,6 +5002,42 @@ body {
 .shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
 .shell__top .shell__search:hover { color: var(--fg); background: var(--s-3); }
 @media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
+
+/* M257. One set of dock buttons serves two densities. Compact/Standard keeps
+   the learned icon strip and its tooltip; Wide exposes the names and groups. */
+.dock__product { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--iris); flex: 0 0 auto; }
+.dock__group { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); width: 100%; }
+.dock__group--system { margin-top: auto; }
+.dock__group-label { display: none; }
+.dock__label kbd { margin-left: var(--sp-3); color: var(--fg-4); font: inherit; }
+.shell[data-bp="wide"] .shell__dock { align-items: stretch; padding-inline: var(--sp-3); }
+.shell[data-bp="wide"] .dock__product { margin-left: var(--sp-2); }
+.shell[data-bp="wide"] .dock__group { align-items: stretch; }
+.shell[data-bp="wide"] .dock__group-label { display: block; padding: var(--sp-3) var(--sp-3) var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); font-weight: 600; }
+.shell[data-bp="wide"] .dock__button { width: 100%; justify-content: flex-start; padding-inline: var(--sp-3); }
+.shell[data-bp="wide"] .dock__label { position: static; transform: none; padding: 0; border: 0; background: transparent; opacity: 1; display: flex; flex: 1; align-items: center; }
+.shell[data-bp="wide"] .dock__button--on::before { left: calc(-1 * var(--sp-3)); }
+.shell[data-bp="wide"] .dock__badge { right: var(--sp-2); }
+
+/* The navigator's list filter is a view over the row's own live subscription;
+   no central state fan-out is introduced. */
+.navigator__filters { display: flex; gap: var(--sp-1); padding: var(--sp-2); overflow-x: auto; }
+.navigator__filter { flex: 0 0 auto; border: 1px solid transparent; border-radius: var(--r-full); background: transparent; color: var(--fg-3); padding: var(--sp-1) var(--sp-3); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.navigator__filter:hover { color: var(--fg); background: var(--s-3); }
+.navigator__filter--on { color: var(--iris); background: var(--iris-dim); border-color: var(--line); }
+.rail-list--panels[data-rail-filter="running"] .rail-row[data-running="false"],
+.rail-list--panels[data-rail-filter="needs-you"] .rail-row[data-needs-you="false"],
+.rail-list--panels[data-rail-filter="changed"] .rail-row[data-changed="false"],
+.rail-list--panels[data-rail-filter="asleep"] .rail-row[data-asleep="false"] { display: none; }
+.rail-row[hidden] { display: none; }
+.rail-heading { text-transform: none; letter-spacing: 0; }
+.rail-heading__button { display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.rail-heading__button svg { width: 12px; height: 12px; }
+.rail-row__mark { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.rail-row:hover .rail-row__mark, .rail-row:focus-within .rail-row__mark { opacity: 1; }
+.rail-row[data-needs-you="true"] { background: var(--amber-dim); }
+.rail-row[data-needs-you="true"].rail-row--selected { box-shadow: inset 3px 0 0 var(--amber); }
+@media (prefers-reduced-motion: reduce) { .rail-row__mark { transition: none; } }
 
 /* M173. The empty state's hints and the launcher's tmux banner: sentences in
    the UI face where a person needs them; the strip that carried them is gone. */

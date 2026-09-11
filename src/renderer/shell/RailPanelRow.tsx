@@ -1,10 +1,10 @@
 import { useLastLine } from '@renderer/session/last-line-store'
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import type { RailRow } from './rail-rows'
+import type { RailGroupId, RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH, Lock, Pin, KindTerminal } from '@renderer/icons'
-import { panelState } from '@renderer/panels/panel-state'
+import { panelState, toneIsAsleep, toneIsRunning, toneNeedsYou } from '@renderer/panels/panel-state'
 import { useChat } from '@renderer/chat/chat-store'
 import { useWatch } from '@renderer/watcher/watcher-store'
 import { chatStateInput } from '@renderer/chat/chat-model'
@@ -19,6 +19,8 @@ export interface RailPanelRowProps {
   onClose: (id: string) => void
   /** M66. The merged view is read-only; its rows say so instead of starting. */
   merged?: boolean
+  groupId: RailGroupId
+  hidden?: boolean
 }
 
 /**
@@ -38,7 +40,7 @@ export interface RailPanelRowProps {
  * defensible answer about which one a click meant.
  */
 function RailPanelRowImpl({
-  row, selected, onGoTo, onStart, onClose, merged = false
+  row, selected, onGoTo, onStart, onClose, merged = false, groupId, hidden = false
 }: RailPanelRowProps): JSX.Element {
   const last = useLastLine(row.id)
   const state = useAgentState(row.id)
@@ -69,10 +71,20 @@ function RailPanelRowImpl({
   // the row's title, and the tail keeps the word for the checks, clipped.
   const Glyph = row.state.kind === 'terminal' ? KindTerminal : KIND_GLYPH[row.state.kind]
   const stateful = shown.tone !== 'kind'
+  const running = toneIsRunning(shown.tone)
+  const needsYou = toneNeedsYou(shown.tone)
+  const changed = last.unread || row.state.kind === 'review' || row.state.kind === 'github' || row.state.kind === 'jira'
+  const asleep = toneIsAsleep(shown.tone) || row.dormant
   return (
     <li
       className={`rail-row${selected ? ' rail-row--selected' : ''}`}
       data-rail-row={row.id}
+      data-rail-group-row={groupId}
+      data-running={running}
+      data-needs-you={needsYou}
+      data-changed={changed}
+      data-asleep={asleep}
+      hidden={hidden}
     >
       {/*
         goToPanel — frame, select, raise — and NEVER onSelectPanel. Waking

@@ -95,6 +95,13 @@ export const Commit = (p: IconProps): JSX.Element => (
 export const Grid = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" /><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" /><rect x="9" y="9" width="4.5" height="4.5" rx="1" /></Svg>
 )
+/** M257. The product's canvas orbit: one authored object moving through one workspace. */
+export const ProductMark = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M3 10.5C1.5 7.5 3.5 3.5 7 2.5c3.2-.9 6.3 1.1 6.5 4.2.2 3.4-3 6.8-6.7 6.8" /><circle cx="7.2" cy="7.1" r="2.1" fill="currentColor" stroke="none" /><path d="M2.5 12.5h3v-3" /></Svg>
+)
+export const People = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="6" cy="6" r="2.25" /><circle cx="11.5" cy="6.5" r="1.6" /><path d="M2.5 13c.3-2.3 1.8-3.5 3.7-3.5S9.7 10.7 10 13M10 10c1.8-.1 3 .9 3.5 2.5" /></Svg>
+)
 export const Folder = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12z" /></Svg>
 )

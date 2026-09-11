@@ -311,6 +311,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    id: 'shell.collapsedRailGroups',
+    label: 'Collapsed navigator sections',
+    description: 'remember which Canvas navigator sections you folded closed',
+    keywords: ['navigator', 'sections', 'groups', 'collapse', 'fold'],
+    type: 'list',
+    default: [],
+    category: SHELL_CATEGORY
+  },
+  {
     id: 'terminal.fontSize',
     planWritable: true,
     label: 'Terminal font size',

@@ -507,7 +507,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined }))
 
   const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
-  const OVERLAY = /\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  const OVERLAY = /\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1054,15 +1054,14 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     rounded && ring && interruptRest && interruptLive && sendLive && chips && approval, JSON.stringify({ rounded, ring, interruptRest, interruptLive, sendLive, chips, approval }))
 }
 
-// M171 — rail.1. THE RAIL AS PLACES: a quiet heading rule (`.rail-heading`,
-// the caps tracking, never `.rail-row` — empty.1 counts rows); the kind glyph
+// M171/M257 — rail.1. THE RAIL AS PLACES: a direct title-case heading rule
+// (`.rail-heading`, never `.rail-row` — empty.1 counts rows); the kind glyph
 // in a soft tint; a state DOT slot on every stateful row with the word kept
 // in the tail but clipped (the checks read its text; a person reads the dot
 // and the title); `start` at opacity 0 revealed on the row's hover /
 // focus-within (the rest rule); the selected row a soft filled pill.
 {
-  const heading = all.find((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel))
-  const headingOk = heading ? /letter-spacing:\s*var\(--track-caps\)/.test(heading.body) && /text-transform:\s*uppercase/.test(heading.body) : false
+  const headingOk = all.some((r) => /(^|,)\s*\.rail-heading\s*(,|$)/.test(r.sel) && /text-transform:\s*none/.test(r.body))
   const tint = all.some((r) => /(^|,)\s*\.rail-row__kind\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
   // `some`, not `find`: these subjects have an M46/M66 rule earlier in the file and the M171 rule later.
   const clipped = all.some((r) => /\.rail-list--panels \.rail-row__tail\s*(,|$)/.test(r.sel) && /position:\s*absolute/.test(r.body) && /clip/.test(r.body)) && !all.some((r) => /(^|,)\s*\.rail-row__tail\s*(,|$)/.test(r.sel) && /clip/.test(r.body)) // scoped to the Panels list: other lists' tails are facts
@@ -1070,13 +1069,13 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const startHidden = all.some((r) => /(^|,)\s*\.rail-row__start\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const startReveal = all.some((r) => /\.rail-row:hover \.rail-row__start/.test(r.sel) && /\.rail-row:focus-within \.rail-row__start/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
   const pill = all.some((r) => /(^|,)\s*\.rail-row--selected\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body) && /border-radius:\s*var\(--r-md\)/.test(r.body))
-  ok('rail.1', 'a caps heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
+  ok('rail.1', 'a direct title-case heading rule, the kind glyph tinted, the tail clipped beside a state dot, start hidden at rest and revealed on hover/focus-within, the selected row a filled pill',
     headingOk && tint && clipped && dot && startHidden && startReveal && pill, JSON.stringify({ headingOk, tint, clipped, dot, startHidden, startReveal, pill }))
 }
 
-// M172 — dock.1. THE DOCK AS NAMED PLACES: each button carries a `.dock__label`
-// at opacity 0 that reveals on the button's :hover / :focus-visible (a tag
-// beside the icon, never a wider dock); the current place is a filled pill
+// M172/M257 — dock.1. THE DOCK AS NAMED PLACES: each button carries a
+// `.dock__label` hidden in the icon dock and revealed on hover/focus-visible;
+// Wide turns those same labels into a persistent grouped rail. The current place is a filled pill
 // (--iris-dim); the `N live / N quiet` capsules are gone from the dock (the
 // metrics rule — the count lives in the rail's `Agents · N` heading), so no
 // `.dock__capsule` rule remains and `Dock.tsx` renders no `data-dock-capsules`;
@@ -1085,13 +1084,34 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
 {
   const label = all.some((r) => /(^|,)\s*\.dock__label\s*(,|$)/.test(r.sel) && /(^|;|\s)opacity:\s*0\s*(;|$)/.test(r.body))
   const reveal = all.some((r) => /\.dock__button:hover \.dock__label/.test(r.sel) && /\.dock__button:focus-visible \.dock__label/.test(r.sel) && /opacity:\s*1\b/.test(r.body))
+  const wide = all.some((r) => /\.shell\[data-bp="wide"\]/.test(r.sel) && /--shell-dock-w:\s*156px/.test(r.body)) && all.some((r) => /\.shell\[data-bp="wide"\] \.dock__label/.test(r.sel) && /position:\s*static/.test(r.body) && /opacity:\s*1/.test(r.body))
   const on = all.some((r) => /(^|,)\s*\.dock__button--on\s*(,|$)/.test(r.sel) && /background:\s*var\(--iris-dim\)/.test(r.body))
   const noCapsule = !all.some((r) => /\.dock__capsule/.test(r.sel))
   const dockSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
   const noCapsuleDom = !/data-dock-capsules/.test(dockSrc)
   const search = all.some((r) => /\.shell__top \.shell__search\s*(,|$)/.test(r.sel) && /border-radius:\s*var\(--r-full\)/.test(r.body) && /border:\s*1px solid var\(--line\)/.test(r.body)) // (0,2,0): the bar's generic button rule must not win
-  ok('dock.1', 'the dock buttons carry a hidden label revealed on hover/focus-visible, the current place is a filled pill, the capsules are gone from the dock and its CSS, and the top bar\'s search is a field-shaped button',
-    label && reveal && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, on, noCapsule, noCapsuleDom, search }))
+  ok('dock.1', 'the dock buttons carry tooltip labels, Wide expands them into a persistent grouped rail, the current place is filled, capsules stay gone, and Search is field-shaped',
+    label && reveal && wide && on && noCapsule && noCapsuleDom && search, JSON.stringify({ label, reveal, wide, on, noCapsule, noCapsuleDom, search }))
+}
+
+// M257 — the recommendations are a connected shell contract, not independent copy edits.
+{
+  const top = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'TopBar.tsx'), 'utf8')
+  const dock = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Dock.tsx'), 'utf8')
+  const nav = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'Navigator.tsx'), 'utf8')
+  const row = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'shell', 'RailPanelRow.tsx'), 'utf8')
+  const settings = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'settings-schema.ts'), 'utf8')
+  const topOk = /\+ Create/.test(top) && /Search panels, files, tasks, commands/.test(top) && /shell__workspace/.test(top) && /shell__view-menu/.test(top) && /onSetTheme/.test(top)
+  const dockOk = ['Work', 'Content', 'Connections', 'System', 'Canvas', 'Tasks', 'Notes', 'Notifications', 'Settings'].every((word) => dock.includes(word)) && /ProductMark/.test(dock)
+  const state = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panels', 'panel-state.ts'), 'utf8')
+  const filters = ['All', 'Running', 'Needs you', 'Changed', 'Asleep'].every((word) => state.includes(word)) && /PANEL_FILTERS/.test(nav) && /data-rail-filter/.test(nav)
+  const collapse = /shell\.collapsedRailGroups/.test(nav) && /aria-expanded/.test(nav) && /group\.label}\s*{group\.rows\.length}/.test(nav)
+  const rowOk = /data-needs-you/.test(row) && /rail-row__mark/.test(row)
+  const stylesOk = all.some((r) => /\.rail-row\[data-needs-you="true"\]/.test(r.sel) && /var\(--amber-dim\)/.test(r.body)) && all.some((r) => /\.rail-row__mark/.test(r.sel) && /opacity:\s*0/.test(r.body))
+  const settingOk = /id:\s*'shell\.collapsedRailGroups'/.test(settings) && /type:\s*'list'/.test(settings)
+  ok('shell.recommendations.1', 'top bar, grouped dock and filtered collapsible navigator land as one contract',
+    topOk && dockOk && filters && collapse && rowOk && stylesOk && settingOk,
+    JSON.stringify({ topOk, dockOk, filters, collapse, rowOk, stylesOk, settingOk }))
 }
 
 // M173 — hud.2. THE STATUS BAR AT REST SAYS NOTHING: `.canvas-hud` is a

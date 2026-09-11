@@ -45,6 +45,21 @@ export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'wo
 export const TONE_WORKING: Tone = 'working'
 export const TONE_NEEDS_YOU: Tone = 'needs-you'
 
+/** M257. Navigator filters name the same vocabulary without respelling it in a view. */
+export const PANEL_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'running', label: 'Running' },
+  { id: 'needs-you', label: 'Needs you' },
+  { id: 'changed', label: 'Changed' },
+  { id: 'asleep', label: 'Asleep' }
+] as const
+export type PanelFilter = typeof PANEL_FILTERS[number]['id']
+export function toneIsRunning(tone: Tone): boolean {
+  return tone === 'working' || tone === 'idle' || tone === 'starting' || tone === 'needs-you'
+}
+export function toneNeedsYou(tone: Tone): boolean { return tone === 'needs-you' }
+export function toneIsAsleep(tone: Tone): boolean { return tone === 'asleep' }
+
 export interface StateInput {
   kind: StateKind
   status: PanelStatus | undefined

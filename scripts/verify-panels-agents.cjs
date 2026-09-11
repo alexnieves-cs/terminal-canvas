@@ -589,9 +589,11 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           }
           return out })()`)
         const dockClickT = (name) => wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="' + ${JSON.stringify(name)} + '"]'); if (!b) return false; b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return true })()`)
+        await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
         const targetsA = await measure(['.rail-row__start', '.rail-row__close', '.panel__close',
           '.shell__settings', '[data-hud-zoom-in]', '[data-hud-zoom-out]',
           '[data-dock]', '.shell__rail-toggle', '.shell__inspector-toggle', '.shell__merge'])
+        await wc.executeJavaScript(`document.querySelector('.shell__view-trigger')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`); await settle()
         await dockClickT('workspaces'); await settle()
         const targetsB = await measure(['.rail-row__rename', '.shell__region-add'])
         await dockClickT('panels'); await settle()
@@ -843,7 +845,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         ok(IDS[5],
           hud.inTopBar === 0 && hud.inHud === true && scaleAfter > scaleBefore &&
             vpH1.x === vpH2.x && vpH1.y === vpH2.y && vpH1.scale === vpH2.scale &&
-            hud.mergePressed === 'false' && hud.mergeText === '',
+            hud.mergePressed === 'false' && hud.mergeText.includes('Merged view'),
           JSON.stringify({ hud, scaleBefore, scaleAfter, vpH1, vpH2 }))
 
         // empty.1. Close the last panel through the rail; the pane must say so.
@@ -2051,8 +2053,10 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const home = require('node:os').homedir()
         layoutStore.setPreference('terminal.fontSize', 13)
         layoutStore.save({ panels: fromPanels([
-          { kind: 'terminal', rect: { id: 'tA', x: 60, y: 60, w: 520, h: 320 }, z: 1, spec: { panelId: 'tA', cwd: home, command: '/bin/sh', args: [] } },
-          { kind: 'terminal', rect: { id: 'tB', x: 640, y: 60, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
+          // M257's two-line resting creation row owns the top of the canvas;
+          // keep this pointer-metrics fixture below that chrome.
+          { kind: 'terminal', rect: { id: 'tA', x: 60, y: 160, w: 520, h: 320 }, z: 1, spec: { panelId: 'tA', cwd: home, command: '/bin/sh', args: [] } },
+          { kind: 'terminal', rect: { id: 'tB', x: 640, y: 160, w: 520, h: 320 }, z: 2, spec: { panelId: 'tB', cwd: home, command: '/bin/sh', args: [] }, fontSize: 20 }
         ]), camera: { x: 0, y: 0, scale: 1 }, selectedId: null, focusedId: null })
         layoutStore.flushSync()
         const reT = new Promise((resolve) => wc.once('did-finish-load', resolve))
@@ -3171,8 +3175,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     }
 
     // -------------------------------------------------------------------
-    // M66 — labels.3 / labels.4. EVERY CONTROL SAYS WHAT IT IS. The merged
-    // view names itself in the top bar while it is on and its lane headers
+    // M66/M257 — labels.3 / labels.4. EVERY CONTROL SAYS WHAT IT IS. The merged
+    // view names itself in View while it is on and its lane headers
     // are chrome-sized screen-space elements naming the workspace (labels.3);
     // an attention pip carries a chip naming its panel and the state word
     // (labels.4) — an amber wedge at the canvas edge with no name was M61's
@@ -3183,7 +3187,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onL = (_e, level, message) => { if (level >= 2) lLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onL)
       const IDS = [
-        'labels.3 the merged view names itself in the top bar and its lane headers are chrome-sized and name the workspace',
+        'labels.3 the merged view names itself in View and its lane headers are chrome-sized and name the workspace',
         'labels.4 an off-screen panel that needs you gets a pip with a chip naming it and its state word'
       ]
       try {
@@ -3198,17 +3202,17 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const reL = new Promise((resolve) => wc.once('did-finish-load', resolve))
         wc.reload(); await reL
         await settle()
-        // Merged view: the button, then the label and the headers.
+        // Merged view: the mounted View-menu button, then its pressed label and the headers.
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
         const merged = await wc.executeJavaScript(`(() => {
-          const label = document.querySelector('[data-merge-label]')
+          const label = document.querySelector('.shell__view-menu .shell__merge')
           const headers = [...document.querySelectorAll('[data-lane-header]')].map((h) => ({ name: h.querySelector('.lane-header__name')?.textContent, size: getComputedStyle(h.querySelector('.lane-header__name')).fontSize, inWorld: h.closest('.world') !== null }))
-          return { label: label ? label.textContent : null, headers }
+          return { label: label ? label.textContent.trim() : null, pressed: label?.getAttribute('aria-pressed') ?? null, headers }
         })()`)
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__merge'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
         await settle()
-        ok(IDS[0], merged.label === 'merged view · read-only' && merged.headers.length >= 1 && merged.headers.every((h) => typeof h.name === 'string' && h.name.length > 0 && !h.inWorld && parseFloat(h.size) >= 11),
+        ok(IDS[0], merged.label === 'Merged view' && merged.pressed === 'true' && merged.headers.length >= 1 && merged.headers.every((h) => typeof h.name === 'string' && h.name.length > 0 && !h.inWorld && parseFloat(h.size) >= 11),
           JSON.stringify({ merged, log: lLog.slice(-3) }))
 
         // The near panel wakes (a dormant off-screen panel is never spawned,

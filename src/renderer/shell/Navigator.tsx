@@ -1,4 +1,4 @@
-import { memo, type JSX } from 'react'
+import { memo, useEffect, useState, type JSX } from 'react'
 import type { RailRow } from './rail-rows'
 import type { RailWorkspace } from './rail-sections'
 import type { FileRow } from './file-tree-model'
@@ -13,9 +13,10 @@ import { TeammatesPane, type TeammatesPaneProps } from './TeammatesPane'
 import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { SkillsPane, type SkillsPaneProps } from './SkillsPane'
 import { shellControl } from './shell-control'
-import { ChevronLeft, Plus, Lanes, Grid, Layers } from '@renderer/icons'
-import { railGroups } from './rail-rows'
+import { ChevronDown, ChevronLeft, ChevronRight, Plus, Lanes, Grid, Layers } from '@renderer/icons'
+import { railGroups, type RailGroupId } from './rail-rows'
 import { EmptyState } from './EmptyState'
+import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
 
 export interface NavigatorProps {
   navigator: NavigatorPane
@@ -97,6 +98,27 @@ export interface NavigatorProps {
  */
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
+  const [filter, setFilter] = useState<PanelFilter>('all')
+  const [collapsed, setCollapsed] = useState<Set<RailGroupId>>(new Set())
+  useEffect(() => {
+    let live = true
+    const read = (): void => {
+      void window.canvas.settings.list().then((rows) => {
+        if (!live) return
+        const value = rows.find((row) => row.id === 'shell.collapsedRailGroups')?.value
+        if (Array.isArray(value)) setCollapsed(new Set(value.filter((id): id is RailGroupId => ['agents', 'files', 'reviews', 'work', 'workflows', 'capabilities'].includes(id))))
+      })
+    }
+    read()
+    const off = window.canvas.settings.onChanged(read)
+    return () => { live = false; off() }
+  }, [])
+  const toggleGroup = (id: RailGroupId): void => {
+    const next = new Set(collapsed)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    setCollapsed(next)
+    void window.canvas.settings.set('shell.collapsedRailGroups', [...next])
+  }
   const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Connections' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
@@ -226,7 +248,14 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
               ))}
             </ul>
           ) : (
-            <ul className="rail-list rail-list--panels" aria-label="Panels">
+            <>
+            <div className="navigator__filters" role="group" aria-label="Filter panels">
+              {PANEL_FILTERS.map(({ id, label }) => (
+                <button key={id} type="button" className={filter === id ? 'navigator__filter navigator__filter--on' : 'navigator__filter'}
+                  aria-pressed={filter === id} {...shellControl(() => setFilter(id))}>{label}</button>
+              ))}
+            </div>
+            <ul className="rail-list rail-list--panels" aria-label="Panels" data-rail-filter={filter}>
               {props.rows.length === 0 ? (
                 // M46 (spec §8.3). The one section that rendered NOTHING when
                 // empty; every unconditionally rendered list owes an empty
@@ -245,7 +274,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                    are, with counts. A heading is never a `.rail-row` (empty.1
                    counts rows) and never renders over nothing (railGroups). */
                 railGroups(props.rows).flatMap((group) => [
-                  <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id}>{group.label} · {group.rows.length}</li>,
+                  <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id}><button type="button" className="rail-heading__button" aria-expanded={!collapsed.has(group.id)} {...shellControl(() => toggleGroup(group.id))}>{collapsed.has(group.id) ? <ChevronRight /> : <ChevronDown />}<span>{group.label} {group.rows.length}</span></button></li>,
                   ...group.rows.map((row) => (
                     <RailPanelRow
                       key={row.id}
@@ -255,11 +284,14 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                       onStart={props.onStartPanel}
                       merged={props.merged}
                       onClose={props.onClosePanel}
+                      groupId={group.id}
+                      hidden={collapsed.has(group.id)}
                     />
                   ))
                 ])
               )}
             </ul>
+            </>
           )}
         </>
       )}

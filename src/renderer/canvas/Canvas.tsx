@@ -6954,13 +6954,16 @@ export function Canvas({
         onToggleAttention={chrome.toggleAttention}
         onGoToPanel={paletteActions.goToPanel}
         onAnswer={paletteActions.answerApproval}
+        onSettings={openSettingsScope}
       />
       <TopBar
         presets={presetRows}
         onOpenSheet={paletteActions.beginSpawnSheet}
         workspaceName={workspaceRows.find((w) => w.active)?.name}
+        taskName={selectedId === null ? undefined : (() => { const task = taskMenuRef.current(selectedId); return task.kind === 'one' ? task.title : undefined })()}
         onSearch={palette.openPalette}
-        onSettings={openSettingsScope}
+        theme={(() => { const value = settingRows.find((row) => row.id === 'appearance.theme')?.value; return value === 'light' || value === 'dark' ? value : 'system' })()}
+        onSetTheme={(value) => { void window.canvas.settings.set('appearance.theme', value) }}
         merged={merged}
         onToggleMerged={toggleMerged}
         contextOpen={chrome.ctxVisible}
