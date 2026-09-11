@@ -1123,6 +1123,23 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       ok('80 the inspector chord toggles the inspector and leaves the rail alone',
         after.inspector !== before.inspector && after.rail === before.rail,
         `before=${JSON.stringify(before)} after=${JSON.stringify(after)}`)
+      // The class alone was not enough: Canvas's inline `--shell-ctx-w` beat
+      // the collapsed class's zero, so 80 went green while the pane stayed on
+      // screen at full width. The width is the fact a person sees.
+      // 80 may leave it open or collapsed depending on entry, so press the
+      // chord until it is collapsed, measure, and press back to 80's state.
+      const chord = () => wc.executeJavaScript(`
+        window.dispatchEvent(new KeyboardEvent('keydown', {
+          key: '|', code: 'Backslash', metaKey: true, shiftKey: true,
+          repeat: false, bubbles: true }))
+      `)
+      if (!after.inspector) { await chord(); await sleep(250) }
+      const collapsed = (await classes()).inspector
+      const width = await wc.executeJavaScript(
+        `document.querySelector('.shell__inspector').getBoundingClientRect().width`)
+      ok('ctx-collapse.1 a collapsed inspector takes no width',
+        collapsed && width === 0, `collapsed=${collapsed} width=${width}`)
+      if (!after.inspector) { await chord(); await sleep(250) }
       // What 80 LEAVES BEHIND: the inspector is now COLLAPSED (it was open on
       // entry, from 79's note) and `shell.inspectorOpen` is false in main's
       // store; the rail stays open, the two panels and the camera are

@@ -7126,7 +7126,10 @@ export function Canvas({
       // rule including `.shell[data-bp="compact"]`'s own zeroing, so setting
       // it unconditionally would silently defeat the compact collapse for
       // every user, not only a pinned one.
-      style={(chrome.bp !== 'compact' || inspectorPinned) ? ({ '--shell-ctx-w': `${inspectorWidth}px` } as CSSProperties) : undefined}
+      // Also withheld while the pane is hidden outside Compact, for the same
+      // reason: set there, it beat `.shell--inspector-collapsed`'s zero, so
+      // the Context pane toggle (⇧⌘\) flipped the class and the column stayed.
+      style={((chrome.bp !== 'compact' && chrome.ctxVisible) || (chrome.bp === 'compact' && inspectorPinned)) ? ({ '--shell-ctx-w': `${inspectorWidth}px` } as CSSProperties) : undefined}
       data-bp={chrome.bp}
       onMouseDownCapture={(event) => {
         onMouseDownCapture(event)
