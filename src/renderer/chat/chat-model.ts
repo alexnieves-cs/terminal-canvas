@@ -18,7 +18,7 @@ import { shortPath } from '@renderer/palette/panel-name'
 export type ChatRow =
   /** M167. `at` is the turn's record time when it has one; a live row has none — absent stays absent. */
   | { kind: 'user'; id: string; text: string; at?: number }
-  | { kind: 'text'; id: string; text: string; live: boolean; at?: number }
+  | { kind: 'text'; id: string; turnId: string; text: string; live: boolean; at?: number }
   | { kind: 'thinking'; id: string; text: string; live: boolean }
   | {
       kind: 'tool'
@@ -55,7 +55,7 @@ function blockRows(turnId: string, blocks: readonly ContentBlock[], live: boolea
     const id = `${turnId}:${i}`
     switch (block.type) {
       case 'text':
-        rows.push({ kind: 'text', id, text: texts?.[i] ?? block.text, live, ...(at === undefined ? {} : { at }) })
+        rows.push({ kind: 'text', id, turnId, text: texts?.[i] ?? block.text, live, ...(at === undefined ? {} : { at }) })
         return
       case 'thinking':
         rows.push({ kind: 'thinking', id, text: texts?.[i] ?? block.text, live })
