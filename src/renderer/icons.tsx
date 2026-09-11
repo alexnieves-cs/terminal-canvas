@@ -110,12 +110,17 @@ export const More = (p: IconProps): JSX.Element => (
 export const Maximize = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" /></Svg>
 )
+/** M258. Restore size: the four corners turned inward — Maximize's inverse. */
+export const Restore = (p: IconProps): JSX.Element => (
+  <Svg {...p}><path d="M6 3v3H3M10 3v3h3M6 13v-3H3M10 13v-3h3" /></Svg>
+)
 
 /* M63. Kind glyphs for the rail's left column, 12px, so kind stops sharing
    the state slot. A terminal keeps the state DOT (its column is its state);
    these five say what a sessionless row is. */
+/* M258. A review is a DIFF: a page with an added and a removed line. */
 export const KindReview = (p: IconProps): JSX.Element => (
-  <Svg {...p}><path d="M8 3v10M3 8h10" /><path d="M4 12h8" strokeWidth="1" /></Svg>
+  <Svg {...p}><rect x="2.5" y="2" width="11" height="12" rx="1.5" /><path d="M5 6h2M6 5v2" /><path d="M5 10.5h2" /><path d="M9 6h2.5M9 10.5h2.5" strokeWidth="1" /></Svg>
 )
 export const KindFile = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M4 2h5l3 3v9H4z" /><path d="M9 2v3h3" /></Svg>
@@ -126,8 +131,9 @@ export const KindNote = (p: IconProps): JSX.Element => (
 export const KindToolbox = (p: IconProps): JSX.Element => (
   <Svg {...p}><rect x="2" y="5" width="12" height="8" rx="1" /><path d="M6 5V3h4v2M2 9h12" /></Svg>
 )
+/* M258. A ticket: the stub with its tear notch. */
 export const KindJira = (p: IconProps): JSX.Element => (
-  <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M8 2v12M2 8h6" /></Svg>
+  <Svg {...p}><path d="M2 4.5h12v2a1.5 1.5 0 0 0 0 3v2H2v-2a1.5 1.5 0 0 0 0-3z" /><path d="M10 4.5v7" strokeWidth="1" strokeDasharray="1 1.5" /></Svg>
 )
 /* M74. A terminal: the prompt chevron and a line. */
 export const KindTerminal = (p: IconProps): JSX.Element => (
@@ -146,8 +152,9 @@ export const Lanes = (p: IconProps): JSX.Element => (
 
 /** M66. One map from a sessionless kind to its glyph, for the rail row and the panel frame. */
 /** M83. The project memory: a book's spine. */
+/* M258. An open book, so memory stops reading as a list of lines. */
 export const KindMemory = (p: IconProps): JSX.Element => (
-  <Svg {...p}><path d="M3 4h10" /><path d="M3 8h10" /><path d="M3 12h6" /></Svg>
+  <Svg {...p}><path d="M8 4.5C6.5 3.3 4.5 3 2 3v9.5c2.5 0 4.5.3 6 1.5 1.5-1.2 3.5-1.5 6-1.5V3c-2.5 0-4.5.3-6 1.5z" /><path d="M8 4.5V14" /></Svg>
 )
 
 /** M84. The watcher: an eye on a clock's face — a thing that is watching. */
@@ -166,8 +173,9 @@ export const KindBrowser = (p: IconProps): JSX.Element => (
 )
 
 /* M116. The work card: a board's column with one card in it. */
+/* M258. The work card: a board's three lanes, one card raised in the middle. */
 export const KindWork = (p: IconProps): JSX.Element => (
-  <Svg {...p}><rect x="2" y="2" width="12" height="12" rx="1" /><path d="M2 6h12M5 9h6" /></Svg>
+  <Svg {...p}><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M6 2.5v11M10 2.5v11" strokeWidth="1" /><rect x="6.8" y="5" width="2.4" height="3" rx=".5" /></Svg>
 )
 
 /* M128. A skill: a bookmarked page — the shelf's own card, on a leaf. */

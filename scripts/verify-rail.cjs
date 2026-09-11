@@ -3425,6 +3425,31 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// M258 — last-active.1 / last-active.2. A dormant panel's "last active"
+// signal: a word from a KNOWN time only (absent stays absent — never
+// "idle NaN" and never a guessed "just now"), and the per-panel store that
+// holds it is cleared at every site that clears the last-line store, the
+// sibling it shadows (CLAUDE.md: every per-panel store is cleared at every
+// panel-removing call site, or a recycled id inherits a dead panel's time).
+{
+  const W = R.lastActiveWord
+  const now = Date.UTC(2026, 8, 11, 12, 0, 0)
+  const ago = (ms) => (typeof W === 'function' ? W({ at: now - ms, now, tone: 'asleep' }) : undefined)
+  ok('last-active.1 the word is paused/idle plus a coarse age (<1m, Nm, Nh, Nd) from a known time; an absent, zero or future time says nothing',
+    typeof W === 'function' && ago(20e3) === 'paused <1m' && ago(3 * 60e3) === 'paused 3m' && ago(5 * 3600e3) === 'paused 5h' && ago(2 * 86400e3) === 'paused 2d' &&
+      W({ at: now - 60e3 * 7, now, tone: 'idle' }) === 'idle 7m' &&
+      W({ now, tone: 'asleep' }) === undefined && W({ at: 0, now, tone: 'asleep' }) === undefined && W({ at: now + 60e3, now, tone: 'asleep' }) === undefined,
+    typeof W === 'function' ? JSON.stringify([ago(20e3), ago(3 * 60e3), ago(5 * 3600e3), ago(2 * 86400e3)]) : 'no lastActiveWord export')
+  const { readFileSync, readdirSync, statSync } = require('node:fs')
+  const walk = (d) => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(n) ? [p] : [] })
+  const files = walk(join(__dirname, '..', 'src', 'renderer')).filter((f) => !/session[\\/](last-line|last-active)-store\.ts$/.test(f))
+  const count = (text, re) => (text.match(re) || []).length
+  const drift = files.map((f) => { const t = readFileSync(f, 'utf8'); return { f, line: count(t, /\bclearLastLine\(/g), active: count(t, /\bclearLastActive\(/g) } }).filter((x) => x.line !== x.active)
+  const sites = files.reduce((n, f) => n + count(readFileSync(f, 'utf8'), /\bclearLastActive\(/g), 0)
+  ok('last-active.2 clearLastActive is called beside every clearLastLine, file for file',
+    sites > 0 && drift.length === 0, JSON.stringify({ sites, drift }))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) console.log('FAILED: ' + failed.map((f) => f.n).join(', '))

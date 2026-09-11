@@ -3560,6 +3560,26 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
           c.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0, clientX: 40, clientY: 600 })); return true })()`)
         const menuClosed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
         ok(IDS[2], menuOpenedNow === true && menuInside === true && menuClosed === true, JSON.stringify({ menuOpened, menuInside, menuClosed }))
+        // M258 — menu.keys.1. THE ⋯ MENU WITH NO POINTER: opening moves focus
+        // to its first row, ArrowDown walks to the next, the frame's common
+        // action (Fill view) is one of the rows, and Escape closes the menu
+        // AND hands focus back to the ⋯ button, so the route is complete.
+        const menuKeys = await (async () => {
+          await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]'); if (b) { b.focus(); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })) } return !!b })()`)
+          const open = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') !== null`), 3000)
+          const focusFirst = await waitUntil(() => wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); return m !== null && m.contains(document.activeElement) && m.querySelector('button:not(:disabled)') === document.activeElement })()`), 2000)
+          const walked = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]'); if (!m) return 'no menu'
+            const rows = [...m.querySelectorAll('button:not(:disabled)')]
+            document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+            return { second: rows.length > 1 && document.activeElement === rows[1], fill: m.querySelector('[data-panel-menu-maximise]')?.textContent ?? null } })()`)
+          await wc.executeJavaScript(`document.activeElement && document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+          const closed = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id="hdA"] [data-panel-menu]') === null`), 3000)
+          const back = await wc.executeJavaScript(`document.activeElement === document.querySelector('.panel[data-panel-id="hdA"] [data-panel-more]')`)
+          return { open, focusFirst, walked, closed, back }
+        })()
+        ok('menu.keys.1 the ⋯ menu is keyboard-reachable: opening focuses its first row, ArrowDown walks, Fill view is a row, Escape closes it and returns focus to the ⋯ button',
+          menuKeys.open === true && menuKeys.focusFirst === true && menuKeys.walked?.second === true && menuKeys.walked?.fill === 'Fill view' && menuKeys.closed === true && menuKeys.back === true,
+          JSON.stringify(menuKeys))
         // Wake hdB so the flip is measured on a LIVE panel: the first version of
         // this check passed on two dormant (carded) panels while a running
         // terminal did not turn over at all.

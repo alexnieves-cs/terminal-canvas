@@ -1,9 +1,10 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { shellControl } from '@renderer/shell/shell-control'
-import { panelState } from '@renderer/panels/panel-state'
+import { lastActiveWord, panelState } from '@renderer/panels/panel-state'
 import type { PanelSession } from '@renderer/session/panel-session'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
+import { noteStateWord, useLastActive } from '@renderer/session/last-active-store'
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
@@ -147,6 +148,9 @@ function TerminalPanelImpl({
   // M63. The one state word for this panel, applied to the pill, the card's
   // state line, the summary tier, the block tier and the frame's edge.
   const shown = panelState({ kind: 'terminal', status: session.status, dormant: session.dormant }, agentState)
+  // M258. The last-active store stamps a time only on an OBSERVED change of
+  // word; a remount on a tier change re-notes the same word and stamps nothing.
+  useEffect(() => { noteStateWord(session.id, shown.word) }, [session.id, shown.word])
   useEffect(() => {
     if (openingContext === undefined || session.status.kind !== 'running') return
     session.handle.paste(openingContext)
@@ -226,7 +230,7 @@ function TerminalPanelImpl({
       className={agentClass.trim()}
       // M44. A named group for a screen reader; the kind rides the label so
       // "claude — terminal" reads as one thing rather than an anonymous div.
-      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone }}
+      rootAttrs={{ role: 'group', 'aria-label': `${panelLabel} — terminal`, 'data-agent-state': glow ? agentState : undefined, 'data-tone': shown.tone, 'data-dormant': !live && !session.spawned && session.dormant ? '' : undefined }}
       title={panelLabel}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
@@ -328,6 +332,10 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
   // tail, once, through a store that never bumps registry.version(). A
   // spawned panel keeps reading its own xterm buffer, the live truth.
   const recorded = useScrollbackTail(session.id, !session.spawned && session.dormant)
+  // M258. `paused 3m` from an observed time only; absent says nothing.
+  const lastAt = useLastActive(session.id)
+  const since = lastActiveWord({ at: lastAt, now: Date.now(), tone: shown.tone })
+  const sinceChip = since === undefined ? null : <span className="panel__card-since" data-last-active>{since}</span>
   return (
     <div
       // The card carries the state too. A glow that reached only live panels
@@ -358,11 +366,19 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           {!session.spawned && <div className="panel__card-idle">click to start</div>}
         </div>
       ) : session.spawned ? (
-        lines.map((line, i) => (
-          <div className="panel__card-line" key={i}>{line}</div>
-        ))
-      ) : (
         <>
+          {sinceChip}
+          {lines.map((line, i) => (
+            <div className="panel__card-line" key={i}>{line}</div>
+          ))}
+        </>
+      ) : (
+        /* M258. A dormant card is a COMPRESSED SUMMARY: this group is the
+           visible card, and the frame around it is a dashed ghost of the
+           panel's footprint (styles.css). Visual only — the stored rect is
+           untouched and nothing here reaches a session. */
+        <div className="panel__card-dormant" data-card-dormant>
+          {sinceChip}
           {/* What the panel showed before the app last quit, above the
               affordance rather than instead of it: the lines say what this
               panel was doing, the prompt says how to resume it. Nothing
@@ -386,7 +402,7 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           {/* M178 (F.19): the sentence before the verb — an asleep card with no tail is not a blank. */}
           {session.dormant && (recorded === undefined || recorded.length === 0) && <div className="panel__card-sentence">asleep — nothing recorded before the last quit</div>}
           <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
-        </>
+        </div>
       )}
     </div>
   )

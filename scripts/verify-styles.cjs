@@ -507,7 +507,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
     JSON.stringify({ canvasBg: canvasBg.slice(0, 80), dotUses, dotDeclared, auraShell: auraShell !== undefined, auraCanvas: auraCanvas !== undefined }))
 
   const restingUses = bodyRules.filter((r) => /var\(--e-[12]\)/.test(r.body)).map((r) => r.sel)
-  const OVERLAY = /\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  // M258. The navigation cluster — the minimap and the zoom HUD — floats over
+  // the canvas as one instrument and wears the overlay elevation (the brief's
+  // "stronger separation"); both are named here rather than let --e-3 loose.
+  const OVERLAY = /\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1221,6 +1224,53 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   ok('m207.context.1', 'the inspector keeps generic layout and configuration controls in one full-width disclosure that leaves no empty grid while closed',
     more !== undefined && /grid-column:\s*1\s*\/\s*-1/.test(more.body) && /display:\s*grid/.test(more.body) && hidden !== undefined && /display:\s*none/.test(hidden.body),
     JSON.stringify({ more: more?.body, hidden: hidden?.body }))
+}
+
+// M258 — nav.* / frame-identity.* / dormant.1. Navigation and object
+// identity, as stylesheet facts. Each reads the LAST rule for its selector,
+// because the M258 block is appended and wins on source order.
+{
+  const last = (sel) => all.filter((r) => r.sel.trim() === sel).pop()
+  const has = (sel, re) => all.filter((r) => r.sel.trim() === sel).some((r) => re.test(r.body))
+  ok('nav.separation.1', 'the minimap sits on an opaque raised surface with a strong boundary, the overlay elevation and a ground-colour moat',
+    has('.minimap', /background:\s*var\(--s-3\)/) && has('.minimap', /border-color:\s*var\(--line-strong\)/) && has('.minimap', /box-shadow:\s*var\(--e-3\)/) && has('.minimap', /outline:[^;]*var\(--nav-moat\)/),
+    JSON.stringify(last('.minimap')))
+  ok('nav.legend.1', 'the minimap legend rests at opacity 0 (a --dur-1 transition) and shows at 1 on the map\'s hover, taking no pointer',
+    has('.minimap__legend', /(^|;|\s)opacity:\s*0\s*(;|$)/) && has('.minimap__legend', /transition:[^;]*var\(--dur-1\)/) && has('.minimap__legend', /pointer-events:\s*none/) && has('.minimap:hover .minimap__legend', /opacity:\s*1/),
+    JSON.stringify(last('.minimap__legend')))
+  ok('nav.view.1', 'the camera rectangle is a 2px iris ring and grabbable; a selected block is a neutral ink outline, never iris',
+    has('.minimap__view', /border-width:\s*2px/) && has('.minimap__view', /cursor:\s*grab/) && has('.minimap__view', /pointer-events:\s*auto/) &&
+      has('.minimap__block[data-selected]', /outline:[^;]*var\(--fg\)/) && !has('.minimap__block[data-selected]', /iris/),
+    JSON.stringify({ view: last('.minimap__view'), sel: last('.minimap__block[data-selected]') }))
+  const wide = /@media\s*\(min-width:\s*\d+px\)\s*\{\s*\.minimap\s*\{[^}]*top:\s*auto[^}]*bottom:\s*calc\([^}]*var\(--nav-hud-h\)/.test(bare)
+  ok('nav.cluster.1', 'on a wide window the minimap stacks directly above the zoom HUD (bottom-anchored over --nav-hud-h); narrow it keeps its own corner',
+    wide && has('.minimap', /top:\s*var\(--sp-5\)/), String(wide))
+  ok('nav.readout.1', 'the zoom readout fades to 0 at rest and keeps its box (opacity only, never display)',
+    has('.canvas-hud__readout[data-hud-readout="rest"]', /opacity:\s*0/) && !has('.canvas-hud__readout[data-hud-readout="rest"]', /display:|width:/),
+    JSON.stringify(last('.canvas-hud__readout[data-hud-readout="rest"]')))
+  ok('frame-identity.glyph.1', 'the kind glyph sits in a fixed 16px column',
+    has('.pf__state--kind', /flex:\s*0\s+0\s+16px/) && has('.pf__state--kind', /width:\s*16px/), JSON.stringify(last('.pf__state--kind')))
+  // The slop is the CHROME's pseudo-element, absolutely positioned (no box
+  // resizes, so nothing refits) and switched off on the chromeless kinds,
+  // whose first row belongs to xterm or to the note's text.
+  ok('frame-identity.slop.1', 'the header\'s drag hit-slop is an absolutely positioned pseudo-element below it, and absent on terminal and note frames',
+    has('.pf__chrome::after', /position:\s*absolute/) && has('.pf__chrome::after', /top:\s*100%/) && has('.pf__chrome::after', /z-index:\s*-1/) &&
+      all.some((r) => /\.pf--kind-terminal \.pf__chrome::after/.test(r.sel) && /\.pf--kind-note \.pf__chrome::after/.test(r.sel) && /content:\s*none/.test(r.body)),
+    JSON.stringify(last('.pf__chrome::after')))
+  ok('frame-identity.interior.1', 'each kind has its interior: an editorial measure in ch for file prose, graph paper for a workflow, lanes for a board, a floating address pill for a browser',
+    has('.pf--kind-file .file-node__prose', /max-width:\s*var\(--measure-read\)/) && /--measure-read:\s*\d+ch/.test(bare) &&
+      has('.pf--kind-workflow .workflow-node__body', /background-size:\s*var\(--grid-pitch\)/) &&
+      has('.pf--kind-work .work-node__body', /var\(--lane-line\)/) &&
+      has('.pf--kind-browser .browser-node__bar', /border-radius:\s*var\(--r-full\)/),
+    'interior rules')
+  // Visual only: a dormant frame changes paint and the card's inner layout,
+  // never the .panel box (width/height/inset), so the stored rect is what
+  // the canvas still draws around it.
+  const dormant = all.filter((r) => /\.panel\[data-dormant\]/.test(r.sel))
+  ok('dormant.1', 'a dormant panel is a dashed ghost with a compact summary card, and no dormant rule touches the frame box geometry',
+    dormant.length >= 2 && has('.panel[data-dormant]', /border-style:\s*dashed/) && has('.panel__card-dormant', /border-radius/) &&
+      dormant.every((r) => !/(^|;|\s)(width|height|top|left|right|bottom|inset|transform):/.test(r.body)),
+    JSON.stringify(dormant.map((r) => r.sel)))
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`)

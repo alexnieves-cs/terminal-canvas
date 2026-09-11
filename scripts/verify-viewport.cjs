@@ -2499,6 +2499,46 @@ console.log('\n' + '='.repeat(60))
       quiet: anim(run({})), armed: anim(run({ armed: new Set(['a', 'c']) })), firing: anim(run({ fired: new Map([['a:c', 1000]]), now: 1000 })) }))
 }
 
+// M258 — minimap-drag.* / zoom-readout.1. THE VIEWPORT RECTANGLE IS A
+// HANDLE. A drag that starts ON the camera's rectangle keeps the grab offset
+// (no jump to centre the pointer), converts through the projection's inverse
+// as toWorld(p2) - toWorld(p1) — never toWorld(p2 - p1), which subtracts a
+// translation that should cancel — and is recomputed from the ORIGIN camera
+// every frame, so two moves land where one would.
+{
+  const P = V.minimapProjection, Pan = V.minimapPanViewport, Hit = V.minimapViewHit
+  const have = typeof P === 'function' && typeof Pan === 'function' && typeof Hit === 'function'
+  const rects = [{ id: 'a', x: 0, y: 0, w: 400, h: 300 }, { id: 'b', x: 2000, y: 100, w: 300, h: 300 }]
+  const vp = { x: -100, y: -50, scale: 0.5 }, size = { width: 1200, height: 800 }, thumb = { w: 200, h: 120 }
+  const pr = have ? P({ rects, viewport: vp, size, thumb }) : null
+  const from = pr ? { x: pr.view.x + pr.view.w / 2, y: pr.view.y + pr.view.h / 2 } : null
+  const to = from ? { x: from.x + 10, y: from.y + 5 } : null
+  const next = have ? Pan(vp, from, to, pr) : null
+  const worldTL = (c) => V.screenToWorld({ x: 0, y: 0 }, c)
+  const shift = next ? { x: worldTL(next).x - worldTL(vp).x, y: worldTL(next).y - worldTL(vp).y } : null
+  ok('minimap-drag.1 dragging the viewport rectangle moves the camera by the thumb delta through the inverse, keeps the scale, and keeps the grab offset (no recentre)',
+    next !== null && next.scale === vp.scale && Math.abs(shift.x - 10 / pr.scale) < 1e-6 && Math.abs(shift.y - 5 / pr.scale) < 1e-6,
+    JSON.stringify({ next, shift, scale: pr?.scale }))
+  const mid = from ? { x: from.x + 4, y: from.y - 7 } : null
+  const twoStep = have ? Pan(vp, from, to, pr) : null
+  const viaMid = have ? Pan(vp, from, mid, pr) : null
+  const offOrigin = have && pr ? Pan({ x: 500, y: 300, scale: 0.5 }, from, to, pr) : null
+  ok('minimap-drag.2 the pan is recomputed from the ORIGIN camera each frame (an intermediate move changes nothing) and depends only on the pointer delta, not the camera\'s translation',
+    twoStep !== null && viaMid !== null && JSON.stringify(Pan(vp, from, to, pr)) === JSON.stringify(twoStep) &&
+      offOrigin !== null && Math.abs((offOrigin.x - 500) - (twoStep.x - vp.x)) < 1e-9 && Math.abs((offOrigin.y - 300) - (twoStep.y - vp.y)) < 1e-9,
+    JSON.stringify({ twoStep, viaMid, offOrigin }))
+  ok('minimap-drag.3 the hit test is true on the camera rectangle (with slop at its edge) and false well away from it',
+    have && pr !== null && Hit(from, pr) === true && Hit({ x: pr.view.x - 2, y: pr.view.y + 1 }, pr) === true && Hit({ x: pr.view.x - 40, y: pr.view.y - 40 }, pr) === false,
+    JSON.stringify(pr?.view))
+}
+{
+  const Z = V.zoomReadoutShown
+  ok('zoom-readout.1 the zoom readout shows while zooming, or at rest only when the scale is outside 100% ± 5%',
+    typeof Z === 'function' && Z(1, false) === false && Z(1.04, false) === false && Z(0.96, false) === false &&
+      Z(1.06, false) === true && Z(0.5, false) === true && Z(1, true) === true,
+    typeof Z)
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {
