@@ -127,7 +127,6 @@ export function TopBar({
             {...shellControl(onToggleMerged)}><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</button>
         </div>
       </div>
-
     </header>
   )
 }

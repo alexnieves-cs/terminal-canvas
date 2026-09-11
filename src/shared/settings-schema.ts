@@ -222,6 +222,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: ACCESSIBILITY_CATEGORY
   },
   {
+    id: 'accessibility.highContrast',
+    label: 'High contrast',
+    description: 'stronger borders and less translucency, independent of light or dark — off by default',
+    keywords: ['contrast', 'accessibility', 'a11y', 'wcag', 'borders', 'translucency', 'glass'],
+    type: 'boolean',
+    default: false,
+    category: ACCESSIBILITY_CATEGORY
+  },
+  {
     id: 'appearance.theme',
     planWritable: true,
     label: 'Theme',
