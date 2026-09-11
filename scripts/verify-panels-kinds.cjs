@@ -2896,7 +2896,19 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         const src = M24_A
         const dst = M24_B
         await railGoTo(dst)                    // frame the target
-        const port = await portBox(src, 'e')
+        // railGoTo's camera glide can still be moving when it resolves: a port
+        // read mid-glide puts the press where the port WAS, and the drag draws
+        // nothing (red three times on the m248-m250 integration, whose heavier
+        // renderer settles later; green whenever one more round-trip landed
+        // first). Read until two consecutive boxes agree — the camera at rest.
+        let port = await portBox(src, 'e')
+        for (let i = 0; i < 20; i++) {
+          await settle()
+          const again = await portBox(src, 'e')
+          const still = port !== null && again !== null && again.x === port.x && again.y === port.y
+          port = again
+          if (still) break
+        }
         const box = await panelBox(dst)
         if (port && !port.zero && box) await dragPortTo(port, { x: Math.round(box.cx), y: Math.round(box.cy) })
         const links = await m24Links()
