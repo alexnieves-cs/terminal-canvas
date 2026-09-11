@@ -297,13 +297,36 @@ export function toolState(row: ToolRowOf): 'running' | 'done' | 'error' | 'no re
   return row.live ? 'running' : 'no result'
 }
 
-/** M168. `worked for 2m · 6 tools` — the header's words; without a span, the count alone. */
+/**
+ * M260. `worked for 2m · Edited 2 files · Ran 1 command` — the header's
+ * words, one phrase per verb family the group actually ran (never a bare
+ * count of rows, which said nothing an activity rail is for). A verb that
+ * names files (Edit, Read) counts DISTINCT files, since three edits to one
+ * file is one file touched; a verb with no file (Run, Search, anything else)
+ * counts calls. Without a span, the phrases alone.
+ */
+function toolGroupPhrase(verb: string, calls: number, files: number): string {
+  if (verb === 'Edit') return `Edited ${files || calls} file${(files || calls) === 1 ? '' : 's'}`
+  if (verb === 'Read') return `Read ${files || calls} file${(files || calls) === 1 ? '' : 's'}`
+  if (verb === 'Run') return `Ran ${calls} command${calls === 1 ? '' : 's'}`
+  if (verb === 'Search') return `Searched ${calls} time${calls === 1 ? '' : 's'}`
+  return `${calls} ${verb}${calls === 1 ? '' : 's'}`
+}
+
 export function toolGroupLabel(group: Extract<ChatGroup, { kind: 'tools' }>): string {
-  const n = `${group.rows.length} tools`
-  if (group.elapsedMs === undefined) return n
+  const byVerb = new Map<string, { calls: number; files: Set<string> }>()
+  for (const row of group.rows) {
+    const verb = toolVerb(row.name)
+    const entry = byVerb.get(verb) ?? { calls: 0, files: new Set<string>() }
+    entry.calls += 1
+    if (row.file !== undefined) entry.files.add(row.file)
+    byVerb.set(verb, entry)
+  }
+  const summary = [...byVerb.entries()].map(([verb, { calls, files }]) => toolGroupPhrase(verb, calls, files.size)).join(' · ')
+  if (group.elapsedMs === undefined) return summary
   const s = Math.round(group.elapsedMs / 1000)
   const span = s < 60 ? `${s}s` : `${Math.round(s / 60)}m`
-  return `worked for ${span} · ${n}`
+  return `worked for ${span} · ${summary}`
 }
 
 /** M169. The composer's rows: two at rest, one per line of the draft, six at most — pure, so the node only renders it. */

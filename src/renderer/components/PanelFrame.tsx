@@ -11,6 +11,7 @@ import { Close, KIND_GLYPH, Lock, Maximize, Pin, Restore } from '@renderer/icons
 import { shellControl } from '@renderer/shell/shell-control'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 import { useEdgeArriving } from '@renderer/canvas/useEdgeActivity'
+import { useLastLine } from '@renderer/session/last-line-store'
 
 /**
  * M47. ONE panel frame. Five kinds used to ship five hand-rolled headers,
@@ -131,6 +132,14 @@ export function PanelFrame({
   // arrivals and nobody else's — the same per-id discipline agent-state-store
   // uses, and the reason edge activity does not ride registry.version().
   const arriving = useEdgeArriving(id)
+  // M260. THE UNREAD MARK, centrally: `last-line-store` already carries a
+  // per-panel unread boolean (M105), written only for a chat whose turn ended
+  // off-screen, but nothing painted it anywhere but the rail row. Reading it
+  // here — once, for every kind — puts a rest-layer fact on the frame a chat
+  // already wears (so it is visible at a zoomed-out card face too) without a
+  // second unread-tracking mechanism: a kind nothing ever calls setLastLine
+  // for reads the frozen EMPTY sentinel and paints nothing.
+  const unread = useLastLine(id).unread
   const [menuOpen, setMenuOpen] = useState(false)
   // M121. The outside click. Installed only while the menu is open, on the
   // DOCUMENT in the capture phase — the canvas host's own mousedown starts a
@@ -242,6 +251,10 @@ export function PanelFrame({
              the rail row shows, says what the panel is instead. */
           <span className="pf__state pf__state--kind" data-tone="kind" aria-hidden="true">{(() => { const G = KIND_GLYPH[kind]; return <G /> })()}</span>
         )}
+        {/* M260. A rest-layer fact, not a hover-revealed verb: present in the
+            DOM only while true, never opacity-gated like the chrome's other
+            marks, so it is legible at a glance and at a zoomed-out card face. */}
+        {unread && <span className="pf__unread" data-panel-unread title="changed while you were elsewhere" aria-label="unread" />}
         {/* M106. The title is what gives (see styles.css's header rule); the FULL
             title lives here and at the top of the ⋯ menu, never truncated to
             `Revie…` with nowhere to read the rest. */}

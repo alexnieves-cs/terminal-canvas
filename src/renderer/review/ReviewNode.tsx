@@ -3,12 +3,12 @@ import type { ReviewPanel } from '@renderer/panels/panels'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { ReviewAcross, ReviewDiff, ReviewResult } from '@shared/review'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import { NODE_FILE_CAP, buildReviewNodeModel } from './review-node-model'
+import { NODE_FILE_CAP, buildReviewNodeModel, type ReviewNodeRow } from './review-node-model'
 import { useChat } from '@renderer/chat/chat-store'
 import { indexToolFiles, touchesByPath, type ToolTouch } from '@shared/tool-index'
 import { shortPath } from '@renderer/palette/panel-name'
 import { PanelFrame } from '@renderer/components/PanelFrame'
-import { Refresh } from '@renderer/icons'
+import { Refresh, ChevronLeft, ChevronRight, Check } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
 import {
   observedCommands, reportedCommands, reviewEvidence,
@@ -226,6 +226,18 @@ function renderAcross(across: ReviewAcross | undefined, sectionLabel: (panelId: 
  */
 const press = (fn: () => void) => (e: ReactMouseEvent): void => { e.stopPropagation(); e.preventDefault(); fn() }
 
+/**
+ * M260. Below this width a rail beside the diff has no room to be useful —
+ * measured against the rail's own minimum (roughly a path and a count pill)
+ * plus a diff line that still reads as a line and not a wrap. A single-file
+ * result never gets a rail regardless of width: a list of one is not a list.
+ */
+const RAIL_MIN_W = 520
+/** M260. The collapse transition's own window — `--dur-2`, plus a margin so the timeout never fires before the CSS it is timed against. */
+const DISCARD_COLLAPSE_MS = 200
+/** M260. `armedPath`'s sentinel for "discard every changed file", never a real path (paths never start with `*`). */
+const DISCARD_ALL_ARM = '*'
+
 /** How many commands the section shows before it starts counting instead. */
 const EVIDENCE_CAP = 8
 /**
@@ -393,6 +405,53 @@ function ReviewNodeImpl({
   // Captured when the draft opens, exactly as usePalette captures `focusedId`
   // rather than clearing it — and used on BOTH exits below.
   const capturedFocusRef = useRef<string | null>(null)
+
+  // M260. THE ACTIVE HUNK, and crossing a file boundary. `activeHunk` indexes
+  // `diff.lines` (a 'hunk'-kind line's position), reset to 0 whenever the
+  // expanded file changes; `navPending` remembers WHICH direction crossed a
+  // file boundary so that once that file's own diff fetch lands (one file at
+  // a time, unchanged — see the effect above), the active hunk resolves to
+  // that file's first hunk (`next`) or last (`prev`) rather than 0.
+  const [activeHunk, setActiveHunk] = useState(0)
+  const [navPending, setNavPending] = useState<'next' | 'prev' | null>(null)
+  const detailRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => { setActiveHunk(0) }, [expandedPath])
+  const hunkIndices = useMemo(
+    () => (diff !== null && diff.kind === 'diff' ? diff.lines.reduce<number[]>((acc, l, i) => { if (l.kind === 'hunk') acc.push(i); return acc }, []) : []),
+    [diff]
+  )
+  useEffect(() => {
+    if (navPending === null || diff === null) return
+    setActiveHunk(navPending === 'prev' ? Math.max(0, hunkIndices.length - 1) : 0)
+    setNavPending(null)
+  }, [diff, navPending, hunkIndices])
+  useEffect(() => {
+    if (expandedPath === null) return
+    const el = detailRef.current?.querySelector(`[data-review-node-hunk-marker="${activeHunk}"]`)
+    el?.scrollIntoView({ block: 'center' })
+  }, [activeHunk, diff, expandedPath])
+
+  // M260. THE WARNING BANNER'S disclosure: closed by default, so the sentence
+  // that fits at rest is what a person sees first — the count and the fact of
+  // sharing — and the mechanism (which tool calls can and cannot say) is one
+  // press away rather than always in the flow.
+  const [noteExpanded, setNoteExpanded] = useState(false)
+
+  // M260. "Reviewed this session" — an EPHEMERAL, per-file mark, distinct
+  // from `task.reviewed` (a persisted, all-or-nothing fact about the whole
+  // task at a point in time, owned by the canvas). This one is local UI
+  // state with no IPC behind it: it exists so a person working through a
+  // long file list has a progress readout and a per-file "seen" mark, and it
+  // is filtered to whatever the current result still lists on every model
+  // change, so a discarded or reverted file cannot inflate the count.
+  const [locallyReviewed, setLocallyReviewed] = useState<ReadonlySet<string>>(new Set())
+
+  // M260. TWO-PHASE REMOVE: a path lands here the moment its discard
+  // succeeds, so its row can collapse (the CSS transition below) instead of
+  // vanishing the instant `result` is replaced. `refreshToken` — the actual
+  // re-fetch — is delayed by the same window so the row is still real (still
+  // in `model.files`) for the whole animation.
+  const [removingPaths, setRemovingPaths] = useState<ReadonlySet<string>>(new Set())
 
   /**
    * The one way the message input closes, so both exits restore the keyboard.
@@ -583,6 +642,48 @@ function ReviewNodeImpl({
   )
   const { rect, z } = panel
 
+  // M260. A list of one is not a list — the rail only earns its width when
+  // there is a choice of file to make, and only when the panel is wide
+  // enough for a rail and a diff to both read as themselves.
+  const railLayout = model.files.length > 1 && rect.w >= RAIL_MIN_W
+
+  // M260. Prune `locallyReviewed` to whatever the current result still
+  // lists: a discarded or reverted file must not keep inflating "N of M
+  // reviewed" for a file that is no longer in M.
+  useEffect(() => {
+    setLocallyReviewed((prev) => {
+      const valid = new Set(model.files.map((f) => f.path))
+      const next = new Set([...prev].filter((p) => valid.has(p)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [model.files])
+
+  // M260. Two groups, not a filter control: "touched by this agent" (this
+  // chat's own tool calls named the path) and "also changed" (everything
+  // else in the diff — another process, another agent, a hand edit). Shown
+  // as two headed sections in the rail only when BOTH are non-empty; one
+  // group alone is the whole list and a heading over it would say nothing.
+  const touchedFiles = model.files.filter((f) => f.touches !== undefined)
+  const otherFiles = model.files.filter((f) => f.touches === undefined)
+  const attributionSplit = touchedFiles.length > 0 && otherFiles.length > 0
+
+  const filePaths = model.files.map((f) => f.path)
+  const fileIdx = expandedPath === null ? -1 : filePaths.indexOf(expandedPath)
+  const atFirstHunk = activeHunk <= 0
+  const atLastHunk = hunkIndices.length === 0 || activeHunk >= hunkIndices.length - 1
+  const canPrevFile = fileIdx > 0
+  const canNextFile = fileIdx >= 0 && fileIdx < filePaths.length - 1
+  const prevChangeDisabled = expandedPath === null || (atFirstHunk && !canPrevFile)
+  const nextChangeDisabled = expandedPath === null || (atLastHunk && !canNextFile)
+  const goPrevChange = (): void => {
+    if (!atFirstHunk) { setActiveHunk((n) => n - 1); return }
+    if (canPrevFile) { setNavPending('prev'); setExpandedPath(filePaths[fileIdx - 1] as string) }
+  }
+  const goNextChange = (): void => {
+    if (!atLastHunk) { setActiveHunk((n) => n + 1); return }
+    if (canNextFile) { setNavPending('next'); setExpandedPath(filePaths[fileIdx + 1] as string) }
+  }
+
   // M53. One path per call — the row's own confirm — and the result is
   // read back by REFRESHING, never by editing the local result: the engine's
   // answer is the only one that can say what the tree looks like now. No
@@ -603,18 +704,67 @@ function ReviewNodeImpl({
           if (r.removed.length > 0) parts.push(`deleted ${path}`)
           for (const f of r.failed) parts.push(`could not discard ${f.path} — ${f.detail}`)
           setOutcome(parts.join(' · '))
-        } else {
-          setOutcome(
-            r.kind === 'nothing-to-discard' ? 'nothing to discard'
-              : r.kind === 'refused' ? `discard refused — ${r.detail}`
-              : `could not discard — ${r.detail}`)
+          // M260. TWO-PHASE REMOVE: mark the row for its collapse transition
+          // now, and only re-fetch (the thing that actually drops it from
+          // `model.files`) once that transition has had time to play — so the
+          // row visibly shrinks away instead of vanishing on the next paint.
+          setRemovingPaths((prev) => new Set(prev).add(path))
+          setTimeout(() => {
+            setRemovingPaths((prev) => { if (!prev.has(path)) return prev; const next = new Set(prev); next.delete(path); return next })
+            setRefreshToken((n) => n + 1)
+          }, DISCARD_COLLAPSE_MS)
+          return
         }
+        setOutcome(
+          r.kind === 'nothing-to-discard' ? 'nothing to discard'
+            : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : `could not discard — ${r.detail}`)
         setRefreshToken((n) => n + 1)
       })
       .catch((error: unknown) => {
         setDiscarding(false)
         setArmedPath(null)
         setOutcome(`could not discard — ${String(error)}`)
+      })
+  }
+
+  /**
+   * M260. THE FOOTER'S "discard all" — the same `review:discard` door, given
+   * every changed path at once rather than one. It reuses `armedPath`'s
+   * arming mechanism (armed at the sentinel `DISCARD_ALL`, never a real
+   * path) so there is exactly one "are you sure" idiom in this node, not two.
+   */
+  const runDiscardAll = (): void => {
+    if (discarding || model.discard.kind !== 'ready') return
+    const paths = model.discard.paths
+    setDiscarding(true)
+    setOutcome(null)
+    void window.canvas.review.discard(
+      { root: subject.repoRoot, baseline: subject.baselineSha, subjectId: subject.subjectId, paths }
+    )
+      .then((r) => {
+        setDiscarding(false)
+        setArmedPath(null)
+        if (r.kind === 'discarded') {
+          const parts: string[] = []
+          if (r.restored.length > 0) parts.push(`restored ${r.restored.length} file${r.restored.length === 1 ? '' : 's'}`)
+          if (r.removed.length > 0) parts.push(`deleted ${r.removed.length} file${r.removed.length === 1 ? '' : 's'}`)
+          for (const f of r.failed) parts.push(`could not discard ${f.path} — ${f.detail}`)
+          setOutcome(parts.join(' · '))
+          setRemovingPaths(new Set(paths))
+          setTimeout(() => { setRemovingPaths(new Set()); setRefreshToken((n) => n + 1) }, DISCARD_COLLAPSE_MS)
+          return
+        }
+        setOutcome(
+          r.kind === 'nothing-to-discard' ? 'nothing to discard'
+            : r.kind === 'refused' ? `discard refused — ${r.detail}`
+            : `could not discard — ${r.detail}`)
+        setRefreshToken((n) => n + 1)
+      })
+      .catch((error: unknown) => {
+        setDiscarding(false)
+        setArmedPath(null)
+        setOutcome(`could not discard all — ${String(error)}`)
       })
   }
 
@@ -686,6 +836,109 @@ function ReviewNodeImpl({
       })
   }
 
+  /**
+   * M260. One file row, shared by the grouped and ungrouped rail renders (and
+   * by the single-column, non-rail case) — every existing class, attribute
+   * and handler kept EXACTLY as it read before this milestone; the only
+   * additions are `data-review-node-removing` (the collapse transition's own
+   * hook), the "mark seen" toggle, and — the one behavior change — the diff
+   * and touches no longer render inline under the row when `railLayout` is
+   * true, because the detail pane above renders them instead.
+   */
+  const renderFileRow = (f: ReviewNodeRow): JSX.Element => {
+    const removing = removingPaths.has(f.path)
+    const reviewedHere = locallyReviewed.has(f.path)
+    return (
+      <li key={f.path} className="review-node__file" data-review-node-file={f.path} data-review-node-removing={removing ? '' : undefined}>
+        <button
+          type="button"
+          className={`review-node__file-button${f.expanded ? ' review-node__file-button--open' : ''}`}
+          title={f.expanded ? 'Hide the diff' : f.touches !== undefined ? 'Show the diff and the tool calls that touched this file' : 'Show the diff'}
+          onMouseDown={(event) => {
+            event.stopPropagation()
+            event.preventDefault()
+            onFocus(rect.id)
+            setExpandedPath(f.expanded ? null : f.path)
+          }}
+        >
+          {/* M165. The basename leads (the UI face, bold); the directory follows in mono. */}
+          <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
+          <span className="review-node__counts">
+            {f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">bin</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}
+          </span>
+          {f.touches !== undefined && <span className="review-node__touches" data-review-node-touches={f.touches}>· {f.touches} tool call{f.touches === 1 ? '' : 's'}</span>}
+          {/* M260. A REST fact, not a verb: present only while true, always
+              visible (never hover-gated) — the row's own "seen" state, as
+              opposed to the toggle that sets it (below), which follows the
+              same hover-reveal the discard verb does. */}
+          {reviewedHere && <span className="review-node__reviewed-mark" title="marked reviewed this session" aria-label="reviewed this session"><Check /></span>}
+        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="review-node__mark-reviewed"
+            data-review-node-mark-reviewed={f.path}
+            aria-pressed={reviewedHere}
+            title={reviewedHere ? 'Unmark — this session only, nothing is recorded' : 'Mark seen for this session only — nothing is recorded, unlike Mark reviewed'}
+            onMouseDown={(event) => {
+              event.stopPropagation()
+              event.preventDefault()
+              setLocallyReviewed((prev) => {
+                const next = new Set(prev)
+                if (next.has(f.path)) next.delete(f.path); else next.add(f.path)
+                return next
+              })
+            }}
+          >
+            {reviewedHere ? 'seen' : 'mark seen'}
+          </button>
+        )}
+        {model.discard.kind !== 'none' && !readOnly && (
+          <button
+            type="button"
+            className={`review-node__discard${armedPath === f.path ? ' review-node__discard--armed' : ''}`}
+            data-review-node-discard={f.path}
+            disabled={model.discard.kind === 'blocked' || discarding}
+            title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard the changes to ${f.path}`}
+            onMouseDown={(event) => {
+              event.stopPropagation()
+              event.preventDefault()
+              if (model.discard.kind !== 'ready' || discarding) return
+              onFocus(rect.id)
+              setArmedPath((p) => (p === f.path ? null : f.path))
+            }}
+          >
+            {armedPath === f.path ? 'keep' : 'discard'}
+          </button>
+        )}
+        {armedPath === f.path && (
+          <div className="review-node__discard-armed" data-review-node-discard-armed={f.path}>
+            <p className="review-node__discard-sentence">
+              {f.untracked
+                ? `${f.path} did not exist at spawn. Delete it? This cannot be undone.`
+                : `Restore ${f.path} to its state at spawn (${subject.baselineSha.slice(0, 7)})? Anything changed by hand since then goes with it. This cannot be undone.`}
+            </p>
+            <button
+              type="button"
+              className="review-node__discard-confirm"
+              data-review-node-discard-confirm={f.path}
+              disabled={discarding}
+              onMouseDown={(event) => {
+                event.stopPropagation()
+                event.preventDefault()
+                runDiscard(f.path)
+              }}
+            >
+              {discarding ? 'discarding…' : f.untracked ? 'Delete' : 'Restore'}
+            </button>
+          </div>
+        )}
+        {!railLayout && f.expanded && f.touches !== undefined && <Touches list={touchMap.get(f.path) ?? []} />}
+        {!railLayout && f.expanded && <Hunks diff={diff} />}
+      </li>
+    )
+  }
+
   return (
     <PanelFrame
       id={rect.id}
@@ -723,42 +976,6 @@ function ReviewNodeImpl({
         >
           <Refresh />
         </button>
-        {/* M86. A cross-worktree node keeps the Commit control, DISABLED with
-            its reason: a control that disappears is indistinguishable from a
-            feature never built (M86's critic). */}
-        {subject.across === true && (
-          <button type="button" className="review-node__commit" data-review-node-commit disabled
-            title="one worktree at a time — open that worktree's own review to commit"
-            onMouseDown={(event) => { event.stopPropagation(); event.preventDefault() }}>Commit</button>
-        )}
-        {model.commit.kind !== 'none' && (
-          <button
-            type="button"
-            className="review-node__commit"
-            data-review-node-commit
-            disabled={model.commit.kind === 'blocked' || committing}
-            title={model.commit.kind === 'blocked' ? model.commit.reason : 'Commit these changes'}
-            onMouseDown={(event) => {
-              // preventDefault is what keeps DOM focus off this button and on
-              // whatever had it — shellControl's rule, which every control in
-              // this app obeys. stopPropagation is what stops the header's own
-              // handler starting a DRAG from a click on a button inside it.
-              event.stopPropagation()
-              event.preventDefault()
-              if (model.commit.kind !== 'ready' || committing) return
-              setOutcome(null)
-              // Only on the way IN. Re-pressing the control with a draft
-              // already open would otherwise wipe a half-typed message — on
-              // the one verb in this app where the text is the point — and
-              // the press is far more plausibly a mis-aim than a request to
-              // start over.
-              if (draft === null) capturedFocusRef.current = focusedId
-              setDraft((d) => d ?? '')
-            }}
-          >
-            {committing ? 'committing…' : 'commit'}
-          </button>
-        )}
       </>}
     >
 
@@ -796,6 +1013,22 @@ function ReviewNodeImpl({
                 if (event.key === 'Enter') { event.preventDefault(); runCommit() }
                 if (event.key === 'Escape') { event.preventDefault(); closeDraft() }
               }}
+              // M260. The paste gap this input has always had — Cmd+V over a
+              // text draft otherwise reaches the focused TERMINAL (this app's
+              // global keybinding limit, CLAUDE.md's own record of it) — is
+              // closed here rather than left to worsen while this input's
+              // location changes: the menu's paste is served only while this
+              // field holds DOM focus, the same rule the chat composer's own
+              // paste subscription follows.
+              onPaste={(event) => {
+                const text = event.clipboardData.getData('text')
+                const current = draft ?? ''
+                if (text === '') return
+                event.preventDefault()
+                const start = event.currentTarget.selectionStart ?? current.length
+                const end = event.currentTarget.selectionEnd ?? start
+                setDraft(current.slice(0, start) + text + current.slice(end))
+              }}
               onMouseDown={(event) => event.stopPropagation()}
             />
           </div>
@@ -813,76 +1046,147 @@ function ReviewNodeImpl({
         {/* M164. The path rule: the repository's basename at rest, the full path on hover. */}
         <p className="review-node__root" title={model.root}>{displayPath(model.root, model.root).short}</p>
         </>)}
+        {/* M260. THE WARNING BANNER: `shared`'s note is the one case this note
+            slot carries an actual EXPLANATION (which tool calls can and
+            cannot say) rather than a plain fact ("no repository") — so only
+            that arm gets the compact-lead-plus-disclosure treatment; every
+            other arm keeps rendering its one sentence exactly as before.
+            `data-review-node-note` and its class stay on the SAME element
+            either way — the ~200-check hook this repo's rule protects. */}
         {model.note !== undefined && (
-          <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>
+          result?.kind === 'shared' && model.note.includes(' — ') ? (() => {
+            const [lead, ...rest] = model.note.split(' — ')
+            const detail = rest.join(' — ')
+            return (
+              <div className="review-node__banner" data-review-node-banner>
+                <p className="pf__note review-node__note" data-review-node-note>{lead}</p>
+                <button type="button" className="review-node__banner-toggle" aria-expanded={noteExpanded}
+                  onMouseDown={press(() => setNoteExpanded((v) => !v))}>{noteExpanded ? 'hide why' : 'why?'}</button>
+                {noteExpanded && <p className="review-node__banner-detail">{detail}</p>}
+              </div>
+            )
+          })() : (
+            <p className="pf__note review-node__note" data-review-node-note>{model.note}</p>
+          )
         )}
-        <ul className="review-node__files">
-          {model.files.map((f) => (
-            <li key={f.path} className="review-node__file" data-review-node-file={f.path}>
+        <div className="review-node__layout" data-review-layout={railLayout ? 'rail' : 'stack'}>
+        <ul className="review-node__files review-node__rail">
+          {/* M260. Two groups only when both are non-empty — a heading over
+              the whole list would say nothing a single group needs said. */}
+          {attributionSplit ? (
+            <>
+              <li className="review-node__group-head" role="presentation">this chat touched</li>
+              {touchedFiles.map(renderFileRow)}
+              <li className="review-node__group-head" role="presentation">also changed in this repository</li>
+              {otherFiles.map(renderFileRow)}
+            </>
+          ) : model.files.map(renderFileRow)}
+        </ul>
+        {/* M260. THE DETAIL PANE — only when the rail earns its keep (more
+            than one file, room enough). Below `RAIL_MIN_W` or with a single
+            file, the diff stays inline under its row exactly as before
+            (`renderFileRow`'s own `!railLayout` branch), so a narrow or
+            single-file review never grows a pane with nothing beside it. */}
+        {railLayout && (
+          <div className="review-node__detail" ref={detailRef}>
+            {expandedPath === null ? (
+              <p className="review-node__hunk-note">select a file to see its diff</p>
+            ) : (
+              <>
+                <div className="review-node__nav" data-review-node-nav>
+                  <button type="button" className="review-node__nav-verb" data-review-node-nav-verb="prev"
+                    disabled={prevChangeDisabled} title="Previous change" aria-label="Previous change"
+                    onMouseDown={press(goPrevChange)}><ChevronLeft /></button>
+                  <span className="review-node__nav-label" title={expandedPath}>{expandedPath}</span>
+                  <button type="button" className="review-node__nav-verb" data-review-node-nav-verb="next"
+                    disabled={nextChangeDisabled} title="Next change" aria-label="Next change"
+                    onMouseDown={press(goNextChange)}><ChevronRight /></button>
+                </div>
+                {(() => {
+                  const f = model.files.find((x) => x.path === expandedPath)
+                  return f?.touches !== undefined ? <Touches list={touchMap.get(expandedPath) ?? []} /> : null
+                })()}
+                <Hunks diff={diff} activeHunkIndex={activeHunk} />
+              </>
+            )}
+          </div>
+        )}
+        </div>
+        {model.more > 0 && <p className="pf__more review-node__more">+{model.more} more files</p>}
+        {/* M260. THE STICKY FOOTER: the two REAL, always-applicable actions —
+            Commit (moved here from the chrome) and Discard, now also
+            available as one bulk verb — plus the session's own progress. No
+            Approve / Request changes: this codebase carries no such state
+            (no IPC, no persisted verdict), and inventing one here would be
+            exactly the false claim `Mark reviewed`'s own comment refuses
+            elsewhere in this file. Blocked-by-name for `across`/`shared`,
+            never hidden — M86's rule, unchanged by the move. */}
+        {/* No blanket `!readOnly` here: Commit (real or across-blocked) never
+            carried that gate before this move, and this relocation keeps
+            each control's own original gating rather than inventing a new
+            one — only the genuinely NEW controls (discard-all, the progress
+            readout) are `!readOnly`, matching the per-row discard's own
+            existing gate. */}
+        {(model.commit.kind !== 'none' || (model.discard.kind !== 'none' && !readOnly) || subject.across === true) && (
+          <div className="review-node__footer" data-review-node-footer>
+            {!readOnly && model.files.length > 0 && (
+              <span className="review-node__footer-progress" data-review-node-progress={locallyReviewed.size}>
+                {locallyReviewed.size} of {model.files.length} marked seen this session
+              </span>
+            )}
+            {model.discard.kind !== 'none' && !readOnly && model.files.length > 1 && (
+              armedPath === DISCARD_ALL_ARM ? (
+                <div className="review-node__discard-armed" data-review-node-discard-armed={DISCARD_ALL_ARM}>
+                  <p className="review-node__discard-sentence">Discard every changed file — {model.files.length} in all? Anything not committed goes with it. This cannot be undone.</p>
+                  <button type="button" className="review-node__discard-confirm" data-review-node-discard-confirm={DISCARD_ALL_ARM}
+                    disabled={discarding} onMouseDown={press(runDiscardAll)}>{discarding ? 'discarding…' : 'Discard all'}</button>
+                  <button type="button" className="review-node__discard" onMouseDown={press(() => setArmedPath(null))}>cancel</button>
+                </div>
+              ) : (
+                <button type="button" className="review-node__discard" data-review-node-discard-all
+                  disabled={model.discard.kind === 'blocked' || discarding}
+                  title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard all ${model.files.length} changed files`}
+                  onMouseDown={press(() => setArmedPath(DISCARD_ALL_ARM))}>discard all</button>
+              )
+            )}
+            {/* M86. A cross-worktree node keeps the Commit control, DISABLED with
+                its reason: a control that disappears is indistinguishable from a
+                feature never built (M86's critic). */}
+            {subject.across === true && (
+              <button type="button" className="review-node__commit" data-review-node-commit disabled
+                title="one worktree at a time — open that worktree's own review to commit"
+                onMouseDown={(event) => { event.stopPropagation(); event.preventDefault() }}>Commit</button>
+            )}
+            {model.commit.kind !== 'none' && (
               <button
                 type="button"
-                className={`review-node__file-button${f.expanded ? ' review-node__file-button--open' : ''}`}
-                title={f.expanded ? 'Hide the diff' : f.touches !== undefined ? 'Show the diff and the tool calls that touched this file' : 'Show the diff'}
+                className="review-node__commit"
+                data-review-node-commit
+                disabled={model.commit.kind === 'blocked' || committing}
+                title={model.commit.kind === 'blocked' ? model.commit.reason : 'Commit these changes'}
                 onMouseDown={(event) => {
+                  // preventDefault is what keeps DOM focus off this button and on
+                  // whatever had it — shellControl's rule, which every control in
+                  // this app obeys. stopPropagation is what stops the header's own
+                  // handler starting a DRAG from a click on a button inside it.
                   event.stopPropagation()
                   event.preventDefault()
-                  onFocus(rect.id)
-                  setExpandedPath(f.expanded ? null : f.path)
+                  if (model.commit.kind !== 'ready' || committing) return
+                  setOutcome(null)
+                  // Only on the way IN. Re-pressing the control with a draft
+                  // already open would otherwise wipe a half-typed message — on
+                  // the one verb in this app where the text is the point — and
+                  // the press is far more plausibly a mis-aim than a request to
+                  // start over.
+                  if (draft === null) capturedFocusRef.current = focusedId
+                  setDraft((d) => d ?? '')
                 }}
               >
-                {/* M165. The basename leads (the UI face, bold); the directory follows in mono. */}
-                <span className="review-node__path">{(() => { const i = f.path.lastIndexOf('/'); return i === -1 ? <span className="review-node__base">{f.path}</span> : <><span className="review-node__dir">{f.path.slice(0, i + 1)}</span><span className="review-node__base">{f.path.slice(i + 1)}</span></> })()}</span>
-                <span className="review-node__counts">
-                  {f.untracked ? <span className="review-node__new">new</span> : f.binary ? <span className="review-node__new">bin</span> : <><span className="review-node__add">+{f.added}</span> <span className="review-node__del">−{f.removed}</span></>}
-                </span>
-                {f.touches !== undefined && <span className="review-node__touches" data-review-node-touches={f.touches}>· {f.touches} tool call{f.touches === 1 ? '' : 's'}</span>}
+                {committing ? 'committing…' : 'commit'}
               </button>
-              {model.discard.kind !== 'none' && !readOnly && (
-                <button
-                  type="button"
-                  className={`review-node__discard${armedPath === f.path ? ' review-node__discard--armed' : ''}`}
-                  data-review-node-discard={f.path}
-                  disabled={model.discard.kind === 'blocked' || discarding}
-                  title={model.discard.kind === 'blocked' ? model.discard.reason : `Discard the changes to ${f.path}`}
-                  onMouseDown={(event) => {
-                    event.stopPropagation()
-                    event.preventDefault()
-                    if (model.discard.kind !== 'ready' || discarding) return
-                    onFocus(rect.id)
-                    setArmedPath((p) => (p === f.path ? null : f.path))
-                  }}
-                >
-                  {armedPath === f.path ? 'keep' : 'discard'}
-                </button>
-              )}
-              {armedPath === f.path && (
-                <div className="review-node__discard-armed" data-review-node-discard-armed={f.path}>
-                  <p className="review-node__discard-sentence">
-                    {f.untracked
-                      ? `${f.path} did not exist at spawn. Delete it? This cannot be undone.`
-                      : `Restore ${f.path} to its state at spawn (${subject.baselineSha.slice(0, 7)})? Anything changed by hand since then goes with it. This cannot be undone.`}
-                  </p>
-                  <button
-                    type="button"
-                    className="review-node__discard-confirm"
-                    data-review-node-discard-confirm={f.path}
-                    disabled={discarding}
-                    onMouseDown={(event) => {
-                      event.stopPropagation()
-                      event.preventDefault()
-                      runDiscard(f.path)
-                    }}
-                  >
-                    {discarding ? 'discarding…' : f.untracked ? 'Delete' : 'Restore'}
-                  </button>
-                </div>
-              )}
-              {f.expanded && f.touches !== undefined && <Touches list={touchMap.get(f.path) ?? []} />}
-              {f.expanded && <Hunks diff={diff} />}
-            </li>
-          ))}
-        </ul>
-        {model.more > 0 && <p className="pf__more review-node__more">+{model.more} more files</p>}
+            )}
+          </div>
+        )}
       </div>
 
     </PanelFrame>
@@ -907,15 +1211,30 @@ function Touches({ list }: { list: ToolTouch[] }): JSX.Element {
   )
 }
 
-function Hunks({ diff }: { diff: ReviewDiff | null }): JSX.Element {
+/**
+ * `activeHunkIndex` counts only 'hunk'-kind lines (M260's prev/next-change
+ * nav) — a line's OWN index in `diff.lines` would drift as soon as any line
+ * kind is filtered or reordered, where a running count over one kind alone
+ * does not.
+ */
+function Hunks({ diff, activeHunkIndex }: { diff: ReviewDiff | null; activeHunkIndex?: number }): JSX.Element {
   if (diff === null) return <p className="review-node__hunk-note">reading…</p>
   if (diff.kind === 'binary') return <p className="review-node__hunk-note">binary file</p>
   if (diff.kind === 'unavailable') return <p className="review-node__hunk-note">this diff could not be read</p>
+  let hunkCount = -1
   return (
     <div className="review-node__hunks" data-review-node-hunks>
-      {diff.lines.map((line, i) => (
-        <div className={`review-node__line review-node__line--${line.kind}`} key={i}>{line.text}</div>
-      ))}
+      {diff.lines.map((line, i) => {
+        const marker = line.kind === 'hunk' ? ++hunkCount : undefined
+        const active = marker !== undefined && marker === activeHunkIndex
+        return (
+          <div
+            className={`review-node__line review-node__line--${line.kind}${active ? ' review-node__line--active' : ''}`}
+            key={i}
+            {...(marker === undefined ? {} : { 'data-review-node-hunk-marker': marker })}
+          >{line.text}</div>
+        )
+      })}
       {diff.truncated > 0 && (
         <div className="review-node__hunk-note">+{diff.truncated} more lines</div>
       )}

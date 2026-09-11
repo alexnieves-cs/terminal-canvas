@@ -21,7 +21,7 @@ import {
   type ComposerTrigger, type FileCompletionRow
 } from './composer-model'
 import { Markdown } from './Markdown'
-import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown, KIND_GLYPH } from '@renderer/icons'
+import { TOOL_GLYPH, ToolOther, ChevronRight, ChevronDown, KIND_GLYPH, ArrowUp, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import { useTrailFor } from '@renderer/skills/skill-trail-store'
 
@@ -650,7 +650,7 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
           const reason = !BACKENDS[backend].terminalDoor ? BACKENDS[backend].reasons.noTerminal : busy ? 'the chat is still answering — interrupt it first' : turnCount === 0 ? 'send a message first — an empty chat has nothing to move' : null
           return <button type="button" className="pf__verb pf__verb--word" data-open-in-terminal disabled={reason !== null}
             title={reason ?? 'Open in a terminal — claude --resume this session'} aria-label="Open in terminal"
-            {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>to terminal</button>
+            {...shellControl(() => { if (reason === null) props.onOpenInTerminal(id) })}>Open terminal session</button>
         })()}
       </>}
     >
@@ -744,8 +744,10 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
               )}
               {attachments.length > 0 && (
                 <div className="chat__attachments" data-chat-attachments>
-                  {/* A dim mono line in the well's own idiom, not a bordered pill
-                      (M75's critic): `name · size · remove`, the verb a word. */}
+                  {/* M260, reversing M75's "not a bordered pill": a horizontal
+                      strip of compact removable tokens reads better as a set
+                      of things you could each remove than a stacked dim-mono
+                      list did, now that Send has its own anchored spot below. */}
                   {attachments.map((a) => (
                     <span key={a.id} className="chat__chip" data-chat-attachment={a.label}>
                       <span className="chat__chip-label">image · {a.label}{a.size !== undefined ? ` · ${kb(a.size)}` : ''}</span>
@@ -816,9 +818,15 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                   )}
                 </div>
               )}
+              {/* M260. ONE destination chip, not two: the model and the skills
+                  count were a small stack of near-identical pills that said
+                  "the same kind of fact, twice" before a person read either.
+                  Still a read-only label (no picker is wired) — data-chat-chip
+                  stays "model" so a check keyed on it still finds this chip. */}
               <div className="chat__chips" data-chat-chips>
-                <span className="chat__chip chat__chip--quiet" data-chat-chip="model" title="The model this conversation runs on">{snapshot?.model ?? backend}</span>
-                {trailCount > 0 && <span className="chat__chip chat__chip--quiet" data-chat-chip="skills" title="Skills this agent has used">{trailCount} {trailCount === 1 ? 'skill' : 'skills'}</span>}
+                <span className="chat__chip chat__chip--quiet" data-chat-chip="model" title="The model this conversation runs on, and the skills it has used">
+                  {snapshot?.model ?? backend}{trailCount > 0 ? ` · ${trailCount} ${trailCount === 1 ? 'skill' : 'skills'}` : ''}
+                </span>
                 <button type="button" className="chat__chip chat__chip--quiet chat__chip--verb" data-chat-chip="attach" title="Attach a file from this repository (@ in the message)" aria-label="Attach a file"
                   {...shellControl(() => { const next = draft === '' || /\s$/.test(draft) ? `${draft}@` : `${draft} @`; setDraft(next); refreshPopup(next, next.length); textareaRef.current?.focus() })}>@ attach</button>
               </div>
@@ -841,11 +849,15 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
                 onKeyDown={onComposerKey}
               />
               {refusal !== null && <p className="pf__note chat__refusal" data-chat-send-refusal role="alert">{refusal}</p>}
+              {/* M260. ONE anchored control, bottom-right of the well: a filled
+                  circle. Interrupt still takes Send's exact spot while a turn
+                  runs (the `--live` class, unchanged) — only the two buttons'
+                  own shape and content (an icon, not a word) are new. */}
               <div className="chat__verbs">
                 <button type="button" className="chat__verb chat__verb--send" data-chat-send disabled={!composer.send.enabled || (draft.trim() === '' && attachments.length === 0)}
-                  title={composer.send.enabled ? 'Send — ⌘↩ sends' : composer.send.reason} aria-label="Send" {...shellControl(send)}>Send</button>
+                  title={composer.send.enabled ? 'Send — ⌘↩ sends' : composer.send.reason} aria-label="Send" {...shellControl(send)}><ArrowUp /></button>
                 <button type="button" className="chat__verb chat__verb--interrupt" data-chat-interrupt disabled={!composer.interrupt.enabled}
-                  title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}>Interrupt</button>
+                  title={composer.interrupt.enabled ? 'Interrupt the answer in flight' : composer.interrupt.reason} aria-label="Interrupt" {...shellControl(interrupt)}><Stop /></button>
               </div>
             </>
           )}

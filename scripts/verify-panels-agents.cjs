@@ -1585,8 +1585,13 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const clickedEdit = await clickDiff('Edit')
         const editDiff = await stateOf('Edit', 'diff')
         const groupAfter = await wc.executeJavaScript(`(() => { const g = ${sel('[data-chat-tools]')}; if (!g) return null; const row = g.querySelector('[data-chat-tool="Edit"]'); return { open: g.getAttribute('data-chat-tools-open'), rowDisplay: row ? getComputedStyle(row).display : null } })()`)
-        ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
-          groupBefore !== null && Number(groupBefore.tools) >= 2 && groupBefore.open === 'false' && new RegExp(`^${groupBefore.tools} tools$`).test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
+        // M260. The header names WHAT ran, not how many rows: Read/other.txt,
+        // Edit/seed.txt and Bash all land in one group, so the label reads
+        // "Read 1 file · Edited 1 file · Ran 1 command" — a meaningful
+        // summary, never the bare "3 tools" this check used to require.
+        ok('tools.3 consecutive tool rows fold under one header collapsed by default (the rows in the DOM, hidden), its label names what ran, and a dispatched click on a hidden row\'s diff verb reveals the group before the diff opens',
+          groupBefore !== null && Number(groupBefore.tools) >= 2 && groupBefore.open === 'false' &&
+            /Read 1 file/.test(groupBefore.head) && /Edited 1 file/.test(groupBefore.head) && /Ran 1 command/.test(groupBefore.head) && groupBefore.rowDisplay === 'none' &&
             groupAfter !== null && groupAfter.open === 'true' && groupAfter.rowDisplay !== 'none',
           JSON.stringify({ groupBefore, groupAfter }))
         const clickedRead = await clickDiff('Read')

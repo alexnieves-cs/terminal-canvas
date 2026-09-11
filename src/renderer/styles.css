@@ -3383,6 +3383,19 @@ body {
   z-index: 3;
 }
 
+/* M260. A TOOL, not another document: a quiet tint on the review kind's own
+   chrome (`--glass-2`, already declared both themes and used for shell
+   chrome elsewhere — no new hue), and a touch less body padding/line-height
+   than a reading surface needs, so the row list reads as a dense instrument
+   rather than prose. `.review-node__file` keeps its OWN card border/radius
+   (diff.1 pins them) — this only tightens the space around it. */
+.pf--kind-review .panel__chrome { background: color-mix(in srgb, var(--iris) 5%, var(--chrome-bg)); }
+/* display:flex here, not on a `.review-node__body` rule of its own — frame.1
+   forbids a kind namespace from ever declaring the shared `body` family;
+   scoping through the KIND class instead of a second selector keeps every
+   other `.pf__body--text` consumer (file, note, toolbox, Jira) untouched. */
+.pf--kind-review .pf__body--text { display: flex; flex-direction: column; line-height: var(--lh-tight); }
+
 /* --fg-3, not --fg-4: --fg-4 is the DISABLED step and this is ordinary
    running text. */
 .review-node__root { font-family: var(--font-mono); font-size: var(--t-sm); margin: 0 0 var(--sp-4); color: var(--fg-3); word-break: break-all; }
@@ -3422,12 +3435,137 @@ body {
 
 /* Added/removed/context only. Syntax highlighting is a tokenizer for N
    languages, which is a dependency and a milestone of its own. */
-.review-node__line--add { color: var(--green); background: var(--green-dim); }
-.review-node__line--del { color: var(--red); background: var(--red-dim); }
+/* M260. TEXT-ONLY, no background wash: `DiffLine.text` already carries its
+   leading +/- marker (shared/review.ts's own comment on why — a diff that
+   stripped it would be unreadable once copied out of), so the colour alone
+   is never the only signal, and a full-width tint on every added/removed
+   line was the loudest thing on the surface for the least important reason
+   (there are two colours in this app and this used both, everywhere, at
+   once). Sparing means the file-row's two count PILLS (`.review-node__add`/
+   `.review-node__del`, below) stay the one place red/green fills anything. */
+.review-node__line--add { color: var(--green); }
+.review-node__line--del { color: var(--red); }
 .review-node__line--hunk { color: var(--blue); }
 .review-node__line--meta { color: var(--fg-3); }
+.review-node__line--active { background: var(--iris-dim); }
 
 .review-node__hunk-note { margin: var(--sp-2); color: var(--fg-3); }
+
+/* M260. THE RAIL + DETAIL SPLIT. `.review-node__body` becomes a flex column
+   so `.review-node__layout` can claim the remaining vertical space after the
+   summary/task/note sections above it; in the STACK case (one file, or too
+   narrow) `.review-node__layout` is just a block child and the body scrolls
+   as one column exactly as it always did — `.pf__body--text`'s own
+   `overflow: auto` is untouched either way. `shouldYieldWheel`'s rule 3 only
+   asks whether the focused panel contains data-scroll-host ANYWHERE
+   (Canvas.tsx), so leaving that attribute on the outer body needs no change
+   here: the browser's own wheel-scroll still finds whichever of the rail or
+   the detail pane is under the cursor. */
+.review-node__layout { flex: 1 1 auto; min-height: 0; }
+.review-node__layout[data-review-layout="rail"] { display: flex; gap: var(--sp-3); min-height: 0; }
+.review-node__layout[data-review-layout="rail"] > .review-node__rail {
+  flex: 0 0 220px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.review-node__group-head {
+  margin: var(--sp-2) 0 var(--sp-1);
+  padding: 0 var(--sp-1);
+  font-family: var(--font-ui);
+  font-size: var(--t-xs);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--fg-3);
+  list-style: none;
+}
+.review-node__group-head:first-child { margin-top: 0; }
+.review-node__detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--line);
+}
+/* M260. Centred nav: sticky at the pane's own top so it travels with
+   scrolling rather than sitting above the fold once a long diff scrolls. */
+.review-node__nav {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-1) 0;
+  background: var(--s-1);
+}
+.review-node__nav-verb { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); cursor: pointer; }
+.review-node__nav-verb:hover:not(:disabled) { background: var(--s-4); }
+.review-node__nav-verb:disabled { color: var(--fg-4); border-style: dashed; cursor: default; }
+.review-node__nav-verb svg { width: 12px; height: 12px; }
+.review-node__nav-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* M260. THE WARNING BANNER: an amber-tinted lead sentence with a "why?"
+   disclosure, in place of the bare paragraph the shared-checkout note used
+   to be. `.review-node__note` inside it is untouched (class and
+   `data-review-node-note` both survive) — this wraps it, never replaces it. */
+.review-node__banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-3); border-left: 2px solid var(--amber); background: var(--amber-dim); border-radius: var(--r-sm); }
+/* .pf__note, not .review-node__note — frame.1 forbids the latter (the
+   shared "note" family) from ever taking a kind-specific rule; the frame
+   class is the one every note-bearing element in this app already carries. */
+.review-node__banner .pf__note { margin: 0; flex: 1 1 auto; color: var(--fg); }
+.review-node__banner-toggle { flex: none; min-height: 22px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); cursor: pointer; }
+.review-node__banner-toggle:hover { background: var(--s-4); }
+.review-node__banner-detail { flex: 1 0 100%; margin: 0; color: var(--fg-2); font-size: var(--t-sm); }
+
+/* M260. "Mark seen this session": the toggle hover-reveals like discard
+   (the rest rule); the mark it leaves on the row (`.review-node__reviewed-
+   mark`, in `renderFileRow`) is the opposite — a rest-layer fact, present
+   only while true and never opacity-gated, so it reads at a glance without a
+   hover the way the row's own count pills do. */
+.review-node__mark-reviewed { opacity: 0; transition: opacity var(--dur-1) var(--ease); flex: none; min-height: 24px; padding: 0 var(--sp-2); border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: var(--fg-3); cursor: pointer; font: inherit; font-size: var(--t-xs); }
+.review-node__file:hover .review-node__mark-reviewed, .review-node__file:focus-within .review-node__mark-reviewed { opacity: 1; }
+.review-node__mark-reviewed:hover { color: var(--fg); background: var(--s-4); }
+.review-node__mark-reviewed[aria-pressed="true"] { opacity: 1; color: var(--iris); }
+.review-node__reviewed-mark { display: inline-flex; color: var(--iris); flex: none; }
+.review-node__reviewed-mark svg { width: 12px; height: 12px; }
+
+/* M260. THE STICKY FOOTER: pinned to the bottom of the scrolling body, one
+   resting shadow at its top edge (the app's own --lift, not a new one) so it
+   reads as a distinct zone without a second shadow style. */
+.review-node__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) calc(-1 * var(--inset)) calc(-1 * var(--inset));
+  padding: var(--sp-2) var(--inset);
+  background: var(--s-2);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 8px -4px var(--bezel);
+}
+.review-node__footer-progress { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); }
+
+/* M260. TWO-PHASE REMOVE: a discarded row (or one swept up in "discard all")
+   shrinks away instead of vanishing the instant the re-fetched list drops
+   it — `--dur-2`, the bigger-event duration, since a row disappearing is a
+   bigger event than the hover-reveal opacity fades use `--dur-1` for. */
+.review-node__file[data-review-node-removing] {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+  transition: max-height var(--dur-2) var(--ease), opacity var(--dur-1) var(--ease), margin var(--dur-2) var(--ease), padding var(--dur-2) var(--ease), border-width var(--dur-2) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-node__file[data-review-node-removing] { transition: none; }
+}
 
 /* Matches the refresh control rather than standing out: a destructive verb
    that looks like a primary action invites the accidental press this app's
@@ -4563,6 +4701,11 @@ body {
    call is one collapsed row, thinking is dim, the composer is pinned below a
    hairline. Every colour is a token; the state hues appear only on the frame's
    marks through [data-tone], never here. */
+/* M260. LESS CHROME AROUND THE WELL. The chat's own chrome row is shorter
+   than every other kind's — a conversation reads by its transcript, not its
+   header — scoped to `.pf--kind-chat` so the shared `.panel__chrome` every
+   other kind still uses is untouched. */
+.pf--kind-chat .panel__chrome { min-height: 30px; padding-block: var(--sp-1); }
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
 .chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
 /* M167. TURNS (the brief: the Claude desktop app's register). One column, no
@@ -4613,7 +4756,7 @@ body {
 .chat__tool-diff, .chat__tool-result, .chat__tool-result + .chat__tool-toggle { flex: 1 0 100%; }
 /* M111. The tool's name is a CHIP: an object you could pick up, which M77 says it is. */
 .chat__tool-name { font-weight: 600; }
-.chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); box-shadow: inset 0 1px 0 var(--edge-light); }
+.chat__row--tool .chat__tool-name { padding: 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-3); font-size: var(--t-sm); }
 /* Wraps rather than ellipsises: the file name is the part that must survive (principle 3). */
 .chat__tool-input { color: var(--fg-2); overflow-wrap: anywhere; }
 /* M162. A path, a command, a pattern or a URL is mono by the face rule; a Task's description or a search's query is a sentence and is not — the node stamps the modifier from `toolArgumentIsCode`. */
@@ -4637,11 +4780,19 @@ body {
    and is shown only while a turn runs, where it takes Send's place — by class
    and display, never by a fraction of opacity (check 3). The chips above the
    text are quiet; an approval is a sentence and two buttons in the well. */
-.chat__composer { display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); box-shadow: inset 0 1px 2px var(--bezel); }
+.chat__composer { position: relative; display: flex; flex-direction: column; gap: var(--sp-2); margin: var(--sp-3); padding: var(--sp-3) var(--sp-4); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--s-1); box-shadow: inset 0 1px 2px var(--bezel); }
 .chat__composer:focus-within { border-color: var(--iris); box-shadow: inset 0 1px 2px var(--bezel), 0 0 0 2px var(--iris-dim); }
 .chat__verb--interrupt { display: none; }
 .chat__composer--live .chat__verb--interrupt { display: inline-flex; }
 .chat__composer--live .chat__verb--send { display: none; }
+/* M260. ONE anchored circular control, bottom-right of the well, in place of
+   a full-width labelled button row: `position: relative` on `.chat__composer`
+   above is what this anchors to. The display toggle above (class, not
+   opacity) is UNCHANGED — only shape and content (an icon) are new here. */
+.chat__composer .chat__verbs { position: absolute; right: var(--sp-3); bottom: var(--sp-3); margin: 0; }
+.chat__verb--send { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.chat__verb--interrupt { align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: var(--red-dim); color: var(--red); border-color: transparent; }
+.chat__verb--send svg, .chat__verb--interrupt svg { width: 16px; height: 16px; }
 .chat__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 /* `.chat__chips .chat__chip--quiet`: two classes, so the M75 attachment chip's mono rule later in the file does not win by source order (the first golden had the chips in mono). */
 .chat__chips .chat__chip--quiet { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: transparent; }
@@ -4653,7 +4804,11 @@ body {
 /* M111. A RAISED FIELD: the one place in the panel that asks to be typed
    into looks like it — a hairline box on the raised surface, an iris ring
    on focus (the focus outline is relocated, not removed). */
-.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); box-shadow: inset 0 1px 0 var(--edge-light); }
+/* M260. Padding-right leaves room for the anchored circular Send/Interrupt
+   (below); the inset box-shadow is gone — the well's own shadow (above) is
+   the panel's one resting shadow, and a second one nested inside it read as
+   a stray extra border. */
+.chat__input { width: 100%; min-height: 44px; resize: none; padding: var(--sp-3) calc(var(--sp-4) + 40px) var(--sp-3) var(--sp-4); border: 0; border-radius: var(--r-md); background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-md); }
 .chat__input:focus { outline: none; } /* M169. The WELL wears the ring (:focus-within); the field inside it draws none */
 .chat__input:disabled { color: var(--fg-3); }
 .chat__refusal { margin: 0; }
@@ -4729,8 +4884,14 @@ body {
 .chat__fill-name { font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
 .chat__fill-input { min-height: 24px; padding: 0 var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well); color: var(--fg); font-family: var(--font-mono); font-size: var(--t-sm); }
 .chat__attachments { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.chat__chip { display: inline-flex; align-items: baseline; gap: var(--sp-2); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); }
-.chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; }
+/* M260, reversing M75's "not a bordered pill": a horizontal strip reads as a
+   set of removable things when each is a compact token, the way the chip
+   idiom already works everywhere else in this app — not as a stacked list of
+   dim mono lines. `.chat__chips .chat__chip--quiet`'s own rule (above) still
+   wins for the destination/attach chips by specificity, unaffected. */
+.chat__chip { display: inline-flex; align-items: center; gap: var(--sp-1); min-height: 24px; padding: 0 var(--sp-1) 0 var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-2); font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg-2); max-width: 240px; }
+.chat__chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat__chip-remove { min-height: 24px; padding: 0 var(--sp-1); border: 0; background: transparent; color: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); cursor: pointer; flex: 0 0 auto; }
 .chat__chip-remove:hover { color: var(--fg); }
 .chat__image { color: var(--fg-2); }
 
@@ -5242,7 +5403,11 @@ body {
 /* M105. The rail says what is happening: a second line with the agent's last
    line said (prose, cut from the right), an unread dot before the label, and
    the dock's two capsules. */
-.rail-row__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+/* M260. `.pf__unread` shares this exact shape — the frame's own chrome dot,
+   so "unread" is drawn one way whether it is read from the rail or the
+   panel's own header, never two competing definitions of the same mark. */
+.rail-row__unread, .pf__unread { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.pf__unread { color: var(--iris); margin-right: var(--sp-1); }
 /* The row is a flex line; the last line said WRAPS beneath it (a full-width
    child ordered last) rather than sharing the line and squeezing the title
    to `c..` beside it. */
