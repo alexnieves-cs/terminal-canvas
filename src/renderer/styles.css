@@ -978,7 +978,7 @@ body {
 .github-item:last-child { border-bottom: 0; }
 .github-item__head { display: flex; align-items: baseline; gap: var(--sp-2); }
 .github-item__id { font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
-.github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--fg-4); }
+.github-item__state { font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); padding: 1px var(--sp-2); border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-2); white-space: nowrap; }
 .github-item__title { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg); }
 .github-item__body { margin: var(--sp-1) 0 0; padding-right: var(--sp-3); font-family: var(--font-ui); font-size: var(--t-xs); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .github-node__scope { margin: 0; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); } /* M164 (the Act I critic): a sentence */
@@ -1327,6 +1327,8 @@ body {
    chip; destructive sits at the right and goes red the moment it is armed. */
 /* M178 (F.1). No background here: at (0,2,1) this rule beat the primary's (0,1,0) iris fill, so an ENABLED Restart painted white on white since M46 — a latent 4.0 defect the second audit caught (`restart.paint.1`). */
 .context__actions [data-inspector-action="restart"] { grid-column: 1 / -1; font-weight: 600; }
+.context__more-actions { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+.context__more-actions[hidden] { display: none; }
 .inspector__action--secondary { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); min-width: 0; white-space: nowrap; }
 .inspector__action--destructive { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-3); }
 .inspector__action--destructive:hover { color: var(--red); border-color: var(--red); background: var(--red-dim); }
@@ -4582,6 +4584,8 @@ body {
 .workflow-node__body { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); min-height: 0; }
 .workflow-node__count { flex: 0 0 auto; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-3); }
 .workflow-node__verbs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.workflow-node__more-actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.workflow-node__more-actions[hidden] { display: none; }
 .workflow-node__tabs { display: flex; align-items: center; gap: var(--sp-1); border-bottom: 1px solid var(--line); }
 .workflow-node__tab[aria-selected="true"] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--iris); }
 .workflow-node__pane { flex: 1 1 auto; min-height: 0; overflow: auto; }

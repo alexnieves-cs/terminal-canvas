@@ -27,7 +27,8 @@ milestone did run them; it still did not drive the app by hand, and says so wher
 | D07 | M201–M202 | ✅ done | [m201-m202-d07-review-handoff.md](m201-m202-d07-review-handoff.md) |
 | D08 | M203–M204 | ✅ done | [m203-m204-d08-task-navigation.md](m203-m204-d08-task-navigation.md) |
 | D09 | M205 | ✅ built — gate owed (§6 of its log: product 103/103; shell/agents red on the base commit too; visual and packaged not completed under load) | [m205-d09-intent-led-onboarding.md](m205-d09-intent-led-onboarding.md) |
-| D10–D20 | M206–M224 | not started | — |
+| D10 | M206–M208 | ✅ built — gate owed (base reds and open #86/#88 remainder) | [m206-m208-d10-hierarchy.md](m206-m208-d10-hierarchy.md) |
+| D11–D20 | M209–M224 | not started | — |
 
 The full map, its splits and its reservations are below. A phase's evidence, critic disposition and
 owed hand checks go in that phase's own build log, and its row here is updated when it lands.
@@ -51,7 +52,7 @@ re-recorded before the work starts, never after.
 | D07 | **M201–M202** | **re-recorded before the work started** — M201 local review readiness AS A FACT (the pure projection, the two axes, evidence attribution, the persisted mark); M202 the SURFACE (the `review-task` verb's four doors, the card's contextual action, the review node's task section, `Mark reviewed`, `Continue the conversation`). *Was:* M201 the record; M202 readiness and the PR/refusal path. The seam moved because the guide's own step 1 is "specify local review readiness separately", and the *record* needed almost nothing — `work-items.ts` gained one optional field. What was missing was the VOCABULARY, and what was navigation-only was the card's `Review`. The PR path needed no change at all: `prRefusal`'s arms are unchanged and `review` still means a pull request exists | ✅ done |
 | D08 | **M203–M204** | M203 `Show this task` (membership derived, never stored; the camera on the trail); M204 `Show related` (the lens), the far view's task overview, and `Arrange this task`. *Was:* "the far view's work groups" — read at the work as the card's own summary-tier overview (`PanelFrame`'s `far` slot), not a second far renderer; and the guide's step 5, Arrange, which the split did not name, landed in M204 rather than being dropped | ✅ done |
 | D09 | **M205** | — | ✅ built, gate owed |
-| D10 | **M206–M208** | M206 shell, rail and the category labels; M207 the inspector and contextual controls; M208 the graph, the far view and the rest-layer sweep | not started |
+| D10 | **M206–M208** | M206 shell, rail and the category labels; M207 the inspector and contextual controls; M208 the graph, the far view and the rest-layer sweep | ✅ built — gate owed |
 | D11 | **M209–M210** | M209 outcomes that outlive canvas membership (§3.4); M210 Resume | not started |
 | D12 | **M211–M212** | M211 artifact provenance; M212 decision capture | not started |
 | D13 | **M213–M214** | M213 the reader-failure fix and honest coverage (§3.5); M214 the broader scopes | not started |

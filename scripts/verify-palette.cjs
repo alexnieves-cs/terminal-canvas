@@ -2285,16 +2285,16 @@ const WS = [
 // M89 — integrations.1. ONE SENTENCE for a missing service, imported, never
 //      spelled: the GitHub door's reason IS `notConnectedReason('github')`
 //      byte for byte; the Jira rows say the same shape; and the
-//      `Manage integrations…` door is present at rest and enters the
+//      `Manage connections…` door is present at rest and enters the
 //      Credentials scope, so the page and the palette share one path.
 {
   const rows = P.buildCommands(ctx({ credentials: [] }))
   const gh = rows.find((c) => c.id === 'github.open')
   const door = rows.find((c) => c.id === 'manage.integrations')
   const one = typeof P.notConnectedReason === 'function' ? P.notConnectedReason('github') : null
-  ok('integrations.1 the GitHub door\'s reason is notConnectedReason byte for byte, and Manage integrations… is present at rest and enters the Credentials scope',
+  ok('m206.connections.1 the GitHub door\'s reason is notConnectedReason byte for byte, and Manage connections… is present at rest and enters the Credentials scope',
     gh !== undefined && one !== null && gh.disabledReason === one &&
-      door !== undefined && door.disabledReason === undefined && door.entersScope === 'credentials',
+      door !== undefined && door.title === 'Manage connections…' && door.disabledReason === undefined && door.entersScope === 'credentials',
     JSON.stringify({ gh: gh && gh.disabledReason, one, door: door && { scope: door.entersScope, reason: door.disabledReason } }))
 }
 

@@ -1862,7 +1862,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M89. Every service on one page: the door is the navigator's pane, and
   // this row enters the Credentials scope the page's verbs open, so there
   // is one path from either side.
-  out.push({ id: 'manage.integrations', title: 'Manage integrations…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'integrations services connected github jira credentials tokens', run: () => {} })
+  out.push({ id: 'manage.integrations', title: 'Manage connections…', subtitle: `${ctx.credentials.filter((c) => c.verifiedAt !== undefined && c.rejectedAt === undefined).length} connected`, group: 'manage', entersScope: 'credentials', searchText: 'connections integrations services connected github jira credentials tokens', run: () => {} })
   // M88. PRESENT at rest and disabled with the Connect reason when no
   // github credential exists — the Jira door below only exists once a
   // credential does, which is the "row that disappears" rule broken by a

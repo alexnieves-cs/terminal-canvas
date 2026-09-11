@@ -470,7 +470,8 @@ function InspectorPanel({
   // holds here. Disarms when the selection changes: an armed Close carried
   // to the NEXT panel would close a panel the user never armed.
   const [closeArmed, setCloseArmed] = useState(false)
-  useEffect(() => { setCloseArmed(false) }, [model.id])
+  const [actionsOpen, setActionsOpen] = useState(false)
+  useEffect(() => { setCloseArmed(false); setActionsOpen(false) }, [model.id])
   const pid = model.fields.find((f) => f.key === 'pid')?.value
   const TABS: Array<{ id: ContextTab; label: string }> = [
     { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }
@@ -962,6 +963,13 @@ function InspectorPanel({
         >
           Restart
         </button>
+        {/* M207. Layout/configuration verbs remain mounted (and therefore
+            discoverable to checks and assistive technology) but no longer
+            compete permanently with the selected kind's next action. */}
+        <button type="button" className="inspector__action inspector__action--secondary" data-inspector-action="more"
+          aria-expanded={actionsOpen} title={actionsOpen ? 'Hide panel actions' : 'Show layout, naming and linking actions'}
+          {...shellControl(() => setActionsOpen((v) => !v))}>{actionsOpen ? 'Fewer actions' : 'More actions…'}</button>
+        <div className="context__more-actions" data-inspector-more-actions hidden={!actionsOpen}>
         {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
         <button type="button" className="inspector__action" data-inspector-action={model.marks?.locked ? 'unlock' : 'lock'}
           title={model.marks?.locked ? 'Unlock — drag and resize work again' : 'Lock — drag and resize refuse; close still works'}
@@ -1011,6 +1019,7 @@ function InspectorPanel({
         >
           Save as preset
         </button>
+        </div>
         {/*
           M13. Arms the one-shot link mode with THIS panel as the source; the
           next click on the canvas completes or cancels it. Present for both
