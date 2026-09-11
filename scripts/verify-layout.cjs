@@ -3981,6 +3981,28 @@ console.log('\n' + '='.repeat(60))
   } catch (e) { ok('work.readiness.1 (threw)', false, String(e)) }
 }
 
+// M209 (D11). Retained outcomes are task history, not a second run parser:
+// closing the last panel must preserve a bounded, honest fact while a bad
+// historical row cannot prevent the workspace opening.
+{
+  const good = { id: 'outcome_wi1_10', itemId: 'wi1', title: 'Keep meaning', state: 'review', capturedAt: 10, execution: 'completed', sourcePanelId: 'chat1', runId: 'run1' }
+  const warnings = [], malformedWarnings = []
+  const absent = L.parseRetainedOutcomes(undefined, warnings)
+  const malformed = L.parseRetainedOutcomes([good, { ...good, id: 'bad', execution: 'success' }, 'junk'], malformedWarnings)
+  const many = L.parseRetainedOutcomes(Array.from({ length: L.RETAINED_OUTCOMES_MAX + 2 }, (_, i) => ({ ...good, id: `o${i}`, capturedAt: i })), [])
+  const withRecord = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w1', workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, retainedOutcomes: [good] }] }))
+  const old = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w1', workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }] }))
+  const item = { id: 'wi1', source: 'typed', title: 'Keep meaning', state: 'working', panelId: 'chat1', createdAt: 1, updatedAt: 2 }
+  const captured = L.retainOutcome(item, [{ id: 'run1', name: 'r', panelIds: ['chat1'], edges: [], startedAt: 1, endedAt: 2, entries: [{ panelId: 'chat1', startedAt: 1, endedAt: 2, outcome: 'exit 0' }] }], 10)
+  ok('outcome.retained.1 absent retained history stays absent and warns nothing; malformed and unknown execution rows drop individually; the newest bounded records survive; a historical source panel may be missing from the current workspace; and capture reads a completed run without recreating any panel',
+    absent === undefined && warnings.length === 0 && malformed.length === 1 && malformedWarnings.length === 2 &&
+      many.length === L.RETAINED_OUTCOMES_MAX && many[0].id === `o${L.RETAINED_OUTCOMES_MAX + 1}` &&
+      !('retainedOutcomes' in old.snapshot.workspaces[0]) && withRecord.snapshot.workspaces[0].retainedOutcomes?.[0].sourcePanelId === 'chat1' &&
+      captured?.execution === 'completed' && captured.runId === 'run1' && captured.sourcePanelId === 'chat1' &&
+      L.retainedNextAction({ ...good, state: 'done' }).includes('review'),
+    JSON.stringify({ absent, malformed, malformedWarnings, cap: many.length, old: Object.keys(old.snapshot.workspaces[0]), captured }))
+}
+
 // M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE
 // function every Open PR button and the palette row read, so the five arms
 // are named once: no lane, nothing ahead, a source with no repository, GitHub
