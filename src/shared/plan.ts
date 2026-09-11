@@ -75,6 +75,9 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   'import-docx',
   // M248. A deck's file is the person's; a teammate may neither propose into it nor review it.
   'deck-edit', 'deck-write', 'deck-review'
+  // M246: `sheet-edit` is deliberately NOT here. Through the agent door it
+  // PROPOSES — a draft, no file changes — and keeping a draft is refused to
+  // every agent by name (sheet-draft.ts's sheetReviewRefusal).
 ])
 export function agentDoorRefusal(step: PlanStep, facts: PlanFacts, caller?: AgentPlanCaller): string | null {
   if (HUMAN_ANSWER_VERBS.has(step.verb)) {

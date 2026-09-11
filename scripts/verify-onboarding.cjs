@@ -127,6 +127,88 @@ check('onboarding.12 readiness bundle cannot import a process launcher or agent 
   detail: { inputs, imports } }
 })
 
+// M205 (D09). THE FIRST START as a pure decision. Guarded per export, like
+// `check` above, so a missing `firstWorkPlan` fails each case by name rather
+// than throwing past the tally.
+const intent = (id, test) => {
+  try {
+    if (typeof model?.firstWorkPlan !== 'function' || typeof model?.firstWorkRepoAnswer !== 'function') {
+      ok(id, false, loadError ?? 'firstWorkPlan / firstWorkRepoAnswer export is absent')
+      return
+    }
+    const result = test()
+    ok(id, result.pass, JSON.stringify(result.detail))
+  } catch (error) { ok(id, false, error.message) }
+}
+const claudeReady = { preferred: 'claude' }
+const mate = (id, places) => ({ id, name: id, places })
+const plan = (req, teammates = [], readiness = claudeReady) => model.firstWorkPlan(req, { teammates, readiness })
+
+intent('onboarding.intent.1 an empty sentence, an empty folder and a relative path are each refused by their own field and name', () => {
+  const noWords = plan({ intention: '   ', folder: '/code/app' })
+  const noFolder = plan({ intention: 'fix the login test', folder: ' ' })
+  const relative = plan({ intention: 'fix the login test', folder: '~/code/app' })
+  return { pass: noWords.kind === 'refused' && noWords.field === 'intention' &&
+    noFolder.kind === 'refused' && noFolder.field === 'folder' &&
+    relative.kind === 'refused' && relative.field === 'folder' && /full path/.test(relative.reason) &&
+    noFolder.reason !== relative.reason, detail: { noWords, noFolder, relative } }
+})
+intent('onboarding.intent.2 no engine and Codex-only are refused by name — the second pointing at the no-folder alternative — and Claude starts', () => {
+  const none = plan({ intention: 'x', folder: '/code/app' }, [], {})
+  const codex = plan({ intention: 'x', folder: '/code/app' }, [], { preferred: 'codex' })
+  const claude = plan({ intention: 'x', folder: '/code/app' })
+  // M205 critic: an UNANSWERED lane engine is not a missing one — telling a
+  // person to install what they have is the wrong fix. With Codex found and
+  // Claude unanswered, and with nothing answered at all.
+  const unanswered = plan({ intention: 'x', folder: '/code/app' }, [], { preferred: 'codex', rows: [{ backend: 'claude', discovery: 'unknown' }, { backend: 'codex', discovery: 'installed' }] })
+  const silent = plan({ intention: 'x', folder: '/code/app' }, [], { rows: [{ backend: 'claude', discovery: 'unknown' }, { backend: 'codex', discovery: 'unknown' }] })
+  return { pass: none.kind === 'refused' && none.field === 'engine' && /Check again/.test(none.reason) &&
+    codex.kind === 'refused' && codex.field === 'engine' && /without a folder/.test(codex.reason) &&
+    claude.kind === 'start' &&
+    unanswered.kind === 'refused' && /not answered/.test(unanswered.reason) && !/install/i.test(unanswered.reason) &&
+    silent.kind === 'refused' && /not answered/.test(silent.reason), detail: { none, codex, claude, unanswered, silent } }
+})
+intent('onboarding.intent.3 a teammate is reused only when a place CONTAINS the folder by path segment; otherwise one is minted with exactly that folder and nothing wider', () => {
+  const inside = plan({ intention: 'x', folder: '/code/app/' }, [mate('tA', ['/code/'])])
+  const exact = plan({ intention: 'x', folder: '/code/app' }, [mate('tB', ['/code/app'])])
+  const sibling = plan({ intention: 'x', folder: '/code/app2' }, [mate('tC', ['/code/app'])])
+  const none = plan({ intention: 'x', folder: '/code/app' }, [mate('tD', [])])
+  return { pass: inside.kind === 'start' && inside.teammate.reuse === 'tA' && inside.folder === '/code/app' &&
+    exact.kind === 'start' && exact.teammate.reuse === 'tB' &&
+    sibling.kind === 'start' && sibling.teammate.reuse === undefined && JSON.stringify(sibling.teammate.mint?.places) === JSON.stringify(['/code/app2']) &&
+    none.kind === 'start' && none.teammate.reuse === undefined && JSON.stringify(none.teammate.mint?.places) === JSON.stringify(['/code/app']) &&
+    typeof none.teammate.mint?.name === 'string' && /app/.test(none.teammate.mint.name), detail: { inside, exact, sibling, none } }
+})
+intent('onboarding.intent.4 the task title is the first line, capped; the full sentence rides as the description; the summary states the grant before anything is minted', () => {
+  const long = 'Make the login test stop flaking on CI and explain what was wrong with it so I can review the change'
+  const one = plan({ intention: long, folder: '/code/app' })
+  const two = plan({ intention: 'Fix login\nIt fails on CI about once in five runs', folder: '/code/app' }, [mate('tB', ['/code/app'])])
+  const short = plan({ intention: 'fix it', folder: '/code/app' })
+  return { pass: one.kind === 'start' && one.title.length <= 80 && one.title.endsWith('…') && one.description === long &&
+    two.kind === 'start' && two.title === 'Fix login' && /once in five/.test(two.description ?? '') && !(two.description ?? '').includes('Fix login') &&
+    short.kind === 'start' && short.title === 'fix it' && !Object.hasOwn(short, 'description') &&
+    /may work only in/.test(one.summary) && /app/.test(one.summary) && /branch/.test(one.summary) &&
+    !/may work only in/.test(two.summary) && /tB/.test(two.summary), detail: { one, two, short } }
+})
+intent('onboarding.intent.5 the repository answer keeps three arms — a repository, git missing, and not a repository — with a different fix each', () => {
+  const repo = model.firstWorkRepoAnswer({ kind: 'status', root: '/code/app', repository: '/code/app', branch: 'main', upstream: null }, '/code/app')
+  const noGit = model.firstWorkRepoAnswer({ kind: 'git-missing' }, '/code/app')
+  const plain = model.firstWorkRepoAnswer({ kind: 'unreadable', detail: 'fatal: not a git repository' }, '/code/notes')
+  // M205 critic: a SUBFOLDER answers git too and would be refused after the
+  // mint; a missing path is not a plain folder. macOS's /private prefix is
+  // the same folder, not a subfolder.
+  const status = (root) => ({ kind: 'status', root, repository: root, branch: 'main', upstream: null })
+  const sub = model.firstWorkRepoAnswer(status('/private/var/code/app'), '/var/code/app/src')
+  const same = model.firstWorkRepoAnswer(status('/private/var/code/app'), '/var/code/app/')
+  const sibling = model.firstWorkRepoAnswer(status('/code/app'), '/code/app2')
+  const missing = model.firstWorkRepoAnswer({ kind: 'unreadable', detail: "fatal: cannot change to '/code/typo': No such file or directory" }, '/code/typo')
+  return { pass: repo.kind === 'repository' && noGit.kind === 'refused' && /git/.test(noGit.reason) &&
+    plain.kind === 'not-a-repository' && /not a git repository/.test(plain.reason) && /notes/.test(plain.reason) &&
+    noGit.reason !== plain.reason &&
+    sub.kind === 'refused' && /inside the repository/.test(sub.reason) && same.kind === 'repository' && sibling.kind === 'repository' &&
+    missing.kind === 'refused' && /does not exist/.test(missing.reason), detail: { repo, noGit, plain, sub, same, sibling, missing } }
+})
+
 // Static markup proves available/disabled affordances, never that a click sends
 // a turn. The real renderer owns start/send verification separately.
 try {
@@ -141,28 +223,59 @@ try {
   const { renderToStaticMarkup } = require('react-dom/server')
   const { Launcher } = require(launcherOut)
   const noop = () => {}
-  const html = renderToStaticMarkup(createElement(Launcher, {
-    presets: [], report: report({ codex: '/fixture/bin/codex' }),
+  const render = (cliPaths) => renderToStaticMarkup(createElement(Launcher, {
+    presets: [], report: report(cliPaths),
     onCheckAgain: noop, onSpawnPreset: noop, onOpenSheet: noop, onOpenFile: noop,
     onNewNote: noop, noteReason: 'choose a panel', onNewChat: noop,
-    chatReason: 'claude is missing', onNewCodexChat: noop, codexReason: null,
-    onNewSandboxChat: noop, sandboxReason: 'claude is missing'
+    chatReason: cliPaths.claude ? null : 'claude is missing', onNewCodexChat: noop, codexReason: cliPaths.codex ? null : 'codex is missing',
+    onStartWork: async () => ({ kind: 'started' }), onAsk: noop, onChatHere: noop, onOpenStarter: noop, starterReason: null
   }))
-  const start = html.match(/<button\b[^>]*\bdata-onboarding-start(?:="[^"]*")?[^>]*>[\s\S]*?<\/button>/)?.[0]
-  const oldClaude = html.match(/<button\b[^>]*\bdata-launcher-new-chat(?:="[^"]*")?[^>]*>/)?.[0]
-  const oldCodex = html.match(/<button\b[^>]*\bdata-launcher-new-codex(?:="[^"]*")?[^>]*>/)?.[0]
-  ok('onboarding.markup.1 available codex leads with Start a conversation and keeps old doors',
-    Boolean(start && !/\bdisabled(?:=|\s|>)/.test(start) && /Start a conversation/.test(start) &&
-      oldClaude && /\bdisabled(?:=|\s|>)/.test(oldClaude) && oldCodex &&
-      !/\bdisabled(?:=|\s|>)/.test(oldCodex)),
-    JSON.stringify({ start: start ?? null, oldClaude, oldCodex }))
+  const disabled = (tag) => /\bdisabled(?:=|\s|>)/.test(tag ?? '')
+  const buttonTag = (source, attr) => source.match(new RegExp(`<button\\b[^>]*\\b${attr}(?:="[^"]*")?[^>]*>`))?.[0]
+  const html = render({ codex: '/fixture/bin/codex' })
+  // M205 (D09). Rewritten: the primary is Start work, not Start a
+  // conversation. With Codex alone it is PRESENT and disabled by name (a
+  // teammate carries no backend, so a lane runs Claude), the one alternative
+  // is live, and every legacy door is still in the DOM — inside the CLOSED
+  // disclosure, never removed.
+  const start = buttonTag(html, 'data-onboarding-start')
+  const ask = buttonTag(html, 'data-onboarding-ask')
+  const more = html.match(/<details\b[^>]*\bdata-launcher-more[^>]*>[\s\S]*<\/details>/)?.[0] ?? ''
+  const moreOpen = /<details\b[^>]*\bopen\b/.test(more)
+  const legacy = ['data-launcher-sheet', 'data-launcher-open-file', 'data-launcher-new-chat', 'data-launcher-new-codex', 'data-launcher-starter', 'data-launcher-new-note'].map((a) => [a, buttonTag(more, a) !== undefined])
+  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Ask without a folder is live, and every legacy door is inside the closed disclosure',
+    Boolean(start && disabled(start) && /Claude Code/.test(start) && ask && !disabled(ask) && !moreOpen &&
+      legacy.every(([, found]) => found) && disabled(buttonTag(more, 'data-launcher-new-chat')) && !disabled(buttonTag(more, 'data-launcher-new-codex'))),
+    JSON.stringify({ start: start ?? null, ask: ask ?? null, moreOpen, legacy }))
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in',
     /installed/i.test(html) && /sign[ -]?in|authenticat/i.test(html) &&
       /data-launcher-check-again/.test(html),
     'static readiness copy and Check again; no click/send claim')
+  // M205. Readiness ONLY AS NEEDED: with Claude found, one row and no Check
+  // again (Codex's missing row lives in Environment…); with nothing found,
+  // every row and Check again. And no process mechanics in onboarding copy.
+  const claudeOnly = render({ claude: '/fixture/bin/claude' })
+  const nothing = render({})
+  const both = render({ claude: '/fixture/bin/claude', codex: '/fixture/bin/codex' })
+  const engines = (source) => [...source.matchAll(/data-onboarding-engine="([^"]+)"/g)].map((m) => m[1]).join(',')
+  ok('onboarding.markup.3 readiness appears only as needed — one row with an engine found, every row and Check again with none — and no copy says process-per-turn',
+    engines(claudeOnly) === 'claude' && !/data-launcher-check-again/.test(claudeOnly) &&
+      engines(nothing) === 'claude,codex' && /data-launcher-check-again/.test(nothing) &&
+      ![claudeOnly, nothing, both, html].some((source) => /process per turn|one process/i.test(source)),
+    JSON.stringify({ claudeOnly: engines(claudeOnly), nothing: engines(nothing) }))
+  // M205. At rest the primary names the FIRST missing thing (the sentence),
+  // is disabled until it is answered, and the starter reads as optional.
+  const summary = claudeOnly.match(/<p\b[^>]*\bdata-onboarding-summary="([^"]+)"[^>]*>([\s\S]*?)<\/p>/)
+  ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional',
+    Boolean(summary && summary[1] === 'intention' && /what you want to work on/.test(summary[2]) &&
+      disabled(buttonTag(claudeOnly, 'data-onboarding-start')) && !disabled(buttonTag(claudeOnly, 'data-onboarding-ask')) &&
+      /optional/.test(claudeOnly.match(/<button\b[^>]*\bdata-launcher-starter[^>]*>[\s\S]*?<\/button>/)?.[0] ?? '')),
+    JSON.stringify({ summary: summary ? summary.slice(1) : null }))
 } catch (error) {
-  ok('onboarding.markup.1 available codex leads with Start a conversation and keeps old doors', false, error.message)
+  ok('onboarding.markup.1 with Codex alone Start work is present and disabled naming Claude Code, Ask without a folder is live, and every legacy door is inside the closed disclosure', false, error.message)
   ok('onboarding.markup.2 first-launch readiness explicitly separates installed from sign-in', false, error.message)
+  ok('onboarding.markup.3 readiness appears only as needed — one row with an engine found, every row and Check again with none — and no copy says process-per-turn', false, error.message)
+  ok('onboarding.markup.4 at rest the primary is disabled and the summary names the sentence as the one missing thing; the starter line reads as optional', false, error.message)
 }
 
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed`)

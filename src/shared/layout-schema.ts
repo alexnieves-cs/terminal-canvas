@@ -2,6 +2,7 @@ import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
 import { parseImportedNote } from './imported-note'
 import { parseDeckView } from './deck'
+import { parseSheetView } from './sheet'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -916,7 +917,11 @@ export function parseFileSource(raw: unknown, id: string, warnings: string[]): F
   // M248. The same three states; a malformed view costs the VIEW by name, never the panel.
   const deck = parseDeckView(raw.deck)
   if (deck.kind === 'malformed') warnings.push(`file panel ${id}: malformed deck view dropped (${deck.reason})`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}), ...(deck.kind === 'view' ? { deck: deck.view } : {}) }
+  // M245. The same drop-the-field rule: a malformed sheet view reopens the file as a plain file panel.
+  const sheet = parseSheetView(raw.sheet)
+  if (sheet.kind === 'malformed' || ('sheet' in raw && sheet.kind === 'absent')) warnings.push(`file panel ${id}: malformed sheet view dropped`)
+  if (sheet.kind === 'view' && sheet.dropped !== undefined) warnings.push(`file panel ${id}: malformed sheet ${sheet.dropped.join(' and ')} dropped`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(sheet.kind === 'view' ? { sheet: sheet.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}), ...(deck.kind === 'view' ? { deck: deck.view } : {}) }
 }
 
 

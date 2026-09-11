@@ -26,6 +26,8 @@ export interface FileSource {
   path: string
   /** M244. Structured Markdown note view; absent accepted content requires human review. */
   checklist?: import('./checklist').ChecklistView
+  /** M245. A spreadsheet view of a .csv/.tsv/.xlsx file. Presentation and consent only — cells live in the file. */
+  sheet?: import('./sheet').SheetView
   /** M248. Slides view of a Markdown file: the slide on show and a door's staged proposal. */
   deck?: import('./deck').DeckView
   /**
@@ -82,6 +84,17 @@ export type FileResult =
   | { kind: 'too-large'; bytes: number; cap: number }
   | { kind: 'binary'; bytes: number }
   | { kind: 'unreadable'; detail: string }
+  /**
+   * M245. The whole file as bytes — returned ONLY to a read that asked for
+   * `encoding: 'base64'`, so no existing caller can receive it. No line cap
+   * and no binary sniff: both exist to protect a text renderer, and the
+   * caller that asks for bytes (a sheet) parses the file itself. The byte
+   * cap still refuses, for its own reason.
+   */
+  | { kind: 'bytes'; base64: string; bytes: number; mtimeMs: number }
+
+/** M245. Absent is utf8 text — every caller before M245, byte for byte. */
+export type FileEncoding = 'base64'
 
 /**
  * Caps, not preferences, and the reason is prompts.ts's reason: the path is

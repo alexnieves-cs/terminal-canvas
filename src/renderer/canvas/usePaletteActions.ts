@@ -2,6 +2,8 @@ import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from 
 import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
 import { deckController } from '@renderer/file/deck-controllers'
+import { sheetController } from '@renderer/file/sheet-controllers'
+import { forgetAgentLinksFor } from './agent-links-store'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -19,7 +21,7 @@ import { disposeWatcher } from '@renderer/watcher/useWatchers'
 import { disposeChat } from '@renderer/chat/useChatSessions'
 import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } from '@renderer/chat/chat-store'
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
-import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
+import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type AgentPlanCaller, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
 import { importedNoteReason } from '@shared/imported-note'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
@@ -115,7 +117,7 @@ export interface PaletteActionsDeps {
   startDevServerNow: (script?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   discoverProject: () => Promise<PreviewDiscovery | { kind: 'refused'; reason: string }>
   /** M184. Canvas's Run over the draft (the same instantiation the panel's Run calls). */
-  runWorkflowNow: (templateId: string) => string | undefined
+  runWorkflowNow: (templateId: string, caller?: AgentPlanCaller) => string | undefined
   registry: Registry
   palette: PaletteController
   linkMode: LinkMode
@@ -305,10 +307,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         templates: allTemplates(templateRowsRef.current).map((t) => ({ id: t.id })),
         worktrees: worktreeRows.map((w) => ({ id: w.id }))
       })
-      // M248. WHO asked. The palette's runPlan calls execute(step) — a person; runAgentPlan
-      // (the agent door AND a workflow action node) wraps it as 'door'. A deck edit that
-      // arrives through a door stages a proposal instead of writing the file.
-      const execute = async (step: PlanStep, origin: 'person' | 'door' = 'person'): Promise<StepOutcome> => {
+      // M246. `caller` is WHO asked: present through the agent door (and a
+      // workflow an agent triggered), absent for the palette runner and a
+      // person's own run. Only verbs whose meaning depends on it read it.
+      // M248. HOW it arrived: runAgentPlan (the agent door AND a workflow action
+      // node) passes 'door' whatever the caller; the palette's runPlan is a person.
+      // A deck edit that arrives through a door stages a proposal instead of writing.
+      const execute = async (step: PlanStep, caller?: AgentPlanCaller, origin: 'person' | 'door' = 'person'): Promise<StepOutcome> => {
         const a = step.args
         const creation = CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)
         if (creation) return self.createObject(creation.id, a.value)
@@ -321,9 +326,15 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'deck-review': return self.reviewDeck(a.panel!, a.action ?? '', a.slides ?? '', origin)
           case 'deck-present': return self.presentDeck(a.panel!, origin)
           case 'deck-export-pdf': return self.exportDeckPdf(a.panel!)
+          case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '', caller)
+          case 'sheet-review': return self.reviewSheet(a.panel!, a.operation!, a.target, caller)
+          case 'agent-links': return self.setAgentLinks(a.state!)
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
-          case 'workflow-run': return self.runWorkflowNow(a.template!)
+          // M246 (critic, finding 1). The caller rides the run into every action
+          // node: dropped here, an agent could put `sheet-review f1 keep all` in a
+          // template and run it as if a person had.
+          case 'workflow-run': return self.runWorkflowNow(a.template!, caller)
           case 'workflow-stop': return self.stopWorkflow(a.template!)
           case 'workflow-copy': return self.saveWorkflowCopy(a.template!)
           case 'node-test': return self.testNode(a.template!, a.node)
@@ -563,6 +574,18 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     },
     presentDeck: async (panel, origin = 'person') => deckController(panel)?.present(origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
     exportDeckPdf: async (panel) => deckController(panel)?.exportPdf() ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    editSheet: async (panel, cell, value, caller) => sheetController(panel)?.edit(cell, value, caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
+    // M247. The toggle is the `canvas.agentLinks` SETTING, so every door writes the
+    // same record the HUD button and the settings palette row write.
+    setAgentLinks: async (mode) => {
+      if (mode !== 'on' && mode !== 'off' && mode !== 'toggle') return { kind: 'refused', reason: 'use agent-links on, off or toggle' }
+      const rows = await window.canvas.settings.list()
+      const current = rows.find((r) => r.id === 'canvas.agentLinks')?.value !== false
+      const next = mode === 'toggle' ? !current : mode === 'on'
+      self.toggleSetting('canvas.agentLinks', next)
+      return { kind: 'ran', note: next ? 'agent links shown' : 'agent links hidden' }
+    },
+    reviewSheet: async (panel, operation, target, caller) => sheetController(panel)?.review(operation, target ?? 'all', caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -1409,6 +1432,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
                     // panelsRef to be told apart: for any other kind this is
                     // a no-op in main (no session) and on disk (no file).
                     disposeChat(panelId, true); disposeWatcher(panelId)
+                    // M247. BEFORE the sessionless `continue` below: a file object is
+                    // exactly what agent links point AT, so its links must go too.
+                    forgetAgentLinksFor(panelId)
                     if (doomedSessionlessIds.has(panelId)) {
                       clearFileResult(panelId)
                       clearToolbox(panelId)
@@ -2038,8 +2064,8 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // shape). The first cut read those the other way round, so the one door
     // with nobody watching reported a refusal for every run that started and
     // a success for every one that did not.
-    runWorkflowNow: (templateId) => {
-      const refusal = runWorkflowNow(templateId)
+    runWorkflowNow: (templateId, caller) => {
+      const refusal = runWorkflowNow(templateId, caller)
       return refusal === undefined ? { kind: 'ran' } : { kind: 'refused', reason: refusal }
     },
     testNode: (templateId, key) => testNodeNow(templateId, key),
@@ -2209,7 +2235,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, 'door'), caller),
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({

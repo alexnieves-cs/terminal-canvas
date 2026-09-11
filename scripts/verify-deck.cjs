@@ -51,20 +51,22 @@ ok('deck.split.5 every slide carries its source span into the file',
 {
   const before = new Map([['a1', 1], ['b2', 2], ['c3', 3]])
   const after = new Map([['a1', 1], ['b2', 20], ['d4', 4]])
-  const items = call(R.diffItems, before, after)
-  ok('draft.diff.1 diffItems over cells: one changed, one added, one removed — absent is null — and an unchanged key is no item',
+  // M246's diffItems takes the ABSENT value explicitly; null is the one that survives JSON.
+  const items = call(R.diffItems, before, after, null)
+  ok('draft.diff.1 diffItems over cells: one changed, one added, one removed — absent is the given empty (null) — and an unchanged key is no item',
     Array.isArray(items) && items.length === 3 && items.some((i) => i.id === 'b2' && i.old === 2 && i.new === 20) &&
       items.some((i) => i.id === 'd4' && i.old === null && i.new === 4) && items.some((i) => i.id === 'c3' && i.old === 3 && i.new === null), JSON.stringify(items))
-  const draft = { baseHash: call(R.hashText, 'base'), by: 'ch1', at: 5, items: items ?? [] }
+  const draft = { baseHash: call(D.hashText, 'base'), by: 'ch1', at: 5, items: items ?? [] }
   const kept = call(R.keep, draft, ['b2'])
   ok('draft.keep.1 keep hands back exactly the kept items to apply and the rest as the remaining draft, base and author untouched',
     kept?.apply?.length === 1 && kept.apply[0].id === 'b2' && kept.remaining?.items?.length === 2 && kept.remaining.baseHash === draft.baseHash && kept.remaining.by === 'ch1')
   const dropped = call(R.discard, draft, ['b2', 'c3', 'd4'])
-  ok('draft.discard.1 discard applies nothing, and discarding the last item leaves NO draft (null, never an empty one)',
-    dropped?.apply?.length === 0 && dropped.remaining === null && call(R.keep, draft, 'all')?.remaining === null && call(R.keep, draft, 'all')?.apply?.length === 3)
+  // M246's API: discard answers what it DROPPED (never an apply list) and "nothing left" is undefined.
+  ok('draft.discard.1 discard applies nothing, and discarding the last item leaves NO draft (undefined, never an empty one)',
+    dropped?.dropped?.length === 3 && !('apply' in (dropped ?? {})) && dropped.remaining === undefined && call(R.keep, draft, 'all')?.remaining === undefined && call(R.keep, draft, 'all')?.apply?.length === 3)
   ok('draft.state.1 draftState is three-state: none without a draft, pending on its base, conflict once the disk moved',
-    call(R.draftState, null, 'h') === 'none' && call(R.draftState, draft, draft.baseHash) === 'pending' && call(R.draftState, draft, call(R.hashText, 'moved')) === 'conflict')
-  ok('draft.hash.1 hashText is stable and separates near texts', call(R.hashText, 'abc') === call(R.hashText, 'abc') && call(R.hashText, 'abc') !== call(R.hashText, 'abd') && call(R.hashText, 'a\r\n') !== call(R.hashText, 'a\n'))
+    call(R.draftState, undefined, 'h', undefined) === 'none' && call(R.draftState, draft, draft.baseHash, undefined) === 'pending' && call(R.draftState, draft, call(D.hashText, 'moved'), undefined) === 'conflict')
+  ok('draft.hash.1 the deck\'s hashText (deck.ts) is stable and separates near texts', call(D.hashText, 'abc') === call(D.hashText, 'abc') && call(D.hashText, 'abc') !== call(D.hashText, 'abd') && call(D.hashText, 'a\r\n') !== call(D.hashText, 'a\n'))
   const src = existsSync(join(root, 'src/shared/draft-review.ts')) ? readFileSync(join(root, 'src/shared/draft-review.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '') : 'slide'
   ok('draft.generic.1 draft-review.ts names no slide or deck and imports nothing', !/slide|deck/i.test(src) && !/\bimport\b/.test(src))
 }
@@ -88,7 +90,7 @@ const base = deckOf(five)
   const proposal = deckOf([five[0], '# new\n', five[1], '# three!\n', five[3]])
   const draft = call(D.slideDraft, base, proposal, 'ch1', 7)
   const ids = draft?.items?.map((i) => i.id)
-  ok('deck.draft.1 a proposal stages add + change + remove against the disk hash', JSON.stringify(ids) === JSON.stringify(['2', '4', 'r5']) && draft.baseHash === call(R.hashText, base), JSON.stringify(ids))
+  ok('deck.draft.1 a proposal stages add + change + remove against the disk hash', JSON.stringify(ids) === JSON.stringify(['2', '4', 'r5']) && draft.baseHash === call(D.hashText, base), JSON.stringify(ids))
   const partial = call(D.applyKept, base, draft, ['4'])
   ok('deck.keep.1 a partial keep splices ONLY the kept slide into the disk text; the rest stays a draft',
     partial?.kind === 'applied' && partial.text === deckOf([five[0], five[1], '# three!\n', five[3], five[4]]) && JSON.stringify(partial.remaining?.items.map((i) => i.id)) === JSON.stringify(['2', 'r5']), JSON.stringify(partial))
@@ -162,13 +164,14 @@ const base = deckOf(five)
 // deck.session.2 drives the session with 'door' directly; this pins the three
 // places that decide which door a step came through. Dropping the second
 // argument would turn every agent edit into a direct write with every other
-// suite still green (the critic).
+// suite still green (the critic). Integration 2: main's M246 threads `caller`
+// as execute's second parameter, so the origin is now the THIRD.
 {
   const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
   const pa = strip(readFileSync(join(root, 'src/renderer/canvas/usePaletteActions.ts'), 'utf8'))
   const node = existsSync(join(root, 'src/renderer/file/DeckNode.tsx')) ? strip(readFileSync(join(root, 'src/renderer/file/DeckNode.tsx'), 'utf8')) : ''
   ok('deck.origin.1 runAgentPlan runs steps as the door, the palette runPlan as a person, deck verbs pass origin, and a door keep and a door present are refused',
-    pa.includes("runAgentPlan(line, facts(), (step) => execute(step, 'door'), caller)") && /runPlan\(built\.plan, execute, \{/.test(pa) &&
+    pa.includes("runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller)") && /runPlan\(built\.plan, execute, \{/.test(pa) &&
       /case 'deck-edit': return self\.editDeck\([^\n]*origin\)/.test(pa) && /case 'deck-write': [^\n]*origin\)/.test(pa) && /case 'deck-review': [^\n]*origin\)/.test(pa) && /case 'deck-present': [^\n]*origin\)/.test(pa) &&
       /action === 'keep' && origin === 'door'\) return \{ kind: 'refused'/.test(node) && /if \(origin === 'door'\) return \{ kind: 'refused', reason: `presenting/.test(node))
 }

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX } 
 import { createPortal } from 'react-dom'
 import { splitDeck, deckSummary, deckChanges, isRemoteImage, type DeckView, type SlideItem } from '@shared/deck'
 import { createDeckSession } from '@shared/deck-session'
-import { draftState, hashText } from '@shared/draft-review'
+import { draftState } from '@shared/draft-review'
+import { hashText } from '@shared/deck'
 import type { ImageResult } from '@shared/starter'
 import type { CreationResult } from '@shared/verb-table'
 import { PanelFrame } from '@renderer/components/PanelFrame'
@@ -88,7 +89,7 @@ export function DeckNode(props: FileNodeProps & { onView: (id: string, view: Dec
   const disk = state.disk
   const text = disk?.kind === 'text' ? disk.content : ''
   const draft = state.view.draft
-  const review = disk?.kind === 'text' ? draftState(draft, hashText(disk.content)) : 'none'
+  const review = disk?.kind === 'text' ? draftState(draft, hashText(disk.content), undefined) : 'none'
   // The DISK is the deck: the card, the header, Present and every slide number
   // read the file, as the PDF does. A proposal is shown only as a proposal —
   // marked on the filmstrip and previewed inside the review (the critic: an

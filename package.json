@@ -51,6 +51,9 @@
     "verify:pill": "node scripts/verify-pill.cjs",
     "verify:notes": "node scripts/verify-notes.cjs",
     "verify:deck": "node scripts/verify-deck.cjs",
+    "verify:sheet": "node scripts/verify-sheet.cjs",
+    "verify:draft": "node scripts/verify-draft.cjs",
+    "verify:agent-links": "node scripts/verify-agent-links.cjs",
     "verify:toolbox": "node scripts/verify-toolbox.cjs",
     "verify:usage": "node scripts/verify-usage.cjs",
     "verify:machine-cost": "node scripts/verify-machine-cost.cjs",
@@ -80,7 +83,8 @@
     "@sentry/electron": "7.18.0",
     "jszip": "3.10.2",
     "mammoth": "1.12.2",
-    "node-pty": "1.1.0"
+    "node-pty": "1.1.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@doyensec/electronegativity": "^1.10.3",

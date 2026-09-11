@@ -991,7 +991,7 @@ export function makeFilePanel(
     // spread would both share the caller's object (so a later mutation of it
     // rewrites a panel already on the canvas) and write `prose: undefined`,
     // which reads as present. makeReviewPanel's warning, at a sixth mint.
-    source: { path: source.path, ...(source.prose === true ? { prose: true as const } : {}), ...(source.checklist === undefined ? {} : { checklist: source.checklist }), ...(source.imported === undefined ? {} : { imported: source.imported }), ...(source.deck === undefined ? {} : { deck: source.deck }) },
+    source: { path: source.path, ...(source.prose === true ? { prose: true as const } : {}), ...(source.checklist === undefined ? {} : { checklist: source.checklist }), ...(source.sheet === undefined ? {} : { sheet: source.sheet }), ...(source.imported === undefined ? {} : { imported: source.imported }), ...(source.deck === undefined ? {} : { deck: source.deck }) },
     z
   }
 }

@@ -137,6 +137,18 @@ export const SETTINGS: readonly SettingDef[] = [
     category: RESTORE_CATEGORY
   },
   {
+    // M247. The agent → object links. planWritable, so `set-setting` and the
+    // `agent-links` verb both reach it from a plan.
+    id: 'canvas.agentLinks',
+    planWritable: true,
+    label: 'Show agent links',
+    description: 'draw a line from each agent to the files, notes, checklists and sheets it read, wrote or drafted',
+    keywords: ['links', 'edges', 'agent', 'files', 'touched', 'read', 'wrote', 'draft', 'lines'],
+    type: 'boolean',
+    default: true,
+    category: AGENT_CATEGORY
+  },
+  {
     id: 'agent.glow',
     planWritable: true,
     label: 'Show agent state on panels',

@@ -4465,3 +4465,78 @@ README row was added (`verify:meta milestones.1`).
 **The slide grammar is an OPTION of the chat's parser, never its default (`markdown.ts`'s `{ slides: true }`, M248).** Image and table blocks exist only when a deck asks; the chat keeps md.1's closed grammar (a table as its source, an image as its alt text), because a transcript is not a page and an image block there would ask the renderer to load something an assistant named. `http(s):` sources are never read on either path — a named "remote image not loaded" placeholder.
 
 **M244's checklist CSS and New object row used literal px, which left `verify:styles` 4–6 red at 7a3323d0; M248 moved them onto the scale tokens.** `--sp-*`, `--r-*`, `--t-*` only; the nearest step replaced each literal (14px padding → `--sp-5`, 11px → `--sp-5`, 10px → `--sp-4`, 3px → `--sp-1`). The same commit's creation rows were pushed ahead of the spawn section and displaced `New panel…` (`verify:palette sheet.1`); they now follow it.
+
+**A sheet stores FORMULAS and never their values (`sheet-formula.ts`, `csv.ts`, M245).** A cell
+whose text begins with `=` is written to the file verbatim; the renderer's lazy evaluator computes
+what it shows. Writing a computed value back freezes the sheet on its first save — the next edit to
+an input changes nothing downstream, and nothing errors. A LITERAL that begins with `=` (or looks
+like a number in an xlsx text cell) is written with a leading apostrophe (`'=`, `sheet-xlsx.ts`'s
+`textCell`), the spreadsheet convention; without it the text becomes a formula on the next read.
+The grammar is closed — anything outside it is `#NAME?` and does nothing, which is the whole
+CSV-injection answer: no function here reaches outside the grid.
+
+**`csv.ts` remembers BOM, dominant line ending, final newline and needlessly-quoted cells.** A sheet
+edits a file an agent and git also read; a one-cell edit that re-serialized a CRLF file as LF, or
+dropped a BOM, turns a one-cell change into a whole-file diff in the review gate. The `quoted` set
+names cells by `r,c`, so the session drops it on a STRUCTURAL edit (rows/columns moved) rather than
+quote the wrong cells.
+
+**`file:read`/`file:write` `encoding` is ABSENT or `'base64'`, and the watcher re-reads in the
+panel's own encoding (`file-read.ts`, `file-write.ts`, `file-watch.ts`, `ipc.ts`, M245).** The
+`bytes` arm reaches only a read that asked for it, so no earlier caller can receive a result it has
+no arm for. `FileWatchers.watch` stores the encoding; re-reading a sheet's file as TEXT on change
+would deliver a `text` arm the session treats as unreadable, and every external change would read
+as a failure instead of a named conflict. `ipc.ts` honours only the exact string, so a malformed
+value is the text path, never a surprise.
+
+**`sheetFocused()` is in `shouldIgnoreKeys` (`Canvas.tsx`, `sheet-controllers.ts`, M245).** A
+sheet mousedown moves `focusedId` to the sheet, but keyboard or programmatic focus does not — so
+DOM focus can sit in the grid while `focusedId` names a live terminal. Unguarded, the menu's
+`edit:paste` goes into the agent and `edit:undo` runs the CANVAS undo as well as the sheet's (whose
+top entry can be a spawn — the panel disappears). `verify:panels` `sheet-clip.1`/`.2` arrange that
+state exactly, with a blurred positive control so the negative is not vacuous.
+
+**An xlsx's losses are read from its zip ENTRY LIST, not its parsed workbook (`sheet-xlsx.ts`'s
+`lossesOf`, M245).** SheetJS Community never parses charts, images, pivot tables or table
+definitions, so a list computed from what it parsed is always empty — a save that drops a chart
+with no warning. `bookFiles: true` exposes `wb.keys`, the zip's own names, and each part is counted
+from there (`verify:sheet` `sheet.xlsx.6` fails if that list is ever empty for a real workbook).
+`readXlsx` also refuses anything without the zip signature: SheetJS happily parses arbitrary bytes
+as CSV or HTML and returns a workbook of garbage that could then be saved over the file.
+
+**An xlsx's per-cell and sheet metadata is carried BY ADDRESS, so row/column edits on an xlsx are
+refused and the book is re-read from every write (`sheet-xlsx.ts`'s `writeXlsx`,
+`sheet-session.ts`'s `encode`, M245's critic).** Comments, number formats, links, merges and
+column widths are copied onto the rewritten sheet by cell address. That is right while nothing
+moves and silently wrong after an insert or delete — a merge or a comment lands on other data.
+And re-keying from the book as first OPENED (rather than as last written) makes every later
+save wrong the same way. **Read with `cellNF: true`**: without it SheetJS leaves `z` unset, no
+date is recognisable, and every date shows — and is retyped — as a serial number.
+
+**An agent's sheet edit PROPOSES; the caller decides, and it rides into `execute`
+(`usePaletteActions.ts`'s `execute(step, caller)`, `sheet-draft.ts`'s `sheetEditRoute`, M246).**
+`runAgentPlan` is shared by the agent door and the workflow action node, and `execute` used to
+receive only the step — so no verb could tell a person's line from an agent's. The caller is
+now threaded through; `caller.panelId` present means an agent is asking, and `sheet-edit` stages
+a draft instead of writing. Keeping is refused to any agent caller by name: an agent keeping its
+own draft is the approval the draft exists to hand to a person. A person's own write REBASES a
+pending draft onto the new file (`sheet-session.ts`'s `update`); without that, editing any other
+cell would turn the agent's draft into a "conflict" the person caused. **A workflow run carries
+its caller into every action node** (`Canvas.tsx`'s `instantiateTemplate` node loop and
+`runWorkflowFromPlan`, M246's critic): the loop used to pass a hard-coded `undefined`, so an agent
+could put `sheet-review f1 keep all` in a template, `workflow-run` it, and keep its own draft as a
+person. `runWorkflow`'s second parameter is the SOURCE — never pass `runWorkflow` itself where a
+`(templateId, caller)` function is expected. **Undo/redo carry the draft too**: each history step
+records the draft as it stood, and a traversal re-derives it (merge, minus discards, rebase) —
+otherwise undoing a person's edit reads as a conflict and loses the proposal it had dropped.
+
+**Agent links are forgotten BEFORE the palette close loop's sessionless `continue`
+(`usePaletteActions.ts`, `agent-links-store.ts`, M247).** That loop `continue`s past every clear
+for a sessionless panel — a file, note, checklist or sheet — which is exactly what a link points
+AT; a `forgetAgentLinksFor` beside `clearAgentState` would never run for them. The store forgets in
+both directions (a closed agent loses its links; a closed object is dropped from every agent's),
+and `verify:agent-links` `forget.1` counts the sites. **The feed caches per agent on the TURNS
+array's identity** (`Canvas.tsx`): `useChatsVersion` bumps on every streamed delta, so an uncached
+feed re-indexes every transcript on the canvas several times a second while any agent types.
+**It uses its own `linksChatsVersion`**: Canvas's `chatsVersion` is declared ~1,100 lines below,
+and a dependency array is evaluated during render — borrowing it throws before declaration.

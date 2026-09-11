@@ -2056,15 +2056,8 @@ const WS = [
   const spawnRows = P.filterCommands(rows, '').filter((r) => r.group === 'spawn')
   const dflt = byId(rows, 'preset.spawn.shell')
   ok('sheet.1 New panel… is the first spawn row with ⌘⇧N, and the default preset\'s row carries ⌘N',
-    // M244 put the creation registry's "New object" rows (`object.create.*`,
-    // CREATABLE_OBJECTS order) at the head of the spawn group on purpose, and
-    // this check was left red on main by it. The sheet is still the first row
-    // that is NOT a registry creation, and the registry rows all precede it.
-    // Repaired in M249 so the gate could go green; the row order is M244's.
-    sheet !== undefined && sheet.shortcut === '⌘⇧N' && dflt && dflt.shortcut === '⌘N' &&
-      spawnRows.findIndex((r) => r.id === 'spawn.sheet') === spawnRows.filter((r) => r.id.startsWith('object.create.')).length &&
-      spawnRows.slice(0, spawnRows.findIndex((r) => r.id === 'spawn.sheet')).every((r) => r.id.startsWith('object.create.')),
-    JSON.stringify({ sheet: sheet && sheet.title, order: spawnRows.slice(0, 10).map((r) => r.id), dflt: dflt && dflt.shortcut }))
+    sheet !== undefined && sheet.shortcut === '⌘⇧N' && spawnRows[0] && spawnRows[0].id === 'spawn.sheet' && dflt && dflt.shortcut === '⌘N',
+    JSON.stringify({ sheet: sheet && sheet.title, first: spawnRows[0] && spawnRows[0].id, dflt: dflt && dflt.shortcut }))
   const build = typeof P.buildSpawnRequest === 'function' ? P.buildSpawnRequest : () => null
   const presets = [{ id: 'shell', name: 'Login shell', agent: undefined }, { id: 'claude', name: 'Claude', agent: 'claude-code' }]
   const a = build({ what: { kind: 'preset', id: 'shell' }, cwd: '/work', title: '', agentOptions: { permissionMode: 'plan' } }, presets)

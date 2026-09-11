@@ -134,9 +134,11 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
     const file = raw.source as import('./file-panel').FileSource
     // References travel, accepted local text and execution links do not. An imported
     // checklist must be read before it can edit a file on this machine or send a task.
+    // M245. A sheet travels as "this is a sheet" and nothing more: widths are this
+    // machine's taste and loss consent was given to a file on this machine.
     // M250. An imported note's record travels WITHOUT `reviewed`: that a person
     // on this machine read it says nothing about the person who opens the file.
-    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.imported === undefined ? {} : { imported: { from: scrub(file.imported.from, tally), dropped: file.imported.dropped } }), ...(file.deck === undefined ? {} : { deck: {} }) } } as unknown as PersistedPanel
+    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.sheet === undefined ? {} : { sheet: {} }), ...(file.imported === undefined ? {} : { imported: { from: scrub(file.imported.from, tally), dropped: file.imported.dropped } }), ...(file.deck === undefined ? {} : { deck: {} }) } } as unknown as PersistedPanel
   }
   // A terminal: the command it was ASKED for, and nothing the process became.
   const command = typeof raw.command === 'string' ? scrub(raw.command, tally) : undefined
@@ -255,10 +257,11 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
     // — nobody here read it — so the import record is re-parsed (a malformed
     // one is dropped) and rebuilt without `reviewed`, behind its gate.
     // M248. A deck travels as `deck: {}` — the view, never a staged proposal or the slide on show.
-    if (next.kind === 'file' && next.source !== undefined && (next.source.checklist !== undefined || next.source.deck !== undefined || 'imported' in next.source)) {
+    // M245. A sheet travels as `sheet: {}` likewise — widths and loss consent are this machine's.
+    if (next.kind === 'file' && next.source !== undefined && (next.source.checklist !== undefined || next.source.deck !== undefined || next.source.sheet !== undefined || 'imported' in next.source)) {
       const src = next.source
       const parsed = parseImportedNote(src.imported)
-      next.source = { path: src.path, ...(src.prose === true ? { prose: true } : {}), ...(src.checklist === undefined ? {} : { checklist: {} }), ...(src.deck === undefined ? {} : { deck: {} }), ...(parsed.kind === 'view' ? { imported: { from: parsed.view.from, dropped: parsed.view.dropped } } : {}) }
+      next.source = { path: src.path, ...(src.prose === true ? { prose: true } : {}), ...(src.checklist === undefined ? {} : { checklist: {} }), ...(src.sheet === undefined ? {} : { sheet: {} }), ...(src.deck === undefined ? {} : { deck: {} }), ...(parsed.kind === 'view' ? { imported: { from: parsed.view.from, dropped: parsed.view.dropped } } : {}) }
     }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }

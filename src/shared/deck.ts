@@ -9,7 +9,26 @@
  * with the file's OWN separators, so a deck with no change is byte-identical
  * (`deck.split.4`, CRLF included).
  */
-import { hashText, keep as keepItems, discard as discardItems, type Draft, type DraftItem } from './draft-review'
+import { keep as keepItems, discard as discardItems, type Draft, type DraftItem } from './draft-review'
+
+/**
+ * FNV-1a over UTF-16 code units, two lanes, 16 hex characters. Not a security
+ * hash: it answers "is this still the document the draft was made against",
+ * and a CRLF/LF difference must answer no, which a normalising compare would not.
+ * The deck's own (moved here from draft-review.ts when M246's generic module
+ * became canonical): main's `contentHash` carries a `:length` suffix that
+ * `parseDeckView`'s persisted-baseHash grammar refuses, and a slide's `hash`
+ * is also its LCS key, so the deck keeps one hash for both.
+ */
+export function hashText(text: string): string {
+  let a = 0x811c9dc5, b = 0x01000193 ^ text.length
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i)
+    a = Math.imul(a ^ c, 0x01000193) >>> 0
+    b = Math.imul(b ^ c ^ (i & 0xff), 0x01000193) >>> 0
+  }
+  return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0')
+}
 import { parseMarkdown, type Block, type Inline } from './markdown'
 
 export interface DeckSlide {
@@ -235,7 +254,8 @@ export function applyKept(diskText: string, draft: SlideDraft | null | undefined
 export function discardSlides(draft: SlideDraft, ids: readonly string[] | 'all'): { kind: 'discarded'; remaining: SlideDraft | null } | { kind: 'refused'; reason: string } {
   const unknown = ids === 'all' ? [] : ids.filter((id) => !draft.items.some((item) => item.id === id))
   if (unknown.length) return { kind: 'refused', reason: `no proposed change to ${slideWords(unknown)}` }
-  return { kind: 'discarded', remaining: discardItems(draft, ids).remaining }
+  // M246's discard answers `undefined` for "nothing left"; the deck's own API keeps null.
+  return { kind: 'discarded', remaining: discardItems(draft, ids).remaining ?? null }
 }
 
 /** What the deck would read with every proposed slide kept. */

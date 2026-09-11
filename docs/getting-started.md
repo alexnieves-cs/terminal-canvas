@@ -20,26 +20,37 @@ This build is **unsigned**, so macOS will refuse to open it on a double-click.
 
 To run it from source instead: `npm run dev`.
 
-## Your first conversation
+## Your first task
 
-The empty canvas shows one filled button: **Start a conversation**. It uses whichever engine the
-app found on your machine.
+The empty canvas asks two things: **what do you want to work on?** (a sentence, in plain
+language) and **in which repository?** (a full path, **Choose…**, or one of your recent folders).
+Then press **Start work**.
 
-- The app asks your login shell which CLIs are installed and reports three states per engine —
-  installed, missing, or *unanswered* (a shell that timed out is not the same as a CLI that is
-  not there). If one is missing, the launcher names the setup page and offers **Check again**.
-- Installed never means signed in. The first message you send is what finds out; if the CLI
-  needs a login it will say so in the panel, in its own words.
+- Before anything happens the card says what will: the first time, *a new teammate, Claude · app,
+  may work only in ~/code/app — the work happens on its own branch*. That folder is the only one
+  it may touch; you can widen or narrow it later in the Teammates pane.
+- Start work makes a task, a branch of its own for it (a worktree, so your checkout is left
+  alone), and a conversation in that branch whose first message is your sentence. Review what it
+  did before anything reaches your branch or a pull request.
+- A folder that is not a git repository is refused by name, with **Chat in this folder instead**
+  beside it — a conversation there, your sentence in the composer, nothing sent.
+- Start work runs Claude Code. The app asks your login shell which CLIs are installed and reports
+  three states — installed, missing, or *unanswered* (a shell that timed out is not the same as a
+  CLI that is not there) — only when one is needed. Installed never means signed in: the first
+  message is what finds out, and the CLI says so in the panel in its own words.
 
-Type into the composer and press Enter. The panel is the conversation: your turns as bubbles,
-the agent's as prose, and each tool call as one row you can expand.
+**Ask without a folder** is the other door: a conversation about nothing on disk, read-only, with
+your sentence already in its composer. It uses Codex when Codex is the engine you have.
+
+Everything else — a terminal, a file, a chat in your home folder, a note, importing someone's
+canvas — is under **More ways to start**, and all of it is in ⌘K.
 
 ## The starter canvas
 
-**Open the starter canvas** (⌘K, then type "starter") lays out one captioned example of each kind
-of object next to your agent: a terminal, a note, a workflow, a picture and a preview. Nothing in
-it starts a process — the terminal is a card you click to start. Close anything you do not want;
-the starter never puts back what you closed.
+The starter is optional. **Starter canvas…** (under More ways to start, or ⌘K and type
+"starter") lays out one captioned example of each kind of object next to an agent: a terminal, a
+note, a workflow and a picture. Nothing in it starts a process — the terminal is a card you
+click to start. Close anything you do not want; the starter never puts back what you closed.
 
 ## Moving around
 

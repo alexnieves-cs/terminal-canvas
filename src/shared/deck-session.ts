@@ -9,8 +9,8 @@
  * deck.session.2`); it reaches the file only through `review('keep', …)`,
  * which only a person's door may call with `keep`.
  */
-import { applyKept, discardSlides, proposalText, rebuildDeck, slideDraft, splitDeck, type DeckView } from './deck'
-import { draftState, hashText } from './draft-review'
+import { applyKept, discardSlides, hashText, proposalText, rebuildDeck, slideDraft, splitDeck, type DeckView } from './deck'
+import { draftState } from './draft-review'
 import type { FileResult, FileWriteResult } from './file-panel'
 
 export type DeckOrigin = 'person' | 'door'
@@ -61,7 +61,7 @@ export function createDeckSession(initial: DeckView, io: DeckIO) {
   }
   /** What a door edits: the pending proposal when there is one on today's file, else the file. */
   const working = (disk: TextDisk, origin: DeckOrigin): string =>
-    origin === 'door' && draftState(state.view.draft, hashText(disk.content)) === 'pending' ? proposalText(disk.content, state.view.draft) : disk.content
+    origin === 'door' && draftState(state.view.draft, hashText(disk.content), undefined) === 'pending' ? proposalText(disk.content, state.view.draft) : disk.content
 
   return {
     snapshot: () => state,
