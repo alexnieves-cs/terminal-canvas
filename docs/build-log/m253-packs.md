@@ -46,6 +46,14 @@ this one does (`shared/pack.ts`). Whichever reaches main second re-pins that lis
 - The end-to-end checks, `verify:panels:product pack.import.1` and `pack.import.2`, were written
   after the renderer. They were NOT watched red against an absent module — recorded here rather
   than claimed.
+- `verify:panels:product pack.import.1` and `pack.import.2` pass 2/2 (2026-09-10 21:59, under
+  `/tmp/tc-electron-lock`, after the harness fix d9487ee6). The observed needs were GitHub ·
+  personal access token as not-connected and mastodon as unknown-service.
+- The last full `npm run verify` was 39/43, and none of the four reds is caused by packs:
+  - `verify:canvas` 2–4 and `verify:panels:kinds` broadcast.* are red on main at c9fc193f.
+  - `verify:panels:product reach.1` and `reach.3` are red on main too: M207/M208 moved the
+    secondary verbs behind "More actions…".
+  - `verify:pty-manager` 14 was a load flake; it passes 63/63 when rerun alone.
 - `verify:ipc` passes at 138 channels, re-pinned from 134.
 - `verify:verbs gate.2` names `shared/pack.ts` as the seventh `redactSecrets` caller, and
   `agent-door.7` refuses both pack verbs.
