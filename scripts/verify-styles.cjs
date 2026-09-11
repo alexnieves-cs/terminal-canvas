@@ -1196,10 +1196,28 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // integration-verified-pop: the Integrations redesign's success
   // transition — one breath on a service's state pill the instant Verify
   // succeeds.
-  const allowed = ['chat-caret', 'context-panel-enter', 'edge-waiting', 'integration-verified-pop', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse']
+  // drawer-in-left / drawer-in-right / drawer-scrim-in: a compact drawer
+  // sliding from its own edge on --dur-drawer, over a scrim fading with it.
+  const allowed = ['chat-caret', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in','edge-waiting', 'integration-verified-pop', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
+}
+
+// drawer-motion.1. A compact drawer slides from ITS edge (nav from the left,
+// context from the right) on --dur-drawer (~200ms), over a scrim that fades
+// in and passes clicks through — without pointer-events: none the scrim would
+// eat the outside click that dismisses the drawer.
+{
+  const tok = /--dur-drawer:\s*200ms/.test(bare)
+  const nav = all.some((r) => /\.shell--nav-drawer \.shell__rail/.test(r.sel) && /animation:[^;]*drawer-in-left[^;]*var\(--dur-drawer\)/.test(r.body))
+  const ctx = all.some((r) => /\.shell--ctx-drawer \.shell__inspector/.test(r.sel) && /animation:[^;]*drawer-in-right[^;]*var\(--dur-drawer\)/.test(r.body))
+  const left = /@keyframes\s+drawer-in-left\s*\{[^}]*translateX\(-100%\)/.test(bare)
+  const right = /@keyframes\s+drawer-in-right\s*\{[^}]*translateX\(100%\)/.test(bare)
+  const scrim = all.find((r) => /\.shell--nav-drawer::after/.test(r.sel) && /\.shell--ctx-drawer::after/.test(r.sel))
+  const scrimOk = !!scrim && /pointer-events:\s*none/.test(scrim.body) && /drawer-scrim-in[^;]*var\(--dur-drawer\)/.test(scrim.body) && /background:\s*var\(--scrim\)/.test(scrim.body)
+  ok('drawer-motion.1', 'the compact drawers slide from their own edges on --dur-drawer (200ms) over a fading, click-through scrim',
+    tok && nav && ctx && left && right && scrimOk, JSON.stringify({ tok, nav, ctx, left, right, scrimOk }))
 }
 
 // M177 — empty.1. EMPTY STATES AS PLACES: one `.empty-state` rule — centred,
