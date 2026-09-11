@@ -1,16 +1,21 @@
 # Launch plan
 - Ship the canvas
 - Export decks
-  - straight to PowerPoint
-Note: Open with why this matters.
+- Straight to PowerPoint
+
+<!-- notes Open with why this matters. -->
 
 ---
 
 ## The numbers
 Revenue grew **twelve** percent.
+
 ![Growth chart](chart.png)
-Note: Say where the chart came from.
+
+<!-- notes
+Say where the chart came from.
 It is the quarterly board pack.
+-->
 
 ---
 
@@ -18,6 +23,7 @@ It is the quarterly board pack.
 | risk | owner |
 |------|-------|
 | slip | Alex  |
+
 - Release key ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij must not leave
 
 ---
@@ -27,6 +33,8 @@ It is the quarterly board pack.
 ---
 npm run verify
 ```
+
 1. Thank you
 2. Questions
+
 ![Not a picture](not-a-picture.png)

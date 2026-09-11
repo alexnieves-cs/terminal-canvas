@@ -1,5 +1,11 @@
 # M251 — a Markdown deck, exported to .pptx
 
+> **Superseded in part (2026-09-10).** The deck MODEL below was replaced by M248's deck when this
+> branch merged `m248-deck`: slides, front matter and `<!-- notes -->` come from M248's
+> `splitDeck`, the gesture is a PPTX button beside PDF in the deck header, and the verb is
+> `deck-export-pptx`. The export, the gate and the report stand as written. See the build log's
+> "Rebased onto M248" section.
+
 ## Why
 A person drafts a talk where they already write — a Markdown file on the canvas — and needs it
 in the format the room uses. The export is an OUTWARD door, so it passes the gate, and it must
@@ -32,10 +38,10 @@ caller list. Result: `written | cancelled | empty | failed`; `empty` never opens
 The sentence: `Exported N slides to … · K secrets scrubbed · M things not exported: <names>.`
 
 ## Four doors
-`export-deck <panel>` — not destructive (no path argument; the dialog names the file).
+`deck-export-pptx <panel>` — not destructive (no path argument; the dialog names the file).
 Canvas: *Export to PowerPoint…* in the ⋯ menu of a Markdown file panel, beside *Show as a
-deck* / *Show as a file*. Palette: `deck.export`, disabled by name without a file selection.
-Agent: `tc plan export-deck f1`. Workflow: an action node whose line is `export-deck f1`.
+deck* / *Show as a file*. Palette: `deck.export-pptx`, disabled by name without a file selection.
+Agent: `tc plan deck-export-pptx f1`. Workflow: an action node whose line is `deck-export-pptx f1`.
 
 ## Checks
 `verify:deck` (new, plain node): parse arms, bullets and numbering, notes, fence-safe split,

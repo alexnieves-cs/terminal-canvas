@@ -35,7 +35,7 @@ import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, 
 import { INERT_EXPORTERS, type Exporters } from './export'
 import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
-import type { PanelTextExportRequest } from '../shared/export'
+import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -633,6 +633,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.ENV_REPORT, (_event, again?: boolean) => envReport(again === true))
   ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, req: PanelTextExportRequest) => exporters.panelText(req))
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
+  ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
   ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))

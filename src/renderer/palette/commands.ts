@@ -149,6 +149,12 @@ export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
   editChecklist(panel: string, operation: string, value?: string): Promise<CreationResult>
   handChecklist(panel: string, line: number, agent: string): Promise<CreationResult>
+  /** M248. `origin` is 'door' when the step came through runAgentPlan (the agent door or a workflow node): edits then stage. */
+  editDeck(panel: string, slide: number, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  writeDeck(panel: string, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  reviewDeck(panel: string, action: string, slides: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  presentDeck(panel: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  exportDeckPdf(panel: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -916,8 +922,12 @@ export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObj
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
-  out.push(...creationCommands(ctx))
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.edit', title: 'Deck: edit a slide…', subtitle: 'deck-edit <panel> <slide> <markdown> — \\n is a new line', group: 'canvas', searchText: 'deck slides slide edit markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.write', title: 'Deck: replace the whole deck…', subtitle: 'deck-write <panel> <markdown>', group: 'canvas', searchText: 'deck slides write replace markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.review', title: 'Deck: keep or discard proposed slides…', subtitle: 'deck-review <panel> keep|discard <slides|all>', group: 'canvas', searchText: 'deck slides review keep discard proposal draft', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.present', title: 'Deck: present…', subtitle: 'deck-present <panel>', group: 'canvas', searchText: 'deck slides present presentation full screen', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'deck-export-pdf <panel>', group: 'canvas', searchText: 'deck slides export pdf print', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
 
   // --- Panels --------------------------------------------------------------
@@ -2344,7 +2354,7 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // M251. Present at rest and disabled by name, the image.replace rule: the
   // verb itself refuses a file that is not Markdown, in its own sentence.
   const deckPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'file')?.id
-  out.push(withReason({ id: 'deck.export', title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))
+  out.push(withReason({ id: 'deck.export-pptx', title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))
   out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
   // M187. One row per FORM, because "add a note" and "draw a region around
   // this work" are different intentions and a form picker would make a
@@ -2450,6 +2460,9 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     run: () => actions.toggleFlip()
   })
 
+  // M244's New object rows, AFTER the spawn section's own rows: sheet.1 pins
+  // `New panel…` as the first spawn row, and pushing these first displaced it.
+  out.push(...creationCommands(ctx))
   return out
 }
 

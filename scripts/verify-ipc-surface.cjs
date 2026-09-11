@@ -250,9 +250,10 @@ app.whenReady().then(() => {
   // M188 node:fetch (131) — a fetch node's one GET, capped and gated in main.
   // M189 portable:export (132) / portable:import (133) — one portable canvas
   // file written and read by main; what to make of a parse is the renderer's.
-  // M251 deck:export-pptx (134) — main reads the deck and writes the .pptx.
-  // M252 tool:generate (135) — one headless run with no tools; its answer is data.
-  const EXPECTED_CHANNELS = 136
+  // M248 export:deck-pdf (134) — a deck to PDF, main reads the file.
+  // M251 deck:export-pptx (135) — main reads the deck and writes the .pptx.
+  // M252 tool:generate (136) — one headless run with no tools; its answer is data.
+  const EXPECTED_CHANNELS = 137
   ok(`1 every contract channel has a main-process handler (${channels.length} channels)`,
     missing.length === 0 && channels.length === EXPECTED_CHANNELS,
     missing.length ? `unhandled: ${missing.join(', ')}` : `count=${channels.length}`)

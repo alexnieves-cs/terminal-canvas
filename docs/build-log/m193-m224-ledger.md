@@ -401,3 +401,7 @@ still owed.
   and its watchdog). tool.2's race between the saved record and the renderer's copies was
   diagnosed by the check's own detail and fixed on both sides. Owed: one real `claude` run to
   confirm the schema field's name — `docs/build-log/m252-describe-a-tool.md`.
+- **M251 rebased onto M248's deck, 2026-09-10.** Merged `m248-deck` (5eaf7cee); M248's model wins,
+  this branch's deck flag, parser, menu toggle and FileNode tweaks dropped; the .pptx mapping now
+  reads `splitDeck` + `parseMarkdown`; verb `deck-export-pptx`, suite `verify:deck-export`,
+  `verify:ipc` 137. Plain tier green suite by suite (31); Electron tier on the merged tree owed.

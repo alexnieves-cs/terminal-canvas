@@ -26,6 +26,8 @@ export interface FileSource {
   path: string
   /** M244. Structured Markdown note view; absent accepted content requires human review. */
   checklist?: import('./checklist').ChecklistView
+  /** M248. Slides view of a Markdown file: the slide on show and a door's staged proposal. */
+  deck?: import('./deck').DeckView
   /**
    * M27. Render this file as PROSE — wrapped, no line-number gutter — and open
    * it in edit mode on first mount. A note IS a file: same path, same read,
@@ -40,13 +42,6 @@ export interface FileSource {
    * file panel that was never a note.
    */
   prose?: true
-  /**
-   * M251. Read this Markdown file as SLIDES (shared/deck.ts) — `---` between
-   * slides, `Note:` for speaker notes — and offer the .pptx export. The same
-   * display-fact-on-the-source reason as `prose`, and the same `true` or
-   * ABSENT rule: a deck is a file looked at another way, not another thing.
-   */
-  deck?: true
 }
 
 /**

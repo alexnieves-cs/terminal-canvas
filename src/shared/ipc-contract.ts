@@ -6,8 +6,8 @@ import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
-import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
-import type { DeckExportRequest, DeckExportResult } from './deck'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
+import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
 import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
@@ -529,6 +529,8 @@ export const IPC = {
   EXPORT_PANEL_TEXT: 'export:panel-text',
   /** M58. The composited frame as PNG, through a save dialog. */
   EXPORT_CANVAS_PNG: 'export:canvas-png',
+  /** M248. A deck file to PDF, one 16:9 page per slide, through a save dialog. */
+  EXPORT_DECK_PDF: 'export:deck-pdf',
   /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
   DECK_EXPORT_PPTX: 'deck:export-pptx',
   /**
@@ -1643,6 +1645,8 @@ export interface CanvasBridge {
     canvasPng(): Promise<CanvasPngExportResult>
     /** M251. The deck's path; main reads it, so the renderer never hands over text it could have altered. */
     deckPptx(req: DeckExportRequest): Promise<DeckExportResult>
+    /** M248. Main reads the deck file itself; the renderer names only its path. */
+    deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
   }
   tool: {
     /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */

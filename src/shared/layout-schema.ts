@@ -1,5 +1,6 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
+import { parseDeckView } from './deck'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
@@ -904,10 +905,10 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // type says cannot exist.
   const checklist = parseChecklistView(raw.checklist)
   if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
-  // M251. `deck` is `prose`'s twin — a display fact, so a malformed one drops
-  // the FIELD with a warning and keeps the panel; absent warns nothing.
-  if ('deck' in raw && raw.deck !== true) warnings.push(`file panel ${id}: malformed deck flag dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(raw.deck === true ? { deck: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}) }
+  // M248. The same three states; a malformed view costs the VIEW by name, never the panel.
+  const deck = parseDeckView(raw.deck)
+  if (deck.kind === 'malformed') warnings.push(`file panel ${id}: malformed deck view dropped (${deck.reason})`)
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(deck.kind === 'view' ? { deck: deck.view } : {}) }
 }
 
 

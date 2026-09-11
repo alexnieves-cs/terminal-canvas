@@ -5,6 +5,7 @@ import { CanvasHud } from './CanvasHud'
 import { NewObjectRow } from './NewObjectRow'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
+import { DECK_SEED, type DeckView } from '@shared/deck'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useDiagnostics } from './useDiagnostics'
@@ -45,7 +46,7 @@ import {
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
-import type { DeckMenuFact, TaskMenuFact } from '@renderer/components/PanelFrame'
+import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
@@ -67,6 +68,8 @@ import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
+import { DeckNode } from '@renderer/file/DeckNode'
+import { deckFocused } from '@renderer/file/deck-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
 import { NavGrid } from '@renderer/navgrid/NavGrid'
 import { useNavGrid } from '@renderer/navgrid/useNavGrid'
@@ -956,7 +959,7 @@ export function Canvas({
     // File acceptance and handoff links are facts, not canvas geometry history.
     setPanels((current) => next.present.map((panel) => {
       const live = current.find((p) => p.rect.id === panel.rect.id)
-      return isFilePanel(panel) && live && isFilePanel(live) && live.source.checklist !== undefined
+      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.deck !== undefined)
         ? { ...panel, source: live.source } : panel
     }))
     setGroups((current) => pruneGroups(current, ids))
@@ -1267,7 +1270,7 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused(),
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || deckFocused(),
     [palette.isOpen]
   )
 
@@ -3254,7 +3257,7 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; exact?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; deck?: DeckView; exact?: true }) => {
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3280,7 +3283,8 @@ export function Canvas({
           // function for both, so a note and an opened file cannot drift
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
-          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist })
+          ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
+          ...(opts?.deck === undefined ? {} : { deck: opts.deck })
         })
       ]
       commitHistory(next)
@@ -4167,29 +4171,6 @@ export function Canvas({
       arrange: (id: string) => speak(paletteActionsRef.current?.arrangeTask(id))
     }
   }, [])
-  // M251. The ⋯ menu's deck section. `of` reads the panels REF when the menu
-  // opens, the task section's reason: a fact asked on open, never a render
-  // input. The export goes through the same action the other three doors
-  // take and SAYS its sentence — the count and every omission by name.
-  const deckVerbs = useMemo(() => ({
-    of: (id: string): DeckMenuFact => {
-      const panel = panelsRef.current.find((p) => p.rect.id === id)
-      if (panel === undefined || !isFilePanel(panel) || !/\.(md|markdown)$/i.test(panel.source.path)) return 'none'
-      return panel.source.deck === true ? 'deck' : 'markdown'
-    },
-    export: (id: string) => {
-      void paletteActionsRef.current?.exportDeck(id).then((r) => paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')))
-    },
-    // `true` or ABSENT: turning it off REMOVES the key rather than writing
-    // `deck: false`, which layout.json would carry as present.
-    toggle: (id: string) => {
-      setPanels((current) => current.map((panel) => {
-        if (!isFilePanel(panel) || panel.rect.id !== id) return panel
-        const { deck, ...rest } = panel.source
-        return { ...panel, source: deck === true ? rest : { ...rest, deck: true as const } }
-      }))
-    }
-  }), [])
   const marksSignature = panels.map((p) => (p.locked === true || p.pinned === true || p.maximised !== undefined || p.skillTrail === 'collapsed' ? `${p.rect.id}:${p.locked === true ? 'L' : ''}${p.pinned === true ? 'P' : ''}${p.maximised !== undefined ? 'M' : ''}${p.skillTrail === 'collapsed' ? 'T' : ''}` : '')).filter((s) => s !== '').join(',')
   const panelMarks = useMemo<PanelMarks>(() => ({
     marks: new Map(marksSignature === '' ? [] : marksSignature.split(',').map((entry) => {
@@ -4209,9 +4190,8 @@ export function Canvas({
     // M204 (D08). The lens rides the one context every kind's frame reads, so
     // a terminal, a chat and a card dim on ONE rule.
     lens: lensMap,
-    task: taskVerbs,
-    deck: deckVerbs
-  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs, deckVerbs])
+    task: taskVerbs
+  }), [marksSignature, maximisePanel, restorePanel, toggleSkillTrail, merged, onFocusPanel, palette, lensMap, taskVerbs])
 
   // M93. The verbs. Placement resolves the anchor against the panels in paint
   // order (the topmost hit wins). Notes are OUTSIDE the panel history: History
@@ -5849,6 +5829,11 @@ export function Canvas({
     return { kind: 'ran', note: `${keys.length} starter object${keys.length === 1 ? '' : 's'} laid out` }
   }, [beginNewChat, commitHistory, worldCentre, fitSelection])
 
+  // M248. The deck's view (slide on show, staged proposal) is a fact about the file, carried like the checklist's.
+  const setDeckView = useCallback((id: string, view: DeckView) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
+      ? { ...panel, source: { ...panel.source, deck: view } } : panel))
+  }, [])
   const setChecklistView = useCallback((id: string, view: ChecklistView) => {
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
@@ -5934,16 +5919,17 @@ export function Canvas({
         const result = await beginNewChat({ backend: readiness.preferred, at })
         return result.kind === 'refused' ? result : { kind: 'ran' }
       },
-      document: async (checklist, name) => {
+      document: async (view, name) => {
         const root = noteRootRef.current
         if (!root) return { kind: 'refused', reason: 'select a panel with a workspace folder first' }
-        const filename = name?.trim() || `notes/${checklist ? 'checklist' : 'note'}-${Date.now()}.md`
+        const checklist = view === 'checklist'
+        const filename = name?.trim() || `notes/${view}-${Date.now()}.md`
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
-        const seed = `# ${checklist ? 'Checklist' : 'Note'}\n\n`
+        const seed = view === 'deck' ? DECK_SEED : `# ${checklist ? 'Checklist' : 'Note'}\n\n`
         const result = await window.canvas.file.create({ root, name: filename, seed })
         if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
         if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
-        openFilePanel(result.path, at, { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
+        openFilePanel(result.path, at, view === 'deck' ? { deck: {}, exact: true } : { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
         return { kind: 'ran' }
       },
       image: async (path) => {
@@ -6890,6 +6876,10 @@ export function Canvas({
             // onSelectPanel's clear-dormant and registry.wake would be the
             // app's spawn gesture aimed at something that can never spawn.
             if (isFilePanel(panel)) {
+              if (panel.source.deck !== undefined) return <DeckNode key={panel.rect.id} panel={panel}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
+                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
+                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setDeckView} />
               if (panel.source.checklist !== undefined) return <ChecklistNode key={panel.rect.id} panel={panel}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
                 onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}

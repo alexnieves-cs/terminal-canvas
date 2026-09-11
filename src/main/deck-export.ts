@@ -22,7 +22,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import PptxGenJS from 'pptxgenjs'
 import { redactSecrets } from '../shared/redact'
-import { parseDeck, unmappedName, type DeckExportRequest, type DeckExportResult, type DeckSlide, type DeckUnmapped } from '../shared/deck'
+import { pptxDeck, slideHasContent, unmappedName, type DeckExportRequest, type DeckExportResult, type PptxSlide, type DeckUnmapped } from '../shared/deck-pptx'
 import type { ImageResult } from '../shared/starter'
 import { readImage as readImageFile } from './image-read'
 
@@ -68,11 +68,11 @@ export function createDeckExporter(deps: DeckExporterDeps): DeckExporter {
         const code = (error as { code?: string }).code
         return { kind: 'failed', reason: code === 'ENOENT' ? `${req.path} no longer exists` : `${req.path}: ${error instanceof Error ? error.message : String(error)}` }
       }
-      const parsed = parseDeck(text)
+      const parsed = pptxDeck(text)
       if (parsed.kind !== 'deck') return { kind: 'failed', reason: parsed.kind === 'malformed' ? parsed.reason : `${req.path} is empty` }
       // No content, no dialog: asking where to save nothing is a question
       // with no good answer.
-      if (parsed.slides.length === 0) return { kind: 'empty' }
+      if (!parsed.slides.some(slideHasContent)) return { kind: 'empty' }
 
       const tally = { n: 0 }
       const scrub = (s: string): string => {
@@ -116,7 +116,7 @@ interface SlideContext {
 }
 
 /** One slide. Returns whether it carried speaker notes. */
-function addSlide(pptx: PptxGenJS, slide: DeckSlide, n: number, ctx: SlideContext): boolean {
+function addSlide(pptx: PptxGenJS, slide: PptxSlide, n: number, ctx: SlideContext): boolean {
   const s = pptx.addSlide()
   const pictures: { data: string; alt: string }[] = []
   for (const image of slide.images) {

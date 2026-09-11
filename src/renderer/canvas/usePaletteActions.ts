@@ -1,6 +1,7 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
+import { deckController } from '@renderer/file/deck-controllers'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -20,7 +21,7 @@ import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } f
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
-import { deckExportSentence } from '@shared/deck'
+import { deckExportSentence } from '@shared/deck-pptx'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
@@ -302,7 +303,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         templates: allTemplates(templateRowsRef.current).map((t) => ({ id: t.id })),
         worktrees: worktreeRows.map((w) => ({ id: w.id }))
       })
-      const execute = async (step: PlanStep): Promise<StepOutcome> => {
+      // M248. WHO asked. The palette's runPlan calls execute(step) — a person; runAgentPlan
+      // (the agent door AND a workflow action node) wraps it as 'door'. A deck edit that
+      // arrives through a door stages a proposal instead of writing the file.
+      const execute = async (step: PlanStep, origin: 'person' | 'door' = 'person'): Promise<StepOutcome> => {
         const a = step.args
         const creation = CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)
         if (creation) return self.createObject(creation.id, a.value)
@@ -310,6 +314,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         switch (step.verb) {
           case 'checklist-edit': return self.editChecklist(a.panel!, a.operation!, a.value)
           case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
+          case 'deck-edit': return self.editDeck(a.panel!, Number(a.slide), a.value ?? '', origin)
+          case 'deck-write': return self.writeDeck(a.panel!, a.value ?? '', origin)
+          case 'deck-review': return self.reviewDeck(a.panel!, a.action ?? '', a.slides ?? '', origin)
+          case 'deck-present': return self.presentDeck(a.panel!, origin)
+          case 'deck-export-pdf': return self.exportDeckPdf(a.panel!)
           case 'starter': return applyStarter()
           case 'workflow-save': return self.saveWorkflow(a.template!)
           case 'workflow-run': return self.runWorkflowNow(a.template!)
@@ -318,7 +327,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'node-test': return self.testNode(a.template!, a.node)
           case 'feedback': return self.prepareFeedback(a.says)
           case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
-          case 'export-deck': return self.exportDeck(step.args.panel as string)
+          case 'deck-export-pptx': return self.exportDeck(step.args.panel as string)
           case 'import-canvas': return self.importCanvas(a.path)
           case 'note-add': return self.addNote(a.form!, a.text)
           case 'note-set': return self.setNoteText(a.panel!, a.text ?? '')
@@ -532,6 +541,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     createObject: createObjectNow,
     editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
+    // M248. A plan line cannot hold a newline (runAgentPlan refuses control
+    // characters), so `\n` typed in the text is one.
+    editDeck: async (panel, slide, text, origin = 'person') => deckController(panel)?.edit(slide, text.replace(/\\n/g, '\n'), origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    writeDeck: async (panel, text, origin = 'person') => deckController(panel)?.write(text.replace(/\\n/g, '\n'), origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    reviewDeck: async (panel, action, slides, origin = 'person') => {
+      const words = slides.trim().split(/\s+/).filter(Boolean)
+      if (words.length === 0) return { kind: 'refused', reason: 'name the slides to keep or discard, or all' }
+      return deckController(panel)?.review(action, words.length === 1 && words[0] === 'all' ? 'all' : words, origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` }
+    },
+    presentDeck: async (panel, origin = 'person') => deckController(panel)?.present(origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    exportDeckPdf: async (panel) => deckController(panel)?.exportPdf() ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
     spawnPreset: (id) => {
       const row = presetRows.find((p) => p.id === id)
       // buildCommands already disables an unavailable row, so this is the
@@ -2188,7 +2208,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), execute, caller),
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, 'door'), caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({

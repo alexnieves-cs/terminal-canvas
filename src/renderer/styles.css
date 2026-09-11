@@ -4928,6 +4928,7 @@ body {
      browser           the real address, which is not the page's title
      image             the source, and Replace
      note (sticky)     the tint controls
+     deck              slide N of M, and the proposed-change count (M248)
 
    A rule with an exception list is fine; a rule that is silently per-kind is
    how the frame drifted before M47 unified it, which is why this list is
@@ -5085,13 +5086,13 @@ body {
    Native buttons retain tab/Enter/Space semantics and a visible focus ring. */
 .new-object-row {
   position: absolute; top: 12px; left: 16px; right: 176px; z-index: 20;
-  display: flex; gap: 6px; overflow-x: auto; padding: 3px;
+  display: flex; gap: var(--sp-3); overflow-x: auto; padding: var(--sp-1);
   pointer-events: auto; font-family: var(--font-ui);
 }
 .new-object-row__pill {
-  display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px;
-  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: 12px;
+  display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 999px; padding: var(--sp-3) var(--sp-5);
+  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-sm);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
 .new-object-row__pill:hover { color: var(--fg); background: var(--s-2); }
@@ -5099,20 +5100,89 @@ body {
 .new-object-row__pill:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
-.checklist-node__body { overflow: auto; height: 100%; padding: 14px; font-family: var(--font-ui); color: var(--fg-2); }
-.checklist-node__items { list-style: none; padding: 0; margin: 0 0 12px; }
-.checklist-node__items li { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.checklist-node__items label { display: flex; align-items: start; gap: 8px; overflow-wrap: anywhere; }
+.checklist-node__body { overflow: auto; height: 100%; padding: var(--sp-5); font-family: var(--font-ui); color: var(--fg-2); }
+.checklist-node__items { list-style: none; padding: 0; margin: 0 0 var(--sp-5); }
+.checklist-node__items li { padding: var(--sp-4) 0; border-bottom: 1px solid var(--line); }
+.checklist-node__items label { display: flex; align-items: start; gap: var(--sp-4); overflow-wrap: anywhere; }
 .checklist-node__items input { accent-color: var(--iris); }
-.checklist-node__actions { display: flex; flex-wrap: wrap; gap: 8px; opacity: 0; transition: opacity var(--dur-1); }
+.checklist-node__actions { display: flex; flex-wrap: wrap; gap: var(--sp-4); opacity: 0; transition: opacity var(--dur-1); }
 .checklist-node__items li:hover .checklist-node__actions, .checklist-node__items li:focus-within .checklist-node__actions { opacity: 1; }
 .checklist-node__body button, .checklist-node__body select, .checklist-node__body input:not([type=checkbox]) {
-  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px;
+  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3);
 }
 .checklist-node__body button:disabled { color: var(--fg-4); }
-.checklist-node__body form { display: flex; gap: 8px; }
+.checklist-node__body form { display: flex; gap: var(--sp-4); }
 .checklist-node__body form input { min-width: 0; flex: 1; }
-.checklist-node__tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.checklist-node__run { color: var(--fg-3); font-size: 12px; margin-left: 24px; }
-.checklist-node__review { padding: 10px; background: var(--iris-dim); border-radius: 8px; margin-bottom: 12px; }
+.checklist-node__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-4); }
+.checklist-node__run { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-7); }
+.checklist-node__review { padding: var(--sp-4); background: var(--iris-dim); border-radius: var(--r-md); margin-bottom: var(--sp-5); }
 .checklist-node__review pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------------ M248 --
+   THE DECK. A file panel read as slides; it keeps its header (the M236 list
+   above: "slide N of M" is a fact the body does not carry).
+
+   A slide is a 16:9 box whose type scales with its WIDTH through a container
+   unit, so the card, the filmstrip, the editor's preview and the presenter
+   render one slide at four sizes with no script and no transform.
+
+   The FILMSTRIP is the contextual layer: absolutely positioned over the
+   body's bottom, opacity 0 -> 1 on the frame's hover and focus-within (the
+   rest rule's selectors). It never changes the body's box. */
+.deck-node__body { position: relative; height: 100%; overflow: hidden; font-family: var(--font-ui); color: var(--fg-2); }
+.deck-node__body:focus-visible, .deck-node__body :focus-visible, .deck-presenter :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.deck-node__stage { height: 100%; display: flex; align-items: center; justify-content: center; padding: var(--sp-5); box-sizing: border-box; }
+.deck-node__stage .deck__slide { max-height: 100%; }
+.deck__slide {
+  container-type: inline-size; aspect-ratio: 16 / 9; width: 100%; box-sizing: border-box; overflow: hidden;
+  background: var(--s-3); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 5cqw 6cqw; font-size: 2.6cqw; line-height: 1.35;
+}
+.deck__slide h3 { font-size: 2.3em; margin: 0 0 0.4em; }
+.deck__slide h4 { font-size: 1.7em; margin: 0 0 0.4em; }
+.deck__slide h5 { font-size: 1.3em; margin: 0 0 0.3em; }
+.deck__slide .md__p, .deck__slide .md__list { margin: 0 0 0.6em; }
+.deck__slide .md__fence { font-size: 0.8em; }
+.deck__slide .md__copy { display: none; }
+.deck__slide--changed { border-color: var(--iris); }
+.deck__img { display: block; max-width: 100%; max-height: 60cqw; margin: 0 auto; }
+.deck__img-missing { color: var(--fg-3); font-style: italic; }
+.md__table { border-collapse: collapse; }
+.md__table th, .md__table td { border: 1px solid var(--line); padding: 0.2em 0.6em; }
+.deck-node__strip {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: var(--sp-3); overflow-x: auto;
+  padding: var(--sp-3); background: var(--s-1); border-top: 1px solid var(--line);
+  opacity: 0; transition: opacity var(--dur-1) var(--ease);
+}
+.pf:hover .deck-node__strip, .pf:focus-within .deck-node__strip { opacity: 1; }
+.deck-node__thumb { flex: 0 0 96px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--r-sm); }
+.deck-node__thumb .deck__slide { pointer-events: none; }
+.deck-node__thumb[aria-current="true"] .deck__slide { border-color: var(--fg-3); }
+.deck-node__thumb[data-deck-changed] .deck__slide { border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris); }
+.deck-node__review {
+  position: absolute; top: var(--sp-4); right: var(--sp-4); max-width: 60%; max-height: 60%; overflow: auto;
+  padding: var(--sp-4); background: var(--iris-dim); border-radius: var(--r-md); font-size: var(--t-sm);
+}
+.deck-node__review p { margin: 0 0 var(--sp-3); }
+.deck-node__review ul { list-style: none; margin: 0 0 var(--sp-3); padding: 0; }
+.deck-node__review li { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
+.deck-node__jump { flex: 1 1 auto; text-align: left; }
+.deck-node__proposed { margin: 0 0 var(--sp-3); }
+.deck-node__body button, .deck-presenter button {
+  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); cursor: pointer;
+}
+.deck-node__body button:disabled, .deck-presenter button:disabled { color: var(--fg-4); cursor: default; }
+.deck-node__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.deck-node__note { position: absolute; left: var(--sp-5); bottom: var(--sp-5); margin: 0; padding: var(--sp-2) var(--sp-4); background: var(--s-1); border-radius: var(--r-sm); font-size: var(--t-sm); }
+.deck-node__edit { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; gap: var(--sp-4); height: 100%; padding: var(--sp-4); box-sizing: border-box; }
+.deck-node__source { min-width: 0; resize: none; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-4); }
+.deck-node__preview { min-width: 0; overflow: auto; }
+.deck-node__edit .deck-node__tools { grid-column: 1 / -1; }
+.deck-presenter {
+  position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto;
+  background: var(--s-0); color: var(--fg); outline: none;
+}
+.deck-presenter__stage { display: flex; align-items: center; justify-content: center; padding: var(--sp-7); min-width: 0; min-height: 0; }
+.deck-presenter__stage .deck__slide { width: min(100%, calc((100vh - 120px) * 16 / 9)); }
+.deck-presenter__notes { width: 28vw; overflow: auto; padding: var(--sp-6); border-left: 1px solid var(--line); white-space: pre-wrap; font-size: var(--t-lg); color: var(--fg-2); }
+.deck-presenter__bar { grid-column: 1 / -1; display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--line); }

@@ -13,7 +13,7 @@ Spec: `docs/superpowers/specs/2026-09-10-m251-deck-pptx-export.md`.
 5. Channel `deck:export-pptx`: contract → `Exporters.deckPptx` (injected `DeckExporter`, so
    `export.ts` keeps pptxgenjs out of verify:file's bundle) → ipc handler → preload → the
    `index.ts` dialog with a pptx filter. CLAUDE.md list, README diagram, verify:ipc 135.
-6. Doors: `export-deck` verb + `V9_DOORS`; palette `deck.export`; `usePaletteActions` case and
+6. Doors: `deck-export-pptx` verb + `V9_DOORS`; palette `deck.export-pptx`; `usePaletteActions` case and
    action; `PanelMarks.deck` + the ⋯ menu section; `FileNode` kind word; a deck paints as prose.
 7. Alias settled by building: main's `@shared`-only alias bundles, pptxgenjs externalised.
 8. Docs: build log, README row, load-bearing entry, ledger line.
