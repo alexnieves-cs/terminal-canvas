@@ -1,13 +1,17 @@
 import { MIN_PANEL_H, MIN_PANEL_W } from './panel-geometry'
 import { parseChecklistView } from './checklist'
+import { parseImportedNote } from './imported-note'
+import { parseDeckView } from './deck'
 import { parseSheetView } from './sheet'
 import { isReadableUrl } from './browser-panel'
 import { DEVICE_WIDTHS, isDeviceWidthId, type DeviceWidthId, normalisePreviewPath, type PreviewBinding } from './preview'
 import { isAssetId } from './assets'
+import { parseArtifactReference, type ArtifactReference } from './artifact-reference'
 import { NOTE_FORMS, NOTE_TINTS, isNoteForm, isNoteTint, normaliseNoteText, type NoteForm, type NoteTint } from './notes'
 import { parseAnnotations, type Annotation } from './annotations'
 import { parseStarter, type PersistedStarter } from './starter'
 import { parseWorkItems, type PersistedWorkItem } from './work-items'
+import { parseRetainedOutcomes, type RetainedOutcome } from './retained-outcomes'
 import { SettingValue, settingDef } from './settings-schema'
 import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
@@ -422,7 +426,7 @@ export interface PersistedImagePanel extends PersistedPanelBase {
    * path still paints, and a picture that vanished because its id was
    * misspelled would read as a panel the app deleted.
    */
-  image: { path: string; asset?: string }
+  image: { path: string; asset?: string; artifact?: ArtifactReference }
 }
 
 /**
@@ -573,6 +577,8 @@ export interface CanvasState {
   annotations?: Annotation[]
   /** M113. The board's records. ABSENT on every pre-M113 file and stays absent, for M93's reason. */
   workItems?: PersistedWorkItem[]
+  /** D11. Historical task meaning, independent of the live panel graph. */
+  retainedOutcomes?: RetainedOutcome[]
   /** M181. The starter's applied keys. ABSENT on every pre-M181 file and on a canvas the starter never touched. */
   starter?: PersistedStarter
 }
@@ -887,7 +893,8 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   return chat
 }
 
-function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
+/** Exported for `verify:notes notes.gate.3` — the record's on-disk arms are checked where they are parsed. */
+export function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSource | null {
   if (!isRecord(raw)) {
     warnings.push(`dropped file panel ${id}: source was not an object`)
     return null
@@ -912,11 +919,20 @@ function parseFileSource(raw: unknown, id: string, warnings: string[]): FileSour
   // type says cannot exist.
   const checklist = parseChecklistView(raw.checklist)
   if (checklist.kind === 'malformed' || ('checklist' in raw && checklist.kind === 'absent')) warnings.push(`file panel ${id}: malformed checklist view dropped`)
+  // M250. A malformed import record drops the RECORD and keeps the panel, and
+  // is never coerced into a reviewed one — dropping it makes the note an
+  // ordinary note, which is the one loss a person can see (the banner is gone)
+  // rather than a silent "someone read this".
+  const imported = parseImportedNote(raw.imported)
+  if (imported.kind === 'malformed') warnings.push(`file panel ${id}: malformed imported-note record dropped`)
+  // M248. The same three states; a malformed view costs the VIEW by name, never the panel.
+  const deck = parseDeckView(raw.deck)
+  if (deck.kind === 'malformed') warnings.push(`file panel ${id}: malformed deck view dropped (${deck.reason})`)
   // M245. The same drop-the-field rule: a malformed sheet view reopens the file as a plain file panel.
   const sheet = parseSheetView(raw.sheet)
   if (sheet.kind === 'malformed' || ('sheet' in raw && sheet.kind === 'absent')) warnings.push(`file panel ${id}: malformed sheet view dropped`)
   if (sheet.kind === 'view' && sheet.dropped !== undefined) warnings.push(`file panel ${id}: malformed sheet ${sheet.dropped.join(' and ')} dropped`)
-  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(sheet.kind === 'view' ? { sheet: sheet.view } : {}) }
+  return { path, ...(raw.prose === true ? { prose: true as const } : {}), ...(checklist.kind === 'view' ? { checklist: checklist.view } : {}), ...(sheet.kind === 'view' ? { sheet: sheet.view } : {}), ...(imported.kind === 'view' ? { imported: imported.view } : {}), ...(deck.kind === 'view' ? { deck: deck.view } : {}) }
 }
 
 
@@ -948,12 +964,29 @@ function parsePreviewBinding(value: unknown, id: string, warnings: string[]): Pr
     warnings.push(`browser panel ${id}: preview root ${JSON.stringify(record.root)} is not an absolute folder — the pane is kept, bound to nothing`)
     return undefined
   }
+  // M252. `reviewed` FAILS CLOSED, the template rule: `true` normalises to
+  // absent, and any other present value keeps the pane unread with a warning
+  // — a corrupted flag must never be the thing that starts somebody's code.
+  const rawReviewed = record.reviewed
+  const unread = rawReviewed !== undefined && rawReviewed !== true
+  if (unread && rawReviewed !== false) warnings.push(`browser panel ${id}: preview reviewed ${JSON.stringify(rawReviewed)} is not a boolean — the pane stays unread`)
+  // The capability lists are a DISPLAY of what arrived: a malformed one drops
+  // the field (the pane still refuses to run until read) rather than the pane.
+  const rawTool = record.tool
+  const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string')
+  let tool: PreviewBinding['tool']
+  if (rawTool !== undefined) {
+    const t = rawTool as Record<string, unknown> | null
+    if (t !== null && typeof t === 'object' && strings(t.files) && strings(t.network) && strings(t.commands)) tool = { files: t.files, network: t.network, commands: t.commands }
+    else warnings.push(`browser panel ${id}: preview tool capabilities were malformed and dropped`)
+  }
+  const extra = { ...(unread ? { reviewed: false as const } : {}), ...(tool === undefined ? {} : { tool }) }
   const rawSource = record.sourcePanelId
   if (rawSource !== undefined && (typeof rawSource !== 'string' || rawSource === '')) {
     warnings.push(`browser panel ${id}: preview sourcePanelId ${JSON.stringify(rawSource)} is not a panel id — the folder ${root} is still bound`)
-    return { root }
+    return { root, ...extra }
   }
-  return { root, ...(rawSource === undefined ? {} : { sourcePanelId: rawSource }) }
+  return { root, ...(rawSource === undefined ? {} : { sourcePanelId: rawSource }), ...extra }
 }
 
 function parsePanel(
@@ -1144,7 +1177,9 @@ function parsePanel(
       if (isAssetId(assetRaw)) asset = assetRaw
       else warnings.push(`image panel ${id}: image.asset ${JSON.stringify(assetRaw)} is not a sha-256 asset id — the picture is kept and its store identity dropped`)
     }
-    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }) } }
+    const artifact = image.artifact === undefined ? undefined : parseArtifactReference(image.artifact)
+    if (image.artifact !== undefined && artifact === undefined) warnings.push(`image panel ${id}: malformed artifact provenance dropped`)
+    return { ...base, kind: 'image', image: { path: image.path, ...(asset === undefined ? {} : { asset }), ...(artifact === undefined ? {} : { artifact }) } }
   }
   if (kind === 'note') {
     const note = (raw as Record<string, unknown>).note
@@ -2112,6 +2147,7 @@ function parseWorkspace(raw: unknown, index: number, warnings: string[]): Worksp
     // did not survive keeps its id (the note says `lane closed`), so the
     // parser takes no panel set — unlike annotations, whose anchor is geometry.
     ...(() => { const w = parseWorkItems(raw.workItems, warnings); return w === undefined ? {} : { workItems: w } })(),
+    ...(() => { const o = parseRetainedOutcomes(raw.retainedOutcomes, warnings); return o === undefined ? {} : { retainedOutcomes: o } })(),
     // M181. The starter record: absent stays absent; malformed dropped by name.
     ...(() => { const s = parseStarter(raw.starter, warnings); return s === undefined ? {} : { starter: s } })()
   }

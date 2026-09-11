@@ -5,6 +5,7 @@ import type { WatchTrigger } from '@shared/watch-trigger'
 import type { ChatSource } from '@shared/chat-panel'
 import type { DeviceWidthId, PreviewBinding } from '@shared/preview'
 import type { NoteForm, NoteTint } from '@shared/notes'
+import type { ArtifactReference } from '@shared/artifact-reference'
 import type { Point, WorldRect } from '@renderer/canvas/viewport'
 import type { ReviewSubject } from '@shared/review'
 import type { FileSource } from '@shared/file-panel'
@@ -266,7 +267,7 @@ export interface WorkflowPanel extends PanelBase {
 export interface ImagePanel extends PanelBase {
   kind: 'image'
   /** M186. The path is where the bytes are here; the asset id is what they are. Absent unless this app took them in. */
-  image: { path: string; asset?: string }
+  image: { path: string; asset?: string; artifact?: ArtifactReference }
 }
 
 export interface NotePanel extends PanelBase {
@@ -991,7 +992,7 @@ export function makeFilePanel(
     // spread would both share the caller's object (so a later mutation of it
     // rewrites a panel already on the canvas) and write `prose: undefined`,
     // which reads as present. makeReviewPanel's warning, at a sixth mint.
-    source: { path: source.path, ...(source.prose === true ? { prose: true as const } : {}), ...(source.checklist === undefined ? {} : { checklist: source.checklist }), ...(source.sheet === undefined ? {} : { sheet: source.sheet }) },
+    source: { path: source.path, ...(source.prose === true ? { prose: true as const } : {}), ...(source.checklist === undefined ? {} : { checklist: source.checklist }), ...(source.sheet === undefined ? {} : { sheet: source.sheet }), ...(source.imported === undefined ? {} : { imported: source.imported }), ...(source.deck === undefined ? {} : { deck: source.deck }) },
     z
   }
 }
@@ -1034,8 +1035,8 @@ export const IMAGE_W = 480
 export const IMAGE_H = 360
 
 /** M181. An image panel centred on the point (makePanel's contract); the path is copied by name. */
-export function makeImagePanel(id: string, centre: Point, z: number, path: string, title: string, asset?: string): ImagePanel {
-  return { kind: 'image', rect: { id, x: centre.x - IMAGE_W / 2, y: centre.y - IMAGE_H / 2, w: IMAGE_W, h: IMAGE_H }, z, title, image: { path, ...(asset === undefined ? {} : { asset }) } }
+export function makeImagePanel(id: string, centre: Point, z: number, path: string, title: string, asset?: string, artifact?: ArtifactReference): ImagePanel {
+  return { kind: 'image', rect: { id, x: centre.x - IMAGE_W / 2, y: centre.y - IMAGE_H / 2, w: IMAGE_W, h: IMAGE_H }, z, title, image: { path, ...(asset === undefined ? {} : { asset }), ...(artifact === undefined ? {} : { artifact }) } }
 }
 
 export const WORKFLOW_W = 640

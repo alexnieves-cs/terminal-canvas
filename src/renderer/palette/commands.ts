@@ -157,6 +157,12 @@ export interface PaletteActions {
   reviewSheet(panel: string, operation: string, target?: string, caller?: import('@shared/plan').AgentPlanCaller): Promise<CreationResult>
   /** M247. Show, hide or toggle the agent → object links (the `canvas.agentLinks` setting). */
   setAgentLinks(mode: string): Promise<CreationResult>
+  /** M248. `origin` is 'door' when the step came through runAgentPlan (the agent door or a workflow node): edits then stage. */
+  editDeck(panel: string, slide: number, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  writeDeck(panel: string, text: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  reviewDeck(panel: string, action: string, slides: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  presentDeck(panel: string, origin?: 'person' | 'door'): Promise<CreationResult>
+  exportDeckPdf(panel: string): Promise<CreationResult>
   spawnPreset(id: string): void
   beginRenamePreset(id: string, currentName: string): void
   deletePreset(id: string): void
@@ -471,7 +477,11 @@ export interface PaletteActions {
   /** M185. The preview's four verbs, plus the discovery the pane's own control renders. */
   prepareFeedback(says?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   exportCanvas(path?: string, pictures?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M251. A Markdown file panel's deck as .pptx, through main's save dialog; the note is the export sentence. */
+  exportDeck(panelId: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvas(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M250. A .docx into a new, unreviewed note beside it; no path opens the system's chooser. */
+  importDocx(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M253. Packs: import READS and shows the manifest, adding nothing; export writes the library as one pack. */
   exportPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importPack(path?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -940,6 +950,11 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
   const out: Command[] = []
   out.push({ id: 'checklist.edit', title: 'Checklist: edit an item…', subtitle: 'checklist-edit <panel> add <text> · toggle/delete <line> · move <line> <line> · undo/redo', group: 'canvas', searchText: 'checklist task add toggle check reorder delete undo redo', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.edit', title: 'Deck: edit a slide…', subtitle: 'deck-edit <panel> <slide> <markdown> — \\n is a new line', group: 'canvas', searchText: 'deck slides slide edit markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.write', title: 'Deck: replace the whole deck…', subtitle: 'deck-write <panel> <markdown>', group: 'canvas', searchText: 'deck slides write replace markdown presentation', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.review', title: 'Deck: keep or discard proposed slides…', subtitle: 'deck-review <panel> keep|discard <slides|all>', group: 'canvas', searchText: 'deck slides review keep discard proposal draft', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.present', title: 'Deck: present…', subtitle: 'deck-present <panel>', group: 'canvas', searchText: 'deck slides present presentation full screen', run: () => actions.beginRunVerb() })
+  out.push({ id: 'deck.export-pdf', title: 'Deck: export to PDF…', subtitle: 'deck-export-pdf <panel>', group: 'canvas', searchText: 'deck slides export pdf print', run: () => actions.beginRunVerb() })
   out.push({ id: 'checklist.hand', title: 'Checklist: hand an item to an agent…', subtitle: 'checklist-hand <panel> <zero-based line> <conversation>', group: 'canvas', searchText: 'checklist hand task agent teammate send', run: () => actions.beginRunVerb() })
   out.push({ id: 'canvas.agent-links', title: 'Agent links: show or hide', subtitle: 'the lines from each agent to what it read, wrote or drafted', group: 'canvas', searchText: 'agent links edges lines files touched read wrote draft show hide toggle', run: () => { void actions.setAgentLinks('toggle') } })
   out.push({ id: 'sheet.review', title: 'Sheet: keep or discard draft cells…', subtitle: 'sheet-review <panel> keep|discard <cell, B2:C4 or all>', group: 'canvas', searchText: 'sheet draft review keep discard accept reject agent proposal', run: () => actions.beginRunVerb() })
@@ -2380,7 +2395,14 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   // (pictures only when the person asks, through the verb line); Import makes
   // a SEPARATE workspace and starts nothing.
   out.push({ id: 'portable.export', title: 'Export this canvas…', subtitle: 'one file: the objects, the workflows, secrets scrubbed and every omission named', group: 'canvas', searchText: 'export canvas file share portable save send', run: () => { void actions.exportCanvas() } })
+  // M251. Present at rest and disabled by name, the image.replace rule: the
+  // verb itself refuses a file that is not Markdown, in its own sentence.
+  const deckPanelId = ctx.panels.find((p) => ctx.selectedIds.includes(p.id) && p.kind === 'file')?.id
+  out.push(withReason({ id: 'deck.export-pptx', title: 'Deck: export to PowerPoint…', subtitle: 'the selected Markdown file as slides — headings, bullets, pictures and notes; secrets scrubbed and anything left out named', group: 'canvas', searchText: 'deck slides pptx powerpoint keynote export presentation markdown', run: () => { if (deckPanelId !== undefined) void actions.exportDeck(deckPanelId).then((r) => actions.say(r.kind === 'refused' ? r.reason : (r.note ?? ''))) } }, deckPanelId === undefined ? 'select a Markdown file panel first' : undefined))
   out.push({ id: 'portable.import', title: 'Import a canvas…', subtitle: 'into a new workspace, with nothing started', group: 'canvas', searchText: 'import canvas file open portable load', run: () => { void actions.importCanvas() } })
+  // M250. A literal id, for closure.v9.1's text read. The refusal (a docx the
+  // converter cannot read, a note already there) lands on the feedback line.
+  out.push({ id: 'note.import-docx', title: 'Import a Word document…', subtitle: 'a new Markdown note beside the .docx — what was dropped is named, and the note waits to be read', group: 'canvas', searchText: 'import word docx document convert note markdown', run: () => { void actions.importDocx().then((r) => { if (r.kind === 'refused') actions.say(r.reason) }) } })
   // M253. A pack's two rows. Import shows what the pack holds and needs FIRST
   // and adds nothing until Add; export writes the library — not this canvas.
   out.push({ id: 'pack.export', title: 'Export a pack…', subtitle: 'your workflows, saved prompts and presets in one file — secrets scrubbed, credentials named and never carried', group: 'canvas', searchText: 'export pack share bundle discipline library workflows prompts presets', run: () => { void actions.exportPack() } })

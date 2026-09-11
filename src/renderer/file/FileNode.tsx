@@ -8,6 +8,8 @@ import { buildFileNodeModel } from './file-node-model'
 import { PanelFrame } from '@renderer/components/PanelFrame'
 import { Pencil, Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
+import { importedNoteReason } from '@shared/imported-note'
+import { RichNoteEditor, type RichNoteHandle } from './RichNoteEditor'
 
 /**
  * The conflict banner's wording.
@@ -209,6 +211,12 @@ export interface FileNodeProps {
    * never declares a prop at all has nothing to omit.
    */
   linkTarget: boolean
+  /**
+   * M250. A person pressed "I've read it" on an imported note — the ONE writer
+   * of `imported.reviewed`. Optional only because ChecklistNode shares these
+   * props; Canvas's FileNode call site passes it.
+   */
+  onImportReviewed?: (id: string) => void
 }
 
 /**
@@ -228,7 +236,7 @@ export interface FileNodeProps {
  */
 function FileNodeImpl({
   panel, selected, onSelect, onFocus, onBeginDrag, onClose, restoreFocus, focusedId,
-  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true
+  readOnly = false, onBeginLink, linkTarget, vault, vaultReady = true, onImportReviewed
 }: FileNodeProps): JSX.Element {
   const { rect, z } = panel
   const id = rect.id
@@ -265,6 +273,13 @@ function FileNodeImpl({
   const [conflict, setConflict] = useState<null | 'disk-changed' | 'refused'>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const editing = draft !== null
+  // M250. Source | Rich — two views over the SAME draft. Source stays the
+  // default, so every reader of `data-file-node-editor` keeps its surface.
+  const [mode, setMode] = useState<'source' | 'rich'>('source')
+  const richRef = useRef<RichNoteHandle | null>(null)
+  // M250. The import gate: an imported note nobody has read yet does not
+  // enter its editor and cannot be edited — the sentence says why.
+  const gate = importedNoteReason(panel.source)
 
   // The seed the current draft was built from. A ref, not state: comparing
   // against it must not itself trigger a render, and it has to survive
@@ -408,6 +423,9 @@ function FileNodeImpl({
   useEffect(() => {
     if (autoEditedRef.current) return
     if (panel.source.prose !== true) return
+    // M250. An imported note opens to be READ, and decides so once: it must not
+    // snap into its editor the moment "I've read it" is pressed.
+    if (importedNoteReason(panel.source) !== undefined) { autoEditedRef.current = true; return }
     // M85. A note INSIDE A VAULT opens to be read: its links are the point,
     // and an editor over them hides every one. The ✎ control is one click
     // away; a note outside a vault keeps M27's open-to-write. Until the
@@ -421,7 +439,7 @@ function FileNodeImpl({
     seedRef.current = result.content
     setDraft(result.content)
     setBaseMtimeMs(result.mtimeMs)
-  }, [panel.source.prose, model.editable, result, vault, vaultReady])
+  }, [panel.source.prose, panel.source.imported, model.editable, result, vault, vaultReady])
 
   // Read on mount, close on unmount. This is what makes "the renderer is
   // showing this file" and "main is watching it" one statement: a workspace
@@ -497,6 +515,15 @@ function FileNodeImpl({
 
   const save = (force: boolean): void => {
     if (draft === null) return
+    // M250. In Rich mode the block being typed in has not reached `draft` yet
+    // (Save is a mousedown that never moves focus, so nothing blurred): flush
+    // it and save what it answers, or the last paragraph typed is not saved.
+    // A REFUSED flush stops the save: the block has reopened as source holding
+    // what was typed, and saving (then closing the draft) would unmount it and
+    // lose that typing with the refusal never seen.
+    const flushed = mode === 'rich' && richRef.current !== null ? richRef.current.flush() : { kind: 'ok' as const, text: draft }
+    if (flushed.kind === 'refused') { setSaveError(`Not saved — ${flushed.reason}. The block is open as source; keep or change it, then save.`); return }
+    const content = flushed.text
     // THE GATE, ENFORCED WHERE THE WRITE IS ISSUED. `model.editable` was
     // checked only where edit mode is ENTERED, which is a different claim: a
     // draft opened on an editable file can arrive at an uneditable one
@@ -520,7 +547,7 @@ function FileNodeImpl({
       // No panelId: FileWriteRequest is a plain request/response with
       // nothing to key on the panel that issues it — see its own doc
       // comment in ipc-contract.ts.
-      .write({ path, content: draft, baseMtimeMs: force ? null : baseMtimeMs })
+      .write({ path, content, baseMtimeMs: force ? null : baseMtimeMs })
       .then((res) => {
         if (res.kind === 'written') {
           // Adopt the mtime main stamped for OUR write, as the current token,
@@ -529,7 +556,7 @@ function FileNodeImpl({
           // closeDraft a line later, and is kept because leaving `baseMtimeMs`
           // describing a superseded revision for even one render is a lie
           // waiting for a future reader to depend on).
-          lastWriteRef.current = { content: draft, mtimeMs: res.mtimeMs }
+          lastWriteRef.current = { content, mtimeMs: res.mtimeMs }
           setBaseMtimeMs(res.mtimeMs)
           // Leave edit mode on success through the same door every other
           // exit uses, so focus comes back exactly once. The watcher's own
@@ -546,6 +573,13 @@ function FileNodeImpl({
       // MANDATORY, the rule the read effect already states: an unhandled
       // rejection leaves a draft that looks saved and is not.
       .catch((error: unknown) => setSaveError(String(error)))
+  }
+
+  // Escape on a DIRTY draft arms rather than discards — the textarea's rule,
+  // shared with Rich mode so the most reflexive key behaves the same in both.
+  const onEditorEscape = (): void => {
+    if (!dirty || discardArmed) { disarm(); closeDraft(); return }
+    arm('discard')
   }
 
   return (
@@ -585,6 +619,11 @@ function FileNodeImpl({
             into the heading, which is the rule the inspector's own file arm
             states. */}
         <span className="pf__summary file-node__summary" data-file-node-summary>{model.summary}</span>
+        {/* M250. What an import could not carry — the contextual layer, never
+            the rest layer, and absent (not "nothing dropped") when clean. */}
+        {panel.source.imported !== undefined && panel.source.imported.dropped !== '' && (
+          <span className="file-node__dropped" data-file-node-dropped title={`${panel.source.imported.dropped} — from ${panel.source.imported.from}`}>{panel.source.imported.dropped}</span>
+        )}
         {dirty && (
           // Visible unsaved-work marker. An editor that gives no sign of a
           // pending, un-persisted draft is its own defect — the user has no
@@ -607,19 +646,19 @@ function FileNodeImpl({
           className={`file-node__edit${editing ? ' file-node__edit--on' : ''}`}
           data-file-node-edit
           aria-pressed={editing}
-          disabled={!model.editable || editing}
+          disabled={!model.editable || editing || gate !== undefined}
           // Present and DISABLED rather than hidden. verify:palette 31's rule:
           // a control that disappears is indistinguishable from a feature that
           // was never built, and a user who wants to edit a 40,000-line log is
           // precisely the person who will go looking for this button.
-          title={model.editable ? (editing ? 'Editing — save or discard to finish' : 'Edit this file') : model.editableNote}
+          title={gate ?? (model.editable ? (editing ? 'Editing — save or discard to finish' : 'Edit this file') : model.editableNote)}
           onMouseDown={(event) => {
             // shellControl's rule, which every control in this app obeys:
             // preventDefault keeps DOM focus off the button, stopPropagation
             // stops the header starting a drag from a click inside it.
             event.stopPropagation()
             event.preventDefault()
-            if (!model.editable || result?.kind !== 'text') return
+            if (!model.editable || result?.kind !== 'text' || gate !== undefined) return
             seedRef.current = result.content
             setDraft(result.content)
             // The store's mtime is the freshest answer EXCEPT after a save
@@ -691,6 +730,21 @@ function FileNodeImpl({
       >
         {/* M164. The path rule: the last two segments at rest (the file panel knows no repository root — the review engine resolves one; M164 records this), the full path on hover. */}
         <p className="file-node__directory" data-file-node-directory title={model.directory}>{displayPath(model.directory).short}</p>
+        {gate !== undefined && panel.source.imported !== undefined && (
+          // M250. The import gate, in the body above the text it is about: the
+          // person reads the note right here, then says so.
+          <div className="file-node__import" data-file-node-import>
+            <p>{gate}.</p>
+            <p className="pf__note">Converted from {displayPath(panel.source.imported.from).short}. {panel.source.imported.dropped || 'Nothing was dropped.'}</p>
+            <button
+              type="button"
+              data-file-node-import-reviewed
+              disabled={readOnly || onImportReviewed === undefined}
+              title={readOnly ? 'leave merged view to mark this read' : 'Mark this imported note as read — editing and agents can use it after this'}
+              onMouseDown={(event) => { event.stopPropagation(); event.preventDefault(); if (!readOnly) onImportReviewed?.(id) }}
+            >I&apos;ve read it</button>
+          </div>
+        )}
         {editing ? (
           <>
             {conflict !== null && (
@@ -729,7 +783,31 @@ function FileNodeImpl({
                 Press Escape again to discard your unsaved changes.
               </p>
             )}
-            <textarea
+            {model.prose && (
+              <div className="file-node__modes" role="group" aria-label="Editing mode" data-file-node-modes>
+                {(['source', 'rich'] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={mode === m}
+                    data-file-node-mode={m}
+                    title={m === 'source' ? 'Edit the Markdown itself' : 'Edit block by block — anything the editor cannot represent stays as source'}
+                    onMouseDown={(event) => {
+                      event.stopPropagation()
+                      event.preventDefault()
+                      if (m === mode) return
+                      // Leaving Rich commits the block being typed in first.
+                      // A refused flush keeps Rich mounted, with the block open as source.
+                      if (mode === 'rich' && richRef.current?.flush().kind === 'refused') return
+                      setMode(m)
+                    }}
+                  >{m === 'source' ? 'Source' : 'Rich'}</button>
+                ))}
+              </div>
+            )}
+            {model.prose && mode === 'rich' ? (
+              <RichNoteEditor text={draft} onChange={setDraft} handleRef={richRef} onSave={() => save(false)} onEscape={onEditorEscape} />
+            ) : <textarea
               className="file-node__editor"
               data-file-node-editor
               autoFocus
@@ -756,11 +834,10 @@ function FileNodeImpl({
                   // one press: there is nothing to lose, and making the
                   // ordinary exit ask twice is how a confirmation stops being
                   // read.
-                  if (!dirty || discardArmed) { disarm(); closeDraft(); return }
-                  arm('discard')
+                  onEditorEscape()
                 }
               }}
-            />
+            />}
           </>
         ) : model.note !== undefined ? (
           <p className="pf__note file-node__note" data-file-node-note>{model.note}</p>

@@ -3796,6 +3796,28 @@ console.log('\n' + '='.repeat(60))
   }
 }
 
+// D12 — artifact.provenance.1. A title is mutable presentation; source is a
+// separate optional record. Old images retain no invented source, a capture
+// keeps its stable id/URL through serialisation, and a malformed or unknown
+// source costs itself rather than the picture.
+{
+  const out = L.parseLayout(JSON.stringify({
+    workspaces: [{ id: 'w1', name: 'Main', panels: [
+      { id: 'old', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 1, title: 'renamed', image: { path: '/w/old.png' } },
+      { id: 'cap', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 2, title: 'anything now', image: { path: '/w/capture.png', artifact: { kind: 'capture', id: '2026-page.png', url: 'http://localhost:5173/a', capturedAt: 42 } } },
+      { id: 'bad', kind: 'image', x: 0, y: 0, w: 480, h: 360, z: 3, image: { path: '/w/bad.png', artifact: { kind: 'future', value: 'x' } } }
+    ] }], activeWorkspaceId: 'w1'
+  }))
+  const by = (id) => out.snapshot.workspaces[0].panels.find((p) => p.id === id)
+  const round = L.parseLayout(L.serialiseLayout(out.snapshot)).snapshot.workspaces[0].panels.find((p) => p.id === 'cap')
+  ok('artifact.provenance.1 image artifact provenance: absent old images stay absent; a renamed capture retains its capture id, URL and time through a round-trip; malformed or unknown provenance is warned and dropped while its image remains',
+    by('old') && !('artifact' in by('old').image) &&
+      by('cap')?.image.artifact?.kind === 'capture' && by('cap').image.artifact.id === '2026-page.png' && by('cap').title === 'anything now' &&
+      round?.image.artifact?.kind === 'capture' && round.image.artifact.url === 'http://localhost:5173/a' &&
+      by('bad') && !('artifact' in by('bad').image) && out.warnings.some((w) => w.includes('bad') && w.includes('artifact')),
+    JSON.stringify({ panels: out.snapshot.workspaces[0].panels, warnings: out.warnings }))
+}
+
 // M186 — image.asset.1. THE ASSET IDENTITY ON DISK. `image.asset` is a
 // sha-256 of the picture's own bytes: absent on every pre-M186 record and on
 // any picture the person pointed at in place (and it serialises to NO key),
@@ -3979,6 +4001,28 @@ console.log('\n' + '='.repeat(60))
         JSON.stringify(roundTrip.snapshot.workspaces[0].workItems[0].reviewed) === JSON.stringify(mark),
       JSON.stringify({ bareKeys: Object.keys(bare), carried: carried.reviewed, upserted: upserted[0] && upserted[0].reviewed, parsedIds: parsed.map((i) => i.id), badMark, roundTrip: roundTrip.snapshot.workspaces[0].workItems[0] }))
   } catch (e) { ok('work.readiness.1 (threw)', false, String(e)) }
+}
+
+// M209 (D11). Retained outcomes are task history, not a second run parser:
+// closing the last panel must preserve a bounded, honest fact while a bad
+// historical row cannot prevent the workspace opening.
+{
+  const good = { id: 'outcome_wi1_10', itemId: 'wi1', title: 'Keep meaning', state: 'review', capturedAt: 10, execution: 'completed', sourcePanelId: 'chat1', runId: 'run1' }
+  const warnings = [], malformedWarnings = []
+  const absent = L.parseRetainedOutcomes(undefined, warnings)
+  const malformed = L.parseRetainedOutcomes([good, { ...good, id: 'bad', execution: 'success' }, 'junk'], malformedWarnings)
+  const many = L.parseRetainedOutcomes(Array.from({ length: L.RETAINED_OUTCOMES_MAX + 2 }, (_, i) => ({ ...good, id: `o${i}`, capturedAt: i })), [])
+  const withRecord = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w1', workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 }, retainedOutcomes: [good] }] }))
+  const old = L.parseLayout(JSON.stringify({ version: 1, activeWorkspaceId: 'w1', workspaces: [{ id: 'w1', name: 'a', panels: [], camera: { x: 0, y: 0, scale: 1 } }] }))
+  const item = { id: 'wi1', source: 'typed', title: 'Keep meaning', state: 'working', panelId: 'chat1', createdAt: 1, updatedAt: 2 }
+  const captured = L.retainOutcome(item, [{ id: 'run1', name: 'r', panelIds: ['chat1'], edges: [], startedAt: 1, endedAt: 2, entries: [{ panelId: 'chat1', startedAt: 1, endedAt: 2, outcome: 'exit 0' }] }], 10)
+  ok('outcome.retained.1 absent retained history stays absent and warns nothing; malformed and unknown execution rows drop individually; the newest bounded records survive; a historical source panel may be missing from the current workspace; and capture reads a completed run without recreating any panel',
+    absent === undefined && warnings.length === 0 && malformed.length === 1 && malformedWarnings.length === 2 &&
+      many.length === L.RETAINED_OUTCOMES_MAX && many[0].id === `o${L.RETAINED_OUTCOMES_MAX + 1}` &&
+      !('retainedOutcomes' in old.snapshot.workspaces[0]) && withRecord.snapshot.workspaces[0].retainedOutcomes?.[0].sourcePanelId === 'chat1' &&
+      captured?.execution === 'completed' && captured.runId === 'run1' && captured.sourcePanelId === 'chat1' &&
+      L.retainedNextAction({ ...good, state: 'done' }).includes('review'),
+    JSON.stringify({ absent, malformed, malformedWarnings, cap: many.length, old: Object.keys(old.snapshot.workspaces[0]), captured }))
 }
 
 // M115 — work.4. THE PR DOOR'S REFUSALS, as data. `prRefusal` is the ONE

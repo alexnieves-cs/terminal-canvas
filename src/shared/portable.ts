@@ -1,4 +1,5 @@
 import { redactSecrets } from './redact'
+import { parseImportedNote } from './imported-note'
 import type { PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
 
@@ -135,7 +136,9 @@ function portablePanel(panel: PersistedPanel, tally: { n: number }): PersistedPa
     // checklist must be read before it can edit a file on this machine or send a task.
     // M245. A sheet travels as "this is a sheet" and nothing more: widths are this
     // machine's taste and loss consent was given to a file on this machine.
-    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.sheet === undefined ? {} : { sheet: {} }) } } as unknown as PersistedPanel
+    // M250. An imported note's record travels WITHOUT `reviewed`: that a person
+    // on this machine read it says nothing about the person who opens the file.
+    return { ...base, kind: 'file', source: { path: scrub(file.path, tally), ...(file.prose === true ? { prose: true } : {}), ...(file.checklist === undefined ? {} : { checklist: {} }), ...(file.sheet === undefined ? {} : { sheet: {} }), ...(file.imported === undefined ? {} : { imported: { from: scrub(file.imported.from, tally), dropped: file.imported.dropped } }), ...(file.deck === undefined ? {} : { deck: {} }) } } as unknown as PersistedPanel
   }
   // A terminal: the command it was ASKED for, and nothing the process became.
   const command = typeof raw.command === 'string' ? scrub(raw.command, tally) : undefined
@@ -249,8 +252,16 @@ export function remapPortable(file: PortableFile, mint: (prefix: string) => stri
     const raw = next as unknown as Record<string, unknown>
     // Import is a gate too: a hand-authored portable file can carry fields our
     // exporter would never write. Strip acceptance and execution links here.
-    if (next.kind === 'file' && (next.source?.checklist !== undefined || next.source?.sheet !== undefined)) {
-      next.source = { path: next.source.path, ...(next.source.prose === true ? { prose: true } : {}), ...(next.source.checklist === undefined ? {} : { checklist: {} }), ...(next.source.sheet === undefined ? {} : { sheet: {} }) }
+    // Rebuilt FIELD BY FIELD, never spread: a hand-authored file can carry keys
+    // our exporter would never write. M250: it can also claim `reviewed: true`
+    // — nobody here read it — so the import record is re-parsed (a malformed
+    // one is dropped) and rebuilt without `reviewed`, behind its gate.
+    // M248. A deck travels as `deck: {}` — the view, never a staged proposal or the slide on show.
+    // M245. A sheet travels as `sheet: {}` likewise — widths and loss consent are this machine's.
+    if (next.kind === 'file' && next.source !== undefined && (next.source.checklist !== undefined || next.source.deck !== undefined || next.source.sheet !== undefined || 'imported' in next.source)) {
+      const src = next.source
+      const parsed = parseImportedNote(src.imported)
+      next.source = { path: src.path, ...(src.prose === true ? { prose: true } : {}), ...(src.checklist === undefined ? {} : { checklist: {} }), ...(src.sheet === undefined ? {} : { sheet: {} }), ...(src.deck === undefined ? {} : { deck: {} }), ...(parsed.kind === 'view' ? { imported: { from: parsed.view.from, dropped: parsed.view.dropped } } : {}) }
     }
     if (raw.kind === 'workflow') {
       const wf = raw.workflow as { templateId: string }

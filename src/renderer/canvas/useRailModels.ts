@@ -46,6 +46,8 @@ export interface RailModelsDeps {
   workStateOf?: (itemId: string) => WorkItemState | undefined
   /** M133. A workflow trigger's template name by id — the rail row and the pane both read it. */
   templateNameOf?: (templateId: string) => string | undefined
+  /** M252. The workflow's record by id, for the inspector's reach and read fields. */
+  templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
   /** M116. The record itself, for the inspector's five facts. */
   workItemOf?: (itemId: string) => PersistedWorkItem | undefined
   /**
@@ -379,7 +381,9 @@ export function useRailModels(deps: RailModelsDeps) {
         // the workflow rather than `/usr/bin/true`.
         deps.templateNameOf,
         // M196. The lane records, for the chat arm's repository and lane rows.
-        deps.lanes
+        deps.lanes,
+        // M252. The workflow's record, for its reach and whether it was read.
+        deps.templateOf
       )
   const inspectorSig = inspectorSignature(inspectorBuilt)
   const inspectorModel = useMemo(() => inspectorBuilt, [inspectorSig])

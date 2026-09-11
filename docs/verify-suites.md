@@ -34,6 +34,8 @@ engineer could get wrong; for the full blow-by-blow of any suite, read that suit
 | `verify:subagent` | plain node | 27 checks (one lettered sub-check) against `subagent-scan.ts`'s pure functions and `subagent-watch.ts`'s state machine driven with a fake filesystem — Claude Code project-directory slug mapping, … → full text: `### verify:subagent` under Suite details. |
 | `verify:github` | plain node | 6 checks against `main/github-client.ts` over a FAKE broker with recorded GitHub bodies: the no-credential arm sorted by the broker's CODE (never its sentence), two GET calls through the broker with the panel id, the `owner/repo#N` mapping with a PR deduped across both lists and its assignee never its author, 401 rejected against 403 unavailable with GitHub's own message, a truncated answer named, the 50-item page and a search total past the page each a note, control bytes stripped from a body before it can reach a terminal. |
 | `verify:file` | plain node | 83 checks (one lettered sub-check) against `main/file-read.ts`'s five-arm read and `main/file-watch.ts`'s directory watcher, in a fixture directory with a SPACE in it (this repo's costliest silent … → full text: `### verify:file` under Suite details. |
+| `verify:notes` | plain node | M250's rich note model and .docx import — round trip as BUFFERS, the loss report as numbers, the docx compared byte for byte before and after. → `## M250 — rich notes and .docx import` below. |
+| `verify:deck` | plain node | M248: the deck's split (fences by length, front matter, `***`/`- - -` not breaks, byte-exact CRLF round trip, notes), the LCS per-slide diff (insert 2 of 5 is ONE added item), `applyKept`'s partial keep / Buffer-identical no-op / named conflict, the GENERIC `draft-review.ts` on non-slide items (`draft.generic.1` fails it for naming a slide or importing anything), the view record through every copy site and the portable strip, the `{ slides: true }` Markdown option beside md.1's unchanged grammar, the PDF core over fake deps, and the session over a REAL spaced file (a person writes; a door stages; keep writes only the kept slide). The real page count is `verify:canvas deck.pdf.1`. |
 | `verify:toolbox` | plain node | 43 checks against `main/toolbox-scan.ts`'s pure parsers and `main/toolbox-read.ts`'s real-filesystem reader, in a fixture tree that is spaced AND synthesised (never the developer's real `~/.claude`, … → full text: `### verify:toolbox` under Suite details. |
 | `verify:usage` | plain node | 25 checks: `usage-parse.ts`'s JSONL parser, `pricing.ts`'s four-class price table, and `usage-accumulator.ts`'s per-panel accumulator. **2/3** are one check in two halves: a chunk ending mid-record must return no entry and carry the fragment forward (2), and that carry must complete on the next chunk landing EXACTLY once (3) — 2 alone passes against an implementation that never consumes the fragment (silently losing the turn later), 3 alone passes against one that double-counts it. **10** is the whole four-token-class model's reason to exist: a cache READ must cost less than the same count of FRESH input — its own fixture (cache dominating input by ~60,000x) is satisfied just as well by a price table with the two rates TRANSPOSED, since it only proves a cache-heavy total costs *something*. **11** is `costOf`'s asymmetry: an UNKNOWN model returns `undefined`, never `0` — a zero renders a confident "$0.00" beside a visibly-working agent. **18** is the dedupe nothing else in the repo could catch: a read that adds nothing must return `undefined` rather than a fresh, equal object, or the Cost section re-announces an unchanged total every tick (invisible as anything but heat). **19** is `resetIfShrunk`: a transcript that SHRANK (truncated or replaced) resets the panel's whole state rather than reading from a stale offset into garbage. |
 | `verify:machine-cost` | plain node | 7 checks against `main/machine-cost.ts`'s `ps` parsing and process-tree aggregation, driven with a FAKE process lister and a hand-written table — so nothing here reads this machine's real process list, the same injected-dependency trade `review-engine.ts` and `credential-store.ts` make. **2** is why aggregation is RECURSIVE: a panel's pid is a shell or a tmux client, and the agent doing the work is its descendant, so a non-recursive sum reports ~0% CPU beside a fan spinning at full speed. **4** is the one worth knowing: the canvas total folds the UNION of every tree's pids, never the sum of the panel figures, so two targets where one is an ancestor of the other cannot make the canvas count one process twice. **5** is the asymmetry `verify:usage` 11 already states for an unknown model, reached by a second door — an absent root yields NO panel entry rather than a zero-valued one, since "0.0% CPU" beside a live agent is a confident wrong answer while a missing row is an honest one. **6/7** are the two ways this must stay cheap and quiet: an empty target list skips the subprocess entirely, and a `ps` failure returns an empty snapshot rather than REJECTING the invoke (the renderer then keeps its prior reading — a process-table race is the ordinary case, not an error). |
@@ -52,7 +54,7 @@ engineer could get wrong; for the full blow-by-blow of any suite, read that suit
 | `verify:ipc` | real Electron | 1 check: every INVOKE channel in `Object.values(IPC)` has a main-process handler — the count is pinned in the suite, never here — re-derive it from
 `EXPECTED_CHANNELS` in `scripts/verify-ipc-surface.cjs` rather than from any prose here,
 since this count has gone stale in two separate places in this file already; a **send**-direction event (`session:live`, `subagent:state`, `usage:panel`, `canvas:counts`'s reply, etc.) deliberately does NOT move this count, since nobody is required to `ipcMain.handle` a message main only sends — see "`session:live` is an `IPC_EVENTS` member" below for why that boundary keeps getting reached and declined rather than crossed. |
-| `verify:canvas` | real Electron | 6 checks: real input into the built renderer. |
+| `verify:canvas` | real Electron | Real input into the built renderer, plus M248's `deck.pdf.1`: a 4-slide deck printed through `createPdfRenderer`'s real hidden window must be a 4-page PDF (counted as `/Type /Page`, never `/Pages`). |
 | `verify:xterm` | real Electron | 11 checks: an xterm `Terminal` survives its host being detached and reattached — this is a spike proving the M3 eviction design's core assumption (a terminal keeps accepting writes while off-DOM and repaints on reattach), not a regression suite for one module. It runs a DOM-renderer control terminal alongside the WebGL one under test, because `.xterm-rows` stays empty under WebGL even when healthy — DOM text content is not a valid repaint signal there. **`unicode.1`** (M36) builds a terminal through the REAL `createTerminal` and asserts a grinning face advances the cursor two cells — the one observable that separates the Unicode 11 table from the built-in Unicode 6 one; `activeVersion` alone would pass against an addon loaded and never activated. **`repaint.1`** (M149) is the pixel half checks 4–6 disclaim: a terminal built through the real `createTerminal`, attached, detached and re-attached through the real `attachTerminal`/`detachTerminal`, with the ink in its fixed host rectangle counted by `capturePage` before and after (the two captures are kept under `out/verify/repaint-*.png`). The page injects xterm's stylesheet for it — without the sheet a Terminal lays out no rows and the first capture was a bare cursor box, which the first cut of the check accepted as painted; the ink floor is now four thousand pixels. |
 | `verify:panels` | real Electron | 309 checks (many lettered sub-checks): the single largest suite, driving a real renderer end to end against `out/renderer/index.html` through a hand-wired Electron entry point … → full text: `### verify:panels` under Suite details. |
 
@@ -142,6 +144,33 @@ than fail). The fix is always the same two lines (the `@shared`/`@renderer` alia
 one `buildSync` call), and it does not transfer between bundles — each `buildSync` call is its
 own esbuild invocation with its own config, so a fix to one does not cover a sibling that
 reuses the same source file through a *different* entry point. **The only reliable way to know
+
+## `verify:pill` (M249) and `verify:panels:product pill.*`
+
+The plain suite pins the pure half: what the pill says at rest, which chat its input talks to,
+and what counts as a running agent. `pill.rest.zero.1` walks every combination of counts and
+also feeds it `NaN`, `Infinity` and negative numbers, because "0 agents running" and
+"NaN selected" are the two ways the rest layer tells a confident wrong answer.
+
+The product part's five `pill.*` checks share one live `/bin/sh`, and they run in order:
+
+- **`pill.focus.1`** types with REAL `sendInputEvent` characters, so they land wherever DOM
+  focus actually is. It then dispatches a keydown on `.xterm-screen`. A keydown dispatched on
+  `.panel__slot` never reaches xterm.
+- **`pill.rects.1`** compares every `.panel` box and `__m4aGrid()` before, during and after
+  expansion. It opens the running list too, the pill's tallest state.
+- **`pill.paste.1`** is the shortcut, the menu paste and Escape together. Its discriminating
+  clause is `leaked === false`, observed at `ptyManager.write`. The input holding the text is
+  not enough: with `pillFocused()` missing from `shouldIgnoreKeys`, the paste lands in both.
+- **`pill.jump.1`** rings a real bell, pans the camera 150px or more away, then asserts the
+  panel's centre is within 6px of the host's. It also checks the rest text.
+- **`pill.send.1`** needs a canvas with NO supervisor (`__m81SupervisorOffered() === true`).
+  Anything that seeds one earlier in this part will turn it red by name, not by accident. The
+  first send's text must be in the new chat's composer and NOT in any fake process's stdin
+  (M81's unsent rule). The second send must reach stdin.
+
+A throw inside the block fails every check it had not yet recorded, with the error text. It
+never silently skips them.
 
 ## `verify:control` (M54)
 
@@ -544,6 +573,26 @@ its lane is left DORMANT on purpose: a restored terminal has no live cwd and no 
 and the check's first run found it silently out of its task. `task.related.1`, `task.far.1` and
 `task.arrange.1` share one fixture over a REAL linked worktree, because the far overview's
 `ready to review` and `1 file changed` must come from a real fork diff.
+
+## M250 — rich notes and .docx import
+
+`verify:notes` is plain node, and every check in it compares BYTES or NUMBERS, never a rendering,
+because every property it guards fails silently. `notes.roundtrip.1` runs the corpus in
+`scripts/fixtures/md-corpus/` plus a CRLF, a mixed-ending and a no-final-newline variant of each
+file MADE IN THE CHECK — a committed CRLF fixture is one `core.autocrlf` away from being LF on the
+next checkout, and the check would then pass against the bug it exists for. `notes.roundtrip.2`
+is the construction behind it (the blocks tile the file, no byte between or outside them);
+`notes.roundtrip.3` compares the bytes before and after an edited block as Buffers. `notes.edit.1`
+is the refusal rule: an edit whose bytes would not read back as the same block (a paragraph
+becoming a heading, a blank line splitting it, inline HTML, a list item growing a nested list) is
+refused with a reason. `docx.fixture.1` rebuilds `scripts/fixtures/sample.docx` from
+`build-sample-docx.cjs` and compares it to the committed bytes, so the fixture is reviewable as
+source; `docx.loss.1` pins the report as numbers against constructs the builder writes on purpose;
+`docx.readonly.1` compares the docx's bytes and mtime after an import; `docx.create.1` imports
+three times and asserts neither existing note was touched. The fixture directory has a SPACE in it.
+mammoth and jszip are EXTERNAL in the suite's esbuild bundle, resolved from node_modules exactly as
+the main bundle's `externalizeDepsPlugin` resolves them.
+
 ## Suite details
 
 The full text of every table cell too long to grep usefully. Each heading is the suite's

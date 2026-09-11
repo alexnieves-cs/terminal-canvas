@@ -1,6 +1,7 @@
 import { onboardingReadiness, isFirstLaunchBackend, FIRST_LAUNCH_ENGINES } from '@shared/onboarding'
 import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
+import { deckController } from '@renderer/file/deck-controllers'
 import { sheetController } from '@renderer/file/sheet-controllers'
 import { forgetAgentLinksFor } from './agent-links-store'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
@@ -22,6 +23,8 @@ import { insertIntoComposer, lastAssistantText, reportedModels, scrollToTurn } f
 import { refreshChatGrants } from '@renderer/chat/useChatSessions'
 import { buildPlan, describePlan, parsePlanLine, planIsDestructive, runPlan, runAgentPlan, type AgentPlanCaller, type PlanFacts, type PlanStep, type StepOutcome } from '@shared/plan'
 import { outward } from '@shared/outward'
+import { importedNoteReason } from '@shared/imported-note'
+import { deckExportSentence } from '@shared/deck-pptx'
 import { REASON_NO_LIVE_PAGE, normaliseTypedUrl } from '@shared/browser-panel'
 import { browserGuestId } from '@renderer/browser/browser-store'
 import type { SettingValue } from '@shared/settings-schema'
@@ -96,6 +99,8 @@ export interface PaletteActionsDeps {
   /** M189. The portable file's two verbs — the renderer builds it and decides what to make of one. */
   exportCanvasFile: (path?: string, withPixels?: boolean) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importCanvasFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
+  /** M250. A .docx into a new, unreviewed note — main converts, the canvas opens the result. */
+  importDocxFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   /** M253. A pack's two doors, and the two "I've read this" statements. */
   exportPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
   importPackFile: (path?: string) => Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }>
@@ -254,7 +259,7 @@ export interface PaletteActionsDeps {
 export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
   const {
     createObjectNow,
-    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
+    recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, templateRowsRef, reloadTemplates, registry, palette, linkMode, panelsRef, displayPanelsRef, mergedRef,
     promptBodiesRef, nextGroupIdRef, presetRows, promptRows, settingRows,
     broadcastInput, broadcastReady, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, worldCentre,
     goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
@@ -335,7 +340,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // M246. `caller` is WHO asked: present through the agent door (and a
       // workflow an agent triggered), absent for the palette runner and a
       // person's own run. Only verbs whose meaning depends on it read it.
-      const execute = async (step: PlanStep, caller?: AgentPlanCaller): Promise<StepOutcome> => {
+      // M248. HOW it arrived: runAgentPlan (the agent door AND a workflow action
+      // node) passes 'door' whatever the caller; the palette's runPlan is a person.
+      // A deck edit that arrives through a door stages a proposal instead of writing.
+      const execute = async (step: PlanStep, caller?: AgentPlanCaller, origin: 'person' | 'door' = 'person'): Promise<StepOutcome> => {
         const a = step.args
         const creation = CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)
         if (creation) return self.createObject(creation.id, a.value)
@@ -343,6 +351,11 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         switch (step.verb) {
           case 'checklist-edit': return self.editChecklist(a.panel!, a.operation!, a.value)
           case 'checklist-hand': return self.handChecklist(a.panel!, Number(a.line), a.agent!)
+          case 'deck-edit': return self.editDeck(a.panel!, Number(a.slide), a.value ?? '', origin)
+          case 'deck-write': return self.writeDeck(a.panel!, a.value ?? '', origin)
+          case 'deck-review': return self.reviewDeck(a.panel!, a.action ?? '', a.slides ?? '', origin)
+          case 'deck-present': return self.presentDeck(a.panel!, origin)
+          case 'deck-export-pdf': return self.exportDeckPdf(a.panel!)
           case 'sheet-edit': return self.editSheet(a.panel!, a.cell!, a.value ?? '', caller)
           case 'sheet-review': return self.reviewSheet(a.panel!, a.operation!, a.target, caller)
           case 'agent-links': return self.setAgentLinks(a.state!)
@@ -357,7 +370,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
           case 'node-test': return self.testNode(a.template!, a.node)
           case 'feedback': return self.prepareFeedback(a.says)
           case 'export-canvas': return self.exportCanvas(a.path, a.pictures)
+          case 'deck-export-pptx': return self.exportDeck(step.args.panel as string)
           case 'import-canvas': return self.importCanvas(a.path)
+          // A plan must NAME the document: with no path the import opens the
+          // system's chooser, and a modal nobody asked for in front of the
+          // person is not a plan's to open. The chooser is the palette row's.
+          case 'import-docx': return a.path ? self.importDocx(a.path) : { kind: 'refused', reason: 'name the .docx to import — import-docx <path>; choosing one is the palette row\'s' }
           case 'export-pack': return self.exportPack(a.path)
           case 'import-pack': return self.importPack(a.path)
           case 'sample-pack': return self.importSamplePack()
@@ -474,6 +492,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               if (page.kind === 'refused') return { kind: 'refused', reason: `${a.panel}: ${page.reason}` }
               return { kind: 'ran', note: `${page.note}: ${page.text.slice(0, 160).replace(/\s+/g, ' ')}` }
             }
+            // M250. An imported note nobody has read yet is inert at the APP's
+            // doors: the canvas `read` verb refuses it, by the same sentence its
+            // banner shows. This is not a filesystem boundary — an agent with a
+            // shell can still `cat` the .md; the gate is what this app hands over.
+            const importGate = p && isFilePanel(p) ? importedNoteReason(p.source) : undefined
+            if (importGate !== undefined) return { kind: 'refused', reason: `${a.panel}: ${importGate}` }
             const raw = p && isChatPanel(p) ? lastAssistantText(p.rect.id) : (await window.canvas.scrollback.tail({ panelId: a.panel!, lines: 40 })).join('\n')
             const gate = outward(raw, `panel ${a.panel}`)
             return { kind: 'ran', note: `${gate.note}: ${gate.text.slice(-160).replace(/\s+/g, ' ')}` }
@@ -576,6 +600,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     createObject: createObjectNow,
     editChecklist: async (panel, operation, value) => checklistController(panel)?.edit(operation, value) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
     handChecklist: async (panel, line, agent) => checklistController(panel)?.hand(line, agent) ?? { kind: 'refused', reason: 'open a checklist in this workspace first' },
+    // M248. A plan line cannot hold a newline (runAgentPlan refuses control
+    // characters), so `\n` typed in the text is one.
+    editDeck: async (panel, slide, text, origin = 'person') => deckController(panel)?.edit(slide, text.replace(/\\n/g, '\n'), origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    writeDeck: async (panel, text, origin = 'person') => deckController(panel)?.write(text.replace(/\\n/g, '\n'), origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    reviewDeck: async (panel, action, slides, origin = 'person') => {
+      const words = slides.trim().split(/\s+/).filter(Boolean)
+      if (words.length === 0) return { kind: 'refused', reason: 'name the slides to keep or discard, or all' }
+      return deckController(panel)?.review(action, words.length === 1 && words[0] === 'all' ? 'all' : words, origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` }
+    },
+    presentDeck: async (panel, origin = 'person') => deckController(panel)?.present(origin) ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
+    exportDeckPdf: async (panel) => deckController(panel)?.exportPdf() ?? { kind: 'refused', reason: `${panel} is not an open deck in this workspace` },
     editSheet: async (panel, cell, value, caller) => sheetController(panel)?.edit(cell, value, caller) ?? { kind: 'refused', reason: `${panel} is not an open sheet in this workspace` },
     // M247. The toggle is the `canvas.agentLinks` SETTING, so every door writes the
     // same record the HUD button and the settings palette row write.
@@ -891,7 +926,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               }
               // M181. The image panel's one field, by name — the fifteenth arm.
               if (isImagePanel(p)) {
-                return { kind: p.kind, rect: p.rect, image: { path: p.image.path }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
+                return { kind: p.kind, rect: p.rect, image: { path: p.image.path, ...(p.image.asset === undefined ? {} : { asset: p.image.asset }), ...(p.image.artifact === undefined ? {} : { artifact: p.image.artifact }) }, z: p.z, title: name, ...carryMarks(p), ...(p.links === undefined ? {} : { links: p.links }) }
               }
               // M49. `fontSize` and `links` ride along field by field, absent
               // staying absent: a rename that rebuilt the panel without them
@@ -2074,6 +2109,18 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     prepareFeedback: (says) => prepareFeedbackNow(says),
     exportCanvas: (path, withPixels) => exportCanvasFile(path, withPixels === 'with-pictures'),
     importCanvas: (path) => importCanvasFile(path),
+    importDocx: (path) => importDocxFile(path),
+    // M251. ONE action for the four doors. The renderer hands main a PATH and
+    // never the text: main reads the file itself, so what is exported is what
+    // is on disk, and the scrub runs where the bytes are.
+    exportDeck: async (panelId) => {
+      const panel = panelsRef.current.find((p) => p.rect.id === panelId)
+      if (panel === undefined) return { kind: 'refused', reason: `there is no panel ${panelId} on this canvas` }
+      if (panel.kind !== 'file') return { kind: 'refused', reason: `${panelId} is not a file panel — a deck is a Markdown file` }
+      if (!/\.(md|markdown)$/i.test(panel.source.path)) return { kind: 'refused', reason: `${panel.source.path} is not Markdown — a deck is a .md file with --- between slides` }
+      const r = await window.canvas.export.deckPptx({ path: panel.source.path })
+      return r.kind === 'written' || r.kind === 'cancelled' ? { kind: 'ran', note: deckExportSentence(r) } : { kind: 'refused', reason: deckExportSentence(r) }
+    },
     exportPack: (path) => exportPackFile(path),
     importPack: (path) => importPackFile(path),
     importSamplePack: () => importSamplePackFile(),
@@ -2262,7 +2309,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // (the palette's `feedback` idiom), confirmed once when any step is
     // destructive, and run by the executor below — the ONLY place a verb's
     // meaning lives. The table knows what a verb IS; this knows what it DOES.
-    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, caller), caller),
+    runAgentPlan: (line, caller) => runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller),
     beginRunVerb: () => {
       const open = (initial: string, refused?: string): void => {
         setInputMode({
@@ -2483,7 +2530,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // M122. The chat store's bus; the panel scrolls the turn's row into view.
     scrollChatTurn: (panelId, turnIndex) => scrollToTurn(panelId, turnIndex)
 
-  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
+  }); return self }, [recheckEnvironment, applyStarter, saveWorkflowDraft, saveWorkflowCopyDraft, prepareFeedbackNow, exportCanvasFile, importCanvasFile, importDocxFile, exportPackFile, importPackFile, importSamplePackFile, markPresetReadNow, markWorkflowReadNow, testNodeNow, addNote, setNoteText, setNoteTint, addImageFromPath, replaceImagePanel, openPreviewNow, bindPreviewNow, setPreviewWidthNow, capturePreviewNow, startDevServerNow, discoverProject, stopWorkflowRun, runWorkflowNow, resetViewport, fitAll, fitSelection, selectedIdsRef, centreOn, selectAndRaise, presetRows, promptRows,
        reloadPresets, palette.openPalette, palette.closePalette,
        palette.capturedId, reloadPrompts, commitHistory, reloadSettings,
        settingRows, switchWorkspace, reloadWorkspaces, onClosePanel,

@@ -49,8 +49,25 @@ const FACTS = {
 
 ;(async () => {
   ok('creation.registry.1 one registry describes every creation pill and its executable four doors',
-    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist', 'sheet'].every((id) =>
+    Array.isArray(V.CREATABLE_OBJECTS) && ['terminal', 'agent', 'note', 'image', 'workflow', 'browser', 'checklist', 'sheet', 'deck', 'tool'].every((id) =>
       V.CREATABLE_OBJECTS.some((entry) => entry.id === id && typeof entry.create === 'function' && entry.icon && V.V9_DOORS[entry.verb])))
+  // tool.door.1 (M252). "I've read this" is a PERSON'S act and has no door:
+  // every verb, palette row, agent line and action node runs through these
+  // four files, so none of them may name a mark-read function or write
+  // `reviewed` at all — and Canvas hands its two mark-read functions ONLY to
+  // the two nodes' `onMarkRead` props. An agent that could reach either would
+  // un-inert its own answer, and nothing on screen would say so.
+  {
+    const src = (p) => readFileSync(join(__dirname, '..', 'src', p), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts']
+    const reaching = doors.filter((p) => /mark(Template|Preview)Read|onMarkRead|reviewed\s*[:=]/.test(src(p)))
+    const canvas = src('renderer/canvas/Canvas.tsx')
+    const uses = (name) => [...canvas.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
+    const passedOnly = uses('markTemplateRead') === 2 && /onMarkRead=\{\(templateId\) => \{ void markTemplateRead\(templateId\) \}\}/.test(canvas) &&
+      uses('markPreviewRead') === 2 && /onMarkRead=\{markPreviewRead\}/.test(canvas)
+    ok('tool.door.1 marking a tool read has NO verb, palette row, agent line or workflow node: no door file names a mark-read function or writes `reviewed`, and Canvas passes each mark-read function only to its node\'s onMarkRead',
+      reaching.length === 0 && passedOnly, JSON.stringify({ reaching, markTemplateRead: uses('markTemplateRead'), markPreviewRead: uses('markPreviewRead') }))
+  }
   // closure.1 — THE one that matters long-term. The PaletteActions interface
   // (commands.ts) is the authority for what the app can do; every member is
   // either mapped by a verb or named on the excluded list with a reason.
@@ -203,11 +220,17 @@ const FACTS = {
     // export is a structure scrubbed field by field whose count is part of the
     // file. `shared/feedback.ts` scrubs a draft whose count is stated IN the
     // draft, so the person can see what was taken out before they send it.
+    // M251 adds the SEVENTH by name: `main/deck-export.ts` writes a .pptx, a
+    // structure like the portable file, so it scrubs title, bullets, body,
+    // alt text and notes one field at a time and reports the count in its
+    // export sentence — `outward`'s one-text-one-note answer cannot say that.
     // M253 adds the SEVENTH: `shared/pack.ts` scrubs a pack's workflows,
     // prompts and presets field by field for the same reason portable.ts
     // does — the count is part of the file.
-    ok('gate.2 redactSecrets has exactly seven callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
+    // M255 (merge): M251's deck-export and M253's pack are BOTH the seventh on
+    // their own branches; merged, the list is eight, each named for its reason.
+    ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, M251\'s deck export to .pptx, scrubbed field by field with its count in the export sentence, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
+      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
       JSON.stringify({ callers, readers, unguarded }))
   }
 

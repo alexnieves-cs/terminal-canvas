@@ -102,6 +102,13 @@ milestone in it; the evidence and the reasoning are in
   violates the rest rule. Contextual: next action, related work, current blocker, revealed at
   opacity 0 → 1. Inspector: configuration, provenance, detailed outcomes. Deep detail: logs,
   diagnostics, metrics, history.
+- **The palette finds anything; the command pill acts on this canvas now (M249).** The pill at
+  the bottom of the canvas is a canvas's rest layer. It shows one state, in priority order:
+  "N agents need you", "N agents running", "N selected", or a glyph alone, never "0 …". Its
+  contextual layer is the input to the orchestrator chat plus Fit, Jump, Running and the
+  selection actions. It has no search and no command list. Every control runs an existing verb
+  through the palette's own executor. A control that cannot run is disabled with its reason,
+  never hidden.
 - **A `note` is a Markdown FILE and nothing else is.** M27's prose file panel: a path on disk,
   indexed by the vault, reachable by `[[links]]`, backlinks and `#tags`, searchable, and alive
   outside any canvas. M187's sixteenth kind has three forms — a **sticky**, a **text** and a
@@ -112,4 +119,10 @@ milestone in it; the evidence and the reasoning are in
   unchanged — this is a copy rule plus one real defect to fix, `RailTailKind`/`StateKind`'s single
   `'note'` literal now carrying BOTH meanings since M187 gave the kind the name the comment says
   it should never have (`rail-rows.ts:147-155, 201-202, 317`; `panel-state.ts:24-25`).
+- **A deck is a note's slides view, not a new kind (M248).** `kind: 'file'` with
+  `source.deck`, the checklist's shape. It KEEPS ITS HEADER under the M236 frame rule — "slide
+  N of M" is a fact the body does not carry, and "N slide changes" appears only above zero. Its
+  filmstrip is the contextual layer (opacity 0 → 1, absolutely positioned, never the body's
+  box). A person's edit writes the file; an agent's or a workflow's is a per-slide proposal a
+  person keeps or discards.
 

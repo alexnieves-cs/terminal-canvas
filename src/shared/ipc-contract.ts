@@ -6,7 +6,9 @@ import type { RunRow, UsageRow } from './run-ledger'
 import type { AgentSessionSpec, AgentCreateResult, SendAnswer, AgentSessionSnapshot, AgentTranscriptResult, AgentSessionEvent, AgentImportRequest, AgentImportResult, ChatAttachment, ClipboardImage, AutoStartRequest, AutoStartResult } from './agent-session'
 import type { PermissionAnswer } from './transcript'
 import type { OrphanRow } from './orphans'
-import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult } from './export'
+import type { PanelTextExportRequest, PanelTextExportResult, CanvasPngExportResult, DeckPdfExportRequest, DeckPdfExportResult } from './export'
+import type { DeckExportRequest, DeckExportResult } from './deck-pptx'
+import type { ToolGenerateRequest, ToolGenerateResult } from './tool-spec'
 import type { EnvReport } from './env-report'
 import type { BrowserReadRequest, BrowserReadResult } from './browser-panel'
 import type { Discovery as PreviewDiscovery } from './preview'
@@ -96,6 +98,7 @@ export interface MemoryEntryRow {
   panelId?: string
   at: number
   redacted?: number
+  source?: { conversationId: string; turnId: string; taskId?: string; acceptedAt: number }
 }
 
 /** M81. The canvas model `tc status` answers with — the renderer's own words. */
@@ -527,6 +530,17 @@ export const IPC = {
   EXPORT_PANEL_TEXT: 'export:panel-text',
   /** M58. The composited frame as PNG, through a save dialog. */
   EXPORT_CANVAS_PNG: 'export:canvas-png',
+  /** M248. A deck file to PDF, one 16:9 page per slide, through a save dialog. */
+  EXPORT_DECK_PDF: 'export:deck-pdf',
+  /** M251. A Markdown deck as .pptx, scrubbed field by field, through a save dialog. */
+  DECK_EXPORT_PPTX: 'deck:export-pptx',
+  /**
+   * M252. Describe a tool: ONE headless agent run with no tools, whose reply
+   * becomes a workflow template or a mini app's files — which arrive INERT.
+   * Main runs it because main owns every process; the renderer decides what
+   * to make of the answer and marks it unreviewed.
+   */
+  TOOL_GENERATE: 'tool:generate',
   /** M48. The environment report: what main found at startup, key names only. */
   ENV_REPORT: 'env:report',
   /** M51. Open a Cmd-clicked path or URL — only main opens anything. */
@@ -713,7 +727,14 @@ export const IPC = {
   /** M181. An image panel's bytes as a data URL, read in main by magic number under a cap; four arms, never rejects. */
   IMAGE_READ: 'image:read',
   /** M181. The starter's two files under userData/starter, written once; answers both paths. */
-  STARTER_PREPARE: 'starter:prepare'
+  STARTER_PREPARE: 'starter:prepare',
+  /**
+   * M250. A .docx becomes a NEW Markdown note beside it, converted in main
+   * (mammoth + jszip are main-only dependencies). With no path, main opens the
+   * system's own chooser filtered to .docx. The docx is only read; the note is
+   * written through createFile's `wx`, so nothing is overwritten.
+   */
+  DOCX_IMPORT: 'docx:import'
 } as const
 
 /**
@@ -1371,7 +1392,7 @@ export interface SettingRow {
 /** Shape of the bridge the preload exposes on window.canvas. */
 /** M185. What a capture answers: the file it wrote and the page it is of, or one named refusal. */
 export type PreviewCaptureResult =
-  | { kind: 'captured'; path: string; url: string; host: string; bytes: number }
+  | { kind: 'captured'; path: string; id: string; url: string; host: string; capturedAt: number; bytes: number }
   | { kind: 'refused'; reason: string }
 
 /** M186. What the asset store answers: the id and where the bytes are, or one named refusal. */
@@ -1554,7 +1575,7 @@ export interface CanvasBridge {
       unresolved?: string
     }>
     /** Refused BY NAME for an unusable kind or empty text; every write is scrubbed. */
-    add(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
+    add(req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }): Promise<{ ok: true } | { ok: false; reason: string }>
   }
   /** M100. Teammates: the roster. `save` upserts by id and answers the record as saved; `remove` answers whether it held the id. */
   teammate: {
@@ -1695,6 +1716,14 @@ export interface CanvasBridge {
     /** M58; M112 carries the live buffer when the panel has one. */
     panelText(req: PanelTextExportRequest): Promise<PanelTextExportResult>
     canvasPng(): Promise<CanvasPngExportResult>
+    /** M251. The deck's path; main reads it, so the renderer never hands over text it could have altered. */
+    deckPptx(req: DeckExportRequest): Promise<DeckExportResult>
+    /** M248. Main reads the deck file itself; the renderer names only its path. */
+    deckPdf(req: DeckPdfExportRequest): Promise<DeckPdfExportResult>
+  }
+  tool: {
+    /** M252. A description in, a tool OUT — never run. The renderer saves it unreviewed. */
+    generate(req: ToolGenerateRequest): Promise<ToolGenerateResult>
   }
   diagnostics: {
     /** Main's own numbers only — the IPC send rate. Everything else in the
@@ -1879,6 +1908,10 @@ export interface CanvasBridge {
   asset: {
     put(req: { path?: string; bytes?: Uint8Array }): Promise<AssetPutResult>
     choose(): Promise<string | null>
+  }
+  /** M250. Import one .docx as a new, unreviewed note; never rejects. */
+  docx: {
+    import(req: { path?: string }): Promise<import('./imported-note').DocxImportResult>
   }
   /**
    * M188. The fetch node's one request. A GET and only a GET — any other

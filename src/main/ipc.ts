@@ -35,8 +35,9 @@ import type { PersistedRoutine } from '../shared/routines'
 import type { Shelf } from '../shared/skills'
 import type { PresetTemplate, SessionBackendInfo, PresetListRow, CapturedPanel, MergedWorkspace, FileReadRequest, FileWriteRequest, FileCreateRequest, ToolboxReadRequest, ToolboxPermissionsRequest, WorktreeListRow, WorktreeRemoveResult } from '../shared/ipc-contract'
 import { INERT_EXPORTERS, type Exporters } from './export'
+import { INERT_TOOLS, type ToolHandlers } from './tool-generate'
 import type { ReviewSubject, ReviewDiffRequest, ReviewCommitRequest, ReviewCommitResult, ReviewDiscardRequest, ReviewDiscardResult } from '../shared/review'
-import type { PanelTextExportRequest } from '../shared/export'
+import type { DeckPdfExportRequest, PanelTextExportRequest } from '../shared/export'
 import type { PtyManager } from './pty-manager'
 import { expandTilde } from './pty-manager'
 import type { LayoutStore } from './layout-store'
@@ -130,7 +131,7 @@ export interface PaletteHandlers {
   starterPrepare(): StarterFiles
   snapshotRestore(at: number, afterId?: number): { kind: 'restored'; workspaceId: string } | { kind: 'refused'; reason: string }
   memoryList(root: string, limit: number): Promise<{ root: string; entries: unknown[]; skipped: number }>
-  memoryAdd(req: { root: string; kind: string; text: string; panelId?: string }): Promise<{ ok: true } | { ok: false; reason: string }>
+  memoryAdd(req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }): Promise<{ ok: true } | { ok: false; reason: string }>
   listTemplates(): PersistedTemplate[]
   /** M100. */
   listTeammates(): PersistedTeammate[]
@@ -273,6 +274,15 @@ export interface AssetHandlers {
 const INERT_ASSETS: AssetHandlers = {
   put: async () => ({ kind: 'refused', reason: 'the asset store is not available here' }),
   choose: async () => null
+}
+
+/** M250. The .docx import's one door; see main/docx-import.ts. */
+export interface DocxHandlers {
+  import(req: { path?: string }): Promise<import('../shared/imported-note').DocxImportResult>
+}
+
+const INERT_DOCX: DocxHandlers = {
+  import: async () => ({ kind: 'refused', reason: 'importing a .docx is not available here' })
 }
 
 /** M188. The fetch node's one door; see main/node-run.ts. */
@@ -502,12 +512,20 @@ export function registerIpcHandlers(
   nodes: NodeHandlers = INERT_NODES,
   /** M189. Appended last, like every collaborator before it. */
   portable: PortableHandlers = INERT_PORTABLE,
+  /** M250. Appended last, like every collaborator before it. */
+  docx: DocxHandlers = INERT_DOCX,
+  /** M252. Appended last, like every collaborator before it — a harness that does not wire it gets a named refusal, never a process. */
+  tools: ToolHandlers = INERT_TOOLS,
   /** M253. Appended last, like every collaborator before it. */
   pack: PackHandlers = INERT_PACK,
   /** M255. Appended last, like every collaborator before it. */
   publisher: PublishHandlers = INERT_PUBLISH
 ): void {
+  ipcMain.handle(IPC.TOOL_GENERATE, (_event, req: { description: string; folder: string }) => tools.generate(req))
   ipcMain.handle(IPC.UPDATE_CHECK, () => update.check())
+  // M250. The renderer names a path (or none, for the chooser) and nothing
+  // else; a non-string is treated as absent rather than trusted.
+  ipcMain.handle(IPC.DOCX_IMPORT, (_event, req: { path?: unknown }) => docx.import(typeof req?.path === 'string' ? { path: req.path } : {}))
   // M181. A relative path is refused as `missing` before the read: the record
   // parser already drops one, and a read resolved against main's cwd would
   // name a file nobody meant.
@@ -663,6 +681,8 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.ENV_REPORT, (_event, again?: boolean) => envReport(again === true))
   ipcMain.handle(IPC.EXPORT_PANEL_TEXT, (_event, req: PanelTextExportRequest) => exporters.panelText(req))
   ipcMain.handle(IPC.EXPORT_CANVAS_PNG, () => exporters.canvasPng())
+  ipcMain.handle(IPC.EXPORT_DECK_PDF, (_event, req: DeckPdfExportRequest) => exporters.deckPdf(req))
+  ipcMain.handle(IPC.DECK_EXPORT_PPTX, (_event, req: { path: string }) => exporters.deckPptx(req))
   ipcMain.handle(IPC.REVIEW_DISCARD, (_event, req: ReviewDiscardRequest) => reviewDiscard(req))
   ipcMain.handle(IPC.LEDGER_LIST, (_event, panelId: string, limit: number) => ledgerList(panelId, Math.max(1, Math.min(200, limit))))
   ipcMain.handle(IPC.LINK_OPEN, (_event, req: { panelId: string; target: string }) => links.open(req))
@@ -689,7 +709,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.PROMPT_DELETE, (_event, id: string) => palette.removePrompt(id))
   ipcMain.handle(IPC.PRESET_TEMPLATE, (_event, id: string) => palette.presetTemplate(id))
   ipcMain.handle(IPC.MEMORY_LIST, (_event, root: string, limit: number) => palette.memoryList(root, limit))
-  ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string }) => palette.memoryAdd(req))
+  ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }) => palette.memoryAdd(req))
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
   ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number) => palette.saveTemplate(template, typeof expectedRevision === 'number' ? expectedRevision : undefined))
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))

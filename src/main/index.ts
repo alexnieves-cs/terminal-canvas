@@ -10,6 +10,8 @@ import { discoverPreview } from './preview-discover'
 import { descendantsOf } from './machine-cost'
 import { capturePreview } from './preview-capture'
 import { putAsset } from './asset-store'
+import { importDocx } from './docx-import'
+import { createFile } from './file-create'
 import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
 import { parsePortable } from '@shared/portable'
 import { createPackHandlers } from './pack-handlers'
@@ -59,6 +61,8 @@ import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
 import { findOrphans, orphanPrompt } from './orphans'
 import { createExporters } from './export'
+import { createDeckExporter } from './deck-export'
+import { createToolGenerator } from './tool-generate'
 import type { OrphanRow } from '../shared/orphans'
 import { createGitRunner } from './git-runner'
 import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
@@ -77,6 +81,8 @@ import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
 import { telemetryPlan, scrubEvent } from './telemetry'
 import { checkForUpdate, repoOf } from './update-check'
 import { readImage } from './image-read'
+import { readFile } from './file-read'
+import { createDeckPdf, createPdfRenderer } from './deck-pdf'
 import { prepareStarter } from './starter-prepare'
 import { get as httpsGet } from 'node:https'
 import { get as httpGet } from 'node:http'
@@ -1948,7 +1954,8 @@ app.whenReady().then(async () => {
     // M58. The save dialog and the composited frame are main's; the arms and
     // the scrubbing live in export.ts, plain-node tested. A written file is
     // revealed in the Finder, which is the only "done" the palette can show.
-    createExporters({
+    {
+    ...createExporters({
       log: scrollbackLog,
       persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
       askPath: async (suggested) => {
@@ -1960,8 +1967,31 @@ app.whenReady().then(async () => {
       capture: async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
         return (await mainWindow.webContents.capturePage()).toPNG()
-      }
+      },
+      // M251. The same dialog, filtered to .pptx; the arms, the scrub and the
+      // report live in deck-export.ts, plain-node tested by verify:deck.
+      deck: createDeckExporter({
+        askPath: async (suggested) => {
+          const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
+          const options = { title: 'Export deck', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PowerPoint', extensions: ['pptx'] }] }
+          const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+          return r.canceled || !r.filePath ? null : r.filePath
+        }
+      })
     }),
+    // M248. A deck to PDF: main reads the file, a hidden sandboxed window prints it.
+    deckPdf: createDeckPdf({
+      readText: async (path) => readFile(path),
+      readImage: (path) => readImage(path),
+      render: createPdfRenderer(BrowserWindow, app.getPath('temp')),
+      askPath: async (suggested) => {
+        const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
+        const options = { defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PDF', extensions: ['pdf'] }] }
+        const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+        return r.canceled || !r.filePath ? null : r.filePath
+      }
+    })
+    },
     agentHandlers,
     watcherHandlers,
     // M103. The guest is resolved by the id the node learned on did-attach;
@@ -2265,6 +2295,32 @@ app.whenReady().then(async () => {
         return { kind: 'read' as const, path, parse: parsePortable(text) }
       }
     },
+    // M250. A .docx into a NEW note beside it. The chooser is the system's own
+    // (a cancel is `cancelled`, never a refusal); pictures go through the SAME
+    // store and caps a dropped picture does; the note through createFile's
+    // `wx`. The docx itself is only read — see main/docx-import.ts.
+    {
+      import: async (req) => {
+        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path.trim() : undefined
+        if (path === undefined) {
+          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
+          const answer = await dialog.showOpenDialog(mainWindow, {
+            title: 'Import a Word document',
+            properties: ['openFile'],
+            filters: [{ name: 'Word document', extensions: ['docx'] }]
+          })
+          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
+          path = answer.filePaths[0]
+        }
+        return importDocx({ path }, {
+          putAsset: (bytes) => putAsset({ dir: join(app.getPath('userData'), 'assets'), bytes }),
+          createFile
+        })
+      }
+    },
+    // M252. Describe a tool: the SAME claude binary and login environment
+    // sessions use, one run with no tools, and a reply that is only data.
+    createToolGenerator({ runner: claudeCliRunner, command: () => claudePath ?? 'claude', env: () => loginEnv }),
     // M253. Packs — the ONE factory production and the panels harness both
     // build (main/pack-handlers.ts), so the suite drives this code and not a
     // copy. Only the choosers are this file's: the system's own dialogs.

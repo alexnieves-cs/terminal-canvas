@@ -70,6 +70,11 @@ const TEAMMATE_REFUSED_VERBS = new Set([
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.
   'export-canvas', 'import-canvas', 'checklist-edit', 'checklist-hand',
+  // M250. The import READS a path the caller names and writes a note beside
+  // it — a teammate's plan does not choose which files this app reads.
+  'import-docx',
+  // M248. A deck's file is the person's; a teammate may neither propose into it nor review it.
+  'deck-edit', 'deck-write', 'deck-review',
   // M246: `sheet-edit` is deliberately NOT here. Through the agent door it
   // PROPOSES — a draft, no file changes — and keeping a draft is refused to
   // every agent by name (sheet-draft.ts's sheetReviewRefusal).

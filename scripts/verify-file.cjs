@@ -750,6 +750,26 @@ const p = (name) => join(DIR, name)
     JSON.stringify({ empty, added, secret, badKind, badText, listed: listed.entries, afterJunk: { n: afterJunk.entries.length, skipped: afterJunk.skipped }, capped: capped.entries.length }))
 }
 
+// D12 — memory.decision.1. Accepted text is redacted before its durable write
+// and names the immutable conversation turn and known task. Old lines without
+// source stay valid; a malformed optional source never turns into a guess.
+{
+  const dir = join(DIR, 'decision memory')
+  const store = F.createMemoryStore({ dir, now: () => 77 })
+  const root = '/repo/decision'
+  const written = store.add({ root, kind: 'decided', text: 'use token ghp_0123456789012345678901234567890123456789', source: { conversationId: 'chat-1', turnId: 'turn-2', taskId: 'task-3' } })
+  require('node:fs').appendFileSync(store.fileOf(root), JSON.stringify({ kind: 'decided', text: 'old record', at: 1 }) + '\n')
+  require('node:fs').appendFileSync(store.fileOf(root), JSON.stringify({ kind: 'decided', text: 'bad source', at: 2, source: { conversationId: 7 } }) + '\n')
+  const read = store.list(root, 10)
+  const accepted = read.entries.find((entry) => entry.source?.turnId === 'turn-2')
+  const old = read.entries.find((entry) => entry.text === 'old record')
+  const malformed = read.entries.find((entry) => entry.text === 'bad source')
+  ok('memory.decision.1 accepted decisions are scrubbed before persistence and retain conversation, turn, task and acceptance time across a fresh read; old records remain source-less and malformed optional source metadata is dropped rather than guessed',
+    written.ok === true && accepted?.source?.conversationId === 'chat-1' && accepted.source.taskId === 'task-3' && accepted.source.acceptedAt === 77 && !/ghp_0123/.test(accepted.text) &&
+      old && !('source' in old) && malformed && !('source' in malformed),
+    JSON.stringify({ written, accepted, old, malformed }))
+}
+
 // M83 — memory.2. THE THREE PROPERTIES A GREEN memory.1 DOES NOT HAVE, each
 //      found by the milestone's verifier and each a SILENT failure.
 //      (a) The file name is injective: `/a/b` and `/a-b` flatten to the same

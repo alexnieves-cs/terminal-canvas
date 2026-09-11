@@ -3307,6 +3307,46 @@ body {
   padding: var(--sp-4);
 }
 
+/* M250. The note's Source | Rich toggle and the rich editor. The editor is a
+   VIEW over the same draft the textarea edits, so it takes the same ground and
+   measure; nothing here changes the panel's box (a note is not a terminal, but
+   the frame rule's "never a box that collapses" costs nothing to keep). */
+.file-node__modes { display: flex; gap: var(--sp-1); padding: 0 var(--sp-4) var(--sp-2); }
+.file-node__modes button { font-size: var(--t-xs); padding: var(--sp-1) var(--sp-2); border: 1px solid var(--line); background: transparent; color: var(--fg-2); border-radius: var(--r-sm); }
+.file-node__modes button[aria-pressed="true"] { background: var(--s-3); color: var(--fg); }
+/* The loss report is CONTEXTUAL (opacity 0 → 1 with the frame), the rest rule's layer for "what this import could not carry". */
+.file-node__dropped { opacity: 0; transition: opacity var(--dur-1) var(--ease); font-size: var(--t-xs); color: var(--amber, var(--fg-2)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.pf:hover .file-node__dropped, .pf:focus-within .file-node__dropped, .panel--selected .file-node__dropped { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .file-node__dropped { transition: none; } }
+.file-node__import { margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3); border: 1px solid var(--line); background: var(--s-2); display: flex; flex-direction: column; gap: var(--sp-2); }
+.file-node__import p { margin: 0; }
+.rich-note { flex: 1; min-height: 0; overflow: auto; background: var(--s-1); color: var(--fg); padding: var(--sp-2) var(--sp-4) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-sm); line-height: var(--lh-body); }
+.rich-note__tools { display: flex; flex-wrap: wrap; gap: var(--sp-1); position: sticky; top: 0; background: var(--s-1); padding-bottom: var(--sp-2); z-index: 1; }
+.rich-note__tools button, .rich-note__block button { font-size: var(--t-xs); }
+.rich-note__link-form { display: flex; gap: var(--sp-1); }
+.rich-note__block { position: relative; padding: var(--sp-1) var(--sp-2); margin: 0 calc(-1 * var(--sp-2)); border-radius: var(--r-sm); cursor: text; max-width: var(--measure); }
+.rich-note__block:hover, .rich-note__block:focus-visible { background: var(--s-2); }
+.rich-note__block--active { background: var(--s-2); cursor: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
+.rich-note__remove { position: absolute; top: var(--sp-1); right: var(--sp-1); opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.rich-note__block:hover .rich-note__remove, .rich-note__block:focus-within .rich-note__remove { opacity: 1; }
+.rich-note__badge { display: inline-block; font-size: var(--t-xs); color: var(--fg-2); border: 1px solid var(--line); padding: 0 var(--sp-1); border-radius: var(--r-sm); }
+.rich-note__raw, .rich-note__code { margin: 0; white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--fg-2); }
+.rich-note__text { white-space: pre-wrap; outline: 1px solid var(--line); padding: var(--sp-1); min-height: 1.5em; }
+.rich-note__source { width: 100%; resize: vertical; font-family: var(--font-mono); font-size: var(--t-xs); background: var(--s-1); color: var(--fg); border: 1px solid var(--line); }
+.rich-note__p { margin: 0; white-space: pre-wrap; }
+.rich-note__h { font-weight: 600; }
+.rich-note__h1 { font-size: var(--t-lg, 1.25em); } .rich-note__h2 { font-size: var(--t-md, 1.1em); }
+.rich-note__list { margin: 0; padding-left: 1.4em; }
+.rich-note__table { border-collapse: collapse; }
+.rich-note__table th, .rich-note__table td { border: 1px solid var(--line); padding: var(--sp-1) var(--sp-2); text-align: left; }
+.rich-note__table input { width: 100%; min-width: 4em; }
+.rich-note__item { display: flex; gap: var(--sp-1); align-items: center; }
+.rich-note__item input:not([type="checkbox"]) { flex: 1; }
+.rich-note__figure { margin: 0; }
+.rich-note__img { max-width: 100%; max-height: 240px; }
+.rich-note__link { text-decoration: underline; }
+.rich-note__done { align-self: flex-start; }
+
 /* Small text buttons inside a node body: the save control, the conflict
    choices, a Jira transition. One shape. */
 .file-node__save,
@@ -4987,6 +5027,7 @@ body {
      browser           the real address, which is not the page's title
      image             the source, and Replace
      note (sticky)     the tint controls
+     deck              slide N of M, and the proposed-change count (M248)
 
    A rule with an exception list is fine; a rule that is silently per-kind is
    how the frame drifted before M47 unified it, which is why this list is
@@ -5149,13 +5190,56 @@ body {
 }
 .new-object-row__pill {
   display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
-  border: 1px solid var(--line); border-radius: 999px; padding: var(--sp-3) var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-3) var(--sp-5);
   background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-sm);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
 .new-object-row__pill:hover { color: var(--fg); background: var(--s-2); }
 .new-object-row__pill:disabled { color: var(--fg-4); cursor: default; }
 .new-object-row__pill:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
+  outline: 2px solid var(--focus); outline-offset: 2px;
+}
+/* M249. The bottom command pill: a sibling of .world, ABSOLUTELY positioned
+   and anchored at the bottom, so expanding grows UPWARD over the canvas and
+   pushes nothing — no panel box moves, no terminal refits, no SIGWINCH
+   (M234; verify:panels:product pill.rects.1). Rest carries one state or a
+   glyph alone; the panel above it is the contextual layer. No shadow and no
+   blur: shadow.1 keeps --e-* for overlays, blur.1 keeps the HUD flat. */
+.command-pill {
+  position: absolute; left: 50%; bottom: var(--sp-5); transform: translateX(-50%); z-index: 930;
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+  max-width: min(560px, calc(100% - 2 * var(--sp-5)));
+  pointer-events: auto; font-family: var(--font-ui);
+}
+.command-pill__rest {
+  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 28px;
+  border: 1px solid var(--line); border-radius: var(--r-full); padding: 0 var(--sp-3);
+  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-xs); cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1);
+}
+.command-pill__rest:hover { color: var(--fg); background: var(--s-2); }
+.command-pill__rest[data-pill-state="attention"] { color: var(--amber); border-color: var(--amber); }
+.command-pill__panel {
+  display: flex; flex-direction: column; gap: var(--sp-2); width: 100%;
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: var(--sp-2);
+  background: var(--s-2);
+}
+.command-pill__input {
+  font: inherit; font-size: var(--t-md); color: var(--fg); background: var(--s-1);
+  border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-2); min-width: 0;
+}
+.command-pill__input:disabled { color: var(--fg-4); }
+.command-pill__actions { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.command-pill__action, .command-pill__row {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-2) var(--sp-2);
+  background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-xs); cursor: pointer;
+}
+.command-pill__action:hover, .command-pill__row:hover { color: var(--fg); background: var(--s-3); }
+.command-pill__action:disabled { color: var(--fg-4); cursor: default; }
+.command-pill__note { max-width: 100%; color: var(--fg-2); font-size: var(--t-xs); text-align: center; overflow-wrap: anywhere; }
+.command-pill__running { list-style: none; margin: 0; padding: 0; max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-1); }
+.command-pill__rest:focus-visible, .command-pill__action:focus-visible, .command-pill__row:focus-visible, .command-pill__input:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 .checklist-node__body { overflow: auto; height: 100%; padding: var(--sp-6); font-family: var(--font-ui); color: var(--fg-2); }
@@ -5175,6 +5259,75 @@ body {
 .checklist-node__run { color: var(--fg-3); font-size: var(--t-sm); margin-left: var(--sp-7); }
 .checklist-node__review { padding: var(--sp-5); background: var(--iris-dim); border-radius: var(--r-md); margin-bottom: var(--sp-5); }
 .checklist-node__review pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------------ M248 --
+   THE DECK. A file panel read as slides; it keeps its header (the M236 list
+   above: "slide N of M" is a fact the body does not carry).
+
+   A slide is a 16:9 box whose type scales with its WIDTH through a container
+   unit, so the card, the filmstrip, the editor's preview and the presenter
+   render one slide at four sizes with no script and no transform.
+
+   The FILMSTRIP is the contextual layer: absolutely positioned over the
+   body's bottom, opacity 0 -> 1 on the frame's hover and focus-within (the
+   rest rule's selectors). It never changes the body's box. */
+.deck-node__body { position: relative; height: 100%; overflow: hidden; font-family: var(--font-ui); color: var(--fg-2); }
+.deck-node__body:focus-visible, .deck-node__body :focus-visible, .deck-presenter :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.deck-node__stage { height: 100%; display: flex; align-items: center; justify-content: center; padding: var(--sp-5); box-sizing: border-box; }
+.deck-node__stage .deck__slide { max-height: 100%; }
+.deck__slide {
+  container-type: inline-size; aspect-ratio: 16 / 9; width: 100%; box-sizing: border-box; overflow: hidden;
+  background: var(--s-3); color: var(--fg); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 5cqw 6cqw; font-size: 2.6cqw; line-height: 1.35;
+}
+.deck__slide h3 { font-size: 2.3em; margin: 0 0 0.4em; }
+.deck__slide h4 { font-size: 1.7em; margin: 0 0 0.4em; }
+.deck__slide h5 { font-size: 1.3em; margin: 0 0 0.3em; }
+.deck__slide .md__p, .deck__slide .md__list { margin: 0 0 0.6em; }
+.deck__slide .md__fence { font-size: 0.8em; }
+.deck__slide .md__copy { display: none; }
+.deck__slide--changed { border-color: var(--iris); }
+.deck__img { display: block; max-width: 100%; max-height: 60cqw; margin: 0 auto; }
+.deck__img-missing { color: var(--fg-3); font-style: italic; }
+.md__table { border-collapse: collapse; }
+.md__table th, .md__table td { border: 1px solid var(--line); padding: 0.2em 0.6em; }
+.deck-node__strip {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: var(--sp-3); overflow-x: auto;
+  padding: var(--sp-3); background: var(--s-1); border-top: 1px solid var(--line);
+  opacity: 0; transition: opacity var(--dur-1) var(--ease);
+}
+.pf:hover .deck-node__strip, .pf:focus-within .deck-node__strip { opacity: 1; }
+.deck-node__thumb { flex: 0 0 96px; padding: 0; border: 0; background: none; cursor: pointer; border-radius: var(--r-sm); }
+.deck-node__thumb .deck__slide { pointer-events: none; }
+.deck-node__thumb[aria-current="true"] .deck__slide { border-color: var(--fg-3); }
+.deck-node__thumb[data-deck-changed] .deck__slide { border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris); }
+.deck-node__review {
+  position: absolute; top: var(--sp-4); right: var(--sp-4); max-width: 60%; max-height: 60%; overflow: auto;
+  padding: var(--sp-4); background: var(--iris-dim); border-radius: var(--r-md); font-size: var(--t-sm);
+}
+.deck-node__review p { margin: 0 0 var(--sp-3); }
+.deck-node__review ul { list-style: none; margin: 0 0 var(--sp-3); padding: 0; }
+.deck-node__review li { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
+.deck-node__jump { flex: 1 1 auto; text-align: left; }
+.deck-node__proposed { margin: 0 0 var(--sp-3); }
+.deck-node__body button, .deck-presenter button {
+  font: inherit; color: var(--fg-2); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-2) var(--sp-3); cursor: pointer;
+}
+.deck-node__body button:disabled, .deck-presenter button:disabled { color: var(--fg-4); cursor: default; }
+.deck-node__tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+.deck-node__note { position: absolute; left: var(--sp-5); bottom: var(--sp-5); margin: 0; padding: var(--sp-2) var(--sp-4); background: var(--s-1); border-radius: var(--r-sm); font-size: var(--t-sm); }
+.deck-node__edit { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; gap: var(--sp-4); height: 100%; padding: var(--sp-4); box-sizing: border-box; }
+.deck-node__source { min-width: 0; resize: none; font-family: var(--font-mono); font-size: var(--t-sm); color: var(--fg); background: var(--s-1); border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--sp-4); }
+.deck-node__preview { min-width: 0; overflow: auto; }
+.deck-node__edit .deck-node__tools { grid-column: 1 / -1; }
+.deck-presenter {
+  position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto;
+  background: var(--s-0); color: var(--fg); outline: none;
+}
+.deck-presenter__stage { display: flex; align-items: center; justify-content: center; padding: var(--sp-7); min-width: 0; min-height: 0; }
+.deck-presenter__stage .deck__slide { width: min(100%, calc((100vh - 120px) * 16 / 9)); }
+.deck-presenter__notes { width: 28vw; overflow: auto; padding: var(--sp-6); border-left: 1px solid var(--line); white-space: pre-wrap; font-size: var(--t-lg); color: var(--fg-2); }
+.deck-presenter__bar { grid-column: 1 / -1; display: flex; gap: var(--sp-4); align-items: center; padding: var(--sp-4) var(--sp-6); border-top: 1px solid var(--line); }
 
 /* M245. The sheet. Keeps its header (the frame rule): rows × cols and the
    directory are facts the grid does not repeat. The grid is a positioned plane

@@ -10,6 +10,12 @@
 > CLAUDE.md" about a specific invariant mean this file — every entry's bold
 > first sentence is unchanged, so `grep` still finds them.
 
+The tail of the old module tree, left here by the split (the whole tree is in
+[architecture-map.md](architecture-map.md)). Its opening fence was lost in the split, so the
+closing fence below was unmatched and every Markdown viewer rendered the rest of this file as
+one code block; `npm run lb` found no entries at all until it was restored.
+
+```
   GroupLayer.tsx        the frame, label and collapse control, inside .world beneath the
                         panels — LinkLayer's position, and deaf to the pointer for the
                         same reason everywhere but its own header controls
@@ -45,8 +51,12 @@ Each of these exists because the naive version fails *silently*. Don't undo them
 > entry are bold too. Entries are in rough milestone order, not subsystem order.
 >
 > **So search it, don't scroll it, and search for the FILE rather than the
-> symptom.** Nearly every entry names its own module, so `grep -n 'pty-manager'`
-> or `grep -n 'session-registry'` over this file is the reliable way in; the
+> symptom.** `npm run lb -- pty-manager` lists every entry in this file and its
+> -recovered sibling that names the module, as whole entries with a file:line
+> (`--full` for the bodies, `--modules` for the index of cited files). A raw
+> `grep -n 'pty-manager'` still works, but returns one long line with no entry
+> boundary. Nearly every entry names its own module, which is why this is the
+> reliable way in; the
 > subsystem keyword clusters worth knowing are `pty-manager`/`tmux`/`shell-env`,
 > `Canvas.tsx`/`viewport`/`lod`, `panels.ts`/panel kinds, `palette`,
 > `layout-store`/`layout-schema`, `review-`/`git-`, `rail-`/`inspector-`,
@@ -4375,6 +4385,166 @@ answers `ran`. M204's first Arrange did exactly that and framed the empty destin
 (M149) does not, and by the same reading is a no-op that reports success — recorded, not fixed, in
 the D08 build log.
 
+**The command pill never takes the keyboard it was not given (`canvas/CommandPill.tsx`, M249).**
+The pill sits over every running agent. A keypress that reached it would be a keypress the agent
+never saw. Four mechanisms stop that, and each covers a different path:
+- Every button is a `shellControl`. The mousedown `preventDefault` keeps DOM focus in xterm's
+  textarea.
+- A click on the rest pill EXPANDS it without focusing the input. Only a press on the input
+  itself, or `Cmd+Shift+Space`, moves the keyboard there. `useKeyboardNav` tests that chord
+  BEFORE its no-Shift gate, and like every chord it is Cmd-scoped, so no bare key is ever
+  taken from a TUI.
+- Escape, a send and a rest-button collapse hand focus back to the element the input was
+  ENTERED FROM. That element is recorded on the input's focus event (`relatedTarget` outside
+  the pill) and forgotten on a blur to somewhere outside. It is not the element captured when
+  the shortcut fired: the pill stays open across outside clicks, so a person can move from
+  terminal A to terminal B and back into the input, and restoring A would type into an agent
+  that is not the highlighted one (M249's critic).
+- `pillFocused()` sits in `shouldIgnoreKeys`.
+
+The last one is the one that fails silently. `Cmd+V`/`Cmd+Z` are menu accelerators, so with the
+pill's input focused a paste still reaches `useCanvasClipboard` and pastes into the FOCUSED
+TERMINAL, while the pill's own `edit:paste` subscription puts the same text in the input. The
+person sees the text where they expected it and never learns an agent received it too.
+`Cmd+Z` would run the canvas undo, which can dispose a panel. `pill.paste.1`'s discriminating
+clause is `leaked === false` at `ptyManager.write`, never the input's value.
+
+**The command pill is a sibling of `.world` and absolutely positioned; it never pushes anything
+(`Canvas.tsx`'s mount, `styles.css .command-pill`, M249).** It is anchored at `bottom` with
+`left: 50%` and a `translateX(-50%)`, so expanding grows upward over the canvas. Mounting it
+inside `.world` would scale it with the camera. Mounting it as a flow box that reserved space
+at the bottom of the host would shrink the canvas. A chromeless terminal would then refit and
+send a SIGWINCH to the running agent each time the pill opened, which is M234's collapsing-chrome
+defect in a new place. `pill.rects.1` compares every `.panel` rect and the focused terminal's
+`__m4aGrid()` across expand (running list open) and collapse. It also compares the host's own
+box and the `.world` transform: a host shrunk from the bottom moves no panel rect, because the
+world origin is the host's top-left. `shouldYieldWheel` yields over `.command-pill`, because
+the root's bubble-phase `onWheel` stop runs AFTER `useViewport`'s capture listener has already
+panned.
+
+**Screen-space controls inside `.canvas` must stand the CAPTURE slot down, not only stop
+bubbling (`useCanvasPointer.ts`'s `onCanvasMouseDownCapture`, M249).** The pill and the
+new-object row are mounted inside the canvas host. That host's `onMouseDownCapture` resolves
+an armed link by hit-testing the WORLD point under the press, and starts a pan on a
+middle-press. Both run before any bubble-phase `stopPropagation` in the control. So with link
+mode armed, pressing a pill button completed a link onto whatever panel lay under the pill.
+The pill sits bottom-centre, which is where panels are. The button's own action then ran as
+well. The capture handler now returns first for `.command-pill, .new-object-row`. This is the
+pointer's version of the `shouldYieldWheel` rule above.
+
+**The pill shows its send's outcome in place, never through `say()` (`Canvas.tsx`'s
+`sendFromPill`, M249).** `say()` is `setInputMode` plus `openPalette()`, so it moves the
+keyboard into the palette. After a send, the pill has just handed the keyboard back to the
+terminal, and a success sentence through `say()` took it straight away again.
+`sendFromPill` RETURNS its sentence and the pill renders it as a `role=status` note:
+- a `beginNewChat` refusal
+- the "made a supervisor chat" line
+- every `sendRefusalSentence` arm, including the string arms (`refused-budget`,
+  `no-session` …) that M197 found reading as silence
+- a caught IPC error
+
+**The pill has no verbs of its own (`CommandPill.tsx`, M249).** Each control calls an existing
+`PaletteActions` member:
+- Fit is `zoomToFit`.
+- Jump is Cmd+J's queue and cursor (`reachableQueue`/`nextAttentionId` over the same
+  `jumpCursorRef`), landing through `jumpToAttention`, the function a clicked OS notification
+  now calls too.
+- A running-agents row is `goToPanel`, which navigates without waking.
+- The selection controls are `tidyPanels`, `arrangeTask`, `showRelated`, `beginCreateGroup`
+  and `closePanel`.
+
+A second implementation of any of these would drift from the palette's copy with no check to
+say so. Two consequences follow from sharing. The attention COUNT the rest state shows is the
+reachable queue, not `waitingIds`, so the pill never says "1 agent needs you" about a phantom
+Jump cannot reach. And Close is enabled for exactly one selected panel. `close` is the dispose,
+and no other door ends several agents with one press.
+
+**The pill's first send with no orchestrator leaves the text UNSENT (`Canvas.tsx`'s
+`sendFromPill`, M249).** The target is the first `chat.supervisor` chat, else the first
+`chat.orchestrator` chat (`command-pill.ts orchestratorTarget`). With neither, the pill does
+not grow a way to start an agent. It calls the sheet's own supervisor path,
+`beginNewChat({ title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message })`, which
+seats the message in the new composer. That keeps M81's rule that nothing starts work unread,
+and the pill says so in a sentence. Every later send goes through `agentSession.send`, the
+chat composer's own door, and it does NOT carry the composer's first-turn memory block. That
+block belongs to a composer's first message, and the pill is not a composer.
+**A note's blocks TILE the file, and only `\n`/`\r\n` end a line (`md-blocks.ts`'s `splitLines`,
+M250).** An editor that splits on `/\r?\n/` and joins with `\n` has already rewritten every CRLF
+note, every lone `\r`, and the missing final newline before the person types a character — and the
+save that follows is a diff over the whole file that looks like theirs. Each block's `source` is
+its exact bytes, blank runs are blocks too, so `serializeBlocks(parseBlocks(t)) === t` is true by
+construction rather than by care (`verify:notes notes.roundtrip.1–2`).
+
+**A rich edit is accepted only if the WHOLE note reads back the same (`md-blocks.ts`'s
+`editBlock`, M250).** Re-serializing a model can change what the bytes mean: a paragraph whose text
+now starts `# ` is a heading, a blank line in it is two blocks, a `<span>` is inline HTML the model
+cannot hold, a list item with a newline becomes a nested list. A list of such cases drifts from the
+parser the first time either changes. So the edit is spliced in, the document parsed again, and it
+is refused unless every other block is byte-identical and the edited one is the same kind holding
+the same model. The rich editor then reopens that block as SOURCE holding what was typed — a
+refusal never loses typing (`RichNoteEditor.tsx`'s `finish`).
+
+**Rich mode's Save FLUSHES the block being typed in (`FileNode.tsx`'s `save`, `RichNoteEditor`'s
+`handleRef`, M250).** Save is a mousedown with `preventDefault` — shellControl's rule, so focus
+never moves — which means the active block never blurs and its typing never reaches `draft`. A save
+from Rich wrote the note minus its last paragraph with no error. `save` calls `flush()` and writes
+the string it answers, not the `draft` in its closure. And `flush()` is THREE-state: when the active
+block's edit is refused the block reopens as source holding what was typed, and a save that went
+ahead would close the draft, unmount the editor and lose that typing with the refusal never seen —
+so a refused flush stops the save and the Source toggle (M250's critic, finding 1).
+
+**The .docx size cap is on the COMPRESSED file; the inflated size is capped separately
+(`docx-import.ts`'s `analyzeDocx`, M250's critic).** A package that inflates to gigabytes is small
+on disk, and both jszip and mammoth unpack it in MAIN, the process that owns every PTY. The central
+directory's declared sizes are summed before a byte is inflated (`docx.refuse.2`).
+
+**An imported note's `reviewed` has one writer and is stripped at every door out
+(`imported-note.ts`, `portable.ts`'s export and `remapPortable`, `layout-schema.ts`'s
+`parseFileSource`, M250).** `reviewed: true` says a PERSON read converted text. Carried in a
+portable file it would say that about someone who never saw it, so export drops it and import
+strips a hand-authored one; a malformed record is dropped, never coerced, because coercing `"yes"`
+would be a parser deciding someone read something. The only writer is Canvas's `setImportReviewed`,
+reached from the note's "I've read it". While unreviewed the note does not auto-enter its editor,
+✎ is disabled by the gate sentence, and the agent `read` verb refuses it by the same sentence.
+
+**The .docx loss report is counted from the OOXML, never from mammoth's output
+(`docx-import.ts`'s `analyzeDocx`, M250).** mammoth drops comments without a message, SHOWS `w:ins`
+and silently drops `w:del`, and renders a merged cell as a `colspan` a pipe table cannot say — its
+silence is exactly the loss. The regexes end in `\b` because `<w:comments`, `<w:delText` and
+`<w:moveFromRangeStart` are not comments or changes, and a table is complex by its top-level
+`w:tbl` span, so a nested table counts its parent once.
+
+**`sample.docx` rebuilds byte-identically only with `createFolders: false`
+(`scripts/fixtures/build-sample-docx.cjs`, M250).** Without it jszip adds `word/` and `_rels/`
+directory entries stamped with the CURRENT time, and two builds differ at byte ~348 — the fixture
+then cannot be reviewed as source and `docx.fixture.1` could never be written.
+
+**M244's `object.create.*` rows sit ABOVE `spawn.sheet`, and moving them is not a free fix
+(`commands.ts`'s `buildCommands`, measured in M250).** M244 made `object.create.terminal` the first
+row of the section M65's `sheet.1` pins to the sheet, so `verify:palette sheet.1` has been red since
+7a3323d0. Moving the rows below the sheet turns `sheet.1` green but makes
+`verify:panels:agents search.1` fail at SEEDING (the reloaded layout never shows its two
+terminals) in two of two runs, and the part runs at 99% of its watchdog; with M244's order restored
+and nothing else changed, seeding works and the part takes 78%. The mechanism was not found, so
+M250 left the order alone and `sheet.1` red, and handed it to the integrator. The same commit's CSS
+literals were mapped onto the `--sp-*`/`--t-*`/`--r-*` tokens (`verify:styles` 4–6), and its
+README row was added (`verify:meta milestones.1`).
+**A deck's slide break is `---` OUTSIDE a fence whose LENGTH is tracked (`deck.ts`'s `splitDeck`, M248).** A slide deck is where `---` appears inside code most often (a Markdown or YAML example), and a fence opened with four backticks is closed only by four or more of the same character — a 3-backtick line inside it is content. Splitting on every `---` line cut a code sample in half and turned its tail into a slide, with no error. Front matter is only front matter when every line inside reads as YAML, so a deck that opens with a plain rule keeps its first slide (`verify:deck deck.split.1–.3`).
+
+**Nothing re-serialises a slide nobody changed (`deck.ts`'s `rebuildDeck`, M248).** Every slide carries its source span and is stitched back with the file's OWN separator lines, so an untouched deck is byte-identical — CRLF, a last slide with no newline and front matter included (`deck.split.4`). A deck rebuilt from parsed parts would rewrite line endings on the first keep and every agent proposal after it would diff the whole file.
+
+**Slides are aligned by an LCS on each slide's source hash, never by position (`deck.ts`'s `diffSlides`, M248).** By position, inserting slide 2 of 5 reads as four changed slides and a fifth added one, and a person reviewing "per slide" would be asked to keep four slides nobody touched. Ids are the PROPOSAL's slide numbers (`r<n>` for a removed base slide); after a partial keep the remaining draft is recomputed against the file as written, so its base hash is today's file and its ids still name the proposal's slides (`deck.diff.1`, `deck.keep.1`).
+
+**Keeping against a moved file is a named CONFLICT, never a merge (`deck.ts`'s `applyKept`, `draft-review.ts`'s `draftState`, M248).** The draft records the hash of the text it was computed against; a keep on a disk that no longer hashes to it names the file and the slides and writes nothing. A merge would place an agent's slide somewhere the person never saw it proposed. `draftState` is three-state — none / pending / conflict — because "no proposal" and "a proposal on yesterday's file" need different words and different buttons.
+
+**The executor learns WHO asked from the call path, not from the step (`usePaletteActions.ts`'s `execute(step, origin)`, M248).** The palette's `runPlan` calls `execute(step)` — a person; `runAgentPlan` — the agent door AND a workflow action node, which runs its line through the same function — wraps it as `'door'`. A deck edit through a door STAGES into `source.deck.draft` and leaves the file byte-identical; `deck-review keep` through a door is refused by name (an agent may withdraw its proposal, never accept it). A new verb whose meaning depends on the asker reads `origin`; one that ignores it treats an agent's line as a person's.
+
+**The deck PDF page is a temp FILE, not a `data:` URL (`deck-pdf.ts`'s `createPdfRenderer`, M248).** Images are inlined as base64 so the page loads nothing; a data URL past Chromium's navigation cap (about 2 MB) loads no page at all, so a deck with three screenshots would export nothing. The window runs with JavaScript off, sandboxed, no preload, and the page carries `default-src 'none'`. Every slide's text goes through `outward()` — no new `redactSecrets` caller (`verify:verbs gate.2`) — and speaker notes never reach the page. The `/Type /Page` count in `verify:canvas deck.pdf.1` is the one observable a stray `break-after` on the last slide changes.
+
+**The slide grammar is an OPTION of the chat's parser, never its default (`markdown.ts`'s `{ slides: true }`, M248).** Image and table blocks exist only when a deck asks; the chat keeps md.1's closed grammar (a table as its source, an image as its alt text), because a transcript is not a page and an image block there would ask the renderer to load something an assistant named. `http(s):` sources are never read on either path — a named "remote image not loaded" placeholder.
+
+**M244's checklist CSS and New object row used literal px, which left `verify:styles` 4–6 red at 7a3323d0; M248 moved them onto the scale tokens.** `--sp-*`, `--r-*`, `--t-*` only; the nearest step replaced each literal (14px padding → `--sp-5`, 11px → `--sp-5`, 10px → `--sp-4`, 3px → `--sp-1`). The same commit's creation rows were pushed ahead of the spawn section and displaced `New panel…` (`verify:palette sheet.1`); they now follow it.
+
 **A sheet stores FORMULAS and never their values (`sheet-formula.ts`, `csv.ts`, M245).** A cell
 whose text begins with `=` is written to the file verbatim; the renderer's lazy evaluator computes
 what it shows. Writing a computed value back freezes the sheet on its first save — the next edit to
@@ -4449,3 +4619,23 @@ array's identity** (`Canvas.tsx`): `useChatsVersion` bumps on every streamed del
 feed re-indexes every transcript on the canvas several times a second while any agent types.
 **It uses its own `linksChatsVersion`**: Canvas's `chatsVersion` is declared ~1,100 lines below,
 and a dependency array is evaluated during render — borrowing it throws before declaration.
+**A deck export scrubs FIELD BY FIELD and decides a picture by its FIRST BYTES
+(`main/deck-export.ts`, M251).** A .pptx is a structure, like the portable file, so it cannot go
+through `outward` (one text, one note): title, each bullet, each paragraph, alt text and notes each
+pass `redactSecrets` and the count is part of the export sentence — which is why the file is on
+`gate.2`'s named list. A picture's bytes are embedded unscrubbed, so a deck line
+`![x](~/.ssh/id_rsa)` would carry a key out inside the zip if the extension were believed; M181's
+`readImage` decides by magic number and the line lands in the report as `not an image` instead.
+The renderer hands main a PATH, never text, so what leaves is what is on disk.
+
+**A described tool is INERT until a person reads it, and reading it has NO door (`shared/tool-spec.ts`,
+`main/tool-generate.ts`, `Canvas.tsx`'s `markTemplateRead`/`markPreviewRead`, M252).** The agent
+is run with `--tools ""`, so its answer is data and this app writes the files. A workflow is saved
+`reviewed: false`; an app's `PreviewBinding.reviewed: false` makes `BrowserNode` create NO guest
+(loading the page is running it) and Open / Start dev server refuse — and the binding's flag fails
+CLOSED on a malformed value. "I've read this" reaches the two mark-read functions only as
+`onMarkRead` props: a verb, palette row, agent line or action node that could clear it would let
+an agent un-inert its own answer (`verify:verbs tool.door.1` reads the door files). Marking read
+must clear the RECORD, the renderer's `templateRowsRef` and the DRAFT at once, the moment the save
+lands: Run reads the draft-or-rows copy, and clearing only main's record left the next Run refused
+for a window a check could hit (`verify:panels tool.2`, found by its own diagnostic detail).

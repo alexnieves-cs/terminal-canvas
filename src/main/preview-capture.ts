@@ -33,7 +33,7 @@ export interface CaptureDeps {
 }
 
 export type CaptureResult =
-  | { kind: 'captured'; path: string; url: string; host: string; bytes: number }
+  | { kind: 'captured'; path: string; id: string; url: string; host: string; capturedAt: number; bytes: number }
   | { kind: 'refused'; reason: string }
 
 /** `2026-09-08T17-40-12-127.0.0.1_5173.png` — sortable, and it says what it is a picture of. */
@@ -55,7 +55,9 @@ export async function capturePreview(deps: CaptureDeps): Promise<CaptureResult> 
   if (image.isEmpty?.() === true) return { kind: 'refused', reason: captureRefusal('empty') }
   const png = image.toPNG()
   if (png.length === 0) return { kind: 'refused', reason: captureRefusal('empty') }
-  const path = `${deps.dir.replace(/\/$/, '')}/${captureFileName(url, deps.now())}`
+  const capturedAt = deps.now()
+  const id = captureFileName(url, capturedAt)
+  const path = `${deps.dir.replace(/\/$/, '')}/${id}`
   // M185's critic (finding 4): the write is the one step that can fail for a
   // reason outside this app (no space, a read-only volume, a permission), and
   // an unguarded `writeFileSync` REJECTED the invoke — the renderer awaits it
@@ -65,5 +67,5 @@ export async function capturePreview(deps: CaptureDeps): Promise<CaptureResult> 
   } catch (error) {
     return { kind: 'refused', reason: `the capture could not be written: ${error instanceof Error ? error.message : String(error)}` }
   }
-  return { kind: 'captured', path, url, host: browserHost(url), bytes: png.length }
+  return { kind: 'captured', path, id, url, host: browserHost(url), capturedAt, bytes: png.length }
 }

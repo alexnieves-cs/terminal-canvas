@@ -28,6 +28,8 @@ export interface FileSource {
   checklist?: import('./checklist').ChecklistView
   /** M245. A spreadsheet view of a .csv/.tsv/.xlsx file. Presentation and consent only — cells live in the file. */
   sheet?: import('./sheet').SheetView
+  /** M248. Slides view of a Markdown file: the slide on show and a door's staged proposal. */
+  deck?: import('./deck').DeckView
   /**
    * M27. Render this file as PROSE — wrapped, no line-number gutter — and open
    * it in edit mode on first mount. A note IS a file: same path, same read,
@@ -42,6 +44,14 @@ export interface FileSource {
    * file panel that was never a note.
    */
   prose?: true
+  /**
+   * M250. This note was converted from a file that arrived from outside (a
+   * .docx). While `reviewed` is unset the note is INERT: it does not enter its
+   * editor and no agent reads it — see shared/imported-note.ts. Absent on
+   * every note a person wrote here, and absent must stay absent through every
+   * copy site (the `prose` rule above).
+   */
+  imported?: import('./imported-note').ImportedNote
 }
 
 /**

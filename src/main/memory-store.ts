@@ -32,6 +32,8 @@ export interface MemoryEntry {
   at: number
   /** How many secrets the scrubber replaced when this was written. */
   redacted?: number
+  /** D12: immutable origin of a consciously accepted conversation result. */
+  source?: { conversationId: string; turnId: string; taskId?: string; acceptedAt: number }
 }
 
 export interface MemoryAddRequest {
@@ -40,6 +42,7 @@ export interface MemoryAddRequest {
   text: string
   panelId?: string
   at?: number
+  source?: { conversationId: string; turnId: string; taskId?: string; acceptedAt?: number }
 }
 
 export type MemoryAddResult = { ok: true; entry: MemoryEntry } | { ok: false; reason: string }
@@ -105,12 +108,19 @@ export function createMemoryStore(deps: { dir: string; now?: () => number }): Me
         if (typeof parsed !== 'object' || parsed === null) { skipped += 1; continue }
         const row = parsed as Record<string, unknown>
         if (!MEMORY_KINDS.includes(row.kind as MemoryKind) || typeof row.text !== 'string' || typeof row.at !== 'number') { skipped += 1; continue }
+        const sourceRow = typeof row.source === 'object' && row.source !== null && !Array.isArray(row.source) ? row.source as Record<string, unknown> : undefined
+        const source = sourceRow !== undefined && typeof sourceRow.conversationId === 'string' && sourceRow.conversationId !== ''
+          && typeof sourceRow.turnId === 'string' && sourceRow.turnId !== '' && typeof sourceRow.acceptedAt === 'number'
+          ? { conversationId: sourceRow.conversationId, turnId: sourceRow.turnId,
+              ...(typeof sourceRow.taskId === 'string' && sourceRow.taskId !== '' ? { taskId: sourceRow.taskId } : {}), acceptedAt: sourceRow.acceptedAt }
+          : undefined
         entries.push({
           kind: row.kind as MemoryKind,
           text: row.text,
           at: row.at,
           ...(typeof row.panelId === 'string' ? { panelId: row.panelId } : {}),
-          ...(typeof row.redacted === 'number' && row.redacted > 0 ? { redacted: row.redacted } : {})
+          ...(typeof row.redacted === 'number' && row.redacted > 0 ? { redacted: row.redacted } : {}),
+          ...(source === undefined ? {} : { source })
         })
       } catch {
         skipped += 1
@@ -160,12 +170,18 @@ export function createMemoryStore(deps: { dir: string; now?: () => number }): Me
         return { ok: false, reason: 'a memory needs a repository' }
       }
       const scrubbed = redactSecrets(req.text.trim())
+      const source = req.source !== undefined && typeof req.source.conversationId === 'string' && req.source.conversationId !== ''
+        && typeof req.source.turnId === 'string' && req.source.turnId !== ''
+        ? { conversationId: req.source.conversationId, turnId: req.source.turnId,
+            ...(typeof req.source.taskId === 'string' && req.source.taskId !== '' ? { taskId: req.source.taskId } : {}), acceptedAt: req.source.acceptedAt ?? (req.at ?? now()) }
+        : undefined
       const entry: MemoryEntry = {
         kind: req.kind as MemoryKind,
         text: scrubbed.text,
         at: req.at ?? now(),
         ...(req.panelId === undefined ? {} : { panelId: req.panelId }),
-        ...(scrubbed.count > 0 ? { redacted: scrubbed.count } : {})
+        ...(scrubbed.count > 0 ? { redacted: scrubbed.count } : {}),
+        ...(source === undefined ? {} : { source })
       }
       try {
         mkdirSync(deps.dir, { recursive: true })

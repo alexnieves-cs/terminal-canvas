@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import { CREATABLE_OBJECTS } from '@shared/verb-table'
 import { creationCommands, type PaletteActions } from '@renderer/palette/commands'
-import { KindTerminal, KindChat, KindNote, KindImage, KindWorkflow, KindBrowser, Check, Plus } from '@renderer/icons'
+import { KindTerminal, KindChat, KindNote, KindImage, KindWorkflow, KindBrowser, KindDeck, Check, Plus } from '@renderer/icons'
 
 // M245. A grid, drawn here rather than added to the shared icon set until a second surface needs it.
 const SheetGlyph = (): JSX.Element => <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
@@ -11,7 +11,7 @@ const SheetGlyph = (): JSX.Element => <svg viewBox="0 0 16 16" width="14" height
 const icons: Record<string, () => JSX.Element> = {
   terminal: () => <KindTerminal />, agent: () => <KindChat />, note: () => <KindNote />,
   image: () => <KindImage />, workflow: () => <KindWorkflow />, browser: () => <KindBrowser />, checklist: () => <Check />,
-  sheet: () => <SheetGlyph />
+  sheet: () => <SheetGlyph />, deck: () => <KindDeck />
 }
 
 export function NewObjectRow(props: { actions: Pick<PaletteActions, 'createObject'>; merged?: boolean; noteRoot: string | null; agentReason?: string }): JSX.Element {

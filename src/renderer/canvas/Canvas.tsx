@@ -5,6 +5,7 @@ import { CanvasHud } from './CanvasHud'
 import { NewObjectRow } from './NewObjectRow'
 import { CREATABLE_OBJECTS, creationReason, type CreationHost, type CreationResult } from '@shared/verb-table'
 import type { ChecklistView } from '@shared/checklist'
+import { DECK_SEED, type DeckView } from '@shared/deck'
 import { isSheetPath, type SheetView } from '@shared/sheet'
 import { DiagnosticsOverlay } from './DiagnosticsOverlay'
 import type { MouseEvent as ReactMouseEvent } from 'react'
@@ -52,6 +53,7 @@ import {
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
 import { useViewport } from './useViewport'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
+import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { arrangePlan, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
@@ -72,6 +74,12 @@ import { ReviewNode } from '@renderer/review/ReviewNode'
 import { FileNode } from '@renderer/file/FileNode'
 import { ChecklistNode } from '@renderer/file/ChecklistNode'
 import { checklistFocused } from '@renderer/file/checklist-controllers'
+import { pillFocused, orchestratorTarget } from './command-pill'
+import { CommandPill, orchestratorCandidates } from './CommandPill'
+import { noteEditorFocused } from '@renderer/file/rich-note-focus'
+import type { ImportedNote } from '@shared/imported-note'
+import { DeckNode } from '@renderer/file/DeckNode'
+import { deckFocused } from '@renderer/file/deck-controllers'
 import { SheetNode } from '@renderer/file/SheetNode'
 import { sheetController, sheetFocused } from '@renderer/file/sheet-controllers'
 import { ToolboxNode } from '@renderer/toolbox/ToolboxNode'
@@ -93,6 +101,7 @@ import { applyMachineCosts, clearMachineCost } from '@renderer/session/machine-c
 import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
+import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   CapturedPanel,
@@ -150,7 +159,7 @@ import { WatcherNode } from '@renderer/watcher/WatcherNode'
 import { BrowserNode } from '@renderer/browser/BrowserNode'
 import { ImageNode } from '@renderer/image/ImageNode'
 import { NoteNode } from '@renderer/note/NoteNode'
-import { clearDraft, getDraft, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
+import { clearDraft, getDraft, markDraftRead, resetDraft, selectedOf } from '@renderer/workflow/template-draft-store'
 import { getPool } from '@renderer/workflow/pool-store'
 import { REASON_NOTHING_RUNNING, TEMPLATE_GONE } from '@renderer/workflow/WorkflowNode'
 import { runsForTemplate } from '@renderer/workflow/workflow-diagram'
@@ -347,9 +356,19 @@ export function Canvas({
   const [workItems, setWorkItems] = useState<PersistedWorkItem[]>(() => initial.workItems ?? [])
   const workItemsRef = useRef(workItems)
   workItemsRef.current = workItems
+  // D11. This record is intentionally separate from the live panel graph:
+  // close removes geometry, never the task's retained meaning.
+  const [retainedOutcomes, setRetainedOutcomes] = useState<RetainedOutcome[]>(() => initial.retainedOutcomes ?? [])
+  const retainedOutcomesRef = useRef(retainedOutcomes)
+  retainedOutcomesRef.current = retainedOutcomes
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
+    const item = workItemsRef.current.find((candidate) => candidate.panelId === chatId)
+    if (item !== undefined) {
+      const captured = retainOutcome(item, runsRef.current, Date.now())
+      if (captured !== null) setRetainedOutcomes((current) => [captured, ...current.filter((outcome) => outcome.itemId !== item.id)].slice(0, 200))
+    }
     setWorkItems((current) => current.some((i) => i.panelId === chatId)
       ? current.map((i) => (i.panelId === chatId ? carryWorkItem({ ...i, note: 'lane closed', anchor: undefined, updatedAt: Date.now() }) : i))
       : current)
@@ -965,7 +984,7 @@ export function Canvas({
     // M245: so is a sheet's loss consent — undoing a MOVE must not re-arm a confirmation.
     setPanels((current) => next.present.map((panel) => {
       const live = current.find((p) => p.rect.id === panel.rect.id)
-      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.sheet !== undefined)
+      return isFilePanel(panel) && live && isFilePanel(live) && (live.source.checklist !== undefined || live.source.sheet !== undefined || live.source.deck !== undefined)
         ? { ...panel, source: live.source } : panel
     }))
     setGroups((current) => pruneGroups(current, ids))
@@ -1165,6 +1184,12 @@ export function Canvas({
     // over it must not zoom the world under a thumb of the world.
     if (target?.closest?.('.minimap')) return true
 
+    // M249. The command pill, rule 1's reason again: it is a screen-space
+    // overlay inside .canvas, so its own onWheel stopPropagation runs AFTER
+    // useViewport's capture listener has already panned the camera — a wheel
+    // over the running-agents list would move the world instead of the list.
+    if (target?.closest?.('.command-pill')) return true
+
     // 2. A zoom gesture is otherwise always the camera's, never a terminal
     // scroll, regardless of what is under the cursor. Both spellings are
     // claimed because canvas-input.ts treats both as a zoom intent: a trackpad
@@ -1276,7 +1301,9 @@ export function Canvas({
     // an open palette: the user is looking at a text field, `focusedId` still
     // names a terminal (rule 2 keeps it), and a Cmd+V routed below would put
     // the clipboard into a running agent the user is not looking at.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || sheetFocused(),
+    // M249. The command pill's input is the same situation again (pill.paste.1).
+    // M250. A rich note editor is a text surface too; its own edit:* subscriptions act on it.
+    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
     [palette.isOpen]
   )
 
@@ -1503,9 +1530,14 @@ export function Canvas({
   // M43. A clicked OS notification frames its panel — the Cmd+J path, which
   // never wakes. Read through the ref so this subscribes once and never goes
   // stale as paletteActions is rebuilt.
-  useEffect(() => window.canvas.agent.onAttentionJump((panelId) => {
+  // M249. Named so the command pill's Jump runs the SAME landing a clicked
+  // notification does (goToPanel: frame, raise, select — never wake), rather
+  // than a third copy of "go to a waiting panel". Stable identity: it reads
+  // the actions through their ref.
+  const jumpToAttention = useCallback((panelId: string) => {
     paletteActionsRef.current?.goToPanel(panelId)
-  }), [])
+  }, [])
+  useEffect(() => window.canvas.agent.onAttentionJump(jumpToAttention), [jumpToAttention])
 
   // One subscription for the whole canvas, like agent.onState above and for the
   // same reason: the store fans out per panel id, so a per-panel subscription
@@ -1930,7 +1962,7 @@ export function Canvas({
     switchWorkspace, resolveDormant, toggleMerged, movePanelsToWorkspace,
     deleteWorkspaceRef, reloadWorkspacesRef
   } = useWorkspaceVerbs({
-    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter,
+    registry, transitionRef, mergedRef, preMergeRef, panelsRef, groupsRef, bookmarksRef, runsRef, annotationsRef, setAnnotations, starterRef, setStarter, retainedOutcomesRef, setRetainedOutcomes, workItemsRef, setWorkItems,
     viewportRef, nextIdRef, toggleMergedImplRef, restoreCamera, selectedId,
     focusedId, selectOnly, linkDraw, setPanels, setGroups, setBookmarks, setRuns, forgetOpenRuns,
     setDormantIds, setFocusedId, setSelectedIds, setHistory, setMerged,
@@ -2366,6 +2398,23 @@ export function Canvas({
     selectAndRaise(id)
   }
 
+  // M249. The command pill's Jump: Cmd+J's own queue and its own cursor — so
+  // a pill press and a Cmd+J press advance ONE cycle rather than two that
+  // disagree about which waiting panel is next — landing through
+  // jumpToAttention, the notification click's function. Nothing waiting
+  // does nothing, for Cmd+J's reason.
+  const pillJump = useCallback(() => {
+    const known = new Set(displayPanelsRef.current.map((p) => p.rect.id))
+    const id = nextAttentionId(reachableQueue(attentionIds(), known), jumpCursorRef.current, 1)
+    if (id === null) return
+    jumpCursorRef.current = id
+    jumpToAttention(id)
+  }, [jumpToAttention])
+  // Filled by CommandPill with its "expand and take the keyboard"; a ref so
+  // useKeyboardNav's listener installs once (openPill's identity is fixed).
+  const pillOpenRef = useRef<() => void>(() => {})
+  const openPill = useCallback(() => pillOpenRef.current(), [])
+
   const onSelectPanel = useCallback((id: string, additive = false) => {
     if (additive) {
       selectAndRaise(id, true)
@@ -2455,9 +2504,10 @@ export function Canvas({
       runs,
       ...(annotations.length === 0 ? {} : { annotations }),
       ...(workItems.length === 0 ? {} : { workItems }),
+      ...(retainedOutcomes.length === 0 ? {} : { retainedOutcomes }),
       ...(starter === undefined ? {} : { starter })
     })
-  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, starter])
+  }, [panels, groups, viewport, selectedId, focusedId, merged, bookmarks, runs, annotations, workItems, retainedOutcomes, starter])
 
   // Every mouse gesture the canvas host owns, lifted into useCanvasPointer.ts.
   // Four of the returned handlers are plain functions rather than useCallbacks
@@ -3324,10 +3374,10 @@ export function Canvas({
    * (FileNode's mount effect), which is what keeps "the renderer is showing
    * this file" and "main is watching it" one statement.
    */
-  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; sheet?: SheetView; exact?: true }) => {
+  const openFilePanel = useCallback((path: string, centre: Point, opts?: { prose?: true; checklist?: ChecklistView; imported?: ImportedNote; sheet?: SheetView; deck?: DeckView; exact?: true }) => {
     // M245. A newly opened .csv/.tsv/.xlsx opens as a sheet. Only NEW opens:
     // a persisted file panel without the key stays the text view it was.
-    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && isSheetPath(path) ? {} : undefined)
+    const sheet = opts?.sheet ?? (opts?.prose !== true && opts?.checklist === undefined && opts?.deck === undefined && isSheetPath(path) ? {} : undefined)
     if (path === '') return
     // `f`, off the SAME counter as `n` and `r`. PanelId doubles as a tmux
     // session name and the global-uniqueness rule turns on nothing else being
@@ -3354,7 +3404,9 @@ export function Canvas({
           // apart in id minting, cascading, z-order or selection.
           ...(opts?.prose === true ? { prose: true as const } : {}),
           ...(opts?.checklist === undefined ? {} : { checklist: opts.checklist }),
-          ...(sheet === undefined ? {} : { sheet })
+          ...(sheet === undefined ? {} : { sheet }),
+          ...(opts?.imported === undefined ? {} : { imported: opts.imported }),
+          ...(opts?.deck === undefined ? {} : { deck: opts.deck })
         })
       ]
       commitHistory(next)
@@ -3431,6 +3483,7 @@ export function Canvas({
     return path.startsWith(base + '/') ? path.slice(base.length + 1) : path
   }
   const addImageRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
+  const importDocxRef = useRef<((path: string, world?: Point) => Promise<unknown>) | null>(null)
   const dropPath = useCallback((path: string, screen: Point): 'ignored' | 'pasted' | 'opened' => {
     if (palette.isOpen() || navGridIsOpenRef.current()) return 'ignored'
     const world = screenToWorld(screen, viewportRef.current)
@@ -3461,6 +3514,13 @@ export function Canvas({
     // (the same reason `openFilePanel`'s own test hook sits in its own effect).
     if (attachmentKind(path) === 'image') {
       void addImageRef.current?.(path, world)
+      return 'opened'
+    }
+    // M250. A WORD DOCUMENT dropped on nothing becomes a note — the canvas
+    // door of `import-docx`, through a ref for addImageRef's TDZ reason. A
+    // .docx opened as a file panel would be a "binary" arm nobody can use.
+    if (/\.docx$/i.test(path)) {
+      void importDocxRef.current?.(path, world)
       return 'opened'
     }
     openFilePanel(path, world)
@@ -5493,7 +5553,7 @@ export function Canvas({
       // node, sees the line and marks it reviewed; until then it is refused
       // by name with the line quoted, so the refusal is also the review.
       if (reviewed === false) {
-        return { kind: 'failed', reason: `this workflow came from a file and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
+        return { kind: 'failed', reason: `this workflow came from outside this canvas (a file, or an agent's answer) and has not been read yet — open ${node.key ?? 'the block'} and confirm its line (${line.slice(0, 80)}) before running it`, ms: Date.now() - started }
       }
       // The CALLER travels with the line: without it a teammate's plan could
       // write a verb into a template and run it with its identity erased.
@@ -5601,6 +5661,23 @@ export function Canvas({
     return { kind: 'ran', note: `${displayPath(path).short}${stored.wrote ? '' : ' (already in this canvas\'s pictures)'}` }
   }, [commitHistory, selectOnly])
   addImageRef.current = addImageFromPath
+  /**
+   * M250. A .docx into a NEW note, the one door all four gestures take (the
+   * drop, the palette row, the agent's verb, an action node). Main converts
+   * and writes; this only opens what main answered, as a note behind the
+   * import gate (`imported` without `reviewed`). The loss report is the
+   * result's note, so every door says what was dropped in the same words.
+   */
+  const importDocxFile = useCallback(async (path?: string, world?: Point): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    const result = await window.canvas.docx.import(path === undefined ? {} : { path })
+    if (result.kind === 'cancelled') return { kind: 'refused', reason: 'no document chosen' }
+    if (result.kind === 'exists') return { kind: 'refused', reason: `${displayPath(result.path).short} already exists — rename or move it, then import again` }
+    if (result.kind === 'refused') return result
+    const at = world ?? screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
+    openFilePanel(result.path, at, { prose: true, exact: true, imported: { from: result.source, dropped: result.dropped } })
+    return { kind: 'ran', note: `${displayPath(result.path).short} — ${result.dropped || 'nothing was dropped'}` }
+  }, [openFilePanel])
+  importDocxRef.current = importDocxFile
   /**
    * M186. Replace: the SAME store door, pointed at an existing panel. A
    * picture whose bytes are gone is an object a person can repair — the arm
@@ -5714,6 +5791,9 @@ export function Canvas({
    */
   const previewSubjectReason = previewSubject() === undefined ? REASON_NO_PREVIEW_SUBJECT : undefined
   const openPreview = useCallback(async (url?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    // M252. An unread tool's pane loads NOTHING, from any door — its page is
+    // code nobody has read, and pointing the pane at it is running it.
+    if (previewPane()?.preview?.reviewed === false) return { kind: 'refused', reason: REASON_TOOL_UNREAD }
     if (url !== undefined) {
       const normalised = normaliseTypedUrl(url)
       if (normalised.kind === 'refused') return { kind: 'refused', reason: normalised.reason }
@@ -5813,7 +5893,7 @@ export function Canvas({
     const centre = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current)
     const imageId = `img${nextIdRef.current++}`
     setPanels((current) => {
-      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`)]
+      const next = [...current, makeImagePanel(imageId, cascadeCentre(centre, current), nextZ(current), shot.path, `capture · ${shot.host}`, undefined, { kind: 'capture', id: shot.id, url: shot.url, capturedAt: shot.capturedAt })]
       commitHistory(next)
       return next
     })
@@ -5821,6 +5901,9 @@ export function Canvas({
     return { kind: 'ran', note: `captured ${shot.url}` }
   }, [commitHistory, previewPane, selectOnly])
   const startDevServer = useCallback(async (script?: string): Promise<{ kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }> => {
+    // M252. The dev script is a generated tool's COMMAND: no process for an
+    // unread one, whichever door asked.
+    if (previewPane()?.preview?.reviewed === false) return { kind: 'refused', reason: REASON_TOOL_UNREAD }
     const subject = previewSubject()
     if (subject === undefined) return { kind: 'refused', reason: REASON_NO_PREVIEW_SUBJECT }
     const found = await window.canvas.preview.discover({ pids: subject.pids, cwd: subject.cwd })
@@ -5957,9 +6040,78 @@ export function Canvas({
     return { kind: 'ran', note: `${keys.length} starter object${keys.length === 1 ? '' : 's'} laid out` }
   }, [beginNewChat, commitHistory, worldCentre, fitSelection])
 
+  // M248. The deck's view (slide on show, staged proposal) is a fact about the file, carried like the checklist's.
+  const setDeckView = useCallback((id: string, view: DeckView) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
+      ? { ...panel, source: { ...panel.source, deck: view } } : panel))
+  }, [])
   const setChecklistView = useCallback((id: string, view: ChecklistView) => {
     setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id
       ? { ...panel, source: { ...panel.source, checklist: view } } : panel))
+  }, [])
+  // M252. What a described tool becomes on the canvas — and nothing it
+  // becomes is RUN. A workflow is saved `reviewed: false`, so M190's refusal
+  // names each action block until a person reads it; an app opens as a
+  // preview whose binding is unread, so the pane makes no guest at all. The
+  // note is returned, never `say()`d: say opens the palette (M149), and the
+  // inert object on the canvas already says what it is.
+  const arriveTool = useCallback(async (result: ToolGenerateResult, at: Point): Promise<CreationResult> => {
+    if (result.kind === 'refused') return result
+    const dropped = result.dropped.length === 0 ? '' : ` · ${result.dropped.length} part${result.dropped.length === 1 ? '' : 's'} of the answer left out: ${result.dropped.join('; ')}`
+    if (result.kind === 'workflow') {
+      const saved = await window.canvas.template.save(result.template)
+      if (saved.kind !== 'saved') return { kind: 'refused', reason: saved.reason }
+      const rows = await window.canvas.template.list()
+      templateRowsRef.current = rows
+      setTemplateRows(rows)
+      openWorkflowPanel(saved.template.id, at)
+      return { kind: 'ran', note: `${saved.template.name} arrived as a workflow — nothing has run; read its blocks, then choose "I've read this" to allow runs${dropped}` }
+    }
+    openBrowserPanel(result.url, { root: result.root, reviewed: false, tool: result.capabilities }, at)
+    return { kind: 'ran', note: `${result.name} arrived in ${result.root} — nothing of it has run; read what it can reach, then choose "I've read this"${dropped}` }
+  }, [openWorkflowPanel, openBrowserPanel])
+  // M252. "I've read this" — a PERSON'S act, and deliberately NOT a verb: no
+  // palette row, no agent line, no workflow node reaches either function
+  // below (verify:verbs tool.door.1), so an agent cannot un-inert its own
+  // answer — the shape of Mark reviewed on a review (M202). The workflow's
+  // mark is cleared on the RECORD at the revision it was read at; a stale
+  // save is refused and said, like any other.
+  const markTemplateRead = useCallback(async (templateId: string): Promise<void> => {
+    const template = templateRowsRef.current.find((t) => t.id === templateId)
+    if (template === undefined) return
+    let revision = template.revision ?? 0
+    if (template.reviewed === false) {
+      const read = { ...template }
+      delete read.reviewed
+      const saved = await window.canvas.template.save(read, template.revision)
+      if (saved.kind !== 'saved') { paletteActionsRef.current?.say(saved.reason); return }
+      revision = saved.template.revision ?? revision
+      // The renderer's own copies change THE MOMENT the save lands, before the
+      // list round-trip: a Run pressed in that gap read the unread row and was
+      // refused (verify:panels tool.2, diagnosed by its own detail).
+      templateRowsRef.current = templateRowsRef.current.map((t) => (t.id === templateId ? saved.template : t))
+      markDraftRead(templateId, revision)
+      const rows = await window.canvas.template.list()
+      templateRowsRef.current = rows
+      setTemplateRows(rows)
+      return
+    }
+    // Run runs the DRAFT when there is one (M184): a record already read with
+    // a draft still marked would leave every door refused.
+    markDraftRead(templateId, revision)
+  }, [])
+  const markPreviewRead = useCallback((paneId: string): void => {
+    setPanels((current) => current.map((panel) => {
+      if (!isBrowserPanel(panel) || panel.rect.id !== paneId || panel.preview?.reviewed !== false) return panel
+      const preview = { ...panel.preview }
+      delete preview.reviewed
+      return { ...panel, preview }
+    }))
+  }, [])
+  // M250. The ONE writer of `reviewed: true` — a person's click on the note.
+  const setImportReviewed = useCallback((id: string) => {
+    setPanels((current) => current.map((panel) => isFilePanel(panel) && panel.rect.id === id && panel.source.imported !== undefined
+      ? { ...panel, source: { ...panel.source, imported: { ...panel.source.imported, reviewed: true as const } } } : panel))
   }, [])
   // M245. Widths and loss consent, never cells — the file holds those.
   const setSheetView = useCallback((id: string, view: SheetView) => {
@@ -6003,13 +6155,13 @@ export function Canvas({
           return { kind: 'ran' }
         }
         const checklist = view === 'checklist'
-        const filename = name?.trim() || `notes/${checklist ? 'checklist' : 'note'}-${Date.now()}.md`
+        const filename = name?.trim() || `notes/${view}-${Date.now()}.md`
         if (!/\.md$/i.test(filename)) return { kind: 'refused', reason: 'choose a Markdown filename ending in .md' }
-        const seed = `# ${checklist ? 'Checklist' : 'Note'}\n\n`
+        const seed = view === 'deck' ? DECK_SEED : `# ${checklist ? 'Checklist' : 'Note'}\n\n`
         const result = await window.canvas.file.create({ root, name: filename, seed })
         if (result.kind !== 'created') return { kind: 'refused', reason: result.kind === 'exists' ? 'that file already exists — choose another filename' : result.detail }
         if (!current()) return { kind: 'refused', reason: `created ${result.path}; the workspace changed, so open the file there explicitly` }
-        openFilePanel(result.path, at, { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
+        openFilePanel(result.path, at, view === 'deck' ? { deck: {}, exact: true } : { prose: true, exact: true, ...(checklist ? { checklist: { accepted: seed } } : {}) })
         return { kind: 'ran' }
       },
       image: async (path) => {
@@ -6034,11 +6186,26 @@ export function Canvas({
         if (parsed.kind === 'refused') return { kind: 'refused', reason: 'use an http(s) URL' }
         openBrowserPanel(parsed.url, undefined, at)
         return { kind: 'ran' }
+      },
+      tool: async (description) => {
+        const folder = noteRootRef.current
+        if (!folder) return { kind: 'refused', reason: 'select a panel with a workspace folder first — a tool is made inside one' }
+        const typed = description?.trim() ?? ''
+        if (typed === '') {
+          // The palette FIRST: input mode is cleared whenever the palette is
+          // closed, so a prompt set on a closed palette would vanish unseen.
+          palette.openPalette()
+          setInputMode({ kind: 'text', label: 'Describe a tool — what should it do?', initial: '', submit: (said) => { setInputMode(null); if (said.trim() !== '') void createObject('tool', said) } })
+          return { kind: 'ran' }
+        }
+        const result = await window.canvas.tool.generate({ description: typed, folder })
+        if (!current()) return refused()
+        return arriveTool(result, at)
       }
     }
     try { const result = await entry.create(host, value); if (result.kind === 'refused') paletteActionsRef.current?.say(result.reason); return result }
     catch (error) { const reason = `Could not create ${entry.label.toLowerCase()}: ${String(error)}`; paletteActionsRef.current?.say(reason); return { kind: 'refused', reason } }
-  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel])
+  }, [worldCentre, onSpawn, beginNewChat, openFilePanel, addImageFromPath, openWorkflowPanel, openBrowserPanel, arriveTool, palette])
   /**
    * M205 (D09). THE FIRST START — the launcher's primary. A sentence and a
    * folder, run through D05's own executor (`startWork` → `dispatchWorkItem`),
@@ -6128,6 +6295,7 @@ export function Canvas({
     exportCanvasFile: exportCanvas,
     prepareFeedbackNow: prepareFeedback,
     importCanvasFile: importCanvas,
+    importDocxFile,
     exportPackFile: exportPack,
     importPackFile: importPack,
     importSamplePackFile: importSamplePack,
@@ -6189,6 +6357,27 @@ export function Canvas({
   // stale; focusPanel is onFocusPanel; releaseFocus is the background release.
   const goToPanelStable = useCallback((id: string) => { paletteActionsRef.current?.goToPanel(id) }, [])
   const releaseFocusStable = useCallback(() => setFocusedId(null), [])
+  // M249. The pill's input: the orchestrator chat's own send — the door
+  // ChatNode's composer calls — or, with no orchestrator, the sheet's
+  // supervisor path with the text as its first message, UNSENT in the new
+  // composer (M81: nothing starts work unread). Read through refs at send
+  // time, so the target is the canvas as it is when Enter lands.
+  //
+  // It RETURNS its sentence for the pill to show in place, never `say()`: say
+  // opens the palette, which would take the keyboard straight back from the
+  // terminal the send just returned it to (the critic's finding). Every
+  // refusal arm is spelled by sendRefusalSentence — the string arms
+  // (budget, backend, no-session…) read as silence otherwise (M197's trap).
+  const sendFromPill = useCallback(async (text: string): Promise<string | null> => {
+    try {
+      const target = orchestratorTarget(orchestratorCandidates(panelsRef.current))
+      if (target !== null) return sendRefusalSentence(await window.canvas.agentSession.send(target, text, []))
+      const made = await beginNewChatRef.current({ title: 'supervisor', appendSystemPrompt: SUPERVISOR_PROMPT, message: text })
+      return made.kind === 'refused' ? made.reason : 'no orchestrator yet — made a supervisor chat; your message is in its composer, unsent'
+    } catch (error) {
+      return `not sent — ${error instanceof Error ? error.message : String(error)}`
+    }
+  }, [])
   useKeyboardNav({
     shouldIgnoreKeys,
     rectsRef: terminalRectsRef,
@@ -6199,7 +6388,8 @@ export function Canvas({
     hostRef,
     goToPanel: goToPanelStable,
     focusPanel: onFocusPanel,
-    releaseFocus: releaseFocusStable
+    releaseFocus: releaseFocusStable,
+    openPill
   })
   // The banner lives INSIDE the canvas host, unlike every other shell
   // control, so its press would bubble to useCanvasPointer's background
@@ -6259,6 +6449,7 @@ export function Canvas({
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
+    templateOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId),
     // M196 (D04). The lane records, already read for the skills door's own
     // lane question. ONE source: this is the same list main's `laneRootOf`
     // asks, so the inspector and the Places gate cannot disagree about which
@@ -6875,6 +7066,16 @@ export function Canvas({
       >
         <NewObjectRow actions={paletteActions} merged={merged} noteRoot={noteRoot}
           agentReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined} />
+        {/* M249. A SIBLING of .world, never inside it: outside the transformed
+            layer it cannot change a panel's size, and it is absolutely
+            positioned so expanding it pushes nothing (pill.rects.1). The
+            attention count is the REACHABLE queue, Cmd+J's, so the pill never
+            says "1 agent needs you" about a phantom it cannot jump to. */}
+        <CommandPill actions={paletteActions} panels={panels}
+          attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
+          selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
+          engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
+          onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
         {/* M69. The far-view tier, provided once for every kind's frame. */}
         <CardDetailContext.Provider value={cardDetail}>
         {/* M92. The marks every frame paints, keyed by id, provided ONCE like the tier. */}
@@ -7025,6 +7226,10 @@ export function Canvas({
             // onSelectPanel's clear-dormant and registry.wake would be the
             // app's spawn gesture aimed at something that can never spawn.
             if (isFilePanel(panel)) {
+              if (panel.source.deck !== undefined) return <DeckNode key={panel.rect.id} panel={panel}
+                selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
+                onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
+                onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id} onView={setDeckView} />
               if (panel.source.sheet !== undefined) return <SheetNode key={panel.rect.id} panel={panel}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag}
                 onClose={onClosePanel} restoreFocus={restoreFocus} focusedId={focusedId} readOnly={merged}
@@ -7053,6 +7258,7 @@ export function Canvas({
                   onBeginLink={onBeginLink}
                   linkTarget={linkDraw.state?.target === panel.rect.id}
                   vaultReady={vaultReady}
+                  onImportReviewed={setImportReviewed}
                   {...(noteVault !== null && panel.source.path.startsWith(`${noteVault.root}/`) ? { vault: noteVault } : {})}
                 />
               )
@@ -7095,6 +7301,7 @@ export function Canvas({
                   onCapture={capturePreviewNow}
                   onStartDev={startDevServer}
                   onBindSource={bindPreview}
+                  onMarkRead={markPreviewRead}
                   {...(previewSubjectReason === undefined ? {} : { bindReason: previewSubjectReason })}
                   selected={selectedIds.has(panel.rect.id)}
                   onSelect={selectAndRaise}
@@ -7206,6 +7413,7 @@ export function Canvas({
                   // the captured id); the open waits a tick for the focus ref to land.
                   onOpenAuto={(id) => { onFocusPanel(id); setTimeout(() => palette.openPalette(), 0) }}
                   teammateName={panel.chat.teammateId === undefined ? undefined : (teammates ?? []).find((t) => t.id === panel.chat.teammateId)?.name ?? panel.chat.teammateId}
+                  taskId={workItems.find((item) => item.panelId === panel.rect.id)?.id}
                 />
               )
             }
@@ -7218,7 +7426,8 @@ export function Canvas({
             if (isWorkPanel(panel)) {
               const item = workItems.find((i) => i.id === panel.work.itemId)
               const execution = item?.panelId === undefined || liveRunFacts[item.panelId] === undefined ? undefined : projectSession(item.panelId, liveRunFacts[item.panelId])
-              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval}
+              const retained = item === undefined ? undefined : retainedOutcomes.find((outcome) => outcome.itemId === item.id)
+              return <WorkNode key={panel.rect.id} panel={panel} item={item} teammates={teammates ?? []} laneLabel={item?.panelId === undefined ? undefined : railRows.find((r) => r.id === item.panelId)?.label} execution={execution} onAnswer={paletteActions.answerApproval} retainedOutcome={retained}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
@@ -7245,6 +7454,7 @@ export function Canvas({
                   selectOnly(it.panelId)
                   onFocusPanel(it.panelId)
                 }}
+                onClearHistory={(itemId) => setRetainedOutcomes((current) => current.filter((outcome) => outcome.itemId !== itemId))}
                 onDone={(itemId) => paletteActionsRef.current?.markDone(itemId)} />
             }
             // M128. The skill panel: every OPEN panel that has a directory,
@@ -7271,7 +7481,7 @@ export function Canvas({
               const template = allTemplates(templateRows).find((t) => t.id === panel.workflow.templateId)
               return <WorkflowNode key={panel.rect.id} panel={panel} template={template} runs={runs} liveFacts={liveRunFacts} onAnswer={paletteActions.answerApproval}
                 selected={selectedIds.has(panel.rect.id)} onSelect={selectAndRaise} onFocus={onFocusPanel} onBeginDrag={onBeginDrag} onClose={onClosePanel} readOnly={merged} onBeginLink={onBeginLink} linkTarget={linkDraw.state?.target === panel.rect.id}
-                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onDelete={deleteWorkflowTemplate}
+                onRun={runWorkflow} onTrigger={beginWorkflowTrigger} onBuildWithAi={buildWorkflowWithAi} onMarkRead={(templateId) => { void markTemplateRead(templateId) }} onDelete={deleteWorkflowTemplate}
                 onSave={saveWorkflowDraft} onSaveCopy={saveWorkflowCopy} onReload={reloadWorkflowDraft} onStopRun={stopWorkflowRun}
                 deleteReason={isBuiltInTemplate(panel.workflow.templateId) ? 'a built-in workflow ships with the app and cannot be deleted' : null}
                 runReason={template === undefined ? null : (templateRefusal(template, presetRows, claudeAvailable(presetRows)) ?? null)} />

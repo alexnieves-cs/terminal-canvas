@@ -1539,6 +1539,17 @@ app.whenReady().then(async () => {
       return { kind: 'read', path, parse: parsePortable(text) }
     }
   },
+  // M250's `docx` slot, left to its INERT default: the parameters are
+  // positional, and without this placeholder the tools stub below lands in
+  // docx's place and every tool.* check reads "not wired here".
+  undefined,
+  // M252. Describe a tool, answered by a PLANTED result: no suite starts a
+  // `claude` process. What the renderer does with the answer — save it
+  // unreviewed, refuse its run by name, open its preview without a page —
+  // is the production path the tool.* checks drive.
+  {
+    generate: async () => state.toolReply ?? { kind: 'refused', reason: 'no tool reply was planted by this check' }
+  },
   // M253. The PRODUCTION pack factory, not a copy: only the choosers are the
   // harness's (`state.packPath` stands in for both dialogs), and the credential
   // store is the harness's real one — metadata only, exactly as in main.
