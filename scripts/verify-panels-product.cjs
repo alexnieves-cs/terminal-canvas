@@ -3301,7 +3301,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
     const DEVREL_IDS = ['devrel.1 the sample dev-relations pack previews its manifest with ten objects and the GitHub need and adds every workflow and preset unread; the plan door refuses a publish outright; a cancelled publish asks once naming the release and repo and sends nothing; a confirmed one is exactly one POST with personConfirmed']
     try {
       flushLayoutStore()
-      const before = layoutStore.current()
+      // IDS, copied now: `current()` is the store's LIVE snapshot, so holding
+      // the object and reading `.templates` after the add reads the new list.
+      const snap = layoutStore.current()
+      const before = { templates: snap.templates.map((t) => ({ id: t.id })), presets: snap.presets.map((p) => ({ id: p.id })), prompts: snap.prompts.map((p) => ({ id: p.id })) }
       const read = await ctx.requestFromRendererWith(wc, IPC_EVENTS.CANVAS_PLAN, { line: 'sample-pack' }, null, 10000)
       const shown = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-pack-preview]') !== null`), 5000)
       const previewText = await wc.executeJavaScript(`(document.querySelector('[data-pack-preview]') || {}).textContent || ''`)

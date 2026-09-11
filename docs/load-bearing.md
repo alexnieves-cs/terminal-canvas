@@ -1432,6 +1432,41 @@ link layer to take pointer events, undoing the guarantee above. Incoming rows li
 panel as `from` — reversed, the remove/relabel controls on an incoming row silently do nothing,
 because the mutator looks for a link on a panel that doesn't hold it.
 
+**The broker writes only for a person: a teammate's per-request card OR `personConfirmed`
+(`main/broker.ts`, `main/control-handler.ts`, `main/github-publish.ts`).**
+
+Until M255 the broker asked before a write **only when the caller was a chat bound to a
+teammate**. So a terminal, a workflow's chat node (template chat nodes carry no teammate) or a
+bare `tc api` could POST to GitHub or Jira with no one asked. And one "Allow for session" on a
+`github` card approved every later write from that chat, because the card's tool name was the
+service name.
+
+The rule now:
+- A non-read-only request with no teammate needs `personConfirmed: true`, or it is refused
+  `not-asked` **before the credential is read**.
+- Only main-side code sets `personConfirmed`, right after its own dialog (the publisher).
+- `tc api`'s handler builds its broker request field by field and never forwards it
+  (`verify:control control.gap.1`, asserted on the KEY).
+- Each card is asked under `brokerCardTool`'s per-request name, so a session grant answers
+  only the write it was for.
+
+The obvious "simplification", spreading the wire request into `broker.call`, would let an agent
+claim a person said yes. `verify:credentials scope.1` was CHANGED ON PURPOSE: it used to assert
+that the teammate-less write went through.
+
+**Publishing reads a draft FILE, resolves the repo from the file's own origin, gates the body,
+then asks: never a body from the renderer, never a remembered yes (`main/github-publish.ts`).**
+- The repository is the draft's own `origin` remote, so a draft cannot be posted into a
+  repository it is not in.
+- The body and title pass `outward()`, and the confirm shows the scrubbed text with the
+  redaction count. What is shown is what is sent.
+- The confirm is the system's own dialog in main, defaulting to Cancel, and asked on EVERY
+  publish. A memo would recreate the session-grant hole this milestone closed.
+- A Discussion's GraphQL lookups run only after the confirm, so a cancel costs nothing.
+- The sample pack (`shared/devrel-pack.ts`) only DRAFTS. No preset or terminal node may carry a
+  GitHub write (`verify:file devrel.pack.1`), because a `gh` write uses gh's own login and
+  bypasses both rules above.
+
 **A pack is added by TOKEN, never by payload (`main/pack-handlers.ts`, `shared/ipc-contract.ts`
 `pack:add`).** `pack:read` parses the file in main, holds the parse under a fresh token, and
 answers the manifest. `pack:add` takes only that token. The obvious shape, `pack:add(pack)` with

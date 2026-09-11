@@ -249,6 +249,22 @@ const served = (q) => ({ ok: true, status: 200, truncated: false, body: q.path.i
       await P.publish({ broker: pubBroker(created), confirm, remoteOf: origin }, { kind: 'release', path: draft, tag: 'v1.2.0' })
       ok('publish.6 there is no memo: two publishes of the same draft to the same target ask twice', asks.length === 2, JSON.stringify({ asked: asks.length }))
     }
+
+    // M255 (the critic's observation). The confirm shows the opening lines,
+    // but the WHOLE body is sent — so a long draft's confirm says how many
+    // lines it did not show and where to read them, rather than reading as
+    // the entire post.
+    if (need('publish.7 a long draft\'s confirm names how many lines it did not show and the file to read them in, while the whole body is sent')) {
+      asks.length = 0; answer = true
+      const long = join(dir, 'ANNOUNCEMENT.md')
+      writeFileSync(long, ['# v2', ...Array.from({ length: 20 }, (_, i) => `line ${i + 1}`)].join('\n'))
+      const b = pubBroker(created)
+      await P.publish({ broker: b, confirm, remoteOf: origin }, { kind: 'release', path: long, tag: 'v2' })
+      const sentBody = b.calls[0] ? JSON.parse(b.calls[0].body).body : ''
+      ok('publish.7 a long draft\'s confirm names how many lines it did not show and the file to read them in, while the whole body is sent',
+        asks.length === 1 && /12 more lines not shown/.test(asks[0].detail) && /ANNOUNCEMENT\.md/.test(asks[0].detail) && !/line 20/.test(asks[0].detail) && /line 20/.test(sentBody),
+        JSON.stringify({ detail: asks[0] && asks[0].detail }))
+    }
   }
 
   const failed = results.filter((r) => !r.pass)

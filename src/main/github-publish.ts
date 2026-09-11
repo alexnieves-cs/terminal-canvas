@@ -139,7 +139,12 @@ export async function publish(deps: PublishDeps, req: PublishRequest): Promise<P
   const gated = outward(raw, basename(req.path))
   const titleGated = outward(title, basename(req.path))
   const redacted = gated.redacted + titleGated.redacted
-  const preview = gated.text.split('\n').filter((l) => l.trim() !== '').slice(0, 8).join('\n')
+  // The opening lines, and — the critic's point — an honest count of what is
+  // NOT shown: the whole body is what is sent, so a long draft's confirm must
+  // not read as the entire post.
+  const shownLines = gated.text.split('\n').filter((l) => l.trim() !== '')
+  const hidden = Math.max(0, shownLines.length - 8)
+  const preview = `${shownLines.slice(0, 8).join('\n')}${hidden === 0 ? '' : `\n\n… and ${hidden} more line${hidden === 1 ? '' : 's'} not shown here — the whole draft is sent; read it in ${basename(req.path)} before confirming`}`
   const scrubNote = redacted === 0 ? 'nothing looked like a secret' : `${redacted} secret${redacted === 1 ? '' : 's'} redacted before sending`
   const message = req.kind === 'release'
     ? `Publish a GitHub release ${req.tag} to ${repo}?`
