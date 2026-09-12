@@ -7305,7 +7305,7 @@ export function Canvas({
             layer it cannot change a panel's size, and it is absolutely
             positioned so expanding it pushes nothing (pill.rects.1). The
             attention count is the REACHABLE queue, Cmd+J's, so the pill never
-            says "1 agent needs you" about a phantom it cannot jump to. */}
+            says "1 chat needs you" about a phantom it cannot jump to. */}
         <CommandPill actions={paletteActions} panels={panels}
           attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
           {...(lens !== null ? { taskTitle: workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId } : {})}

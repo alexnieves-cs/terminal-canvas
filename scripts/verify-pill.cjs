@@ -20,7 +20,7 @@ const rest = (facts) => (typeof P.pillRestState === 'function' ? P.pillRestState
 // One check per priority. Each fixture carries every LOWER-priority fact too,
 // so a rule that checked them in the wrong order would pick the wrong one.
 const a = rest({ attention: 2, running: 3, selected: 4 })
-ok('pill.rest.1 attention outranks running and selection, and is plural-correct', a?.kind === 'attention' && a.text === '2 agents need you' && rest({ attention: 1, running: 0, selected: 0 })?.text === '1 agent needs you')
+ok('pill.rest.1 attention outranks running and selection, and is plural-correct', a?.kind === 'attention' && a.text === '2 chats need you' && rest({ attention: 1, running: 0, selected: 0 })?.text === '1 chat needs you')
 const taskBeat = rest({ attention: 0, running: 3, selected: 4, taskTitle: 'Ship the API' })
 ok('pill.rest.task.1 with the lens on, the task title outranks running and selection; attention still wins',
   taskBeat?.kind === 'task' && taskBeat.text === 'Ship the API' &&
@@ -34,6 +34,12 @@ const s = rest({ attention: 0, running: 0, selected: 2 })
 ok('pill.rest.3 with nothing waiting or running, the selection is the state', s?.kind === 'selected' && s.text === '2 selected')
 const e = rest({ attention: 0, running: 0, selected: 0 })
 ok('pill.rest.4 nothing to say is an empty pill — a glyph alone, no text', e?.kind === 'empty' && e.text === '')
+// M265. When the pill already says the queue, do not also toast the same fact.
+ok('pill.attention.gate.1 suppress in-app queue-count restatement when rest is already attention',
+  typeof P.shouldAnnounceAttentionQueue === 'function' && P.shouldAnnounceAttentionQueue('attention') === false &&
+  P.shouldAnnounceAttentionQueue('running') === true && P.shouldAnnounceAttentionQueue('task') === true &&
+  typeof P.isAttentionQueueRestatement === 'function' && P.isAttentionQueueRestatement('2 chats need you') === true &&
+  P.isAttentionQueueRestatement('1 agent needs you') === true && P.isAttentionQueueRestatement('fitted 3 panels') === false)
 // Every combination of 0..2 for the three facts: no text ever starts with 0,
 // and a negative or non-finite count is treated as none, never printed.
 const texts = []

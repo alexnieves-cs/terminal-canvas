@@ -3,7 +3,7 @@ import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
 import { deckController } from '@renderer/file/deck-controllers'
 import { sheetController } from '@renderer/file/sheet-controllers'
-import { forgetAgentLinksFor } from './agent-links-store'
+import { isAttentionQueueRestatement } from './command-pill'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { applyDraftOp, getDraft, resetDraft } from '@renderer/workflow/template-draft-store'
@@ -1768,7 +1768,10 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // reopen already uses (a text mode with `feedback`), for a refusal that
     // arrives on a keystroke and would otherwise be swallowed. Enter or
     // Escape closes it; nothing is submitted.
+    // M265. Suppress a queue-count restatement the pill already owns — the
+    // polite live region still names which panel arrived.
     say: (sentence: string) => {
+      if (isAttentionQueueRestatement(sentence)) return
       setInputMode({ kind: 'text', label: sentence, initial: '', feedback: true as const, submit: () => setInputMode(null) })
       palette.openPalette()
     },

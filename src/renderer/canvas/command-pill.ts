@@ -46,7 +46,7 @@ const count = (n: number): number => (Number.isFinite(n) && n > 0 ? Math.floor(n
  */
 export function pillRestState(facts: PillFacts): PillRest {
   const attention = count(facts.attention)
-  if (attention > 0) return { kind: 'attention', text: attention === 1 ? '1 agent needs you' : `${attention} agents need you` }
+  if (attention > 0) return { kind: 'attention', text: attention === 1 ? '1 chat needs you' : `${attention} chats need you` }
   const task = typeof facts.taskTitle === 'string' ? facts.taskTitle.trim() : ''
   if (task !== '') return { kind: 'task', text: task }
   const running = count(facts.running)
@@ -54,6 +54,22 @@ export function pillRestState(facts: PillFacts): PillRest {
   const selected = count(facts.selected)
   if (selected > 0) return { kind: 'selected', text: `${selected} selected` }
   return { kind: 'empty', text: '' }
+}
+
+/**
+ * M265. When the pill rest is already the attention sentence, do not also
+ * `say()` / canvas-feedback a restatement of the same queue fact. The polite
+ * live region may still name *which* panel arrived; OS notifications when
+ * backgrounded stay. Returns false when the in-app queue-count toast should
+ * be suppressed.
+ */
+export function shouldAnnounceAttentionQueue(restKind: PillRest['kind']): boolean {
+  return restKind !== 'attention'
+}
+
+/** True when `text` is a queue-count restatement the pill already owns. */
+export function isAttentionQueueRestatement(text: string): boolean {
+  return /^\d+ chats? needs? you\b/i.test(text.trim()) || /^\d+ agents? needs? you\b/i.test(text.trim())
 }
 
 export interface OrchestratorCandidate {
