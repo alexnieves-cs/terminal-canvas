@@ -336,19 +336,24 @@ export function Launcher({ presets, onImportCanvas, report, tmux, onDismissTmux,
                 )}
               </p>
             )}
-            <div className="launcher__actions">
-              {/* M262. FILLED at rest, disabled or not: a primary that drew as an
-                  outline until both questions were answered read as decoration. */}
+            <div className="launcher__actions" data-create-face="empty-strip">
+              {/* M263. Composed next step: Start work · Ask · Create… — not nine
+                  equal creatable-kind pills. Create opens the shared sheet. */}
               <button type="button" className="launcher__verb launcher__start is-primary" data-onboarding-start
                 disabled={startReason !== null || busy} title={startReason ?? (plan.kind === 'start' ? plan.summary : '')}
                 {...shellControl(start)}>
-                <span className="launcher__verb-name">{busy ? 'Making the lane…' : 'Start task'}</span>
+                <span className="launcher__verb-name">{busy ? 'Making the lane…' : 'Start work'}</span>
                 {!busy && <kbd className="launcher__kbd" aria-hidden="true">↵</kbd>}
               </button>
               <button type="button" className="launcher__verb launcher__ask" data-onboarding-ask disabled={askReason !== null}
                 title={askReason ?? 'A conversation with no folder — read-only, nothing to write to. Your sentence goes in its composer.'}
                 {...shellControl(() => { if (askReason === null) onAsk?.(intention) })}>
-                <span className="launcher__verb-name">Start a general chat</span>
+                <span className="launcher__verb-name">Ask</span>
+              </button>
+              <button type="button" className="launcher__verb launcher__create" data-onboarding-create
+                title="Open the create sheet — Task or Panel"
+                {...shellControl(() => onOpenSheet())}>
+                <span className="launcher__verb-name">Create…</span>
               </button>
             </div>
           </div>

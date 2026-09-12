@@ -7274,8 +7274,13 @@ export function Canvas({
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
-        <NewObjectRow actions={paletteActions} merged={merged} noteRoot={noteRoot}
-          agentReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined} />
+        {/* M263. Occupied canvas only: one Create + into the shared sheet. Empty
+            canvas owns Start work · Ask · Create… on the launcher — mounting
+            both would duplicate the primary verbs. */}
+        {panels.length > 0 && (
+          <NewObjectRow onOpenCreate={paletteActions.beginSpawnSheet}
+            disabledReason={merged ? 'leave merged view to create an object' : undefined} />
+        )}
         {/* M249. A SIBLING of .world, never inside it: outside the transformed
             layer it cannot change a panel's size, and it is absolutely
             positioned so expanding it pushes nothing (pill.rects.1). The

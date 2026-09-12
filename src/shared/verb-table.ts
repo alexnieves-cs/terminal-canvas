@@ -65,7 +65,9 @@ export interface CreationHost {
 export interface CreationAvailability { merged?: boolean; noteRoot: string | null; agentReason?: string }
 const creation = (id: string, label: string, icon: string, create: (host: CreationHost, value?: string) => Promise<CreationResult>, requires: 'none' | 'folder' | 'agent' = 'none') => ({
   id, label, icon, create, requires, verb: `create-${id}`, palette: `object.create.${id}`,
-  doors: { canvas: `New object row: ${label}`, palette: `object.create.${id}`, agent: `tc plan create-${id}`, workflow: `an action node whose line is: create-${id}` }
+  // M263. The permanent pill band is gone; the canvas door is the single Create
+  // + (occupied) or Create… (empty strip), which opens the shared sheet.
+  doors: { canvas: `Create + / Create… opens the create sheet for ${label}`, palette: `object.create.${id}`, agent: `tc plan create-${id}`, workflow: `an action node whose line is: create-${id}` }
 })
 
 /** M244. The only creatable-kind list. New doors are derived here, beside V9_DOORS. */

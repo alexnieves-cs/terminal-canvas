@@ -1,28 +1,31 @@
 import type { JSX } from 'react'
-import { CREATABLE_OBJECTS } from '@shared/verb-table'
-import { creationCommands, type PaletteActions } from '@renderer/palette/commands'
-import { KindTerminal, KindChat, KindNote, KindImage, KindWorkflow, KindBrowser, KindDeck, Check, Plus } from '@renderer/icons'
+import { Plus } from '@renderer/icons'
+import { shellControl } from '@renderer/shell/shell-control'
 
-// M245. A grid, drawn here rather than added to the shared icon set until a second surface needs it.
-const SheetGlyph = (): JSX.Element => <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true">
-  <rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 6.5h12M2 10h12M6.5 2.5v11" />
-</svg>
-
-const icons: Record<string, () => JSX.Element> = {
-  terminal: () => <KindTerminal />, agent: () => <KindChat />, note: () => <KindNote />,
-  image: () => <KindImage />, workflow: () => <KindWorkflow />, browser: () => <KindBrowser />, checklist: () => <Check />,
-  sheet: () => <SheetGlyph />, deck: () => <KindDeck />
-}
-
-export function NewObjectRow(props: { actions: Pick<PaletteActions, 'createObject'>; merged?: boolean; noteRoot: string | null; agentReason?: string }): JSX.Element {
-  const rows = creationCommands(props)
-  return <nav className="new-object-row" aria-label="New object" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
-    {CREATABLE_OBJECTS.map((entry, index) => {
-      const row = rows[index], Icon = icons[entry.icon] ?? Plus
-      return <button type="button" key={entry.id} className="new-object-row__pill" data-create-object={entry.id}
-        disabled={row.disabledReason !== undefined} title={row.disabledReason ?? `New ${entry.label.toLowerCase()}`} onClick={() => row.run()}>
-        <Icon /><span>{entry.label}</span>
+/**
+ * M263. ONE create door on an occupied canvas: a single `+` that opens the
+ * same Task | Panel sheet the shell's Create / ⌘⇧N use. The permanent
+ * creatable-kind pill band is gone — kinds stay reachable via the sheet,
+ * palette, agent line and workflow (four doors), not nine equal canvas pills.
+ *
+ * Empty canvas: this component is not mounted; the launcher owns the composed
+ * Start work · Ask · Create… strip.
+ */
+export function NewObjectRow(props: {
+  onOpenCreate: () => void
+  /** Named reason when create is refused (merged view); never removes the control. */
+  disabledReason?: string
+}): JSX.Element {
+  const disabled = props.disabledReason !== undefined
+  return (
+    <nav className="new-object-row" aria-label="Create" data-create-face="plus"
+      onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
+      <button type="button" className="new-object-row__plus" data-create-open
+        disabled={disabled} title={props.disabledReason ?? 'Create…'}
+        aria-label={disabled ? `Create: ${props.disabledReason}` : 'Create'}
+        {...shellControl(() => { if (!disabled) props.onOpenCreate() })}>
+        <Plus /><span>Create</span>
       </button>
-    })}
-  </nav>
+    </nav>
+  )
 }

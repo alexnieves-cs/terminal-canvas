@@ -5934,20 +5934,21 @@ body {
    a second line INSIDE the same left/right bounds instead of scrolling it
    out of sight, so it never enters the minimap's reserved corner and needs
    no new gesture to reach it. */
+/* M263. Occupied canvas: one Create +, never a wrap of creatable-kind pills. */
 .new-object-row {
-  position: absolute; top: 12px; left: 16px; right: 176px; z-index: 20;
-  display: flex; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-1);
+  position: absolute; top: 12px; left: 16px; z-index: 20;
+  display: flex; gap: var(--sp-3); padding: var(--sp-1);
   pointer-events: auto; font-family: var(--font-ui);
 }
-.new-object-row__pill {
+.new-object-row__plus {
   display: inline-flex; align-items: center; gap: var(--sp-3); flex: 0 0 auto;
   border: 1px solid var(--line); border-radius: var(--r-full); padding: var(--sp-3) var(--sp-5);
   background: var(--s-1); color: var(--fg-3); font: inherit; font-size: var(--t-sm);
   cursor: pointer; transition: color var(--dur-1), background var(--dur-1);
 }
-.new-object-row__pill:hover { color: var(--fg); background: var(--s-2); }
-.new-object-row__pill:disabled { color: var(--fg-4); cursor: default; }
-.new-object-row__pill:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
+.new-object-row__plus:hover { color: var(--fg); background: var(--s-2); }
+.new-object-row__plus:disabled { color: var(--fg-4); cursor: default; }
+.new-object-row__plus:focus-visible, .checklist-node__body :focus-visible, .checklist-node__body:focus-visible {
   outline: 2px solid var(--focus); outline-offset: 2px;
 }
 /* M249. The bottom command pill: a sibling of .world, ABSOLUTELY positioned
