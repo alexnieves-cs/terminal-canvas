@@ -21,6 +21,13 @@ const rest = (facts) => (typeof P.pillRestState === 'function' ? P.pillRestState
 // so a rule that checked them in the wrong order would pick the wrong one.
 const a = rest({ attention: 2, running: 3, selected: 4 })
 ok('pill.rest.1 attention outranks running and selection, and is plural-correct', a?.kind === 'attention' && a.text === '2 agents need you' && rest({ attention: 1, running: 0, selected: 0 })?.text === '1 agent needs you')
+const taskBeat = rest({ attention: 0, running: 3, selected: 4, taskTitle: 'Ship the API' })
+ok('pill.rest.task.1 with the lens on, the task title outranks running and selection; attention still wins',
+  taskBeat?.kind === 'task' && taskBeat.text === 'Ship the API' &&
+  rest({ attention: 1, running: 3, selected: 4, taskTitle: 'Ship the API' })?.kind === 'attention')
+ok('pill.rest.task.2 blank or whitespace task title is no sentence — never invent, never zero',
+  rest({ attention: 0, running: 0, selected: 0, taskTitle: '  ' })?.kind === 'empty' &&
+  rest({ attention: 0, running: 1, selected: 0, taskTitle: '' })?.kind === 'running')
 const r = rest({ attention: 0, running: 3, selected: 4 })
 ok('pill.rest.2 with nothing waiting, running agents outrank the selection', r?.kind === 'running' && r.text === '3 agents running' && rest({ attention: 0, running: 1, selected: 0 })?.text === '1 agent running')
 const s = rest({ attention: 0, running: 0, selected: 2 })

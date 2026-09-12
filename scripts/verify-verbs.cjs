@@ -432,10 +432,20 @@ const FACTS = {
     // verdict list with one false in it.
     const fitDoor = doors?.['fit-task']
     const fitBound = V.VERBS.some((v) => v.id === 'fit-task') ? P.buildPlan(P.parsePlanLine('fit-task'), facts) : null
+    const canvasSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+    const hudSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'CanvasHud.tsx'), 'utf8')
+    const fitTaskFn = canvasSrc.match(/boardVerbsRef\.current\.fitTask = \(\) => \{[\s\S]*?\n  \}/)?.[0] ?? ''
+    const fitTaskAt = hudSrc.indexOf('data-hud-fit-task')
+    const fitAllAt = hudSrc.search(/data-hud-fit(?!-task)/)
+    const fitBeforeAll = fitTaskAt !== -1 && fitAllAt !== -1 && fitTaskAt < fitAllAt
     ok('fit-task.doors.1 fit-task is a verb with a real HUD gesture, the task.fit palette row, an agent line and an action-node line that bind',
       fitDoor !== undefined && typeof fitDoor.canvas === 'string' && /HUD/.test(fitDoor.canvas) && fitDoor.palette === 'task.fit' &&
         commandsSrc.includes("id: 'task.fit'") && fitBound?.kind === 'plan' && fitBound.plan.steps[0]?.verb === 'fit-task' && fitDoor.workflow === 'an action node whose line is: fit-task',
       JSON.stringify({ fitDoor, fitBound }))
+    // M264 — Fit task lights the sticky lens; Fit task is primary in the HUD.
+    ok('fit-task.stage.1 Fit task sets relatedItemId on a successful frame, and the HUD places Fit task before Fit all',
+      /setRelatedItemId\(target\.itemId\)/.test(fitTaskFn) && fitBeforeAll,
+      JSON.stringify({ lightsLens: /setRelatedItemId\(target\.itemId\)/.test(fitTaskFn), fitBeforeAll, fitTaskAt, fitAllAt }))
   }
 
   // M190 (the Acts V-VII critic, 1 and 3) — agent-door.7. THE ACTION NODE'S

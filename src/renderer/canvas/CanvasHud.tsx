@@ -72,17 +72,16 @@ export function CanvasHud({ viewport, onZoomBy, onFit, updateNewer, agentLinks, 
         <span className="canvas-hud__readout" data-hud-readout={readoutShown ? 'shown' : 'rest'} aria-hidden={readoutShown ? undefined : true}>{Math.round(viewport.scale * 100)}%</span>
         <button type="button" className="icon-button" data-hud-zoom-in title="Zoom in (⌘=)"
           aria-label="Zoom in" {...shellControl(() => onZoomBy(ZOOM_STEP))}><Plus /></button>
-        <button type="button" className="icon-button" data-hud-fit title="Fit all — every panel in view (⌘1)"
-          aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
-        {/* M258. Fit task: the active task, not everything. Disabled BY NAME
-            with no task context — a control that vanished would read as a
-            feature that was never built. */}
+        {/* M264. Fit task is the PRIMARY zoom framing control; Fit all stays
+            reachable beside it (and via the palette). */}
         {fitTask !== undefined && (
           <button type="button" className="icon-button" data-hud-fit-task disabled={fitTask.disabledReason !== undefined}
             title={fitTask.disabledReason ?? 'Fit task — the active task\'s panels in view'}
             aria-label={fitTask.disabledReason === undefined ? 'Fit task' : `Fit task: ${fitTask.disabledReason}`}
             {...shellControl(() => { if (fitTask.disabledReason === undefined) fitTask.run() })}><FitTaskGlyph /><span className="canvas-hud__fit-label">Fit task</span></button>
         )}
+        <button type="button" className="icon-button" data-hud-fit title="Fit all — every panel in view (⌘1)"
+          aria-label="Fit all" {...shellControl(onFit)}><Maximize /><span className="canvas-hud__fit-label">Fit all</span></button>
         {/* M247. Inside the zoom cluster, the HUD's one pointer surface, so it
             inherits that cluster's wheel yielding rather than needing its own. */}
         {agentLinks !== undefined && (

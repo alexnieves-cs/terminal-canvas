@@ -41,6 +41,8 @@ export interface CommandPillProps {
   panels: readonly Panel[]
   /** The REACHABLE attention queue's size — Cmd+J's. */
   attentionCount: number
+  /** M264. Lit task's title when the related lens is on; absent means no task sentence. */
+  taskTitle?: string
   selectedIds: readonly string[]
   orchestratorId: string | null
   /** Set when no conversation engine is available: the input is disabled with it. */
@@ -68,7 +70,7 @@ const MAX_VISIBLE_ACTIONS = 5
 const MAX_VISIBLE_RUNNING = 4
 
 export function CommandPill(props: CommandPillProps): JSX.Element {
-  const { actions, panels, attentionCount, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
+  const { actions, panels, attentionCount, taskTitle, selectedIds, orchestratorId, engineReason, onJump, onSend, openRef } = props
   const [expanded, setExpanded] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -101,7 +103,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
     : isTerminalPanel(p)
       ? { id: p.rect.id, kind: 'terminal', agent: p.spec.agent !== undefined, agentState: getAgentState(p.rect.id) }
       : { id: p.rect.id, kind: p.kind })))
-  const rest = pillRestState({ attention: attentionCount, running: running.length, selected: selectedIds.length })
+  const rest = pillRestState({ attention: attentionCount, running: running.length, selected: selectedIds.length, ...(taskTitle !== undefined ? { taskTitle } : {}) })
 
   const collapse = (restore: boolean): void => {
     setExpanded(false)

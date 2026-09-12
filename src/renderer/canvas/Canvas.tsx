@@ -4436,6 +4436,24 @@ export function Canvas({
   const lensSignature = lens === null ? null : lens.members.map((m) => `${m.panelId}=${m.reason}`).join(',')
   const lensMap = useMemo(() => (lensSignature === null ? null : new Map(lensSignature === '' ? [] : lensSignature.split(',').map((e) => e.split('=') as [string, string]))), [lensSignature])
   useEffect(() => { if (relatedItemId !== null && !workItems.some((i) => i.id === relatedItemId)) setRelatedItemId(null) }, [relatedItemId, workItems])
+  // M264. Escape clears the sticky stage when the lens is lit — but never when
+  // the key belongs to a focused terminal (`.xterm`), an open text draft, or
+  // chrome that already owns Escape (shouldIgnoreKeys). Stealing agent Escape
+  // is the paste defect M204 deliberately avoided.
+  useEffect(() => {
+    if (relatedItemId === null) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      if (shouldIgnoreKeys()) return
+      const active = document.activeElement
+      if (active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement || active instanceof HTMLSelectElement || (active instanceof HTMLElement && active.isContentEditable)) return
+      if (active instanceof Element && active.closest('.xterm') !== null) return
+      event.preventDefault()
+      setRelatedItemId(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [relatedItemId, shouldIgnoreKeys])
   // M204 (D08). The ⋯ menu's task section asks this at the moment it opens.
   // A ref, so the marks object below keeps ONE identity and no frame
   // re-renders for a membership it is not showing.
@@ -4982,8 +5000,9 @@ export function Canvas({
   // M258. FIT TASK — the four doors' landing point (the HUD button, the
   // `task.fit` row, `tc plan fit-task`, an action node). The ACTIVE task is
   // the lens's when one is lit, else the one task of the single selected
-  // panel (or the focused one). A camera move through the trail and nothing
-  // else, exactly as Show this task: no selection, focus, tier or geometry.
+  // panel (or the focused one). M264: a successful frame also lights the
+  // sticky related lens so stage and camera agree — Show related or Fit task
+  // are the stage entrances; no soft follow.
   boardVerbsRef.current.fitTask = () => {
     const shown = displayPanelsRef.current
     const items = workItemsRef.current
@@ -4991,6 +5010,7 @@ export function Canvas({
     const panelId = selected.size === 1 ? [...selected][0] : (focusedIdRef.current ?? undefined)
     const target = fitTaskTarget({ lensItemId: relatedItemId, ...(panelId === undefined ? {} : { panelId }), panels: shown, memberships: taskMemberships(shown, items), titles: Object.fromEntries(items.map((i) => [i.id, i.title])) })
     if (target.kind === 'refused') return target
+    setRelatedItemId(target.itemId)
     frameRects(target.rects)
     const title = items.find((i) => i.id === target.itemId)?.title ?? target.itemId
     return { kind: 'ran', note: `fitted ${target.rects.length} panel${target.rects.length === 1 ? '' : 's'} of ${title}` }
@@ -7288,6 +7308,7 @@ export function Canvas({
             says "1 agent needs you" about a phantom it cannot jump to. */}
         <CommandPill actions={paletteActions} panels={panels}
           attentionCount={reachableQueue(waitingIds, new Set(displayPanels.map((p) => p.rect.id))).length}
+          {...(lens !== null ? { taskTitle: workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId } : {})}
           selectedIds={[...selectedIds]} orchestratorId={orchestratorTarget(orchestratorCandidates(panels))}
           engineReason={onboardingReadiness(envReport).preferred === undefined ? 'no conversation engine available — check readiness' : undefined}
           onJump={pillJump} onSend={sendFromPill} openRef={pillOpenRef} />
@@ -7895,10 +7916,9 @@ export function Canvas({
           </div>
         )}
         {/* M204 (D08). The lens bar: which task is lit, how much of it, what
-            is missing, and the ways out. Viewport-pinned like the env banner;
-            Escape is deliberately not bound — it belongs to the focused
-            terminal, and an agent reading the canvas's Escape is the paste
-            defect CLAUDE.md already documents. */}
+            is missing, and the ways out. Viewport-pinned like the env banner.
+            M264: Escape clears the lens when it is not destined for a focused
+            terminal or text draft (see the relatedItemId keydown effect). */}
         {lens !== null && (() => {
           const title = workItems.find((i) => i.id === lens.itemId)?.title ?? lens.itemId
           const gone = missingSentence(lens.missing)

@@ -7,6 +7,9 @@
  * The pill is "act on this canvas now", never "find anything" — that is the
  * palette's, with its unbounded list. So nothing here searches or lists
  * commands; it decides one sentence and two targets.
+ *
+ * M264. Rest priority gains a task sentence when the related lens is on:
+ * attention → task → running → selected → empty.
  */
 
 export interface PillFacts {
@@ -16,10 +19,16 @@ export interface PillFacts {
   running: number
   /** Selected panels. */
   selected: number
+  /**
+   * M264. Work-item title when the related lens is lit. Absent / empty means
+   * no task sentence — never invent a title, never print a zero statement.
+   */
+  taskTitle?: string
 }
 
 export type PillRest =
   | { kind: 'attention'; text: string }
+  | { kind: 'task'; text: string }
   | { kind: 'running'; text: string }
   | { kind: 'selected'; text: string }
   | { kind: 'empty'; text: '' }
@@ -30,13 +39,16 @@ export type PillRest =
 const count = (n: number): number => (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0)
 
 /**
- * ONE meaningful state, in priority order: someone waiting outranks work in
- * flight, which outranks what the person is holding. Nothing to say is an
- * empty pill — a glyph alone — never "0 agents running".
+ * ONE meaningful state, in priority order: someone waiting outranks the lit
+ * task, which outranks work in flight, which outranks what the person is
+ * holding. Nothing to say is an empty pill — a glyph alone — never "0 agents
+ * running".
  */
 export function pillRestState(facts: PillFacts): PillRest {
   const attention = count(facts.attention)
   if (attention > 0) return { kind: 'attention', text: attention === 1 ? '1 agent needs you' : `${attention} agents need you` }
+  const task = typeof facts.taskTitle === 'string' ? facts.taskTitle.trim() : ''
+  if (task !== '') return { kind: 'task', text: task }
   const running = count(facts.running)
   if (running > 0) return { kind: 'running', text: running === 1 ? '1 agent running' : `${running} agents running` }
   const selected = count(facts.selected)
