@@ -5,6 +5,7 @@ import type { PanelStatus } from '@renderer/session/panel-session'
 import { panelState, type StateInput } from '@renderer/panels/panel-state'
 import type { WorkItemState } from '@shared/work-items'
 import { noteSummary } from '@shared/notes'
+import { chatDisplayLead } from '@renderer/palette/panel-name'
 
 /**
  * What the rail's Panels section renders, as plain data.
@@ -61,7 +62,9 @@ export function railLabel(
    * absent means "nobody asked", which `workflowWatchLabel` says as `a
    * workflow` rather than guessing the template is gone.
    */
-  templateNameOf?: (templateId: string) => string | undefined
+  templateNameOf?: (templateId: string) => string | undefined,
+  /** M266. Teammate display name by teammate id — for chat silhouette leads. */
+  teammateNameOf?: (teammateId: string) => string | undefined
 ): string {
   // M116. A work card reads `work · <title>` with the KIND first, before the
   // title rule below: its title is the item's, and the chat dispatched on
@@ -118,10 +121,14 @@ export function railLabel(
   if (isBrowserPanel(panel)) return `browser · ${browserHost(panel.url)}`
   // M187. A note reads by its own first line — its name is what it says.
   if (isNotePanel(panel)) return `${panel.note.form} · ${noteSummary(panel.note.text, panel.note.form, 32)}`
-  // M73. The same split as the toolbox, for the same 260px reason.
+  // M266. Teammate · place when known; else place basename — never "agent".
   if (isChatPanel(panel)) {
     const cwd = panel.chat.cwd.replace(/\/+$/, '')
-    return `chat · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+    const place = cwd.slice(cwd.lastIndexOf('/') + 1) || cwd
+    const mate = panel.chat.teammateId === undefined || teammateNameOf === undefined
+      ? undefined
+      : teammateNameOf(panel.chat.teammateId)
+    return chatDisplayLead(place, mate)
   }
   return (status?.kind === 'running' ? status.command : undefined)
     ?? panel.spec.command
@@ -185,7 +192,9 @@ export function buildRailRows(
    */
   workStateOf?: (itemId: string) => WorkItemState | undefined,
   /** M133. Passed through to `railLabel` — see its own parameter. */
-  templateNameOf?: (templateId: string) => string | undefined
+  templateNameOf?: (templateId: string) => string | undefined,
+  /** M266. Passed through to `railLabel` for chat silhouette leads. */
+  teammateNameOf?: (teammateId: string) => string | undefined
 ): RailRow[] {
   return panels.map((panel) => {
     const id = panel.rect.id
@@ -205,7 +214,7 @@ export function buildRailRows(
     const workState = isWorkPanel(panel) && workStateOf !== undefined ? workStateOf(panel.work.itemId) : undefined
     const state: StateInput = { kind: tailKind, status, dormant, ...(workState === undefined ? {} : { work: { state: workState } }) }
     // M92. The marks, absent unless set, so a plain row's shape is unchanged.
-    return { id, label: railLabel(panel, status, templateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
+    return { id, label: railLabel(panel, status, templateNameOf, teammateNameOf), tail: workState === undefined ? railTail(status, dormant, tailKind) : panelState(state, undefined).word, dormant, state, ...(panel.locked === true ? { locked: true } : {}), ...(panel.pinned === true ? { pinned: true } : {}) }
   })
 }
 

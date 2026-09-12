@@ -2884,6 +2884,21 @@ const session = (id, over = {}) => ({
     JSON.stringify([sp('/Users/me/work/api'), sp('/tmp'), sp('/a/b')]))
 }
 
+// M266 — silhouette.chat.1. Teammate · place when known; place alone when not;
+//     never "agent" as the lead noun.
+{
+  const lead = typeof R.chatDisplayLead === 'function' ? R.chatDisplayLead : () => 'missing'
+  const chat = (over = {}) => ({ kind: 'chat', rect: { id: 'c1', x: 0, y: 0, w: 1, h: 1 }, z: 1, chat: { cwd: '/Users/a/code/api', sessionId: 'u', ...over } })
+  const named = typeof R.panelName === 'function' ? R.panelName(chat({ teammateId: 'ada' }), undefined, { teammateName: 'Ada' }) : ''
+  const placeOnly = typeof R.panelName === 'function' ? R.panelName(chat(), undefined) : ''
+  const railNamed = typeof R.railLabel === 'function' ? R.railLabel(chat({ teammateId: 'ada' }), undefined, undefined, (id) => id === 'ada' ? 'Ada' : undefined) : ''
+  ok('silhouette.chat.1 chat lead is Teammate · place when known, else place basename — never agent',
+    lead('api', 'Ada') === 'Ada · api' && lead('api') === 'api' && lead('', '') === 'chat' &&
+      named === 'Ada · api' && placeOnly === 'api' && railNamed === 'Ada · api' &&
+      !/agent/i.test(named) && !/agent/i.test(placeOnly) && !/^chat ·/.test(named) && !/^chat ·/.test(placeOnly),
+    JSON.stringify({ lead: lead('api', 'Ada'), named, placeOnly, railNamed }))
+}
+
 // M66 — labels.1/.2. EVERY CONTROL SAYS WHAT IT IS. Read as text, like
 //     verify:styles: every <button in the renderer carries an aria-label, a
 //     title, or visible text inside its element (labels.1); every element

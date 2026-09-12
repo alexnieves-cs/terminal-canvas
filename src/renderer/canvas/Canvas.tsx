@@ -6634,6 +6634,10 @@ export function Canvas({
     // M133. A workflow trigger's template name, so a watcher whose command is
     // `/usr/bin/true` reads as the workflow it runs — built-ins included.
     templateNameOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId)?.name,
+    teammateNameOf: (teammateId: string) => {
+      const t = (teammates ?? []).find((x) => x.id === teammateId)
+      return t === undefined ? undefined : (t.name.trim() === '' ? t.id : t.name)
+    },
     templateOf: (templateId: string) => allTemplates(templateRows).find((t) => t.id === templateId),
     // M196 (D04). The lane records, already read for the skills door's own
     // lane question. ONE source: this is the same list main's `laneRootOf`

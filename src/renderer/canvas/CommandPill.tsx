@@ -304,7 +304,7 @@ export function CommandPill(props: CommandPillProps): JSX.Element {
                 </button>
               )}
               {running.length > 0 && (
-                <ul className="command-pill__running" aria-label="Running agents">
+                <ul className="command-pill__running" aria-label="Running sessions">
                   {running.slice(0, MAX_VISIBLE_RUNNING).map((id) => (
                     <li key={id}>
                       <button type="button" className="command-pill__row" data-pill-running-row={id} aria-label={`Go to ${titleOf(id)}`}

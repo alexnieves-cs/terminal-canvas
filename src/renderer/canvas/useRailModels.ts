@@ -46,6 +46,8 @@ export interface RailModelsDeps {
   workStateOf?: (itemId: string) => WorkItemState | undefined
   /** M133. A workflow trigger's template name by id — the rail row and the pane both read it. */
   templateNameOf?: (templateId: string) => string | undefined
+  /** M266. Teammate display name by id — chat silhouette leads on the rail and Go-to. */
+  teammateNameOf?: (teammateId: string) => string | undefined
   /** M252. The workflow's record by id, for the inspector's reach and read fields. */
   templateOf?: (templateId: string) => import('@shared/templates').PersistedTemplate | undefined
   /** M116. The record itself, for the inspector's five facts. */
@@ -84,14 +86,17 @@ export interface RailModelsDeps {
  * so a panel that flips to needs-you while the overlay is up still reads
  * needs-you. Only the `state:` query's ORDER uses the build-time word.
  */
-function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>): { name: string; path?: string; state: StateInput; stateWord: string } {
+function findingFields(p: Panel, registry: Registry, dormantIds: ReadonlySet<string>, teammateNameOf?: (id: string) => string | undefined): { name: string; path?: string; state: StateInput; stateWord: string } {
   const status = registry.get(p.rect.id)?.status
   const resolved = status?.kind === 'running' ? status.command : undefined
   const tailKind = isFilePanel(p) && p.source.prose === true ? 'note' : p.kind
   const state: StateInput = { kind: tailKind, status, dormant: isTerminalPanel(p) && dormantIds.has(p.rect.id), ...(isWatcherPanel(p) ? { watch: watchStateInput(p.rect.id) } : {}) }
   const { word } = panelState(state, getAgentState(p.rect.id))
   const path = panelPath(p)
-  return { name: panelName(p, resolved), ...(path === undefined ? {} : { path }), state, stateWord: word }
+  const teammateName = isChatPanel(p) && p.chat.teammateId !== undefined && teammateNameOf !== undefined
+    ? teammateNameOf(p.chat.teammateId)
+    : undefined
+  return { name: panelName(p, resolved, teammateName === undefined ? undefined : { teammateName }), ...(path === undefined ? {} : { path }), state, stateWord: word }
 }
 
 function orderPanelsFor(panels: Panel[], viewport: Viewport | null, lastFocusedAt: Record<string, number>): Panel[] {
@@ -192,7 +197,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 // one line up: read off the session, passed in as plain data.
                 spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
-                ...findingFields(p, registry, dormantIds)
+                ...findingFields(p, registry, dormantIds, deps.teammateNameOf)
               }
             : {
                 id: p.rect.id,
@@ -208,7 +213,7 @@ export function useRailModels(deps: RailModelsDeps) {
                 agent: registry.get(p.rect.id)?.spec.agent !== undefined,
                 spawned: registry.get(p.rect.id)?.spawned === true,
                 ...frontEndFields(p),
-                ...findingFields(p, registry, dormantIds)
+                ...findingFields(p, registry, dormantIds, deps.teammateNameOf)
               }
         )
       : EMPTY_PANELS),
@@ -249,7 +254,7 @@ export function useRailModels(deps: RailModelsDeps) {
   // panels beside a canvas showing everyone's would be the two disagreeing on
   // screen at once. goToPanel reads the same array, which is what keeps every
   // row it renders navigable.
-  const railBuilt = buildRailRows(displayPanels, (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf)
+  const railBuilt = buildRailRows(displayPanels, (id) => registry.get(id)?.status, dormantIds, deps.workStateOf, deps.templateNameOf, deps.teammateNameOf)
   const railSig = railSignature(railBuilt)
   const railRows = useMemo(() => railBuilt, [railSig])
 

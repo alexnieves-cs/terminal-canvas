@@ -20,8 +20,25 @@ import { noteSummary } from '@shared/notes'
 /** M164. ONE shortening: the palette's cut lives in `shared/display-path.ts` now and is re-exported here for its callers. */
 export { shortPath } from '@shared/display-path'
 
+/**
+ * M266. Chat display lead: `Teammate · place` when the teammate is known,
+ * else the place basename. Never invent a name; never fall back to "agent".
+ */
+export function chatDisplayLead(placeBasename: string, teammateName?: string): string {
+  const place = placeBasename.trim()
+  const mate = typeof teammateName === 'string' ? teammateName.trim() : ''
+  if (mate !== '') return place !== '' ? `${mate} · ${place}` : mate
+  if (place !== '') return place
+  return 'chat'
+}
+
+export interface PanelNameOpts {
+  /** Resolved teammate display name for a chat with `chat.teammateId`. */
+  teammateName?: string
+}
+
 /** What a row leads with: the user's title, else the honest name without path or id. */
-export function panelName(panel: Panel, resolvedCommand?: string): string {
+export function panelName(panel: Panel, resolvedCommand?: string, opts?: PanelNameOpts): string {
   if (panel.title !== undefined) return panel.title
   if (isReviewPanel(panel)) return `review: ${panel.subject.label}`
   if (isFilePanel(panel)) return panel.source.path.slice(panel.source.path.lastIndexOf('/') + 1)
@@ -31,11 +48,10 @@ export function panelName(panel: Panel, resolvedCommand?: string): string {
     const cwd = panel.source.cwd.replace(/\/+$/, '')
     return `toolbox · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
   }
-  // M73. `chat · <directory basename>`, the toolbox's split for the same
-  // reason: the row has room for one thing, and the path is the trailing hint.
+  // M266. Teammate · place when known; else place basename — never "agent".
   if (isChatPanel(panel)) {
     const cwd = panel.chat.cwd.replace(/\/+$/, '')
-    return `chat · ${cwd.slice(cwd.lastIndexOf('/') + 1) || cwd}`
+    return chatDisplayLead(cwd.slice(cwd.lastIndexOf('/') + 1) || cwd, opts?.teammateName)
   }
   // M83. `memory · <repository basename>`, the same split.
   if (isMemoryPanel(panel)) {

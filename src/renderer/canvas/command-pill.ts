@@ -50,7 +50,7 @@ export function pillRestState(facts: PillFacts): PillRest {
   const task = typeof facts.taskTitle === 'string' ? facts.taskTitle.trim() : ''
   if (task !== '') return { kind: 'task', text: task }
   const running = count(facts.running)
-  if (running > 0) return { kind: 'running', text: running === 1 ? '1 agent running' : `${running} agents running` }
+  if (running > 0) return { kind: 'running', text: running === 1 ? '1 session running' : `${running} sessions running` }
   const selected = count(facts.selected)
   if (selected > 0) return { kind: 'selected', text: `${selected} selected` }
   return { kind: 'empty', text: '' }

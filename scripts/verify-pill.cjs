@@ -29,7 +29,7 @@ ok('pill.rest.task.2 blank or whitespace task title is no sentence — never inv
   rest({ attention: 0, running: 0, selected: 0, taskTitle: '  ' })?.kind === 'empty' &&
   rest({ attention: 0, running: 1, selected: 0, taskTitle: '' })?.kind === 'running')
 const r = rest({ attention: 0, running: 3, selected: 4 })
-ok('pill.rest.2 with nothing waiting, running agents outrank the selection', r?.kind === 'running' && r.text === '3 agents running' && rest({ attention: 0, running: 1, selected: 0 })?.text === '1 agent running')
+ok('pill.rest.2 with nothing waiting, running sessions outrank the selection', r?.kind === 'running' && r.text === '3 sessions running' && rest({ attention: 0, running: 1, selected: 0 })?.text === '1 session running')
 const s = rest({ attention: 0, running: 0, selected: 2 })
 ok('pill.rest.3 with nothing waiting or running, the selection is the state', s?.kind === 'selected' && s.text === '2 selected')
 const e = rest({ attention: 0, running: 0, selected: 0 })
@@ -71,6 +71,11 @@ const run = typeof P.runningAgents === 'function' ? P.runningAgents([
   { id: 'f1', kind: 'file' }
 ]) : undefined
 ok('pill.running.1 running agents are starting/streaming chats and busy AGENT terminals — never a busy shell, an idle agent or a ready chat', JSON.stringify(run) === JSON.stringify(['c1', 'c3', 't1']), JSON.stringify(run))
+ok('pill.rest.silhouette.1 rest copy never says N agents for the queue or running face',
+  !/agents? need/.test(rest({ attention: 2, running: 0, selected: 0 })?.text ?? '') &&
+  !/agents? running/.test(rest({ attention: 0, running: 2, selected: 0 })?.text ?? '') &&
+  /chats need you/.test(rest({ attention: 2, running: 0, selected: 0 })?.text ?? '') &&
+  /sessions running/.test(rest({ attention: 0, running: 2, selected: 0 })?.text ?? ''))
 
 const failed = results.filter((x) => !x.pass)
 console.log(`[verify:pill] ${results.length - failed.length}/${results.length} passed`)

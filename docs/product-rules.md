@@ -104,7 +104,7 @@ milestone in it; the evidence and the reasoning are in
   diagnostics, metrics, history.
 - **The palette finds anything; the command pill acts on this canvas now (M249 / M264 / M265).** The pill at
   the bottom of the canvas is a canvas's rest layer. It shows one state, in priority order:
-  "N chats need you", the lit task's title when the related lens is on, "N agents running",
+  "N chats need you", the lit task's title when the related lens is on, "N sessions running",
   "N selected", or a glyph alone, never "0 …". Its
   contextual layer is the input to the orchestrator chat plus Fit, Jump, Running and the
   selection actions. It has no search and no command list. Every control runs an existing verb
