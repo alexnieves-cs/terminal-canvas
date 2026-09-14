@@ -211,6 +211,10 @@ module.exports = {
   // `shelf`/`saveShelf` on the harness palette both invokes REJECTED, which
   // the renderer swallowed as an unhandled rejection with an empty pane.
   parseShelf: require('../src/shared/skills').parseShelf,
+  // Through this bundle, never a bare require from the harness: rate-limit is
+  // TypeScript, and Electron's loader cannot resolve a .ts file — the part
+  // throws at load and reads as a HANG, not a red suite.
+  windowUtilization: require('../src/shared/rate-limit').windowUtilization,
   // M127. The key's own encoder, for the same reason `parseShelf` is here: a
   // harness that spelled `JSON.stringify([scope, name])` by hand would be a
   // SECOND author of the shelf's key format, and a change to the real one

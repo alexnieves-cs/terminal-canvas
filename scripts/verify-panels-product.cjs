@@ -2,7 +2,11 @@
    Run with: npm run build && npm run verify:panels:product
    The harness (scripts/panels-harness.cjs) boots the renderer; this file holds the
    checks the old file held at lines 17398–19778, moved verbatim, ids unchanged. */
-const { runPanelsSuite } = require('./panels-harness.cjs')
+// A throw while the harness LOADS (a bad require, a failed esbuild) never
+// reaches runPanelsSuite's watchdog: Electron prints "App threw an error
+// during load" and idles, which read as a 30-minute hang on 2026-09-14.
+let runPanelsSuite
+try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
 const WATCHDOG_MS = 230000 // measured 2026-09-10 after M203/M204 (D08) added task.show.1, task.related.1, task.far.1 and task.arrange.1 (a real linked worktree, two reloads, a far-zoom walk): 167.5 s green, 88% of the old 190000 and so two points under headroom.1's 90% line. Headroom above 1.35x on purpose — a watchdog kill reads as a HANG and not as a red check (M135). Was 190000 against 125 s after M202. Re-measure when a milestone adds checks
 

@@ -77,6 +77,22 @@ Every panels part also asserts `headroom.1`: red at 90% of its measured watchdog
 that has outgrown its pin says so by name before the watchdog fires and reads as a hang.
 When it goes red, re-measure that part and re-pin its `WATCHDOG_MS`.
 
+**A part that cannot LOAD must still exit.** A throw while `panels-harness.cjs` loads never
+reaches the watchdog: Electron prints "App threw an error during load" and idles. From
+4e06abd1 a bare `require` of a `.ts` file did exactly that to all five parts — a 30-minute
+hang, not a red suite. Each part wraps its harness require and exits 1; anything the harness
+needs from `src/` goes through the `panels-entry.cjs` bundle, never a require of its own. The
+watchdog itself carries a hard `process.exit(1)` five seconds after it fires, because
+`app.exit(1)` behind a pending body once took sixteen minutes to land.
+
+`TC_SETTLE_PROBE=<path prefix>` is a measurement mode, never a gate: `settle()` still sleeps
+its 300ms, and around it records the calling line, every DOM mutation (split inside/outside
+`.xterm`) and every ipcMain handler start/end, written to `<prefix>-<part>.json`. It answers
+which windows needed their 300ms — and it cannot answer which ones guard a NEGATIVE, so a
+quiet window is a candidate for a condition wait, not a licence. **Measure on a quiet
+machine**: with swap near full, parts that pass minutes earlier trip their watchdogs, and
+that reads as a regression.
+
 **A check that THROWS aborts the run, so every check written after it never executes — and
 its RED is therefore not evidence.** These are single scripts with no per-check isolation:
 `ok(...)` records a failure and carries on, but an uncaught exception — calling an export the

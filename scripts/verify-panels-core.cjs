@@ -2,7 +2,11 @@
    Run with: npm run build && npm run verify:panels:core
    The harness (scripts/panels-harness.cjs) boots the renderer; this file holds the
    checks the old file held at lines 1474–5259, moved verbatim, ids unchanged. */
-const { runPanelsSuite } = require('./panels-harness.cjs')
+// A throw while the harness LOADS (a bad require, a failed esbuild) never
+// reaches runPanelsSuite's watchdog: Electron prints "App threw an error
+// during load" and idles, which read as a 30-minute hang on 2026-09-14.
+let runPanelsSuite
+try { ({ runPanelsSuite } = require('./panels-harness.cjs')) } catch (error) { console.error('FAIL  harness failed to load:', error); process.exit(1) }
 
 const WATCHDOG_MS = 75000 // measured 2026-09-10 in the Electron tier after M234–M237 (the chromeless checks), two green-but-for-headroom runs: 58.4s chained, 59.6s alone; 1.25x the slower, to the next second. Was 63000, which headroom.1 flagged at 93–95% before any watchdog fired
 

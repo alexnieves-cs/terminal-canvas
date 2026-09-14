@@ -119,6 +119,7 @@ const {
   parseShelf,
   skillWriteHandlers,
   credentialDir: harnessCredentialDir,
+  windowUtilization,
 } = require(ENTRY_OUT)
 
 /** Panels seeded with a live session before the window loads, so check 24 has
@@ -144,7 +145,6 @@ function findTmux() {
 }
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
-const { windowUtilization } = require('../src/shared/rate-limit')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
@@ -337,7 +337,55 @@ const pressPlain = (wc, key) =>
  * for other post-action settling throughout this file (e.g. the M6d block
  * above), comfortably above two local IPC round trips to an idle process.
  */
-const settle = () => sleep(300)
+/*
+ * TC_SETTLE_PROBE=<path prefix> — a MEASUREMENT mode, never a gate. settle()
+ * still sleeps exactly 300ms (so no check can pass or fail differently
+ * because of the probe); around that sleep it records the calling line, every
+ * DOM mutation batch inside the window (split into inside-.xterm, which a
+ * running shell produces forever, and everything else), and every ipcMain
+ * handler that started or finished in it. The question the rows answer is
+ * which of the hundreds of 300ms windows actually needed 300ms: a window
+ * whose last non-xterm mutation and last IPC completion land at 20ms could
+ * return then, one with activity at 280ms could not — and one BEFORE A
+ * NEGATIVE assertion ("nothing spawned") may need the full window even when
+ * nothing moved, which is why these rows decide nothing on their own.
+ * Absent, settle is the plain sleep it always was.
+ */
+const SETTLE_PROBE = process.env.TC_SETTLE_PROBE || ''
+const settleProbe = { wc: null, rows: [], ipc: [] }
+const SETTLE_PROBE_INSTALL = `(() => {
+  if (!window.__tcSettleProbe) {
+    const p = { t0: performance.now(), marks: [] }
+    new MutationObserver((list) => {
+      let dom = 0, term = 0
+      for (const m of list) {
+        const el = m.target.nodeType === 1 ? m.target : m.target.parentElement
+        if (el && el.closest && el.closest('.xterm')) term++; else dom++
+      }
+      if (p.marks.length < 4000) p.marks.push([Math.round(performance.now() - p.t0), dom, term])
+    }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true })
+    p.reset = () => { p.t0 = performance.now(); p.marks = [] }
+    p.take = () => { const out = p.marks; p.marks = []; return out }
+    window.__tcSettleProbe = p
+  }
+  window.__tcSettleProbe.reset()
+  return true
+})()`
+const settle = !SETTLE_PROBE ? () => sleep(300) : async () => {
+  // Line 0 is "Error", 1 is this arrow, 2 is whoever awaited settle().
+  const site = (new Error().stack.split('\n')[2] || '').trim()
+  const wc = settleProbe.wc
+  if (!wc || wc.isDestroyed()) return sleep(300)
+  const start = Date.now()
+  let armed = false
+  try { armed = await wc.executeJavaScript(SETTLE_PROBE_INSTALL) } catch { /* a reload in flight: record what we can */ }
+  await sleep(300)
+  let marks = null
+  try { marks = await wc.executeJavaScript('window.__tcSettleProbe ? window.__tcSettleProbe.take() : null') } catch { /* same */ }
+  const ipc = settleProbe.ipc.filter((e) => e[0] >= start).map(([t, ch, phase]) => [t - start, ch, phase])
+  settleProbe.ipc = settleProbe.ipc.filter((e) => e[0] >= start - 5000)
+  settleProbe.rows.push({ site, armed, marks, ipc })
+}
 
 /**
  * Clicks a panel's own `.panel__close`, by id, regardless of kind. A
@@ -949,7 +997,14 @@ app.whenReady().then(async () => {
   // every channel -> listener pair it registers.
   const registeredHandlers = new Map()
   const realIpcMainHandle = ipcMain.handle.bind(ipcMain)
-  ipcMain.handle = (channel, listener) => { registeredHandlers.set(channel, listener); return realIpcMainHandle(channel, listener) }
+  // Under TC_SETTLE_PROBE every handler is timed (see settle()), and the TIMED
+  // closure is what registeredHandlers keeps, so check 174's restore puts the
+  // probe back along with the real handler.
+  const probeTimed = (channel, listener) => !SETTLE_PROBE ? listener : async (...args) => {
+    settleProbe.ipc.push([Date.now(), channel, 'start'])
+    try { return await listener(...args) } finally { settleProbe.ipc.push([Date.now(), channel, 'end']) }
+  }
+  ipcMain.handle = (channel, listener) => { const l = probeTimed(channel, listener); registeredHandlers.set(channel, l); return realIpcMainHandle(channel, l) }
   // M73. A REAL AgentSessionManager over a FAKE process runner: each spawn
   // records its argv and replays scripts/fixtures/agent-session/turn.jsonl
   // (recorded from claude 2.1.259) on the first user line it is written, in
@@ -1632,7 +1687,12 @@ app.whenReady().then(async () => {
   const watchdog = setTimeout(() => {
     watchdogFired = true
     console.error(`\nFAIL  watchdog — run did not finish within ${BUDGET_MS}ms`)
-    ptyManager.killAll()
+    // The backstop's own backstop. On 2026-09-14 agents' watchdog fired at 113s
+    // and app.exit(1) did not end the process until 1074s — a teardown stuck
+    // behind the part's still-pending body. A hard exit a few seconds later,
+    // unref'd so it never holds a healthy exit open.
+    setTimeout(() => process.exit(1), 5000).unref()
+    try { ptyManager.killAll() } catch (error) { console.error('watchdog: killAll threw', error) }
     app.exit(1)
   }, BUDGET_MS)
 
@@ -1682,6 +1742,7 @@ app.whenReady().then(async () => {
     // carries the measurement and separates "no build" from "flaked".
     await loadRenderer(win)
     const wc = win.webContents
+    settleProbe.wc = wc
 
     // Check 32's evidence, SAMPLED here and asserted at the end of the run
     // beside the other preset checks. It cannot be asserted where it is
@@ -1831,6 +1892,12 @@ app.whenReady().then(async () => {
       } else {
         ok(`headroom.1 (SKIPPED — TC_WATCHDOG_SCALE ${SCALE}: a contended clock measures the machine, not the part)`, true,
           `${(wallMs / 1000).toFixed(1)}s against a ${(BUDGET_MS / 1000).toFixed(0)}s scaled watchdog`)
+      }
+      if (SETTLE_PROBE) {
+        try {
+          writeFileSync(`${SETTLE_PROBE}-${name}.json`, JSON.stringify(settleProbe.rows))
+          console.log(`[verify:panels:${name}] settle probe: ${settleProbe.rows.length} windows -> ${SETTLE_PROBE}-${name}.json`)
+        } catch (error) { console.error('settle probe: could not write', error) }
       }
       console.log('\n' + '='.repeat(60))
       const failed = results.filter((r) => !r.pass)
