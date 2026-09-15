@@ -34,6 +34,8 @@ export interface PanelDragDeps {
  */
 export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]) => void {
   const dragRef = useRef<readonly DragState[] | null>(null)
+  const settleTimersRef = useRef(new Map<string, number>())
+  const movedRef = useRef(false)
   // Mirrored so the document listeners, installed once, always call the
   // current callbacks without being torn down and rebuilt every render.
   const depsRef = useRef(deps)
@@ -51,10 +53,37 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       )
     }
 
+    const panelElement = (id: string): HTMLElement | null => {
+      for (const node of document.querySelectorAll<HTMLElement>('[data-panel-id]')) {
+        if (node.dataset.panelId === id) return node
+      }
+      return null
+    }
+
+    const settle = (states: readonly DragState[]): void => {
+      for (const state of states) {
+        if (state.mode.kind !== 'move') continue
+        const panel = panelElement(state.panelId)
+        panel?.removeAttribute('data-panel-dragging')
+        panel?.setAttribute('data-panel-settling', '')
+        const previous = settleTimersRef.current.get(state.panelId)
+        if (previous !== undefined) window.clearTimeout(previous)
+        const timer = window.setTimeout(() => {
+          panelElement(state.panelId)?.removeAttribute('data-panel-settling')
+          settleTimersRef.current.delete(state.panelId)
+        }, 560)
+        settleTimersRef.current.set(state.panelId, timer)
+      }
+    }
+
     const onUp = (): void => {
       const state = dragRef.current
       if (!state) return
       dragRef.current = null
+      // A gesture begins on mousedown, so a click-to-select is a drag with no
+      // move; settling it would bounce every panel a person merely selects.
+      if (movedRef.current) settle(state)
+      movedRef.current = false
       depsRef.current.onCommit(state)
     }
 
@@ -75,6 +104,17 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
       }
       const world = toWorld(event)
       if (!world) return
+      // The lift arrives with the first real move, not the press, for the
+      // same reason the settle waits for one: a click is not a gesture.
+      if (!movedRef.current) {
+        movedRef.current = true
+        for (const member of state) {
+          if (member.mode.kind !== 'move') continue
+          const panel = panelElement(member.panelId)
+          panel?.removeAttribute('data-panel-settling')
+          panel?.setAttribute('data-panel-dragging', '')
+        }
+      }
       // Every member is handed its own UNCHANGED state every frame, so each
       // rect is derived from its mousedown origin rather than the preceding
       // frame or a group bounding box — see applyDrag's own note.
@@ -88,10 +128,22 @@ export function usePanelDrag(deps: PanelDragDeps): (states: readonly DragState[]
     return () => {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      for (const timer of settleTimersRef.current.values()) window.clearTimeout(timer)
+      settleTimersRef.current.clear()
+      for (const node of document.querySelectorAll<HTMLElement>('[data-panel-dragging], [data-panel-settling]')) {
+        node.removeAttribute('data-panel-dragging')
+        node.removeAttribute('data-panel-settling')
+      }
     }
   }, [])
 
   return useCallback((states: readonly DragState[]) => {
+    for (const state of states) {
+      const previous = settleTimersRef.current.get(state.panelId)
+      if (previous !== undefined) window.clearTimeout(previous)
+      settleTimersRef.current.delete(state.panelId)
+    }
+    movedRef.current = false
     dragRef.current = states
   }, [])
 }

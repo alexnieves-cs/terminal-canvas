@@ -2549,6 +2549,32 @@ console.log('\n' + '='.repeat(60))
     typeof Z)
 }
 
+{
+  // The onboarding chat's geometry on a 1000x760 host: the zoom pill in the
+  // bottom-right corner and the minimap stacked above it (the wide cluster).
+  const C = V.clearOfOverlays
+  const panel = { width: 560, height: 620 }
+  const hud = { x: 760, y: 680, w: 222, h: 34 }
+  const map = { x: 820, y: 560, w: 162, h: 102 }
+  const hits = (c, o, m = 16) => {
+    const l = c.x - panel.width / 2, t = c.y - panel.height / 2
+    return !(l + panel.width <= o.x - m || l >= o.x + o.w + m || t + panel.height <= o.y - m || t >= o.y + o.h + m)
+  }
+  const out = typeof C === 'function' ? C({ x: 500, y: 400 }, panel, [map, hud]) : null
+  ok('spawn-clear.1 a panel centred under the navigation cluster is moved clear of every overlay, along the cheaper axis, and stays inside the host margin',
+    out !== null && !hits(out, map) && !hits(out, hud) && out.x < 500 && out.y === 400 && out.x - panel.width / 2 >= 16,
+    JSON.stringify(out))
+  const clear = typeof C === 'function' ? C({ x: 300, y: 300 }, { width: 200, height: 200 }, [map, hud]) : null
+  const none = typeof C === 'function' ? C({ x: 500, y: 400 }, panel, []) : null
+  ok('spawn-clear.2 a point already clear of the overlays, or with none, is returned untouched',
+    clear !== null && clear.x === 300 && clear.y === 300 && none !== null && none.x === 500 && none.y === 400,
+    JSON.stringify({ clear, none }))
+  const cramped = typeof C === 'function' ? C({ x: 300, y: 300 }, { width: 560, height: 560 }, [{ x: 200, y: 200, w: 400, h: 400 }]) : null
+  ok('spawn-clear.3 with no room on either axis the panel takes what room there is and never crosses the host\'s left or top margin',
+    cramped !== null && cramped.x - 280 >= 16 - 1e-9 && cramped.y - 280 >= 16 - 1e-9,
+    JSON.stringify(cramped))
+}
+
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)
 if (failed.length) {

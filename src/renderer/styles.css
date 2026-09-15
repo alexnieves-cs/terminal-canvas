@@ -64,7 +64,7 @@
 
   /* Motion. 90ms is below the threshold at which a change reads as waiting
      and above the one at which it reads as a glitch. */
-  --dur-1: 90ms; --dur-2: 160ms;
+  --dur-1: 90ms; --dur-2: 160ms; --dur-spring: 520ms; --dur-flow: 900ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
   /* A compact drawer's slide: longer than an arrival because it travels 300px. */
@@ -2050,11 +2050,14 @@ body {
 }
 .canvas__aura {
   position: absolute;
-  inset: -40%;
+  inset: -48%;
   pointer-events: none;
   --aura-now: var(--aura-1);
-  background: radial-gradient(38% 38% at 50% 48%, var(--aura-now), transparent 70%);
-  transition: --aura-now var(--dur-2) var(--ease);
+  background:
+    radial-gradient(42% 38% at 44% 46%, var(--aura-now), transparent 72%),
+    radial-gradient(26% 34% at 72% 64%, var(--aura-now-2), transparent 74%),
+    linear-gradient(118deg, transparent 34%, color-mix(in srgb, var(--aura-2) 42%, transparent) 50%, transparent 68%);
+  transition: --aura-now var(--dur-2) var(--ease), --aura-now-2 var(--dur-2) var(--ease);
 }
 /* needs-you outranks working, the same order STATE_PRIORITY gives them: a
    canvas where someone is being ASKED something outranks one merely busy.
@@ -2367,6 +2370,16 @@ body {
    led to the moving thing rather than hunting for it. */
 .link-layer__line[data-edge-activity="firing"],
 .link-layer__line[data-edge-activity="arrived"] { stroke: var(--iris); }
+@keyframes edge-current {
+  from { stroke-dashoffset: 34; }
+  to   { stroke-dashoffset: 0; }
+}
+.link-layer__line[data-edge-activity="firing"] {
+  stroke-width: 3px;
+  stroke-dasharray: 18 8 3 8;
+  animation: edge-current var(--dur-flow) linear 1;
+  filter: drop-shadow(0 0 5px var(--iris-dim));
+}
 /* The packet. No transition and no animation of its own: its POSITION is set
    per frame by the layer's one rAF from the reducer's t, so a CSS transition
    here would fight the frame it is already being given and smear it. */
@@ -2374,6 +2387,7 @@ body {
   fill: var(--iris);
   stroke: none;
 }
+.link-layer__packet-halo { fill: var(--iris-dim); stroke: var(--iris); stroke-width: 1px; }
 /* The flow arrowhead. A marker does not inherit the referencing path's
    stroke, so a lit line kept a --line-strong head until M232 gave it one of
    its own — a grey head on an accented line is the half-applied material
@@ -2393,6 +2407,8 @@ body {
    The `reduced-motion` golden is the proof. */
 @media (prefers-reduced-motion: reduce) {
   .link-layer__packet { display: none; }
+  .link-layer__packet-halo { display: none; }
+  .link-layer__line[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
   .link-layer__line[data-edge-activity="waiting"] { animation: none; }
 }
 .link-layer__badge--selected circle { stroke: var(--iris); }
@@ -2672,11 +2688,13 @@ body {
    nothing above the body is transformed reaches the arrival too. The rise
    stays; the scale is declined by name in the ledger. */
 @keyframes panel-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  0%   { opacity: 0; transform: translateY(18px); }
+  64%  { opacity: 1; transform: translateY(-3px); }
+  82%  { transform: translateY(1px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 .panel__motion--entering {
-  animation: panel-enter var(--dur-2) var(--ease) both;
+  animation: panel-enter var(--dur-spring) var(--ease) both;
 }
 
 /* M63. IRIS, not blue: blue is now only ever "working", and the interface's
@@ -4789,7 +4807,7 @@ body {
    other kind still uses is untouched. */
 .pf--kind-chat .panel__chrome { min-height: 30px; padding-block: var(--sp-1); }
 .chat__body { display: flex; flex-direction: column; min-height: 0; }
-.chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-3) var(--sp-4); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
+.chat__transcript { flex: 1; min-height: 0; overflow: auto; padding: var(--sp-5) var(--sp-6); font-family: var(--font-ui); font-size: var(--t-md); color: var(--fg); }
 /* M167. TURNS (the brief: the Claude desktop app's register). One column, no
    caps label, no rule between rows: the user's turn is a bubble on --bubble
    aligned right at ≤ 75%, the assistant's is unboxed prose at the measure. The
@@ -4801,7 +4819,7 @@ body {
 /* M111. A user turn is a BAND — a tinted, rounded row rather than a labelled
    column — so the eye finds the turns at a glance; the agent's answer stays
    on the ground, the loudest thing in the panel. */
-.chat__row--user { background: var(--bubble); border-radius: var(--r-lg); padding: var(--sp-3) var(--sp-5); margin: var(--sp-2) 0; max-width: 75%; align-self: flex-end; margin-left: auto; font-size: var(--t-base); line-height: var(--lh-body); }
+.chat__row--user { background: var(--bubble); border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-5); margin: var(--sp-4) 0; max-width: 75%; align-self: flex-end; margin-left: auto; font-size: var(--t-base); line-height: var(--lh-body); }
 .chat__row--assistant { max-width: var(--measure); font-size: var(--t-base); line-height: var(--lh-body); }
 .chat__when { position: absolute; right: var(--sp-2); top: var(--sp-1); font-size: var(--t-xs); color: var(--fg-4); opacity: 0; transition: opacity var(--dur-1) var(--ease); pointer-events: none; }
 .chat__row:hover .chat__when { opacity: 1; }
@@ -5955,8 +5973,8 @@ body {
    and anchored at the bottom, so expanding grows UPWARD over the canvas and
    pushes nothing — no panel box moves, no terminal refits, no SIGWINCH
    (M234; verify:panels:product pill.rects.1). Rest carries one state or a
-   glyph alone; the panel above it is the contextual layer. No shadow and no
-   blur: shadow.1 keeps --e-* for overlays, blur.1 keeps the HUD flat. */
+   glyph alone; the panel above it is the contextual overlay and wears --e-3.
+   The rest button stays flat and neither surface adds backdrop blur. */
 .command-pill {
   position: absolute; left: 50%; bottom: var(--sp-5); transform: translateX(-50%); z-index: 930;
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
@@ -5967,7 +5985,7 @@ body {
    the one object the panel above grows out of rather than a button that
    summons a second, disconnected surface. */
 .command-pill__rest {
-  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 30px;
+  display: inline-flex; align-items: center; gap: var(--sp-3); min-height: 34px;
   border: 1px solid var(--line-strong); border-radius: var(--r-full); padding: 0 var(--sp-5);
   background: var(--s-2); color: var(--fg-2); font: inherit; font-size: var(--t-xs); font-weight: 500; cursor: pointer;
   transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
@@ -5985,15 +6003,17 @@ body {
    rather than a second one appearing beside it. Transform + opacity only —
    see .palette's own note on why nothing here animates a layout property. */
 @keyframes pill-expand {
-  from { opacity: 0; transform: scale(.92) translateY(6px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+  0%   { opacity: 0; filter: blur(10px); transform: translateY(22px) scale(.88); }
+  58%  { opacity: 1; filter: blur(0); transform: translateY(-5px) scale(1.025); }
+  78%  { transform: translateY(2px) scale(.992); }
+  100% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
 }
 .command-pill__panel {
   display: flex; flex-direction: column; gap: var(--sp-4); width: 100%;
   border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: var(--sp-5);
   background: var(--s-2);
   transform-origin: bottom center;
-  animation: pill-expand var(--dur-2) var(--ease) both;
+  animation: pill-expand var(--dur-spring) var(--ease) both;
 }
 @media (prefers-reduced-motion: reduce) { .command-pill__panel { animation: none; } }
 
@@ -6680,3 +6700,90 @@ body {
 .sheet__button:hover:not(:disabled) { background: var(--s-3); }
 .sheet__button.is-primary { font-weight: 600; }
 .sheet__button.is-primary:disabled { background: color-mix(in srgb, var(--iris) 50%, var(--s-2)); color: var(--on-iris); border-color: transparent; box-shadow: none; cursor: not-allowed; }
+
+/* Material and interaction polish. Paint changes leave the canvas coordinate
+   system and terminal cell geometry alone. The shared durations also obey
+   the global reduced-motion override. */
+.command-pill__panel {
+  padding: var(--sp-6);
+  gap: var(--sp-5);
+  background: var(--s-3);
+  box-shadow: var(--e-3), var(--rim-top);
+}
+.command-pill__rest { font-size: var(--t-sm); box-shadow: var(--rim-top); }
+.command-pill[data-pill-expanded] .command-pill__rest { border-color: var(--iris); }
+.command-pill__input { padding: var(--sp-4) var(--sp-5); }
+.command-pill__destination { color: var(--fg-3); font-size: var(--t-sm); }
+.command-pill__action, .command-pill__row {
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--t-sm);
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.command-pill__row { border-color: transparent; background: transparent; border-radius: var(--r-md); }
+.command-pill__more-panel { animation: panel-enter var(--dur-2) var(--ease); }
+.command-pill__send:active:not(:disabled) { transform: scale(.96); }
+
+.chat__row--assistant { padding-block: var(--sp-4); }
+.chat__row--user { box-shadow: var(--rim-top); }
+/* Only the last user turn arrives; streaming text never restarts an animation
+   and a restored transcript does not cascade dozens of moving rows. */
+.chat__row--user:last-child { animation: panel-enter var(--dur-2) var(--ease); }
+.chat__composer {
+  margin: var(--sp-4) var(--sp-5) var(--sp-5);
+  padding: var(--sp-4);
+  transition: border-color var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease);
+}
+.chat__tool-state {
+  transition: color var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease);
+}
+.chat__tool-result, .chat__thinking-text { animation: panel-enter var(--dur-2) var(--ease); }
+.chat__row:focus-within .chat__when { opacity: 1; }
+
+/* The rim settles after a press without moving the frame or its hit targets. */
+.panel:has(.panel__chrome:active) { border-color: var(--line-strong); }
+.panel--selected:has(.panel__chrome:active) { border-color: var(--iris); }
+.panel--agent-wants-you:has(.panel__chrome:active) { border-color: var(--amber); }
+.pf::before { transition: box-shadow var(--dur-2) var(--ease); }
+/* Menu targets stay fixed from the first frame, including rapid clicks. */
+.pf__menu { animation: palette-scrim-in var(--dur-2) var(--ease); }
+
+/* M267. The frame carries the gesture's mass. During a move its world rect
+   still follows the cursor exactly; only the elevation changes. On release,
+   the existing motion wrapper translates through a short damped settle.
+   Neither rule changes width or height, so xterm never refits and no PTY sees
+   a resize. */
+.panel[data-panel-dragging] {
+  cursor: grabbing;
+  border-color: color-mix(in srgb, var(--iris) 64%, var(--frame-line));
+  box-shadow: 0 24px 58px -18px color-mix(in srgb, var(--iris) 28%, transparent), var(--lift), var(--rim-top);
+}
+.panel[data-panel-dragging] .panel__chrome { cursor: grabbing; }
+@keyframes panel-settle {
+  0%   { transform: translateY(0); }
+  28%  { transform: translateY(5px); }
+  54%  { transform: translateY(-2px); }
+  74%  { transform: translateY(1px); }
+  100% { transform: translateY(0); }
+}
+.panel[data-panel-settling] > .panel__motion { animation: panel-settle var(--dur-spring) var(--ease) both; }
+
+/* A live signal announces itself as a finite expanding wave, then returns to
+   the same calm dot. Re-entering working state restarts the wave because the
+   data tone changes; a long-running session does not animate forever. */
+@keyframes signal-live {
+  0%   { box-shadow: 0 0 0 0 var(--tone); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: none; }
+}
+.status-dot[data-tone="working"] { animation: signal-live var(--dur-breath) var(--ease) 3; }
+
+/* The rest control is the summoning point. Its one finite beacon overlaps the
+   panel's spring arrival, making the expanded surface read as energy pulled
+   out of the pill rather than an unrelated popover fading in. */
+@keyframes pill-beacon {
+  0%   { box-shadow: 0 0 0 0 var(--iris), var(--rim-top); }
+  55%  { box-shadow: 0 0 0 9px transparent, 0 0 28px var(--iris-dim), var(--rim-top); }
+  100% { box-shadow: 0 0 0 0 transparent, var(--rim-top); }
+}
+.command-pill[data-pill-expanded] .command-pill__rest { animation: pill-beacon var(--dur-spring) var(--ease) 1; }

@@ -510,7 +510,8 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M258. The navigation cluster — the minimap and the zoom HUD — floats over
   // the canvas as one instrument and wears the overlay elevation (the brief's
   // "stronger separation"); both are named here rather than let --e-3 loose.
-  const OVERLAY = /\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  // The expanded command pill overlays the canvas; its resting button stays flat.
+  const OVERLAY = /\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1185,7 +1186,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // not a duration; every other literal is a duration that escaped the tokens.
   const literal = [...bare.matchAll(/(?:transition|animation|transition-duration|transition-delay|animation-duration|animation-delay)\s*:[^;}]*?(\d*\.?\d+m?s)\b/g)].filter((m) => !/^(0m?s|\.01ms)$/.test(m[1])).map((m) => m[0].replace(/\s+/g, ' ').slice(0, 60))
   // A RISE, not a scale: a scale on .pf__motion (an ancestor of .pf__body) broke product annot.1 — declined in the ledger.
-  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(8px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-2\)/.test(r.body))
+  const spawn = /@keyframes\s+panel-enter\s*\{[^}]*translateY\(18px\)/.test(bare) && !/@keyframes\s+panel-enter\s*\{[^}]*scale\(/.test(bare) && all.some((r) => /\.panel__motion--entering/.test(r.sel) && /animation:[^;]*panel-enter[^;]*var\(--dur-spring\)/.test(r.body))
   const breath = /--dur-breath:\s*1\.2s/.test(bare)
   const names = [...bare.matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]).sort()
   // navgrid-cell-enter: the ⌘G grid's cells rising (M44) — an overlay's arrival, the palette's family.
@@ -1209,10 +1210,19 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // cluster-arrive: M262's first-start arrival — the card and its agent rise
   // in turn, ONCE, on the canvas flag that clears after it; a rise like
   // panel-enter's, never a scale.
-  const allowed = ['chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'pill-expand', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  const allowed = ['chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'panel-settle', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
-  ok('motion.2', 'every transition and animation duration is a token (--dur-1 / --dur-2 / --dur-breath), the panel arrival is a rise on --dur-2 (never a scale above .pf__body), and only the moments\' keyframes are declared',
+  ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
+}
+
+{
+  const drag = all.some((r) => /\.panel\[data-panel-dragging\]/.test(r.sel) && /box-shadow:/.test(r.body) && !/transform:/.test(r.body))
+  const settle = all.some((r) => /\.panel\[data-panel-settling\]\s*>\s*\.panel__motion/.test(r.sel) && /panel-settle/.test(r.body) && /var\(--dur-spring\)/.test(r.body))
+  const flow = all.some((r) => /data-edge-activity="firing"/.test(r.sel) && /stroke-dasharray:/.test(r.body) && /edge-current/.test(r.body))
+  const reduced = /prefers-reduced-motion:[^{]*reduce[\s\S]*?data-edge-activity="firing"[^}]*animation:\s*none/.test(bare)
+  ok('motion.material.1', 'drag weight changes paint only, release settles the motion wrapper, and firing edges carry a reduced-motion-safe traveling current',
+    drag && settle && flow && reduced, JSON.stringify({ drag, settle, flow, reduced }))
 }
 
 // drawer-motion.1. A compact drawer slides from ITS edge (nav from the left,

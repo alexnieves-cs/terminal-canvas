@@ -306,13 +306,22 @@ function LinkLayerImpl({
                uses — `bez()` at the reducer's t. No getPointAtLength, no
                laid-out DOM, and no clock in this component: the reducer owns
                the time and this owns the arithmetic. */
-            <circle
-              className="link-layer__packet"
-              data-link-packet={ek}
-              r="4"
-              cx={bez(act.t, s.x1, s.c1x, s.c2x, s.x2)}
-              cy={bez(act.t, s.y1, s.c1y, s.c2y, s.y2)}
-            />
+            <>
+              <circle
+                className="link-layer__packet-halo"
+                aria-hidden="true"
+                r="11"
+                cx={bez(act.t, s.x1, s.c1x, s.c2x, s.x2)}
+                cy={bez(act.t, s.y1, s.c1y, s.c2y, s.y2)}
+              />
+              <circle
+                className="link-layer__packet"
+                data-link-packet={ek}
+                r="4"
+                cx={bez(act.t, s.x1, s.c1x, s.c2x, s.x2)}
+                cy={bez(act.t, s.y1, s.c1y, s.c2y, s.y2)}
+              />
+            </>
           )}
           {(hovered === s.key || selectedKey === ek) && onRemove !== undefined && (
             <g

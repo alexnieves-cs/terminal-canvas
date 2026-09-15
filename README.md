@@ -1044,6 +1044,7 @@ price of not killing something.
 | M264 | feel reshape beat 2 — Fit task lights the sticky related lens; Fit task is the primary HUD zoom control; pill rest gains a task sentence when the lens is on — `docs/build-log/m264-task-stage.md` | ✅ done |
 | M265 | feel reshape beat 3 — one attention story: pill says chats need you; suppress duplicate in-app queue-count toasts when the pill already owns that sentence — `docs/build-log/m265-attention-story.md` | ✅ done |
 | M266 | feel reshape beat 4 — teammate · chat · session silhouettes: chat leads as Teammate · place; pill running copy says sessions — `docs/build-log/m266-silhouettes.md` | ✅ done |
+| M267 | motion and material — drag weight and settle, a travelling current on firing edges, the summoned command pill, aura depth, a living working signal; a new chat spawns clear of the navigation cluster — `docs/build-log/m267-motion-material.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

@@ -100,6 +100,51 @@ export function centreOn(vp: Viewport, rect: WorldRect, size: Size): Viewport {
   }
 }
 
+/** A canvas-local pixel rect — something painted OVER the canvas, not in the world. */
+export interface ScreenRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * Nudge a spawn point so a panel of `panel` screen size, centred on it, clears
+ * the chrome floating over the canvas's right and bottom edges — the minimap
+ * over the zoom pill, the command pill. A chat centred beneath that cluster put
+ * its Send button under the minimap, so the one door a beginner needs was
+ * covered (verify:panels:product onboarding.start.1).
+ *
+ * Each overlap moves the point along the CHEAPER axis (left or up), never so
+ * far that the panel crosses the host's own left or top margin; when neither
+ * axis has the room, it takes what room there is. A point already clear is
+ * returned untouched, so placement elsewhere never drifts. Two passes, because
+ * clearing one overlay can slide the panel into its neighbour.
+ */
+export function clearOfOverlays(centre: Point, panel: Size, obstacles: readonly ScreenRect[], margin = 16): Point {
+  let c = { x: centre.x, y: centre.y }
+  for (let pass = 0; pass < 2; pass++) {
+    for (const o of obstacles) {
+      const left = c.x - panel.width / 2
+      const top = c.y - panel.height / 2
+      const right = left + panel.width
+      const bottom = top + panel.height
+      if (right <= o.x - margin || left >= o.x + o.w + margin || bottom <= o.y - margin || top >= o.y + o.h + margin) continue
+      const dx = o.x - margin - right
+      const dy = o.y - margin - bottom
+      const roomX = Math.max(0, left - margin)
+      const roomY = Math.max(0, top - margin)
+      const fitsX = -dx <= roomX
+      const fitsY = -dy <= roomY
+      if (fitsX && (!fitsY || -dx <= -dy)) c = { x: c.x + dx, y: c.y }
+      else if (fitsY) c = { x: c.x, y: c.y + dy }
+      else if (roomX >= roomY) c = { x: c.x - roomX, y: c.y }
+      else c = { x: c.x, y: c.y - roomY }
+    }
+  }
+  return c
+}
+
 /**
  * The fourth camera verb (after resetViewport, worldCentre and centreOn),
  * factored out as pure math for the same reason those are: so the one fact

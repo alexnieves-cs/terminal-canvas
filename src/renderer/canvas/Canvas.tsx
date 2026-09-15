@@ -15,7 +15,7 @@ import { useKeyboardNav } from './useKeyboardNav'
 import { useHandoff } from './useHandoff'
 import { shellControl } from '../shell/shell-control'
 import { EdgeIndicators } from './EdgeIndicators'
-import { Minimap } from './MinimapOverlay'
+import { Minimap, MINIMAP_W, MINIMAP_H } from './MinimapOverlay'
 import { CardDetailContext } from '@renderer/components/card-detail-context'
 import { LinkLayer } from './LinkLayer'
 import { AgentLinkLayer } from './AgentLinkLayer'
@@ -58,7 +58,7 @@ import { arrangePlan, fitTaskTarget, FIT_TASK_NO_CONTEXT, missingSentence, showT
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
-  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect } from './viewport'
+  screenToWorld, worldToScreen, type Point, type Viewport, type WorldRect, hitTest, simplifyStroke, docFocusRect, clearOfOverlays, type ScreenRect } from './viewport'
 import { Marquee, type MarqueeScreenRect } from './MarqueeLayer'
 import { MergedLanes } from './MergedLanes'
 import { mergedLayout } from './merged-layout'
@@ -4638,11 +4638,42 @@ export function Canvas({
     const result = await window.canvas.agentSession.create({ id, cwd, sessionId, ...backend, ...identity, ...sandbox, ...(agentOptions === undefined ? {} : { agentOptions }), ...(opts?.appendSystemPrompt === undefined ? {} : { appendSystemPrompt: opts.appendSystemPrompt }) })
     if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     const title = (opts?.title ?? '').trim()
+    // The navigation cluster and the command pill float over the host's edges;
+    // a chat cascaded beneath them put its Send under the minimap, a covered
+    // door (onboarding.start.1). Measured at spawn, because which corner the
+    // cluster sits in is a breakpoint the CSS owns, not a constant here.
+    const clearOfChrome = (world: Point): Point => {
+      const host = hostRef.current
+      if (!host) return world
+      const hb = host.getBoundingClientRect()
+      const vp = viewportRef.current
+      const local = (r: DOMRect): ScreenRect => ({ x: r.left - hb.left, y: r.top - hb.top, w: r.width, h: r.height })
+      const obstacles = [...document.querySelectorAll<HTMLElement>('.minimap, .canvas-hud, .command-pill__rest')]
+        .map((n) => local(n.getBoundingClientRect()))
+        .filter((r) => r.w > 0 && r.h > 0)
+      // The minimap renders NOTHING on an empty canvas and arrives one render
+      // after this chat does — onto its Send. So when it is absent, reserve its
+      // box where the CSS will put it: stacked above the zoom pill on a wide
+      // window (styles.css, the navigation cluster), top-right otherwise, and
+      // nowhere in the compact layout, which hides it.
+      const hud = document.querySelector<HTMLElement>('.canvas-hud')
+      if (document.querySelector('.minimap') === null && document.querySelector('.shell[data-bp="compact"]') === null && hud !== null) {
+        const h = local(hud.getBoundingClientRect())
+        const w = MINIMAP_W + 2
+        const tall = MINIMAP_H + 2
+        obstacles.push(window.matchMedia('(min-width: 1280px)').matches
+          ? { x: h.x + h.w - w, y: h.y - 6 - tall, w, h: tall }
+          : { x: hb.width - 12 - w, y: 12, w, h: tall })
+      }
+      const screen = clearOfOverlays(worldToScreen(world, vp), { width: CHAT_W * vp.scale, height: CHAT_H * vp.scale }, obstacles)
+      return screenToWorld(screen, vp)
+    }
     setPanels((current) => {
       // M181. An EXACT placement when the caller asked for one (the starter,
       // which lays four examples out relative to this rect and so must know it
-      // without waiting for a commit); the cascade otherwise.
-      const centre = opts?.at ?? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current)
+      // without waiting for a commit); the cascade otherwise, kept clear of the
+      // chrome floating over the canvas.
+      const centre = opts?.at ?? clearOfChrome(cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), current))
       // M121. A routine's chat is MARKED, the way a lane is: the record is what
       // makes its next spawn carry ROUTINE_PROMPT again after a relaunch.
       const panel = makeChatPanel(id, centre, nextZ(current), { cwd: opts?.sandbox === true ? result.snapshot.cwd : cwd, sessionId, ...backend, ...identity, ...sandbox, ...(opts?.appendSystemPrompt === undefined || opts.teammateId !== undefined ? {} : { supervisor: true }), ...(opts?.routine === true ? { routine: true as const } : {}), ...(agentOptions === undefined ? {} : { agentOptions }) })
@@ -7328,7 +7359,7 @@ export function Canvas({
             gradient already painting on it. No second layer, no per-panel
             element, no layout read per frame — a light that cost frames
             during a drag would be a net loss whatever it looked like. */}
-        <div className="canvas__aura" aria-hidden="true" data-activity={canvasActivity} style={{ transform: `translate(${viewport.x * 0.12}px, ${viewport.y * 0.12}px)` }} />
+        <div className="canvas__aura" aria-hidden="true" data-activity={canvasActivity} style={{ transform: `translate(${viewport.x * 0.09}px, ${viewport.y * 0.09}px)` }} />
         <div
           className="world"
           data-detail={cardDetail}
