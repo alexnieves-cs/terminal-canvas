@@ -3341,6 +3341,11 @@ export function Canvas({
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
   }), [templateRows, presetRows])
+  const orchTemplates = useMemo(() => allTemplates(templateRows).map((t) => ({
+    id: t.id,
+    name: t.name,
+    poolKeys: t.nodes.filter((n) => n.kind === 'pool').map((n) => n.key)
+  })), [templateRows])
   const paletteApprovals = useMemo<ApprovalRow[]>(() => pendingApprovals.map((a) => {
     const panel = panelsRef.current.find((p) => p.rect.id === a.id)
     return { ...a, label: panel === undefined ? a.id : railLabel(panel, undefined) }
@@ -7314,6 +7319,7 @@ export function Canvas({
           <OrchestrationView
             panels={panels}
             workItems={workItems}
+            templates={orchTemplates}
             onJumpPanel={(id) => {
               chrome.setCenterView('canvas')
               paletteActions.goToPanel(id)
@@ -7322,6 +7328,8 @@ export function Canvas({
               chrome.setCenterView('canvas')
               goToWorkItem(id)
             }}
+            onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
+            onMarkDone={markDone}
           />
         </div>
       )}
