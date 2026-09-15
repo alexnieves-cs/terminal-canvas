@@ -70,6 +70,9 @@ export interface TerminalPanelProps {
   onOpenAsChat?: (id: string) => void
   /** True only for a newly created panel, never for an LOD remount. */
   entering: boolean
+  /** M272. Paint-only demote / wake; never a size change. */
+  demoting?: boolean
+  waking?: boolean
   /** Clears the one-shot entry marker once its wrapper animation finishes. */
   onEntryEnd: (id: string) => void
   /**
@@ -131,7 +134,7 @@ const CONFIRM_CLOSE_MS = 3000
 
 function TerminalPanelImpl({
   session, rect, z, title, cardDetail, flipped = false, selected, onSelect, onFocus, onBeginDrag, onSlotMount, onSlotUnmount,
-  onClose, glow, entering, onEntryEnd, readOnly = false, openingContext, onContextPasted,
+  onClose, glow, entering, demoting, waking, onEntryEnd, readOnly = false, openingContext, onContextPasted,
   onBeginLink, linkTarget, onOpenAsChat
 }: TerminalPanelProps): JSX.Element {
   const slotRef = useRef<HTMLDivElement>(null)
@@ -234,7 +237,7 @@ function TerminalPanelImpl({
       title={panelLabel}
       agentGlyph={session.spec.agent !== undefined}
       agentState={glow ? agentState : undefined}
-      motion={{ entering, onEntryEnd }}
+      motion={{ entering, demoting, waking, onEntryEnd }}
       onSelect={onSelect}
       onBeginDrag={onBeginDrag}
       onBeginLink={onBeginLink}
@@ -350,7 +353,9 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           agent state, cost) plus at most one line, so a dormant panel with
           no buffer has the same three tiers as a live one. The `tail` markup
           below stays byte-identical: three checks read .panel__card-idle. */}
-      {detail === 'block' ? (
+      {detail === 'cluster' ? (
+        <div className="panel__card-cluster" data-card-cluster data-tone={shown.tone} />
+      ) : detail === 'block' ? (
         <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block data-tone={shown.tone}>
           <span className="panel__card-block-title">{title}</span>
         </div>

@@ -1,7 +1,7 @@
 import { useLastLine } from '@renderer/session/last-line-store'
 import { memo, type JSX } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import type { RailGroupId, RailRow } from './rail-rows'
+import type { RailGroupId, RailRoleId, RailRow } from './rail-rows'
 import { shellControl } from './shell-control'
 import { Close, KIND_GLYPH, Lock, Pin, KindTerminal } from '@renderer/icons'
 import { panelState, toneIsAsleep, toneIsRunning, toneNeedsYou } from '@renderer/panels/panel-state'
@@ -19,7 +19,7 @@ export interface RailPanelRowProps {
   onClose: (id: string) => void
   /** M66. The merged view is read-only; its rows say so instead of starting. */
   merged?: boolean
-  groupId: RailGroupId
+  groupId: RailGroupId | RailRoleId
   hidden?: boolean
 }
 

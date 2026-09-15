@@ -319,21 +319,64 @@ export function chatHeaderLine(input: { cwd: string; branch?: string; backend: s
  * cannot keep); the group order is fixed here and nowhere else.
  */
 export type RailGroupId = 'agents' | 'files' | 'reviews' | 'work' | 'workflows' | 'capabilities'
-export interface RailGroup<R extends { state: { kind: string } }> { id: RailGroupId; label: string; rows: R[] }
+/** M270. Role-in-this-task headings when a task lens is on — not Integrations. */
+export type RailRoleId = 'doing' | 'review' | 'files' | 'watching' | 'related' | 'elsewhere'
+export interface RailGroup<R extends { state: { kind: string } }> { id: RailGroupId | RailRoleId; label: string; rows: R[] }
 
 const GROUP_ORDER: { id: RailGroupId; label: string; kinds: readonly string[] }[] = [
   { id: 'agents', label: 'Agents', kinds: ['terminal', 'chat'] },
   { id: 'files', label: 'Files', kinds: ['file', 'note', 'image', 'browser', 'memory'] },
   { id: 'reviews', label: 'Reviews', kinds: ['review'] },
   { id: 'work', label: 'Work', kinds: ['work', 'jira', 'github'] },
-  { id: 'workflows', label: 'Workflows', kinds: ['workflow', 'watcher'] },
+  { id: 'workflows', label: 'Runs & watchers', kinds: ['workflow', 'watcher'] },
   { id: 'capabilities', label: 'Capabilities', kinds: ['toolbox', 'skill'] }
 ]
+
+const ROLE_ORDER: { id: RailRoleId; label: string }[] = [
+  { id: 'doing', label: 'Doing this' },
+  { id: 'review', label: 'Review' },
+  { id: 'files', label: 'Files in this' },
+  { id: 'watching', label: 'Watching' },
+  { id: 'related', label: 'Linked' },
+  { id: 'elsewhere', label: 'Elsewhere' }
+]
+
+const FILE_KINDS = new Set(['file', 'note', 'image', 'browser', 'memory'])
+
+/**
+ * Role of a panel in the lit task. Kind still decides files/watchers among
+ * members (a file in-lane is Files, not Doing this). Non-members are
+ * Elsewhere. Browser, memory and watcher never land under Integrations.
+ */
+export function railRoleOf(
+  kind: string,
+  reason: 'card' | 'conversation' | 'lane-origin' | 'review' | 'in-lane' | 'linked' | 'same-run' | undefined
+): RailRoleId {
+  if (reason === undefined) return 'elsewhere'
+  if (reason === 'review' || kind === 'review') return 'review'
+  if (kind === 'watcher') return 'watching'
+  if (FILE_KINDS.has(kind)) return 'files'
+  if (reason === 'linked') return 'related'
+  return 'doing'
+}
 
 /** A future kind remains discoverable with capabilities until its product role is named. */
 const FALLBACK = GROUP_ORDER.findIndex((g) => g.id === 'capabilities')
 
-export function railGroups<R extends { state: { kind: string } }>(rows: readonly R[], kindOf: (row: R) => string = (r) => r.state.kind): RailGroup<R>[] {
+export function railGroups<R extends { state: { kind: string }; id?: string }>(
+  rows: readonly R[],
+  kindOf: (row: R) => string = (r) => r.state.kind,
+  roleOf?: (row: R) => RailRoleId
+): RailGroup<R>[] {
+  if (roleOf !== undefined) {
+    const out: RailGroup<R>[] = ROLE_ORDER.map((g) => ({ id: g.id, label: g.label, rows: [] }))
+    for (const row of rows) {
+      const role = roleOf(row)
+      const i = ROLE_ORDER.findIndex((g) => g.id === role)
+      out[i === -1 ? ROLE_ORDER.length - 1 : i].rows.push(row)
+    }
+    return out.filter((g) => g.rows.length > 0)
+  }
   const out: RailGroup<R>[] = GROUP_ORDER.map((g) => ({ id: g.id, label: g.label, rows: [] }))
   for (const row of rows) {
     const kind = kindOf(row)

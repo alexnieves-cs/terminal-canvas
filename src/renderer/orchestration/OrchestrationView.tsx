@@ -10,7 +10,7 @@ import {
   isChatPanel, isFilePanel, isTerminalPanel, isWatcherPanel, isWorkflowPanel, isWorkPanel
 } from '@renderer/panels/panels'
 import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-store'
-import { formatCpu, formatMemory, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
+import { formatCpu, formatMemory, getMachineCostSampledAt, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
 import { lastAssistantText } from '@renderer/chat/chat-store'
@@ -24,19 +24,35 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { railLabel } from '@renderer/shell/rail-rows'
 import { agentWord, TONE_WORKING } from '@renderer/panels/panel-state'
 import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, ProductMark, Search, Stop } from '@renderer/icons'
+import { EmptyState } from '@renderer/shell/EmptyState'
 import {
   buildOrchestrationSnapshot,
   filterActivity,
+  filterGraph,
   filterRoster,
   filterWorkItems,
   isoCubeFaces,
   isLiveRosterState,
+  orchActivityCoverage,
+  orchBlocker,
+  orchCommands,
+  orchEdgesFiredByPanel,
+  orchFilesCoverage,
+  orchKeysShouldHandle,
+  orchLogsCoverage,
+  orchMachineReadout,
+  orchMetricLens,
+  orchRosterStep,
+  orchTaskFrame,
   ORCH_ACTIVITY_SCOPES,
+  ORCH_EDGE_FIRE_MS,
   ORCH_GRAPH_SIZE,
   ORCH_MODES,
   ORCH_ROSTER_FILTERS,
   type OrchActivityScope,
+  type OrchCommandId,
   type OrchGraphNode,
+  type OrchMetricId,
   type OrchMode,
   type OrchPanelInput,
   type OrchRosterFilter,
@@ -64,6 +80,11 @@ export interface OrchestrationViewProps {
   onJumpWorkItem: (id: string) => void
   onInterrupt?: (id: string) => void
   onMarkDone?: (itemId: string) => void
+  onFocusRelated?: (panelId: string) => void
+  onOpenFiles?: () => void
+  onShowCanvas?: () => void
+  /** D08 member panel ids for the focused board task; empty/absent = no frame. */
+  taskMemberIds?: readonly string[]
 }
 
 type SideTab = 'activity' | 'terminal' | 'files'
@@ -195,12 +216,15 @@ function IsoCube(props: {
 }): JSX.Element {
   const { node, selected, onSelect, onJump } = props
   const faces = isoCubeFaces(0, 0, node.size)
-  const synthetic = node.id === '__hub__'
+  const synthetic = node.synthetic === true || node.id === '__hub__'
+  const live = isLiveRosterState(node.state)
+  const needs = node.state === 'wants-you'
   return (
     <g
-      className={`orch__cube${node.hub ? ' orch__cube--hub' : ''}${selected ? ' orch__cube--on' : ''}${isLiveRosterState(node.state) ? ' orch__cube--live' : ''}`}
+      className={`orch__cube${node.hub ? ' orch__cube--hub' : ''}${selected ? ' orch__cube--on' : ''}${live ? ' orch__cube--live' : ''}${needs ? ' orch__cube--needs' : ''}`}
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: synthetic ? 'default' : 'pointer' }}
+      data-tone={toneFromState(node.state)}
       onClick={() => { if (!synthetic) onSelect(node.id) }}
       onDoubleClick={() => { if (!synthetic) onJump(node.id) }}
     >
@@ -216,10 +240,12 @@ function GraphBoard(props: {
   nodes: readonly OrchGraphNode[]
   edges: readonly { from: string; to: string; authored?: boolean }[]
   selectedId: string | null
+  selectedIds: readonly string[]
+  firingKeys: ReadonlySet<string>
   onSelect: (id: string) => void
   onJump: (id: string) => void
 }): JSX.Element {
-  const { nodes, edges, selectedId, onSelect, onJump } = props
+  const { nodes, edges, selectedId, selectedIds, firingKeys, onSelect, onJump } = props
   const [cam, setCam] = useState({ x: 0, y: 0, k: 1 })
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
 
@@ -283,11 +309,13 @@ function GraphBoard(props: {
           const from = nodes.find((n) => n.id === e.from)
           const to = nodes.find((n) => n.id === e.to)
           if (!from || !to) return null
+          const firing = firingKeys.has(`${e.from}:${e.to}`) || firingKeys.has(`${e.to}:${e.from}`)
           return (
             <line
               key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}`}
+              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}`}
+              data-edge-activity={firing ? 'firing' : undefined}
             />
           )
         })}
@@ -295,7 +323,7 @@ function GraphBoard(props: {
           <IsoCube
             key={n.id}
             node={n}
-            selected={selectedId === n.id}
+            selected={selectedId === n.id || selectedIds.includes(n.id)}
             onSelect={onSelect}
             onJump={onJump}
           />
@@ -338,20 +366,30 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds } = props
   const [tick, setTick] = useState(0)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tab, setTab] = useState<SideTab>('activity')
   const [mode, setMode] = useState<OrchMode>('dev')
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
   const [query, setQuery] = useState('')
+  const [metric, setMetric] = useState<OrchMetricId | null>(null)
   const [activityScope, setActivityScope] = useState<OrchActivityScope>('live')
   const [pipelineStage, setPipelineStage] = useState<WorkItemState | null>(null)
   const [cpuHistory, setCpuHistory] = useState<number[]>([])
   const [memHistory, setMemHistory] = useState<number[]>([])
   const [openedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
+  const [frameTask, setFrameTask] = useState(true)
+  const [edgeFires, setEdgeFires] = useState<Map<string, number>>(() => new Map())
+  const [freshNeeds, setFreshNeeds] = useState<Set<string>>(() => new Set())
+  const [stageShift, setStageShift] = useState<{ from: WorkItemState; to: WorkItemState; at: number } | null>(null)
+  const knownNeedsRef = useRef<Set<string>>(new Set())
+  const prevStageRef = useRef<WorkItemState | undefined>(undefined)
+  const visibleRosterRef = useRef<OrchRosterRow[]>([])
+  const selectedIdsRef = useRef<string[]>([])
   const total = useMachineCostTotal()
+  const selectedId = selectedIds[selectedIds.length - 1] ?? null
   const selectedCost = useMachineCost(selectedId ?? '')
   const selectedLive = useLiveSession(selectedId ?? '')
 
@@ -365,9 +403,27 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     const title = panel ? railLabel(panel, undefined) : panelId
     pushOrchActivity(agentTransitionActivity(panelId, title, state, prev, Date.now()))
     setTick((n) => n + 1)
+    if (prev !== state) {
+      const at = Date.now()
+      setEdgeFires((cur) => {
+        const next = new Map(cur)
+        for (const key of orchEdgesFiredByPanel(
+          // Snapshot edges are rebuilt below; fire any live graph edge that
+          // still names this panel — parent re-filters by time each tick.
+          liveEdgesRef.current,
+          panelId
+        )) next.set(key, at)
+        return next
+      })
+    }
   }), [panels])
 
+  const liveEdgesRef = useRef<{ from: string; to: string }[]>([])
+
   useEffect(() => {
+    const sampledAt = getMachineCostSampledAt()
+    const panelCount = listMachineCosts().length
+    if (sampledAt === null || panelCount <= 0) return
     setCpuHistory((h) => [...h, total.cpuPercent].slice(-24))
     setMemHistory((h) => [...h, total.memoryBytes / (1024 * 1024)].slice(-24))
   }, [total.cpuPercent, total.memoryBytes])
@@ -386,24 +442,61 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
       ...(w.note !== undefined ? { note: w.note } : {}),
       ...(w.key !== undefined ? { tags: [w.key] } : {})
     })),
-    machine: { cpuPercent: total.cpuPercent, memoryBytes: total.memoryBytes },
+    machine: {
+      cpuPercent: total.cpuPercent,
+      memoryBytes: total.memoryBytes,
+      ...(getMachineCostSampledAt() !== null ? { sampledAt: getMachineCostSampledAt() as number } : {})
+    },
     hour: new Date().getHours(),
     ...(displayName !== undefined ? { displayName } : {})
   }), [panels, workItems, templates, total.cpuPercent, total.memoryBytes, displayName, tick, now])
 
+  liveEdgesRef.current = liveSnap.graph.edges
+
+  const members = frameTask && taskMemberIds !== undefined && taskMemberIds.length > 0
+    ? taskMemberIds
+    : null
+  const framed = orchTaskFrame({
+    graph: liveSnap.graph,
+    roster: liveSnap.roster,
+    files: liveSnap.files,
+    memberIds: members
+  })
+
   const visibleRoster = useMemo(
-    () => filterRoster(liveSnap.roster, rosterFilter, query),
-    [liveSnap.roster, rosterFilter, query]
+    () => filterRoster(framed.roster, rosterFilter, query),
+    [framed.roster, rosterFilter, query]
   )
+  visibleRosterRef.current = visibleRoster
+  selectedIdsRef.current = selectedIds
+
+  const lensIds = useMemo(() => new Set(visibleRoster.map((r) => r.id)), [visibleRoster])
+  const visibleGraph = useMemo(
+    () => filterGraph(framed.graph, lensIds, { keepSyntheticHub: !framed.framed }),
+    [framed.graph, framed.framed, lensIds]
+  )
+  const visibleFiles = framed.files
 
   const livePanelIds = useMemo(
     () => liveSnap.roster.filter((r) => isLiveRosterState(r.state)).map((r) => r.id),
     [liveSnap.roster]
   )
 
+  const activityPanelIds = useMemo(() => {
+    if (framed.framed) return framed.roster.map((r) => r.id)
+    if (rosterFilter === 'all' && query.trim() === '') return null
+    return visibleRoster.map((r) => r.id)
+  }, [framed.framed, framed.roster, rosterFilter, query, visibleRoster])
+
   const filteredActivity = useMemo(
-    () => filterActivity(activity, { selectedId, scope: activityScope, livePanelIds, now }),
-    [activity, selectedId, activityScope, livePanelIds, now]
+    () => filterActivity(activity, {
+      selectedId: selectedIds.length === 1 ? selectedId : null,
+      scope: activityScope,
+      livePanelIds,
+      now,
+      ...(activityPanelIds !== null ? { panelIds: activityPanelIds } : {})
+    }),
+    [activity, selectedIds.length, selectedId, activityScope, livePanelIds, now, activityPanelIds]
   )
 
   const selectedRow = liveSnap.roster.find((r) => r.id === selectedId) ?? null
@@ -435,18 +528,163 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }, [liveSnap.roster, total.cpuPercent, total.memoryBytes, tick])
 
   const jump = useCallback((id: string): void => { onJumpPanel(id) }, [onJumpPanel])
-  const select = useCallback((id: string): void => {
-    setSelectedId((cur) => cur === id ? null : id)
+  const select = useCallback((id: string, opts?: { additive?: boolean; range?: boolean }): void => {
+    setFreshNeeds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    setSelectedIds((cur) => {
+      if (opts?.range === true && cur.length > 0) {
+        const rows = visibleRosterRef.current
+        const from = rows.findIndex((r) => r.id === cur[cur.length - 1])
+        const to = rows.findIndex((r) => r.id === id)
+        if (from >= 0 && to >= 0) {
+          const lo = Math.min(from, to)
+          const hi = Math.max(from, to)
+          return rows.slice(lo, hi + 1).map((r) => r.id)
+        }
+      }
+      if (opts?.additive === true) {
+        return cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+      }
+      return cur.length === 1 && cur[0] === id ? [] : [id]
+    })
   }, [])
+
+  useEffect(() => {
+    const cur = new Set(liveSnap.roster.filter((r) => r.state === 'wants-you').map((r) => r.id))
+    const known = knownNeedsRef.current
+    const added: string[] = []
+    for (const id of cur) {
+      if (!known.has(id)) added.push(id)
+    }
+    knownNeedsRef.current = cur
+    if (added.length === 0) return
+    setFreshNeeds((prev) => {
+      const next = new Set(prev)
+      for (const id of added) next.add(id)
+      return next
+    })
+  }, [liveSnap.roster])
+
+  useEffect(() => {
+    const cur = liveSnap.task?.state
+    const prev = prevStageRef.current
+    if (prev !== undefined && cur !== undefined && prev !== cur) {
+      setStageShift({ from: prev, to: cur, at: Date.now() })
+    }
+    prevStageRef.current = cur
+  }, [liveSnap.task?.state])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const isArrow = event.key === 'ArrowDown' || event.key === 'ArrowUp'
+      const isEnter = event.key === 'Enter'
+      const isEscape = event.key === 'Escape'
+      if (!isArrow && !isEnter && !isEscape) return
+      const target = event.target instanceof Element ? event.target : null
+      if (!orchKeysShouldHandle(target)) return
+      if (isEscape && target !== null && target.closest('input, textarea, select')) return
+      const rows = visibleRosterRef.current
+      const current = selectedIdsRef.current
+      const primary = current[current.length - 1] ?? null
+      if (isEscape) {
+        event.preventDefault()
+        setSelectedIds([])
+        setFreshNeeds(new Set())
+        return
+      }
+      if (isEnter) {
+        if (primary === null) return
+        event.preventDefault()
+        jump(primary)
+        return
+      }
+      event.preventDefault()
+      const next = orchRosterStep(rows, primary, event.key === 'ArrowDown' ? 1 : -1)
+      if (next === null) return
+      select(next, { range: event.shiftKey })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [jump, select])
+
+  const applyMetric = (id: OrchMetricId): void => {
+    const next = orchMetricLens(id, metric)
+    setMetric(next.metric)
+    setRosterFilter(next.rosterFilter)
+    setQuery(next.query)
+    setMode(next.mode)
+  }
+
+  const firingKeys = useMemo(() => {
+    const out = new Set<string>()
+    for (const [key, at] of edgeFires) {
+      if (now - at >= 0 && now - at < ORCH_EDGE_FIRE_MS) out.add(key)
+    }
+    return out
+  }, [edgeFires, now])
+
+  const machineReadout = orchMachineReadout({
+    sampledAt: getMachineCostSampledAt(),
+    now,
+    cpuPercent: total.cpuPercent,
+    memoryBytes: total.memoryBytes,
+    panelCount: listMachineCosts().length
+  })
 
   const clock = new Date(now)
   const clockLabel = `${String(clock.getHours()).padStart(2, '0')}:${String(clock.getMinutes()).padStart(2, '0')}:${String(clock.getSeconds()).padStart(2, '0')}`
   const openSecs = Math.max(0, Math.floor((now - openedAt) / 1000))
   const openLabel = `${String(Math.floor(openSecs / 3600)).padStart(2, '0')}:${String(Math.floor((openSecs % 3600) / 60)).padStart(2, '0')}:${String(openSecs % 60).padStart(2, '0')}`
 
-  const selectedPanel = selectedRow === null ? undefined : panels.find((p) => p.rect.id === selectedRow.id)
-  const selectedCanStop = selectedRow !== null && selectedPanel !== undefined && isChatPanel(selectedPanel)
-    && (selectedRow.state === 'busy' || selectedRow.state === 'starting' || selectedRow.state === 'wants-you')
+  const canInterruptId = (id: string): boolean => {
+    const row = liveSnap.roster.find((r) => r.id === id)
+    const panel = panels.find((p) => p.rect.id === id)
+    return row !== undefined && panel !== undefined && isChatPanel(panel)
+      && (row.state === 'busy' || row.state === 'starting' || row.state === 'wants-you')
+  }
+  const selectedCanStop = selectedRow !== null && canInterruptId(selectedRow.id)
+  const canInterruptAll = selectedIds.length > 0 && selectedIds.every(canInterruptId) && onInterrupt !== undefined
+  const canJumpAll = selectedIds.length > 0 && selectedIds.every((id) => id !== '__hub__' && liveSnap.roster.some((r) => r.id === id))
+  const canMarkDone = liveSnap.task !== null && liveSnap.task.state !== WORK_ITEM_STATES[3] && onMarkDone !== undefined
+  const canFocusRelated = selectedIds.length === 1 && selectedRow !== null && onFocusRelated !== undefined
+  const commands = orchCommands({
+    selectedIds,
+    canInterrupt: canInterruptAll,
+    canJump: canJumpAll,
+    canMarkDone,
+    canFocusRelated,
+    canOpenFiles: visibleFiles.length > 0 && onOpenFiles !== undefined
+  })
+  const runCommand = (id: OrchCommandId): void => {
+    if (id === 'interrupt' && onInterrupt !== undefined) {
+      for (const pid of selectedIds) if (canInterruptId(pid)) onInterrupt(pid)
+    } else if (id === 'jump' && selectedId !== null) {
+      jump(selectedId)
+    } else if (id === 'mark-done' && liveSnap.task !== null && onMarkDone !== undefined) onMarkDone(liveSnap.task.id)
+    else if (id === 'focus-related' && selectedRow !== null && onFocusRelated !== undefined) onFocusRelated(selectedRow.id)
+    else if (id === 'open-files' && onOpenFiles !== undefined) onOpenFiles()
+  }
+
+  const waitingRow = liveSnap.roster.find((r) => r.state === 'wants-you')
+  const reviewItem = workItems.find((w) => w.state === WORK_ITEM_STATES[2])
+  const runningRow = liveSnap.roster.find((r) => r.state === 'busy' || r.state === 'starting')
+  const queuedItem = workItems.find((w) => w.state === WORK_ITEM_STATES[0])
+  const blocker = orchBlocker({
+    waiting: liveSnap.counts.waiting,
+    ...(waitingRow !== undefined ? { waitingTitle: waitingRow.title } : {}),
+    reviewable: workItems.filter((w) => w.state === WORK_ITEM_STATES[2]).length,
+    ...(reviewItem !== undefined ? { reviewTitle: reviewItem.title } : {}),
+    running: liveSnap.counts.activeAgents,
+    ...(runningRow !== undefined ? { runningTitle: runningRow.title } : {}),
+    queued: workItems.filter((w) => w.state === WORK_ITEM_STATES[0]).length,
+    ...(queuedItem !== undefined ? { queuedTitle: queuedItem.title } : {})
+  })
+  const stageShiftLive = stageShift !== null && now - stageShift.at < ORCH_EDGE_FIRE_MS
 
   const outputCommand = selectedLive?.currentCommand || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.command : undefined)
   const outputCwd = selectedLive?.cwd || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.cwd : undefined)
@@ -471,34 +709,58 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             </div>
           </div>
         </div>
-        <div className="orch__metrics">
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.activeAgents > 0 ? TONE_WORKING : 'idle'} aria-pressed={rosterFilter === 'running'} {...shellControl(() => setRosterFilter((f) => f === 'running' ? 'all' : 'running'))}>
+        <div className="orch__metrics" data-orch-density="rest">
+          <button type="button" className="orch__metric" data-tone={liveSnap.counts.activeAgents > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'agents'} {...shellControl(() => applyMetric('agents'))}>
             <span className="orch__metric-label">Active agents</span>
             <span className="orch__metric-value">{liveSnap.counts.activeAgents}</span>
             <span className="orch__metric-sub">{liveSnap.counts.activeAgents > 0 ? agentWord('busy').word : agentWord('idle').word}</span>
           </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.tasksInProgress > 0 ? TONE_WORKING : 'idle'} aria-pressed={mode === 'pipeline'} {...shellControl(() => setMode((m) => m === 'pipeline' ? 'dev' : 'pipeline'))}>
+          <button type="button" className="orch__metric" data-tone={liveSnap.counts.tasksInProgress > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'tasks'} {...shellControl(() => applyMetric('tasks'))}>
             <span className="orch__metric-label">Tasks in progress</span>
             <span className="orch__metric-value">{liveSnap.counts.tasksInProgress}</span>
             <span className="orch__metric-sub">{liveSnap.counts.tasksInProgress > 0 ? 'In progress' : 'Clear'}</span>
           </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.watchersRunning > 0 ? TONE_WORKING : 'idle'} {...shellControl(() => { setQuery('watcher'); setRosterFilter('running') })}>
+          <button type="button" className="orch__metric" data-tone={liveSnap.counts.watchersRunning > 0 ? TONE_WORKING : 'idle'} aria-pressed={metric === 'watchers'} {...shellControl(() => applyMetric('watchers'))}>
             <span className="orch__metric-label">Watchers</span>
             <span className="orch__metric-value">{liveSnap.counts.watchersRunning}</span>
             <span className="orch__metric-sub">{liveSnap.counts.watchersRunning > 0 ? agentWord('busy').word : agentWord('idle').word}</span>
           </button>
-          <button type="button" className="orch__metric" data-tone={liveSnap.counts.waiting > 0 ? 'needs-you' : 'idle'} aria-pressed={rosterFilter === 'needs-you'} {...shellControl(() => setRosterFilter((f) => f === 'needs-you' ? 'all' : 'needs-you'))}>
+          <button type="button" className="orch__metric" data-tone={liveSnap.counts.waiting > 0 ? 'needs-you' : 'idle'} aria-pressed={metric === 'waiting'} {...shellControl(() => applyMetric('waiting'))}>
             <span className="orch__metric-label">Waiting on you</span>
             <span className="orch__metric-value">{liveSnap.counts.waiting}</span>
             <span className="orch__metric-sub">{liveSnap.counts.waiting > 0 ? 'Attention' : 'Clear'}</span>
           </button>
         </div>
+        {blocker !== null && (
+          <p className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</p>
+        )}
+        {commands.length > 0 && (
+          <div className="orch__commands" data-orch-commands data-orch-density="contextual" role="toolbar" aria-label="Selection commands">
+            {commands.map((cmd) => (
+              <button
+                key={cmd.id}
+                type="button"
+                className="orch__command"
+                data-orch-command={cmd.id}
+                title={cmd.label}
+                {...shellControl(() => runCommand(cmd.id))}
+              >
+                {cmd.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="orch__body">
         <aside className="orch__roster" aria-label="Agent pool">
           <div className="orch__section-head">
             <div className="orch__section-title">Agent pool</div>
+            {taskMemberIds !== undefined && taskMemberIds.length > 0 && (
+              <button type="button" className="orch__mini" {...shellControl(() => setFrameTask((v) => !v))}>
+                {frameTask ? 'Show all' : 'This task'}
+              </button>
+            )}
             <label className="orch__filter">
               <span className="orch__sr">Filter agents</span>
               <select
@@ -523,17 +785,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             />
           </label>
           {visibleRoster.length === 0 ? (
-            <p className="orch__empty">No agents or watchers match this filter. Create a chat or terminal from the canvas.</p>
+            <EmptyState id="orch-roster" onVerb={onShowCanvas} />
           ) : (
-            <ul className="orch__roster-list">
+            <ul className="orch__roster-list" data-orch-roster>
               {visibleRoster.map((row) => (
                 <li key={row.id}>
                   <button
                     type="button"
-                    className={`orch__roster-row${selectedId === row.id ? ' orch__roster-row--on' : ''}`}
+                    className={`orch__roster-row${selectedIds.includes(row.id) ? ' orch__roster-row--on' : ''}`}
                     data-tone={row.tone}
-                    aria-pressed={selectedId === row.id}
-                    {...shellControl(() => select(row.id))}
+                    data-attention-new={freshNeeds.has(row.id) ? '' : undefined}
+                    aria-pressed={selectedIds.includes(row.id)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      select(row.id, { additive: e.metaKey || e.ctrlKey, range: e.shiftKey })
+                    }}
                     onDoubleClick={() => jump(row.id)}
                   >
                     <span className="orch__dot status-dot" data-tone={row.tone} aria-hidden="true" />
@@ -574,10 +841,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           <div className="orch__graph-wrap">
             {mode === 'dev' ? (
               <GraphBoard
-                nodes={liveSnap.graph.nodes}
-                edges={liveSnap.graph.edges}
+                nodes={visibleGraph.nodes}
+                edges={visibleGraph.edges}
                 selectedId={selectedId}
-                onSelect={select}
+                selectedIds={selectedIds}
+                firingKeys={firingKeys}
+                onSelect={(id) => select(id)}
                 onJump={jump}
               />
             ) : (
@@ -587,8 +856,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     <button
                       key={stage.state}
                       type="button"
-                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}`}
+                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}${liveSnap.task?.state === stage.state ? ' orch__wp--current' : ''}${stageShiftLive && stageShift?.to === stage.state ? ' orch__wp--shift' : ''}`}
                       data-tone={stage.state === WORK_ITEM_STATES[1] ? TONE_WORKING : stage.state === WORK_ITEM_STATES[2] ? 'starting' : stage.state === WORK_ITEM_STATES[3] ? 'idle' : 'kind'}
+                      data-orch-stage-current={liveSnap.task?.state === stage.state ? '' : undefined}
+                      data-orch-stage-shift={stageShiftLive && stageShift?.to === stage.state ? '' : undefined}
                       aria-pressed={pipelineStage === stage.state}
                       {...shellControl(() => setPipelineStage((cur) => cur === stage.state ? null : stage.state))}
                     >
@@ -600,14 +871,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 </div>
                 <ul className="orch__pipeline-items">
                   {stageItems.length === 0 ? (
-                    <li className="orch__empty">No tasks in this stage. Start work from the board or palette.</li>
+                    <li><EmptyState id="orch-pipeline" onVerb={onShowCanvas} /></li>
                   ) : stageItems.map((item) => (
                     <li key={item.id}>
                       <button
                         type="button"
                         className="orch__pipeline-item"
                         {...shellControl(() => {
-                          if (item.panelId) { setSelectedId(item.panelId); onJumpWorkItem(item.id) }
+                          if (item.panelId) { select(item.panelId); onJumpWorkItem(item.id) }
                           else onJumpWorkItem(item.id)
                         })}
                       >
@@ -637,7 +908,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 type="button"
                 className="orch__float orch__float--term"
                 title="Jump to terminal"
-                {...shellControl(() => { setSelectedId(liveSnap.terminalSnippet!.panelId); setTab('terminal') })}
+                {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); setTab('terminal') })}
                 onDoubleClick={() => jump(liveSnap.terminalSnippet!.panelId)}
               >
                 <span className="orch__float-title">{liveSnap.terminalSnippet.title}</span>
@@ -667,19 +938,29 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           </div>
 
           <div className="orch__bottom">
-            <div className="orch__perf" aria-label="System performance">
+            <div className="orch__perf" aria-label="System performance" data-orch-density="detail">
               <div className="orch__section-title">System</div>
-              <p className="orch__caption">From this machine&apos;s process table</p>
+              <p className="orch__caption">{
+                machineReadout.kind === 'none' || machineReadout.kind === 'empty'
+                  ? 'No process sample yet'
+                  : machineReadout.kind === 'stale'
+                    ? `Last sample ${machineReadout.age}`
+                    : 'From this machine\'s process table'
+              }</p>
               <div className="orch__perf-grid">
                 <div className="orch__perf-card">
                   <span className="orch__perf-label">CPU</span>
-                  <span className="orch__perf-value">{formatCpu(total.cpuPercent)}</span>
-                  <Sparkline values={cpuHistory} />
+                  <span className="orch__perf-value">{machineReadout.cpu}</span>
+                  {machineReadout.kind === 'live' || machineReadout.kind === 'stale'
+                    ? <Sparkline values={cpuHistory} />
+                    : <Sparkline values={[]} />}
                 </div>
                 <div className="orch__perf-card">
                   <span className="orch__perf-label">Memory</span>
-                  <span className="orch__perf-value">{formatMemory(total.memoryBytes)}</span>
-                  <Sparkline values={memHistory} tone="var(--green)" />
+                  <span className="orch__perf-value">{machineReadout.memory}</span>
+                  {machineReadout.kind === 'live' || machineReadout.kind === 'stale'
+                    ? <Sparkline values={memHistory} tone="var(--green)" />
+                    : <Sparkline values={[]} />}
                 </div>
               </div>
               {computeBlocks.length > 0 && (
@@ -703,7 +984,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <div className="orch__task-panel">
               <div className="orch__section-title">Current task</div>
               {liveSnap.task === null ? (
-                <p className="orch__empty">No task is in progress or in review. Start work from the board or palette.</p>
+                <EmptyState id="orch-task" onVerb={onShowCanvas} />
               ) : (
                 <div className="orch__task-card">
                   <button type="button" className="orch__task-main" {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}>
@@ -735,7 +1016,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <div className="orch__selected" aria-label="Selected agent">
               <div className="orch__section-title">Selected</div>
               {selectedRow === null ? (
-                <p className="orch__empty">Select an agent in the pool or graph to see its process cost and jump to it.</p>
+                <EmptyState id="orch-selected" />
               ) : (
                 <div className="orch__selected-body">
                   <span className="orch__selected-title">{selectedRow.title}</span>
@@ -755,16 +1036,16 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
 
         <aside className="orch__side" aria-label="Activity">
           <div className="orch__tabs" role="tablist">
-            {(['activity', 'terminal', 'files'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                className={`orch__tab${tab === t ? ' orch__tab--on' : ''}`}
-                {...shellControl(() => setTab(t))}
-              >{t === 'activity' ? 'Activity' : t === 'terminal' ? 'Terminal' : 'Files'}</button>
-            ))}
+                {(['activity', 'terminal', 'files'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t}
+                  className={`orch__tab${tab === t ? ' orch__tab--on' : ''}`}
+                  {...shellControl(() => setTab(t))}
+                >{t === 'activity' ? 'Activity' : t === 'terminal' ? 'Logs' : 'Files'}</button>
+              ))}
           </div>
           {tab === 'activity' && (
             <>
@@ -779,9 +1060,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   {ORCH_ACTIVITY_SCOPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </label>
+              <p className="orch__caption">{orchActivityCoverage(activityScope)}</p>
               <ul className="orch__activity" aria-label="Activity feed">
                 {filteredActivity.length === 0 ? (
-                  <li className="orch__empty">Agent state changes will appear here.</li>
+                  <li><EmptyState id="orch-activity" /></li>
                 ) : filteredActivity.map((e) => (
                   <li key={e.id}>
                     <button
@@ -791,7 +1073,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       disabled={e.panelId === undefined}
                       {...shellControl(() => {
                         if (!e.panelId) return
-                        setSelectedId(e.panelId)
+                        select(e.panelId)
                       })}
                       onDoubleClick={() => { if (e.panelId) jump(e.panelId) }}
                     >
@@ -806,9 +1088,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             </>
           )}
           {tab === 'terminal' && (
-            <div className="orch__term-tab">
+            <div className="orch__term-tab" data-orch-density="detail">
+              <p className="orch__caption">{orchLogsCoverage()}</p>
               {outputPanelId === null ? (
-                <p className="orch__empty">No live command reported yet (tmux sessions publish cwd and command). Select a terminal to tail its scrollback.</p>
+                <EmptyState id="orch-terminal" onVerb={onShowCanvas} />
               ) : (
                 <>
                   <button
@@ -828,10 +1111,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             </div>
           )}
           {tab === 'files' && (
+            <>
+              <p className="orch__caption">{orchFilesCoverage()}</p>
             <ul className="orch__activity">
-              {liveSnap.files.length === 0 ? (
-                <li className="orch__empty">No file panels on this canvas. Drop a file onto the canvas or open one from the palette.</li>
-              ) : liveSnap.files.map((f) => {
+              {visibleFiles.length === 0 ? (
+                <li><EmptyState id="orch-files" onVerb={onShowCanvas} /></li>
+              ) : visibleFiles.map((f) => {
                 const shown = displayPath(f.path)
                 return (
                   <li key={f.id}>
@@ -839,7 +1124,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       type="button"
                       className={`orch__activity-row${selectedId === f.id ? ' orch__roster-row--on' : ''}`}
                       title={shown.full}
-                      {...shellControl(() => { setSelectedId(f.id); jump(f.id) })}
+                      {...shellControl(() => { select(f.id); jump(f.id) })}
                     >
                       <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
                       <span className="orch__activity-title">{f.title}</span>
@@ -848,21 +1133,8 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   </li>
                 )
               })}
-              {liveSnap.workflows.map((w) => (
-                <li key={w.id}>
-                  <button
-                    type="button"
-                    className="orch__activity-row"
-                    data-tone={w.live ? TONE_WORKING : 'idle'}
-                    {...shellControl(() => jump(w.id))}
-                  >
-                    <span className="orch__dot status-dot" data-tone={w.live ? TONE_WORKING : 'idle'} aria-hidden="true" />
-                    <span className="orch__activity-title">{w.title}</span>
-                    <span className="orch__activity-detail">{w.live ? 'pool live' : 'workflow'}</span>
-                  </button>
-                </li>
-              ))}
             </ul>
+            </>
           )}
         </aside>
       </div>

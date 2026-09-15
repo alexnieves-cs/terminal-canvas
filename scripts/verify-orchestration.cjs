@@ -181,6 +181,127 @@ ok('orch.pipeline.2 stage filter returns only that board state; null passes all 
   workFilter([{ id: 'a', title: 't', state: 'todo' }, { id: 'b', title: 'u', state: 'done' }], 'todo').length === 1 &&
   workFilter([{ id: 'a', title: 't', state: 'todo' }], null).length === 1)
 
+const nameless = build({
+  panels: [],
+  workItems: [],
+  machine: { cpuPercent: 0, memoryBytes: 0 },
+  hour: 20
+})
+ok('orch.greeting.1 an absent displayName is “Good evening.” never “Good evening, there.”',
+  nameless?.greeting?.startsWith('Good evening.') === true && !/there/i.test(nameless?.greeting ?? ''),
+  JSON.stringify(nameless?.greeting))
+ok('orch.greeting.2 placeholder names are omitted the same way',
+  M.orchGreetingName?.('') === '' && M.orchGreetingName?.('there') === '' && M.orchGreetingName?.('Alex') === 'Alex')
+
+const cmdsNone = typeof M.orchCommands === 'function' ? M.orchCommands({ selectedId: null, canInterrupt: false, canMarkDone: false, canFocusRelated: false, canOpenFiles: false }) : null
+const cmdsAll = typeof M.orchCommands === 'function' ? M.orchCommands({ selectedId: 'c1', canInterrupt: true, canMarkDone: true, canFocusRelated: true, canOpenFiles: true }) : null
+ok('orch.commands.1 only enabled verbs appear — no decorative disabled buttons',
+  Array.isArray(cmdsNone) && cmdsNone.length === 0 &&
+    cmdsAll?.map((c) => c.id).join(',') === 'interrupt,jump,mark-done,focus-related,open-files',
+  JSON.stringify({ none: cmdsNone, all: cmdsAll }))
+
+const hubEmpty = empty?.graph?.nodes[0]
+ok('orch.hub.1 a canvas with no supervisor chat labels the synthetic hub “No supervisor yet”, never Orchestrator',
+  hubEmpty?.id === '__hub__' && hubEmpty?.synthetic === true && hubEmpty?.title === 'No supervisor yet' &&
+    hubEmpty?.title !== 'Orchestrator',
+  JSON.stringify(hubEmpty))
+
+const step = typeof M.orchRosterStep === 'function' ? M.orchRosterStep : () => null
+ok('orch.keys.1 roster step walks ids, clamps at the ends, and stays null on an empty list',
+  step([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 'a', 1) === 'b' &&
+    step([{ id: 'a' }, { id: 'b' }], 'b', 1) === 'b' &&
+    step([{ id: 'a' }, { id: 'b' }], null, 1) === 'a' &&
+    step([], 'a', 1) === null)
+
+const keys = typeof M.orchKeysShouldHandle === 'function' ? M.orchKeysShouldHandle : () => true
+const fake = (hits) => ({ closest: (sel) => (hits.includes(sel) ? {} : null) })
+ok('orch.keys.2 HUD keys stand down for xterm and contenteditable, and only handle a target inside .orch',
+  keys(fake(['.orch'])) === true &&
+    keys(fake(['.xterm', '.orch'])) === false &&
+    keys(fake(['[contenteditable="true"]'])) === false &&
+    keys(null) === false)
+
+const fires = new Map([['c1:c2', 1000]])
+ok('orch.edge.1 travelling current is only live inside ORCH_EDGE_FIRE_MS of a recorded transition, not because endpoints are busy',
+  typeof M.orchEdgeIsFiring === 'function' &&
+    M.orchEdgeIsFiring('c1', 'c2', fires, 1000) === true &&
+    M.orchEdgeIsFiring('c1', 'c2', fires, 1000 + M.ORCH_EDGE_FIRE_MS) === false &&
+    M.orchEdgeIsFiring('c1', 'c2', new Map(), 1000) === false &&
+    M.orchEdgesFiredByPanel([{ from: 'c1', to: 'c2' }, { from: 'x', to: 'y' }], 'c2').join() === 'c1:c2')
+
+const blockerWait = typeof M.orchBlocker === 'function' ? M.orchBlocker({ waiting: 1, waitingTitle: 'Coder', reviewable: 0, running: 2, queued: 3 }) : null
+const blockerNone = typeof M.orchBlocker === 'function' ? M.orchBlocker({ waiting: 0, reviewable: 0, running: 0, queued: 0 }) : 'x'
+ok('orch.blocker.1 one factual line, waiting outranks running, and zero counts invent nothing',
+  blockerWait?.kind === 'waiting-on-you' && /Coder/.test(blockerWait?.line ?? '') && blockerNone === null,
+  JSON.stringify({ blockerWait, blockerNone }))
+
+const frame = typeof M.orchTaskFrame === 'function' ? M.orchTaskFrame({
+  graph: { nodes: [
+    { id: '__hub__', title: 'No supervisor yet', kind: 'chat', hub: true, synthetic: true, x: 0, y: 0, state: 'idle', size: 56 },
+    { id: 'c2', title: 'Coder', kind: 'chat', hub: false, x: 1, y: 1, state: 'busy', size: 38 },
+    { id: 't1', title: 'build', kind: 'terminal', hub: false, x: 2, y: 2, state: 'idle', size: 38 }
+  ], edges: [{ from: '__hub__', to: 'c2' }, { from: 'c2', to: 't1' }] },
+  roster: [
+    { id: 'c2', title: 'Coder', kind: 'chat', state: 'busy', tone: 'working', agentic: true },
+    { id: 't1', title: 'build', kind: 'terminal', state: 'idle', tone: 'idle', agentic: true }
+  ],
+  files: [{ id: 'f1', title: 'readme', path: '/tmp/repo/README.md' }],
+  memberIds: ['c2', 'f1']
+}) : null
+ok('orch.frame.1 a board-task frame keeps only named members — synthetic hub and unrelated agents drop',
+  frame?.framed === true &&
+    frame?.roster?.map((r) => r.id).join() === 'c2' &&
+    frame?.files?.[0]?.path === '/tmp/repo/README.md' &&
+    frame?.graph?.nodes?.every((n) => n.id === 'c2' || n.id === 'f1') === true &&
+    frame?.graph?.nodes?.some((n) => n.id === '__hub__') === false,
+  JSON.stringify(frame && { nodes: frame.graph.nodes.map((n) => n.id), roster: frame.roster.map((r) => r.id), files: frame.files }))
+
+const lensRun = typeof M.orchMetricLens === 'function' ? M.orchMetricLens('agents', null) : null
+const lensOff = typeof M.orchMetricLens === 'function' ? M.orchMetricLens('agents', 'agents') : null
+ok('orch.metric.1 metric cards are one shared lens; a second click clears',
+  lensRun?.metric === 'agents' && lensRun?.rosterFilter === 'running' && lensRun?.mode === 'dev' &&
+    lensOff?.metric === null && lensOff?.rosterFilter === 'all',
+  JSON.stringify({ lensRun, lensOff }))
+
+const multiJump = typeof M.orchCommands === 'function'
+  ? M.orchCommands({ selectedIds: ['c1', 'c2'], canInterrupt: true, canJump: true, canMarkDone: false, canFocusRelated: false, canOpenFiles: false })
+  : null
+const multiNoInterrupt = typeof M.orchCommands === 'function'
+  ? M.orchCommands({ selectedIds: ['c1', 'c2'], canInterrupt: false, canJump: true, canMarkDone: false, canFocusRelated: false, canOpenFiles: false })
+  : null
+ok('orch.commands.2 multi-select Interrupt only when every selected row can run it; Jump when the caller says every row can',
+  multiJump?.map((c) => c.id).join() === 'interrupt,jump' &&
+    multiNoInterrupt?.map((c) => c.id).join() === 'jump',
+  JSON.stringify({ multiJump, multiNoInterrupt }))
+
+const machineNone = typeof M.orchMachineReadout === 'function'
+  ? M.orchMachineReadout({ sampledAt: null, now: 10_000, cpuPercent: 0, memoryBytes: 0, panelCount: 0 })
+  : null
+const machineStale = typeof M.orchMachineReadout === 'function'
+  ? M.orchMachineReadout({ sampledAt: 1000, now: 20_000, cpuPercent: 12, memoryBytes: 1024 * 1024 * 100, panelCount: 2, staleMs: 8000 })
+  : null
+ok('orch.machine.1 missing samples say “no sample yet”, never a confident 0%; a stale sample keeps its last reading and names its age',
+  machineNone?.kind === 'none' && machineNone?.cpu === 'no sample yet' &&
+    machineStale?.kind === 'stale' && /12/.test(machineStale?.cpu ?? '') && machineStale?.age !== null,
+  JSON.stringify({ machineNone, machineStale }))
+
+ok('orch.coverage.1 Live vs Historical names the window; Logs refuse a live terminal; Files name real paths',
+  typeof M.orchActivityCoverage === 'function' && /last 2 minutes/.test(M.orchActivityCoverage('live')) &&
+    /durable/.test(M.orchActivityCoverage('all')) &&
+    /not a live terminal/.test(M.orchLogsCoverage()) &&
+    /real path/.test(M.orchFilesCoverage()))
+
+const viewSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+ok('orch.gate.1 every HUD chat and scrollback tail reader in OrchestrationView passes through outward()',
+  /lastAssistantText\(/.test(viewSrc) && /scrollback\.tail\(/.test(viewSrc) &&
+    /outward\(raw/.test(viewSrc) && /outward\(got\.join/.test(viewSrc) &&
+    !/lastAssistantText\([^)]+\)(?![\s\S]{0,200}outward)/.test(viewSrc.replace(/\s+/g, ' ')))
+
+const empties = readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8')
+ok('orch.empty.1 orch empty states live in empty-states.ts with named next steps and no fake Connect',
+  /id: 'orch-roster'/.test(empties) && /id: 'orch-task'/.test(empties) &&
+    /Show Canvas/.test(empties) && !/id: 'orch-[^']+'[^}]*Connect/.test(empties))
+
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
 if (failed.length) {

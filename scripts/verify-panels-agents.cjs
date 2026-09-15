@@ -3562,8 +3562,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
           return out })()`)
         const atSummary = await zoomBelow(0.24); await settle()
         const summary = await readFar()
-        // MIN_SCALE is 0.1 and BLOCK_ENTER 0.11: the floor IS below the band.
-        const atBlock = await zoomBelow(0.105); await settle()
+        // MIN_SCALE is 0.1; block band is 0.16–0.20; cluster is below 0.12.
+        const atBlock = await zoomBelow(0.155); await settle()
         const block = await readFar()
         await cmd('0'); await settle()
         const words = { ovF: 'file', ovT: 'toolbox', ovJ: 'Jira', ovN: 'note' }

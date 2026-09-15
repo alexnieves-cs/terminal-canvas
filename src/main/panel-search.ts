@@ -1,6 +1,6 @@
 import { redactSecrets } from '../shared/redact'
 import type { TranscriptTurn } from '../shared/transcript'
-import type { PanelSearchHit, PanelSearchResult } from '../shared/ipc-contract'
+import type { PanelSearchHit, PanelSearchResult, PanelSearchFailure } from '../shared/ipc-contract'
 
 /**
  * M122. FIND IN PANELS — one query over the two durable logs this app keeps:
@@ -49,9 +49,13 @@ export async function searchPanels(
   caps: { maxHits: number; maxPerPanel: number }
 ): Promise<PanelSearchResult> {
   const q = query.trim().toLowerCase()
-  const empty: PanelSearchResult = { hits: [], capped: false, cap: caps.maxHits, redacted: 0 }
+  const terminalIds = panels.filter((p) => p.kind !== 'chat').map((p) => p.id)
+  const chatPanels = panels.filter((p) => p.kind === 'chat')
+  const searched = { terminals: terminalIds.length, chats: chatPanels.length }
+  const empty: PanelSearchResult = { hits: [], capped: false, cap: caps.maxHits, redacted: 0, failures: [], searched }
   if (q === '') return empty
   const hits: PanelSearchHit[] = []
+  const failures: PanelSearchFailure[] = []
   let redacted = 0
   const push = (hit: PanelSearchHit): void => {
     const r = redactSecrets(hit.line)
@@ -60,22 +64,29 @@ export async function searchPanels(
   }
   // Terminals first, through the log's own newest-first search, then the
   // chats: the order a user scanning "which panel printed that" expects.
-  const terminalIds = panels.filter((p) => p.kind !== 'chat').map((p) => p.id)
   let raw: { panelId: string; line: string; lineIndex: number }[] = []
   try {
     raw = terminalIds.length === 0 ? [] : await deps.scrollback(terminalIds, q, caps)
-  } catch {
+  } catch (err) {
     raw = []
+    if (terminalIds.length > 0) {
+      const reason = err instanceof Error ? err.message : 'could not read terminal output'
+      failures.push({ source: 'scrollback', reason: redactSecrets(reason).text })
+    }
   }
   for (const hit of raw) {
     if (hits.length >= caps.maxHits) break
     push({ panelId: hit.panelId, kind: 'scrollback', line: hit.line, lineIndex: hit.lineIndex })
   }
   let capped = hits.length >= caps.maxHits && raw.length > hits.length
-  for (const panel of panels) {
-    if (panel.kind !== 'chat') continue
+  for (const panel of chatPanels) {
     let turns: TranscriptTurn[] = []
-    try { turns = deps.transcript(panel.id) } catch { turns = [] }
+    try { turns = deps.transcript(panel.id) } catch (err) {
+      turns = []
+      const reason = err instanceof Error ? err.message : 'could not read chat transcript'
+      failures.push({ source: `transcript:${panel.id}`, reason: redactSecrets(reason).text })
+      continue
+    }
     // A chat that fills ITS cap stops only itself (the next chat is still
     // read); only the total cap ends the search and says so — the first cut
     // broke out of every chat at one chat's fifth line, and the row said
@@ -95,5 +106,5 @@ export async function searchPanels(
     }
     if (capped) break
   }
-  return { hits, capped, cap: caps.maxHits, redacted }
+  return { hits, capped, cap: caps.maxHits, redacted, failures, searched }
 }

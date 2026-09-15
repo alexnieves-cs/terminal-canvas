@@ -2330,6 +2330,15 @@ export function buildCommands(ctx: PaletteContext): Command[] {
   }
   if (ctx.searchResults !== null) {
     const result = ctx.searchResults
+    const searched = result.searched
+    if (searched !== undefined && ctx.searchQuery.trim() !== '') {
+      const t = `searched ${searched.terminals} terminal${searched.terminals === 1 ? '' : 's'} and ${searched.chats} chat${searched.chats === 1 ? '' : 's'}`
+      out.push(withReason({ id: 'search.scope', title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
+    }
+    for (const failure of result.failures ?? []) {
+      const t = `could not read ${failure.source} — ${failure.reason}`
+      out.push(withReason({ id: `search.fail.${failure.source}`, title: t, group: 'panel', scope: 'search', hiddenAtRest: true, run: () => {} }, t))
+    }
     if (result.hits.length === 0) {
       // Only once a query has been typed: an empty query answers null above,
       // not [], so "no matches" never shows before the first keystroke.

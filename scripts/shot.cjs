@@ -691,6 +691,14 @@ const SCENES = [
       await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await sleep(200)
     } },
+  { name: 'orchestration', intent: 'M271. The Orchestration HUD over the fixture canvas: glass metrics, isometric agent cubes, the selection command strip, pipeline stages from the board, and the activity ring. The canvas host stays mounted behind it. No invented CI branding.',
+    run: async (k) => {
+      await k.loadMain()
+      await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+      for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch')`)); i++) await sleep(100)
+      await sleep(600)
+      await k.shot('orchestration')
+    } },
   { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
     run: async (k) => {
       // Last, on purpose: the file stays gone for every scene after it.

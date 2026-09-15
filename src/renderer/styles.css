@@ -6855,6 +6855,16 @@ body {
   color: var(--iris);
 }
 .orch__greeting { margin: var(--sp-1) 0 0; font-size: var(--t-md); color: var(--fg-2); max-width: 48rem; }
+.orch__blocker {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--fg);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--glass-1);
+}
+.orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); }
 .orch__clocks { display: flex; gap: var(--sp-3); flex-shrink: 0; }
 .orch__clock {
   display: flex;
@@ -6974,6 +6984,12 @@ body {
 .orch__graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .orch__edge { stroke: color-mix(in srgb, var(--iris) 40%, transparent); stroke-width: 1.5; }
 .orch__edge--authored { stroke: var(--amber); stroke-dasharray: 4 3; }
+.orch__edge[data-edge-activity="firing"] {
+  stroke: var(--iris);
+  stroke-width: 3px;
+  stroke-dasharray: 18 8 3 8;
+  animation: edge-current var(--dur-flow) linear 1;
+}
 .orch__cube-face { stroke: color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); stroke-width: 1.2; }
 .orch__cube-face--top { fill: color-mix(in srgb, var(--tone, var(--iris)) 28%, var(--glass-2)); }
 .orch__cube-face--left { fill: color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--glass-1)); }
@@ -7041,6 +7057,8 @@ body {
 .orch__perf-label { font-size: var(--t-xs); color: var(--fg-3); }
 .orch__perf-value { font-size: var(--t-md); font-weight: 600; }
 .orch__caption { margin: 0 0 var(--sp-2); font-size: var(--t-xs); color: var(--fg-4); }
+.orch [data-orch-density="detail"] .orch__section-title { color: var(--fg-3); font-weight: 500; }
+.orch__clock-label { font-size: var(--t-xs); color: var(--fg-4); text-transform: uppercase; letter-spacing: var(--track-caps); }
 .orch__spark { display: block; margin-top: var(--sp-1); }
 .orch__compute { display: flex; align-items: flex-end; gap: var(--sp-2); height: 4.5rem; margin-top: var(--sp-3); }
 .orch__compute-block {
@@ -7206,4 +7224,187 @@ body {
   .orch__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .orch__bottom { grid-template-columns: minmax(0, 1fr); }
   .orch__clocks { display: none; }
+}
+
+/* M270–M273. Calm shell, HUD v2, motion, resume — paint-only, tokens only. */
+
+.task-clusters {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.task-cluster {
+  position: absolute;
+  border-radius: var(--r-lg);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--iris)) 55%, var(--line));
+  background: color-mix(in srgb, var(--tone, var(--iris)) 16%, var(--glass-1));
+  box-shadow: inset 0 0 40px color-mix(in srgb, var(--tone, var(--iris)) 12%, transparent);
+}
+.task-cluster__title {
+  position: absolute;
+  left: var(--sp-4);
+  top: var(--sp-3);
+  font-family: var(--font-ui);
+  font-size: calc(var(--t-sm) * var(--chrome-scale, 1));
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.task-cluster__count {
+  position: absolute;
+  right: var(--sp-4);
+  top: var(--sp-3);
+  font-size: calc(var(--t-xs) * var(--chrome-scale, 1));
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.world[data-detail="cluster"] .panel__card-cluster {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--tone, var(--iris)) 35%, transparent);
+}
+
+.resume-banner {
+  position: absolute;
+  top: var(--sp-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  max-width: min(36rem, 92%);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--glass-3);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  box-shadow: var(--e-3);
+  pointer-events: auto;
+}
+.resume-banner__kicker {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--iris);
+}
+.resume-banner__title { font-size: var(--t-md); font-weight: 600; color: var(--fg); }
+.resume-banner__line, .resume-banner__next { margin: var(--sp-1) 0 0; font-size: var(--t-sm); color: var(--fg-2); line-height: var(--lh-body); }
+.resume-banner__next { color: var(--fg); }
+.resume-banner__verbs { display: flex; flex-direction: column; gap: var(--sp-2); flex-shrink: 0; }
+.resume-banner__go, .resume-banner__dismiss {
+  font: inherit;
+  font-size: var(--t-sm);
+  padding: var(--sp-1) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+.resume-banner__go { border-color: var(--iris); color: var(--iris); }
+
+.inspector__context { padding: 0 var(--sp-4) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.inspector__context-next { margin: 0; font-size: var(--t-sm); color: var(--fg); }
+.inspector__context-blocker { margin: 0; font-size: var(--t-sm); color: var(--amber); }
+.inspector__context-related { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); font-size: var(--t-sm); color: var(--fg-2); }
+.inspector__deep { margin: 0; }
+.inspector__deep-summary { font-size: var(--t-sm); color: var(--fg-3); cursor: pointer; }
+
+.canvas--behind-orch {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.985);
+  transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease);
+}
+.shell__orch--on { animation: orch-enter var(--dur-2) var(--ease) both; }
+@keyframes orch-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
+.orch__commands { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.orch__command {
+  font: inherit;
+  font-size: var(--t-sm);
+  padding: var(--sp-1) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--glass-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+.orch__wp[data-orch-stage-current] {
+  box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent);
+}
+.orch__wp[data-orch-stage-shift] {
+  animation: orch-stage-shift var(--dur-flow) var(--ease) 1;
+}
+@keyframes orch-stage-shift {
+  from { box-shadow: 0 0 0 1px var(--iris); }
+  to { box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent); }
+}
+.orch__cube--needs .orch__cube-face {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent));
+  animation: orch-needs-pulse var(--dur-breath) var(--ease) 3;
+}
+.orch__cube--live .orch__cube-face {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tone, var(--iris)) 65%, transparent));
+}
+@keyframes orch-needs-pulse {
+  0%, 100% { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent)); }
+  50% { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--amber) 90%, transparent)); }
+}
+
+@keyframes panel-demote {
+  from { filter: none; }
+  to { filter: grayscale(1); }
+}
+@keyframes panel-wake {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.panel__motion--demoting { animation: panel-demote var(--dur-2) var(--ease) both; }
+.panel__motion--waking { animation: panel-wake var(--dur-spring) var(--ease) both; }
+
+@keyframes attention-pip {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.dock__badge[data-attention-new]:not([hidden]) { animation: attention-pip var(--dur-2) var(--ease) 2; }
+.edge-indicator[data-attention-new] { animation: attention-pip var(--dur-2) var(--ease) 2; }
+.orch__roster-row[data-attention-new] { animation: attention-pip var(--dur-2) var(--ease) 2; }
+
+.world[data-detail="summary"] .workflow-node__verbs,
+.world[data-detail="block"] .workflow-node__verbs,
+.world[data-detail="cluster"] .workflow-node__verbs,
+.world[data-detail="summary"] .workflow-node__refusal,
+.world[data-detail="block"] .workflow-node__refusal {
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+.panel:hover .workflow-node__verbs,
+.panel:focus-within .workflow-node__verbs,
+.panel:hover .workflow-node__refusal,
+.panel:focus-within .workflow-node__refusal { opacity: 1; }
+
+.sheet { animation: palette-enter var(--dur-2) var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas--behind-orch { transform: none; transition: none; }
+  .shell__orch--on { animation: none; }
+  .orch__cube--needs .orch__cube-face { animation: none; }
+  .orch__edge[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
+  .orch__wp[data-orch-stage-shift] { animation: none; }
+  .panel__motion--demoting, .panel__motion--waking { animation: none; }
+  .dock__badge[data-attention-new], .edge-indicator[data-attention-new], .orch__roster-row[data-attention-new] { animation: none; }
+  .sheet { animation: none; }
 }

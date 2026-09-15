@@ -14,7 +14,8 @@ import { BoardPane, type BoardPaneProps } from './BoardPane'
 import { SkillsPane, type SkillsPaneProps } from './SkillsPane'
 import { shellControl } from './shell-control'
 import { ChevronDown, ChevronLeft, ChevronRight, Plus, Lanes, Grid, Layers } from '@renderer/icons'
-import { railGroups, type RailGroupId } from './rail-rows'
+import { railGroups, railRoleOf } from './rail-rows'
+import type { TaskMemberReason } from '@renderer/canvas/task-members'
 import { EmptyState } from './EmptyState'
 import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
 
@@ -69,6 +70,11 @@ export interface NavigatorProps {
   board: BoardPaneProps
   /** M127. The skills pane's model. */
   skills: SkillsPaneProps
+  /**
+   * M270. When a task lens is on, group the panels list by role in that task
+   * rather than by kind. Absent: kind groups (browser/memory still Files).
+   */
+  taskMemberReason?: (panelId: string) => TaskMemberReason | undefined
 }
 
 /**
@@ -99,21 +105,22 @@ export interface NavigatorProps {
 function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const { navigator, onToggle } = props
   const [filter, setFilter] = useState<PanelFilter>('all')
-  const [collapsed, setCollapsed] = useState<Set<RailGroupId>>(new Set())
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   useEffect(() => {
     let live = true
     const read = (): void => {
       void window.canvas.settings.list().then((rows) => {
         if (!live) return
         const value = rows.find((row) => row.id === 'shell.collapsedRailGroups')?.value
-        if (Array.isArray(value)) setCollapsed(new Set(value.filter((id): id is RailGroupId => ['agents', 'files', 'reviews', 'work', 'workflows', 'capabilities'].includes(id))))
+        const known = ['agents', 'files', 'reviews', 'work', 'workflows', 'capabilities', 'doing', 'review', 'watching', 'related', 'elsewhere']
+        if (Array.isArray(value)) setCollapsed(new Set(value.filter((id): id is string => typeof id === 'string' && known.includes(id))))
       })
     }
     read()
     const off = window.canvas.settings.onChanged(read)
     return () => { live = false; off() }
   }, [])
-  const toggleGroup = (id: RailGroupId): void => {
+  const toggleGroup = (id: string): void => {
     const next = new Set(collapsed)
     if (next.has(id)) next.delete(id); else next.add(id)
     setCollapsed(next)
@@ -269,11 +276,17 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                     </ul>
                   )}
                 </li>
-              ) : (
+              ) : (() => {
                 /* M171. THE RAIL AS PLACES: rows under quiet headings by what they
                    are, with counts. A heading is never a `.rail-row` (empty.1
-                   counts rows) and never renders over nothing (railGroups). */
-                railGroups(props.rows).flatMap((group) => [
+                   counts rows) and never renders over nothing (railGroups).
+                   M270: when a task lens is lit, headings are the panel's role
+                   in that task — Doing this / Review / Files — never a
+                   leftover Integrations bucket. */
+                const grouped = props.taskMemberReason === undefined
+                  ? railGroups(props.rows)
+                  : railGroups(props.rows, (r) => r.state.kind, (r) => railRoleOf(r.state.kind, props.taskMemberReason?.(r.id)))
+                return grouped.flatMap((group) => [
                   <li key={`h:${group.id}`} className="rail-heading" data-rail-group={group.id}><button type="button" className="rail-heading__button" aria-expanded={!collapsed.has(group.id)} {...shellControl(() => toggleGroup(group.id))}>{collapsed.has(group.id) ? <ChevronRight /> : <ChevronDown />}<span>{group.label} {group.rows.length}</span></button></li>,
                   ...group.rows.map((row) => (
                     <RailPanelRow
@@ -289,7 +302,7 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
                     />
                   ))
                 ])
-              )}
+              })()}
             </ul>
             </>
           )}

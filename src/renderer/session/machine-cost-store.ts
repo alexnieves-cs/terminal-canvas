@@ -13,6 +13,8 @@ const costs = new Map<PanelId, PanelMachineCost>()
 const listeners = new Map<PanelId, Set<() => void>>()
 const totalListeners = new Set<() => void>()
 let total: MachineCostSnapshot['total'] = { cpuPercent: 0, memoryBytes: 0 }
+/** Null until the first `applyMachineCosts` — a default 0% is not a sample. */
+let sampledAt: number | null = null
 
 function sameCost(a: PanelMachineCost | undefined, b: PanelMachineCost | undefined): boolean {
   return a?.cpuPercent === b?.cpuPercent && a?.memoryBytes === b?.memoryBytes
@@ -28,6 +30,8 @@ function notifyTotal(): void {
 
 /** Replace the live snapshot, clearing a process that exited between polls. */
 export function applyMachineCosts(snapshot: MachineCostSnapshot): void {
+  const first = sampledAt === null
+  sampledAt = Date.now()
   const next = new Map(snapshot.panels.map((cost) => [cost.panelId, cost]))
   const ids = new Set([...costs.keys(), ...next.keys()])
   for (const id of ids) {
@@ -38,10 +42,14 @@ export function applyMachineCosts(snapshot: MachineCostSnapshot): void {
     else costs.delete(id)
     notify(id)
   }
-  if (total.cpuPercent !== snapshot.total.cpuPercent || total.memoryBytes !== snapshot.total.memoryBytes) {
-    total = snapshot.total
-    notifyTotal()
-  }
+  const totalsChanged = total.cpuPercent !== snapshot.total.cpuPercent || total.memoryBytes !== snapshot.total.memoryBytes
+  total = snapshot.total
+  if (first || totalsChanged) notifyTotal()
+}
+
+/** Epoch ms of the last applied sample, or null when none has arrived. */
+export function getMachineCostSampledAt(): number | null {
+  return sampledAt
 }
 
 export function clearMachineCost(panelId: PanelId): void {

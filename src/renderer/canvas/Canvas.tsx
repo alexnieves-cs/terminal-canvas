@@ -55,6 +55,8 @@ import { useViewport } from './useViewport'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { arrangePlan, fitTaskTarget, FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
+import { taskClusters } from './task-clusters'
+import { TaskClusterLayer } from './TaskClusterLayer'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import { useTiering } from './useTiering'
 import {
@@ -102,6 +104,7 @@ import { clearScrollbackTail } from '@renderer/session/scrollback-store'
 import { createSessionFactory } from '@renderer/terminal/session-factory'
 import type { CanvasState, PersistedBookmark, PersistedRun } from '@shared/layout-schema'
 import { retainOutcome, type RetainedOutcome } from '@shared/retained-outcomes'
+import { buildResumeSummary, pickResumeSubject, type ResumeSummary } from '@shared/resume-summary'
 import type { MachineCostTarget } from '@shared/machine-cost'
 import type {
   CapturedPanel,
@@ -231,6 +234,8 @@ import { TopBar } from '../shell/TopBar'
 import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
+import { ResumeBanner } from '../shell/ResumeBanner'
+import { buildInspectorContext } from '../shell/inspector-context'
 import { useShellChrome } from '../shell/useShellChrome'
 import { useAttentionAnnouncer } from '../shell/useAttentionAnnouncer'
 import { useShellBreakpoint } from '../shell/useShellBreakpoint'
@@ -369,6 +374,8 @@ export function Canvas({
   const [retainedOutcomes, setRetainedOutcomes] = useState<RetainedOutcome[]>(() => initial.retainedOutcomes ?? [])
   const retainedOutcomesRef = useRef(retainedOutcomes)
   retainedOutcomesRef.current = retainedOutcomes
+  const [resumeDismissed, setResumeDismissed] = useState(false)
+  const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null)
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
   const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
@@ -498,6 +505,8 @@ export function Canvas({
   // when the wrapper animation ends, so its one-time render cost cannot join
   // the canvas's 60Hz path either.
   const [enteringPanelIds, setEnteringPanelIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [demotingPanelIds, setDemotingPanelIds] = useState<ReadonlySet<string>>(() => new Set())
+  const [wakingPanelIds, setWakingPanelIds] = useState<ReadonlySet<string>>(() => new Set())
   // Hit testing and the pip layer keep the WHOLE array: a review node is a
   // real, clickable panel and an off-screen one is a real thing to point at.
   const rects = useMemo(() => displayPanels.map((p) => p.rect), [displayPanels])
@@ -841,6 +850,18 @@ export function Canvas({
       next.delete(id)
       return next
     })
+    setDemotingPanelIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
+    setWakingPanelIds((current) => {
+      if (!current.has(id)) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
   }, [])
   const [focusedId, setFocusedId] = useState<string | null>(initial.focusedId)
   // M173: the HUD no longer prints the cursor; the state stays (the pointer hook
@@ -900,6 +921,21 @@ export function Canvas({
   // woken panel was still asleep while the pill beside it said `idle`.
   const dormantIdsRef = useRef(dormantIds)
   dormantIdsRef.current = dormantIds
+  const prevDormantRef = useRef<ReadonlySet<string>>(dormantIds)
+  // Paint-only demote/wake: a single id flipping dormant gets a CSS beat.
+  // A workspace switch replaces the whole set and must not choreograph every
+  // card — that would be layout-adjacent motion on panels whose xterm is
+  // already unmounted.
+  useEffect(() => {
+    const prev = prevDormantRef.current
+    const demoted: string[] = []
+    for (const id of dormantIds) if (!prev.has(id)) demoted.push(id)
+    const woken: string[] = []
+    for (const id of prev) if (!dormantIds.has(id)) woken.push(id)
+    prevDormantRef.current = dormantIds
+    if (demoted.length === 1) setDemotingPanelIds((current) => new Set(current).add(demoted[0]!))
+    if (woken.length === 1) setWakingPanelIds((current) => new Set(current).add(woken[0]!))
+  }, [dormantIds])
 
   // Applying a history state has to reach the registry too: an undone close
   // must recreate the panel's session, and it comes back DORMANT because its
@@ -3337,6 +3373,31 @@ export function Canvas({
   // and answers `undefined` until the first read lands, so a card says
   // nothing about review rather than guessing.
   const { handoffOf: taskHandoffOf, laneOf: taskLaneOf, pathsOf: taskPathsOf, refresh: refreshTaskHandoffs } = useTaskHandoffs({ workItems, liveFacts: liveRunFacts })
+  const activeWorkspaceId = workspaceRows.find((w) => w.active)?.id
+  useEffect(() => { setResumeDismissed(false) }, [activeWorkspaceId])
+  useEffect(() => {
+    if (resumeDismissed || workItems.length === 0) { setResumeSummary(null); return }
+    const subject = pickResumeSubject(workItems, retainedOutcomes)
+    if (subject === null) { setResumeSummary(null); return }
+    const item = workItems.find((i) => i.id === subject.itemId)
+    if (item === undefined) { setResumeSummary(null); return }
+    const retained = retainedOutcomes.find((o) => o.itemId === item.id)
+    const laneId = item.panelId
+    const execution = laneId === undefined || liveRunFacts[laneId] === undefined ? undefined : projectSession(laneId, liveRunFacts[laneId])
+    const handoff = taskHandoffOf(item.id)
+    setResumeSummary(buildResumeSummary({
+      item: {
+        id: item.id,
+        title: item.title,
+        state: item.state,
+        ...(item.description !== undefined ? { description: item.description } : {}),
+        ...(item.note !== undefined ? { note: item.note } : {})
+      },
+      ...(retained !== undefined ? { retained: { execution: retained.execution, state: retained.state } } : {}),
+      ...(execution !== undefined ? { execution: { word: execution.word, detail: execution.detail, ...(execution.blocker !== undefined ? { blocker: execution.blocker } : {}) } } : {}),
+      ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {})
+    }))
+  }, [workItems, retainedOutcomes, resumeDismissed, liveRunFacts, taskHandoffOf, activeWorkspaceId])
   const paletteTemplates = useMemo(() => templateRows.map((t) => {
     const refusal = templateRefusal(t, presetRows, claudeAvailable(presetRows))
     return { id: t.id, name: t.name, nodes: t.nodes.length, edges: t.edges.length, ...(refusal === undefined ? {} : { refusal }) }
@@ -4423,6 +4484,22 @@ export function Canvas({
     })
     return memberships
   }
+  const clusterHulls = useMemo(() => {
+    if (cardDetail !== 'cluster') return []
+    return taskClusters({
+      panels: displayPanels.map((p) => ({
+        id: p.rect.id,
+        rect: p.rect,
+        tone: panelState(
+          { kind: p.kind, status: isTerminalPanel(p) ? registry.get(p.rect.id)?.status : undefined, dormant: dormantIds.has(p.rect.id) },
+          getAgentState(p.rect.id)
+        ).tone
+      })),
+      memberships: taskMemberships(displayPanels, workItems),
+      titles: Object.fromEntries(workItems.map((i) => [i.id, i.title])),
+      groups: groups.map((g) => ({ id: g.id, title: g.label, panelIds: g.panelIds }))
+    })
+  }, [cardDetail, displayPanels, workItems, groups, dormantIds, version, runs, taskLaneOf])
   // M204 (D08). THE TASK LENS — a VIEW state, never persisted (M106's flip is
   // the precedent). Derived as the task's panels change, and cleared when the
   // task leaves the board — which includes switching to a workspace whose
@@ -6683,6 +6760,30 @@ export function Canvas({
     lanes: worktreeRows
   })
 
+  const inspectorContextBand = useMemo(() => {
+    if (selectedPanel === undefined || inspectorModel === null) return undefined
+    const approval = pendingApprovals.find((a) => a.id === selectedPanel.rect.id)
+    const memberships = taskMemberships(displayPanels, workItems)
+    const membership = memberships.find((m) => m.members.some((x) => x.panelId === selectedPanel.rect.id))
+    const relatedItem = membership === undefined ? undefined : workItems.find((i) => i.id === membership.itemId)
+    const workItem = isWorkPanel(selectedPanel)
+      ? workItems.find((i) => i.id === selectedPanel.work.itemId)
+      : relatedItem
+    const laneId = workItem?.panelId
+    const execution = laneId === undefined || liveRunFacts[laneId] === undefined ? undefined : projectSession(laneId, liveRunFacts[laneId])
+    const handoff = workItem === undefined ? undefined : taskHandoffOf(workItem.id)
+    return buildInspectorContext({
+      panel: selectedPanel,
+      ...(approval !== undefined ? { approvalTool: approval.toolName } : {}),
+      agentState: getAgentState(selectedPanel.rect.id),
+      restartable: inspectorModel.restartable,
+      ...(workItem !== undefined ? { workItem: { id: workItem.id, title: workItem.title, state: workItem.state, ...(workItem.note !== undefined ? { note: workItem.note } : {}) } } : {}),
+      ...(execution !== undefined ? { execution: { detail: execution.detail, ...(execution.blocker !== undefined ? { blocker: execution.blocker } : {}) } } : {}),
+      ...(handoff !== undefined ? { handoff: { actionLabel: handoff.actionLabel, detail: handoff.detail, ...(handoff.blocker !== undefined ? { blocker: handoff.blocker } : {}) } } : {}),
+      ...(membership !== undefined && relatedItem !== undefined ? { related: { itemId: relatedItem.id, title: relatedItem.title, memberCount: membership.members.length } } : {})
+    })
+  }, [selectedPanel, inspectorModel, pendingApprovals, displayPanels, workItems, liveRunFacts, taskHandoffOf])
+
   // M180. The agent door: `tc plan` lands on the SAME executor the palette's
   // verb line runs, with the caller main resolved riding beside the line.
   useEffect(() => window.canvas.canvas.onPlan((req) => paletteActions.runAgentPlan(req.line, req.caller)), [paletteActions])
@@ -7179,7 +7280,8 @@ export function Canvas({
         chrome.ctxVisible ? '' : ' shell--inspector-collapsed'}${
         chrome.navVisible && chrome.navigator === 'files' ? '' : ' shell--tree-collapsed'}${
         chrome.navDrawer ? ' shell--nav-drawer' : ''}${chrome.ctxDrawer ? ' shell--ctx-drawer' : ''}${
-        inspectorPinned ? ' shell--inspector-pinned' : ''}`}
+        inspectorPinned ? ' shell--inspector-pinned' : ''}${
+        chrome.centerView === 'orchestration' ? ' shell--center-orch' : ''}`}
       // (this redesign) The resize handle sets this same custom property live, imperatively,
       // during a drag; this inline value is only what REACT last committed —
       // the source of truth between drags, not during one. Set ONLY outside
@@ -7273,6 +7375,7 @@ export function Canvas({
         onDeleteWorkspace={paletteActions.deleteWorkspace}
         rows={railRows}
         selectedId={selectedId}
+        taskMemberReason={lens === null ? undefined : (panelId) => lens.members.find((m) => m.panelId === panelId)?.reason}
         onGoToPanel={paletteActions.goToPanel}
         onStartPanel={paletteActions.startPanel}
         onClosePanel={paletteActions.closePanel}
@@ -7312,14 +7415,20 @@ export function Canvas({
           component would be a changed prop on every one of those frames,
           defeating `memo` for every panel on every zoom gesture. See
           PanelPorts.tsx's own comment. */}
-      {/* M268. Orchestration shares the canvas grid cell; the canvas host stays
-          mounted (hidden) so PTYs and agents keep running underneath. */}
+      {/* M268/M272. Orchestration shares the canvas grid cell; the canvas host
+          stays mounted (visually behind, never unmounted) so PTYs and agents
+          keep running. The overlay animates in; prefers-reduced-motion snaps. */}
       {chrome.centerView === 'orchestration' && (
-        <div className="shell__orch" role="presentation">
+        <div className="shell__orch shell__orch--on" data-center-view="orchestration" role="presentation">
           <OrchestrationView
             panels={panels}
             workItems={workItems}
             templates={orchTemplates}
+            taskMemberIds={(() => {
+              const focused = workItems.find((w) => w.state === WORK_ITEM_STATES[1]) ?? workItems.find((w) => w.state === WORK_ITEM_STATES[2])
+              if (focused === undefined) return []
+              return taskMemberships(panels, [focused])[0]?.members.map((m) => m.panelId) ?? []
+            })()}
             onJumpPanel={(id) => {
               chrome.setCenterView('canvas')
               paletteActions.goToPanel(id)
@@ -7330,6 +7439,23 @@ export function Canvas({
             }}
             onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
             onMarkDone={markDone}
+            onFocusRelated={(id) => {
+              chrome.setCenterView('canvas')
+              const shown = displayPanelsRef.current
+              const items = workItemsRef.current
+              const target = showTaskTarget(id, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
+              if (target.kind === 'refused') {
+                paletteActionsRef.current?.say(target.reason)
+                return
+              }
+              setRelatedItemId(target.itemId)
+              frameRects(target.rects)
+            }}
+            onOpenFiles={() => {
+              chrome.setCenterView('canvas')
+              chrome.chooseNavigator('files')
+            }}
+            onShowCanvas={() => chrome.setCenterView('canvas')}
           />
         </div>
       )}
@@ -7344,9 +7470,8 @@ export function Canvas({
         // never inferred from which panels happen to render summaries.
         data-flipped={flipped ? '' : undefined}
         data-cluster-arrival={clusterArrival ? '' : undefined}
-        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}`}
+        className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView === 'orchestration' ? ' canvas--behind-orch' : ''}`}
         ref={hostRef}
-        hidden={chrome.centerView === 'orchestration'}
         aria-hidden={chrome.centerView === 'orchestration' ? true : undefined}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
@@ -7421,6 +7546,7 @@ export function Canvas({
             onToggle={toggleGroupCollapsed}
             onRemove={onRemoveGroup}
           />
+          {cardDetail === 'cluster' && <TaskClusterLayer clusters={clusterHulls} />}
           {/* First child, and z-index 0 in the stylesheet, so it paints
               beneath every panel — nextZ mints z >= 1. It is inside .world so
               it pans and zooms with the panels. The LAYER itself still takes
@@ -7822,6 +7948,8 @@ export function Canvas({
                 openingContext={openingContexts.get(panel.rect.id)}
                 onContextPasted={onContextPasted}
                 entering={enteringPanelIds.has(panel.rect.id)}
+                demoting={demotingPanelIds.has(panel.rect.id)}
+                waking={wakingPanelIds.has(panel.rect.id)}
                 onEntryEnd={onPanelEntryEnd}
                 onBeginLink={onBeginLink}
                 linkTarget={linkDraw.state?.target === panel.rect.id}
@@ -7977,6 +8105,18 @@ export function Canvas({
             onOpenRelease={(url) => { void window.canvas.links.open({ panelId: '', target: url }) }}
           />
         )}
+        {resumeSummary !== null && panels.length > 0 && (
+          <ResumeBanner
+            summary={resumeSummary}
+            onContinue={(itemId) => {
+              setResumeDismissed(true)
+              setRelatedItemId(itemId)
+              const r = frameItem(itemId)
+              if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason)
+            }}
+            onDismiss={() => setResumeDismissed(true)}
+          />
+        )}
         {envReport !== null && !envReport.shell.ok && (
           <div className="env-banner" data-env-banner role="status">
             Your login shell could not be read ({envReport.shell.reason ?? 'the probe failed'}) — CLIs installed
@@ -8075,6 +8215,9 @@ export function Canvas({
         onSelectTab={chrome.setContextTab}
         model={inspectorModel}
         summary={inspectorSummary}
+        contextBand={inspectorContextBand}
+        onShowRelated={(itemId) => { setRelatedItemId(itemId); const r = frameItem(itemId); if (r.kind === 'refused') paletteActionsRef.current?.say(r.reason) }}
+        onShowTask={(panelId) => { const r = boardVerbsRef.current.show?.(panelId); if (r !== undefined && (r.kind === 'refused' || r.partial === true)) paletteActionsRef.current?.say(r.kind === 'refused' ? r.reason : (r.note ?? '')) }}
         onRename={paletteActions.beginRenamePanel}
         onClose={paletteActions.closePanel}
         onSavePreset={paletteActions.savePanelAsPreset}

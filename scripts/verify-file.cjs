@@ -1668,6 +1668,24 @@ const p = (name) => join(DIR, name)
         none.hits.length === 0 && none.capped === false,
       JSON.stringify({ gate, foo, secret, one, none, perPanel }))
   } catch (e) { ok('psearch.1 (threw)', false, String(e)) }
+  try {
+    const dirS = join(DIR, 'psearch')
+    const slog = F.createScrollbackLog({ dir: join(dirS, 'scrollback'), maxBytes: 1024 * 1024 })
+    const tlog = F.createAgentTranscriptLog({ dir: join(dirS, 'transcripts') })
+    const panels = [{ id: 'n1', kind: 'terminal', title: 'api' }, { id: 'c1', kind: 'chat', title: 'api (chat)' }, { id: 'c2', kind: 'chat', title: 'busy' }, { id: 'c3', kind: 'chat', title: 'last' }, { id: 'n9', kind: 'terminal', title: 'nothing' }]
+    const deps = { scrollback: (ids, q, caps) => slog.search(ids, q, caps), transcript: (id) => tlog.read(id).turns }
+    const caps = { maxHits: 50, maxPerPanel: 10 }
+    const none = await F.searchPanels('zzqx', panels, deps, caps)
+    const boom = await F.searchPanels('gate', panels, {
+      scrollback: deps.scrollback,
+      transcript: (id) => { if (id === 'c2') throw new Error('disk unreadable'); return deps.transcript(id) }
+    }, caps)
+    ok('psearch.scope.1 the result names how many terminals and chats were searched, and a thrown transcript is a named failure whose reason is redacted',
+      none.searched?.terminals === 2 && none.searched?.chats === 3 && Array.isArray(none.failures) && none.failures.length === 0 &&
+        boom.failures?.some((f) => f.source === 'transcript:c2' && /unreadable/.test(f.reason)) === true &&
+        boom.hits.some((h) => h.panelId === 'c1') && !boom.hits.some((h) => h.panelId === 'c2'),
+      JSON.stringify({ searched: none.searched, failures: none.failures, boomFail: boom.failures, boomHits: boom.hits.map((h) => h.panelId) }))
+  } catch (e) { ok('psearch.scope.1 (threw)', false, String(e)) }
   // M123 — update.1. THE UPDATE CHECK, pure over an injected fetcher. Three
   // states and never two: `current`, `newer` (with the release's url) and
   // `could-not-check` (with the reason) — a check that folded the last into
