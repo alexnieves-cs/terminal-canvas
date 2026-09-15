@@ -274,6 +274,19 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onS = (_e, level, message) => { if (level >= 2) sLog.push(String(message).slice(0, 200)) }
       wc.on('console-message', onS)
       try {
+        // keyboard.1's race, one block earlier: handoff.2 ends by FRAMING its
+        // target, a camera flight that saves every frame, and a late frame
+        // overwrote the seed below (seededS=false). Seed once the camera is still.
+        {
+          let last = null
+          await waitUntil(async () => {
+            const now = JSON.stringify(await wc.executeJavaScript(`window.__m4aViewport()`))
+            const still = now === last
+            last = now
+            return still
+          }, 4000, 150)
+          await settle()
+        }
         state.backend = createDirectBackend('verify: direct (m42 search)')
         const home = require('node:os').homedir()
         const sPanel = (id, x) => ({
@@ -403,6 +416,22 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
       const onK = (_e, level, message) => { if (level >= 2) kLog.push(String(message).slice(0, 180)) }
       wc.on('console-message', onK)
       try {
+        // attention.1 ends on ATTENTION_JUMP, a camera FLIGHT, and the page
+        // saves its layout on every frame of it. main's save() merges into the
+        // active workspace last-write-wins, so a frame arriving after the seed
+        // below restored jHere/jFar and the reload never showed kA/kB
+        // (seededK=false, and keyboard.1–4 red with it). Seed once the old
+        // page's camera has stopped moving.
+        {
+          let last = null
+          await waitUntil(async () => {
+            const now = JSON.stringify(await wc.executeJavaScript(`window.__m4aViewport()`))
+            const still = now === last
+            last = now
+            return still
+          }, 4000, 150)
+          await settle()
+        }
         state.backend = createDirectBackend('verify: direct (m44 keyboard)')
         const home = require('node:os').homedir()
         const kP = (id, x) => ({ kind: 'terminal', rect: { id, x, y: 60, w: 300, h: 220 }, z: 1,
@@ -3161,7 +3190,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (w) w.focus(); return !!w })()`)
         await settle()
         const firstSuggestion = await wc.executeJavaScript(`(() => { const w = document.querySelector('[data-sheet-where]'); if (!w) return null
-          const first = document.querySelector('[data-sheet-suggestions] .sheet__suggestion .sheet__suggestion-path'); return { value: w.value, first: first ? first.getAttribute('title') : null, why: first ? first.nextElementSibling?.textContent : null } })()`)
+          const first = document.querySelector('[data-sheet-suggestions] .sheet__suggestion .sheet__suggestion-path'); return { value: w.value, first: first ? first.getAttribute('title') : null, why: first ? first.nextElementSibling?.textContent : null, when: first ? first.nextElementSibling?.hasAttribute('data-sheet-suggestion-when') === true : null } })()`)
         await present('after suggestions')
         // A directory that is not there: refused, in the sheet.
         await set('[data-sheet-what]', '__command__')
@@ -3187,7 +3216,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const cwdOk = spawnedCwd !== null && (spawnedCwd === dirA || spawnedCwd === realpathSync(dirA))
         ok(IDS[0], opened === true && spawned !== false && live === true && focused === true && exited === true,
           JSON.stringify({ opened, spawned, live, focused, exited, steps, pill: spawned === false ? null : await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id="${spawned}"] .pf__pill, .panel[data-panel-id="${spawned}"] [data-panel-state]') || {}).textContent ?? null`), state: spawned === false ? null : await wc.executeJavaScript(`(document.querySelector('.panel[data-panel-id="${spawned}"]') || {}).getAttribute?.('data-agent-state') ?? null`), pty: spawned === false ? null : (ptyManager.list().find((s) => s.panelId === spawned) || null), log: hLog.slice(-3) }))
-        ok(IDS[1], firstSuggestion !== null && firstSuggestion.first !== null && (firstSuggestion.first === dirA || firstSuggestion.first === realpathSync(dirA)) && firstSuggestion.why === 'focused panel' && typeof refused === 'string' && /no such directory/.test(refused) && cwdOk,
+        ok(IDS[1], firstSuggestion !== null && firstSuggestion.first !== null && (firstSuggestion.first === dirA || firstSuggestion.first === realpathSync(dirA)) && (firstSuggestion.why === 'focused panel' || firstSuggestion.when === true /* SpawnSheet.tsx: a recently used directory shows its age in the reason's place */) && typeof refused === 'string' && /no such directory/.test(refused) && cwdOk,
           JSON.stringify({ firstSuggestion, refused, dirA, spawnedCwd }))
       } catch (hErr) {
         for (const id of IDS) ok(id, false, 'threw: ' + String(hErr && hErr.message || hErr) + ' | renderer: ' + (hLog.slice(-4).join(' || ') || '(none)'))

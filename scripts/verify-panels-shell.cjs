@@ -2521,13 +2521,29 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
     //     gesture — not a rail control, which by design takes neither DOM
     //     focus nor focusedId and therefore acknowledges nothing.
     {
-      const point = await wc.executeJavaScript(`(() => {
-        const el = document.querySelector(
-          '[data-panel-id=${JSON.stringify(state.attentionPanelId)}] .panel__slot')
+      // 97 frames the panel through goToPanel, which never wakes — so on a
+      // canvas past the live budget it is framed as a CARD with no slot. A
+      // card press SELECTS and WAKES (Canvas.tsx onSelectPanel) but does not
+      // focus, and only focus acknowledges (onFocusPanel). So it is two
+      // presses, the way a person meets it: the card to start the panel,
+      // then its live slot to look at it.
+      const centreOf = (selector) => wc.executeJavaScript(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)})
         if (!el) return null
         const r = el.getBoundingClientRect()
         return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }
       })()`)
+      const slotSel = `[data-panel-id=${JSON.stringify(state.attentionPanelId)}] .panel__slot`
+      let point = await centreOf(slotSel)
+      if (!point) {
+        const card = await centreOf(`[data-panel-id=${JSON.stringify(state.attentionPanelId)}] .panel__card`)
+        if (card) {
+          wc.sendInputEvent({ type: 'mouseDown', x: card.x, y: card.y, button: 'left', clickCount: 1 })
+          wc.sendInputEvent({ type: 'mouseUp', x: card.x, y: card.y, button: 'left', clickCount: 1 })
+          await waitUntil(async () => (await centreOf(slotSel)) !== null, 5000)
+          point = await centreOf(slotSel)
+        }
+      }
       // NOT a throw, unlike 96/97's fixture guards. At the RED step 97's
       // click does nothing, so the panel is still off screen and may be a
       // card with no .panel__slot at all — and a throw here would end the run
@@ -3002,6 +3018,15 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
             ${JSON.stringify(JSON.stringify(node))} + ']')
           return n ? n.querySelector('.panel__title').textContent : null })()`)
         const sessions = await sessionMap(wc)
+        // openReview returns SILENTLY on a null baseline, so without main's own
+        // answer a red here cannot say whether the click, the gate or main broke.
+        const baseline106 = await wc.executeJavaScript(`window.canvas.review.baseline(${JSON.stringify(first)})`).catch((e) => 'threw: ' + String(e))
+        const buttons106 = await wc.executeJavaScript(`[...document.querySelectorAll('[data-inspector-action="review"]')].map((b) => { const r = b.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height), disabled: b.disabled, inInspector: !!b.closest('.inspector'), hiddenAncestor: !!b.closest('[hidden]') } })`)
+        // 107 and the later review checks click this SAME hidden-tab button and
+        // mint a node, so visibility is not the cause. What differs is how 106
+        // selects (the rail row) and that it demands exactly ONE fresh id.
+        const fresh106 = (await panelIds()).filter((id) => !beforeIds.includes(id))
+        console.log(`[106] review.baseline(${first}) -> ${JSON.stringify(baseline106)} buttons=${JSON.stringify(buttons106)} fresh=${JSON.stringify(fresh106)}`)
         ok('106 the inspector opens a review node for the selected panel',
           typeof node === 'string' && node.startsWith('r') &&
             typeof heading === 'string' && heading.includes('review') &&
@@ -4426,6 +4451,19 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       const armLinkFrom = async (id) => {
         const opened = await ensureInspectorOpen()
         const selected = await railGoTo(id)
+        // The redesign moved "Link to…" into the ⋯ menu, which keeps every
+        // verb MOUNTED but `hidden` until opened — so the button was always
+        // found and always measured 0x0, and 125–129 failed on the arm step
+        // alone. Open it with a real click on the trigger, as a user would.
+        const trigger = await wc.executeJavaScript(`(() => {
+          const t = document.querySelector('[data-inspector-action="menu"]')
+          if (!t) return null
+          const r = t.getBoundingClientRect()
+          return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+        })()`)
+        if (trigger) await clickAt(trigger.x, trigger.y)
+        await waitUntil(() => wc.executeJavaScript(
+          `(() => { const m = document.querySelector('[data-inspector-menu]'); return m !== null && !m.hidden })()`), 2000)
         const box = await wc.executeJavaScript(`(() => {
           const b = document.querySelector('[data-inspector-action="link"]')
           if (!b) return null
@@ -4578,7 +4616,10 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
           `!!document.querySelector('[data-panel-id="${LINK_A}"] .panel__slot')`)), 4000)
         const boxFocus = await panelBox(LINK_A)
         if (boxFocus) await clickAt(boxFocus.cx, boxFocus.cy)
-        const focusedBefore127 = await wc.executeJavaScript(`window.__m4aGrid() !== null`)
+        // A condition, not one read: focus lands once the woken panel's
+        // terminal attaches, which can outlast clickAt's settle — the ledger's
+        // "127 flaky" was this read losing that race (focused false -> false).
+        const focusedBefore127 = await waitUntil(() => wc.executeJavaScript(`window.__m4aGrid() !== null`), 3000)
         const mid = await wc.executeJavaScript(`(() => {
           const el = document.querySelector('.link-layer [data-link]')
           if (!el) return null

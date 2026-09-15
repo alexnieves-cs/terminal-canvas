@@ -559,6 +559,11 @@ app.whenReady().then(async () => {
     // half). A harness that mirrors production loosely proves the app works
     // for a configuration nobody ships.
     (panelId) => {
+      // One line per drop, with the caller: review.baseline() answering null
+      // is silent in the renderer (openReview just returns), so a red 106 is
+      // unexplainable without knowing what dropped the record and when.
+      const caller = (new Error().stack || '').split('\n').slice(2, 5).map((l) => l.trim().replace(/^at /, '')).join(' < ')
+      console.log(`[baseline] drop ${panelId} had=${layoutStore.baseline(panelId) !== undefined} via ${caller}`)
       baselineCapture.drop(panelId)
       layoutStore.dropBaseline(panelId)
     },

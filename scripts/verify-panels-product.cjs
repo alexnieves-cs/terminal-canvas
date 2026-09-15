@@ -276,8 +276,10 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // unchanged: a beginner reaches a real composer and a recorded reply
       // with no terminal.
       const primary = await waitUntil(() => wc.executeJavaScript(`(() => {
+        // M263 renamed this door "Ask" (Start work, Ask, Create...); its title
+        // still promises a conversation with no folder, which is the property.
         const b = document.querySelector('[data-onboarding-ask]')
-        return b && !b.disabled && b.textContent.includes('Start a general chat') ? true : false
+        return b && !b.disabled && b.querySelector('.launcher__verb-name')?.textContent === 'Ask' ? true : false
       })()`), 1500)
       const before = { spawns: chatSpawns.length, ptys: ptyManager.list().length }
       const started = primary === true && await clickVisible('[data-onboarding-ask]')
@@ -2485,7 +2487,11 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // the summary cannot start it — its label reads null, and the walk
         // stops at the first control that reads the same as its start.
         await wc.executeJavaScript(`(() => { const d = document.querySelector('[data-launcher-more]'); if (d) d.open = true; return true })()`)
-        const launcher = await tabWalk('[data-launcher-sheet]', `const n = el.querySelector && el.querySelector('.launcher__verb-name'); return n ? 'verb:' + n.textContent : null`, 40)
+        // From the FIRST enabled verb in DOM order, the pane half's own rule.
+        // M262/M263 put Start work, Create… and the doors above `Custom panel…`,
+        // so a walk starting there could only ever reach 10 of 13 — the
+        // property never broke, the start point went stale.
+        const launcher = await tabWalk('[data-launcher] .launcher__verb:not([disabled])', `const n = el.querySelector && el.querySelector('.launcher__verb-name'); return n ? 'verb:' + n.textContent : null`, 40)
         const verbsInOrder = launcher.visited.filter((v) => typeof v === 'string' && v.startsWith('verb:')).length
         const verbCount = await wc.executeJavaScript(`document.querySelectorAll('[data-launcher] .launcher__verb:not([disabled])').length`)
         ok(IDS[0], paneOk && launcher.started === true && verbsInOrder >= verbCount,
@@ -3790,10 +3796,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         await settle()
 
         const cardState = (id) => wc.executeJavaScript(`(() => {
-          const n = document.querySelector('.panel[data-panel-id="${id}"]'); if (!n) return false
+          // Distinct misses, never a bare false: "the card never rendered" (a
+          // seed lost to a late renderer save) and "the card rendered but its
+          // fork diff was never read" are different bugs.
+          const n = document.querySelector('.panel[data-panel-id="${id}"]'); if (!n) return 'no-panel'
           const r = n.querySelector('[data-work-readiness]')
           const verb = n.querySelector('[data-work-verb="review"]')
-          if (!r) return false
+          if (!r) return 'no-readiness'
           return {
             readiness: r.getAttribute('data-work-readiness'), standing: r.getAttribute('data-work-standing'), word: r.textContent,
             disposition: n.getAttribute('data-work-state'), pill: n.querySelector('[data-work-word]') ? n.querySelector('[data-work-word]').textContent : null,
@@ -3808,6 +3817,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
         // the third state: before that the card says nothing about review.
         const ready = await waitUntil(async () => { const c = await cardState('d07A'); return c && c.readiness === 'ready' ? c : false }, 15000)
         const none = await waitUntil(async () => { const c = await cardState('d07B'); return c && c.readiness === 'no-lane' ? c : false }, 8000)
+        if (ready === false || none === false) console.log(`[work.action.1] final d07A=${JSON.stringify(await cardState('d07A'))} d07B=${JSON.stringify(await cardState('d07B'))}`)
 
         // ---- review.task.2: the card's Review, pressed as a person does ----
         // mousedown and click in SEPARATE tasks (M195's lesson: a handler
