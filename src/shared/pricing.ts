@@ -3,19 +3,23 @@ import { type TokenTotals } from './cost'
 /**
  * Dollars per MILLION tokens, per class, per model.
  *
- * TRANSCRIBED on 2026-08-30 and NOT YET VERIFIED against Anthropic's
- * published API price list — the whole-branch review's SDD ledger records
- * these figures as plausible in structure (cache writes above input, cache
- * reads well below it) but unconfirmed against a real source, and
- * `claude-opus-5`'s specific rate is a guess rather than a checked value. A
+ * CHECKED on 2026-09-14 against platform.claude.com's models overview, which
+ * publishes input/output per model and "cache reads cost 10% of the base
+ * input price (2.5% on Claude Fable 5.1)". The first transcription
+ * (2026-08-30) had Sonnet 5 at 3/15 — half again too high — and lacked both
+ * Fables. Cache WRITE rates are still the 1.25x-of-input 5-minute rule rather
+ * than a figure read off the pricing page (that page 404'd at check time). A
  * price table with no date is a table nobody can tell is stale, which is why
- * that sentence is here rather than in a commit message; this is the same
- * shape of honesty callout as the unverified `--session-id`→filename link and
- * the `agent.idleAfterMs` provisional default recorded elsewhere in
- * CLAUDE.md — it needs a hand checking it against the real list once, and
- * must not be read as confirmed until somebody has done that. An unknown
- * model yields no figure at all rather than a plausible-looking wrong one,
- * which is the one thing this table gets to be confident about regardless.
+ * the date is here rather than in a commit message; `verify:usage`
+ * `pricing.1` pins the checked rates so a re-transcription error goes red.
+ * An unknown model yields no figure at all rather than a plausible-looking
+ * wrong one, which is the one thing this table gets to be confident about
+ * regardless.
+ *
+ * KNOWN UNDERCOUNT: `cacheWrite` does not separate 5-minute from 1-hour
+ * writes (the latter bill at 2x input), so a session on the 1-hour TTL is
+ * priced low. Splitting it needs `cache_creation.ephemeral_1h_input_tokens`
+ * carried through TokenTotals.
  *
  * These are API LIST prices. They are not what a Max or Pro subscriber is
  * charged, which is nothing per token. Everything downstream labels the
@@ -34,9 +38,27 @@ export interface ModelRates {
 }
 
 export const MODEL_RATES: Record<string, ModelRates> = {
+  // Fable 5.1's cache read is 2.5% of input, not 10% — the one row where
+  // scaling from input would have been wrong even before the write rate.
+  'claude-fable-5-1': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 0.25 },
+  'claude-fable-5': { input: 10, output: 50, cacheWrite: 12.5, cacheRead: 1 },
   'claude-opus-5': { input: 5, output: 25, cacheWrite: 6.25, cacheRead: 0.5 },
-  'claude-sonnet-5': { input: 3, output: 15, cacheWrite: 3.75, cacheRead: 0.3 },
+  'claude-sonnet-5': { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
   'claude-haiku-4-5': { input: 1, output: 5, cacheWrite: 1.25, cacheRead: 0.1 }
+}
+
+/**
+ * Models before the 4.6 generation report a DATED snapshot id in
+ * `message.model` — real transcripts carry `claude-haiku-4-5-20251001`, never
+ * the alias — so an exact-key lookup priced every Haiku turn as unknown, and
+ * one unknown model blanks a whole run's total. Only an 8-digit date suffix is
+ * stripped: anything looser would price an unrelated future id at a
+ * neighbour's rate, the plausible-wrong figure `costOf` exists to refuse.
+ */
+const DATED_SNAPSHOT = /-\d{8}$/
+
+function ratesFor(model: string): ModelRates | undefined {
+  return MODEL_RATES[model] ?? MODEL_RATES[model.replace(DATED_SNAPSHOT, '')]
 }
 
 const PER_MILLION = 1_000_000
@@ -52,7 +74,7 @@ const PER_MILLION = 1_000_000
  * legitimately IS 0 — those are two different sentences.
  */
 export function costOf(totals: TokenTotals, model: string): number | undefined {
-  const rates = MODEL_RATES[model]
+  const rates = ratesFor(model)
   if (!rates) return undefined
   return (
     (totals.input * rates.input +

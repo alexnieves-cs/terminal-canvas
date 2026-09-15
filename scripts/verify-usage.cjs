@@ -202,6 +202,46 @@ const rec = (over = {}) => JSON.stringify({
     String(U.costOf(U.emptyTotals(), 'claude-opus-5')))
 }
 
+// pricing.1 The rates checked against platform.claude.com on 2026-09-14 are
+//     PINNED. Checks 9–13 are all shape checks — a table with Sonnet 5 at
+//     3/15 (the first transcription, 50% high) satisfies every one of them.
+//     A deliberate price change edits this check and the table together.
+{
+  const pinned = {
+    'claude-fable-5-1': [10, 50, 0.25],
+    'claude-opus-5': [5, 25, 0.5],
+    'claude-sonnet-5': [2, 10, 0.2],
+    'claude-haiku-4-5': [1, 5, 0.1]
+  }
+  const off = Object.entries(pinned).filter(([m, [i, o, r]]) => {
+    const x = U.MODEL_RATES[m]
+    return !x || x.input !== i || x.output !== o || x.cacheRead !== r
+  })
+  ok('pricing.1 checked rates are pinned', off.length === 0,
+    off.length ? `drifted: ${off.map(([m]) => m).join(', ')}` : 'ok')
+}
+
+// pricing.2 A dated snapshot id prices as its alias. Claude Code transcripts
+//     carry `claude-haiku-4-5-20251001` (see fixtures), so without this every
+//     Haiku turn is "unpriced" and blanks the run total around it.
+{
+  const t = { input: 1000000, output: 0, cacheWrite: 0, cacheRead: 0 }
+  ok('pricing.2 dated snapshot prices as alias',
+    U.costOf(t, 'claude-haiku-4-5-20251001') === U.costOf(t, 'claude-haiku-4-5') &&
+      U.costOf(t, 'claude-haiku-4-5') === 1,
+    String(U.costOf(t, 'claude-haiku-4-5-20251001')))
+}
+
+// pricing.3 Only an 8-digit date is stripped. A looser rule would price a
+//     future `claude-opus-5-2` at Opus 5's rate — check 11's plausible wrong
+//     answer arriving by the side door.
+{
+  const t = { input: 100, output: 100, cacheWrite: 0, cacheRead: 0 }
+  ok('pricing.3 non-date suffix stays unpriced',
+    U.costOf(t, 'claude-opus-5-2') === undefined && U.costOf(t, 'claude-opus-5-2026') === undefined,
+    String(U.costOf(t, 'claude-opus-5-2')))
+}
+
 // A file-size argument the accumulator can compare against its offset. The
 // tests pass `offset + text.length` for the ordinary growing case.
 const grow = (st, id, text) => U.applyChunk(st, id, text, U.offsetFor(st, id) + text.length)
