@@ -118,6 +118,69 @@ ok('orch.settings.1 shell.centerView enum is canvas | orchestration with default
   /values:\s*\['canvas',\s*'orchestration'\]/.test(schema) &&
   /default:\s*'canvas'/.test(schema.split("id: 'shell.centerView'")[1] ?? ''))
 
+const linked = build({
+  panels: [
+    { id: 'c1', kind: 'chat', title: 'Supervisor', agentic: true, agentState: 'busy', supervisor: true },
+    { id: 'c2', kind: 'chat', title: 'Coder', agentic: true, agentState: 'idle', linksTo: ['t1'] },
+    { id: 't1', kind: 'terminal', title: 'build', agentic: true, agentState: 'busy' },
+    { id: 'doc', kind: 'file', title: 'readme', agentic: false, path: '/tmp/repo/README.md' }
+  ],
+  workItems: [
+    { id: 'i1', title: 'A', state: 'todo' },
+    { id: 'i2', title: 'B', state: 'working' },
+    { id: 'i3', title: 'C', state: 'review' },
+    { id: 'i4', title: 'D', state: 'done' }
+  ],
+  machine: { cpuPercent: 1, memoryBytes: 1 },
+  hour: 15
+})
+ok('orch.model.6 authored canvas links become dashed graph edges; files stay off the roster',
+  linked?.graph?.edges?.some((e) => e.from === 'c2' && e.to === 't1' && e.authored === true) === true &&
+  linked?.files?.length === 1 && linked?.files[0]?.path === '/tmp/repo/README.md' &&
+  linked?.roster?.every((r) => r.kind !== 'file'),
+  JSON.stringify({ edges: linked?.graph?.edges, files: linked?.files, roster: linked?.roster?.map((r) => r.kind) }))
+ok('orch.pipeline.1 four board stages with counts from the work items, never a fifth invented word',
+  linked?.pipeline?.length === 4 &&
+  linked?.pipeline?.every((s) => typeof s.state === 'string' && typeof s.count === 'number') &&
+  linked?.pipeline?.map((s) => s.count).join(',') === '1,1,1,1',
+  JSON.stringify(linked?.pipeline))
+
+const filter = typeof M.filterRoster === 'function' ? M.filterRoster : () => []
+const roster = snap.roster
+ok('orch.filter.1 running keeps busy/wants-you/watching/pool; needs-you is only that tone; query matches title',
+  filter(roster, 'running', '').every((r) => ['busy', 'starting', 'wants-you', 'watching', 'pool'].includes(r.state)) &&
+  filter(roster, 'needs-you', '').every((r) => r.state === 'wants-you') &&
+  filter(roster, 'all', 'Coder').every((r) => r.title === 'Coder') &&
+  filter(roster, 'all', 'zzzz-nope').length === 0,
+  JSON.stringify({ running: filter(roster, 'running', '').map((r) => r.state), need: filter(roster, 'needs-you', '').map((r) => r.id) }))
+
+const actFilter = typeof M.filterActivity === 'function' ? M.filterActivity : () => []
+const events = [
+  { panelId: 'c1', at: 1 },
+  { panelId: 'c2', at: 1 },
+  { panelId: 'gone', at: 1 }
+]
+ok('orch.filter.2 live scope keeps live panels and recent events; historical keeps all; selection still filters',
+  actFilter(events, { selectedId: null, scope: 'live', livePanelIds: ['c1'], now: 1000, liveMs: 50 }).length === 1 &&
+  actFilter(events, { selectedId: null, scope: 'all', livePanelIds: ['c1'], now: 1000, liveMs: 50 }).length === 3 &&
+  actFilter(events, { selectedId: 'c2', scope: 'all', livePanelIds: [], now: 1000 }).length === 1,
+  JSON.stringify({
+    live: actFilter(events, { selectedId: null, scope: 'live', livePanelIds: ['c1'], now: 1000, liveMs: 50 }),
+    all: actFilter(events, { selectedId: null, scope: 'all', livePanelIds: ['c1'], now: 1000, liveMs: 50 }).length
+  }))
+
+const faces = typeof M.isoCubeFaces === 'function' ? M.isoCubeFaces(100, 80, 40) : null
+const pts = (s) => (s || '').trim().split(/\s+/).length
+ok('orch.cube.1 isometric cube has three faces of four points; hub node is larger than a satellite',
+  faces !== null && pts(faces.top) === 4 && pts(faces.left) === 4 && pts(faces.right) === 4 &&
+  snap?.graph?.nodes?.find((n) => n.hub)?.size > snap?.graph?.nodes?.find((n) => !n.hub)?.size,
+  JSON.stringify({ faces, hub: snap?.graph?.nodes?.find((n) => n.hub)?.size, sat: snap?.graph?.nodes?.find((n) => !n.hub)?.size }))
+
+const workFilter = typeof M.filterWorkItems === 'function' ? M.filterWorkItems : () => []
+ok('orch.pipeline.2 stage filter returns only that board state; null passes all through',
+  workFilter([{ id: 'a', title: 't', state: 'todo' }, { id: 'b', title: 'u', state: 'done' }], 'todo').length === 1 &&
+  workFilter([{ id: 'a', title: 't', state: 'todo' }], null).length === 1)
+
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
 if (failed.length) {

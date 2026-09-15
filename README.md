@@ -1046,6 +1046,7 @@ price of not killing something.
 | M266 | feel reshape beat 4 — teammate · chat · session silhouettes: chat leads as Teammate · place; pill running copy says sessions — `docs/build-log/m266-silhouettes.md` | ✅ done |
 | M267 | motion and material — drag weight and settle, a travelling current on firing edges, the summoned command pill, aura depth, a living working signal; a new chat spawns clear of the navigation cluster — `docs/build-log/m267-motion-material.md` | ✅ done |
 | M268 | Orchestration center view — dock / TopBar / palette swap the center column between Canvas and Orchestration; canvas stays mounted; HUD aggregates live agents, board tasks, watchers, workflows, machine cost and an activity ring — `docs/build-log/m268-orchestration.md` | ✅ done |
+| M269 | Orchestration HUD — denser glass ops view over the M268 page: isometric agent graph with pan/zoom, filterable pool, Dev/Pipeline stages from the board, live/historical activity, PTY/chat tail, real process metrics; selection drives the other panes; jump still returns to the canvas — `docs/build-log/m269-orchestration-hud.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

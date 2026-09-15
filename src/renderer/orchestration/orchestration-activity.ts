@@ -5,7 +5,7 @@
 
 import { TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 
-export type OrchActivityKind = 'agent' | 'pool' | 'watcher'
+export type OrchActivityKind = 'agent' | 'pool' | 'watcher' | 'task'
 
 export interface OrchActivityEvent {
   id: string
@@ -88,4 +88,21 @@ export function agentTransitionActivity(
           : 'idle'
   const detail = prev === undefined ? `became ${state}` : `${prev} → ${state}`
   return { at, kind: 'agent', panelId, title, detail, tone }
+}
+
+export function poolActivity(
+  panelId: string,
+  title: string,
+  detail: string,
+  live: boolean,
+  at: number
+): Omit<OrchActivityEvent, 'id'> {
+  return {
+    at,
+    kind: 'pool',
+    panelId,
+    title,
+    detail,
+    tone: live ? TONE_WORKING : 'idle'
+  }
 }

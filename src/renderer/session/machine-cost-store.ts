@@ -59,6 +59,16 @@ function subscribe(panelId: PanelId, listener: () => void): () => void {
   }
 }
 
+/** Plain read for the orchestration HUD — same cache the inspector hook uses. */
+export function getMachineCost(panelId: PanelId): PanelMachineCost | undefined {
+  return costs.get(panelId)
+}
+
+/** Every panel in the latest sample, for the compute-block viz. */
+export function listMachineCosts(): PanelMachineCost[] {
+  return [...costs.values()]
+}
+
 export function useMachineCost(panelId: PanelId): PanelMachineCost | undefined {
   return useSyncExternalStore(
     (listener) => subscribe(panelId, listener),
