@@ -3625,6 +3625,20 @@ body {
   pointer-events: none;
 }
 
+/* Startup splash. The top screen-space layer, a sibling of .world, alive for
+   under three seconds. pointer-events is set INLINE per mode: Field Lines
+   covers the canvas (a click there is a skip, never a blind click on the
+   Launcher it hides); the ghost is pointer-events:none, so a click during it
+   lands on the panel it is tracing. */
+.startup-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 1200;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 /* Backlog #75. A sibling of .world like the HUD and the palette, so it never
    pans or zooms with the panels it is reporting on. */
 .diagnostics-overlay {

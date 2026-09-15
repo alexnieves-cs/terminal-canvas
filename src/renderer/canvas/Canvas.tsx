@@ -52,7 +52,9 @@ import {
   EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
   MACHINE_COST_SAMPLE_MS, retainSelection, panelLabel, MAXIMISE_MARGIN } from './canvas-constants'
-import { useViewport } from './useViewport'
+import { useViewport, prefersReducedMotion } from './useViewport'
+import { StartupSplash } from './StartupSplash'
+import { splashMode, LAST_VERSION_KEY, PLAYED_KEY, type SplashMode, type StartupInput } from './splash'
 import type { TaskMenuFact } from '@renderer/components/PanelFrame'
 import { REASON_TOOL_UNREAD, type ToolGenerateResult } from '@shared/tool-spec'
 import { FIT_TASK_NO_CONTEXT, missingSentence, showTaskTarget, taskMembership, type TaskMembership } from './task-members'
@@ -298,8 +300,11 @@ export function Canvas({
   initial,
   liveSessionIds,
   defaultTemplate,
-  allPanelIds
+  allPanelIds,
+  startup
 }: {
+  /** The startup splash's boot inputs; absent (a harness mount) means no splash. */
+  startup?: StartupInput
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
   liveSessionIds: Set<string>
@@ -3218,6 +3223,27 @@ export function Canvas({
   // back, because an empty canvas with no way to start is the state M48 fixed.
   const [launcherPutAway, setLauncherPutAway] = useState(false)
   useEffect(() => { if (panels.length !== 0) setLauncherPutAway(false) }, [panels.length])
+  // Startup splash. Decided ONCE, from the layout as it was restored — the
+  // ghost traces what you left, not what you did in the first 800 ms.
+  const [splash, setSplash] = useState<SplashMode>(() => startup === undefined ? 'none' : splashMode({
+    ...startup,
+    reducedMotion: prefersReducedMotion(),
+    playedThisSession: (() => { try { return window.sessionStorage.getItem(PLAYED_KEY) !== null } catch { return false } })(),
+    merged: false,
+    panelCount: initial.panels.length
+  }))
+  useEffect(() => {
+    if (splash === 'none' || startup === undefined) return
+    try {
+      window.localStorage.setItem(LAST_VERSION_KEY, startup.version || 'unknown')
+      window.sessionStorage.setItem(PLAYED_KEY, '1')
+    } catch { /* storage unavailable: the splash may replay, nothing worse */ }
+    // Mount-only by design: the write marks that a splash STARTED.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Entering the merged view ENDS the splash rather than hiding it: hidden,
+  // leaving the view would remount it and replay the scene from zero.
+  useEffect(() => { if (merged) setSplash('none') }, [merged])
   // M262. THE STARTER CLUSTER: a first start mints a card and its agent; for
   // one arrival they rise in turn and the camera frames them TOGETHER, so the
   // first thing a person sees is the pair, never one panel alone on a void.
@@ -7773,6 +7799,9 @@ export function Canvas({
           onClose={diagnostics.close}
           getRendererInput={getDiagnosticsInput}
         />
+        {splash !== 'none' && !merged && (
+          <StartupSplash mode={splash} rects={rects} viewport={viewport} onDone={() => setSplash('none')} />
+        )}
         {/* M48. The launcher: keyed on the panel COUNT of this canvas, never
             on activity, and never while merged (the merged view's geometry is
             read-only). A sibling of .world, so it never scales. */}

@@ -170,7 +170,9 @@ export function setReducedMotionOverride(value: boolean | null): void {
     else window.localStorage.setItem(OVERRIDE_KEY, value ? 'true' : 'false')
   } catch { /* storage unavailable: the module variable still holds for this page */ }
 }
-const prefersReducedMotion = (): boolean => {
+// Exported for StartupSplash: the splash must honour the same override the
+// harness sets, not a second media-query read that ignores it.
+export const prefersReducedMotion = (): boolean => {
   if (reducedMotionOverride !== null) return reducedMotionOverride
   try {
     const stored = window.localStorage.getItem(OVERRIDE_KEY)

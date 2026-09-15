@@ -8,6 +8,8 @@ module.exports = {
   ...require('../src/renderer/canvas/panel-interaction'),
   ...require('../src/renderer/canvas/pointer-correct'),
   ...require('../src/renderer/canvas/attention'),
+  // The startup splash's mode table and field math (splash.1, splash.2).
+  ...require('../src/renderer/canvas/splash'),
   ...require('../src/renderer/panels/panels'),
   // M187. The note kind's pure rules travel with the panel factories they shape.
   ...require('../src/shared/notes'),

@@ -6,6 +6,7 @@ import type { PresetTemplate } from '@shared/ipc-contract'
 import { DEFAULT_CAMERA } from '@shared/layout-schema'
 import { App } from './App'
 import { installDropGuard } from './drop-guard'
+import { LAST_VERSION_KEY, type StartupInput } from './canvas/splash'
 
 // Installed before React mounts, and never uninstalled: an unhandled file drop
 // navigates the renderer, which kills every PTY in the window. Nothing about
@@ -138,6 +139,24 @@ async function boot(): Promise<void> {
     console.warn('[boot] could not list workspaces; ids seed from this canvas only', error)
   }
 
+  // The startup splash's inputs, resolved here for the same reason as the
+  // layout: useState is synchronous, and a splash decided in an effect would
+  // paint one frame of bare canvas first. Every failure reads as "on" with no
+  // history — the harness flag, not a failed read, is what keeps suites still.
+  let startupEnabled = true
+  try {
+    const row = (await window.canvas.settings.list()).find((r) => r.id === 'appearance.startupAnimation')
+    if (row !== undefined && row.value === false) startupEnabled = false
+  } catch { /* the default stands */ }
+  let lastVersion: string | null = null
+  try { lastVersion = window.localStorage.getItem(LAST_VERSION_KEY) } catch { /* storage unavailable */ }
+  const startup: StartupInput = {
+    enabled: startupEnabled,
+    harnessOff: new URLSearchParams(window.location.search).get('tc-splash') === 'off',
+    lastVersion,
+    version: window.canvas.appVersion ?? ''
+  }
+
   // Deliberately NOT wrapped in StrictMode. StrictMode double-invokes effects
   // in development, which for a terminal means spawning a PTY, killing it, and
   // spawning it again on every mount.
@@ -149,6 +168,7 @@ async function boot(): Promise<void> {
       liveSessionIds={liveSessionIds}
       defaultTemplate={defaultTemplate}
       allPanelIds={allPanelIds}
+      startup={startup}
     />
   )
 }

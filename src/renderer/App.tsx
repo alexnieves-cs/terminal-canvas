@@ -3,6 +3,7 @@ import type { CanvasState } from '@shared/layout-schema'
 import type { PresetTemplate } from '@shared/ipc-contract'
 import { Canvas } from './canvas/Canvas'
 import { CanvasToaster } from './shell/CanvasToaster'
+import type { StartupInput } from './canvas/splash'
 
 /**
  * M4b: the starting canvas arrives from main rather than from a constant.
@@ -21,8 +22,11 @@ export function App({
   initial,
   liveSessionIds,
   defaultTemplate,
-  allPanelIds
+  allPanelIds,
+  startup
 }: {
+  /** The startup splash's boot inputs; see renderer/main.tsx. */
+  startup?: StartupInput
   initial: CanvasState
   /** Panels that already have a process; see renderer/main.tsx for the rule. */
   liveSessionIds: Set<string>
@@ -38,6 +42,7 @@ export function App({
         liveSessionIds={liveSessionIds}
         defaultTemplate={defaultTemplate}
         allPanelIds={allPanelIds}
+        startup={startup}
       />
       {/* Round 8. One-shot outcomes only — see shell/toast.ts for the line
           between this and the attention system, which stays the source of
