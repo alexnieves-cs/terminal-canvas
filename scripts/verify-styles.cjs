@@ -511,7 +511,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // the canvas as one instrument and wears the overlay elevation (the brief's
   // "stronger separation"); both are named here rather than let --e-3 loose.
   // The expanded command pill overlays the canvas; its resting button stays flat.
-  const OVERLAY = /\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions/
+  const OVERLAY = /\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
