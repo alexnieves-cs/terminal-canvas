@@ -20,3 +20,5 @@ Canvas stays mounted when Orchestrate is showing. Transitions are paint-only.
 - Palette already entered with M267 material; the Task|Panel sheet uses the
   same enter. Keyboard reach unchanged (`<details>`, sheet fields, palette
   input).
+- Orchestration graph edges travel with `edge-current` only when a real
+  agent transition fires (`ORCH_EDGE_FIRE_MS`), not because endpoints are live.

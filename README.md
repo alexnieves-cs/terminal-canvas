@@ -1051,6 +1051,7 @@ price of not killing something.
 | M271 | Orchestration HUD v2 — selection-driven verbs, shared empty states, isometric depth on live/needs-you, orchestration shot scene — `docs/build-log/m271-orchestration-hud-v2.md` | ✅ done |
 | M272 | Motion — canvas stays mounted behind Orchestrate, paint-only spawn/demote/wake, finite attention pip, sheet enter matching M267 — `docs/build-log/m272-motion.md` | ✅ done |
 | M273 | Resume and navigation — facts-only reopen summary, Show this task / Show related, intent-led empty canvas, search scope honesty — `docs/build-log/m273-resume-nav.md` | ✅ done |
+| M274 | Orchestration deepen O1–O4 — roster keyboard, transition-only edge current, task frame, blocker strip, metric lens, honest hub, stale samples; O5/AO held — `docs/build-log/m274-orchestration-deepen.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

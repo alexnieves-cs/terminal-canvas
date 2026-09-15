@@ -7424,6 +7424,11 @@ export function Canvas({
             panels={panels}
             workItems={workItems}
             templates={orchTemplates}
+            taskMemberIds={(() => {
+              const focused = workItems.find((w) => w.state === WORK_ITEM_STATES[1]) ?? workItems.find((w) => w.state === WORK_ITEM_STATES[2])
+              if (focused === undefined) return []
+              return taskMemberships(panels, [focused])[0]?.members.map((m) => m.panelId) ?? []
+            })()}
             onJumpPanel={(id) => {
               chrome.setCenterView('canvas')
               paletteActions.goToPanel(id)

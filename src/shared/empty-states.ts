@@ -41,8 +41,8 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'orch-pipeline', sentence: 'no tasks in this stage — start work from the board or palette', verb: 'Show Canvas' },
   { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },
   { id: 'orch-selected', sentence: 'select an agent in the pool or graph to jump to it' },
-  { id: 'orch-activity', sentence: 'no agent state changes yet — they appear here as they happen' },
-  { id: 'orch-terminal', sentence: 'no live command reported yet — select a terminal to tail its scrollback' },
+  { id: 'orch-activity', sentence: 'no matching activity — Live is working panels plus the recent window; Historical is this session' },
+  { id: 'orch-terminal', sentence: 'no recorded logs yet — select a panel to read its scrollback or last chat turn', verb: 'Show Canvas' },
   { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' }
 ]
 

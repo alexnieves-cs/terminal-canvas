@@ -6,9 +6,19 @@
  */
 
 import type { AgentState } from '@shared/types'
+import { EDGE_FIRE_MS } from '@shared/edge-activity'
 import type { WorkItemState } from '@shared/work-items'
 import { WORK_ITEM_STATES } from '@shared/work-items'
 import { TONE_NEEDS_YOU, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
+
+/** Same travel window as the canvas edge current (M267). */
+export const ORCH_EDGE_FIRE_MS = EDGE_FIRE_MS
+
+/** Honest label for a hub that is layout-only, not a supervisor chat. */
+export const ORCH_SYNTHETIC_HUB_TITLE = 'No supervisor yet'
+
+/** A sample older than this is shown with its age, never as a fresh 0%. */
+export const ORCH_MACHINE_STALE_MS = 8_000
 
 export type OrchPanelKind = 'chat' | 'terminal' | 'watcher' | 'workflow' | 'work' | 'file' | 'other'
 
@@ -79,6 +89,8 @@ export interface OrchWorkItemInput {
 export interface OrchMachineInput {
   cpuPercent: number
   memoryBytes: number
+  /** Epoch ms of the last process-table sample. Absent: never sampled. */
+  sampledAt?: number
 }
 
 export interface OrchRosterRow {
@@ -95,6 +107,8 @@ export interface OrchGraphNode {
   title: string
   kind: OrchPanelKind
   hub: boolean
+  /** True when the hub is layout-only — no supervisor/orchestrator chat. */
+  synthetic?: boolean
   x: number
   y: number
   state: OrchRosterRow['state']
@@ -213,15 +227,20 @@ export interface OrchCommand {
  * disabled button is not a door.
  */
 export function orchCommands(input: {
-  selectedId: string | null
+  selectedId?: string | null
+  selectedIds?: readonly string[]
   canInterrupt: boolean
+  /** When omitted, Jump is real iff at least one selected id is a real panel. */
+  canJump?: boolean
   canMarkDone: boolean
   canFocusRelated: boolean
   canOpenFiles: boolean
 }): OrchCommand[] {
+  const ids = input.selectedIds ?? (input.selectedId != null && input.selectedId !== '' ? [input.selectedId] : [])
+  const canJump = input.canJump ?? ids.some((id) => id !== '__hub__')
   const out: OrchCommand[] = []
   if (input.canInterrupt) out.push({ id: 'interrupt', label: 'Interrupt' })
-  if (input.selectedId !== null) out.push({ id: 'jump', label: 'Jump' })
+  if (canJump) out.push({ id: 'jump', label: 'Jump' })
   if (input.canMarkDone) out.push({ id: 'mark-done', label: 'Mark done' })
   if (input.canFocusRelated) out.push({ id: 'focus-related', label: 'Focus related' })
   if (input.canOpenFiles) out.push({ id: 'open-files', label: 'Open Files' })
@@ -274,11 +293,13 @@ export function buildOrchestrationSnapshot(input: {
   const nodes: OrchGraphNode[] = []
   const edges: OrchGraphEdge[] = []
   const hubId = hubPanel?.id ?? '__hub__'
+  const syntheticHub = hubPanel === undefined
   nodes.push({
     id: hubId,
-    title: hubPanel?.title ?? 'Orchestrator',
+    title: hubPanel?.title ?? ORCH_SYNTHETIC_HUB_TITLE,
     kind: hubPanel?.kind ?? 'chat',
     hub: true,
+    ...(syntheticHub ? { synthetic: true } : {}),
     x: HUB_X,
     y: HUB_Y,
     state: hubPanel ? rosterState(hubPanel) : 'idle',
@@ -391,10 +412,16 @@ export function filterActivity<T extends { panelId?: string; at: number }>(
     livePanelIds: readonly string[]
     now: number
     liveMs?: number
+    /** When set, only these panels (task frame / metric lens). Empty → none. */
+    panelIds?: readonly string[] | null
   }
 ): T[] {
   const liveMs = opts.liveMs ?? ORCH_LIVE_MS
+  const allow = opts.panelIds === undefined || opts.panelIds === null
+    ? null
+    : new Set(opts.panelIds)
   return rows.filter((row) => {
+    if (allow !== null && (row.panelId === undefined || !allow.has(row.panelId))) return false
     if (opts.selectedId !== null && row.panelId !== opts.selectedId) return false
     if (opts.scope === 'all') return true
     if (row.panelId !== undefined && opts.livePanelIds.includes(row.panelId)) return true
@@ -435,6 +462,227 @@ export function filterBySelection<T extends { id?: string; panelId?: string }>(
 ): T[] {
   if (selectedId === null) return [...rows]
   return rows.filter((r) => r.id === selectedId || r.panelId === selectedId)
+}
+
+/**
+ * Arrow roster step. Clamps at the ends; an empty list stays unselected.
+ * `delta` is +1 (down) or -1 (up). No selection yet lands on the first/last.
+ */
+export function orchRosterStep(
+  rows: readonly { id: string }[],
+  selectedId: string | null,
+  delta: number
+): string | null {
+  if (rows.length === 0) return null
+  if (selectedId === null) return delta >= 0 ? rows[0]!.id : rows[rows.length - 1]!.id
+  const i = rows.findIndex((r) => r.id === selectedId)
+  if (i < 0) return delta >= 0 ? rows[0]!.id : rows[rows.length - 1]!.id
+  const next = i + delta
+  if (next < 0) return rows[0]!.id
+  if (next >= rows.length) return rows[rows.length - 1]!.id
+  return rows[next]!.id
+}
+
+/**
+ * Roster keyboard is for the HUD. A focused terminal, a contenteditable
+ * surface, or a target outside `.orch` must keep its keys — shellControl
+ * leaves xterm focused on purpose, and stealing those arrows would write
+ * into a running agent.
+ */
+export function orchKeysShouldHandle(target: { closest: (selector: string) => unknown } | null): boolean {
+  if (target === null) return false
+  if (target.closest('.xterm') != null) return false
+  if (target.closest('.xterm-helper-textarea') != null) return false
+  if (target.closest('.xterm-screen') != null) return false
+  if (target.closest('[contenteditable="true"]') != null) return false
+  return target.closest('.orch') != null
+}
+
+export function orchEdgeKey(from: string, to: string): string {
+  return `${from}:${to}`
+}
+
+/** Edges that touch a panel the instant a real agent transition fires. */
+export function orchEdgesFiredByPanel(
+  edges: readonly OrchGraphEdge[],
+  panelId: string
+): string[] {
+  return edges
+    .filter((e) => e.from === panelId || e.to === panelId)
+    .map((e) => orchEdgeKey(e.from, e.to))
+}
+
+export function orchEdgeIsFiring(
+  from: string,
+  to: string,
+  fires: ReadonlyMap<string, number>,
+  now: number,
+  fireMs: number = ORCH_EDGE_FIRE_MS
+): boolean {
+  const at = fires.get(orchEdgeKey(from, to)) ?? fires.get(orchEdgeKey(to, from))
+  if (at === undefined) return false
+  const dt = now - at
+  return dt >= 0 && dt < fireMs
+}
+
+export type OrchBlockerKind = 'waiting-on-you' | 'queued' | 'running' | 'reviewable'
+
+export interface OrchBlocker {
+  kind: OrchBlockerKind
+  line: string
+}
+
+function blockerCountLine(kind: OrchBlockerKind, count: number, title: string | undefined, noun: string): string {
+  if (count <= 0) return ''
+  const head =
+    kind === 'waiting-on-you' ? 'Waiting on you'
+      : kind === 'reviewable' ? 'Reviewable'
+        : kind === 'running' ? 'Running'
+          : 'Queued'
+  if (title !== undefined && title.trim() !== '') {
+    return count === 1 ? `${head} — ${title}` : `${head} — ${title} and ${count - 1} more`
+  }
+  return `${head} — ${count} ${noun}${count === 1 ? '' : 's'}`
+}
+
+/**
+ * One resting line from facts that already exist. Priority is waiting →
+ * reviewable → running → queued. Returns null when none of those counts
+ * are above zero — never invents a status word.
+ */
+export function orchBlocker(input: {
+  waiting: number
+  waitingTitle?: string
+  reviewable: number
+  reviewTitle?: string
+  running: number
+  runningTitle?: string
+  queued: number
+  queuedTitle?: string
+}): OrchBlocker | null {
+  if (input.waiting > 0) {
+    return { kind: 'waiting-on-you', line: blockerCountLine('waiting-on-you', input.waiting, input.waitingTitle, 'agent') }
+  }
+  if (input.reviewable > 0) {
+    return { kind: 'reviewable', line: blockerCountLine('reviewable', input.reviewable, input.reviewTitle, 'task') }
+  }
+  if (input.running > 0) {
+    return { kind: 'running', line: blockerCountLine('running', input.running, input.runningTitle, 'agent') }
+  }
+  if (input.queued > 0) {
+    return { kind: 'queued', line: blockerCountLine('queued', input.queued, input.queuedTitle, 'task') }
+  }
+  return null
+}
+
+export type OrchMetricId = 'agents' | 'tasks' | 'watchers' | 'waiting'
+
+export interface OrchLens {
+  metric: OrchMetricId | null
+  rosterFilter: OrchRosterFilter
+  query: string
+  mode: OrchMode
+}
+
+/** Metric cards are the same filter everywhere — click again to clear. */
+export function orchMetricLens(id: OrchMetricId, current: OrchMetricId | null): OrchLens {
+  if (current === id) {
+    return { metric: null, rosterFilter: 'all', query: '', mode: 'dev' }
+  }
+  if (id === 'agents') return { metric: id, rosterFilter: 'running', query: '', mode: 'dev' }
+  if (id === 'waiting') return { metric: id, rosterFilter: 'needs-you', query: '', mode: 'dev' }
+  if (id === 'watchers') return { metric: id, rosterFilter: 'running', query: 'watcher', mode: 'dev' }
+  return { metric: id, rosterFilter: 'all', query: '', mode: 'pipeline' }
+}
+
+export function filterGraph(
+  graph: { nodes: readonly OrchGraphNode[]; edges: readonly OrchGraphEdge[] },
+  keepIds: ReadonlySet<string>,
+  opts?: { keepSyntheticHub?: boolean }
+): { nodes: OrchGraphNode[]; edges: OrchGraphEdge[] } {
+  const keepHub = opts?.keepSyntheticHub !== false
+  const nodes = graph.nodes.filter((n) => {
+    if (keepIds.has(n.id)) return true
+    if (keepHub && n.hub && n.synthetic === true) return true
+    return false
+  })
+  const ids = new Set(nodes.map((n) => n.id))
+  const edges = graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to))
+  return { nodes: [...nodes], edges: [...edges] }
+}
+
+/**
+ * Task-centric frame: keep only panels a D08 membership names. Synthetic
+ * hub is dropped — it is not a member. Empty member set → empty frame.
+ */
+export function orchTaskFrame(input: {
+  graph: { nodes: readonly OrchGraphNode[]; edges: readonly OrchGraphEdge[] }
+  roster: readonly OrchRosterRow[]
+  files: readonly OrchFileRow[]
+  memberIds: readonly string[] | null
+}): {
+  graph: { nodes: OrchGraphNode[]; edges: OrchGraphEdge[] }
+  roster: OrchRosterRow[]
+  files: OrchFileRow[]
+  framed: boolean
+} {
+  if (input.memberIds === null) {
+    return {
+      graph: { nodes: [...input.graph.nodes], edges: [...input.graph.edges] },
+      roster: [...input.roster],
+      files: [...input.files],
+      framed: false
+    }
+  }
+  const keep = new Set(input.memberIds)
+  return {
+    graph: filterGraph(input.graph, keep, { keepSyntheticHub: false }),
+    roster: input.roster.filter((r) => keep.has(r.id)),
+    files: input.files.filter((f) => keep.has(f.id)),
+    framed: true
+  }
+}
+
+export function orchActivityCoverage(scope: OrchActivityScope, liveMs: number = ORCH_LIVE_MS): string {
+  const minutes = Math.max(1, Math.round(liveMs / 60_000))
+  if (scope === 'live') {
+    return `Live: panels currently working, plus events from the last ${minutes} minute${minutes === 1 ? '' : 's'}.`
+  }
+  return 'Historical: durable activity recorded this session.'
+}
+
+export function orchLogsCoverage(): string {
+  return 'Logs: recorded scrollback or last chat turn — not a live terminal.'
+}
+
+export function orchFilesCoverage(): string {
+  return 'Files: canvas file panels, each with its real path.'
+}
+
+export type OrchMachineKind = 'none' | 'empty' | 'stale' | 'live'
+
+export function orchMachineReadout(input: {
+  sampledAt: number | null | undefined
+  now: number
+  cpuPercent: number
+  memoryBytes: number
+  panelCount: number
+  staleMs?: number
+}): { kind: OrchMachineKind; cpu: string; memory: string; age: string | null } {
+  const staleMs = input.staleMs ?? ORCH_MACHINE_STALE_MS
+  if (input.sampledAt === undefined || input.sampledAt === null) {
+    return { kind: 'none', cpu: 'no sample yet', memory: 'no sample yet', age: null }
+  }
+  if (input.panelCount <= 0) {
+    return { kind: 'empty', cpu: 'no sample yet', memory: 'no sample yet', age: null }
+  }
+  const ageMs = Math.max(0, input.now - input.sampledAt)
+  const age = ageMs < 1000 ? 'just now' : ageMs < 60_000 ? `${Math.floor(ageMs / 1000)}s ago` : `${Math.floor(ageMs / 60_000)}m ago`
+  const cpu = `${input.cpuPercent.toLocaleString(undefined, { maximumFractionDigits: input.cpuPercent < 10 ? 1 : 0 })}%`
+  const mib = input.memoryBytes / (1024 * 1024)
+  const memory = mib < 1024 ? `${Math.round(mib)} MB` : `${(mib / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} GB`
+  if (ageMs > staleMs) return { kind: 'stale', cpu, memory, age }
+  return { kind: 'live', cpu, memory, age }
 }
 
 export const ORCH_GRAPH_SIZE = { w: GRAPH_W, h: GRAPH_H } as const

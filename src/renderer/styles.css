@@ -6855,6 +6855,16 @@ body {
   color: var(--iris);
 }
 .orch__greeting { margin: var(--sp-1) 0 0; font-size: var(--t-md); color: var(--fg-2); max-width: 48rem; }
+.orch__blocker {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--fg);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--glass-1);
+}
+.orch__blocker[data-orch-blocker="waiting-on-you"] { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, var(--line)); }
 .orch__clocks { display: flex; gap: var(--sp-3); flex-shrink: 0; }
 .orch__clock {
   display: flex;
@@ -6974,6 +6984,12 @@ body {
 .orch__graph { width: 100%; height: 100%; display: block; touch-action: none; }
 .orch__edge { stroke: color-mix(in srgb, var(--iris) 40%, transparent); stroke-width: 1.5; }
 .orch__edge--authored { stroke: var(--amber); stroke-dasharray: 4 3; }
+.orch__edge[data-edge-activity="firing"] {
+  stroke: var(--iris);
+  stroke-width: 3px;
+  stroke-dasharray: 18 8 3 8;
+  animation: edge-current var(--dur-flow) linear 1;
+}
 .orch__cube-face { stroke: color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); stroke-width: 1.2; }
 .orch__cube-face--top { fill: color-mix(in srgb, var(--tone, var(--iris)) 28%, var(--glass-2)); }
 .orch__cube-face--left { fill: color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--glass-1)); }
@@ -7041,6 +7057,8 @@ body {
 .orch__perf-label { font-size: var(--t-xs); color: var(--fg-3); }
 .orch__perf-value { font-size: var(--t-md); font-weight: 600; }
 .orch__caption { margin: 0 0 var(--sp-2); font-size: var(--t-xs); color: var(--fg-4); }
+.orch [data-orch-density="detail"] .orch__section-title { color: var(--fg-3); font-weight: 500; }
+.orch__clock-label { font-size: var(--t-xs); color: var(--fg-4); text-transform: uppercase; letter-spacing: var(--track-caps); }
 .orch__spark { display: block; margin-top: var(--sp-1); }
 .orch__compute { display: flex; align-items: flex-end; gap: var(--sp-2); height: 4.5rem; margin-top: var(--sp-3); }
 .orch__compute-block {
@@ -7326,6 +7344,13 @@ body {
 .orch__wp[data-orch-stage-current] {
   box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent);
 }
+.orch__wp[data-orch-stage-shift] {
+  animation: orch-stage-shift var(--dur-flow) var(--ease) 1;
+}
+@keyframes orch-stage-shift {
+  from { box-shadow: 0 0 0 1px var(--iris); }
+  to { box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent); }
+}
 .orch__cube--needs .orch__cube-face {
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent));
   animation: orch-needs-pulse var(--dur-breath) var(--ease) 3;
@@ -7356,6 +7381,7 @@ body {
 }
 .dock__badge[data-attention-new]:not([hidden]) { animation: attention-pip var(--dur-2) var(--ease) 2; }
 .edge-indicator[data-attention-new] { animation: attention-pip var(--dur-2) var(--ease) 2; }
+.orch__roster-row[data-attention-new] { animation: attention-pip var(--dur-2) var(--ease) 2; }
 
 .world[data-detail="summary"] .workflow-node__verbs,
 .world[data-detail="block"] .workflow-node__verbs,
@@ -7376,7 +7402,9 @@ body {
   .canvas--behind-orch { transform: none; transition: none; }
   .shell__orch--on { animation: none; }
   .orch__cube--needs .orch__cube-face { animation: none; }
+  .orch__edge[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
+  .orch__wp[data-orch-stage-shift] { animation: none; }
   .panel__motion--demoting, .panel__motion--waking { animation: none; }
-  .dock__badge[data-attention-new], .edge-indicator[data-attention-new] { animation: none; }
+  .dock__badge[data-attention-new], .edge-indicator[data-attention-new], .orch__roster-row[data-attention-new] { animation: none; }
   .sheet { animation: none; }
 }

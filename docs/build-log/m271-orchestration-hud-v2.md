@@ -18,5 +18,7 @@ and needs-you only. Still a tail + jump — live xterm stays on the canvas.
 - SVG/CSS glow and pulse on `--live` / `--needs` cubes. No Three.js.
 - Greeting: empty / `there` / `user` / `guest` names become `Good evening.`
   HUD command buttons use `shellControl` so they do not steal terminal focus.
+  Roster ArrowUp/Down / Enter / Escape never handle a key whose target is
+  `.xterm` or contenteditable (`orchKeysShouldHandle`).
 
 Every tail/chat reader still goes through `outward()` / `redactSecrets`.
