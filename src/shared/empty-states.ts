@@ -36,7 +36,14 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   { id: 'palette', sentence: 'No matching command' },
   /** `{backend}` is filled by the node — the sentence names the engine, as codex.1 reads it. */
   { id: 'chat', sentence: 'No turns yet. Send a message to start {backend} here.' },
-  { id: 'attention', sentence: 'nothing waiting' }
+  { id: 'attention', sentence: 'nothing waiting' },
+  { id: 'orch-roster', sentence: 'no agents match this filter — start a chat or terminal on the canvas', verb: 'Show Canvas' },
+  { id: 'orch-pipeline', sentence: 'no tasks in this stage — start work from the board or palette', verb: 'Show Canvas' },
+  { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },
+  { id: 'orch-selected', sentence: 'select an agent in the pool or graph to jump to it' },
+  { id: 'orch-activity', sentence: 'no agent state changes yet — they appear here as they happen' },
+  { id: 'orch-terminal', sentence: 'no live command reported yet — select a terminal to tail its scrollback' },
+  { id: 'orch-files', sentence: 'no file panels on this canvas — drop a file or open one from the palette', verb: 'Show Canvas' }
 ]
 
 export function emptyState(id: string): EmptyState {

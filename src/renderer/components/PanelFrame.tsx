@@ -114,7 +114,7 @@ export interface PanelFrameProps {
   /** null: no close control (the merged view's read-only geometry). */
   close: PanelFrameClose | null
   /** The terminal's enter animation, on the motion wrapper. */
-  motion?: { entering: boolean; onEntryEnd: (id: string) => void }
+  motion?: { entering: boolean; demoting?: boolean; waking?: boolean; onEntryEnd: (id: string) => void }
   onSelect: (id: string, additive?: boolean) => void
   onBeginDrag: (state: DragState) => void
   onBeginLink: (panelId: string, event: ReactMouseEvent) => void
@@ -209,7 +209,11 @@ export function PanelFrame({
   // every tier. The terminal's own tiers are its own (TerminalPanel).
   const detail = useContext(CardDetailContext)
   const farBody: ReactNode | null = kind === 'terminal' ? null
-    : detail === 'block' ? (
+    : detail === 'cluster' ? (
+      <div className="pf__body pf__far pf__far--cluster" data-card-cluster data-tone={tone}>
+        <div className="panel__card-cluster" data-tone={tone} />
+      </div>
+    ) : detail === 'block' ? (
       <div className="pf__body pf__far pf__far--block" data-card-block data-tone={tone}>
         <div className="panel__card-block" data-tone={tone}><span className="panel__card-block-title">{title}</span></div>
       </div>
@@ -388,8 +392,10 @@ export function PanelFrame({
         /* Motion lives on this wrapper, never .panel: .panel's geometry rides
            .world and the viewport checks read that transform as a matrix. */
         <div
-          className={`pf__motion panel__motion${motion.entering ? ' panel__motion--entering' : ''}`}
-          onAnimationEnd={(event) => { if (event.animationName === 'panel-enter') motion.onEntryEnd(id) }}
+          className={`pf__motion panel__motion${motion.entering ? ' panel__motion--entering' : ''}${motion.demoting === true ? ' panel__motion--demoting' : ''}${motion.waking === true ? ' panel__motion--waking' : ''}`}
+          onAnimationEnd={(event) => {
+            if (event.animationName === 'panel-enter' || event.animationName === 'panel-demote' || event.animationName === 'panel-wake') motion.onEntryEnd(id)
+          }}
         >
           {inner}
         </div>

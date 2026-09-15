@@ -1214,11 +1214,22 @@ export interface PanelSearchHit {
   turnIndex?: number
 }
 /** M122. The answer STATES its cap and how many secrets the gate replaced. */
+export interface PanelSearchFailure {
+  /** Which reader failed — `scrollback` or `transcript:<panelId>`. */
+  source: string
+  /** Why it failed, without secrets. */
+  reason: string
+}
+
 export interface PanelSearchResult {
   hits: PanelSearchHit[]
   capped: boolean
   cap: number
   redacted: number
+  /** D13. Named reader failures — absent on older answers is "none failed". */
+  failures?: PanelSearchFailure[]
+  /** D13. What was actually searched, so a miss is not silent coverage. */
+  searched?: { terminals: number; chats: number }
 }
 
 export interface PromptBridgeRow {

@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMo
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machine-cost-store'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
+import type { InspectorContextBand } from './inspector-context'
 import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
 import type { Tone } from '@renderer/panels/panel-state'
 import { panelState } from '@renderer/panels/panel-state'
@@ -139,6 +140,10 @@ export interface InspectorProps {
    */
   toolbox: ToolboxFieldModel | null
   onOpenToolbox: (id: string) => void
+  /** M270. Contextual next / blocker / related — omitted when nothing applies. */
+  contextBand?: InspectorContextBand
+  onShowRelated?: (itemId: string) => void
+  onShowTask?: (panelId: string) => void
   /** (this redesign) Mousedown on the pane's own left-edge handle; Canvas owns the drag itself (it holds `shellRef`), this only starts it. */
   onResizeHandleDown: (event: ReactMouseEvent) => void
 }
@@ -164,7 +169,8 @@ export interface InspectorProps {
  */
 function InspectorImpl({
   onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
-  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown
+  onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown,
+  contextBand, onShowRelated, onShowTask
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
@@ -193,6 +199,9 @@ function InspectorImpl({
             review={review}
             toolbox={toolbox}
             onOpenToolbox={onOpenToolbox}
+            contextBand={contextBand}
+            onShowRelated={onShowRelated}
+            onShowTask={onShowTask}
             onRename={onRename}
             onClose={onClose}
             onSavePreset={onSavePreset}
@@ -455,7 +464,7 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
  */
 function InspectorPanel({
   tab, onSelectTab, automations, templateOf, onTestNode,
-  model, review, toolbox, onOpenToolbox, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
+  model, review, toolbox, onOpenToolbox, contextBand, onShowRelated, onShowTask, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount, panelRun, onRunAgain,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, branchLine, repository
 }: {
   templateOf?: (id: string) => PersistedTemplate | undefined
@@ -471,6 +480,9 @@ function InspectorPanel({
   repository: string | null
   toolbox: ToolboxFieldModel | null
   onOpenToolbox: (id: string) => void
+  contextBand?: InspectorContextBand
+  onShowRelated?: (itemId: string) => void
+  onShowTask?: (panelId: string) => void
   onRename: (id: string, title: string) => void
   onClose: (id: string) => void
   onSavePreset: (id: string) => void
@@ -552,6 +564,41 @@ function InspectorPanel({
           <span className="inspector__repository" data-inspector-repository title={repository}> · {repository.replace(/\/+$/, '').split('/').pop()}</span>
         )}
       </div>
+      {(contextBand?.nextAction !== undefined || contextBand?.blocker !== undefined || contextBand?.related !== undefined) && (
+        <div className="inspector__context" data-inspector-context>
+          {contextBand.nextAction !== undefined && (
+            <p className="inspector__context-next" data-inspector-next>{contextBand.nextAction}</p>
+          )}
+          {contextBand.blocker !== undefined && (
+            <p className="inspector__context-blocker" data-inspector-blocker role="status">{contextBand.blocker}</p>
+          )}
+          {contextBand.related !== undefined && (
+            <div className="inspector__context-related" data-inspector-related>
+              <span>{contextBand.related.title} · {contextBand.related.memberCount} related</span>
+              {onShowRelated !== undefined && (
+                <button
+                  type="button"
+                  className="inspector__action inspector__action--secondary"
+                  title="Show related panels of this task"
+                  {...shellControl(() => onShowRelated(contextBand.related!.itemId))}
+                >
+                  Show related
+                </button>
+              )}
+              {onShowTask !== undefined && (
+                <button
+                  type="button"
+                  className="inspector__action inspector__action--secondary"
+                  title="Frame this task on the canvas"
+                  {...shellControl(() => onShowTask(model.id))}
+                >
+                  Show this task
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       <div className="inspector__state">
         {/*
           The ATTRIBUTE, not only a class: a class is a styling decision a
@@ -655,6 +702,8 @@ function InspectorPanel({
         // terminal the honest arm is `not measured`, never `not running`.
         const arm = model.kind !== 'terminal' ? 'not-measured' : machine !== undefined ? 'reading' : model.running === true ? 'none' : 'not-running'
         return (
+          <details className="inspector__deep" data-inspector-deep>
+            <summary className="inspector__deep-summary">Process metrics</summary>
           <section className="inspector__section inspector__machine" data-inspector-machine={arm}>
             <h3 className="inspector__section-heading">Machine</h3>
             <div className="inspector__value" data-machine-cost>{arm === 'reading' && machine !== undefined
@@ -666,6 +715,7 @@ function InspectorPanel({
               ? `CPU ${machine.cpuPercent < 0.05 ? 'under 1%' : formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
               : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured — only a terminal\'s process tree is sampled' : 'not running — nothing to measure'}</div>
           </section>
+          </details>
         )
       })()}
       {model.links.length > 0 && (
@@ -994,6 +1044,7 @@ function InspectorPanel({
             type="button"
             className="inspector__action"
             data-inspector-action={verb}
+            hidden={model.approval === undefined}
             disabled={model.approval === undefined}
             title={model.approval === undefined
               ? 'nothing is waiting for an answer'
@@ -1016,8 +1067,9 @@ function InspectorPanel({
         */}
         <button
           type="button"
-          className="inspector__action inspector__action--primary"
+          className={`inspector__action${model.kind === 'terminal' ? ' inspector__action--primary' : ' inspector__action--quiet'}`}
           data-inspector-action="restart"
+          hidden={model.kind !== 'terminal'}
           disabled={model.kind !== 'terminal' || !model.restartable}
           title={
             // Terminal is the SPECIAL case and every other kind is uniform,
@@ -1125,6 +1177,7 @@ function InspectorPanel({
               className="inspector__action inspector__action--secondary"
               role="menuitem"
               data-inspector-action="save-preset"
+              hidden={model.kind !== 'terminal'}
               disabled={model.kind !== 'terminal'}
               title={model.kind === 'terminal'
                 ? `Save ${model.heading} as a preset`

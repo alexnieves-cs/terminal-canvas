@@ -82,6 +82,7 @@ export function EdgeIndicators({ rects, viewport, ids, labelOf }: EdgeIndicators
           <div
             className="edge-indicator"
             data-panel-id={pip.id}
+            data-attention-new=""
             style={{
               transform: `translate(${pip.x}px, ${pip.y}px) translate(-50%, -50%) rotate(${pip.angle}rad)`
             }}

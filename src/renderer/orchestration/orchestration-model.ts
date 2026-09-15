@@ -192,6 +192,43 @@ export function isLiveRosterState(state: OrchRosterRow['state']): boolean {
 }
 
 /**
+ * A greeting name is a person's display name. Empty, whitespace, and the
+ * placeholders that used to produce "Good evening, there." are omitted so
+ * the sentence is "Good evening." rather than a false familiarity.
+ */
+export function orchGreetingName(raw?: string): string {
+  const name = (raw ?? '').trim()
+  if (name === '' || /^(there|user|guest|undefined|null)$/i.test(name)) return ''
+  return name
+}
+
+export type OrchCommandId = 'interrupt' | 'jump' | 'mark-done' | 'focus-related' | 'open-files'
+export interface OrchCommand {
+  id: OrchCommandId
+  label: string
+}
+
+/**
+ * Selection-driven command surface: only verbs that can run now. A decorative
+ * disabled button is not a door.
+ */
+export function orchCommands(input: {
+  selectedId: string | null
+  canInterrupt: boolean
+  canMarkDone: boolean
+  canFocusRelated: boolean
+  canOpenFiles: boolean
+}): OrchCommand[] {
+  const out: OrchCommand[] = []
+  if (input.canInterrupt) out.push({ id: 'interrupt', label: 'Interrupt' })
+  if (input.selectedId !== null) out.push({ id: 'jump', label: 'Jump' })
+  if (input.canMarkDone) out.push({ id: 'mark-done', label: 'Mark done' })
+  if (input.canFocusRelated) out.push({ id: 'focus-related', label: 'Focus related' })
+  if (input.canOpenFiles) out.push({ id: 'open-files', label: 'Open Files' })
+  return out
+}
+
+/**
  * Build the Orchestration snapshot. `hour` is injected so the greeting is
  * deterministic under tests (0–23).
  */
@@ -203,7 +240,7 @@ export function buildOrchestrationSnapshot(input: {
   displayName?: string
 }): OrchSnapshot {
   const { panels, workItems, machine, hour, displayName } = input
-  const name = (displayName ?? '').trim()
+  const name = orchGreetingName(displayName)
   const period = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'
 
   const agentic = panels.filter((p) => p.agentic || p.kind === 'chat' || (p.kind === 'terminal' && p.agentic))
@@ -221,9 +258,8 @@ export function buildOrchestrationSnapshot(input: {
   const watchersRunning = panels.filter((p) => p.kind === 'watcher' && p.watcherStatus === 'running').length
   const workflowsLive = panels.filter((p) => p.kind === 'workflow' && p.poolLive).length
 
-  const who = name === '' ? '' : ` ${name}`
   const greetingParts = [
-    `Good ${period}${who === '' ? '' : `,${who}`}.`,
+    name === '' ? `Good ${period}.` : `Good ${period}, ${name}.`,
     activeAgents > 0
       ? `Your agents are working. ${tasksInProgress} task${tasksInProgress === 1 ? '' : 's'} in progress.`
       : tasksInProgress > 0

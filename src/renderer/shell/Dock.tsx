@@ -60,7 +60,7 @@ function DockImpl({
       { id: 'skills', label: 'Skills', icon: <KindToolbox /> }
     ] },
     { label: 'Connections', entries: [
-      { id: 'integrations', label: 'Integrations', icon: <Link /> },
+      { id: 'integrations', label: 'Services', icon: <Link /> },
       { id: 'teammates', label: 'Teammates', icon: <People /> }
     ] }
   ]
@@ -133,7 +133,7 @@ function DockImpl({
         {/* Always mounted, so the live region exists before the first bell;
             empty text when nothing waits, which a screen reader reads as
             nothing. */}
-        <span className="dock__badge" data-dock-badge aria-live="polite" hidden={attention.length === 0}>
+        <span className="dock__badge" data-dock-badge data-attention-new={attention.length > 0 ? '' : undefined} aria-live="polite" hidden={attention.length === 0}>
           {attention.length === 0 ? '' : String(attention.length)}
         </span>
         {attentionOpen && (

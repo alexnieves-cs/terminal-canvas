@@ -137,7 +137,7 @@ function LinkLayerImpl({
   // M232. One frame counter for the layer; positions are read below, never
   // stored. See useEdgeFrames.
   useEdgeFrames()
-  const far = cardDetail === 'summary' || cardDetail === 'block'
+  const far = cardDetail === 'summary' || cardDetail === 'block' || cardDetail === 'cluster'
   // Read ONCE per render, not once per edge: activityNow() rebuilds the whole
   // map, and calling it inside the segment loop would rebuild it per edge.
   const activity: ReadonlyMap<string, EdgeActivity> = far ? EMPTY_ACTIVITY : activityNow()

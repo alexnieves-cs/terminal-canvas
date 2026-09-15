@@ -1047,6 +1047,10 @@ price of not killing something.
 | M267 | motion and material — drag weight and settle, a travelling current on firing edges, the summoned command pill, aura depth, a living working signal; a new chat spawns clear of the navigation cluster — `docs/build-log/m267-motion-material.md` | ✅ done |
 | M268 | Orchestration center view — dock / TopBar / palette swap the center column between Canvas and Orchestration; canvas stays mounted; HUD aggregates live agents, board tasks, watchers, workflows, machine cost and an activity ring — `docs/build-log/m268-orchestration.md` | ✅ done |
 | M269 | Orchestration HUD — denser glass ops view over the M268 page: isometric agent graph with pan/zoom, filterable pool, Dev/Pipeline stages from the board, live/historical activity, PTY/chat tail, real process metrics; selection drives the other panes; jump still returns to the canvas — `docs/build-log/m269-orchestration-hud.md` | ✅ done |
+| M270 | Calm task-first shell — contextual inspector, quiet dense chrome, far-view task clusters, rail labels by job in the lit task — `docs/build-log/m270-calm-shell.md` | ✅ done |
+| M271 | Orchestration HUD v2 — selection-driven verbs, shared empty states, isometric depth on live/needs-you, orchestration shot scene — `docs/build-log/m271-orchestration-hud-v2.md` | ✅ done |
+| M272 | Motion — canvas stays mounted behind Orchestrate, paint-only spawn/demote/wake, finite attention pip, sheet enter matching M267 — `docs/build-log/m272-motion.md` | ✅ done |
+| M273 | Resume and navigation — facts-only reopen summary, Show this task / Show related, intent-led empty canvas, search scope honesty — `docs/build-log/m273-resume-nav.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

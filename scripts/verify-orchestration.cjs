@@ -181,6 +181,25 @@ ok('orch.pipeline.2 stage filter returns only that board state; null passes all 
   workFilter([{ id: 'a', title: 't', state: 'todo' }, { id: 'b', title: 'u', state: 'done' }], 'todo').length === 1 &&
   workFilter([{ id: 'a', title: 't', state: 'todo' }], null).length === 1)
 
+const nameless = build({
+  panels: [],
+  workItems: [],
+  machine: { cpuPercent: 0, memoryBytes: 0 },
+  hour: 20
+})
+ok('orch.greeting.1 an absent displayName is “Good evening.” never “Good evening, there.”',
+  nameless?.greeting?.startsWith('Good evening.') === true && !/there/i.test(nameless?.greeting ?? ''),
+  JSON.stringify(nameless?.greeting))
+ok('orch.greeting.2 placeholder names are omitted the same way',
+  M.orchGreetingName?.('') === '' && M.orchGreetingName?.('there') === '' && M.orchGreetingName?.('Alex') === 'Alex')
+
+const cmdsNone = typeof M.orchCommands === 'function' ? M.orchCommands({ selectedId: null, canInterrupt: false, canMarkDone: false, canFocusRelated: false, canOpenFiles: false }) : null
+const cmdsAll = typeof M.orchCommands === 'function' ? M.orchCommands({ selectedId: 'c1', canInterrupt: true, canMarkDone: true, canFocusRelated: true, canOpenFiles: true }) : null
+ok('orch.commands.1 only enabled verbs appear — no decorative disabled buttons',
+  Array.isArray(cmdsNone) && cmdsNone.length === 0 &&
+    cmdsAll?.map((c) => c.id).join(',') === 'interrupt,jump,mark-done,focus-related,open-files',
+  JSON.stringify({ none: cmdsNone, all: cmdsAll }))
+
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
 if (failed.length) {

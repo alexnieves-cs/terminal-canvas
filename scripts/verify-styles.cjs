@@ -1210,7 +1210,10 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // cluster-arrive: M262's first-start arrival — the card and its agent rise
   // in turn, ONCE, on the canvas flag that clears after it; a rise like
   // panel-enter's, never a scale.
-  const allowed = ['chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'palette-enter', 'palette-scrim-in', 'panel-enter', 'panel-settle', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // orch-enter / orch-needs-pulse / panel-demote / panel-wake / attention-pip:
+  // M270–M272 moments — overlay arrival, finite needs-you cube breaths, paint-only
+  // dormancy choreography, and a finite pip when something newly wants you.
+  const allowed = ['attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-enter', 'orch-needs-pulse', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))

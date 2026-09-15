@@ -2540,6 +2540,14 @@ const session = (id, over = {}) => ({
   ok('m206.groups.1 railGroups uses object and task language: browser and memory are readable Files, a watcher is a Workflow, toolbox and skill are Capabilities, and an unknown future kind stays discoverable there',
     ids === 'agents:ac files:bgi reviews:h work:d workflows:ef capabilities:jkl' && groups([]).length === 0 && g.every((x) => typeof x.label === 'string' && x.label !== ''),
     JSON.stringify({ ids }))
+  const roleOf = typeof R.railRoleOf === 'function' ? R.railRoleOf : () => 'elsewhere'
+  const roles = typeof R.railGroups === 'function'
+    ? R.railGroups([row('a', 'chat'), row('b', 'file'), row('c', 'watcher'), row('d', 'review'), row('e', 'browser')], (r) => r.state.kind, (r) => roleOf(r.state.kind, r.id === 'a' ? 'conversation' : r.id === 'b' ? 'in-lane' : r.id === 'c' ? 'linked' : r.id === 'd' ? 'review' : r.id === 'e' ? 'in-lane' : undefined))
+    : []
+  const roleIds = roles.map((x) => `${x.id}:${x.rows.map((r) => r.id).join('')}`).join(' ')
+  ok('m270.roles.1 with a task lens, railGroups buckets by role — files and browsers under Files in this, watchers under Watching, never Integrations',
+    roleIds.includes('doing:a') && roleIds.includes('files:be') && roleIds.includes('watching:c') && roleIds.includes('review:d') && !roleIds.includes('integrations'),
+    JSON.stringify({ roleIds }))
 }
 
 // M173 — hints.1. THE HINTS AS DATA: the four gesture hints (pan, zoom,
@@ -3529,6 +3537,22 @@ console.log('\n' + '='.repeat(60))
   } catch (e) {
     ok('file-missing.1', false, 'threw: ' + String(e && e.message || e))
   }
+}
+
+{
+  const pick = typeof R.pickResumeSubject === 'function' ? R.pickResumeSubject : () => null
+  const build = typeof R.buildResumeSummary === 'function' ? R.buildResumeSummary : () => null
+  const subject = pick([{ id: 'a', title: 'A', state: 'todo' }, { id: 'b', title: 'B', state: 'working' }], [])
+  const none = pick([], [])
+  const summary = build({ item: { id: 'b', title: 'B', description: 'first line\nsecond', state: 'working' } })
+  ok('m273.resume.1 pick prefers the working item; an empty board is not a resume; purpose is the first description line, never invented narrative',
+    subject?.itemId === 'b' && none === null && summary?.purpose === 'first line' && summary?.title === 'B' && summary?.nextAction === 'open the lane and continue' && !/refactor|finished/i.test(JSON.stringify(summary)),
+    JSON.stringify({ subject, none, summary }))
+  const ctx = typeof R.buildInspectorContext === 'function' ? R.buildInspectorContext({ panel: { kind: 'chat', rect: { id: 'c', x: 0, y: 0, w: 1, h: 1 } }, agentState: 'wants-you' }) : null
+  const applies = typeof R.inspectorPrimaryApplies === 'function' ? R.inspectorPrimaryApplies({ kind: 'file' }) : null
+  ok('m270.inspector.1 context band names the next action from facts; Restart does not apply to a file',
+    ctx?.nextAction !== undefined && /waiting/.test(ctx.nextAction) && applies?.restart === false && applies?.savePreset === false,
+    JSON.stringify({ ctx, applies }))
 }
 // M258 — last-active.1 / last-active.2. A dormant panel's "last active"
 // signal: a word from a KNOWN time only (absent stays absent — never

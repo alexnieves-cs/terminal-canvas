@@ -1834,6 +1834,23 @@ const WS = [
     JSON.stringify(searchRows.map((r) => ({ id: r.id, scope: r.scope }))))
 }
 
+{
+  const scoped = P.buildCommands(ctx({
+    searchQuery: 'error',
+    searchResults: {
+      hits: [{ panelId: 'n1', kind: 'scrollback', lineIndex: 1, line: 'error one' }],
+      capped: false, cap: 50, redacted: 0,
+      searched: { terminals: 4, chats: 2 },
+      failures: [{ source: 'scrollback', reason: 'log missing' }]
+    },
+    panels: [{ id: 'n1', label: 'n1' }]
+  })).filter((r) => r.scope === 'search')
+  ok('search.scope.1 a result names what was searched and which reader failed, without inventing coverage',
+    scoped.some((r) => r.id === 'search.scope' && /4 terminals/.test(r.title) && /2 chats/.test(r.title)) &&
+      scoped.some((r) => r.id === 'search.fail.scrollback' && /log missing/.test(r.title)),
+    JSON.stringify(scoped.map((r) => ({ id: r.id, title: r.title }))))
+}
+
 // M44 — keyboard.1. buildCommands emits the panel goto rows in the ORDER
 //      ctx.panels is given, so Canvas's orderPanels (on-screen first, then by
 //      focus recency) decides the palette's panel-list order rather than the

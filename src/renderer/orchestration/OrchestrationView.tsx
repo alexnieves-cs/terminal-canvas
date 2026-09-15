@@ -24,6 +24,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { railLabel } from '@renderer/shell/rail-rows'
 import { agentWord, TONE_WORKING } from '@renderer/panels/panel-state'
 import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, ProductMark, Search, Stop } from '@renderer/icons'
+import { EmptyState } from '@renderer/shell/EmptyState'
 import {
   buildOrchestrationSnapshot,
   filterActivity,
@@ -31,11 +32,13 @@ import {
   filterWorkItems,
   isoCubeFaces,
   isLiveRosterState,
+  orchCommands,
   ORCH_ACTIVITY_SCOPES,
   ORCH_GRAPH_SIZE,
   ORCH_MODES,
   ORCH_ROSTER_FILTERS,
   type OrchActivityScope,
+  type OrchCommandId,
   type OrchGraphNode,
   type OrchMode,
   type OrchPanelInput,
@@ -64,6 +67,9 @@ export interface OrchestrationViewProps {
   onJumpWorkItem: (id: string) => void
   onInterrupt?: (id: string) => void
   onMarkDone?: (itemId: string) => void
+  onFocusRelated?: (panelId: string) => void
+  onOpenFiles?: () => void
+  onShowCanvas?: () => void
 }
 
 type SideTab = 'activity' | 'terminal' | 'files'
@@ -196,11 +202,14 @@ function IsoCube(props: {
   const { node, selected, onSelect, onJump } = props
   const faces = isoCubeFaces(0, 0, node.size)
   const synthetic = node.id === '__hub__'
+  const live = isLiveRosterState(node.state)
+  const needs = node.state === 'wants-you'
   return (
     <g
-      className={`orch__cube${node.hub ? ' orch__cube--hub' : ''}${selected ? ' orch__cube--on' : ''}${isLiveRosterState(node.state) ? ' orch__cube--live' : ''}`}
+      className={`orch__cube${node.hub ? ' orch__cube--hub' : ''}${selected ? ' orch__cube--on' : ''}${live ? ' orch__cube--live' : ''}${needs ? ' orch__cube--needs' : ''}`}
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: synthetic ? 'default' : 'pointer' }}
+      data-tone={toneFromState(node.state)}
       onClick={() => { if (!synthetic) onSelect(node.id) }}
       onDoubleClick={() => { if (!synthetic) onJump(node.id) }}
     >
@@ -283,11 +292,13 @@ function GraphBoard(props: {
           const from = nodes.find((n) => n.id === e.from)
           const to = nodes.find((n) => n.id === e.to)
           if (!from || !to) return null
+          const current = isLiveRosterState(from.state) || isLiveRosterState(to.state) || from.state === 'wants-you' || to.state === 'wants-you'
           return (
             <line
               key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}`}
+              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${current ? ' orch__edge--current' : ''}`}
+              data-edge-activity={current ? 'firing' : undefined}
             />
           )
         })}
@@ -338,7 +349,7 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas } = props
   const [tick, setTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [tab, setTab] = useState<SideTab>('activity')
@@ -447,6 +458,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const selectedPanel = selectedRow === null ? undefined : panels.find((p) => p.rect.id === selectedRow.id)
   const selectedCanStop = selectedRow !== null && selectedPanel !== undefined && isChatPanel(selectedPanel)
     && (selectedRow.state === 'busy' || selectedRow.state === 'starting' || selectedRow.state === 'wants-you')
+  const canMarkDone = liveSnap.task !== null && liveSnap.task.state !== WORK_ITEM_STATES[3] && onMarkDone !== undefined
+  const canFocusRelated = selectedRow !== null && onFocusRelated !== undefined
+  const commands = orchCommands({
+    selectedId: selectedRow?.id ?? null,
+    canInterrupt: selectedCanStop && onInterrupt !== undefined,
+    canMarkDone,
+    canFocusRelated,
+    canOpenFiles: liveSnap.files.length > 0 && onOpenFiles !== undefined
+  })
+  const runCommand = (id: OrchCommandId): void => {
+    if (id === 'interrupt' && selectedRow !== null && onInterrupt !== undefined) onInterrupt(selectedRow.id)
+    else if (id === 'jump' && selectedRow !== null) jump(selectedRow.id)
+    else if (id === 'mark-done' && liveSnap.task !== null && onMarkDone !== undefined) onMarkDone(liveSnap.task.id)
+    else if (id === 'focus-related' && selectedRow !== null && onFocusRelated !== undefined) onFocusRelated(selectedRow.id)
+    else if (id === 'open-files' && onOpenFiles !== undefined) onOpenFiles()
+  }
 
   const outputCommand = selectedLive?.currentCommand || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.command : undefined)
   const outputCwd = selectedLive?.cwd || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.cwd : undefined)
@@ -493,6 +520,22 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <span className="orch__metric-sub">{liveSnap.counts.waiting > 0 ? 'Attention' : 'Clear'}</span>
           </button>
         </div>
+        {commands.length > 0 && (
+          <div className="orch__commands" data-orch-commands role="toolbar" aria-label="Selection commands">
+            {commands.map((cmd) => (
+              <button
+                key={cmd.id}
+                type="button"
+                className="orch__command"
+                data-orch-command={cmd.id}
+                title={cmd.label}
+                {...shellControl(() => runCommand(cmd.id))}
+              >
+                {cmd.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <div className="orch__body">
@@ -523,7 +566,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             />
           </label>
           {visibleRoster.length === 0 ? (
-            <p className="orch__empty">No agents or watchers match this filter. Create a chat or terminal from the canvas.</p>
+            <EmptyState id="orch-roster" onVerb={onShowCanvas} />
           ) : (
             <ul className="orch__roster-list">
               {visibleRoster.map((row) => (
@@ -587,8 +630,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     <button
                       key={stage.state}
                       type="button"
-                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}`}
+                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}${liveSnap.task?.state === stage.state ? ' orch__wp--current' : ''}`}
                       data-tone={stage.state === WORK_ITEM_STATES[1] ? TONE_WORKING : stage.state === WORK_ITEM_STATES[2] ? 'starting' : stage.state === WORK_ITEM_STATES[3] ? 'idle' : 'kind'}
+                      data-orch-stage-current={liveSnap.task?.state === stage.state ? '' : undefined}
                       aria-pressed={pipelineStage === stage.state}
                       {...shellControl(() => setPipelineStage((cur) => cur === stage.state ? null : stage.state))}
                     >
@@ -600,7 +644,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 </div>
                 <ul className="orch__pipeline-items">
                   {stageItems.length === 0 ? (
-                    <li className="orch__empty">No tasks in this stage. Start work from the board or palette.</li>
+                    <li><EmptyState id="orch-pipeline" onVerb={onShowCanvas} /></li>
                   ) : stageItems.map((item) => (
                     <li key={item.id}>
                       <button
@@ -703,7 +747,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <div className="orch__task-panel">
               <div className="orch__section-title">Current task</div>
               {liveSnap.task === null ? (
-                <p className="orch__empty">No task is in progress or in review. Start work from the board or palette.</p>
+                <EmptyState id="orch-task" onVerb={onShowCanvas} />
               ) : (
                 <div className="orch__task-card">
                   <button type="button" className="orch__task-main" {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}>
@@ -735,7 +779,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <div className="orch__selected" aria-label="Selected agent">
               <div className="orch__section-title">Selected</div>
               {selectedRow === null ? (
-                <p className="orch__empty">Select an agent in the pool or graph to see its process cost and jump to it.</p>
+                <EmptyState id="orch-selected" />
               ) : (
                 <div className="orch__selected-body">
                   <span className="orch__selected-title">{selectedRow.title}</span>
@@ -781,7 +825,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </label>
               <ul className="orch__activity" aria-label="Activity feed">
                 {filteredActivity.length === 0 ? (
-                  <li className="orch__empty">Agent state changes will appear here.</li>
+                  <li><EmptyState id="orch-activity" /></li>
                 ) : filteredActivity.map((e) => (
                   <li key={e.id}>
                     <button
@@ -808,7 +852,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           {tab === 'terminal' && (
             <div className="orch__term-tab">
               {outputPanelId === null ? (
-                <p className="orch__empty">No live command reported yet (tmux sessions publish cwd and command). Select a terminal to tail its scrollback.</p>
+                <EmptyState id="orch-terminal" />
               ) : (
                 <>
                   <button
@@ -830,7 +874,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           {tab === 'files' && (
             <ul className="orch__activity">
               {liveSnap.files.length === 0 ? (
-                <li className="orch__empty">No file panels on this canvas. Drop a file onto the canvas or open one from the palette.</li>
+                <li><EmptyState id="orch-files" onVerb={onShowCanvas} /></li>
               ) : liveSnap.files.map((f) => {
                 const shown = displayPath(f.path)
                 return (

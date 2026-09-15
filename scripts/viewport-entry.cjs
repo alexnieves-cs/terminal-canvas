@@ -48,5 +48,7 @@ module.exports = {
      neighbours, so this bundle still builds before the module exists and the
      checks fail BY NAME instead of aborting the suite — a check that THROWS
      takes every check below it with it, and its RED is then not evidence. */
-  ...((() => { try { return require('../src/shared/edge-activity.ts') } catch { return {} } })())
+  ...((() => { try { return require('../src/shared/edge-activity.ts') } catch { return {} } })()),
+  ...((() => { try { return require('../src/renderer/canvas/task-clusters.ts') } catch { return {} } })()),
+  ...((() => { try { return require('../src/renderer/canvas/task-members.ts') } catch { return {} } })())
 }

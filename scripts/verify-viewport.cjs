@@ -1978,16 +1978,38 @@ console.log('\n' + '='.repeat(60))
 {
   const can = typeof V.nextCardDetail === 'function'
   const at = (current, scale) => (can ? V.nextCardDetail(current, scale) : null)
-  ok('detail.1 tail above the summary band, summary inside it, block below it, whatever the current tier',
-    can && at('tail', 1) === 'tail' && at('tail', 0.5) === 'tail' && at('tail', 0.2) === 'summary' && at('tail', 0.05) === 'block' &&
-      at('block', 1) === 'tail' && at('block', 0.2) === 'summary' && at('summary', 0.05) === 'block',
-    can ? JSON.stringify({ t1: at('tail', 1), t02: at('tail', 0.2), t005: at('tail', 0.05), b1: at('block', 1) }) : 'nextCardDetail is not exported')
+  ok('detail.1 tail above the summary band, summary inside it, block then cluster below, whatever the current tier',
+    can && at('tail', 1) === 'tail' && at('tail', 0.5) === 'tail' && at('tail', 0.2) === 'summary' && at('tail', 0.14) === 'block' && at('tail', 0.05) === 'cluster' &&
+      at('block', 1) === 'tail' && at('block', 0.21) === 'summary' && at('summary', 0.05) === 'cluster',
+    can ? JSON.stringify({ t1: at('tail', 1), t02: at('tail', 0.2), t014: at('tail', 0.14), t005: at('tail', 0.05), b1: at('block', 1) }) : 'nextCardDetail is not exported')
   // Inside the tail/summary band (0.26..0.32): a card that is `tail` stays
   // tail, a card that is `summary` stays summary; only the far edges flip.
   ok('detail.2 a scale oscillating inside a hysteresis band keeps the current tier; only crossing the far edge flips it',
     can && at('tail', 0.29) === 'tail' && at('summary', 0.29) === 'summary' && at('tail', 0.25) === 'summary' && at('summary', 0.33) === 'tail' &&
-      at('summary', 0.13) === 'summary' && at('block', 0.13) === 'block' && at('summary', 0.10) === 'block' && at('block', 0.16) === 'summary',
-    can ? JSON.stringify({ t029: at('tail', 0.29), s029: at('summary', 0.29), s013: at('summary', 0.13), b013: at('block', 0.13) }) : 'absent')
+      at('summary', 0.18) === 'summary' && at('block', 0.18) === 'block' && at('summary', 0.14) === 'block' && at('block', 0.21) === 'summary' &&
+      at('cluster', 0.13) === 'cluster' && at('cluster', 0.16) === 'block',
+    can ? JSON.stringify({ t029: at('tail', 0.29), s029: at('summary', 0.29), s018: at('summary', 0.18), b018: at('block', 0.18), c013: at('cluster', 0.13) }) : 'absent')
+}
+
+{
+  const hulls = typeof V.taskClusters === 'function' ? V.taskClusters({
+    panels: [
+      { id: 'a', rect: { id: 'a', x: 0, y: 0, w: 100, h: 80 }, tone: 'working' },
+      { id: 'b', rect: { id: 'b', x: 40, y: 20, w: 100, h: 80 }, tone: 'needs-you' }
+    ],
+    memberships: [{ itemId: 't1', members: [{ panelId: 'a', reason: 'card' }, { panelId: 'b', reason: 'conversation' }], missing: [] }],
+    titles: { t1: 'Ship the API' },
+    groups: []
+  }) : []
+  const lonely = typeof V.taskClusters === 'function' ? V.taskClusters({
+    panels: [{ id: 'a', rect: { id: 'a', x: 0, y: 0, w: 10, h: 10 }, tone: 'idle' }],
+    memberships: [{ itemId: 't1', members: [{ panelId: 'a', reason: 'card' }], missing: [] }],
+    titles: { t1: 'Solo' },
+    groups: []
+  }) : [{ id: 'leak' }]
+  ok('m270.cluster.1 a task with two present members gets a hull in the worst tone; a single member is not clustered',
+    hulls.length === 1 && hulls[0].kind === 'task' && hulls[0].title === 'Ship the API' && hulls[0].tone === 'needs-you' && hulls[0].memberIds.join(',') === 'a,b' && lonely.length === 0,
+    JSON.stringify({ hulls, lonely }))
 }
 
 // M69 — minimap.1 / minimap.2 / minimap.3. THE OVERVIEW'S PROJECTION. One
