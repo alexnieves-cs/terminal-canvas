@@ -67,6 +67,9 @@
   --dur-1: 90ms; --dur-2: 160ms; --dur-spring: 520ms; --dur-flow: 900ms;
   /* M176. The one slow duration: the needs-you pulse's breath and the caret's blink. */
   --dur-breath: 1.2s;
+  --dur-bob: 2.8s;     /* M275: a busy cube's Y-bob and top-face breath — slower than a pulse, never a heartbeat */
+  --dur-shimmer: 1.8s; /* M275: the processing shimmer walking a busy cube's rim */
+  --dur-packet: 1.2s;  /* a packet's window on a HUD edge — ORCH_PACKET_MS, read at a glance */
   /* A compact drawer's slide: longer than an arrival because it travels 300px. */
   --dur-drawer: 200ms;
   /* Attention navigation's arrival glow — one swell after the camera lands. Canvas.tsx's LANDING_LIT_MS unmounts it; landing.1 pins the two together. */
@@ -6982,21 +6985,105 @@ body {
   overflow: hidden;
 }
 .orch__graph { width: 100%; height: 100%; display: block; touch-action: none; }
-.orch__edge { stroke: color-mix(in srgb, var(--iris) 40%, transparent); stroke-width: 1.5; }
-.orch__edge--authored { stroke: var(--amber); stroke-dasharray: 4 3; }
+/* Weight is meaning: a hub spoke is layout (the star is drawn, not authored),
+   so it recedes; an authored link is a dependency a person made, so it reads
+   thicker and brighter and paints last (orchEdgePaintOrder). */
+.orch__edge { stroke: color-mix(in srgb, var(--iris) 24%, transparent); stroke-width: 1; }
+.orch__edge--authored { stroke: var(--amber); stroke-width: 2.5; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--amber) 45%, transparent)); }
 .orch__edge[data-edge-activity="firing"] {
   stroke: var(--iris);
-  stroke-width: 3px;
+  stroke-width: 2px;
   stroke-dasharray: 18 8 3 8;
-  animation: edge-current var(--dur-flow) linear 1;
+  animation: edge-current var(--dur-packet) linear 1;
 }
-.orch__cube-face { stroke: color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); stroke-width: 1.2; }
-.orch__cube-face--top { fill: color-mix(in srgb, var(--tone, var(--iris)) 28%, var(--glass-2)); }
-.orch__cube-face--left { fill: color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--glass-1)); }
-.orch__cube-face--right { fill: color-mix(in srgb, var(--tone, var(--iris)) 8%, var(--s-1)); }
-.orch__cube--hub .orch__cube-face { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--iris) 55%, transparent)); }
-.orch__cube--live .orch__cube-face { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--tone, var(--iris)) 50%, transparent)); }
-.orch__cube--on .orch__cube-face { stroke-width: 2; stroke: var(--iris); }
+.orch__edge--authored[data-edge-activity="firing"] { stroke: var(--amber); stroke-width: 3.5px; }
+/* Packets: position and fade are set per frame from ORCH_PACKET_MS; no CSS
+   transition or animation of their own, which would smear the frame. */
+.orch__packet { fill: var(--iris); }
+.orch__packet-halo { fill: var(--iris-dim); stroke: var(--iris); stroke-width: 1px; }
+.orch__packet-trail { fill: var(--iris); }
+[data-authored] > .orch__packet, [data-authored] > .orch__packet-trail { fill: var(--amber); }
+[data-authored] > .orch__packet-halo { fill: color-mix(in srgb, var(--amber) 30%, transparent); stroke: var(--amber); }
+.orch__chip { pointer-events: none; }
+.orch__chip rect { fill: color-mix(in srgb, var(--s-1) 92%, transparent); stroke: var(--amber); stroke-width: 1px; }
+.orch__chip text { fill: var(--fg); font-family: var(--font-mono); font-size: var(--t-xs); }
+.orch__ground-ring { fill: none; stroke: color-mix(in srgb, var(--iris) 14%, transparent); stroke-width: 1; }
+/* Scene depth: a foreshortened ground plane (grid clipped to an ellipse, faded
+   at its rim by a mask) so cubes read as planted, and the orbit track drawn a
+   touch brighter than the decorative rings because satellites stand on it. */
+.orch__ground-grid { stroke: color-mix(in srgb, var(--iris) 16%, transparent); stroke-width: 0.75; fill: none; }
+.orch__ground-plane { fill: color-mix(in srgb, var(--iris) 6%, transparent); }
+.orch__ground-ring--track { stroke: color-mix(in srgb, var(--iris) 26%, transparent); }
+/* Depth bands. Far reads thinner and quieter, near sharper — tone and weight,
+   never fractional opacity (styles check 3). Selection always wins sharp. */
+.orch__cube[data-depth="far"] .orch__cube-label { fill: var(--fg-3); font-weight: 400; }
+.orch__cube[data-depth="mid"] .orch__cube-label { font-weight: 500; }
+.orch__cube[data-depth="near"] .orch__cube-label { fill: var(--fg); font-weight: 600; }
+.orch__cube.orch__cube--on .orch__cube-label { fill: var(--fg); font-weight: 600; }
+.orch__callout[data-depth="far"] .orch__callout-card:not([data-expanded]):not([data-needs]) { border-color: var(--line); box-shadow: none; filter: brightness(0.86); }
+.orch__callout[data-depth="far"] .orch__callout-stem { stroke: var(--line); }
+.orch__callout[data-depth="near"] .orch__callout-card { box-shadow: var(--e-3), 0 0 0 1px color-mix(in srgb, var(--iris) 14%, transparent); }
+/* M275 — cube body language. One cube, five skins; the skin is the state, so a
+   face reads at rest without a label: working breathes on its top face and a
+   shimmer walks its rim; needs-you pulses sharper and lights a beacon that
+   goes out on select; idle sits cooler, flatter and lower; starting settles in
+   once; exited is desaturated with a cracked (dashed) rim and stays factual.
+   Micro-motion runs ONLY while busy — an idle cube is still, and reduced
+   motion stills everything. Sibling dim and selection lift are filters and
+   transforms, never fractional opacity (styles check 3). */
+.orch__cube-shadow { fill: color-mix(in srgb, var(--s-1) 65%, transparent); filter: blur(5px); pointer-events: none; transform-box: fill-box; transform-origin: center; transition: transform var(--dur-2) var(--ease); }
+.orch__cube-viewport { overflow: visible; }
+.orch__cube-scene { width: 100%; height: 100%; display: grid; place-items: center; perspective: 600px; }
+.orch__cube-lift { transform-style: preserve-3d; transition: transform var(--dur-2) var(--ease); }
+.orch__cube-solid { position: relative; transform-style: preserve-3d; transition: filter var(--dur-2) var(--ease); }
+.orch__cube-face { position: absolute; inset: 0; box-sizing: border-box; backface-visibility: hidden; border: 1px solid color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); }
+.orch__cube-face--top { background: linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--iris)) 48%, var(--fg)), color-mix(in srgb, var(--tone, var(--iris)) 32%, var(--s-1))); }
+.orch__cube-face--left { background: linear-gradient(155deg, color-mix(in srgb, var(--tone, var(--iris)) 30%, var(--s-1)), var(--s-1)); }
+.orch__cube-face--right { background: linear-gradient(145deg, color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--s-1)), var(--s-1)); }
+
+/* Working: warm top-face breath + a faint processing shimmer on the rim + a slow Y-bob. */
+.orch__cube--busy .orch__cube-face { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--tone, var(--iris)) 50%, transparent)); animation: orch-rim-shimmer var(--dur-shimmer) ease-in-out infinite; }
+.orch__cube--busy .orch__cube-face--top { animation: orch-breath var(--dur-bob) ease-in-out infinite; }
+.orch__cube--busy .orch__cube-lift { animation: orch-bob var(--dur-bob) ease-in-out infinite; }
+
+/* Needs you: a sharper amber pulse (finite, as pulse.1 asks of the panel) and a beacon above. */
+.orch__cube--needs .orch__cube-face {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent));
+  animation: orch-needs-pulse var(--dur-breath) var(--ease) 3;
+}
+.orch__cube-beacon { fill: var(--amber); filter: drop-shadow(0 0 4px var(--amber)); transform-box: fill-box; transform-origin: center; animation: orch-beacon var(--dur-breath) ease-in-out infinite; pointer-events: none; }
+
+/* Idle: cooler, flatter, lower — no glow, less gradient, sits 3px down. */
+.orch__cube--idle .orch__cube-lift { transform: translateY(3px); }
+.orch__cube--idle .orch__cube-face { border-color: color-mix(in srgb, var(--tone, var(--iris)) 45%, var(--line)); }
+.orch__cube--idle .orch__cube-face--top { background: linear-gradient(135deg, color-mix(in srgb, var(--tone, var(--iris)) 26%, var(--s-2)), color-mix(in srgb, var(--tone, var(--iris)) 16%, var(--s-1))); }
+.orch__cube--idle .orch__cube-face--left { background: linear-gradient(155deg, color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--s-1)), var(--s-1)); }
+
+/* Starting: one soft scale-in settle, then rest. */
+.orch__cube--starting .orch__cube-lift { animation: orch-settle var(--dur-spring) var(--ease) 1; }
+
+/* Exited / failed: desaturated with a cracked rim. Still factual — the label and tone stay. */
+/* Desaturated on the faces, not the solid — a filter there flattens the cube (orch.depth.5). */
+.orch__cube--exited .orch__cube-face { filter: saturate(0.35) brightness(0.9); border-style: dashed; border-color: color-mix(in srgb, var(--tone) 60%, var(--line)); }
+
+/* Selection: a true 3D lift toward the viewer, a larger contact shadow, and
+   siblings dimmed so the graph becomes a control surface. */
+.orch__cube--on .orch__cube-face { border-color: var(--iris); border-width: 2px; }
+.orch__cube--on .orch__cube-lift { transform: translateZ(22px); }
+.orch__cube--on .orch__cube-shadow { transform: scale(1.35); fill: color-mix(in srgb, var(--s-1) 85%, transparent); }
+/* The dim lands on the FACES, never on .orch__cube-solid: any `filter` on a
+   preserve-3d element computes its transform-style to flat, and every sibling
+   cube collapses into a single grey card the moment one is selected. */
+.orch__graph[data-has-selection] .orch__cube:not(.orch__cube--on) .orch__cube-face { filter: brightness(0.82) saturate(0.85); }
+.orch__graph[data-has-selection] .orch__cube:not(.orch__cube--on) .orch__cube-label { fill: var(--fg-3); }
+
+/* Hub: a different object — larger by the model, steadier core glow, no micro-motion.
+   A synthetic hub is layout only: it keeps its “No supervisor yet” label, and no glow. */
+.orch__cube--hub .orch__cube-face { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--iris) 60%, transparent)); animation: none; }
+.orch__cube--hub .orch__cube-lift { animation: none; }
+.orch__cube--synthetic .orch__cube-face { filter: none; border-style: dashed; border-color: color-mix(in srgb, var(--line-strong) 70%, transparent); }
+.orch__cube--synthetic .orch__cube-face--top { background: linear-gradient(135deg, var(--s-2), var(--s-1)); }
+.orch__cube--synthetic .orch__cube-label { fill: var(--fg-3); font-style: italic; }
 .orch__cube-label {
   fill: var(--fg-2);
   font-size: var(--t-xs);
@@ -7351,16 +7438,31 @@ body {
   from { box-shadow: 0 0 0 1px var(--iris); }
   to { box-shadow: 0 0 0 1px var(--iris), 0 0 18px color-mix(in srgb, var(--iris) 22%, transparent); }
 }
-.orch__cube--needs .orch__cube-face {
-  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent));
-  animation: orch-needs-pulse var(--dur-breath) var(--ease) 3;
-}
-.orch__cube--live .orch__cube-face {
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tone, var(--iris)) 65%, transparent));
-}
 @keyframes orch-needs-pulse {
-  0%, 100% { filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent)); }
-  50% { filter: drop-shadow(0 0 22px color-mix(in srgb, var(--amber) 90%, transparent)); }
+  0%, 100% { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--amber) 70%, transparent)); }
+  40% { filter: drop-shadow(0 0 26px var(--amber)); }
+}
+/* M275 busy-only micro-motion: breath on the top face, a shimmer on the rim, a
+   Y-bob on the lift; none runs on an idle cube and all stop under reduced motion. */
+@keyframes orch-breath {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+}
+@keyframes orch-rim-shimmer {
+  0%, 100% { border-color: color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); }
+  50% { border-color: color-mix(in srgb, var(--tone, var(--iris)) 100%, var(--fg)); }
+}
+@keyframes orch-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes orch-settle {
+  from { transform: scale(0.82) translateY(6px); }
+  to { transform: scale(1) translateY(0); }
+}
+@keyframes orch-beacon {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 3px var(--amber)); }
+  50% { transform: scale(1.5); filter: drop-shadow(0 0 8px var(--amber)); }
 }
 
 @keyframes panel-demote {
@@ -7401,10 +7503,60 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .canvas--behind-orch { transform: none; transition: none; }
   .shell__orch--on { animation: none; }
-  .orch__cube--needs .orch__cube-face { animation: none; }
+  .orch__cube--needs .orch__cube-face, .orch__cube--busy .orch__cube-face, .orch__cube--busy .orch__cube-face--top,
+  .orch__cube--busy .orch__cube-lift, .orch__cube--starting .orch__cube-lift, .orch__cube-beacon { animation: none; }
+  .orch__cube-lift, .orch__cube-solid, .orch__cube-shadow { transition: none; }
   .orch__edge[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
   .orch__wp[data-orch-stage-shift] { animation: none; }
   .panel__motion--demoting, .panel__motion--waking { animation: none; }
   .dock__badge[data-attention-new], .edge-indicator[data-attention-new], .orch__roster-row[data-attention-new] { animation: none; }
   .sheet { animation: none; }
 }
+
+/* Upright projected billboards: only the cube faces rotate in 3D. */
+.orch__callout-host[data-ghost] { filter: opacity(20%); }
+.orch__callout-stem { stroke: var(--line-strong); stroke-width: 1; fill: none; }
+.orch__callout-slot { height: 100%; display: flex; align-items: flex-end; box-sizing: border-box; padding-bottom: calc(var(--sp-6) + var(--sp-3)); }
+.orch__callout-card { width: 100%; box-sizing: border-box; padding: var(--sp-4) var(--sp-5); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: color-mix(in srgb, var(--s-1) 90%, transparent); backdrop-filter: blur(16px); color: var(--fg); font: var(--t-sm) var(--font-ui); box-shadow: var(--e-3); animation: orch-callout-rise var(--dur-2) var(--ease); }
+.orch__callout-card > strong, .orch__callout-card > span, .orch__callout-detail > code { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 17px; }
+/* A card flipped under its cube grows downward from the stem, not up into it. */
+.orch__callout-slot[data-below] { align-items: flex-start; padding-bottom: 0; }
+.orch__callout-card[data-needs] { border-color: var(--amber); }
+.orch__callout-ask { color: var(--amber); }
+.orch__callout-work { color: var(--fg-2); }
+.orch__callout-detail > .orch__callout-tail { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 17px; color: var(--fg-2); font-style: italic; }
+.orch__callout-detail { opacity: 0; max-height: 0; overflow: hidden; transition: opacity var(--dur-1) var(--ease); }
+.orch__callout-card[data-expanded] .orch__callout-detail { opacity: 1; max-height: 100px; margin-top: var(--sp-4); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.orch__callout-detail > code { font-family: var(--font-mono); }
+.orch__callout-actions { display: flex; gap: var(--sp-4); margin-top: var(--sp-3); }
+@keyframes orch-callout-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .orch__callout-card { animation: none; } .orch__callout-detail { transition: none; } }
+/* The card is the cube's other face: click selects, double-click jumps. */
+.orch__callout-card { cursor: pointer; }
+
+/* Lens (a metric card or roster filter): excluded cubes dim IN PLACE — removal
+   would re-derive the ring radius and reflow the stage. filter, never a
+   fractional opacity (styles check 3). Their callouts are not drawn at all. */
+.orch__callout-host[data-lensed] { filter: brightness(0.45) saturate(0.4); }
+.orch__callout-host[data-lensed] .orch__cube-beacon { display: none; }
+.orch__edge--lensed { stroke: color-mix(in srgb, var(--iris) 8%, transparent); filter: none; }
+
+/* `+N more`: the capped ring's last slot. Dashed like the synthetic hub (it is not
+   a panel), but lit by the most urgent state it holds, so amber still reads. */
+.orch__cube--overflow .orch__cube-face { border-style: dashed; filter: none; }
+.orch__cube--overflow .orch__cube-label { fill: var(--fg-2); font-weight: 600; }
+
+/* Pipeline wash: a board stage change rims the moved task's member cubes, once,
+   in the stage's colour. Not a CI pipeline — it runs only on a real state change. */
+.orch__cube-wash { fill: none; stroke: var(--wash); pointer-events: none; animation: orch-stage-wash var(--dur-flow) var(--ease) 2; }
+.orch__cube-wash[data-stage="todo"] { --wash: var(--line-strong); }
+.orch__cube-wash[data-stage="working"] { --wash: var(--blue); }
+.orch__cube-wash[data-stage="review"] { --wash: var(--iris); }
+.orch__cube-wash[data-stage="done"] { --wash: var(--green); }
+@keyframes orch-stage-wash {
+  0% { stroke-width: 1px; stroke: color-mix(in srgb, var(--wash) 0%, transparent); filter: none; }
+  30% { stroke-width: 3px; stroke: var(--wash); filter: drop-shadow(0 0 6px var(--wash)); }
+  100% { stroke-width: 1px; stroke: color-mix(in srgb, var(--wash) 0%, transparent); filter: none; }
+}
+/* Reduced motion: the rim holds still for the window, so the fact survives the motion. */
+@media (prefers-reduced-motion: reduce) { .orch__cube-wash { animation: none; stroke-width: 2px; } }

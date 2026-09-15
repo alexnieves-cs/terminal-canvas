@@ -291,6 +291,49 @@ ok('orch.coverage.1 Live vs Historical names the window; Logs refuse a live term
     /not a live terminal/.test(M.orchLogsCoverage()) &&
     /real path/.test(M.orchFilesCoverage()))
 
+const trig = build({
+  panels: [
+    { id: 'a', kind: 'chat', title: 'A', agentic: true, agentState: 'idle', linksTo: ['b', 'c'], linkTriggers: { b: 'after a turn' } },
+    { id: 'b', kind: 'terminal', title: 'B', agentic: true, agentState: 'idle' },
+    { id: 'c', kind: 'terminal', title: 'C', agentic: true, agentState: 'idle' }
+  ],
+  workItems: [],
+  machine: { cpuPercent: 0, memoryBytes: 0 },
+  hour: 10
+})
+const ab = trig?.graph?.edges?.find((e) => e.from === 'a' && e.to === 'b')
+const ac = trig?.graph?.edges?.find((e) => e.from === 'a' && e.to === 'c')
+ok('orch.flow.1 an enabled handoff link carries its trigger word onto the graph edge; a bare link carries none',
+  ab?.trigger === 'after a turn' && ac !== undefined && ac.trigger === undefined, JSON.stringify(trig?.graph?.edges))
+
+const order = typeof M.orchEdgePaintOrder === 'function'
+  ? M.orchEdgePaintOrder([{ from: 'h', to: 'x', authored: true }, { from: 'h', to: 'y' }, { from: 'h', to: 'z' }])
+  : []
+ok('orch.flow.2 hub spokes paint before authored handoffs, so a dependency is never drawn under the star',
+  order.length === 3 && order[2].authored === true && order[0].authored !== true)
+
+const P = M.ORCH_PACKET_MS
+const pk = (edges, fires, now) => (typeof M.orchEdgePackets === 'function' ? M.orchEdgePackets(edges, new Map(fires), now) : [])
+const hubEdge = { from: 'hub', to: 'b' }
+const stateFire = pk([hubEdge], [['hub:b', { at: 1000, origin: 'b', handoff: false }]], 1000 + P / 2)
+const handFire = pk([{ from: 'a', to: 'b', authored: true, trigger: 'on exit' }], [['a:b', { at: 1000, origin: 'a', handoff: true }]], 1000 + P / 4)
+const stateOnAuthored = pk([{ from: 'a', to: 'b', authored: true, trigger: 'on exit' }], [['a:b', { at: 1000, origin: 'a', handoff: false }]], 1100)
+ok('orch.flow.3 packets exist only inside ORCH_PACKET_MS (1–1.5s), leave the panel that changed, and only a handoff carries the trigger chip',
+  P >= 1000 && P <= 1500 &&
+    stateFire.length === 1 && stateFire[0].from === 'b' && stateFire[0].to === 'hub' && Math.abs(stateFire[0].t - 0.5) < 1e-9 && stateFire[0].trigger === undefined &&
+    handFire.length === 1 && handFire[0].from === 'a' && handFire[0].trigger === 'on exit' &&
+    stateOnAuthored.length === 1 && stateOnAuthored[0].trigger === undefined &&
+    pk([hubEdge], [['hub:b', { at: 1000, origin: 'b', handoff: false }]], 1000 + P).length === 0 &&
+    pk([hubEdge], [['hub:b', { at: 1000, origin: 'b', handoff: false }]], 999).length === 0 &&
+    pk([hubEdge], [], 1000).length === 0,
+  JSON.stringify({ P, stateFire, handFire, stateOnAuthored }))
+
+const rec = typeof M.orchRecordFires === 'function' ? M.orchRecordFires : () => new Map()
+const kept = rec(new Map([['a:b', { at: 1000, origin: 'a', handoff: true }]]), ['a:b'], { at: 1100, origin: 'b', handoff: false })
+const later = rec(new Map([['a:b', { at: 1000, origin: 'a', handoff: true }]]), ['a:b'], { at: 1000 + P, origin: 'b', handoff: false })
+ok('orch.flow.4 a state fire inside a live handoff window never downgrades it (a turn end emits both); after the window it records',
+  kept.get('a:b')?.handoff === true && later.get('a:b')?.handoff === false)
+
 const viewSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
 ok('orch.gate.1 every HUD chat and scrollback tail reader in OrchestrationView passes through outward()',
   /lastAssistantText\(/.test(viewSrc) && /scrollback\.tail\(/.test(viewSrc) &&
@@ -301,6 +344,112 @@ const empties = readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8')
 ok('orch.empty.1 orch empty states live in empty-states.ts with named next steps and no fake Connect',
   /id: 'orch-roster'/.test(empties) && /id: 'orch-task'/.test(empties) &&
     /Show Canvas/.test(empties) && !/id: 'orch-[^']+'[^}]*Connect/.test(empties))
+
+const D = load('src/renderer/orchestration/orchestration-depth.ts', 'orchestration-depth.cjs')
+if (typeof D.orchProjectNode === 'function') {
+  const stage = { w: 720, h: 420, cx: 360, cy: 210, ringR: 148 }
+  const still = { x: 0, y: 0, k: 1 }
+  const pan = { x: 100, y: 0, k: 1 }
+  const hub = { x: 360, y: 210, hub: true }
+  const back = { x: 360, y: 62, hub: false }
+  const front = { x: 360, y: 358, hub: false }
+  const p = (n, c) => D.orchProjectNode(n, stage, c)
+  const moved = (n) => p(n, pan).x - p(n, still).x
+  ok('orch.depth.1 the tilt foreshortens the ring; back is far and smaller, front is near and larger',
+    p(front, still).y - p(back, still).y < front.y - back.y &&
+      p(back, still).band === 'far' && p(front, still).band === 'near' && p(hub, still).band === 'mid' &&
+      p(back, still).scale < 1 && p(front, still).scale > 1)
+  ok('orch.depth.2 parallax: hub pans slowest, satellites faster the nearer, callouts fastest',
+    moved(hub) < moved(back) && moved(back) < moved(front) &&
+      Math.abs(moved(front) + p(front, pan).calloutDrift.x - 100) < 1e-9 && p(hub, pan).calloutDrift.x > 0)
+  const g = D.orchGroundPlane(stage, pan, 20)
+  ok('orch.depth.3 the ground plane moves with the hub layer and is an ellipse flattened by the same tilt',
+    g.x - D.orchGroundPlane(stage, still, 20).x === moved(hub) && Math.abs(g.ry / g.rx - D.ORCH_COS_TILT) < 1e-9)
+} else {
+  ok('orch.depth.1 orchestration-depth.ts exports orchProjectNode', false)
+}
+ok('orch.depth.4 every cube wears the one stage tilt, and the view projects through orchProjectNode',
+  /rotateX\(\$\{-ORCH_STAGE_TILT_DEG\}deg\)/.test(viewSrc) && /orchProjectNode\(/.test(viewSrc) && !/far \? -38/.test(viewSrc))
+
+// Helpful, not just pretty: the capped ring, the dimming lens, the stage wash.
+const many = build({
+  panels: [
+    ...Array.from({ length: 10 }, (_, i) => ({ id: `t${i}`, kind: 'terminal', title: `T${i}`, agentic: true, agentState: 'idle' })),
+    { id: 'late', kind: 'chat', title: 'Late', agentic: true, agentState: 'wants-you' }
+  ],
+  workItems: [],
+  machine: { cpuPercent: 0, memoryBytes: 0 },
+  hour: 9
+})
+const more = many?.graph?.nodes?.find((n) => n.id === M.ORCH_OVERFLOW_ID)
+const seatedIds = (many?.graph?.nodes ?? []).filter((n) => !n.hub && n.overflow === undefined).map((n) => n.id)
+ok('orch.ring.1 past the cap the last slot is “+N more”, every agent is seated or counted, and a waiting agent is never the hidden one',
+  more !== undefined && seatedIds.length === M.ORCH_RING_CAP - 1 &&
+    more.title === `+${more.overflow.length} more` && seatedIds.length + more.overflow.length === 11 &&
+    seatedIds.includes('late') && !more.overflow.some((o) => o.id === 'late') &&
+    many.graph.edges.some((e) => e.to === M.ORCH_OVERFLOW_ID),
+  JSON.stringify({ seatedIds, more }))
+const framedMore = M.filterGraph?.(many.graph, new Set(['t0', more?.overflow?.[0]?.id]))
+const moreFramed = framedMore?.nodes?.find((n) => n.id === M.ORCH_OVERFLOW_ID)
+ok('orch.ring.2 a frame recounts the overflow to what it still holds; off-ring keeps exactly its ids and none without them',
+  moreFramed?.overflow?.length === 1 && moreFramed?.title === '+1 more' &&
+    M.filterGraph(many.graph, new Set(['t0'])).nodes.every((n) => n.id !== M.ORCH_OVERFLOW_ID) &&
+    M.filterRoster(many.roster, 'off-ring', '', more.overflow.map((o) => o.id)).length === more.overflow.length &&
+    M.filterRoster(many.roster, 'off-ring', '').length === 0,
+  JSON.stringify(moreFramed))
+const waitLens = M.filterRoster?.(many.roster, M.orchMetricLens('waiting', null).rosterFilter, '')
+const lit = M.orchLensLit?.(many.graph.nodes, new Set(waitLens.map((r) => r.id)), true)
+const litHidden = M.orchLensLit?.(many.graph.nodes, new Set([more.overflow[0].id]), true)
+ok('orch.lens.1 a lens dims rather than removes: Waiting on you lights only the amber cube, the overflow lights for what it hides, no lens is null',
+  lit?.size === 1 && lit.has('late') && litHidden?.has(M.ORCH_OVERFLOW_ID) === true &&
+    M.orchLensLit(many.graph.nodes, new Set(), false) === null,
+  JSON.stringify({ lit: lit && [...lit], litHidden: litHidden && [...litHidden] }))
+ok('orch.wash.1 a stage shift is a known item whose state moved; a first sight or an unchanged item washes nothing',
+  JSON.stringify(M.orchStageShifts?.(new Map([['a', 'working'], ['b', 'todo']]), [
+    { id: 'a', state: 'review' }, { id: 'b', state: 'todo' }, { id: 'new', state: 'done' }
+  ])) === JSON.stringify([{ id: 'a', from: 'working', to: 'review' }]))
+const viewFlat = viewSrc.replace(/\s+/g, ' ')
+ok('orch.gate.2 a callout tail (chat reply or terminal last line) is read inside outwardTail and scrubbed by outward() before it paints, and only for an expanded card',
+  /function outwardTail\([^)]*\): string \{ const raw = isChat \? lastAssistantText\(panelId\) : terminalLine [^}]{0,80}const lines = outward\(raw/.test(viewFlat) &&
+    /const tail = expanded \? outwardTail\(/.test(viewFlat) && /className="orch__callout-tail"/.test(viewSrc))
+
+// The diorama's reduced-motion contract: static depth, tone and callouts stay;
+// float, pulse and travel go. Every orch rule that animates or transitions must
+// be stood down by a reduced-motion block, or a new keyframe moves silently.
+{
+  const css = readFileSync(join(root, 'src/renderer/styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+  const moving = []
+  const stilled = new Set()
+  const rm = /@media \(prefers-reduced-motion: reduce\) \{((?:[^{}]|\{[^{}]*\})*)\}/g
+  for (const m of css.matchAll(rm)) {
+    for (const r of m[1].matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/(animation|transition)\s*:\s*none/.test(r[2])) continue
+      for (const s of r[1].split(',')) stilled.add(s.trim())
+    }
+  }
+  const outside = css.replace(rm, '')
+  for (const r of outside.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+    if (!/(animation|transition)\s*:/.test(r[2]) || /(animation|transition)\s*:\s*none/.test(r[2])) continue
+    for (const s of r[1].split(',').map((x) => x.trim())) if (/\.orch/.test(s)) moving.push(s)
+  }
+  // A `filter` on a preserve-3d element computes it flat: M275's selection dim
+  // sat on .orch__cube-solid and turned every unselected cube into one grey
+  // card, with no red anywhere. Dim, glow or fade the faces or a 2D ancestor.
+  const flattening = [...css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)]
+    .filter((r) => /\.orch__cube-(solid|lift|scene)\s*$/.test(r[1].trim().split(',').pop().trim()) && /(^|;)\s*filter\s*:/.test(r[2]))
+    .map((r) => r[1].trim())
+  ok('orch.depth.5 no filter sits on a preserve-3d cube element (solid, lift, scene), so a dim never flattens the cube',
+    flattening.length === 0, JSON.stringify(flattening))
+  const loose = moving.filter((s) => !stilled.has(s))
+  ok('orch.motion.1 every orchestration selector that animates or transitions is stood down under prefers-reduced-motion',
+    moving.length > 0 && loose.length === 0, JSON.stringify(loose))
+}
+ok('orch.lens.2 the scene is fed the whole frame with a lit set (never filterGraph), callouts select and jump, and the graph is described by the blocker line',
+  !/filterGraph\(/.test(viewSrc) && /litIds=\{litIds\}/.test(viewSrc) &&
+    /onClick=\{\(e\) => onCard\(e, \(\) => onSelect\(node\.id\)\)\}/.test(viewFlat) &&
+    /onDoubleClick=\{\(e\) => onCard\(e, \(\) => onJump\(node\.id\)\)\}/.test(viewFlat) &&
+    /id="orch-blocker"/.test(viewSrc) && /describedBy: 'orch-blocker'/.test(viewSrc) &&
+    /const blocker = orchBlocker\(\{ waiting: liveSnap\.counts\.waiting/.test(viewFlat))
 
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)

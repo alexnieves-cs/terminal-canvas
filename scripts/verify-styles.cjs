@@ -511,7 +511,7 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // the canvas as one instrument and wears the overlay elevation (the brief's
   // "stronger separation"); both are named here rather than let --e-3 loose.
   // The expanded command pill overlays the canvas; its resting button stays flat.
-  const OVERLAY = /\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$/
+  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere
@@ -1214,7 +1214,12 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // M270–M272 moments — overlay arrival, finite needs-you cube breaths, paint-only
   // dormancy choreography, and a finite pip when something newly wants you.
   // orch-stage-shift: pipeline stage moves only when the board state changes.
-  const allowed = ['attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-enter', 'orch-needs-pulse', 'orch-stage-shift', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // orch-breath / orch-rim-shimmer / orch-bob: M275's busy-only micro-motion —
+  // a cube that is hot breathes and bobs; an idle one is still (the rule is
+  // "this process is hot", not a screensaver). orch-settle: a starting cube's
+  // one scale-in. orch-beacon: the needs-you point above a cube, out on select.
+  // orch-stage-wash: one rim on a task's member cubes when its board stage moves.
+  const allowed = ['attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))

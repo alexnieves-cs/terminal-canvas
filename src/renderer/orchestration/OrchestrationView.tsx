@@ -13,8 +13,10 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { formatCpu, formatMemory, getMachineCostSampledAt, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { lastAssistantText } from '@renderer/chat/chat-store'
+import { useChat, lastAssistantText } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
+import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
+import { edgeFiredAt, useEdgeActivityVersion } from '@renderer/canvas/useEdgeActivity'
 import { useLastLine } from '@renderer/session/last-line-store'
 import { getPool, livePoolKeys } from '@renderer/workflow/pool-store'
 import type { PersistedWorkItem } from '@shared/work-items'
@@ -28,24 +30,32 @@ import { EmptyState } from '@renderer/shell/EmptyState'
 import {
   buildOrchestrationSnapshot,
   filterActivity,
-  filterGraph,
   filterRoster,
   filterWorkItems,
-  isoCubeFaces,
   isLiveRosterState,
   orchActivityCoverage,
   orchBlocker,
   orchCommands,
+  orchEdgeKey,
   orchEdgesFiredByPanel,
   orchFilesCoverage,
   orchKeysShouldHandle,
+  orchLensLit,
   orchLogsCoverage,
+  orchStageShifts,
+  ORCH_OVERFLOW_ID,
+  ORCH_STAGE_WASH_MS,
   orchMachineReadout,
   orchMetricLens,
   orchRosterStep,
   orchTaskFrame,
   ORCH_ACTIVITY_SCOPES,
   ORCH_EDGE_FIRE_MS,
+  ORCH_PACKET_MS,
+  orchEdgePackets,
+  orchEdgePaintOrder,
+  orchRecordFires,
+  type OrchEdgeFire,
   ORCH_GRAPH_SIZE,
   ORCH_MODES,
   ORCH_ROSTER_FILTERS,
@@ -64,6 +74,7 @@ import {
   pushOrchActivity,
   subscribeOrchActivity
 } from './orchestration-activity'
+import { ORCH_STAGE_TILT_DEG, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
 
 export interface OrchTemplateInput {
   id: string
@@ -85,7 +96,12 @@ export interface OrchestrationViewProps {
   onShowCanvas?: () => void
   /** D08 member panel ids for the focused board task; empty/absent = no frame. */
   taskMemberIds?: readonly string[]
+  /** D08 members of ANY board item — the stage wash rims the item that moved, not only the focused one. */
+  taskMembersOf?: (itemId: string) => readonly string[]
 }
+
+/** A board stage change, painted as a brief rim on the moved item's member cubes. */
+interface OrchWash { at: number; stage: WorkItemState; ids: readonly string[] }
 
 type SideTab = 'activity' | 'terminal' | 'files'
 
@@ -94,13 +110,18 @@ function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplat
     const id = p.rect.id
     const title = railLabel(p, undefined)
     const linksTo = (p.links ?? []).map((l) => l.to)
+    // Only an ENABLED handoff has a trigger worth naming; a bare or switched-off
+    // link is still a dependency line, but nothing can cross it on its own.
+    const triggers = Object.fromEntries((p.links ?? []).flatMap((l) =>
+      l.automation?.kind === 'handoff' && l.automation.enabled ? [[l.to, TRIGGER_WORDS[l.automation.trigger]]] : []))
+    const linkTriggers = Object.keys(triggers).length > 0 ? { linkTriggers: triggers } : {}
     if (isChatPanel(p)) {
       return {
         id, title, kind: 'chat' as const, agentic: true,
         agentState: getAgentState(id),
         supervisor: p.chat.supervisor === true,
         orchestrator: p.chat.orchestrator !== undefined,
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
     if (isTerminalPanel(p)) {
@@ -111,14 +132,14 @@ function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplat
         agentState: getAgentState(id),
         ...(live?.currentCommand ? { currentCommand: live.currentCommand } : {}),
         ...(live?.cwd ? { cwd: live.cwd } : {}),
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
     if (isWatcherPanel(p)) {
       return {
         id, title, kind: 'watcher' as const, agentic: false,
         watcherStatus: getWatch(id).status,
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
     if (isWorkflowPanel(p)) {
@@ -131,22 +152,22 @@ function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplat
         templateId: p.workflow.templateId,
         poolLive: live.length > 0,
         ...(poolItems.length > 0 ? { poolItems } : {}),
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
     if (isWorkPanel(p)) {
       return {
         id, title, kind: 'work' as const, agentic: false, workItemId: p.work.itemId,
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
     if (isFilePanel(p)) {
       return {
         id, title, kind: 'file' as const, agentic: false, path: p.source.path,
-        ...(linksTo.length > 0 ? { linksTo } : {})
+        ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers
       }
     }
-    return { id, title, kind: 'other' as const, agentic: false, ...(linksTo.length > 0 ? { linksTo } : {}) }
+    return { id, title, kind: 'other' as const, agentic: false, ...(linksTo.length > 0 ? { linksTo } : {}), ...linkTriggers }
   })
 }
 
@@ -171,7 +192,7 @@ function Sparkline({ values, tone }: { values: number[]; tone?: string }): JSX.E
   )
 }
 
-function stateWord(row: OrchRosterRow): string {
+function stateWord(row: Pick<OrchRosterRow, 'state'>): string {
   if (row.state === 'wants-you' || row.state === 'busy' || row.state === 'idle' || row.state === 'starting' || row.state === 'exited') {
     return agentWord(row.state).word
   }
@@ -210,44 +231,264 @@ function kindGlyph(kind: OrchRosterRow['kind']): JSX.Element {
 
 function IsoCube(props: {
   node: OrchGraphNode
+  labelOffset: { x: number; y: number }
+  band: OrchDepthBand
   selected: boolean
+  /** The board stage this cube's task just entered, while the wash is live. */
+  wash?: OrchWash
   onSelect: (id: string) => void
   onJump: (id: string) => void
+  onOverflow: () => void
 }): JSX.Element {
-  const { node, selected, onSelect, onJump } = props
-  const faces = isoCubeFaces(0, 0, node.size)
-  const synthetic = node.synthetic === true || node.id === '__hub__'
+  const { node, selected, onSelect, onJump, onOverflow } = props
+  const overflow = node.overflow !== undefined
+  // The overflow node is not a panel: nothing to select or jump to, its verb is the roster.
+  const synthetic = node.synthetic === true || node.id === '__hub__' || overflow
   const live = isLiveRosterState(node.state)
   const needs = node.state === 'wants-you'
+  // State skins (M275): each state wears a distinct body, not one neon cube.
+  // `tone` is the CSS hook; the classes below only name the moments CSS animates.
+  const tone = toneFromState(node.state)
+  const skin = `${node.hub ? ' orch__cube--hub' : ''}${overflow ? ' orch__cube--overflow' : synthetic ? ' orch__cube--synthetic' : ''}${selected ? ' orch__cube--on' : ''}${live ? ' orch__cube--live' : ''}${needs ? ' orch__cube--needs' : ''}${tone === TONE_WORKING ? ' orch__cube--busy' : ''}${tone === 'starting' ? ' orch__cube--starting' : ''}${tone === 'exited' ? ' orch__cube--exited' : ''}${tone === 'idle' && !synthetic ? ' orch__cube--idle' : ''}`
   return (
     <g
-      className={`orch__cube${node.hub ? ' orch__cube--hub' : ''}${selected ? ' orch__cube--on' : ''}${live ? ' orch__cube--live' : ''}${needs ? ' orch__cube--needs' : ''}`}
+      className={`orch__cube${skin}`}
       transform={`translate(${node.x}, ${node.y})`}
-      style={{ cursor: synthetic ? 'default' : 'pointer' }}
-      data-tone={toneFromState(node.state)}
-      onClick={() => { if (!synthetic) onSelect(node.id) }}
+      style={{ cursor: synthetic && !overflow ? 'default' : 'pointer' }}
+      data-tone={tone}
+      data-depth={props.band}
+      data-orch-overflow={overflow ? node.overflow!.length : undefined}
+      onClick={() => { if (overflow) onOverflow(); else if (!synthetic) onSelect(node.id) }}
       onDoubleClick={() => { if (!synthetic) onJump(node.id) }}
     >
-      <polygon className="orch__cube-face orch__cube-face--left" points={faces.left} data-tone={toneFromState(node.state)} />
-      <polygon className="orch__cube-face orch__cube-face--right" points={faces.right} data-tone={toneFromState(node.state)} />
-      <polygon className="orch__cube-face orch__cube-face--top" points={faces.top} data-tone={toneFromState(node.state)} />
-      <text y={node.size * 0.95} textAnchor="middle" className="orch__cube-label">{node.title}</text>
+      {/* Keyed on the shift's time so a second move restarts the rim instead of
+          silently continuing the first one's animation. */}
+      {props.wash !== undefined && (
+        <ellipse key={props.wash.at} className="orch__cube-wash" data-stage={props.wash.stage} data-orch-wash={props.wash.stage}
+          cy={node.size * 0.65} rx={node.size * 0.98} ry={node.size * 0.3} aria-hidden="true" />
+      )}
+      <ellipse className="orch__cube-shadow" cy={node.size * 0.65} rx={node.size * 0.7} ry={node.size * 0.18} />
+      <foreignObject x={-node.size} y={-node.size} width={node.size * 2} height={node.size * 2} className="orch__cube-viewport">
+        <div className="orch__cube-scene">
+          {/* The lift wrapper owns every state transform (settle, bob, selection translateZ);
+              the solid keeps the per-node rotation so the two never fight over one property. */}
+          <div className="orch__cube-lift">
+          <div className="orch__cube-solid" style={{ width: node.size, height: node.size, transform: `rotateX(${-ORCH_STAGE_TILT_DEG}deg) rotateY(${node.hub ? 45 : 40 + (node.x / ORCH_GRAPH_SIZE.w) * 10}deg)` }}>
+            <div className="orch__cube-face orch__cube-face--left" style={{ transform: `translateZ(${node.size / 2}px)` }} />
+            <div className="orch__cube-face orch__cube-face--right" style={{ transform: `rotateY(-90deg) translateZ(${node.size / 2}px)` }} />
+            <div className="orch__cube-face orch__cube-face--top" style={{ transform: `rotateX(90deg) translateZ(${node.size / 2}px)` }} />
+          </div>
+          </div>
+        </div>
+      </foreignObject>
+      {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
+          cube is selected — the person has looked, so the graph stops calling. */}
+      {needs && !selected ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
+      <text x={props.labelOffset.x} y={node.size * 1.15 + props.labelOffset.y} textAnchor="middle" className="orch__cube-label">{node.title}</text>
+    </g>
+  )
+}
+
+/** The last non-blank line of a chat reply or terminal tail, scrubbed for the HUD. */
+function outwardTail(panelId: string, isChat: boolean, terminalLine: string): string {
+  const raw = isChat ? lastAssistantText(panelId) : terminalLine
+  if (raw.trim() === '') return ''
+  const lines = outward(raw, `panel ${panelId}`).text.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  return lines[lines.length - 1] ?? ''
+}
+
+/** How far below the cube centre a flipped card's anchor sits, in cube sizes — under the label. */
+const CALLOUT_BELOW_K = 1.4
+
+/** Cards share the projected cube anchor but never inherit its face rotation. */
+function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
+  node: OrchGraphNode; offsetX: number; expanded: boolean; task?: string
+  /** The card hangs under the cube, stem pointing up — set when there is no room above. */
+  below: boolean
+  /** Callouts pan fastest: the card slides past its cube by this, the stem stretches to follow. */
+  drift: { x: number; y: number }; band: OrchDepthBand
+  onSelect: (id: string) => void; onJump: (id: string) => void; onInterrupt?: (id: string) => void
+}): JSX.Element {
+  // The card is the cube's other face: click selects, double-click jumps. Its own
+  // buttons keep their verbs — a Jump press must not also toggle the selection.
+  const onCard = (event: { target: EventTarget }, run: () => void): void => {
+    if (event.target instanceof Element && event.target.closest('button') !== null) return
+    run()
+  }
+  const chat = useChat(node.id)
+  const live = useLiveSession(node.id)
+  const blocks = [...chat.turns.flatMap((t) => t.blocks), ...(chat.live?.blocks.map((b) => b.block) ?? [])]
+  const tool = blocks.reverse().find((b) => b.type === 'tool_use')
+  const work = live?.currentCommand || (tool?.type === 'tool_use' ? tool.name : undefined) || task
+  const cwd = live?.cwd || chat.snapshot?.cwd
+  const cost = chat.snapshot?.costUsd ?? chat.meta?.costUsd
+  const lastLine = useLastLine(node.id)
+  // The tail is what the agent last SAID, so it crosses outward() like every other
+  // HUD reader (orch.gate.2). Only an expanded card pays for the scrub — at most
+  // the hovered and the selected card — and a blank tail is omitted, never "—".
+  const tail = expanded ? outwardTail(node.id, chat.turns.length > 0 || chat.live !== undefined && chat.live !== null, lastLine.line) : ''
+  const needs = node.state === 'wants-you'
+  const ask = (chat.snapshot?.pending.length ?? 0) > 0 ? 'Waiting on approval' : needs ? 'Needs input' : undefined
+  const height = expanded ? 154 : 76
+  const width = needs ? 218 : 184
+  // Far cards shrink a little (never grow, so the collision pass stays honest).
+  const s = band === 'far' ? 0.92 : band === 'mid' ? 0.96 : 1
+  // The stem runs 22px from the anchor toward the card on whichever side it hangs.
+  const sy = below ? 22 : -22
+  const anchorY = below ? node.y + node.size * CALLOUT_BELOW_K : node.y - node.size
+  return <g className="orch__callout" data-depth={band} transform={`translate(${node.x}, ${anchorY})`}>
+    <path className="orch__callout-stem" d={`M 0 0 L ${offsetX + drift.x} ${sy + drift.y}`} />
+    <g transform={`translate(${offsetX + drift.x}, ${sy + drift.y}) scale(${s}) translate(${-offsetX}, ${-sy})`}>
+    <foreignObject x={offsetX - width / 2} y={below ? 22 : -height - 22} width={width} height={height + 22}>
+      <div className="orch__callout-slot" data-below={below || undefined}><div className="orch__callout-card" data-needs={needs || undefined} data-expanded={expanded || undefined}
+        onClick={(e) => onCard(e, () => onSelect(node.id))} onDoubleClick={(e) => onCard(e, () => onJump(node.id))}>
+        {ask && <strong className="orch__callout-ask">{ask}</strong>}
+        <strong title={node.title}>{node.title}</strong>
+        {!ask && <span>{stateWord(node)}</span>}
+        {work && <span className="orch__callout-work" title={work}>{work}</span>}
+        <div className="orch__callout-detail">
+          {tail && <span className="orch__callout-tail" title={tail}>{tail}</span>}
+          {cwd && <code title={cwd}>{displayPath(cwd).short}</code>}
+          {cost !== undefined && <span>${cost.toFixed(2)}</span>}
+          <div className="orch__callout-actions">
+            <button type="button" className="orch__mini" {...shellControl(() => onJump(node.id))}>Jump</button>
+            {onInterrupt && <button type="button" className="orch__mini" {...shellControl(() => onInterrupt(node.id))}>Interrupt</button>}
+          </div>
+        </div>
+      </div></div>
+    </foreignObject>
+    </g>
+  </g>
+}
+
+const packetFade = (t: number): number => Math.min(1, t / 0.08, (1 - t) / 0.12)
+
+/**
+ * The packets and payload chips on firing HUD edges. Its own component so the
+ * per-frame clock re-renders a few circles, never the cubes and their callouts
+ * (the canvas LinkLayer makes the same split for the same reason). The rAF runs
+ * only while a packet is live; under reduced motion there is no travel — the
+ * chip holds at the midpoint for the window, so the fact survives the motion.
+ */
+function EdgePackets({ edges, points, fires }: {
+  edges: readonly { from: string; to: string; authored?: boolean; trigger?: string }[]
+  points: ReadonlyMap<string, { x: number; y: number }>
+  fires: ReadonlyMap<string, OrchEdgeFire>
+}): JSX.Element | null {
+  const [, setFrame] = useState(0)
+  const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // Date.now() at render, not a stored clock: a fire that arrives while idle
+  // must be measured against now, or it reads as future and never starts.
+  const packets = orchEdgePackets(edges, fires, Date.now())
+  const live = packets.length > 0
+  useEffect(() => {
+    if (!live || reduced) return
+    let raf = requestAnimationFrame(function step() { setFrame((n) => n + 1); raf = requestAnimationFrame(step) })
+    return () => cancelAnimationFrame(raf)
+  }, [live, reduced])
+  if (!live) return null
+  return (
+    <g className="orch__packets" aria-hidden="true">
+      {packets.map((p) => {
+        const a = points.get(p.from)
+        const b = points.get(p.to)
+        if (!a || !b) return null
+        const at = (t: number): { x: number; y: number } => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+        const t = reduced ? 0.5 : p.t
+        const head = at(t)
+        const fade = reduced ? 1 : packetFade(p.t)
+        return (
+          <g key={p.key} data-orch-packet={p.key} data-authored={p.authored || undefined}>
+            {!reduced && [0.14, 0.07].map((lag, i) => {
+              const tail = at(Math.max(0, t - lag))
+              return <circle key={lag} className="orch__packet-trail" cx={tail.x} cy={tail.y} r={p.authored ? 2 + i : 1.5 + i * 0.5} opacity={fade * (0.3 + i * 0.25)} />
+            })}
+            {!reduced && <circle className="orch__packet-halo" cx={head.x} cy={head.y} r={p.authored ? 7 : 5} opacity={fade * 0.5} />}
+            {!reduced && <circle className="orch__packet" cx={head.x} cy={head.y} r={p.authored ? 3.5 : 2.5} opacity={fade} />}
+            {p.trigger !== undefined && (
+              <g className="orch__chip" transform={`translate(${head.x}, ${head.y - 16})`} opacity={fade} data-orch-chip={p.trigger}>
+                <rect x={-(p.trigger.length * 5.4 + 14) / 2} y={-9} width={p.trigger.length * 5.4 + 14} height={18} rx={9} />
+                <text y={3.5} textAnchor="middle">{p.trigger}</text>
+              </g>
+            )}
+          </g>
+        )
+      })}
     </g>
   )
 }
 
 function GraphBoard(props: {
   nodes: readonly OrchGraphNode[]
-  edges: readonly { from: string; to: string; authored?: boolean }[]
+  edges: readonly { from: string; to: string; authored?: boolean; trigger?: string }[]
+  fires: ReadonlyMap<string, OrchEdgeFire>
   selectedId: string | null
   selectedIds: readonly string[]
+  panels: readonly Panel[]
+  workItems: readonly PersistedWorkItem[]
+  memberIds: readonly string[] | null
+  /** Cubes a metric / roster lens leaves lit; everything else dims in place. `null` = no lens. */
+  litIds: ReadonlySet<string> | null
+  wash: OrchWash | null
+  onInterrupt?: (id: string) => void
   firingKeys: ReadonlySet<string>
+  onCamera: (camera: { x: number; y: number; k: number }) => void
   onSelect: (id: string) => void
   onJump: (id: string) => void
+  onOverflow: () => void
+  describedBy?: string
 }): JSX.Element {
-  const { nodes, edges, selectedId, selectedIds, firingKeys, onSelect, onJump } = props
+  const { nodes, edges, selectedId, selectedIds, firingKeys, litIds, wash, onSelect, onJump, onOverflow } = props
+  const lensedOut = (id: string): boolean => litIds !== null && !litIds.has(id)
+  const [hovered, setHovered] = useState<string | null>(null)
   const [cam, setCam] = useState({ x: 0, y: 0, k: 1 })
+  useEffect(() => props.onCamera(cam), [cam, props.onCamera])
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
+  // Project endpoints and cubes together so depth never detaches a connection.
+  // The stage centres on the hub's model position and reads the ring radius off
+  // the satellites, so the tilt foreshortens around whatever the model laid out.
+  const hubNode = nodes.find((n) => n.hub)
+  const stage: OrchStage = {
+    w: ORCH_GRAPH_SIZE.w, h: ORCH_GRAPH_SIZE.h,
+    cx: hubNode?.x ?? ORCH_GRAPH_SIZE.w / 2, cy: hubNode?.y ?? ORCH_GRAPH_SIZE.h / 2,
+    ringR: nodes.reduce((r, n) => n.hub || !hubNode ? r : Math.max(r, Math.hypot(n.x - hubNode.x, n.y - hubNode.y)), 0) || 148
+  }
+  const projected = nodes.map((node) => {
+    const p = orchProjectNode(node, stage, cam)
+    return { ...node, x: p.x, y: p.y, size: node.size * p.scale, depth: p.depth, band: p.band, drift: p.calloutDrift }
+  })
+  const ground = orchGroundPlane(stage, cam, (hubNode?.size ?? 56) * 0.55)
+
+  const expanded = (id: string): boolean => selectedIds.includes(id) || selectedId === id || hovered === id
+  const calloutNodes = projected.filter((n) => !n.synthetic && n.id !== '__hub__' && n.overflow === undefined
+    && (props.memberIds === null || props.memberIds.includes(n.id))
+    // A lensed-out cube keeps its place but not its card: the lit set's callouts are the answer.
+    && !lensedOut(n.id)
+    && (isLiveRosterState(n.state) || expanded(n.id)))
+  const offsets = new Map<string, number>()
+  // Cards that hang BELOW their cube: a back-of-ring cube has no room above it,
+  // and x was the only axis clamped — its expanded card drew past the stage top.
+  const below = new Set<string>()
+  const occupied: { x: number; y: number; w: number; h: number }[] = []
+  // Reserve the selected card's space first so attention cannot cover its verbs.
+  // Keep each card near its anchor; a slanted stem identifies a shifted card.
+  for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
+    const w = n.state === 'wants-you' ? 218 : 184
+    const h = expanded(n.id) ? 154 : 76
+    const flip = n.y - n.size - h - 22 < 8
+    // Below clears the cube's label (it sits at size × 1.15), mirroring the 22px stem above.
+    const y = flip ? n.y + n.size * CALLOUT_BELOW_K + 22 : n.y - n.size - h - 22
+    if (flip) below.add(n.id)
+    const candidates = [0, ...occupied.flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16].map((dx) => {
+      const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
+      const overlap = occupied.reduce((sum, r) => sum + Math.max(0, Math.min(x + w + 8, r.x + r.w) - Math.max(x - 8, r.x))
+        * Math.max(0, Math.min(y + h + 8, r.y + r.h) - Math.max(y - 8, r.y)), 0)
+      return { x, y, w, h, overlap, distance: Math.abs(x + w / 2 - n.x) }
+    }).sort((a, b) => a.overlap - b.overlap || a.distance - b.distance)
+    const placed = candidates[0]
+    occupied.push(placed)
+    offsets.set(n.id, placed.x + w / 2 - n.x)
+  }
 
   const onWheel = (event: ReactWheelEvent<SVGSVGElement>): void => {
     event.preventDefault()
@@ -257,7 +498,7 @@ function GraphBoard(props: {
 
   const onPointerDown = (event: ReactPointerEvent<SVGSVGElement>): void => {
     const target = event.target as SVGElement
-    if (target.closest('.orch__cube')) return
+    if (target.closest('.orch__cube, .orch__callout-host')) return
     drag.current = { x: event.clientX, y: event.clientY, cx: cam.x, cy: cam.y }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -281,9 +522,12 @@ function GraphBoard(props: {
   return (
     <svg
       className="orch__graph"
+      data-has-selection={selectedId !== null || selectedIds.length > 0 ? 'true' : undefined}
+      data-lens={litIds !== null ? 'true' : undefined}
       viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}
-      role="img"
+      role="group"
       aria-label="Agent graph"
+      aria-describedby={props.describedBy}
       onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -302,32 +546,89 @@ function GraphBoard(props: {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+        {/* In the ground group's own coordinates (it is translated and scaled). */}
+        <clipPath id="orch-ground-clip"><ellipse rx={ground.rx} ry={ground.ry} /></clipPath>
+        <radialGradient id="orch-ground-fade-g" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#fff" stopOpacity="1" />
+          <stop offset="70%" stopColor="#fff" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id="orch-ground-fade" maskContentUnits="userSpaceOnUse">
+          <ellipse rx={ground.rx} ry={ground.ry} fill="url(#orch-ground-fade-g)" />
+        </mask>
       </defs>
-      <g transform={`translate(${cam.x}, ${cam.y}) scale(${cam.k})`}>
-        <circle cx={ORCH_GRAPH_SIZE.w / 2} cy={ORCH_GRAPH_SIZE.h / 2} r="118" fill="url(#orch-hub-glow)" />
-        {edges.map((e) => {
-          const from = nodes.find((n) => n.id === e.from)
-          const to = nodes.find((n) => n.id === e.to)
+      <g>
+        {/* Ground plane: a grid clipped to the tilted ellipse and faded at its rim,
+            under concentric rings; the ring at 1/1.45 is the orbit track. It moves
+            with the hub layer, so the hub stays planted while satellites parallax. */}
+        <g transform={`translate(${ground.x}, ${ground.y}) scale(${ground.k})`} aria-hidden="true">
+          <ellipse rx={ground.rx * 1.08} ry={ground.ry * 1.08} fill="url(#orch-hub-glow)" />
+          <ellipse rx={ground.rx} ry={ground.ry} className="orch__ground-plane" mask="url(#orch-ground-fade)" />
+          <g clipPath="url(#orch-ground-clip)" mask="url(#orch-ground-fade)">
+            {Array.from({ length: 13 }, (_, i) => {
+              const t = (i - 6) / 6
+              return <g key={i}>
+                <line className="orch__ground-grid" x1={t * ground.rx} y1={-ground.ry} x2={t * ground.rx} y2={ground.ry} />
+                <line className="orch__ground-grid" x1={-ground.rx} y1={t * ground.ry} x2={ground.rx} y2={t * ground.ry} />
+              </g>
+            })}
+          </g>
+          {[0.4, 1 / 1.45, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / 1.45 ? ' orch__ground-ring--track' : ''}`} />)}
+        </g>
+        {orchEdgePaintOrder(edges).map((e) => {
+          const from = projected.find((n) => n.id === e.from)
+          const to = projected.find((n) => n.id === e.to)
           if (!from || !to) return null
           const firing = firingKeys.has(`${e.from}:${e.to}`) || firingKeys.has(`${e.to}:${e.from}`)
           return (
             <line
               key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}`}
+              className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}`}
               data-edge-activity={firing ? 'firing' : undefined}
             />
           )
         })}
-        {nodes.map((n) => (
+        {/* Painter's order by depth, hub included: a front satellite and its card
+            occlude the hub and the back of the ring, never the other way round. */}
+        {projected.sort((a, b) => a.depth - b.depth || a.y - b.y).map((n) => (
+          <g key={n.id} className="orch__callout-host" data-ghost={props.memberIds !== null && !props.memberIds.includes(n.id) || undefined}
+            data-lensed={lensedOut(n.id) || undefined}
+            onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}
+            onFocus={() => setHovered(n.id)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setHovered(null) }}
+            tabIndex={n.synthetic && n.overflow === undefined ? undefined : 0}
+            aria-label={n.overflow !== undefined ? `${n.title} — show them in the agent pool` : n.title}
+            onKeyDown={(e) => {
+              if (e.target !== e.currentTarget || e.key !== 'Enter') return
+              if (n.overflow !== undefined) onOverflow()
+              else if (!n.synthetic) onSelect(n.id)
+            }}>
           <IsoCube
-            key={n.id}
             node={n}
+            band={n.band}
+            labelOffset={{ x: Math.tanh(cam.x / 240) * 12, y: Math.tanh(cam.y / 180) * 9 + (cam.k - 1) * 4 }}
             selected={selectedId === n.id || selectedIds.includes(n.id)}
+            {...(wash !== null && wash.ids.includes(n.id) ? { wash } : {})}
             onSelect={onSelect}
             onJump={onJump}
+            onOverflow={onOverflow}
           />
+          </g>
         ))}
+        {/* Cards are billboards nearest the eye, so they paint after EVERY cube. Inside
+            each cube's host, a card flipped under a back-of-ring cube lay beneath the
+            hub, which paints later by depth. The group repeats the host's hover so
+            reaching for Jump never reads as leaving the cube and collapses the card. */}
+        {projected.filter((n) => offsets.has(n.id)).map((n) => (
+          <g key={`callout-${n.id}`} onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
+            <CubeCallout node={n} offsetX={offsets.get(n.id)!} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id)}
+              task={props.workItems.find((w) => w.panelId === n.id)?.title} onSelect={onSelect} onJump={onJump}
+              onInterrupt={props.onInterrupt && props.panels.some((p) => p.rect.id === n.id && isChatPanel(p)) && ['busy', 'starting', 'wants-you'].includes(n.state) ? props.onInterrupt : undefined} />
+          </g>
+        ))}
+        {/* Above the cubes so a chip is never hidden behind the object it leaves;
+            the packet fades in and out at the ends so it never sits on a face. */}
+        <EdgePackets edges={edges} fires={props.fires} points={new Map(projected.map((n) => [n.id, n]))} />
       </g>
     </svg>
   )
@@ -366,11 +667,14 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
 }
 
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf } = props
   const [tick, setTick] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tab, setTab] = useState<SideTab>('activity')
   const [mode, setMode] = useState<OrchMode>('dev')
+  const [graphCamera, setGraphCamera] = useState({ x: 0, y: 0, k: 1 })
+  // Foreground cards respond first, then settle at the edge of their readable area.
+  const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
   const [query, setQuery] = useState('')
   const [metric, setMetric] = useState<OrchMetricId | null>(null)
@@ -381,11 +685,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [openedAt] = useState(() => Date.now())
   const [now, setNow] = useState(() => Date.now())
   const [frameTask, setFrameTask] = useState(true)
-  const [edgeFires, setEdgeFires] = useState<Map<string, number>>(() => new Map())
+  const [edgeFires, setEdgeFires] = useState<Map<string, OrchEdgeFire>>(() => new Map())
   const [freshNeeds, setFreshNeeds] = useState<Set<string>>(() => new Set())
-  const [stageShift, setStageShift] = useState<{ from: WorkItemState; to: WorkItemState; at: number } | null>(null)
+  const [stageShift, setStageShift] = useState<OrchWash | null>(null)
   const knownNeedsRef = useRef<Set<string>>(new Set())
-  const prevStageRef = useRef<WorkItemState | undefined>(undefined)
+  const prevStagesRef = useRef<Map<string, WorkItemState> | null>(null)
   const visibleRosterRef = useRef<OrchRosterRow[]>([])
   const selectedIdsRef = useRef<string[]>([])
   const total = useMachineCostTotal()
@@ -405,20 +709,47 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     setTick((n) => n + 1)
     if (prev !== state) {
       const at = Date.now()
-      setEdgeFires((cur) => {
-        const next = new Map(cur)
-        for (const key of orchEdgesFiredByPanel(
-          // Snapshot edges are rebuilt below; fire any live graph edge that
-          // still names this panel — parent re-filters by time each tick.
-          liveEdgesRef.current,
-          panelId
-        )) next.set(key, at)
-        return next
-      })
+      // Snapshot edges are rebuilt below; fire any live graph edge that still
+      // names this panel. The packet leaves the panel that changed.
+      setEdgeFires((cur) => orchRecordFires(cur, orchEdgesFiredByPanel(liveEdgesRef.current, panelId), { at, origin: panelId, handoff: false }))
     }
   }), [panels])
 
-  const liveEdgesRef = useRef<{ from: string; to: string }[]>([])
+  const liveEdgesRef = useRef<{ from: string; to: string; authored?: boolean }[]>([])
+
+  // A handoff crossing is useHandoff's fact, not ours: the edge store's layer
+  // version moves when an edge turns `firing`, and the HUD reads the fire's own
+  // timestamp rather than stamping a second, later one.
+  const edgeVersion = useEdgeActivityVersion()
+  useEffect(() => {
+    const now = Date.now()
+    const hits = liveEdgesRef.current.filter((e) => {
+      if (e.authored !== true) return false
+      const at = edgeFiredAt(e.from, e.to)
+      return at !== undefined && now - at >= 0 && now - at < ORCH_PACKET_MS
+    })
+    if (hits.length === 0) return
+    setEdgeFires((cur) => {
+      let next: Map<string, OrchEdgeFire> = cur
+      for (const e of hits) {
+        const at = edgeFiredAt(e.from, e.to)!
+        const key = orchEdgeKey(e.from, e.to)
+        if (cur.get(key)?.at === at) continue
+        next = orchRecordFires(next, [key], { at, origin: e.from, handoff: true })
+      }
+      return next
+    })
+  }, [edgeVersion])
+
+  // The line's firing class must lapse when the packet does, not at the next
+  // one-second tick — one timer at the soonest expiry.
+  useEffect(() => {
+    const t = Date.now()
+    const soonest = Math.min(...[...edgeFires.values()].map((f) => f.at + ORCH_PACKET_MS - t).filter((ms) => ms > 0))
+    if (!Number.isFinite(soonest)) return
+    const timer = window.setTimeout(() => setNow(Date.now()), soonest + 16)
+    return () => window.clearTimeout(timer)
+  }, [edgeFires, now])
 
   useEffect(() => {
     const sampledAt = getMachineCostSampledAt()
@@ -463,18 +794,29 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     memberIds: members
   })
 
+  const offRingIds = useMemo(
+    () => framed.graph.nodes.find((n) => n.overflow !== undefined)?.overflow?.map((o) => o.id) ?? [],
+    [framed.graph.nodes]
+  )
+  // The ring un-capped (an agent closed): an `off-ring` lens would keep nothing, so it lapses.
+  const effectiveFilter: OrchRosterFilter = rosterFilter === 'off-ring' && offRingIds.length === 0 ? 'all' : rosterFilter
   const visibleRoster = useMemo(
-    () => filterRoster(framed.roster, rosterFilter, query),
-    [framed.roster, rosterFilter, query]
+    () => filterRoster(framed.roster, effectiveFilter, query, offRingIds),
+    [framed.roster, effectiveFilter, query, offRingIds]
   )
   visibleRosterRef.current = visibleRoster
   selectedIdsRef.current = selectedIds
 
   const lensIds = useMemo(() => new Set(visibleRoster.map((r) => r.id)), [visibleRoster])
-  const visibleGraph = useMemo(
-    () => filterGraph(framed.graph, lensIds, { keepSyntheticHub: !framed.framed }),
-    [framed.graph, framed.framed, lensIds]
+  const litIds = useMemo(
+    () => orchLensLit(framed.graph.nodes, lensIds, effectiveFilter !== 'all' || query.trim() !== ''),
+    [framed.graph.nodes, lensIds, effectiveFilter, query]
   )
+  const openOffRing = useCallback((): void => {
+    setMetric(null)
+    setQuery('')
+    setRosterFilter('off-ring')
+  }, [])
   const visibleFiles = framed.files
 
   const livePanelIds = useMemo(
@@ -569,14 +911,32 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     })
   }, [liveSnap.roster])
 
+  // Any board item's move, not only the focused task's: the focused task is
+  // re-picked by state, so tracking its one state read a DIFFERENT task taking
+  // over as a shift. Per item id, a first sight is never a move.
+  // Read through a ref: the caller passes a fresh arrow every render, and the
+  // effect must run on a board change, not on every Canvas render.
+  const membersOfRef = useRef(taskMembersOf)
+  membersOfRef.current = taskMembersOf
   useEffect(() => {
-    const cur = liveSnap.task?.state
-    const prev = prevStageRef.current
-    if (prev !== undefined && cur !== undefined && prev !== cur) {
-      setStageShift({ from: prev, to: cur, at: Date.now() })
-    }
-    prevStageRef.current = cur
-  }, [liveSnap.task?.state])
+    const prev = prevStagesRef.current
+    prevStagesRef.current = new Map(workItems.map((w) => [w.id, w.state]))
+    if (prev === null) return
+    const moved = orchStageShifts(prev, workItems).at(-1)
+    if (moved === undefined) return
+    const item = workItems.find((w) => w.id === moved.id)
+    const ids = membersOfRef.current?.(moved.id) ?? (item?.panelId !== undefined ? [item.panelId] : [])
+    setStageShift({ at: Date.now(), stage: moved.to, ids })
+  }, [workItems])
+
+  // The rim lapses at its own window, not at the next one-second tick.
+  useEffect(() => {
+    if (stageShift === null) return
+    const left = stageShift.at + ORCH_STAGE_WASH_MS - Date.now()
+    if (left <= 0) return
+    const timer = window.setTimeout(() => setNow(Date.now()), left + 16)
+    return () => window.clearTimeout(timer)
+  }, [stageShift])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -621,11 +981,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   }
 
   const firingKeys = useMemo(() => {
-    const out = new Set<string>()
-    for (const [key, at] of edgeFires) {
-      if (now - at >= 0 && now - at < ORCH_EDGE_FIRE_MS) out.add(key)
-    }
-    return out
+    void now
+    // Date.now(), not `now`: that state can be up to a second old when a fire
+    // lands, which would read the fire as future and skip the line entirely.
+    return new Set(orchEdgePackets(liveEdgesRef.current, edgeFires, Date.now()).map((p) => p.key))
   }, [edgeFires, now])
 
   const machineReadout = orchMachineReadout({
@@ -685,6 +1044,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     ...(queuedItem !== undefined ? { queuedTitle: queuedItem.title } : {})
   })
   const stageShiftLive = stageShift !== null && now - stageShift.at < ORCH_EDGE_FIRE_MS
+  const wash = stageShift !== null && Date.now() - stageShift.at < ORCH_STAGE_WASH_MS ? stageShift : null
 
   const outputCommand = selectedLive?.currentCommand || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.command : undefined)
   const outputCwd = selectedLive?.cwd || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.cwd : undefined)
@@ -731,8 +1091,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             <span className="orch__metric-sub">{liveSnap.counts.waiting > 0 ? 'Attention' : 'Clear'}</span>
           </button>
         </div>
+        {/* The textual truth. It reads liveSnap — never the lens, frame or ring
+            cap — so the scene below may illustrate it but can never hide it. */}
         {blocker !== null && (
-          <p className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</p>
+          <p id="orch-blocker" className="orch__blocker" data-orch-blocker={blocker.kind} data-orch-density="contextual">{blocker.line}</p>
         )}
         {commands.length > 0 && (
           <div className="orch__commands" data-orch-commands data-orch-density="contextual" role="toolbar" aria-label="Selection commands">
@@ -765,11 +1127,12 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               <span className="orch__sr">Filter agents</span>
               <select
                 className="orch__select"
-                value={rosterFilter}
+                value={effectiveFilter}
                 onChange={(e) => setRosterFilter(e.target.value as OrchRosterFilter)}
                 aria-label="Filter agents"
               >
                 {ORCH_ROSTER_FILTERS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                {offRingIds.length > 0 && <option value="off-ring">{`Not on the ring (${offRingIds.length})`}</option>}
               </select>
             </label>
           </div>
@@ -841,11 +1204,21 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           <div className="orch__graph-wrap">
             {mode === 'dev' ? (
               <GraphBoard
-                nodes={visibleGraph.nodes}
-                edges={visibleGraph.edges}
+                nodes={members === null ? framed.graph.nodes : [...framed.graph.nodes, ...liveSnap.graph.nodes.filter((n) => !members.includes(n.id) && n.id !== ORCH_OVERFLOW_ID)]}
+                edges={framed.graph.edges}
+                panels={panels}
+                workItems={workItems}
+                memberIds={members}
+                litIds={litIds}
+                wash={wash}
+                onOverflow={openOffRing}
+                {...(blocker !== null ? { describedBy: 'orch-blocker' } : {})}
+                onInterrupt={onInterrupt}
                 selectedId={selectedId}
                 selectedIds={selectedIds}
                 firingKeys={firingKeys}
+                fires={edgeFires}
+                onCamera={setGraphCamera}
                 onSelect={(id) => select(id)}
                 onJump={jump}
               />
@@ -856,10 +1229,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                     <button
                       key={stage.state}
                       type="button"
-                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}${liveSnap.task?.state === stage.state ? ' orch__wp--current' : ''}${stageShiftLive && stageShift?.to === stage.state ? ' orch__wp--shift' : ''}`}
+                      className={`orch__wp${pipelineStage === stage.state ? ' orch__wp--on' : ''}${stage.count > 0 ? ' orch__wp--hot' : ''}${liveSnap.task?.state === stage.state ? ' orch__wp--current' : ''}${stageShiftLive && stageShift?.stage === stage.state ? ' orch__wp--shift' : ''}`}
                       data-tone={stage.state === WORK_ITEM_STATES[1] ? TONE_WORKING : stage.state === WORK_ITEM_STATES[2] ? 'starting' : stage.state === WORK_ITEM_STATES[3] ? 'idle' : 'kind'}
                       data-orch-stage-current={liveSnap.task?.state === stage.state ? '' : undefined}
-                      data-orch-stage-shift={stageShiftLive && stageShift?.to === stage.state ? '' : undefined}
+                      data-orch-stage-shift={stageShiftLive && stageShift?.stage === stage.state ? '' : undefined}
                       aria-pressed={pipelineStage === stage.state}
                       {...shellControl(() => setPipelineStage((cur) => cur === stage.state ? null : stage.state))}
                     >
@@ -907,6 +1280,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               <button
                 type="button"
                 className="orch__float orch__float--term"
+                style={floatStyle}
                 title="Jump to terminal"
                 {...shellControl(() => { select(liveSnap.terminalSnippet!.panelId); setTab('terminal') })}
                 onDoubleClick={() => jump(liveSnap.terminalSnippet!.panelId)}
@@ -920,6 +1294,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               <button
                 type="button"
                 className="orch__float orch__float--task"
+                style={floatStyle}
                 title="Open task on canvas"
                 {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}
               >

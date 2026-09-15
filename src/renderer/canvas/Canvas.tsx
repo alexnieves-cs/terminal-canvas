@@ -7429,6 +7429,10 @@ export function Canvas({
               if (focused === undefined) return []
               return taskMemberships(panels, [focused])[0]?.members.map((m) => m.panelId) ?? []
             })()}
+            taskMembersOf={(itemId) => {
+              const item = workItems.find((w) => w.id === itemId)
+              return item === undefined ? [] : taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? []
+            }}
             onJumpPanel={(id) => {
               chrome.setCenterView('canvas')
               paletteActions.goToPanel(id)

@@ -142,6 +142,15 @@ export function noteEdgeFired(from: string, to: string): void {
   recompute()
 }
 
+/**
+ * When a handoff last crossed this edge, for a reader that draws its own
+ * surface (the Orchestration HUD) and must not write here. Read-only: the
+ * one-writer rule above is about `fired`'s WRITES.
+ */
+export function edgeFiredAt(from: string, to: string): number | undefined {
+  return fired.get(edgeKey(from, to))
+}
+
 /** useHandoff, at the moment a join arrival lands on an edge. */
 export function noteEdgeArrived(from: string, to: string): void {
   arrived.set(edgeKey(from, to), Date.now())

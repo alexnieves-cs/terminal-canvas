@@ -691,13 +691,37 @@ const SCENES = [
       await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await sleep(200)
     } },
-  { name: 'orchestration', intent: 'M271. The Orchestration HUD over the fixture canvas: glass metrics, isometric agent cubes, the selection command strip, pipeline stages from the board, and the activity ring. The canvas host stays mounted behind it. No invented CI branding.',
+  { name: 'orchestration', intent: 'M271/M274/M275. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, CSS-3D agent cubes (top + side faces under one stage tilt) standing on an elliptical ground plane with contact shadows, the hub painted behind the near satellites, upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
     run: async (k) => {
-      await k.loadMain()
-      await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
-      for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch')`)); i++) await sleep(100)
-      await sleep(600)
-      await k.shot('orchestration')
+      // Sized so the capture never inherits the previous scene's window (a golden
+      // at 865 against an 868 capture was this scene's standing red), and stilled
+      // so a mid-bob cube can never move a tile between two runs.
+      try { k.wc.debugger.attach('1.3') } catch { /* attached by an earlier scene */ }
+      await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      try {
+        await k.loadMain()
+        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-solid')`)); i++) await sleep(100)
+        if (!(await k.js(`!!document.querySelector('.orch__cube-solid')`))) throw new Error('orchestration scene: no 3D cube painted')
+        // The fixture has a focused task, which ghosts every non-member cube and
+        // hides its card — a golden of ghosts pins no glass and no depth. Show the
+        // whole ring, then select one plain satellite so an EXPANDED callout (the
+        // glass card, its outward-scrubbed tail, Jump) is in the frame.
+        await k.js(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await sleep(300)
+        const picked = await k.js(`(() => { const c = document.querySelector('.orch__cube:not(.orch__cube--hub):not(.orch__cube--overflow):not(.orch__cube--synthetic)'); if (c) c.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!c })()`)
+        if (!picked) throw new Error('orchestration scene: no satellite cube to select')
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__callout-card[data-expanded]')`)); i++) await sleep(100)
+        // The one thing hidden: the wall clock, the view-open timer and the
+        // time-of-day greeting change every run (a changed word is a red tile), so
+        // they keep their boxes but paint nothing. verify:orchestration owns their words.
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await sleep(600)
+        await k.shot('orchestration')
+        await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
+      } finally {
+        await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+      }
     } },
   { name: 'file-missing', intent: 'M149. A file panel whose file was deleted from disk under it: the watcher\'s push reaches the panel and it says so in words (`not found`), keeps its title and its chrome, and offers the reload — the error arm every three-state result must have, never a blank body.', size: [1440, 900],
     run: async (k) => {

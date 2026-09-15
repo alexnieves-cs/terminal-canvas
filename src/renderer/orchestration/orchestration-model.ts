@@ -22,7 +22,8 @@ export const ORCH_MACHINE_STALE_MS = 8_000
 
 export type OrchPanelKind = 'chat' | 'terminal' | 'watcher' | 'workflow' | 'work' | 'file' | 'other'
 
-export type OrchRosterFilter = 'all' | 'running' | 'idle' | 'needs-you'
+/** `off-ring` is only offered while the ring is capped — see ORCH_RING_CAP. */
+export type OrchRosterFilter = 'all' | 'running' | 'idle' | 'needs-you' | 'off-ring'
 export type OrchActivityScope = 'live' | 'all'
 export type OrchMode = 'dev' | 'pipeline'
 export type OrchPoolItemState = 'queued' | 'started' | 'finished'
@@ -73,6 +74,8 @@ export interface OrchPanelInput {
   path?: string
   /** Authored canvas links from this panel. */
   linksTo?: readonly string[]
+  /** Target id → trigger word, for this panel's ENABLED handoff links only. */
+  linkTriggers?: Readonly<Record<string, string>>
   /** Pool block items for a live workflow. */
   poolItems?: readonly { item: string; state: OrchPoolItemState; id?: string }[]
 }
@@ -113,12 +116,16 @@ export interface OrchGraphNode {
   y: number
   state: OrchRosterRow['state']
   size: number
+  /** Only on the `+N more` node: the agents the capped ring could not seat. */
+  overflow?: readonly { id: string; state: OrchRosterRow['state'] }[]
 }
 
 export interface OrchGraphEdge {
   from: string
   to: string
   authored?: boolean
+  /** The link's trigger word ("on exit", "after a turn") when a handoff rule is on. */
+  trigger?: string
 }
 
 export interface OrchTaskCard {
@@ -174,6 +181,22 @@ const SAT_SIZE = 38
 
 const WORK_WORKING = WORK_ITEM_STATES[1]
 const WORK_REVIEW = WORK_ITEM_STATES[2]
+
+/** Ring slots. Past this, the last slot is a `+N more` node — never a silent drop. */
+export const ORCH_RING_CAP = 8
+export const ORCH_OVERFLOW_ID = '__more__'
+
+const urgency = (state: OrchRosterRow['state']): number =>
+  state === 'wants-you' ? 0 : isLiveRosterState(state) ? 1 : 2
+
+/**
+ * The `+N more` node from what it holds. It wears the MOST urgent hidden state,
+ * so an amber agent past the cap still turns the overflow amber.
+ */
+function overflowNode(base: OrchGraphNode, entries: readonly { id: string; state: OrchRosterRow['state'] }[]): OrchGraphNode {
+  const state = [...entries].sort((a, b) => urgency(a.state) - urgency(b.state))[0]?.state ?? 'idle'
+  return { ...base, title: `+${entries.length} more`, state, overflow: entries }
+}
 
 function rosterState(p: OrchPanelInput): OrchRosterRow['state'] {
   if (p.kind === 'watcher') {
@@ -289,7 +312,15 @@ export function buildOrchestrationSnapshot(input: {
 
   const hubPanel = panels.find((p) => p.kind === 'chat' && p.supervisor)
     ?? panels.find((p) => p.kind === 'chat' && p.orchestrator)
-  const satellites = rosterSource.filter((p) => p.id !== hubPanel?.id).slice(0, 8)
+  const candidates = rosterSource.filter((p) => p.id !== hubPanel?.id)
+  // Seat by urgency so a waiting agent is never the one hidden, then keep canvas
+  // order among the seated so the ring does not reshuffle on every transition.
+  const seated = candidates.length <= ORCH_RING_CAP
+    ? new Set(candidates.map((p) => p.id))
+    : new Set(candidates.map((p, i) => ({ p, i })).sort((a, b) => urgency(rosterState(a.p)) - urgency(rosterState(b.p)) || a.i - b.i)
+      .slice(0, ORCH_RING_CAP - 1).map((x) => x.p.id))
+  const satellites = candidates.filter((p) => seated.has(p.id))
+  const hidden = candidates.filter((p) => !seated.has(p.id))
   const nodes: OrchGraphNode[] = []
   const edges: OrchGraphEdge[] = []
   const hubId = hubPanel?.id ?? '__hub__'
@@ -305,20 +336,30 @@ export function buildOrchestrationSnapshot(input: {
     state: hubPanel ? rosterState(hubPanel) : 'idle',
     size: HUB_SIZE
   })
+  const slots = satellites.length + (hidden.length > 0 ? 1 : 0)
+  const slotAt = (i: number): { x: number; y: number } => {
+    const angle = (Math.PI * 2 * i) / Math.max(slots, 1) - Math.PI / 2
+    return { x: HUB_X + Math.cos(angle) * RING_R, y: HUB_Y + Math.sin(angle) * RING_R }
+  }
   satellites.forEach((p, i) => {
-    const angle = (Math.PI * 2 * i) / Math.max(satellites.length, 1) - Math.PI / 2
     nodes.push({
       id: p.id,
       title: p.title,
       kind: p.kind,
       hub: false,
-      x: HUB_X + Math.cos(angle) * RING_R,
-      y: HUB_Y + Math.sin(angle) * RING_R,
+      ...slotAt(i),
       state: rosterState(p),
       size: SAT_SIZE
     })
     edges.push({ from: hubId, to: p.id })
   })
+  if (hidden.length > 0) {
+    nodes.push(overflowNode(
+      { id: ORCH_OVERFLOW_ID, title: '', kind: 'other', hub: false, ...slotAt(satellites.length), state: 'idle', size: SAT_SIZE },
+      hidden.map((p) => ({ id: p.id, state: rosterState(p) }))
+    ))
+    edges.push({ from: hubId, to: ORCH_OVERFLOW_ID })
+  }
 
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edgeKey = (a: string, b: string): string => `${a}\0${b}`
@@ -329,7 +370,8 @@ export function buildOrchestrationSnapshot(input: {
       const key = edgeKey(p.id, to)
       if (seen.has(key)) continue
       seen.add(key)
-      edges.push({ from: p.id, to, authored: true })
+      const trigger = p.linkTriggers?.[to]
+      edges.push({ from: p.id, to, authored: true, ...(trigger !== undefined ? { trigger } : {}) })
     }
   }
 
@@ -390,7 +432,9 @@ export function buildOrchestrationSnapshot(input: {
 export function filterRoster(
   rows: readonly OrchRosterRow[],
   filter: OrchRosterFilter,
-  query: string
+  query: string,
+  /** The `+N more` node's ids; `off-ring` with none keeps nothing. */
+  offRingIds: readonly string[] = []
 ): OrchRosterRow[] {
   const q = query.trim().toLowerCase()
   return rows.filter((row) => {
@@ -398,6 +442,7 @@ export function filterRoster(
       return false
     }
     if (filter === 'all') return true
+    if (filter === 'off-ring') return offRingIds.includes(row.id)
     if (filter === 'needs-you') return row.tone === TONE_NEEDS_YOU
     if (filter === 'running') return isLiveRosterState(row.state)
     return !isLiveRosterState(row.state) && row.tone !== TONE_NEEDS_YOU
@@ -525,7 +570,91 @@ export function orchEdgeIsFiring(
   return dt >= 0 && dt < fireMs
 }
 
-export type OrchBlockerKind = 'waiting-on-you' | 'queued' | 'running' | 'reviewable'
+/**
+ * How long a packet is visible on a HUD edge. Longer than the canvas's
+ * EDGE_FIRE_MS travel: the HUD is read at a glance from across the room, and a
+ * 900ms dot on a 150px spoke is gone before the eye lands on it.
+ */
+export const ORCH_PACKET_MS = 1200
+
+/**
+ * One recorded crossing. `origin` orients a state fire (the packet leaves the
+ * panel that changed); a handoff always travels from→to. Only a handoff may
+ * carry the trigger chip — a state flicker delivered nothing, and a chip on it
+ * would name a handoff that did not happen.
+ */
+export interface OrchEdgeFire {
+  at: number
+  origin: string
+  handoff: boolean
+}
+
+export interface OrchPacket {
+  key: string
+  from: string
+  to: string
+  /** Position along from→to in [0, 1). */
+  t: number
+  authored: boolean
+  trigger?: string
+}
+
+/**
+ * Record fires on `keys`. A live handoff is never downgraded by a state fire
+ * landing inside its window — a turn end emits both, in either order, and the
+ * one that carries the payload is the one worth seeing.
+ */
+export function orchRecordFires(
+  fires: ReadonlyMap<string, OrchEdgeFire>,
+  keys: readonly string[],
+  fire: OrchEdgeFire,
+  packetMs: number = ORCH_PACKET_MS
+): Map<string, OrchEdgeFire> {
+  const next = new Map(fires)
+  for (const key of keys) {
+    const cur = next.get(key)
+    if (cur !== undefined && cur.handoff && !fire.handoff && fire.at - cur.at < packetMs) continue
+    next.set(key, fire)
+  }
+  return next
+}
+
+/** Packets on the given edges right now; an expired or future fire yields none. */
+export function orchEdgePackets(
+  edges: readonly OrchGraphEdge[],
+  fires: ReadonlyMap<string, OrchEdgeFire>,
+  now: number,
+  packetMs: number = ORCH_PACKET_MS
+): OrchPacket[] {
+  const out: OrchPacket[] = []
+  for (const e of edges) {
+    const key = orchEdgeKey(e.from, e.to)
+    const fire = fires.get(key)
+    if (fire === undefined) continue
+    const dt = now - fire.at
+    if (dt < 0 || dt >= packetMs) continue
+    const reverse = !fire.handoff && fire.origin === e.to
+    out.push({
+      key,
+      from: reverse ? e.to : e.from,
+      to: reverse ? e.from : e.to,
+      t: dt / packetMs,
+      authored: e.authored === true,
+      ...(fire.handoff && e.trigger !== undefined ? { trigger: e.trigger } : {})
+    })
+  }
+  return out
+}
+
+/**
+ * Hub spokes paint first, authored handoffs last, so a real dependency is
+ * never drawn UNDER the star layout's lines where they cross.
+ */
+export function orchEdgePaintOrder<T extends { authored?: boolean }>(edges: readonly T[]): T[] {
+  return [...edges.filter((e) => e.authored !== true), ...edges.filter((e) => e.authored === true)]
+}
+
+export type OrchBlockerKind ='waiting-on-you' | 'queued' | 'running' | 'reviewable'
 
 export interface OrchBlocker {
   kind: OrchBlockerKind
@@ -601,15 +730,55 @@ export function filterGraph(
   opts?: { keepSyntheticHub?: boolean }
 ): { nodes: OrchGraphNode[]; edges: OrchGraphEdge[] } {
   const keepHub = opts?.keepSyntheticHub !== false
-  const nodes = graph.nodes.filter((n) => {
-    if (keepIds.has(n.id)) return true
-    if (keepHub && n.hub && n.synthetic === true) return true
-    return false
+  const nodes = graph.nodes.flatMap((n): OrchGraphNode[] => {
+    // The overflow survives a frame only for what it still holds, and recounts.
+    if (n.overflow !== undefined) {
+      const kept = n.overflow.filter((o) => keepIds.has(o.id))
+      return kept.length > 0 ? [overflowNode(n, kept)] : []
+    }
+    if (keepIds.has(n.id)) return [n]
+    if (keepHub && n.hub && n.synthetic === true) return [n]
+    return []
   })
   const ids = new Set(nodes.map((n) => n.id))
   const edges = graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to))
   return { nodes: [...nodes], edges: [...edges] }
 }
+
+/**
+ * Which cubes a lens leaves lit. The scene DIMS what a lens excludes rather
+ * than removing it: removal re-derives the ring radius and reflows the stage,
+ * and a metric click should move attention, not furniture. `null` = no lens.
+ * The overflow node is lit when it holds any lit agent; the synthetic hub,
+ * holding nothing, dims under every lens.
+ */
+export function orchLensLit(
+  nodes: readonly OrchGraphNode[],
+  visibleIds: ReadonlySet<string>,
+  active: boolean
+): Set<string> | null {
+  if (!active) return null
+  return new Set(nodes.filter((n) => n.overflow !== undefined
+    ? n.overflow.some((o) => visibleIds.has(o.id))
+    : visibleIds.has(n.id)).map((n) => n.id))
+}
+
+/**
+ * Board items whose stage moved since `prev`. An item absent from `prev` is
+ * new, not moved — a first render or a fresh card washes nothing.
+ */
+export function orchStageShifts(
+  prev: ReadonlyMap<string, WorkItemState>,
+  items: readonly { id: string; state: WorkItemState }[]
+): { id: string; from: WorkItemState; to: WorkItemState }[] {
+  return items.flatMap((w) => {
+    const from = prev.get(w.id)
+    return from !== undefined && from !== w.state ? [{ id: w.id, from, to: w.state }] : []
+  })
+}
+
+/** How long a member cube wears the stage rim — two --dur-flow passes in styles.css. */
+export const ORCH_STAGE_WASH_MS = 1800
 
 /**
  * Task-centric frame: keep only panels a D08 membership names. Synthetic
