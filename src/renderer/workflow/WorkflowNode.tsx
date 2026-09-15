@@ -522,7 +522,13 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
               </span>
               <button type="button" className="pf__verb workflow-node__more" data-workflow-more
                 aria-expanded={actionsOpen} aria-label={actionsOpen ? 'Hide workflow actions' : 'More workflow actions'} title={actionsOpen ? 'Hide workflow actions' : 'Stop, save, delete and build actions'}
-                onMouseDown={press(() => setActionsOpen((v) => !v))}><More size={14} /></button>
+                // The opener acts on CLICK, not mousedown: Stop, Save, Delete and
+                // Build live only behind it, and Enter/Space fire click, never
+                // mousedown — a press()-only ⋯ left them unreachable by keyboard
+                // (verify:panels product reach.3). Mousedown still swallows, so the
+                // body's focus handler and a canvas drag never see the press.
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+                onClick={(e) => { e.stopPropagation(); setActionsOpen((v) => !v) }}><More size={14} /></button>
               <div className="workflow-node__more-actions" data-workflow-more-actions hidden={!actionsOpen}>
               {stopVerb}
               {saveVerb}

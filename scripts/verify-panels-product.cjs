@@ -5206,7 +5206,20 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             return { started, visited }
           }
           const wfIdentity = `const v = el.closest('[data-workflow-verb]'); if (v) return 'verb:' + v.getAttribute('data-workflow-verb'); const t = el.closest('[data-workflow-tab]'); if (t) return 'tab:' + t.getAttribute('data-workflow-tab'); return null`
+          // M259 put Stop, Save, Delete and Build behind the toolbar's ⋯, which
+          // keeps them MOUNTED but `hidden` until opened. This is a KEYBOARD
+          // audit, so ⋯ is opened the way a keyboard user must: focused, then a
+          // real Enter. (A mouse press is no substitute — in this fixture the
+          // inspector covers ⋯, and a mouse-only opener is the defect to catch.)
+          const menuOpen = () => wc.executeJavaScript(`(() => { const a = document.querySelector('.panel[data-panel-id="wfB"] [data-workflow-more-actions]'); return a === null ? 'absent' : !a.hidden })()`)
+          const moreFocused = await wc.executeJavaScript(`(() => { const m = document.querySelector('.panel[data-panel-id="wfB"] [data-workflow-more]'); if (!m) return 'absent'; m.focus(); return document.activeElement === m })()`)
+          if (moreFocused === true) {
+            wc.sendInputEvent({ type: 'keyDown', keyCode: 'Return' }); wc.sendInputEvent({ type: 'char', keyCode: '\r' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+            await waitUntil(async () => (await menuOpen()) === true, 2000)
+          }
+          const openedByKeyboard = await menuOpen()
           const wfWalk = await tabWalk3('.panel[data-panel-id="wfB"] [data-workflow-verb="run"]', wfIdentity, 12)
+          wfWalk.menu = { moreFocused, openedByKeyboard }
           const wfVerbs = await wc.executeJavaScript(`[...document.querySelectorAll('.panel[data-panel-id="wfB"] [data-workflow-verb]')].map((b) => [b.getAttribute('data-workflow-verb'), b.disabled, b.getAttribute('title')])`)
           const enabledVerbs = wfVerbs.filter((v) => v[1] === false).map((v) => 'verb:' + v[0])
           const disabledVerbs = wfVerbs.filter((v) => v[1] === true)
