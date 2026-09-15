@@ -61,7 +61,7 @@ never a zero-value statement), *contextual* (next action, blocker; opacity 0 →
 
 `package.json` lists the scripts; what it cannot tell you: **`npm run verify` is the whole
 verification story** — there is no unit-test runner and no linter — and it must be green
-before claiming work is done. It is `scripts/verify-all.cjs`, which **DERIVES** its suite
+before work merges to main. It is `scripts/verify-all.cjs`, which **DERIVES** its suite
 list from package.json's `verify:*` keys rather than enumerating one, so a new suite runs by
 being written; `verify:packaged` and `verify:visual` are the only exclusions and they are
 named in the runner's `HAND_RUN` (`verify:meta` 19 pins all of that, and that `verify` still
@@ -208,10 +208,26 @@ every render.
 
 ## Working on this repo
 
-Milestones follow a fixed shape: a design spec in `docs/superpowers/specs/`, then a plan in
-`docs/superpowers/plans/`, then tasks executed test-first — checks written and *watched
-failing* against a non-existent module before it is implemented. M2 and M3 are worked examples.
-Every milestone ends with a fresh-context critic and a ledger line carrying its evidence.
+**Size the process to the change before writing anything — the tier decides what gets written.**
+Inside this repo this table overrides the superpowers defaults (brainstorming, writing-plans,
+subagent-driven-development, requesting-code-review): those are the *run* tier's tools.
+
+| Tier | The change | Before code | Building | Done when |
+|---|---|---|---|---|
+| **Patch** | A fix, copy or token tweak, a check, a refactor inside one module — no new channel, persisted field, kind or product rule | `npm run lb -- <module>` | Inline in this session; a behaviour change gets its check first, watched red | `npm run affected` green, committed |
+| **Milestone** | One M-number: a new surface, verb, IPC channel, persisted field or kind | A short spec in `docs/superpowers/specs/` — the open decisions and the checks that will prove it; no plan file | Inline, red-first; a subagent only for an independent piece that runs in parallel | `npm run verify` green, a ledger line with its evidence |
+| **Run** | Several milestones, a new seam, a format migration, or work another session resumes | Spec, plan, run prompt | Subagent-driven, per the run prompt | Per the run prompt |
+
+Take the smaller tier when unsure, and step up the moment the work reaches a larger tier's
+trigger. Ask a clarifying question only when intent is genuinely ambiguous — a patch starts
+from the code, not from a brainstorm.
+
+**`npm run verify` gates main.** Branch patches close on `npm run affected`; batch several
+through one full verify before merging.
+
+A **fresh-context critic** is owed at any tier for exactly two things: a visible surface that
+changed (see goldens below), and a boundary — `outward`, `redactSecrets`, import inertness,
+credentials. Everything else closes on its checks.
 
 - Commits: conventional format scoped by milestone — `feat(m3): …`, `fix(m3): …`.
 - Comments explain *why*. Match that density; a non-obvious line without a reason attached
