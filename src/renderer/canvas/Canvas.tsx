@@ -228,6 +228,7 @@ import { PanelMarksContext, type PanelMarks } from '@renderer/components/PanelFr
 // or threading it back through a callback, making App a state owner in exchange
 // for a tidier diagram.
 import { TopBar } from '../shell/TopBar'
+import { OrchestrationView } from '../orchestration/OrchestrationView'
 import { Inspector } from '../shell/Inspector'
 import type { AutomationRow } from '../shell/Inspector'
 import { useShellChrome } from '../shell/useShellChrome'
@@ -6543,7 +6544,7 @@ export function Canvas({
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
     setInputMode, setBroadcastInput, openBrowserPanel, openSkillPanel,
-    teammatesRef, chooseNavigator: chrome.chooseNavigator, toggleFlip: () => setFlipped((v) => !v),
+    teammatesRef, chooseNavigator: chrome.chooseNavigator, setCenterView: chrome.setCenterView, toggleFlip: () => setFlipped((v) => !v),
     workItemsRef, setWorkItems, boardVerbsRef
   })
   sayRef.current = paletteActions.say
@@ -7224,6 +7225,8 @@ export function Canvas({
         navigator={chrome.navigator}
         navVisible={chrome.navVisible}
         onChoose={chrome.chooseNavigator}
+        centerView={chrome.centerView}
+        onSetCenterView={chrome.setCenterView}
         attention={railAttention}
         attentionOpen={chrome.attentionOpen}
         onToggleAttention={chrome.toggleAttention}
@@ -7245,6 +7248,8 @@ export function Canvas({
         onToggleContext={chrome.toggleContext}
         inspectorPinned={inspectorPinned}
         onToggleInspectorPinned={onToggleInspectorPinned}
+        centerView={chrome.centerView}
+        onSetCenterView={chrome.setCenterView}
       />
       <Navigator
         hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
@@ -7302,6 +7307,24 @@ export function Canvas({
           component would be a changed prop on every one of those frames,
           defeating `memo` for every panel on every zoom gesture. See
           PanelPorts.tsx's own comment. */}
+      {/* M268. Orchestration shares the canvas grid cell; the canvas host stays
+          mounted (hidden) so PTYs and agents keep running underneath. */}
+      {chrome.centerView === 'orchestration' && (
+        <div className="shell__orch" role="presentation">
+          <OrchestrationView
+            panels={panels}
+            workItems={workItems}
+            onJumpPanel={(id) => {
+              chrome.setCenterView('canvas')
+              paletteActions.goToPanel(id)
+            }}
+            onJumpWorkItem={(id) => {
+              chrome.setCenterView('canvas')
+              goToWorkItem(id)
+            }}
+          />
+        </div>
+      )}
       <div
         // `panning` is real React state (flips only at drag begin/end, so no
         // 60Hz cost); spaceHeld.isHeld() reads a ref and is therefore
@@ -7315,6 +7338,8 @@ export function Canvas({
         data-cluster-arrival={clusterArrival ? '' : undefined}
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}`}
         ref={hostRef}
+        hidden={chrome.centerView === 'orchestration'}
+        aria-hidden={chrome.centerView === 'orchestration' ? true : undefined}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
         // own keyboard model (a screen reader must pass keys through, not

@@ -325,6 +325,8 @@ export const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   removeGroup: 'group administration is the user\'s',
   toggleBroadcastInput: 'broadcast types into EVERY selected terminal — the opposite of guardrail 4',
   toggleMerged: 'a read-only view the user enters',
+  // M268. Center-page swap; palette rows and the TopBar call it directly, like toggleMerged.
+  setCenterView: 'a center-page swap between canvas and Orchestration — the canvas host stays mounted',
   beginLink: 'enters a pointer mode',
   removeLink: 'edge administration is the user\'s (M78)',
   beginRelabelLink: 'opens the palette\'s text mode',

@@ -3,6 +3,8 @@ import type { ShellBreakpoint } from './useShellBreakpoint'
 
 export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
 export type ContextTab = 'detail' | 'work' | 'tools'
+/** M268. Which page fills the center column. The canvas host stays mounted either way. */
+export type CenterView = 'canvas' | 'orchestration'
 
 export interface ShellChrome {
   /** The breakpoint the shell measured for itself; stamped as `data-bp`. */
@@ -19,8 +21,12 @@ export interface ShellChrome {
   /** The Attention popover is up. */
   attentionOpen: boolean
   contextTab: ContextTab
+  /** M268. Canvas vs Orchestration in the center column. */
+  centerView: CenterView
   /** The dock's verb: show this pane (and open the navigator), or collapse it if it is the active one. */
   chooseNavigator: (pane: NavigatorPane) => void
+  /** M268. Swap the center page; orchestration auto-hides rail/inspector without rewriting their prefs. */
+  setCenterView: (view: CenterView) => void
   toggleNavigator: () => void
   toggleContext: () => void
   toggleTree: () => void
@@ -60,6 +66,11 @@ export interface ShellChrome {
  * palette is — because a resident overlay would put panels permanently under
  * chrome and make every world coordinate the canvas reports a lie (§7.2).
  * The persisted booleans are simply not consulted at Compact.
+ *
+ * M268. Orchestration is a center PAGE, not a navigator pane. While it is
+ * showing, the rail and inspector are forced closed for room — without
+ * writing shell.railOpen / shell.inspectorOpen — so returning to the canvas
+ * restores the user's prefs as they were.
  */
 export function useShellChrome(deps: {
   paletteIsOpen: () => boolean
@@ -74,6 +85,7 @@ export function useShellChrome(deps: {
   const [treeOpen, setTreeOpen] = useState(false)
   const [navigatorPref, setNavigatorPref] = useState<Exclude<NavigatorPane, 'files'>>('panels')
   const [contextTab, setContextTabState] = useState<ContextTab>('detail')
+  const [centerView, setCenterViewState] = useState<CenterView>('canvas')
   const [navDrawer, setNavDrawer] = useState(false)
   const [ctxDrawer, setCtxDrawer] = useState(false)
   const [attentionOpen, setAttentionOpen] = useState(false)
@@ -88,6 +100,7 @@ export function useShellChrome(deps: {
         const tree = rows.find((r) => r.id === 'files.treeOpen')
         const nav = rows.find((r) => r.id === 'shell.navigator')
         const tab = rows.find((r) => r.id === 'shell.contextTab')
+        const center = rows.find((r) => r.id === 'shell.centerView')
         if (rail) setRailPref(rail.persisted ? rail.value === true : null)
         if (ctx) setCtxPref(ctx.persisted ? ctx.value === true : null)
         if (tree) setTreeOpen(tree.value === true)
@@ -95,6 +108,7 @@ export function useShellChrome(deps: {
         // rather than leaving the navigator on a pane that does not exist.
         if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' || nav.value === 'integrations' || nav.value === 'teammates' || nav.value === 'board' || nav.value === 'skills' ? nav.value : 'panels')
         if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' ? tab.value : 'detail')
+        if (center) setCenterViewState(center.value === 'orchestration' ? 'orchestration' : 'canvas')
       })
     }
     read()
@@ -111,34 +125,52 @@ export function useShellChrome(deps: {
   // The breakpoint rule, in one place.
   const railOpen = railPref ?? true
   const inspectorOpen = ctxPref ?? (bp === 'wide')
-  const navVisible = bp === 'compact' ? navDrawer : railOpen
-  const ctxVisible = bp === 'compact' ? ctxDrawer : inspectorOpen
+  const orchestration = centerView === 'orchestration'
+  // M268. Orchestration takes the center full-bleed: hide rail/inspector for
+  // room without rewriting their persisted prefs.
+  const navVisible = orchestration ? false : (bp === 'compact' ? navDrawer : railOpen)
+  const ctxVisible = orchestration ? false : (bp === 'compact' ? ctxDrawer : inspectorOpen)
   const navigator: NavigatorPane = treeOpen ? 'files' : navigatorPref
 
   const write = (id: string, value: boolean | string): void => {
     void window.canvas.settings.set(id, value)
   }
 
+  const setCenterView = useCallback((view: CenterView) => {
+    setCenterViewState(view)
+    write('shell.centerView', view)
+    if (view === 'orchestration') {
+      setNavDrawer(false)
+      setCtxDrawer(false)
+      setAttentionOpen(false)
+    }
+  }, [])
+
   // The IPC write is deliberately OUTSIDE any setState updater: an updater
   // must be pure, and under StrictMode it runs twice.
   const toggleNavigator = useCallback(() => {
+    if (orchestration) { setCenterView('canvas'); return }
     if (bp === 'compact') { setNavDrawer((d) => !d); setCtxDrawer(false); setAttentionOpen(false); return }
     const next = !railOpen
     setRailPref(next)
     write('shell.railOpen', next)
-  }, [bp, railOpen])
+  }, [bp, railOpen, orchestration, setCenterView])
 
   const toggleContext = useCallback(() => {
+    if (orchestration) { setCenterView('canvas'); return }
     if (bp === 'compact') { setCtxDrawer((d) => !d); setNavDrawer(false); setAttentionOpen(false); return }
     // Present means the user won: the toggle is how a pane becomes present,
     // in either direction, at Standard and Wide alike.
     const next = !inspectorOpen
     setCtxPref(next)
     write('shell.inspectorOpen', next)
-  }, [bp, inspectorOpen])
+  }, [bp, inspectorOpen, orchestration, setCenterView])
 
   const chooseNavigator = useCallback((pane: NavigatorPane) => {
-    const showing = navVisible && navigator === pane
+    // M268. Opening a navigator pane from Orchestration returns to the canvas
+    // so the rail has somewhere to sit beside.
+    if (orchestration) setCenterView('canvas')
+    const showing = !orchestration && navVisible && navigator === pane
     if (showing) { toggleNavigator(); return }
     if (pane === 'files') {
       setTreeOpen(true); write('files.treeOpen', true)
@@ -146,11 +178,11 @@ export function useShellChrome(deps: {
       if (treeOpen) { setTreeOpen(false); write('files.treeOpen', false) }
       if (navigatorPref !== pane) { setNavigatorPref(pane); write('shell.navigator', pane) }
     }
-    if (!navVisible) {
+    if (orchestration || !navVisible) {
       if (bp === 'compact') { setNavDrawer(true); setCtxDrawer(false); setAttentionOpen(false) }
       else { setRailPref(true); write('shell.railOpen', true) }
     }
-  }, [bp, navVisible, navigator, treeOpen, navigatorPref, toggleNavigator])
+  }, [bp, navVisible, navigator, treeOpen, navigatorPref, toggleNavigator, orchestration, setCenterView])
 
   const toggleTree = useCallback(() => {
     if (treeOpen) {
@@ -214,8 +246,8 @@ export function useShellChrome(deps: {
   }, [paletteIsOpen, toggleNavigator, toggleContext, toggleTree, dismissTransient, navDrawer, ctxDrawer, attentionOpen])
 
   return {
-    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, contextTab,
-    chooseNavigator, toggleNavigator, toggleContext, toggleTree, toggleAttention, setContextTab, dismissTransient,
+    bp, navigator, navVisible, ctxVisible, navDrawer, ctxDrawer, attentionOpen, contextTab, centerView,
+    chooseNavigator, setCenterView, toggleNavigator, toggleContext, toggleTree, toggleAttention, setContextTab, dismissTransient,
     railOpen: navVisible, inspectorOpen: ctxVisible, treeOpen,
     toggleRail: toggleNavigator, toggleInspector: toggleContext
   }

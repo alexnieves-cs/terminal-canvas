@@ -219,6 +219,8 @@ export interface PaletteActionsDeps {
   /** M100. The roster as loaded (a ref: the sheet's submit reads it once), and the navigator's chooser. */
   teammatesRef: RefObject<PersistedTeammate[]>
   chooseNavigator: (pane: NavigatorPane) => void
+  /** M268. Canvas ↔ Orchestration center page. */
+  setCenterView: (view: 'canvas' | 'orchestration') => void
   /** M106. */
   toggleFlip: () => void
   /** M113. The board's records (a ref: a verb reads the list once) and their setter. Records, not layout: not in history, like runs and bookmarks. */
@@ -270,7 +272,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     restartWithSpec, commitHistory, switchWorkspace,
     movePanelsToWorkspace, toggleMerged, reloadPresets, reloadPrompts,
     reloadSettings, reloadCredentials, reloadWorkspaces, reloadWorktrees, worktreeRows, setPanels, setGroups,
-    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip,
+    setInputMode, setBroadcastInput, teammatesRef, chooseNavigator, setCenterView, openBrowserPanel, openSkillPanel, toggleFlip,
     workItemsRef, setWorkItems, boardVerbsRef
   } = deps
 
@@ -649,6 +651,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
      * built.
      */
     toggleMerged: () => toggleMerged(),
+    setCenterView: (view) => setCenterView(view),
     toggleBroadcastInput: () => {
       // The command's disabled state is UX, not authority: the selection or a
       // session can change while the palette is open, so re-check the live
@@ -2555,5 +2558,5 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
        openFilePanel, openJiraPanel, worldCentre, beginNewNote, beginNewChat, openAsChat, openInTerminal, reloadWorktrees,
        lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, beginAnnotate,
        worktreeRows, setInputMode, goToViewport, cameraBack, cameraForward, bookmarksRef, setBookmarks, viewportRef,
-       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow])
+       registry, panelsRef, restartWithSpec, onClosePanel, lockPanel, unlockPanel, pinPanel, unpinPanel, maximisePanel, restorePanel, teammatesRef, chooseNavigator, setCenterView, openBrowserPanel, openSkillPanel, toggleFlip, workItemsRef, setWorkItems, boardVerbsRef, createObjectNow])
 }

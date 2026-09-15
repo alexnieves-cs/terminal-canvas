@@ -1045,6 +1045,7 @@ price of not killing something.
 | M265 | feel reshape beat 3 — one attention story: pill says chats need you; suppress duplicate in-app queue-count toasts when the pill already owns that sentence — `docs/build-log/m265-attention-story.md` | ✅ done |
 | M266 | feel reshape beat 4 — teammate · chat · session silhouettes: chat leads as Teammate · place; pill running copy says sessions — `docs/build-log/m266-silhouettes.md` | ✅ done |
 | M267 | motion and material — drag weight and settle, a travelling current on firing edges, the summoned command pill, aura depth, a living working signal; a new chat spawns clear of the navigation cluster — `docs/build-log/m267-motion-material.md` | ✅ done |
+| M268 | Orchestration center view — dock / TopBar / palette swap the center column between Canvas and Orchestration; canvas stays mounted; HUD aggregates live agents, board tasks, watchers, workflows, machine cost and an activity ring — `docs/build-log/m268-orchestration.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

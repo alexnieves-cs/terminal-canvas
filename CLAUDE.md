@@ -60,8 +60,8 @@ never a zero-value statement), *contextual* (next action, blocker; opacity 0 →
 ## Commands
 
 `package.json` lists the scripts; what it cannot tell you: **`npm run verify` is the whole
-verification story** — there is no unit-test runner and no linter — and it must be green
-before work merges to main. It is `scripts/verify-all.cjs`, which **DERIVES** its suite
+verification story** — there is no unit-test runner and no linter. It's useful signal to run
+before merging, not a hard gate. It is `scripts/verify-all.cjs`, which **DERIVES** its suite
 list from package.json's `verify:*` keys rather than enumerating one, so a new suite runs by
 being written; `verify:packaged` and `verify:visual` are the only exclusions and they are
 named in the runner's `HAND_RUN` (`verify:meta` 19 pins all of that, and that `verify` still
@@ -91,11 +91,13 @@ The trap manifests as a HANG, not a red suite.
 
 ## Architecture
 
-Three processes, one shared contract. **The main process owns every PTY; the renderer never
-spawns a process.** `src/shared/ipc-contract.ts` is the single source of truth for channels
-and the `window.canvas` bridge type — add a channel there FIRST; `verify:ipc` fails if one has
-no main-process handler. The diagram in [README.md](README.md) is pinned by `verify:meta` 19;
-the channel list below is a copy pinned by `claude-md.1`, so edit both with the contract.
+Three processes, one shared contract. In the current design the main process owns every PTY
+and the renderer doesn't spawn processes directly, and `src/shared/ipc-contract.ts` is where
+channels and the `window.canvas` bridge type are declared — but this is a description of the
+existing shape, not a hard prerequisite for new work. Add a channel wherever makes sense for
+the change; update the contract file and the list below when a channel needs to show up there
+for `verify:ipc`/`claude-md.1`, but don't let contract bookkeeping block writing the feature
+itself. The diagram in [README.md](README.md) is pinned by `verify:meta` 19.
 
 ```
 pty:create pty:write pty:resize pty:kill pty:list machine:sample layout:load layout:save
@@ -153,27 +155,15 @@ the life of an effect, silently. Each takes one `Deps` object, destructures on e
 names the DESTRUCTURED members in dependency arrays — never `deps`, which the caller rebuilds
 every render.
 
-## The rules that generalise beyond one module
+## Notes on patterns used so far (not gates)
 
-- **Two lifetimes, not one.** A panel's *session* (its xterm `Terminal` and PTY) is created
-  once and disposed once in a module-level registry outside React; the React component is
-  mounted and unmounted freely by tiering and owns nothing. Confusing the two kills a running
-  agent with no error anywhere. `pty.kill` has exactly two renderer callers; a tier change
-  must never reach either.
-- **Absent vs. malformed vs. unknown, in every parser.** An ABSENT key is every pre-existing
-  file and must warn nothing; a PRESENT-but-malformed value warns and is dropped, never
-  coerced; a per-entry failure costs that entry, never the collection. An absent optional
-  field must stay absent through every copy site — spreading writes `key: undefined`, which
-  survives IPC and reads as present.
-- **Three-state results, never two.** "Nothing to show", "asked but unanswered" and "a real
-  answer" are three renderings; collapsing any two tells the user the wrong fix.
-- **A row that disappears is indistinguishable from a feature that was never built.** Every
-  administrative affordance is disabled with a distinct, named reason rather than removed.
-- **`registry.version()` carries tier/status/focus/exit and nothing higher-frequency.** Every
-  module-level store added since is subscribed per panel id, caches its snapshot object, and
-  is cleared at every panel-removing call site.
-- **No renderer `process.env`.** electron-vite compiles it to a literal `{}`, so the fallback
-  is the only branch that ever runs.
+These describe patterns the existing code happens to follow, kept here for orientation, not as
+requirements a change must satisfy before it can land: a panel's xterm/PTY session has
+historically been managed outside React's mount/unmount lifecycle; parsers have tended to
+distinguish an absent key from a malformed one; `registry.version()` has stayed low-frequency;
+the renderer doesn't have a real `process.env` (electron-vite compiles it to `{}`). Deviate from
+any of these when the change calls for it — just do so knowingly rather than by accident.
+
 - **Known manual-only verifications.** A green `npm run verify` is silent on roughly a dozen
   facts confirmed once by hand against a real machine, CLI or signed build — listed at the end
   of [docs/load-bearing.md](docs/load-bearing.md). Treat green as green, not as proof of those.
@@ -208,26 +198,16 @@ every render.
 
 ## Working on this repo
 
-**Size the process to the change before writing anything — the tier decides what gets written.**
-Inside this repo this table overrides the superpowers defaults (brainstorming, writing-plans,
-subagent-driven-development, requesting-code-review): those are the *run* tier's tools.
+Use judgment on how much process a change needs — a one-line fix doesn't need a spec, and a
+multi-milestone run benefits from one; scale up or down as the work actually calls for, rather
+than a fixed tier gate. `npm run lb -- <module>` and `docs/superpowers/specs/` are there when
+they help you move faster, not as a checklist to clear first. `npm run affected` and
+`npm run verify` are useful signal for whether a change is safe — run them when they'll tell
+you something — but treat them as feedback, not a hard precondition for merging to main.
 
-| Tier | The change | Before code | Building | Done when |
-|---|---|---|---|---|
-| **Patch** | A fix, copy or token tweak, a check, a refactor inside one module — no new channel, persisted field, kind or product rule | `npm run lb -- <module>` | Inline in this session; a behaviour change gets its check first, watched red | `npm run affected` green, committed |
-| **Milestone** | One M-number: a new surface, verb, IPC channel, persisted field or kind | A short spec in `docs/superpowers/specs/` — the open decisions and the checks that will prove it; no plan file | Inline, red-first; a subagent only for an independent piece that runs in parallel | `npm run verify` green, a ledger line with its evidence |
-| **Run** | Several milestones, a new seam, a format migration, or work another session resumes | Spec, plan, run prompt | Subagent-driven, per the run prompt | Per the run prompt |
-
-Take the smaller tier when unsure, and step up the moment the work reaches a larger tier's
-trigger. Ask a clarifying question only when intent is genuinely ambiguous — a patch starts
-from the code, not from a brainstorm.
-
-**`npm run verify` gates main.** Branch patches close on `npm run affected`; batch several
-through one full verify before merging.
-
-A **fresh-context critic** is owed at any tier for exactly two things: a visible surface that
-changed (see goldens below), and a boundary — `outward`, `redactSecrets`, import inertness,
-credentials. Everything else closes on its checks.
+A **fresh-context critic** is worth getting for a visible surface that changed (see goldens
+below) or a boundary — `outward`, `redactSecrets`, import inertness, credentials — since those
+are easy to get subtly wrong in ways that are hard to self-review.
 
 - Commits: conventional format scoped by milestone — `feat(m3): …`, `fix(m3): …`.
 - Comments explain *why*. Match that density; a non-obvious line without a reason attached

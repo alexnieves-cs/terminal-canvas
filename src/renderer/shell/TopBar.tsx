@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
+import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
 
@@ -23,6 +24,9 @@ export interface TopBarProps {
   /** (this redesign) Keeps the inspector open through the Compact breakpoint's own auto-collapse (`shell.inspectorPinned`). */
   inspectorPinned: boolean
   onToggleInspectorPinned: () => void
+  /** M268. Center page: canvas or orchestration. */
+  centerView: CenterView
+  onSetCenterView: (view: CenterView) => void
 }
 
 
@@ -45,7 +49,8 @@ export interface TopBarProps {
  */
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
-  workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned
+  workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
+  centerView, onSetCenterView
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -81,6 +86,22 @@ export function TopBar({
       */}
       <span className="shell__mark" aria-hidden="true"><ProductMark /><span>canvas</span></span>
 
+      {/* M268. Center-page swap: reachable without opening dock labels. */}
+      <div className="shell__center-toggle" role="group" aria-label="Center view">
+        <button
+          type="button"
+          className={`shell__center-btn${centerView === 'canvas' ? ' shell__center-btn--on' : ''}`}
+          aria-pressed={centerView === 'canvas'}
+          {...shellControl(() => onSetCenterView('canvas'))}
+        >Canvas</button>
+        <button
+          type="button"
+          className={`shell__center-btn${centerView === 'orchestration' ? ' shell__center-btn--on' : ''}`}
+          aria-pressed={centerView === 'orchestration'}
+          {...shellControl(() => onSetCenterView('orchestration'))}
+        >Orchestrate</button>
+      </div>
+
       <button
         type="button"
         className="shell__spawn"
@@ -98,7 +119,7 @@ export function TopBar({
         {taskName !== undefined && <><span className="shell__breadcrumb-separator">/</span><span className="shell__task">{taskName}</span></>}
       </div>
 
-      <button type="button" className="shell__search" title="Search panels, files, tasks, commands… (⌘K)"
+      <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
         {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
       <div className="shell__view" ref={viewRef}>
         <button type="button" className="shell__view-trigger" aria-haspopup="menu" aria-expanded={viewOpen}
@@ -125,6 +146,11 @@ export function TopBar({
           <button type="button" role="menuitemcheckbox" aria-checked={merged} aria-pressed={merged}
             className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
             {...shellControl(onToggleMerged)}><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</button>
+          <button type="button" role="menuitemradio" aria-checked={centerView === 'orchestration'}
+            {...shellControl(() => { onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration'); setViewOpen(false) })}>
+            <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
+            Orchestration view
+          </button>
         </div>
       </div>
     </header>

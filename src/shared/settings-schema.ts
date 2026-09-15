@@ -323,6 +323,21 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    // M268. The center column's page: the infinite canvas, or the Orchestration
+    // HUD that aggregates agents/tasks/workflows. The canvas stays mounted when
+    // orchestration is showing — this enum only chooses which sibling is
+    // visible. Auto-collapsing the rail/inspector while here is a VIEW rule in
+    // useShellChrome, not a write to shell.railOpen / shell.inspectorOpen.
+    id: 'shell.centerView',
+    label: 'Center view',
+    description: 'show the canvas or the Orchestration overview in the center column',
+    keywords: ['orchestration', 'orchestrate', 'dashboard', 'overview', 'ops', 'agents', 'center', 'view', 'canvas', 'shell'],
+    type: 'enum',
+    values: ['canvas', 'orchestration'],
+    default: 'canvas',
+    category: SHELL_CATEGORY
+  },
+  {
     // (this redesign) The inspector's width, dragged from its own left edge; a `number`
     // setting like `terminal.fontSize` rather than a bespoke store, so the
     // one persisted-settings home covers it too. Bounds: 220 is the

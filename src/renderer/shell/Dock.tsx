@@ -1,9 +1,9 @@
 import { memo, type JSX } from 'react'
 import type { RailAttention } from './rail-sections'
-import type { NavigatorPane } from './useShellChrome'
+import type { CenterView, NavigatorPane } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { agentWord } from '@renderer/panels/panel-state'
-import { Bell, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, People, ProductMark } from '@renderer/icons'
+import { Bell, Folder, Gear, Grid, KindNote, KindToolbox, KindWork, Layers, Link, Orbit, People, ProductMark } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 
 export interface DockProps {
@@ -12,6 +12,10 @@ export interface DockProps {
   /** The navigator is on screen; a dock icon is pressed only then. */
   navVisible: boolean
   onChoose: (pane: NavigatorPane) => void
+  /** M268. Which center page is showing; Orchestrate is pressed from this, not the navigator. */
+  centerView: CenterView
+  /** M268. Swap canvas ↔ orchestration. Choosing Canvas also lands on the panels navigator. */
+  onSetCenterView: (view: CenterView) => void
   attention: RailAttention[]
   attentionOpen: boolean
   onToggleAttention: () => void
@@ -27,6 +31,10 @@ export interface DockProps {
  * active one collapses the pane. This is what makes a fifth navigator cheap
  * — a row in this array, not a negotiation over a column's height.
  *
+ * M268. Orchestrate is a CENTER PAGE, not a navigator pane — it sits in the
+ * Work group beside Canvas, and pressing it swaps the center column while
+ * the canvas host stays mounted underneath.
+ *
  * Attention is NOT a pane. It is a count badge on its icon, always visible —
  * the half that keeps a waiting agent from becoming invisible now that the
  * rail's always-resident section is gone — plus a popover on click, because
@@ -36,7 +44,10 @@ export interface DockProps {
  *
  * Every control mounts shellControl(): focus never leaves the terminal.
  */
-function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onSettings }: DockProps): JSX.Element {
+function DockImpl({
+  navigator, navVisible, onChoose, centerView, onSetCenterView,
+  attention, attentionOpen, onToggleAttention, onGoToPanel, onAnswer, onSettings
+}: DockProps): JSX.Element {
   const groups: Array<{ label: string; entries: Array<{ id: NavigatorPane; label: string; shortcut?: string; icon: JSX.Element }> }> = [
     { label: 'Work', entries: [
       { id: 'panels', label: 'Canvas', shortcut: '⌘\\', icon: <Grid /> },
@@ -53,13 +64,18 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
       { id: 'teammates', label: 'Teammates', icon: <People /> }
     ] }
   ]
+  const canvasPressed = centerView === 'canvas' && navVisible && navigator === 'panels'
+  const orchPressed = centerView === 'orchestration'
   return (
     <nav className="shell__dock" aria-label="Dock">
       <span className="dock__product" aria-hidden="true"><ProductMark /></span>
       {groups.map((group) => <div className="dock__group" data-dock-group={group.label.toLowerCase()} key={group.label}>
         <div className="dock__group-label">{group.label}</div>
         {group.entries.map((e) => {
-        const pressed = navVisible && navigator === e.id
+        const isCanvas = e.id === 'panels'
+        const pressed = isCanvas
+          ? canvasPressed
+          : centerView === 'canvas' && navVisible && navigator === e.id
         return (
           <button
             key={e.id}
@@ -69,7 +85,14 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
             aria-pressed={pressed}
             aria-label={e.label}
             title={`${pressed ? 'Hide' : 'Show'} ${e.label}${e.shortcut === undefined ? '' : ` (${e.shortcut})`}`}
-            {...shellControl(() => onChoose(e.id))}
+            {...shellControl(() => {
+              if (isCanvas) {
+                onSetCenterView('canvas')
+                onChoose('panels')
+                return
+              }
+              onChoose(e.id)
+            })}
           >
             {e.icon}
             {/* M172/M257. The name is always a tooltip and becomes a persistent label at wide widths. */}
@@ -77,6 +100,20 @@ function DockImpl({ navigator, navVisible, onChoose, attention, attentionOpen, o
           </button>
         )
       })}
+        {group.label === 'Work' && (
+          <button
+            type="button"
+            className={`dock__button icon-button${orchPressed ? ' dock__button--on' : ''}`}
+            data-dock="orchestration"
+            aria-pressed={orchPressed}
+            aria-label="Orchestrate"
+            title={orchPressed ? 'Show Canvas' : 'Show Orchestration'}
+            {...shellControl(() => onSetCenterView(orchPressed ? 'canvas' : 'orchestration'))}
+          >
+            <Orbit />
+            <span className="dock__label" aria-hidden="true">Orchestrate</span>
+          </button>
+        )}
       </div>)}
       <div className="dock__group dock__group--system" data-dock-group="system">
         <div className="dock__group-label">System</div>

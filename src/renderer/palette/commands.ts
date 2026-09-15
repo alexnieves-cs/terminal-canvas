@@ -388,6 +388,11 @@ export interface PaletteActions {
    */
   toggleMerged(): void
   /**
+   * M268. Show the canvas or the Orchestration center page. The canvas host
+   * stays mounted either way — this only chooses which sibling is visible.
+   */
+  setCenterView(view: 'canvas' | 'orchestration'): void
+  /**
    * Arm the one-shot link mode with this panel as the source. The NEXT click
    * on the canvas completes or cancels it; see useLinkMode and Canvas.tsx's
    * onLinkModeMouseDownCapture.
@@ -1588,6 +1593,21 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     searchText: 'merge merged workspaces lanes all overview toggle',
     group: 'canvas',
     run: () => actions.toggleMerged()
+  })
+  // M268. Center-page doors — same verbs as the TopBar / dock toggles.
+  out.push({
+    id: 'canvas.orchestration',
+    title: 'Show Orchestration',
+    searchText: 'orchestration orchestrate dashboard overview ops agents activity',
+    group: 'canvas',
+    run: () => actions.setCenterView('orchestration')
+  })
+  out.push({
+    id: 'canvas.show',
+    title: 'Show Canvas',
+    searchText: 'canvas center view panels world',
+    group: 'canvas',
+    run: () => actions.setCenterView('canvas')
   })
   out.push({
     id: 'canvas.reset',

@@ -84,6 +84,10 @@ export const Search = (p: IconProps): JSX.Element => (
 export const Layers = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M8 2.5L14 5.5 8 8.5 2 5.5z" /><path d="M2 8.5l6 3 6-3M2 11.5l6 3 6-3" /></Svg>
 )
+/** M268. Orchestration center view: a hub with satellite nodes. */
+export const Orbit = (p: IconProps): JSX.Element => (
+  <Svg {...p}><circle cx="8" cy="8" r="2" /><circle cx="8" cy="8" r="5.5" /><circle cx="8" cy="2.5" r="1" fill="currentColor" stroke="none" /><circle cx="13" cy="10.5" r="1" fill="currentColor" stroke="none" /><circle cx="3" cy="10.5" r="1" fill="currentColor" stroke="none" /></Svg>
+)
 export const Link = (p: IconProps): JSX.Element => (
   <Svg {...p}><path d="M6.5 9.5l3-3" /><path d="M7 4.5l1.25-1.25a2.5 2.5 0 0 1 3.5 3.5L10.5 8" /><path d="M9 11.5l-1.25 1.25a2.5 2.5 0 0 1-3.5-3.5L5.5 8" /></Svg>
 )
