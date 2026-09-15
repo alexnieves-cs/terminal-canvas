@@ -14,6 +14,7 @@ import { formatCpu, formatMemory, listMachineCosts, useMachineCost, useMachineCo
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
 import { lastAssistantText } from '@renderer/chat/chat-store'
+import { outward } from '@shared/outward'
 import { useLastLine } from '@renderer/session/last-line-store'
 import { getPool, livePoolKeys } from '@renderer/workflow/pool-store'
 import type { PersistedWorkItem } from '@shared/work-items'
@@ -312,7 +313,8 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
     let cancelled = false
     const pull = (): void => {
       if (kind === 'chat') {
-        const text = lastAssistantText(panelId)
+        const raw = lastAssistantText(panelId)
+        const text = raw === '' ? '' : outward(raw, `panel ${panelId}`).text
         if (!cancelled) setLines(text === '' ? (lastLine.line === '' ? [] : [lastLine.line]) : text.split('\n').slice(-28))
         return
       }
@@ -321,7 +323,10 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
         return
       }
       void window.canvas.scrollback.tail({ panelId, lines: 28 }).then(
-        (got) => { if (!cancelled) setLines(got) },
+        (got) => {
+          if (cancelled) return
+          setLines(got.length === 0 ? got : outward(got.join('\n'), `panel ${panelId}`).text.split('\n'))
+        },
         () => { if (!cancelled) setLines([]) }
       )
     }
