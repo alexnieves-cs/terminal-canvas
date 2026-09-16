@@ -11,7 +11,7 @@ An index. Every rule in this repository exists because the obvious version fails
 | [docs/product-rules.md](docs/product-rules.md) | You are touching UI, copy, tokens or goldens. The face/rest/path/metrics rules and what a restyle may not touch. |
 | [docs/verify-suites.md](docs/verify-suites.md) + [table](docs/verify-suite-table.md) | Adding or debugging a check. Five rules that fail silently if unknown live in the first. |
 | [docs/milestone-history.md](docs/milestone-history.md) | You need the run-by-run story. |
-| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md). Work numbered past a ledger's range is logged per milestone beside them ([M274](docs/build-log/m274-orchestration-deepen.md), [M275](docs/build-log/m275-swarm-presets.md), [M276](docs/build-log/m276-monaco-file-editor.md)). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
+| `docs/build-log/*-ledger.md` | You need a run's state — the ledger, not memory, is the state. **More than one run is live, and they number apart:** v10 (D01–D20 → M193–M224, by the [product guide](docs/product-development-guide-2026-09-08.md)), ledger [m193-m224](docs/build-log/m193-m224-ledger.md); and v11 visual (M225–M243, by its [run prompt](docs/superpowers/specs/2026-09-09-v11-visual-run-prompt.md)), ledger [m225-m243](docs/build-log/m225-m243-ledger.md); and the M248–M250 integration (deck, command pill, rich notes and .docx import), ledger [m248-m250](docs/build-log/m248-m250-ledger.md); and CoS Waves 1–4 (M270–M273), ledger [m270-m273](docs/build-log/m270-m273-ledger.md). Work numbered past a ledger's range is logged per milestone beside them ([M274](docs/build-log/m274-orchestration-deepen.md), [M275](docs/build-log/m275-swarm-presets.md), [M276](docs/build-log/m276-monaco-file-editor.md), [M277](docs/build-log/m277-libraries.md)). `verify:meta ledger.1` goes red when a newer ledger lands without a link here. |
 | [docs/ideas-backlog.md](docs/ideas-backlog.md) | Picking unscheduled work. Entries marked DONE or declined live in [-closed](docs/ideas-backlog-closed.md) under the same number. |
 
 ## What this is
@@ -154,6 +154,25 @@ created above a block and assigned below it, so re-ordering a call makes a ref r
 the life of an effect, silently. Each takes one `Deps` object, destructures on entry, and
 names the DESTRUCTURED members in dependency arrays — never `deps`, which the caller rebuilds
 every render.
+
+### The library layer (M276–M277, Rounds 1–8)
+
+Every third-party library here is **confined to a named module set and reached through it**,
+never imported ambiently. That is the rule; the modules are where to look:
+
+| Library | Its one door | Why the confinement is load-bearing |
+|---|---|---|
+| `monaco-editor` | `file/monaco.ts`, lazily `import()`ed by `CodeEditor` | A static import from anything `Canvas.tsx` reaches puts ~6MB in the first chunk, silently. `file/editor-registry.ts` exists precisely so the harness door can be installed without it. |
+| `zod` | `shared/workflow-graph-schema.ts` | Adopted at the boundaries that had NO reader — **not** a retrofit of `parseTemplates`, which stays the layout file's hand-written reader. |
+| `sonner` | `shell/toast.ts` + `shell/CanvasToaster.tsx` | `toast.door.1` pins the importer set so it cannot be walked around. A toast is for what is FINISHED; the attention system stays the source of truth for what is still outstanding. |
+| `recharts` | `shell/MachineChart.tsx`, `shell/UsageChart.tsx` | Colours come from `shell/chart-tokens.ts`, read off the live theme — `var()` does not resolve in SVG presentation attributes, so the natural spelling paints an invisible series with no error. |
+| `@radix-ui/*` | `renderer/primitives/` | Adopters take the primitive, never the Radix package. |
+| `@xyflow/react` + `zustand` | `renderer/workflow/` | The store is the flow editor's own; it is not an app-wide state layer and should not become one. |
+| `three` + `@react-three/fiber` | `orchestration/OrchestrationCubes.tsx` | The diorama only. |
+| `motion` | `primitives/MotionSurface.tsx`, `workflow/` | Motion still answers to the token rules in `styles.css` (`verify:styles`). |
+
+Renderer libraries are vite-bundled, so nothing here ships `node_modules` and the
+`dependencies`/`devDependencies` split currently carries no rule — don't read one into it.
 
 ## Notes on patterns used so far (not gates)
 

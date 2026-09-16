@@ -1054,6 +1054,7 @@ price of not killing something.
 | M274 | Orchestration deepen O1–O4 — roster keyboard, transition-only edge current, task frame, blocker strip, metric lens, honest hub, stale samples; O5/AO held — `docs/build-log/m274-orchestration-deepen.md` | ✅ done |
 | M275 | Swarm start-work presets — Explore / Implement / Test / Review as reviewed arrangements on one Start work: a supervisor hub, workers with roles, authored handoff edges, worktrees only where isolation is called for, named refusals — `docs/build-log/m275-swarm-presets.md` | ✅ done |
 | M276 | Monaco in the file panel — the draft surface stops being a textarea, worker bundled locally, CSP untouched; the checks drive the real editor rather than a mirror textarea — `docs/build-log/m276-monaco-file-editor.md` | ✅ done |
+| M277 | zod at the two boundaries that had no reader, charts that required inventing the history first, one-shot toasts for outcomes with nowhere to go — each library confined to a named door, none displacing a working reader — `docs/build-log/m277-libraries.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 

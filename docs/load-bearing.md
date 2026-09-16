@@ -4735,3 +4735,15 @@ that types and immediately writes the file from outside finds a CLEAN draft and 
 it, so no conflict banner is ever raised. Both read as product bugs and are the check's own race.
 `[data-file-node-dirty]` is React's own answer to "have you got it yet", so it is the wait — scoped
 to the panel under test, since an earlier check deliberately leaves its own panel open and dirty.
+
+**`editor-registry.ts` is separate from `monaco.ts` for a CHUNK reason, not a tidiness reason
+(`renderer/file/editor-registry.ts`, M276).** `Canvas.tsx` installs the file editor's harness
+window hooks, so everything `Canvas.tsx` imports lands in the app's FIRST chunk. Monaco is
+`import()`ed lazily by `CodeEditor` because it is a ~6MB chunk and this app opens on a canvas,
+not on a file — a single static `import` of `monaco.ts` from the registry would put all of it
+back into startup for every session, including the many that never open a file panel. Nothing
+throws, no suite goes red, and the only symptom is a slower launch nobody attributes to the
+import. So the registry knows the SHAPE of an editor (two methods, written structurally) and
+not the library; Monaco's `IStandaloneCodeEditor` satisfies it exactly and nothing is cast, so
+a Monaco upgrade that changed either signature is a type error here rather than a runtime
+surprise inside a check. Merging the two files is the obvious cleanup and is the regression.
