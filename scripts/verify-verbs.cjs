@@ -242,7 +242,36 @@ const FACTS = {
     // caller has to be added to the list below by name.
     const boardVerbsReads = (readFileSync(join(root, 'renderer', 'canvas', 'useBoardVerbs.ts'), 'utf8')
       .match(/scrollback\.tail\(|lastAssistantText\(/g) ?? []).length
-    const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|useBoardVerbs\.ts$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
+    // EXACT paths, not a regex alternation, and this is the second thing this
+    // entry has had to learn. The alternation that lived here carried ten
+    // alternatives of which only five still matched a reader, and four of the
+    // dead ones — `ScrollbackPanel`, `TerminalPanel`, `useCanvasTestHooks`,
+    // `search` — were unanchored SUBSTRINGS. `search` would have exempted any
+    // future path containing that word, so a `shell/searchbar.tsx` that read a
+    // chat's last answer and posted it somewhere would have let itself through
+    // this check by its filename. An allowlist whose entries rot into wildcards
+    // is worse than no allowlist, because it still reads as one.
+    //
+    // Each path below reads pane or chat text to put it on THIS screen, to hold
+    // it, or to carry it between processes — never to hand to another reader:
+    //   main/ipc.ts               the SCROLLBACK_TAIL handler, transport only
+    //   canvas/Canvas.tsx         the rest layer's last line, per panel
+    //   canvas/useBoardVerbs.ts   taskContextFor's `account` (see above)
+    //   chat/chat-store.ts        where lastAssistantText is DEFINED
+    //   session/scrollback-store.ts  the renderer's own tail mirror
+    const DISPLAY_READERS = [
+      'main/ipc.ts',
+      'renderer/canvas/Canvas.tsx',
+      'renderer/canvas/useBoardVerbs.ts',
+      'renderer/chat/chat-store.ts',
+      'renderer/session/scrollback-store.ts'
+    ]
+    const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !DISPLAY_READERS.includes(f))
+    // ...and the list may not rot the other way either: an entry that is no
+    // longer a reader is a name nobody is checking, which is how five of the
+    // ten got there. A file that stops reading pane text gets removed from
+    // here in the same commit.
+    const staleExemptions = DISPLAY_READERS.filter((f) => !readers.includes(f))
     // M189 and M190 add the fifth and SIXTH callers by name, which is what
     // this allowlist is for. `shared/portable.ts` scrubs every string that
     // travels in an export and reports the count on the record; it cannot go
@@ -260,8 +289,8 @@ const FACTS = {
     // M255 (merge): M251's deck-export and M253's pack are BOTH the seventh on
     // their own branches; merged, the list is eight, each named for its reason.
     ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, M251\'s deck export to .pptx, scrubbed field by field with its count in the export sentence, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0 && boardVerbsReads === 1,
-      JSON.stringify({ callers, readers, unguarded, boardVerbsReads }))
+      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0 && boardVerbsReads === 1 && staleExemptions.length === 0,
+      JSON.stringify({ callers, readers, unguarded, boardVerbsReads, staleExemptions }))
   }
 
   // routine.1 (M101) — the save-time refusal against M96's table: a

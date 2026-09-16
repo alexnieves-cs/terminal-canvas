@@ -3860,6 +3860,23 @@ caller shows the provenance beside what it shows. `verify:verbs gate.1` plants a
 token in a REAL scrollback log and reads it back through the gate; a reader that bypasses
 the gate is found by grep for `scrollback.tail`/`lastAssistantText` without `outward`.
 
+**The canvas PNG is the ONE door with no gate, because a scrubber takes a string and a
+screenshot is pixels (`main/export.ts`'s `canvasPng`, `export:canvas-png`).** Written down
+because "nothing leaves without passing the gate" is one of the four rules this product
+rests on, and read literally it is false here — so someone auditing the gate finds an
+ungated export and has to decide whether it is a hole or a decision. It is a decision, and
+it is not fixable by moving the call: `redactSecrets` matches token SHAPES in text, and by
+the time the canvas is a Buffer there is no text to match. Whatever is legible on screen is
+in the file — a token a terminal pane echoed, a chat's last answer, the review node's
+`account`. The asymmetry is visible in the return types and is the honest signal: `panelText`
+answers `{ lines, redacted, source }` and `canvasPng` answers `{ path }` alone, because
+there is no count it could truthfully report. What stands in for the gate is that the person
+framed the shot and can see everything in it, which is exactly the assurance a screenshot
+taken by any other tool carries and no more. The reachable mistake is the opposite one:
+adding a SECOND binary export later (a video, a PDF of the canvas) and assuming this
+precedent covers it. It does not — it covers the case where the bytes never were text.
+Grep finds a bypassing TEXT reader; nothing can grep for this, so it lives here.
+
 **Auto's counter is main's; the chip is a projection, and the snapshot keeps the resolved
 run (`agent-session.ts`'s `startAuto`, `shared/auto.ts`, M97).** The rule is M82's from the
 other side: the renderer's count can be wrong — stale after a reload, behind a batched

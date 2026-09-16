@@ -36,7 +36,10 @@ Four rules the whole product rests on — the long form of each is in
 - **What arrives from outside is inert until a person looks.** An imported canvas starts no
   process; imported action nodes are refused by name until read (`reviewed: false`).
 - **Nothing leaves without passing the gate.** `outward` and `redactSecrets` have a named,
-  checked caller list; an export scrubs field by field and reports its count.
+  checked caller list; an export scrubs field by field and reports its count. The rule is
+  about TEXT: the canvas PNG is the one door with no gate, because a scrubber matches token
+  shapes in a string and a screenshot is pixels (`docs/load-bearing.md`). It is a decision,
+  and it does not generalise to a second binary export.
 
 **Project, workspace and task do not merge** (there is still no project record in
 `LayoutSnapshot`), and **a teammate is an identity, a chat is its conversation, a session is
