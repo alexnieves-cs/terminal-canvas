@@ -66,7 +66,11 @@ ok('draft.door.3 a teammate may PROPOSE (sheet-edit is not refused) but not keep
 // A source scan, because the run path is React: the node loop and the verb both pass it on.
 {
   const canvas = require('node:fs').readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
-  const actions = require('node:fs').readFileSync(join(root, 'src/renderer/canvas/usePaletteActions.ts'), 'utf8')
+  // The palette actions are a directory since the domain split — the executor's
+  // `workflow-run` arm is in `palette-actions/executor.ts`. Read the module set.
+  const paDir = join(root, 'src/renderer/canvas/palette-actions')
+  const actions = require('node:fs').readdirSync(paDir).filter((f) => f.endsWith('.ts'))
+    .map((f) => require('node:fs').readFileSync(join(paDir, f), 'utf8')).join('\n')
   ok('draft.door.4 an agent-started workflow run carries the caller into every action node (no hard-coded undefined caller)',
     /runNodeRef\.current\?\.\(node, caller,/.test(canvas) && !/runNodeRef\.current\?\.\(node, undefined,/.test(canvas) &&
       /case 'workflow-run': return self\.runWorkflowNow\(a\.template!, caller\)/.test(actions) && /instantiateTemplateRef\.current\(template, \{\}, caller\)/.test(canvas))

@@ -168,7 +168,12 @@ const base = deckOf(five)
 // as execute's second parameter, so the origin is now the THIRD.
 {
   const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
-  const pa = strip(readFileSync(join(root, 'src/renderer/canvas/usePaletteActions.ts'), 'utf8'))
+  // The palette actions are a directory since the domain split; the executor's
+  // arms and the two plan runners live in `palette-actions/executor.ts`. Read
+  // the whole module set so the check follows the code rather than a filename.
+  const paDir = join(root, 'src/renderer/canvas/palette-actions')
+  const pa = strip(require('node:fs').readdirSync(paDir).filter((f) => f.endsWith('.ts'))
+    .map((f) => readFileSync(join(paDir, f), 'utf8')).join('\n'))
   const node = existsSync(join(root, 'src/renderer/file/DeckNode.tsx')) ? strip(readFileSync(join(root, 'src/renderer/file/DeckNode.tsx'), 'utf8')) : ''
   ok('deck.origin.1 runAgentPlan runs steps as the door, the palette runPlan as a person, deck verbs pass origin, and a door keep and a door present are refused',
     pa.includes("runAgentPlan(line, facts(), (step) => execute(step, caller, 'door'), caller)") && /runPlan\(built\.plan, execute, \{/.test(pa) &&

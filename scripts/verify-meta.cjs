@@ -505,7 +505,12 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     'browser/BrowserNode.tsx',
     'browser/usePreviewReload.ts',
     'canvas/Canvas.tsx',
-    'canvas/usePaletteActions.ts',
+    // Was `canvas/usePaletteActions.ts` until that hook was split by domain.
+    // The SAME two consumers, at their new paths and no others: the spawn
+    // sheet's lineup seat, which mints a pane already bound to the lineup's
+    // folder, and the deps interface that declares the door it calls to do it.
+    'canvas/palette-actions/presets.ts',
+    'canvas/palette-actions/types.ts',
     'panels/layout-adapt.ts',
     'panels/panels.ts',
     'shell/inspector-fields.ts'

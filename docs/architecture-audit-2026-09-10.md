@@ -29,7 +29,7 @@ not a review of its implementation.
 |---|---:|---|
 | Source concentration | Largest 10 production files hold 27,718 lines (33.4% of source) | A third of the implementation has concentrated change coupling. |
 | Canvas root | Canvas.tsx: 7,199 lines, 176 resolved imports, 155 callbacks | The principal renderer composition point owns too many domains. |
-| Palette action root | usePaletteActions.ts: 2,388 lines; 97 named dependency entries | It is an indirect second Canvas root. |
+| Palette action root | usePaletteActions.ts: 2,388 lines; 97 named dependency entries | It is an indirect second Canvas root. **ADDRESSED:** split by domain into `canvas/palette-actions/` (8 slices); the file is now a 137-line composition root. The dependency bag is unchanged — it is the hook's contract with Canvas, and shrinking it is a separate question from where the verbs live. |
 | Persistence root | layout-schema.ts: 2,288 lines; 41 exported functions | One safe parser now owns many record codecs. |
 | IPC root | ipc-contract.ts: 1,858 lines and 67 importers | The contract is rightly central, but costly to evolve by hand. |
 | Test concentration | Largest 10 scripts hold 37,445 lines (63.5% of scripts) | Good coverage is becoming difficult to navigate and extend safely. |
