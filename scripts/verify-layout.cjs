@@ -4239,11 +4239,25 @@ try {
     store.setSetting('restore.layout', false)
     listed = (store.mergedWorkspaces().find((w) => w.active) || { panels: [] }).panels.map((p) => p.id)
     viaInitial = store.initial().panels.map((p) => p.id)
-    const src = (f) => readFileSync(join(__dirname, '..', 'src', 'main', f), 'utf8')
-    sites = ['ipc.ts', 'index.ts'].map((f) => /mergedWorkspaces\(\)\.find\(\(w\) => w\.active\)/.test(src(f)))
+    // M278. The sites are FOUND, not named. This pinned `index.ts` by filename
+    // until the composition-root split moved the panel handler into
+    // `bootstrap/`, and a filename pin fails the same way in both directions:
+    // red when the code merely moved, and silent the day a THIRD handler reads
+    // the restore-gated `initial()` instead. Walking src/main asserts the rule
+    // as written — every site that makes this call makes it on the active row —
+    // and the file list is reported so a move is visible rather than guessed at.
+    const root = join(__dirname, '..', 'src', 'main')
+    const { readdirSync } = require('node:fs')
+    const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(join(d, e.name)) : (/\.ts$/.test(e.name) ? [join(d, e.name)] : []))
+    sites = walk(root)
+      .filter((f) => /mergedWorkspaces\(\)\.find\(\(w\) => w\.active\)/.test(readFileSync(f, 'utf8')))
+      .map((f) => f.slice(root.length + 1))
+      .sort()
   } catch (e) { threw = String(e) }
-  ok('search.active.1 the active merged row lists the panel with restore.layout off (initial() is the restore-gated read, never the search\'s), and both search handler sites read the active row',
-    threw === null && Array.isArray(listed) && listed.includes('sa1') && Array.isArray(viaInitial) && sites && sites.every(Boolean),
+  ok('search.active.1 the active merged row lists the panel with restore.layout off (initial() is the restore-gated read, never the search\'s), and the search handler sites — found by walking src/main, not named — are the ipc door and the panel handler',
+    threw === null && Array.isArray(listed) && listed.includes('sa1') && Array.isArray(viaInitial) &&
+      Array.isArray(sites) && sites.length === 2 && sites.includes('ipc.ts') && sites.some((f) => f.startsWith('bootstrap/')),
     JSON.stringify({ threw, listed, viaInitial, sites }))
 }
 
