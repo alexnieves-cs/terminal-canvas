@@ -72,7 +72,7 @@ they inherit a bare PATH and no dotfile exports — `claude`/`codex` work in Ter
 "command not found" in the app. We probe `$SHELL -ilc env` once at startup (`-i` is what
 makes zsh read `.zshrc`) and use that env for every PTY. A non-zero exit from the probe is
 normal; success is judged by whether a `PATH` came back. The fallback logs loudly on purpose.
-`tmux` (`tmux-probe.ts`) and `git` (`main/index.ts`'s `gitPath`) are resolved by absolute path
+`tmux` (`tmux-probe.ts`) and `git` (`main/index.ts`'s probe loop into `main/bootstrap/context.ts`'s `gitPath`) are resolved by absolute path
 from this same login env, for the identical reason and after it: spawning either by bare name
 against launchd's bare PATH silently fails or resolves the wrong binary, and both are logged
 loudly, once, when unresolved — a git-dependent feature (the Changes section) used to render as
@@ -202,7 +202,7 @@ correcting rather than gating (above): `getBoundingClientRect()` is transform-aw
 its own page-zoom gesture; without `preventDefault()` a pinch zooms the whole UI. React's
 `onWheel` prop may attach passively (where `preventDefault()` silently does nothing), hence a
 manual `addEventListener('wheel', handler, { passive: false })` in an effect, plus
-`setVisualZoomLevelLimits(1, 1)` in `src/main/index.ts` as a second line of defence.
+`setVisualZoomLevelLimits(1, 1)` in `src/main/bootstrap/window.ts` as a second line of defence.
 
 **Clamp scale before deriving translation (`zoomAt`).** Deriving the translation from a
 *requested* scale while applying a *clamped* one makes the canvas drift sideways while
@@ -1488,7 +1488,7 @@ drives production code, not a copy.
 
 **An unread pack preset is refused in MAIN, at every door that resolves a preset
 (`main/presets.ts` `unreviewedPresetReason`, `main/spawn-request.ts`, `main/control-handler.ts`,
-`main/index.ts` `onSpawnPreset`, `main/menu.ts`).** A preset carries a command, so an imported one
+`main/bootstrap/menu-actions.ts` `onSpawnPreset`, `main/menu.ts`).** A preset carries a command, so an imported one
 is a stranger's process one click away. Guarding one door is not enough: the menu, the palette,
 the spawn sheet and `tc spawn` each resolve presets independently, and an unguarded door silently
 reopens the gate. All four ask the one function for the one sentence. The menu disables the item
@@ -1532,7 +1532,7 @@ recoverable. Log lines defend the identical rule from a second angle: neither a 
 nor a warning may ever quote the submitted token, even when `encrypt` itself THROWS while
 holding the plaintext.
 
-**`credentials.json` is its own file, not a key in `layout.json` (`main/index.ts`).** Reusing
+**`credentials.json` is its own file, not a key in `layout.json` (`main/bootstrap/stores.ts`).** Reusing
 `LayoutStore` breaks three of its own deliberate properties: its 500ms debounce would write a
 secret repeatedly at an arbitrary moment rather than once at a moment the user can point to;
 hand-editing `layout.json` is a documented SUPPORTED path, so the file people are invited to
@@ -2184,7 +2184,7 @@ subscribes to, which is why `RailRow` carries `state` and why the signature does
 the agent word.
 
 **The spawn sheet's directory is checked with `expandTilde`, never `resolveCwd`
-(`main/index.ts` `spawnWith`, and the same stub in `verify-panels.cjs`).** `resolveCwd` falls
+(`main/bootstrap/palette-handlers.ts` `spawnWith`, and the same stub in `verify-panels.cjs`).** `resolveCwd` falls
 back to the home directory when a path is missing — right for a restored panel whose
 directory went away, and exactly wrong for a path a person just typed: the sheet's first
 check run spawned two panels at `~` from a typo and refused nothing, because the fallback
@@ -2219,7 +2219,7 @@ bytes. Native minidumps are process memory and no scrubber reads them, which is 
 SEPARATE setting whose description says so.
 
 **`scrubEvent` only sees EVENT envelopes, and the renderer's integration list is the one thing
-holding that true (`main/index.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
+holding that true (`main/bootstrap/telemetry-init.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
 `beforeSend` is Sentry's own event hook: in the installed `@sentry/electron` 7.18.0,
 `main/ipc.js`'s `handleEnvelope` calls it only on the branch that resolves an incoming envelope
 to an event, and hands every other envelope kind — profile chunks, span containers, replays —
@@ -2247,7 +2247,7 @@ double-open. The size trade itself stays accepted and unmeasured further here; w
 that the packaging path is no longer an owed pre-release gate.
 
 **Telemetry reaches the renderer as an argv flag and a bridge FIELD, not a channel
-(`main/index.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
+(`main/bootstrap/telemetry-init.ts`, `main/bootstrap/window.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
 window exists, and stamps `--tc-telemetry=1` on `additionalArguments`; the preload reads
 `process.argv` (sandbox is false) and exposes `canvas.telemetry.enabled`. A channel would have
 added a handler to pin, a diagram row, and a renderer that loads the SDK before it knows the
@@ -2279,7 +2279,7 @@ backwards silently), never the feed's first row (a backported 2.x cut after 3.0 
 it). **The fetcher is injected and the module imports no `https`:** the real one (`https.get`,
 a 10 s deadline for the whole call — M87's rule, node's socket timeout is inactivity — GitHub's
 required `User-Agent`, and NO redirect following: the url is fixed and a 3xx is a
-`could-not-check` naming the status) lives in `main/index.ts` alone, which no suite bundles,
+`could-not-check` naming the status) lives in `main/bootstrap/workspace-handlers.ts` alone, which no suite bundles,
 so `verify:file update.1` drives every arm under plain node and `verify:meta update.1` greps
 the scripts for `https.get(`, an `https` import or a templated `api.github.com/repos/${…}`
 url. **The setting is boolean, off, and NOT `planWritable`, and `checkForUpdates` is on
@@ -2293,7 +2293,7 @@ store. Three doors, one sentence: `updateSentence` is the only place the words l
 
 **The manual-only list, M123's own item.** *A real GET of the real feed.* `verify:file
 update.1` drives a fake fetcher over a hand-written feed; that the fetcher in
-`main/index.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's
+`main/bootstrap/workspace-handlers.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's
 releases page answers the recorded shape, and that `Open release` lands on the release in
 the default browser were not watched by any suite and — until the first release exists on
 the feed (M125 cuts it) — could not have been. Unproven, by construction, at merge.
@@ -2303,12 +2303,12 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
 - **The real OS attention surfaces (M43)** — `new Notification(...).show()` and its click
-  handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/index.ts`. No suite reaches
+  handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/bootstrap/stores.ts`. No suite reaches
   them: `verify:pty-manager` drives a FAKE `AttentionSink` and counts its calls. That a real
   notification appears when the window is behind another, that clicking it focuses the window and
   flies to the panel, that the dock shows the count, and that the beep uses the user's own alert
   sound were each confirmed once by hand.
-- **`scrollback.persist` off in the REAL main process** — `main/index.ts` wires the sink's
+- **`scrollback.persist` off in the REAL main process** — `main/bootstrap/stores.ts` wires the sink's
   `enabled()` and the `scrollback:tail` gate to `layoutStore.getSetting('scrollback.persist')`,
   and no suite runs that line: `verify:pty-manager` drives the sink with a fake `enabled()`, and
   `verify:panels`' harness wires `enabled: () => true`. That turning the setting off stops the
@@ -2930,10 +2930,10 @@ distinction the three empty states depend on (off / no matches / nothing typed y
 
 **Main owns `wants-you` and every out-of-window surface is a READER; the reload SNAPSHOT is a
 no-op and must not be claimed otherwise (`main/pty-manager.ts` AttentionSink/`syncAttention`,
-`main/index.ts`, `main/window-lifecycle.ts`).** M43 hangs the dock badge, an OS notification and
+`main/bootstrap/stores.ts`, `main/window-lifecycle.ts`).** M43 hangs the dock badge, an OS notification and
 a beep off the SAME detectors M6d built, through an injected `AttentionSink` so the whole
 decision path (when to notify, when to beep, the window-focus gate) runs under plain node in
-`verify:pty-manager`; the real `Notification`/`app.dock`/`shell.beep` live in `main/index.ts` and
+`verify:pty-manager`; the real `Notification`/`app.dock`/`shell.beep` live in `main/bootstrap/stores.ts` and
 are on the manual-only list. Nothing here CLEARS a state — focus (`agent:acknowledge`) and a
 `pty:write` stay the only two clearers, so a notification click frames the panel (through
 `goToPanel`, the `Cmd+J` never-wake path, over the new `attention:jump` EVENT — an event, not an
@@ -3102,7 +3102,7 @@ injected connect and exits 0 / 1 / 2 for ok / refused / not running — three an
 apart without parsing prose.
 
 **An orphan session is ASKED about, never adopted silently, and "known" means every workspace
-(`main/orphans.ts`, `index.ts`'s boot block, `renderer/panels/recover.ts`, `session:recover`).**
+(`main/orphans.ts`, `main/bootstrap/orphan-sweep.ts`, `renderer/panels/recover.ts`, `session:recover`).**
 Three rules, each with a quiet failure. **The known set is every workspace's ids**
 (`layoutStore.workspaces()`), not `initial().panels`: the latter is the active workspace only,
 and until M55 a session kept across quit (M38's keep arm) for a panel in a HIDDEN workspace was
@@ -3287,7 +3287,7 @@ close sends no kill and does drop the session and its file.
 
 **The durable chat transcript is written by MAIN from the runtime's own events, and a
 restored panel renders it before any process exists (`main/agent-transcript-log.ts`,
-`main/index.ts`).** One append-only file per panel under `userData/agent-transcripts`,
+`main/bootstrap/agent-runtime.ts`).** One append-only file per panel under `userData/agent-transcripts`,
 a `turn` line per `turn` event (a merged turn re-written whole; the reader keeps the last
 line per turn id in first-seen order) and a `meta` line per `result`. The renderer never
 echoes a turn back, so a chat that streamed while the window was closed is still on disk.
@@ -3307,7 +3307,7 @@ seeds a claude-kind preset over `/bin/sh` to make that gate answer the way a mac
 the CLI does, through the real path.
 
 **One front-end at a time: a Claude session moves between a terminal and a chat, it is never
-shared (`main/index.ts`'s `importSession`, `Canvas.tsx`'s `openAsChat`/`openInTerminal`).**
+shared (`main/bootstrap/agent-handlers.ts`'s `importSession`, `Canvas.tsx`'s `openAsChat`/`openInTerminal`).**
 Two processes on one session id would both append to the CLI's transcript, and the CLI's
 `--resume` reads that file: the conversation would fork silently and each front-end would
 show a different half. So `Open as chat` refuses BY NAME while the terminal's process is
@@ -3357,7 +3357,7 @@ never blanked into a prompt that silently says less. `composer.2` and `verify:pa
 composer.3` (a project prompt inserted verbatim, `{{target}}` intact).
 
 **A chat's `needs you` is decided in MAIN and travels on the terminal's channel; the
-renderer's store is a cache, never a second author (`main/approvals.ts`, `main/index.ts`,
+renderer's store is a cache, never a second author (`main/approvals.ts`, `main/bootstrap/agent-runtime.ts`,
 `chat-store.ts`).** The obvious renderer-side version — derive the attention set from the chat
 store's pending lists — makes two authors of "who wants me": the store fed by `agent:state` and
 a second list fed by `agent:event`, which agree until a dispose races an event and then differ
@@ -3384,7 +3384,7 @@ panel is done while a question is still open. `approve.1`; `approve.3` for focus
 settings.
 
 **A chat's baseline is captured by `agent:create` through the SAME capture PtyManager uses, and
-it SURVIVES a relaunch (`main/index.ts`, `baseline-capture.ts`).** The obvious alternative — a
+it SURVIVES a relaunch (`main/bootstrap/agent-handlers.ts`, `main/bootstrap/stores.ts`, `baseline-capture.ts`).** The obvious alternative — a
 second capture path for chats — would drift from the terminal's once-only guard and epoch
 poisoning silently. The relaunch rule is the opposite of the terminal's on purpose: a terminal's
 next launch spawns a NEW agent, so a surviving baseline would blame it for yesterday's edits;
@@ -3553,8 +3553,8 @@ budget.2` drives two sessions and a second result.
 manager without `limits`, and every canvas that has never opened the settings page, behaves
 exactly as before M82 — the arms are unreachable rather than merely lenient.
 
-**The repository ROOT is resolved in ONE place, and it is main (`main/index.ts`'s
-`memoryRoot`).** A memory node is opened on a panel's directory, a chat carries its own
+**The repository ROOT is resolved in ONE place, and it is main (`main/bootstrap/places.ts`'s
+`scopeResolver`/`memoryScope`).** A memory node is opened on a panel's directory, a chat carries its own
 `cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors
 onto one store, and each of them is usually a SUBDIRECTORY of the repository. Keying the
 file by the path each door happened to hold gives one repository several memories that never
@@ -3617,7 +3617,7 @@ What is durable is M52's run ledger, whose rows are metadata by construction, wh
 what keeps a command's output out of a file that gets pasted into an issue.
 
 **A directory and a file are watched DIFFERENTLY, and confusing them fails silently
-(`main/index.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
+(`main/bootstrap/watch-handlers.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
 and filtering on its basename — M22's atomic-rename rule, which is how every editor and every
 agent writes a file — and handed a DIRECTORY it reads it as a file and refuses. The
 commonest trigger of all is "anything under src", so a directory is watched recursively
@@ -3676,7 +3676,7 @@ refused at both, silently, because each compared `typeof value` against the def'
 and `'text'` is not what `typeof` answers — the pane read `not set` after the setting was set,
 and only the panels check said so.
 
-**The vault root is expanded and realpath'd in main, NEVER `resolveCwd`'d (`main/index.ts`'s
+**The vault root is expanded and realpath'd in main, NEVER `resolveCwd`'d (`main/bootstrap/palette-handlers.ts`'s
 `vaultRead`).** `resolveCwd` falls back to `$HOME` for a path that is not there — the right
 answer for a spawn, and exactly wrong here: a typo'd vault folder walked the user's entire
 home directory synchronously on main, listed Documents and Desktop as the vault, and the

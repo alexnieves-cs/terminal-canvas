@@ -1,126 +1,59 @@
-import type { AgentPlanReply, AgentPlanRequest } from '../shared/plan'
-import { homedir } from 'node:os'
-import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
-import { mkdirSync, rmSync, existsSync, unlinkSync, statSync, writeFileSync, chmodSync, readFileSync, readdirSync } from 'node:fs'
-import { BrowserWindow, Notification, app, dialog, shell, clipboard, session, webContents } from 'electron'
-import { registerIpcHandlers, requestCanvasCounts, requestFromRenderer, requestFromRendererWith } from './ipc'
+import { writeFileSync, chmodSync } from 'node:fs'
+import { app } from 'electron'
+import { registerIpcHandlers } from './ipc'
 import { createBrowserHandlers } from './browser-read'
-import { discoverPreview } from './preview-discover'
-import { descendantsOf } from './machine-cost'
-import { capturePreview } from './preview-capture'
-import { putAsset } from './asset-store'
-import { importDocx } from './docx-import'
-import { createFile } from './file-create'
-import { runHttpNode, NODE_FETCH_MAX_BYTES, NODE_FETCH_TIMEOUT_MS } from './node-run'
-import { parsePortable } from '@shared/portable'
-import { createPackHandlers } from './pack-handlers'
-import { parsePublishRequest, publish } from './github-publish'
-import { buildAppMenu } from './menu'
-import { PtyManager, expandTilde, resolveCwd } from './pty-manager'
-import { skillWriteHandlers } from './skill-write'
-import { resolveToolboxHome } from './toolbox-read'
-import { buildPushArgs } from './git-args'
-import { resolveSandboxCwd, disposeSandbox, realSandboxFs } from './sandbox'
-import { searchPanels } from './panel-search'
-import { createBoardLane } from './board-lane'
-import { repositoriesAnswer } from './board-repo'
-import { createPlacesGate, fsRealpath, sandboxTeammateRefusal } from './places'
-import { skillsForBrief, skillsBriefLine, repoRootForBrief, notVisibleFor } from './skill-assign'
-import { createRoutineRunner } from './routine-runner'
-import { routineRefusal, ROUTINE_MIN_MS } from '@shared/routines'
-import { parseTeammates, parseRoutines } from '@shared/layout-schema'
-import { resolveSpawnRequest } from './spawn-request'
-import { createDirectBackend, type SessionBackend } from './session-backend'
+import { resolveShellEnv, whichFromEnv } from './shell-env'
 import { probeTmux } from './tmux-probe'
 import { resolveSocket } from './tmux-args'
-import { attachPtyLifecycle } from './window-lifecycle'
-import { resolveShellEnv, shellProbeOutcome, shellProbeFacts, reprobeShellEnv, whichFromEnv } from './shell-env'
-import { buildEnvReport, type CliName } from './env-report'
-import { resolveLinkOpen } from './link-open'
-import { createRunLedger } from './run-ledger'
-import { createLayoutSnapshots, restoreFromSnapshot } from './layout-snapshots'
-import { createLayoutStore } from './layout-store'
-import { createCredentialStore } from './credential-store'
-import { createSafeStorageCrypto } from './credential-crypto'
-import { createReviewEngine } from './review-engine'
-import { createReviewCommitter } from './review-commit'
-import { createReviewDiscarder } from './review-discard'
-import { createControlServer, type ControlServer } from './control-server'
-import { createControlHandler } from './control-handler'
-import { createMemoryStore } from './memory-store'
-import { createMemoryScope, createScopeResolver } from './work-scope'
-import { laneOfPath } from '../shared/work-scope'
-import { brokerCardTool, createBroker } from './broker'
-import { listAssignedWorkItems as listGithubWorkItems, openPullRequest, commentIssue } from './github-client'
-import { createHttpsBrokerFetcher } from './credential-verify'
-import { createBrokerAudit } from './broker-audit'
-import { readVault } from './vault-read'
-import type { ControlCanvasModel , BoardControlReply, BoardControlRequest } from '../shared/ipc-contract'
+import { createControlServer } from './control-server'
 import { parseControlUrl, CONTROL_SCHEME } from './control-protocol'
 import { launcherScript, writeLauncher } from './launcher'
-import { findOrphans, orphanPrompt } from './orphans'
-import { createExporters } from './export'
-import { createDeckExporter } from './deck-export'
-import { createToolGenerator } from './tool-generate'
-import type { OrphanRow } from '../shared/orphans'
-import { createGitRunner } from './git-runner'
-import { createBaselineCapture, staleBaselineIds } from './baseline-capture'
-import { createWorktreeManager } from './worktree-manager'
-import { randomUUID } from 'node:crypto'
 import { runQuit } from './quit'
-import { AgentSessionManager } from './agent-session'
-import { RATE_LIMIT_NONE, windowUtilization } from '@shared/rate-limit'
-import { createPoolCaller, type PoolCaller } from './pool-caller'
-import { writeClipboardImage } from './clipboard-file'
-import { claudeCliRunner } from './claude-cli-runner'
-import { listPlugins, PLUGIN_LIST_TIMEOUT_MS, type PluginRunner } from './plugin-list'
-import { describePlugin } from './plugin-details'
-import { createAgentTranscriptLog } from './agent-transcript-log'
-import { importClaudeTranscript } from './claude-transcript-import'
-import { resolveAttachment, ATTACHMENT_MAX_BYTES } from './attachments'
-import { telemetryPlan, scrubEvent } from './telemetry'
-import { checkForUpdate, repoOf } from './update-check'
-import { readImage } from './image-read'
-import { readFile } from './file-read'
-import { createDeckPdf, createPdfRenderer } from './deck-pdf'
-import { prepareStarter } from './starter-prepare'
-import { get as httpsGet } from 'node:https'
-import { get as httpGet } from 'node:http'
-import { createApprovalTracker, createAttentionUnion, type ApprovalTracker } from './approvals'
-import { allTemplates, isBuiltInTemplate } from '../shared/templates'
-import type { AttentionSink } from './pty-manager'
-import { resolveTranscript, readFrom as readTranscriptFrom } from './transcript-reader'
-import { trailFor, forgetTrail } from './skill-trail-read'
-import type { AgentHandlers } from './ipc'
-import { type AgentCreateResult, type AgentSessionSpec } from '../shared/agent-session'
-import { BACKENDS, backendOf, type AgentBackend } from '../shared/agent-backends'
-import { createScrollbackLog, SEARCH_MAX_HITS, SEARCH_MAX_PER_PANEL } from './scrollback-log'
-import { FileWatchers } from './file-watch'
-import { spawn as spawnChild, execFileSync, execFile } from 'node:child_process'
-import { watch as fsWatch, realpathSync, type FSWatcher } from 'node:fs'
-import { createWatchRunner, type WatchSpawnSpec, type WatchHandlers } from './watch-runner'
-import { WATCH_TIMER_MIN_MS, type WatchTrigger } from '../shared/watch-trigger'
-import type { WatcherHandlers } from './ipc'
-import { ToolboxCache } from './toolbox-cache'
-import { IPC_EVENTS, type PoolMintReply, type PoolMintRequest } from '../shared/ipc-contract'
+import { webContents } from 'electron'
+import { IPC_EVENTS } from '../shared/ipc-contract'
+import { createMainState, createPanelTokens } from './bootstrap/context'
+import { createStores } from './bootstrap/stores'
+import { createPlaces } from './bootstrap/places'
+import { createMenuActions } from './bootstrap/menu-actions'
+import { createControlWiring } from './bootstrap/control-wiring'
+import { createWindow, sendToRenderer } from './bootstrap/window'
+import { startAgentRuntime } from './bootstrap/agent-runtime'
+import { initTelemetry } from './bootstrap/telemetry-init'
+import { sweepOrphans } from './bootstrap/orphan-sweep'
+import { createWatchWiring } from './bootstrap/watch-handlers'
+import { createAgentHandlers } from './bootstrap/agent-handlers'
+import { createPaletteWiring } from './bootstrap/palette-handlers'
+import { createToolboxHandlers } from './bootstrap/toolbox-handlers'
 import {
-  allPresets,
-  mintPromptId,
-  presetFromCapture,
-  presetRows,
-  pushDefaultPreset,
-  resolveAvailability,
-  templateOf,
-  unreviewedPresetReason
-} from './presets'
-import { mergePrompts, readProjectPrompts } from './prompts'
-import { parseShelf } from '../shared/skills'
-import type { CapturedPanel } from '../shared/ipc-contract'
+  createEnvReporter, createExportHandlers, createLinkHandlers, createPreviewHandlers,
+  createScrollbackHandlers, createTrailReader, createWorktreeHandlers
+} from './bootstrap/panel-handlers'
+import {
+  createAssetHandlers, createBoardHandlers, createDocxHandlers, createNodeFetchHandlers,
+  createPackWiring, createPortableHandlers, createPublishHandlers, createToolGeneratorWiring,
+  createUpdateHandlers
+} from './bootstrap/workspace-handlers'
 
-let mainWindow: BrowserWindow | null = null
-/** M48. When the startup probe ran; the report says so, since it never re-runs. */
-let probedAt = 0
+/**
+ * THE COMPOSITION ROOT. Every collaborator main owns is constructed here and
+ * nowhere else; the modules under `bootstrap/` hold the wiring, and this file
+ * holds the ORDER — which is the part that is load-bearing.
+ *
+ * Three phases, and each one's position is a decision:
+ *   1. Module scope: the single-instance lock, the object graph, and the two
+ *      doors macOS can knock on before `whenReady` (`open-url`).
+ *   2. `app.whenReady()`: the env probe first, then everything that needs a
+ *      resolved PATH — the agent runtime, the tmux backend, the window.
+ *   3. `before-quit` / `window-all-closed`: teardown, gated on the same lock.
+ *
+ * `bootstrap/context.ts` explains why the late-resolved values travel as a
+ * mutable `state` record rather than as arguments. Read that before moving a
+ * construction earlier or later than it sits here.
+ */
+
+const state = createMainState()
+const tokens = createPanelTokens()
 
 /**
  * Whether this process owns the app. TWO COPIES OF ONE BUILD ARE DESTRUCTIVE
@@ -154,718 +87,19 @@ if (!hasInstanceLock) {
   app.quit()
 }
 
-/**
- * Which backend spawns panels. Reassigned once by the startup probe; a
- * DirectBackend is the value until then, so a pty:create that somehow arrives
- * before the probe finishes still works rather than throwing.
- */
-let backend: SessionBackend = createDirectBackend('startup: tmux not probed yet')
+const stores = createStores(state)
 
 /**
- * The login-shell env, resolved once inside app.whenReady(). Reassigned once
- * by startup, same pattern as `backend` just above: `rebuildMenu` needs it to
- * compute preset availability but runs after that resolution, so this is
- * where it lands rather than a local inside whenReady.
- */
-let loginEnv: Record<string, string> = {}
-
-// userData is the standard per-user application directory; app.getPath is only
-// valid once the app module is loaded, which it is by the time this module runs.
-// M93. Snapshots of saves, beside layout.json: a side effect of every successful write.
-const layoutSnapshots = createLayoutSnapshots({ dir: join(app.getPath('userData'), 'layout-snapshots') })
-const layoutStore = createLayoutStore({
-  filePath: join(app.getPath('userData'), 'layout.json'),
-  onWritten: (bytes) => { layoutSnapshots.record(bytes) }
-})
-
-/** M112. Decided once, after the store loads; read by createWindow for the renderer's flag. */
-let telemetryOn = false
-
-// Its own file, deliberately not a key in layout.json. That file is rewritten
-// in full on a 500ms debounce, CLAUDE.md documents hand-editing it as a
-// supported path, and parseLayout copies a future-version one to .bak — which
-// is correct for a canvas and would silently duplicate a ciphertext.
-const credentialStore = createCredentialStore({
-  filePath: join(app.getPath('userData'), 'credentials.json'),
-  crypto: createSafeStorageCrypto(),
-  onWarning: (m) => console.warn('[credentials]', m)
-})
-
-/**
- * The ABSOLUTE path to git, resolved from the login env at whenReady — null
- * until then, and null forever on a machine with no git on that PATH.
- *
- * Resolved rather than spawned by name for the reason tmux is: launchd gives
- * a GUI app a bare PATH, so a homebrew-only git is simply not found, and the
- * bare-name spawn then produced a silent no-Changes-section instead of the
- * `git-missing` arm that exists for exactly this. The app already computed
- * this answer for its startup diagnostic and threw it away.
- */
-let gitPath: string | null = null
-// M71. The agent-session runtime — a conversation with the installed `claude`
-// in headless mode, not a PTY. Constructed after the env probe for the same
-// reason the PtyManager is: it needs the login environment (how the CLI
-// finds its login and its config) and the CLI's resolved path. Null until
-// then; nothing can reach it before the window exists. No IPC channel names
-// it yet — M72's chat panel is its first caller — but it is wired into the
-// quit sequence now so a process it owns can never outlive the app.
-let agentSessions: AgentSessionManager | null = null
-/** M138. The pool's production caller, made beside the manager it drives. */
-let poolCaller: PoolCaller | null = null
-// M76. Assigned beside it once the runtime exists; create() re-syncs through it.
-let approvals: ApprovalTracker | null = null
-let claudePath: string | null = null
-/** M90. The second headless CLI, from the same probe. Null means the codex chat row is disabled by name. */
-let codexPath: string | null = null
-let copilotPath: string | null = null
-
-// Getters for the reason PtyManager's getBackend is one: this runner is
-// constructed at module scope, and resolveShellEnv() has not run yet. Hoisted
-// to a named const rather than constructed inline per consumer: a second
-// runner would carry its own `warned` flag, and the "git not found" warning
-// this repo deliberately logs ONCE would log twice.
-const gitRunner = createGitRunner({ gitPath: () => gitPath, env: () => loginEnv })
-
-const reviewEngine = createReviewEngine({
-  run: gitRunner,
-  baselineOf: (panelId) => layoutStore.baseline(panelId),
-  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
-  // Closes over baselineCapture, declared below — the same forward-closure
-  // this manager already relies on for layoutStore one line up. Never
-  // called until a real review:panel invoke lands, long after both consts
-  // have been initialised.
-  notARepo: (panelId) => baselineCapture.isNotARepo(panelId),
-  repoUnreadable: (panelId) => baselineCapture.unreadableDetail(panelId),
-  // M86. The worktree records for a root, with each panel's own title so a
-  // section can be called what the user calls it.
-  worktreesOf: (root) => {
-    const titles = new Map<string, string | undefined>()
-    for (const ws of layoutStore.mergedWorkspaces()) for (const panel of ws.panels) titles.set(panel.id, panel.title)
-    return layoutStore.worktrees().filter((w) => w.root === root).map((w) => ({
-      path: w.path, branch: w.branch, panelId: w.panelId,
-      ...(titles.get(w.panelId) === undefined ? {} : { panelTitle: titles.get(w.panelId) })
-    }))
-  }
-})
-
-/**
- * Scratch indexes live under userData, never inside the repository being
- * committed: a scratch file in the tree would appear as an untracked file in
- * the very review about to be committed, and would be staged by a user who
- * pressed commit twice.
- *
- * One file per commit, named by timestamp and a counter rather than reused,
- * so two nodes committing in two repositories at the same moment cannot share
- * one index — which would produce a commit containing the other repository's
- * paths.
- */
-const scratchIndexDir = join(app.getPath('userData'), 'git-index')
-let scratchIndexSeq = 0
-// M53. The subject's own peer count is the refusal the renderer cannot make
-// stale; removal is a FILE unlink through node, never a git write.
-const reviewDiscard = createReviewDiscarder({
-  run: gitRunner,
-  peersInRepo: (root, except) => layoutStore.baselinePeers(root, except),
-  removeFile: (p) => unlinkSync(p),
-  isDirectory: (p) => {
-    try { return statSync(p).isDirectory() } catch { return false }
-  }
-})
-const reviewCommit = createReviewCommitter({
-  run: gitRunner,
-  tempIndexPath: () => {
-    mkdirSync(scratchIndexDir, { recursive: true })
-    return join(scratchIndexDir, `idx-${Date.now()}-${scratchIndexSeq++}`)
-  },
-  // Best effort: a scratch index that outlives its commit is a stale file in
-  // a directory nothing else reads, and throwing here would turn a successful
-  // commit into a rejected invoke.
-  removeTempIndex: (p) => { try { rmSync(p, { force: true }) } catch { /* ignore */ } }
-})
-
-// The once-only guard. Written here rather than inside PtyManager because the
-// store is the thing that knows whether a baseline already exists, and a
-// manager-held flag would be lost on the very reload this guard exists for.
-// The epoch half — a kill poisoning an in-flight capture so it cannot write
-// after the panel it belongs to is gone — lives in baseline-capture.ts,
-// tested in isolation under plain node (verify:review 35/35b) rather than
-// inline here, where nothing but a real Electron run could ever drive it.
-const baselineCapture = createBaselineCapture({
-  baselineOf: (panelId) => layoutStore.baseline(panelId),
-  setBaseline: (panelId, baseline) => layoutStore.setBaseline(panelId, baseline),
-  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
-  captureBaseline: (root) => reviewEngine.captureBaseline(root)
-})
-
-const captureBaseline = (panelId: string, cwd: string): void => baselineCapture.capture(panelId, cwd)
-
-// kill()'s baseline hook: poison any in-flight capture for this id (see
-// baseline-capture.ts) AND drop the persisted record, so neither an
-// in-flight write nor a stale on-disk one can reach a recycled id.
-const dropBaseline = (panelId: string): void => {
-  baselineCapture.drop(panelId)
-  layoutStore.dropBaseline(panelId)
-  // M130. The trail's own per-panel state (offset/carry/entries/decoder,
-  // all owned by skill-trail-read.ts) is forgotten at the same
-  // panel-removing site PtyManager already calls this through — a recycled
-  // panel id must not inherit a dead panel's trail, the same reason
-  // dropPinnedSession exists.
-  forgetTrail(panelId)
-}
-
-// The manager needs a way to reach the live renderer; a getter rather than a
-// captured reference keeps it correct across window reloads. The backend is a
-// getter for the same reason — the probe that chooses it is async and has not
-// run when this module is evaluated.
-/**
- * M52. What each panel ran and how it ended — one JSON line per command end,
- * through its own append writer, capped. No output bytes: metadata only.
- */
-const runLedger = createRunLedger({ file: join(app.getPath('userData'), 'runs.jsonl') })
-// M73. One append-only transcript per chat panel, beside the scrollback logs.
-const agentTranscripts = createAgentTranscriptLog({ dir: join(app.getPath('userData'), 'agent-transcripts') })
-
-// M54. Declared ABOVE the manager, which carries them into every spawn's env.
-const controlSocketPath = join(app.getPath('userData'), 'control.sock')
-const launcherDir = join(app.getPath('userData'), 'bin')
-let controlServer: ControlServer | null = null
-
-// M43. The real OS attention surfaces. Every method reads live state through
-// a getter (focus and the two settings change constantly), and the whole
-// decision path — when to notify, when to beep — lives in PtyManager, tested
-// under plain node; this object only DOES what it is told. Confirmed by hand
-// against a real dock, a real notification and a real beep (manual-only list).
-const osAttention: AttentionSink = {
-  notify: (panelId, label, count, body) => {
-    if (!Notification.isSupported()) return
-    const n = new Notification({
-      title: label,
-      body: body ?? (count > 1 ? `${label} wants you (${count} panels waiting)` : `${label} wants you`)
-    })
-    n.on('click', () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore()
-        mainWindow.focus()
-        // The Cmd+J path, never a wake: frame the panel that called for you.
-        mainWindow.webContents.send(IPC_EVENTS.ATTENTION_JUMP, panelId)
-      }
-    })
-    n.show()
-  },
-  badge: (count) => { app.dock?.setBadge(count > 0 ? String(count) : '') },
-  beep: () => { shell.beep() },
-  windowFocused: () => mainWindow?.isFocused() ?? false,
-  notifyEnabled: () => layoutStore.getSetting('attention.notify') === true,
-  soundEnabled: () => layoutStore.getSetting('attention.sound') === true
-}
-// M76. One badge, two authors, one writer: PtyManager's waiting set and
-// the approval tracker's each report their count to a child sink and the
-// dock badge reads the sum. See main/approvals.ts.
-const attention = createAttentionUnion(osAttention)
-
-const ptyManager = new PtyManager(
-  () => mainWindow?.webContents ?? null,
-  () => backend,
-  // Getters, closing over layoutStore rather than reading it here: the store
-  // is constructed ABOVE this line, and a value read at construction would
-  // also freeze the setting at its boot value, so changing it in the palette
-  // would reach nothing until a relaunch. Both are only ever called from a
-  // running PTY's callbacks, long after module evaluation.
-  () => Number(layoutStore.getSetting('agent.idleAfterMs')),
-  () => layoutStore.getSetting('agent.bell') === true,
-  captureBaseline,
-  dropBaseline,
-  (panelId) => layoutStore.session(panelId),
-  (panelId, sessionId) => layoutStore.setSession(panelId, sessionId),
-  (panelId) => layoutStore.dropSession(panelId),
-  // The real transcript reader and the flush cap keep their defaults.
-  undefined,
-  undefined,
-  undefined,
-  // M37. Closes over worktreeManager, declared below — the same forward
-  // closure captureBaseline already relies on; never called before a real
-  // pty:create lands.
-  (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd),
-  // M39. The durable log, gated per flush on the setting so the toggle takes
-  // effect on the next flush rather than the next launch.
-  {
-    append: (panelId, data) => { void scrollbackLog.append(panelId, data) },
-    drop: (panelId) => { void scrollbackLog.drop(panelId) },
-    enabled: () => layoutStore.getSetting('scrollback.persist') === true
-  },
-  // M43's OS sink, through M76's union — declared above the manager.
-  attention.forPty,
-  // M52. The run ledger (an append stream beside layout.json) and the
-  // shell-integration directory the rc files are written under. Declared
-  // above this construction because they are values, not getters.
-  { ledger: runLedger, integrationDir: join(app.getPath('userData'), 'shell-integration'), now: () => Date.now(), control: { socket: controlSocketPath, binDir: launcherDir } }
-)
-
-/**
- * M39. One file per panel under userData, appended from the flush and read
- * by the dormant card, search and export. An append stream, deliberately not
- * layout-store's temp-and-rename — see scrollback-log.ts.
- */
-const scrollbackLog = createScrollbackLog({ dir: join(app.getPath('userData'), 'scrollback') })
-
-/**
- * M37. Worktrees live under userData, never inside the repository — inside it
- * they would be untracked files in the main checkout's own `git status` and
- * in every review of a panel spawned there. Records live in layout.json
- * beside baselines and sessions; the manager reads and writes them through
- * the store so a relaunch finds them.
- */
-const worktreeManager = createWorktreeManager({
-  run: gitRunner,
-  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
-  worktreesDir: join(app.getPath('userData'), 'worktrees'),
-  records: {
-    forPanel: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
-    add: (record) => layoutStore.addWorktree(record),
-    drop: (id) => layoutStore.dropWorktree(id),
-    list: () => layoutStore.worktrees()
-  }
-})
-
-// One instance for the app's whole lifetime, alongside ptyManager: both are
-// per-panel-id lifecycle managers with the same two teardown seams (a
-// renderer reload, and a real quit) — see window-lifecycle's callback and
-// before-quit below.
-const fileWatchers = new FileWatchers()
-// Keyed by cwd, so twelve panels in one repository share one answer rather
-// than parsing the same 93 KB ~/.claude.json twelve times. See ToolboxCache.
-const toolboxCache = new ToolboxCache()
-
-/**
- * Reset is the only action in the app Cmd+Z cannot take back, which is exactly
- * why it is the only one that asks. The message NAMES what is about to be lost
- * — a generic "Are you sure?" trains people to click through the one that
- * mattered, and closing seven idle panels is not the same act as closing seven
- * running agents.
- */
-async function confirmReset(): Promise<void> {
-  const window = mainWindow
-  if (!window) return
-  const { panels, running } = await requestCanvasCounts(window.webContents)
-  const detail =
-    running > 0
-      ? `${panels} panel${panels === 1 ? '' : 's'} will be closed, including ${running} running process${running === 1 ? '' : 'es'}. This cannot be undone.`
-      : `${panels} panel${panels === 1 ? '' : 's'} will be closed. This cannot be undone.`
-  // M93. Reset stays final, and the dialog says where the past is kept.
-  const kept = layoutSnapshots.list().length
-  const detailWithHistory = kept > 0 ? `${detail} ${kept} snapshot${kept === 1 ? '' : 's'} of earlier saves exist — restore one from the Workspaces pane.` : detail
-
-  const { response } = await dialog.showMessageBox(window, {
-    type: 'warning',
-    message: 'Reset this canvas?',
-    detail: detailWithHistory,
-    buttons: ['Cancel', 'Reset Canvas'],
-    // Cancel is the default, so Return dismisses rather than destroys.
-    defaultId: 0,
-    cancelId: 0
-  })
-  if (response !== 1) return
-
-  layoutStore.reset()
-  layoutStore.flushSync()
-  window.webContents.send(IPC_EVENTS.CANVAS_RESET)
-}
-
-/**
- * The login environment is already resolved above, so availability costs
+ * The login environment is resolved inside whenReady, so availability costs
  * nothing extra — it is the same whichFromEnv the startup diagnostic runs.
  * Probed ONCE: a brew install mid-session is not noticed until relaunch,
  * which is a known limit rather than a bug.
  */
-const which = (command: string): string | null => whichFromEnv(command, loginEnv)
+const which = (command: string): string | null => whichFromEnv(command, state.loginEnv)
 
-/**
- * M126. The real `PluginRunner`: `claude plugin list --json` over
- * `child_process`, resolved through the SAME `claudePath` the startup probe
- * already found (or the bare name, which `listPlugins` turns into `unknown`
- * on the resulting ENOENT — never a throw). Kept to the shape `listPlugins`
- * needs (stdout + exit code) rather than the full `AgentProcess` streaming
- * shape agent-runner.ts defines: this is one call-and-done, not a
- * conversation.
- */
-const runClaudePluginList: PluginRunner = () =>
-  new Promise((resolve) => {
-    execFile(claudePath ?? 'claude', ['plugin', 'list', '--json'], { env: loginEnv, timeout: PLUGIN_LIST_TIMEOUT_MS }, (error, stdout) => {
-      // Absent binary (ENOENT), a non-zero exit, or any other spawn failure
-      // all read the same way here: `listPlugins` only asks whether the code
-      // was zero, so any error becomes a non-zero code rather than a thrown
-      // rejection this Promise never produces.
-      if (error !== null) {
-        resolve({ stdout: '', code: 1 })
-        return
-      }
-      resolve({ stdout, code: 0 })
-    })
-  })
-
-/**
- * M128. The real details runner, per id. Built the same way as
- * `runClaudePluginList` and deliberately not folded into it: `describePlugin`
- * takes a zero-argument runner (the id rides in this closure) so the timeout
- * race in `plugin-list.ts` can be shared byte for byte.
- */
-const runClaudePluginDetails = (id: string): PluginRunner => () =>
-  new Promise((resolve) => {
-    execFile(claudePath ?? 'claude', ['plugin', 'details', id], { env: loginEnv, timeout: PLUGIN_LIST_TIMEOUT_MS }, (error, stdout) => {
-      if (error !== null) {
-        resolve({ stdout: '', code: 1 })
-        return
-      }
-      resolve({ stdout, code: 0 })
-    })
-  })
-
-/**
- * Spawn from a preset, by id. NAMED rather than inlined into the menu's
- * options, because the palette picks presets too (PRESET_SPAWN_BY_ID) and the
- * two picks have to be the identical code — a second copy is a second place
- * for "which preset does this id mean" to answer differently.
- */
-function onSpawnPreset(id: string): string | null {
-  const user = layoutStore.presets()
-  const found = allPresets(user).find((p) => p.id === id)
-  if (!found) {
-    // Never substitute a different preset: spawning the wrong program in
-    // the wrong directory is worse than spawning nothing.
-    console.warn(`[presets] a pick named ${id}, which no longer exists`)
-    return 'that preset no longer exists'
-  }
-  // M253. A pack's preset is a stranger's command until a person reads it.
-  const unread = unreviewedPresetReason(found)
-  if (unread !== null) return unread
-  mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, templateOf(found))
-  return null
-}
-
-function rebuildMenu(): void {
-  buildAppMenu({
-    settingValue: (id) => layoutStore.getSetting(id),
-    onToggleSetting: (id, value) => {
-      layoutStore.setPreference(id, value)
-      // M45. The menu is main's, so the renderer never sees this write
-      // unless told — and a theme radio that applies on the next Cmd+K is
-      // a picker that appears to do nothing.
-      mainWindow?.webContents.send(IPC_EVENTS.SETTINGS_CHANGED, id)
-    },
-    onReset: () => {
-      void confirmReset()
-    },
-    presets: resolveAvailability(allPresets(layoutStore.presets()), which),
-    onSpawnPreset,
-    // M65. The sheet is the renderer's; the menu only asks for it.
-    onOpenSheet: () => { mainWindow?.webContents.send(IPC_EVENTS.SPAWN_OPEN_SHEET) },
-    onTidy: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_TIDY) },
-    onFeedback: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FEEDBACK) },
-    onFlip: () => { mainWindow?.webContents.send(IPC_EVENTS.CANVAS_FLIP) },
-    onSavePreset: () => {
-      void savePresetFromFocusedPanel()
-    }
-  })
-}
-
-/**
- * The three things every preset change has to do. Deleting the default one
- * changes what Cmd+N spawns, and the renderer only learns that from a
- * PRESET_DEFAULT push — without it the old template stays in defaultTemplateRef
- * and Cmd+N keeps spawning a preset the user just deleted.
- */
-function afterPresetChange(): void {
-  rebuildMenu()
-  if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
-}
-
-async function savePresetFromFocusedPanel(): Promise<void> {
-  const wc = mainWindow?.webContents
-  // A windowless app with a live menu bar is ORDINARY on darwin, not a
-  // can't-happen: window-all-closed deliberately does not quit there, so
-  // Cmd+W leaves this menu item clickable with nobody to ask. Returning
-  // silently is the same posture confirmReset takes one screenful up — there
-  // is no panel to save and no window to put a dialog over, so the only
-  // honest answer is to do nothing.
-  if (!wc) return
-  const captured = await requestFromRenderer<CapturedPanel | null>(
-    wc,
-    IPC_EVENTS.PRESET_CAPTURE,
-    null
-  )
-  if (!captured) {
-    // Loud, not silent: a menu item that does nothing is indistinguishable
-    // from a broken one.
-    await dialog.showMessageBox({
-      type: 'info',
-      message: 'Focus a panel first',
-      detail: 'Click into the panel you want to save, then try again.'
-    })
-    return
-  }
-  const preset = presetFromCapture(layoutStore.presets(), captured)
-  layoutStore.addPreset(preset)
-  rebuildMenu()
-}
-
-/**
- * M54. ONE handler behind both doors — the socket below and the URL scheme —
- * over the same store, the same templateOf and the same PRESET_SPAWN send a
- * menu pick uses. A request may arrive with the window closed (darwin keeps
- * the app running) or still loading (a launch-time URL), so the send waits
- * for the renderer rather than sending into a page that is not there yet.
- */
-const sendToRenderer = (channel: string, payload: unknown): void => {
-  if (mainWindow === null || mainWindow.isDestroyed()) createWindow()
-  const win = mainWindow
-  if (win === null) return
-  const wc = win.webContents
-  if (wc.isLoading()) wc.once('did-finish-load', () => wc.send(channel, payload))
-  else wc.send(channel, payload)
-  if (win.isMinimized()) win.restore()
-  win.show()
-}
-/**
- * M196 (D04). THE ONE ANSWER to "is this path in a lane, and of what".
- *
- * All three wiring sites used to inline `w.path === path` — EXACT equality —
- * so a cwd one directory inside a lane translated nowhere and was judged as
- * its own repository, while the renderer answered the same question with a
- * segment prefix (`Canvas.tsx`'s project-skill refusal). Two authors of one
- * fact, disagreeing only below a lane root, which is where a teammate's shell
- * actually stands.
- *
- * The subject it translates to is the lane RECORD's own `root` — the
- * repository the lane was cut from — and `insidePlace` then judges that root
- * exactly as it judges the lane root today. A teammate whose places do not
- * hold that repository is refused before and after.
- *
- * **It matches on the REAL path, and that is a security line rather than a
- * tidiness one.** `PlacesGate.check` REPLACES the candidate with this answer
- * and never judges the candidate itself, so whatever this matches is what the
- * gate stops looking at. Under the exact equality this replaces, only a lane
- * root could take that substitution and a lane root has no symlink component
- * by construction; with containment the whole subtree can, so a symlink
- * created INSIDE a lane — `ln -s /etc evil`, which an agent working in the
- * lane can do — would otherwise be translated to the repository, found inside
- * a place, and allowed. That is exactly the escape `shared/places.ts`'s own
- * header and `verify:teammates places.2` exist to fence, and containment
- * would have unfenced it below a lane. A path that cannot be resolved is
- * matched as written, which fails CLOSED: no translation, and `insidePlace`
- * then judges the raw path and refuses it.
- */
-const laneRootOf = (path: string): string | undefined => {
-  const real = (p: string): string => { try { return fsRealpath(p) } catch { return p } }
-  return laneOfPath(real(path), layoutStore.worktrees().map((w) => ({ ...w, path: real(w.path) })))?.root
-}
-
-const memoryStore = createMemoryStore({ dir: join(app.getPath('userData'), 'memory') })
-// M100. THE PLACES GATE: asked before any spawn resolves a cwd and before a
-// file verb answers for a request that names a teammate. Main's, never the
-// renderer's — a UI affordance is not an authority boundary.
-// M100. A teammate's memory is its own file through the SAME store, a second
-// instance over memory/teammates — beside the repository's, never inside it.
-const teammateMemory = createMemoryStore({ dir: join(app.getPath('userData'), 'memory', 'teammates') })
-const TEAMMATE_ROOT = 'teammate:'
-const teammateSlug = (root: string): string => { const id = root.slice(TEAMMATE_ROOT.length); return layoutStore.teammates().find((t) => t.id === id)?.memory ?? id }
-// M101. The routine runner: intervals in main, the tick answered by the
-// renderer (only it mints panels). Re-armed on every save and delete; a tick
-// that fell while the app was closed is marked MISSED at arm, never fired.
-const routineRunner = createRoutineRunner({
-  now: () => Date.now(),
-  setInterval: (fn, ms) => { const t = setInterval(fn, ms); t.unref?.(); return t },
-  clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
-  fire: (routine) => { mainWindow?.webContents.send(IPC_EVENTS.ROUTINE_FIRE, routine) },
-  save: (routine) => layoutStore.saveRoutine(routine)
-})
-const armRoutines = (startup = false): string[] => routineRunner.arm(layoutStore.routines(), { startup })
-// M102. A session TOKEN per chat, minted into its environment: `tc api` from
-// inside the chat carries it, and the control handler maps it back to the
-// panel that really asked — a claimed panelId beside it is ignored. Memory
-// only; a relaunch mints fresh ones, which is right (the old shells are gone).
-const panelTokens = new Map<string, string>()
-const tokenOfPanel = (id: string): string => {
-  let t = panelTokens.get(id)
-  if (t === undefined) { t = randomBytes(16).toString('hex'); panelTokens.set(id, t) }
-  return t
-}
-const panelOfToken = (token: string): string | undefined => { for (const [id, t] of panelTokens) if (t === token) return id; return undefined }
-const placesGate = createPlacesGate({
-  realpath: fsRealpath,
-  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
-  // M114. A lane under userData/worktrees is judged by the repository it forks.
-  worktreeRootOf: (path) => laneRootOf(path)
-})
-// M114. The lane a dispatch mints: the repository under the teammate's places
-// (origin read by git, one level deep), the gate on its root, the worktree.
-const originOfDir = (dir: string): string | null => { try { return execFileSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim() || null } catch { return null } }
-const subdirsOf = (dir: string): string[] => { try { return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith('.')).map((d) => join(dir, d.name)) } catch { return [] } }
-/**
- * M197. Is this directory a repository ROOT? `.git` as a DIRECTORY is a main
- * worktree and as a FILE is a linked one — both are roots to work in. This
- * is deliberately not a `git` call: the lister asks it of every immediate
- * child of every place, and a subprocess each would turn a ~/work of sixty
- * clones into sixty spawns before a single row is drawn. `originOf` is
- * spawned only for the directories that pass it.
- */
-const isRepoRootDir = (dir: string): boolean => { try { return existsSync(join(dir, '.git')) } catch { return false } }
-const boardLane = createBoardLane({
-  gate: placesGate,
-  worktrees: { ensureForPanel: (panelId, cwd) => worktreeManager.ensureForPanel(panelId, cwd) },
-  teammate: (id) => layoutStore.teammates().find((t) => t.id === id),
-  recordFor: (panelId, root) => layoutStore.worktreeForPanel(panelId, root),
-  originOf: originOfDir,
-  subdirs: subdirsOf
-})
-
-/**
- * M85. Main's OWN watch on the vault root, so a note an agent writes into the
- * folder reaches the pane with no gesture. One recursive watch, replaced when
- * the root changes, debounced so a save that touches several files is one
- * event, and never opening a window (the send goes only to one that exists).
- */
-let vaultWatch: { root: string; watcher: FSWatcher } | null = null
-let vaultChangedTimer: NodeJS.Timeout | null = null
-const armVaultWatch = (root: string): void => {
-  if (vaultWatch !== null && vaultWatch.root === root) return
-  vaultWatch?.watcher.close()
-  vaultWatch = null
-  let isDir = false
-  try { isDir = statSync(root).isDirectory() } catch { isDir = false }
-  if (!isDir) return
-  try {
-    const watcher = fsWatch(root, { persistent: false, recursive: true }, () => {
-      if (vaultChangedTimer !== null) clearTimeout(vaultChangedTimer)
-      vaultChangedTimer = setTimeout(() => {
-        vaultChangedTimer = null
-        const wc = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-        if (wc !== null && !wc.isLoading()) wc.send(IPC_EVENTS.VAULT_CHANGED)
-      }, 250)
-      vaultChangedTimer.unref?.()
-    })
-    watcher.on('error', () => { vaultWatch?.watcher.close(); vaultWatch = null })
-    vaultWatch = { root, watcher }
-  } catch { /* no watch; the refresh control still works */ }
-}
-/** M84. The watcher runner, once it exists — read by the quit sequence. */
-let watchRunnerRef: { disposeAll(): void } | null = null
-
-/**
- * M87. The broker over the credential store — the store's LAST reader — with
- * the real HTTPS fetcher and an audit file beside the run ledger. Wired to
- * the control handler only: no IPC channel reaches it, so the renderer can
- * neither spend a credential nor see what an agent spent.
- */
-const brokerAudit = createBrokerAudit({ file: join(app.getPath('userData'), 'broker-audit.jsonl') })
-// M102. A panel's teammate is MAIN's own record (the chat's `teammateId`),
-// never the CLI's claim; the grant is the roster's; a write asks on the
-// teammate's chat through the manager's external question — the one door.
-const teammateOfPanel = (panelId: string): string | undefined => {
-  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.id === panelId && p.kind === 'chat') return p.chat.teammateId
-  return undefined
-}
-const chatOfTeammate = (teammateId: string, preferred?: string): string | undefined => {
-  const live = agentSessions?.list().map((s) => s.id) ?? []
-  if (preferred !== undefined && live.includes(preferred)) return preferred
-  for (const ws of layoutStore.mergedWorkspaces()) for (const p of ws.panels) if (p.kind === 'chat' && p.chat.teammateId === teammateId && live.includes(p.id)) return p.id
-  return undefined
-}
-const broker = createBroker({
-  store: credentialStore, fetcher: createHttpsBrokerFetcher(), audit: brokerAudit,
-  services: (teammateId) => layoutStore.teammates().find((t) => t.id === teammateId)?.services,
-  account: (service) => credentialStore.list().find((c) => c.service === service)?.label,
-  approve: async (ask) => {
-    const chatId = chatOfTeammate(ask.teammateId, ask.panelId)
-    if (chatId === undefined || agentSessions === null) return false
-    // M255. Asked under a per-request name, so "Allow for session" answers
-    // THIS write only — never every later github write from the chat.
-    return agentSessions.askExternal(chatId, brokerCardTool(ask), { command: `${ask.method} ${ask.path}`, account: ask.account, cost: ask.cost }, `${ask.method} ${ask.path} as ${ask.account} · cost: ${ask.cost} (as stated by the caller)`)
-  }
-})
-
-/** M83. A directory's repository root, or the directory itself when git does not own it. */
-/**
- * M196 (D04). THE SCOPE RESOLVER, wired once. `worktrees()` is the record
- * list; `commonRootOf` is git's own answer for a worktree the app never made.
- */
-const scopeResolver = createScopeResolver({
-  resolveRepo: (cwd) => reviewEngine.resolveRepo(cwd),
-  commonRootOf: (root) => reviewEngine.commonRootOf(root),
-  worktrees: () => layoutStore.worktrees()
-})
-
-const memoryScope = createMemoryScope(scopeResolver)
-
-const controlHandler = createControlHandler({
-  // M87. The one verb that can spend a credential.
-  broker,
-  teammateOf: teammateOfPanel,
-  panelOfToken,
-  presets: () => allPresets(layoutStore.presets()),
-  defaultId: () => layoutStore.defaultPresetId() || null,
-  spawn: (preset, cwd) => {
-    const template = templateOf(preset)
-    if (cwd !== undefined) template.cwd = cwd
-    sendToRenderer(IPC_EVENTS.PRESET_SPAWN, template)
-  },
-  list: () => ptyManager.list().map((r) => ({ panelId: r.panelId, pid: r.pid, command: r.command, cwd: r.cwd })),
-  // M81. `tc status`: the RENDERER's own model — it is the only side that
-  // knows a panel's state word, its edges and its runs. Asked over the
-  // ephemeral reply channel canvas:counts already uses; a window that does
-  // not answer yields null, which the handler turns into an empty model
-  // WITH a note.
-  // M83. The project memory: one store for the app, keyed per repository.
-  // The control door resolves the root through the SAME `memoryRoot` the IPC
-  // door uses. An agent runs `tc memory add` wherever its shell is standing,
-  // which is usually a subdirectory: without this its memories land in a file
-  // the node and the chat never read, and every door still shows a plausible
-  // non-empty list (M83's verifier).
-  memory: {
-    // M100. The teammate prefix routes here as it does at the IPC door.
-    list: async (root, limit) => {
-      if (root.startsWith(TEAMMATE_ROOT)) return teammateMemory.list(teammateSlug(root), limit)
-      const resolved = await memoryScope(root)
-      // M196. A read that could not be scoped answers EMPTY with its reason on
-      // the row rather than a confident empty list against a stray key.
-      if (!resolved.ok) return { root, entries: [], skipped: 0, unresolved: resolved.reason }
-      return { ...memoryStore.list(resolved.root, limit), ...(resolved.scope === undefined ? {} : { scope: resolved.scope }) }
-    },
-    add: async (req) => {
-      if (req.root.startsWith(TEAMMATE_ROOT)) return teammateMemory.add({ ...req, root: teammateSlug(req.root) })
-      const resolved = await memoryScope(req.root)
-      if (!resolved.ok) return { ok: false as const, reason: resolved.reason }
-      return memoryStore.add({ ...req, root: resolved.root })
-    }
-  },
-  canvas: async () => {
-    const wc = mainWindow?.webContents
-    if (!wc) return null
-    return requestFromRenderer<ControlCanvasModel | null>(wc, IPC_EVENTS.CANVAS_MODEL, null, 1500)
-  },
-  // M113. The board verb asks the renderer, which owns the workspace it renders.
-  // M180. The plan door asks the renderer the same way. No window is the
-  // handler's `null`; a plan that outlives the wait is a DIFFERENT answer —
-  // its steps are still running on the canvas, and "no canvas answered" would
-  // send the caller to relaunch an app that is mid-send (the critic).
-  plan: async (line, caller) => {
-    const wc = mainWindow?.webContents
-    if (!wc) return null
-    return requestFromRendererWith<AgentPlanReply, AgentPlanRequest>(wc, IPC_EVENTS.CANVAS_PLAN, { line, ...(caller === undefined ? {} : { caller }) },
-      { kind: 'refused', reason: 'the plan is still running on the canvas — it did not finish within 30 s; check the canvas before repeating it' }, 30000)
-  },
-  board: async (req) => {
-    const wc = mainWindow?.webContents
-    if (!wc) return null
-    return requestFromRendererWith<BoardControlReply | null, BoardControlRequest>(wc, IPC_EVENTS.BOARD_ADD, req, null, 2000)
-  },
-  // Running sessions only: a dormant card has no session here, and `list`
-  // says so in its note.
-  focus: (id) => {
-    if (!ptyManager.list().some((r) => r.panelId === id)) return false
-    sendToRenderer(IPC_EVENTS.ATTENTION_JUMP, id)
-    return true
-  }
-})
+const places = createPlaces(stores)
+const menu = createMenuActions(state, stores, which)
+const control = createControlWiring(state, stores, places, tokens)
 
 // M54. The URL door. Registered at module scope because macOS delivers a
 // launch-time URL before whenReady's body runs. The URL never reaches the
@@ -876,142 +110,8 @@ app.on('open-url', (event, url) => {
   if (!hasInstanceLock) return
   const parsed = parseControlUrl(url)
   if (parsed.kind === 'bad') { console.warn(`[control] refused URL ${url}: ${parsed.error}`); return }
-  void controlHandler(parsed.req).then((r) => { if (!r.ok) console.warn(`[control] URL refused — ${r.error ?? ''}`) })
+  void control.handler(parsed.req).then((r) => { if (!r.ok) console.warn(`[control] URL refused — ${r.error ?? ''}`) })
 })
-
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    show: false,
-    backgroundColor: '#12131a',
-    titleBarStyle: 'hiddenInset',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      // node-pty lives in main, but the preload still needs `require('electron')`
-      // to reach contextBridge/ipcRenderer.
-      sandbox: false,
-      // M103. The browser pane is a <webview> — a guest PROCESS, the one shape
-      // that pans, zooms, clips and z-orders with the world (M0 measured it;
-      // an iframe is refused by the renderer's CSP and a WebContentsView does
-      // not follow the transform, M91). Electron's docs discourage the tag,
-      // and every property they warn about is closed by name below:
-      // will-attach-webview, the partition's permission handler, the guest's
-      // window-open handler. verify:meta browser.1 reads all five as text.
-      webviewTag: true,
-      // M112. The renderer's one fact about telemetry, as an argv flag the
-      // preload reads: no channel, no store read from the renderer, and the
-      // SDK is never loaded in a process that will not send.
-      additionalArguments: telemetryOn ? ['--tc-telemetry=1'] : []
-    }
-  })
-
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-
-  // Cmd+R and Cmd+W destroy the renderer without running React cleanup, so no
-  // pty:kill is ever sent. detachAll — not killAll — frees the local handles
-  // and empties the session map while leaving the tmux sessions running, so
-  // the next page reattaches instead of getting a fresh shell. On the direct
-  // backend there is no session behind the handle and this is exactly the old
-  // behaviour.
-  // The two seams window-lifecycle.ts already covers for PTYs, and for the
-  // same reason. Without the navigation one, every Cmd+R leaks one FSWatcher
-  // per open file panel, forever, in a main process the reload does not
-  // restart.
-  attachPtyLifecycle(mainWindow, () => {
-    ptyManager.detachAll()
-    fileWatchers.closeAll()
-  })
-
-  // Belt and braces against Chromium's own pinch-to-zoom. The renderer
-  // preventDefaults ctrl+wheel on every path the camera claims — but not on
-  // the ones it YIELDS: a pinch over the command palette is deliberately left
-  // uncancelled (shouldYieldWheel's rule 1), so this is the only thing
-  // stopping it zooming the whole UI, which would silently break every
-  // coordinate the canvas computes.
-  mainWindow.webContents.setVisualZoomLevelLimits(1, 1).catch((error: unknown) => {
-    console.warn('[window] could not pin visual zoom', error)
-  })
-
-  // Second line of defence behind the renderer's drop guard. Any navigation
-  // away from the app kills every PTY in this window (attachPtyLifecycle), and
-  // there is no navigation this window is ever supposed to perform after its
-  // initial load — so refuse them all rather than trust one renderer listener.
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    event.preventDefault()
-    console.warn(`[window] blocked navigation to ${url}`)
-  })
-
-  // Never let a link navigate the shell window itself.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
-  })
-
-  // M103. THE GUEST'S PROPERTIES, CLOSED BEFORE IT EXISTS. A page cannot set
-  // them, and the node does not need to remember to: whatever the tag's
-  // attributes say, the guest gets no preload, no node integration and
-  // context isolation — and only an http(s) src ever attaches, so a record
-  // that slipped past the parser with a file: url still opens nothing.
-  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    delete webPreferences.preload
-    webPreferences.nodeIntegration = false
-    webPreferences.contextIsolation = true
-    if (!/^https?:/.test(params.src)) {
-      console.warn(`[browser] refused a guest at ${params.src}: http(s) only`)
-      event.preventDefault()
-    }
-  })
-  // Once attached, the guest's own new windows are denied — a page's
-  // `window.open` or a target=_blank link would otherwise mint a BrowserWindow
-  // with no chrome of ours and no handler on it. `link:open` stays the door
-  // for a page that should leave the app, and it is a labelled verb.
-  mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
-    guest.setWindowOpenHandler(() => ({ action: 'deny' }))
-    // A navigation to anything but the web is refused too; the READ path
-    // checks the live url again on its own (browser-read.ts).
-    guest.on('will-navigate', (event, url) => {
-      if (!/^https?:/.test(url)) { console.warn(`[browser] refused navigation to ${url}`); event.preventDefault() }
-    })
-  })
-  // Every permission ask — camera, microphone, geolocation, notifications,
-  // the lot — answered no by default. The partition is the pane's own, so
-  // the main window's session (which never sees a page) is untouched.
-  session.fromPartition('persist:tc-browser').setPermissionRequestHandler((_webContents, _permission, callback) => callback(false))
-  session.fromPartition('persist:tc-browser').setPermissionCheckHandler(() => false)
-
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
-  if (devServerUrl) {
-    void mainWindow.loadURL(devServerUrl)
-  } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  // After did-finish-load, not before: a send to a webContents that has not
-  // finished loading is dropped, and Cmd+N would spawn nothing until the next
-  // preset change.
-  //
-  // The renderer's half of this ordering is load-bearing and NOT in a
-  // component: did-finish-load fires at the page's load event, while
-  // Canvas.tsx's preset effect is two awaited IPC round trips later, so a
-  // subscription made there is not listening yet and the push lands with no
-  // listener at all. renderer/main.tsx subscribes at module scope — before
-  // boot()'s first await, and therefore before the load event — and hands the
-  // cached template to Canvas as a prop. Moving that subscription back into a
-  // component makes every configured default silently inert again.
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow) pushDefaultPreset(mainWindow.webContents, layoutStore)
-    // M43. The snapshot M6d declined twice: a fresh renderer reads zero waiting
-    // until the next real transition, while the dock badge (main's own count)
-    // says N. Re-emit each session's current state so the two agree.
-    ptyManager.resendStates()
-  })
-}
 
 app.whenReady().then(async () => {
   // THE GATE, AND IT MUST STAY AHEAD OF EVERYTHING BELOW. app.quit() above
@@ -1026,119 +126,24 @@ app.whenReady().then(async () => {
   // Resolve the login-shell environment before the first PTY can be requested,
   // so no panel ever spawns with the bare launchd PATH.
   const env = await resolveShellEnv()
-  loginEnv = env
-  probedAt = Date.now()
+  state.loginEnv = env
+  state.probedAt = Date.now()
   for (const binary of ['claude', 'codex', 'copilot', 'git']) {
     const found = whichFromEnv(binary, env)
     // The diagnostic and the review engine's git are ONE resolution, not two.
     // This loop already computed the right answer before M9a's fix round and
     // only logged it, while git-runner.ts spawned the bare name against the
-    // launchd PATH — see gitPath's declaration above.
-    if (binary === 'git') gitPath = found
-    if (binary === 'claude') claudePath = found
-    if (binary === 'codex') codexPath = found
-    if (binary === 'copilot') copilotPath = found
+    // launchd PATH — see MainState's own comment on gitPath.
+    if (binary === 'git') state.gitPath = found
+    if (binary === 'claude') state.claudePath = found
+    if (binary === 'codex') state.codexPath = found
+    if (binary === 'copilot') state.copilotPath = found
     console.log(`[startup] ${binary}: ${found ?? 'NOT FOUND on resolved PATH'}`)
   }
-  // The bare name is kept when the probe found nothing: the spawn then fails
-  // with ENOENT and the session reads `exited` with the reason in its stderr
-  // tail, which is a named failure. M72 disables the chat verb by name before
-  // it gets that far.
-  agentSessions = new AgentSessionManager({
-    runner: claudeCliRunner,
-    command: claudePath ?? 'claude',
-    // M90. Present only when found: an absent codex makes a codex send
-    // `refused-backend`, never a spawn of a bare name that ENOENTs.
-    ...(codexPath === null ? {} : { codex: { command: codexPath } }),
-    // M118/M119. Present only when found, like codex: the copilot binary serves both its JSONL row and its ACP row.
-    ...(copilotPath === null ? {} : { binaries: { copilot: { command: copilotPath }, acp: { command: copilotPath } } }),
-    hasTurns: (id) => agentTranscripts.read(id).turns.length > 0,
-    env,
-    newSessionId: () => randomUUID(),
-    // M73. Whether the CLI already holds a transcript for a session id —
-    // M17's glob, so a restored chat panel that has had a turn resumes and
-    // one that never did pins. Decided at spawn, never persisted.
-    transcriptExists: (sessionId) => resolveTranscript(sessionId) !== undefined,
-    // M82. Read LIVE, like every other setting the manager consults: a ceiling
-    // raised in the palette must take effect on the next send.
-    limits: () => ({
-      maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
-      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
-      budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
-    }),
-    // M98. Resolved at CALL time through the module-level `approvals`: the
-    // tracker is created after the manager (it subscribes to it), so a
-    // captured reference here would be null for the life of the app.
-    preAnswer: (id, toolName) => approvals?.granted(id, toolName) ?? false
-    ,
-    // M102. Each headless session gets the door and its OWN panel id and token
-    // — the same block PtyManager gives a terminal — so `tc api` from a chat
-    // is that chat's, never a claim.
-    envFor: (id) => ({
-      ...env,
-      TC_CONTROL_SOCKET: controlSocketPath,
-      TC_PANEL_ID: id,
-      TC_PANEL_TOKEN: tokenOfPanel(id),
-      PATH: env['PATH'] === undefined || env['PATH'] === '' ? launcherDir : `${launcherDir}:${env['PATH']}`
-    })
-  })
-  // M138. The pool's production caller. The list is read HERE (main's, like
-  // every file the app reads for an agent; absolute path only, no Places
-  // gate — a pool has no teammate, and the file is the user's own), the mint is the RENDERER's over an
-  // ephemeral reply (board:add's shape, with a longer wait: a chat is created
-  // over IPC before it has an id), the ceilings are M82's read live, and the
-  // spend is the sum of the sessions' own cumulative figures, the same fold
-  // the manager's ceiling reads (M82) — one rule, two readers.
-  const poolAgents = agentSessions
-  poolCaller = createPoolCaller({
-    agents: poolAgents,
-    mint: (req) => {
-      const wc = mainWindow?.webContents
-      if (!wc) return Promise.resolve({ kind: 'refused' as const, reason: 'no window to mint the worker in' })
-      return requestFromRendererWith<PoolMintReply, PoolMintRequest>(wc, IPC_EVENTS.POOL_MINT, req, { kind: 'refused', reason: 'the canvas did not answer in time' }, 20000)
-    },
-    readList: (listPath) => {
-      const expanded = expandTilde(listPath)
-      if (!expanded.startsWith('/')) return { kind: 'error', why: `${listPath} is not an absolute path` }
-      try {
-        // One item per non-empty line; a `#` line is a comment, so a list can say what it is.
-        const items = readFileSync(expanded, 'utf8').split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'))
-        return items.length === 0 ? { kind: 'error', why: `${listPath} holds no items` } : { kind: 'ok', items }
-      } catch (error) {
-        return { kind: 'error', why: error instanceof Error ? error.message : String(error) }
-      }
-    },
-    limits: () => ({
-      maxConcurrent: Number(layoutStore.getSetting('agents.maxConcurrent')) || 0,
-      budgetUsd: Number(layoutStore.getSetting('agents.budgetUsd')) || 0,
-      budgetWindowPercent: Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
-    }),
-    spend: () => poolAgents.list().reduce((sum, snap) => sum + (snap.costUsd ?? 0), 0),
-    windowUtil: () => windowUtilization(poolAgents.rateLimit()),
-    emit: (event) => { mainWindow?.webContents.send(IPC_EVENTS.POOL_EVENT, event) }
-  })
-  // M73. The durable transcript, written from the manager's own events so
-  // the renderer never has to echo a turn back; and every event forwarded
-  // to the renderer on ONE channel, already batched at the manager.
-  const agentSessionsHere = agentSessions
-  // M76. A pending permission is `needs you` on the terminal's own channel,
-  // decided here in main — the renderer's store is a cache of this, never a
-  // second author. The label is the chat's directory name.
-  const approvalsHere = createApprovalTracker({
-    sink: attention.forAgents,
-    emitState: (panelId, state) => { mainWindow?.webContents.send(IPC_EVENTS.AGENT_STATE, { panelId, state }) },
-    label: (id) => { const cwd = agentSessionsHere.get(id)?.cwd ?? id; return cwd.replace(/\/+$/, '').split('/').pop() || cwd }
-  })
-  approvals = approvalsHere
-  agentSessionsHere.subscribe((event) => {
-    approvalsHere.apply(event)
-    if (event.type === 'turn') agentTranscripts.appendTurn(event.id, event.turn)
-    if (event.type === 'result') {
-      const snap = agentSessionsHere.get(event.id)
-      if (snap) agentTranscripts.appendMeta(event.id, { usage: snap.usage, costUsd: snap.costUsd, turns: snap.turns })
-    }
-    mainWindow?.webContents.send(IPC_EVENTS.AGENT_EVENT, event)
-  })
+
+  // M71/M76/M138. The agent runtime, its approval tracker and the pool caller
+  // — all three onto `state`, all three needing the env probe above.
+  startAgentRuntime(state, stores, tokens)
 
   // After the env probe, because tmux must be resolved from the LOGIN PATH:
   // launchd gives a GUI app a bare PATH and /opt/homebrew/bin is not on it.
@@ -1151,7 +156,7 @@ app.whenReady().then(async () => {
     packaged: app.isPackaged,
     override: process.env['TC_TMUX_SOCKET']
   })
-  backend = await probeTmux(env, app.getPath('userData'), tmuxSocket)
+  state.backend = await probeTmux(env, app.getPath('userData'), tmuxSocket)
 
   // One line naming everything an outside observer needs, because for a
   // PACKAGED app stdout is the only channel there is: no IPC into a test
@@ -1169,1229 +174,104 @@ app.whenReady().then(async () => {
   // where the app inherits the developer's own terminal environment.
   console.log(
     `[startup] packaged=${app.isPackaged} userData=${app.getPath('userData')} ` +
-      `socket=${tmuxSocket} backend=${backend.kind} (${backend.reason}) ` +
+      `socket=${tmuxSocket} backend=${state.backend.kind} (${state.backend.reason}) ` +
       `PATH=${env['PATH'] ?? '<none>'}`
   )
 
   // Load before the menu and window exist: Task 10 gives the menu the restore
   // settings, and the renderer's first act is layout:load, which needs a
   // resolved store to answer from.
-  layoutStore.load()
+  stores.layoutStore.load()
 
-  // M112. Telemetry, if and only if a DSN is here. Decided AFTER the store
-  // loads (the setting lives there) and BEFORE the window exists (the
-  // renderer learns the decision as an argv flag, not a channel). The ~100 ms
-  // of boot above this line is uncovered, and that is the trade. The
-  // minidump integration — process memory — rides only on its own setting.
-  //
-  // Fix round 1 (review, IMPORTANT 1): `@sentry/electron/main` pulls in all
-  // of `@sentry/node`, and `externalizeDepsPlugin` leaves that as a real
-  // `require()` in `out/main/index.js` — a static top-level import would run
-  // it on EVERY launch, DSN or not, which is exactly the load the posture
-  // ("no process may load or initialise the SDK at all" with no DSN)
-  // forbids. The dynamic `import()` below only executes once `plan.on` is
-  // true, matching the shape `renderer/main.tsx` already used.
-  {
-    const plan = telemetryPlan((id) => layoutStore.getSetting(id))
-    if (plan.on) {
-      // Fix round 1 (review, IMPORTANT 2): this whole block sits inside
-      // `app.whenReady().then(async () => {…})` with no `.catch` on that
-      // chain, and `createWindow()` is hundreds of lines below. A DSN that
-      // passes telemetryPlan's regex but upsets the SDK (or a minidump
-      // handler that fails to install) would otherwise throw here, becoming
-      // an unhandled rejection that leaves the app permanently window-less
-      // — the exact failure mode `renderer/main.tsx`'s own neighbouring
-      // comment already names as "not hypothetical", now reachable from an
-      // opt-in diagnostics feature nobody asked to depend on for the app to
-      // open at all. Caught, logged, and `telemetryOn` stays false: a failed
-      // telemetry init must degrade to off, never to a blank window.
-      try {
-        const { init: sentryInit, IPCMode, onUncaughtExceptionIntegration, onUnhandledRejectionIntegration, electronMinidumpIntegration, linkedErrorsIntegration, functionToStringIntegration } = await import('@sentry/electron/main')
-        const paths = { userData: app.getPath('userData'), home: app.getPath('home') }
-        const integrations = [onUncaughtExceptionIntegration(), onUnhandledRejectionIntegration(), linkedErrorsIntegration(), functionToStringIntegration()]
-        if (plan.nativeCrashes) integrations.push(electronMinidumpIntegration())
-        sentryInit({
-          dsn: plan.dsn,
-          release: `terminal-canvas@${app.getVersion()}`,
-          sendDefaultPii: false,
-          defaultIntegrations: false,
-          integrations,
-          // Classic rides Electron IPC to main, which holds the DSN and the
-          // scrubber. Protocol mode registers a `sentry-ipc://` handler the
-          // renderer CSP (`default-src 'self'`) would refuse with no error —
-          // so the mode is named here, never left at the SDK's own default
-          // (`Both`). This is a MAIN-only option in the real 7.18.0 types
-          // (`ElectronMainOptions`, not `ElectronRendererOptions`): it
-          // decides how main LISTENS, so `main.tsx`'s renderer-side
-          // `init()` call takes no `ipcMode` at all — passing one there
-          // does not typecheck. What DOES need pairing on that side is
-          // `preload/index.ts`'s `hookupIpc()` call (fix round 1, CRITICAL):
-          // Classic mode with nothing exposing `window.__SENTRY_IPC__`
-          // means the renderer falls back to fetching `sentry-ipc://…`,
-          // which the CSP refuses with no error — the silent failure this
-          // feature exists to avoid.
-          ipcMode: IPCMode.Classic,
-          // Fix round 1 (review, MINOR 1): `scrubEvent` returns `Dict | null`
-          // (`Record<string, unknown> | null`), which is not provably
-          // related to Sentry's `Event` type — going through `unknown`
-          // makes that widening explicit rather than asserting a direct
-          // relationship that does not exist. `scrubEvent` itself is
-          // Task 3's and stays unmodified.
-          beforeSend: (event) => scrubEvent(event, paths) as unknown as typeof event | null,
-          beforeBreadcrumb: () => null
-          // M112 review, IMPORTANT 1: `beforeSend` only sees envelopes the SDK
-          // resolves to an EVENT (`node_modules/@sentry/electron/main/ipc.js`'s
-          // `handleEnvelope`, confirmed against the installed 7.18.0 tree).
-          // Profile chunks, span containers and replay envelopes take a
-          // different branch of that function straight to
-          // `getTransport().send(...)` — `scrubEvent` never runs on them. This
-          // is safe TODAY only because `renderer/main.tsx`'s own `init()` call
-          // passes `defaultIntegrations: false` plus exactly
-          // `globalHandlersIntegration()`, which manufactures error events and
-          // nothing else. The natural next edit to that call —
-          // `replayIntegration()`, `browserTracingIntegration()`, or the logs
-          // integration, any of which starts emitting a type `beforeSend`
-          // cannot see — would export renderer data around this allowlist with
-          // NO symptom: no failed check, no thrown error, just unscrubbed
-          // bytes on the wire. `verify:meta telemetry.5` pins that
-          // `globalHandlersIntegration` is *named* in that call; it does not
-          // and cannot pin that nothing else is. Whoever adds a second
-          // renderer integration must widen `scrubEvent` (or gate the new
-          // envelope kind before it reaches the transport) in the same change.
-        })
-        telemetryOn = true
-        console.log(`[startup] telemetry=on nativeCrashes=${plan.nativeCrashes}`)
-      } catch (error: unknown) {
-        console.error('[startup] telemetry failed to initialise; continuing without it', error)
-      }
-    } else {
-      console.log(`[startup] telemetry=off (${plan.reason})`)
-    }
-  }
+  // AFTER the store loads (the setting lives there) and BEFORE the window
+  // exists (the renderer learns the decision as an argv flag, not a channel).
+  await initTelemetry(state, stores)
 
-  // M55. A tmux session with no panel to reach it holds a process and a
-  // shell the user cannot see, close, or type into — possible if a crash
-  // landed between a spawn and the store's coalesced save. Until M55 these
-  // were killed outright ("adopting would mint geometry the user never
-  // chose"); placement exists now, so the user is ASKED, once, by name.
-  // Never adopted silently: no dialog, no restore.
-  //
-  // The known set is EVERY workspace's ids. It used to be the active
-  // workspace's alone, which killed a session kept across quit (M38) for a
-  // panel in a hidden workspace at the next launch — verify:tmux orphan.1.
-  let recovered: OrphanRow[] = []
-  {
-    const known = new Set(layoutStore.workspaces().flatMap((w) => w.panelIds))
-    const orphans = findOrphans(ptyManager.list(), known)
-    let restore = false
-    if (orphans.length > 0) {
-      const prompt = orphanPrompt(orphans)
-      // App-modal: the window does not exist yet, and that is fine. Restore
-      // is the default button because the cost of a wrong Discard is an
-      // agent's work, and the cost of a wrong Restore is a panel to close.
-      const { response } = await dialog.showMessageBox({
-        type: 'question',
-        message: prompt.message,
-        detail: prompt.detail,
-        buttons: prompt.buttons,
-        defaultId: 0,
-        cancelId: 1
-      })
-      restore = response === 0
-    }
-    // Collected as the loop runs rather than from a second list() call: a
-    // session KILLED here has not survived, and treating it as though it
-    // had would leave its baseline in place for a panel that is about to
-    // spawn a brand-new agent.
-    const surviving: string[] = []
-    // M77. A chat's baseline survives a relaunch: the conversation RESUMES
-    // (`--resume`) rather than starting over, so its starting point is still
-    // the right thing to diff against. Every saved chat panel counts.
-    for (const w of layoutStore.mergedWorkspaces()) for (const p of w.panels) if (p.kind === 'chat') surviving.push(p.id)
-    const orphanIds = new Set(orphans.map((o) => o.panelId))
-    for (const session of ptyManager.list()) {
-      if (known.has(session.panelId)) { surviving.push(session.panelId); continue }
-      if (orphanIds.has(session.panelId) && restore) { surviving.push(session.panelId); continue }
-      console.warn(
-        `[tmux] orphan session ${session.panelId} (pid ${session.pid}) has no saved ` +
-          'panel; discarding it. A session with no panel cannot be reached, closed, or typed into.'
-      )
-      backend.destroy(session.panelId)
-    }
-    if (restore) recovered = orphans
+  // M55. The orphan sweep and the stale-baseline drop, both of which need the
+  // store loaded and neither of which needs a window.
+  const recovered = await sweepOrphans(state, stores)
 
-    // A baseline describes ONE session's starting point, and quitting the app
-    // kills every session by default (before-quit's end arm runs shutdown(), i.e.
-    // kill-server; the M38 keep arm is exactly the case where sessions DO survive
-    // and their baselines are kept, which staleBaselineIds handles by asking), so
-    // a baseline that outlived its session would have the next launch's fresh
-    // agent diffed against a snapshot from a previous day — blaming it for
-    // every edit the user made by hand in between. Dropped HERE, at startup,
-    // and nowhere else: PtyManager's in-memory capturedBaselineIds is the
-    // guard that covers Cmd+R within one run, where the sessions really do
-    // survive and recapture really would be wrong, and this main process's
-    // copy of that set is empty by construction. See staleBaselineIds' own
-    // comment (verify:review 37/37b).
-    for (const id of staleBaselineIds(layoutStore.baselineIds(), surviving)) {
-      console.log(
-        `[review] dropping the stored baseline for panel ${id}: its session did not ` +
-          `survive, so its next spawn is a new session and needs a new snapshot.`
-      )
-      layoutStore.dropBaseline(id)
-    }
-  }
+  menu.rebuildMenu()
 
-  rebuildMenu()
-  // M73. The chat panel's verbs over the runtime and the transcript log.
-  // `create` refuses BY NAME before any process exists: a directory that is
-  // not there (a file is refused too, spawn-request.ts's rule) and a CLI the
-  // probe did not find — the two facts a first send would otherwise discover
-  // as an `exited` session with an ENOENT in its stderr.
-  /**
-   * M84. THE WATCHER RUNTIME'S ARMING, which is main's alone.
-   *
-   * `watch-runner.ts` answers "run it and tell me how it went"; the four
-   * kinds of trigger are armed here, and all four call the SAME `fire`. A
-   * second path into a run would be a watcher that runs twice for one save.
-   *
-   * Nothing here allocates a pty: a watcher's process is an ordinary
-   * `child_process.spawn` with its output read as bytes and kept only as a
-   * capped tail. That is what lets a canvas hold twenty watchers.
-   */
-  const watchFileWatchers = new FileWatchers()
-  const watchDirWatchers = new Map<string, FSWatcher>()
-  const watchTimers = new Map<string, NodeJS.Timeout>()
-  const watchTriggers = new Map<string, WatchTrigger>()
-  const watchRunner = createWatchRunner({
-    spawn: (spec: WatchSpawnSpec, handlers: WatchHandlers) => {
-      const child = spawnChild(spec.command, [...spec.args], { cwd: spec.cwd, env: loginEnv, shell: false })
-      // stdout and stderr into ONE tail, in arrival order: a failing command
-      // says why on stderr and what it was doing on stdout, and two separate
-      // streams in a 340px body would interleave wrongly anyway.
-      child.stdout?.on('data', (chunk: Buffer) => handlers.onData(chunk.toString('utf8')))
-      child.stderr?.on('data', (chunk: Buffer) => handlers.onData(chunk.toString('utf8')))
-      // `error` is a spawn failure (ENOENT for a command that is not there),
-      // which must reach the same exit arm rather than vanishing: a watcher
-      // that shows `working` forever because its command does not exist is
-      // this milestone's worst silent failure.
-      child.on('error', (error: Error) => handlers.onData(`${error.message}\n`))
-      child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => handlers.onExit(code, signal))
-      return { kill: (sig?: string) => { try { child.kill((sig ?? 'SIGTERM') as NodeJS.Signals) } catch { /* already gone */ } } }
-    },
-    now: () => Date.now(),
-    ledger: { append: (row) => runLedger.append(row) },
-    onState: (id, state) => {
-      // sendToRenderer OPENS a window when there is none (macOS's closed-window
-      // state), so a timer watcher's tick would pop the app back open while
-      // nobody is looking (M84's verifier). A state event is news for a window
-      // that exists; there is no window to tell otherwise.
-      const wc = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-      if (wc !== null && !wc.isLoading()) wc.send(IPC_EVENTS.WATCHER_STATE, { id, ...state })
-    }
-  })
-  watchRunnerRef = watchRunner
+  const watch = createWatchWiring(state, stores)
+  // M84. Read by the quit sequence: a watcher's child is an ordinary process
+  // that nothing else in that sequence would reach.
+  state.watchRunner = watch.runner
+
+  const palette = createPaletteWiring(state, stores, places, menu, control, which)
   // M101. Arm every routine the layout holds; a tick that fell while the app
   // was closed is marked missed here (startup only), never fired.
-  armRoutines(true)
-  const disarmWatch = (id: string): void => {
-    watchFileWatchers.close(id)
-    const dir = watchDirWatchers.get(id)
-    if (dir !== undefined) { dir.close(); watchDirWatchers.delete(id) }
-    const timer = watchTimers.get(id)
-    if (timer !== undefined) { clearInterval(timer); watchTimers.delete(id) }
-    watchTriggers.delete(id)
-  }
-  /**
-   * A `panel` trigger is armed by the RENDERER, not here: it is the side that
-   * already learns every exit and every turn's end (it draws the handoff
-   * edges from exactly those events), and it decides with `handoffFires` —
-   * the same one table — before calling `watcher:run`. Arming it here would
-   * need main to learn panel endings a second way, and the two paths would
-   * disagree only in the cases nobody tests.
-   */
-  /**
-   * M84. Watchers main is still arming for panels that no longer exist.
-   *
-   * Arming is the renderer's gesture and disarming is too, so any path that
-   * removes a panel WITHOUT passing through close, undo, reset or workspace
-   * delete — a reload, a crash and reopen — leaves main holding an interval
-   * and a recursive watch that go on RUNNING THE COMMAND for a node nobody
-   * can see or stop. Main reconciles against its own layout store, which is
-   * the only place that knows every workspace's panels.
-   */
-  const reconcileWatchers = (): void => {
-    const known = new Set<string>()
-    // mergedWorkspaces() is the one reader that carries every workspace's
-    // whole panels — a rail row's panelIds would do here too, but this is the
-    // API that already exists and it copies what it returns.
-    for (const workspace of layoutStore.mergedWorkspaces()) {
-      for (const panel of workspace.panels) if (panel.kind === 'watcher') known.add(panel.id)
-    }
-    for (const id of watchRunner.ids()) {
-      if (!known.has(id)) { disarmWatch(id); watchRunner.remove(id) }
-    }
-  }
+  palette.armRoutines(true)
 
-  const watcherHandlers: WatcherHandlers = {
-    create: (req) => {
-      reconcileWatchers()
-      const cwd = resolveCwd(req.cwd)
-      let isDir = false
-      try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
-      if (!isDir) return { ok: false, reason: `no such directory: ${req.cwd}` }
-      if (req.command.trim() === '') return { ok: false, reason: 'a watcher needs a command to run' }
-      // Idempotent at an id: a restored canvas re-creates every watcher it
-      // holds, and a second arm on the same id would double every trigger —
-      // one save, two runs, forever, with nothing on screen saying why.
-      disarmWatch(req.id)
-      watchRunner.add({ id: req.id, cwd, command: req.command, args: req.args, trigger: req.trigger })
-      watchTriggers.set(req.id, req.trigger)
-      // Disarmed on purpose: the watcher is KNOWN (it can still be run by
-      // hand, and its last run is still its state) and nothing is armed. This
-      // is a pause, not a delete — the node says which it is.
-      if (req.armed === false) return { ok: true }
-      const trigger = req.trigger
-      if (trigger.kind === 'path' || trigger.kind === 'git-ref') {
-        // A file and a DIRECTORY are watched differently, and getting this
-        // wrong is silent: `FileWatchers` watches a file by watching its
-        // parent and filtering on its basename (M22's atomic-rename rule,
-        // which is how every editor and every agent writes a file), and
-        // handed a directory it reads it as a file and refuses. A directory
-        // is watched recursively instead — the commonest trigger of all is
-        // "anything under src".
-        //
-        // A git trigger is a FILE watch on `.git/HEAD`, whose rewrite is what
-        // a branch change, a checkout and a commit have in common.
-        const target = trigger.kind === 'path' ? resolveCwd(trigger.path) : join(resolveCwd(trigger.root), '.git', 'HEAD')
-        let isDirTarget = false
-        try { isDirTarget = statSync(target).isDirectory() } catch { isDirTarget = false }
-        if (isDirTarget) {
-          try {
-            // Coalesced by the runner itself (one run at a time, one pending),
-            // so a save that touches forty files is one run.
-            const w = fsWatch(target, { persistent: false, recursive: true }, () => watchRunner.fire(req.id))
-            // An FSWatcher is an EventEmitter, and an unhandled `error` event
-            // THROWS in the main process — deleting or unmounting a watched
-            // directory is an ordinary thing to do, and without this arm it
-            // takes the whole app down (M84's verifier).
-            w.on('error', (error: Error) => {
-              disarmWatch(req.id)
-              const wc = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-              if (wc !== null && !wc.isLoading()) {
-                wc.send(IPC_EVENTS.WATCHER_STATE, { id: req.id, ...(watchRunner.stateOf(req.id) ?? { status: 'not-started' as const, tail: '', pending: false }), disarmed: `stopped watching ${target}: ${error.message}` })
-              }
-            })
-            watchDirWatchers.set(req.id, w)
-          } catch (error) {
-            disarmWatch(req.id)
-            return { ok: false, reason: `could not watch ${target}: ${String(error)}` }
-          }
-        } else {
-          const first = watchFileWatchers.watch(req.id, target, () => watchRunner.fire(req.id))
-          if (first.kind === 'missing' || first.kind === 'unreadable') {
-            disarmWatch(req.id)
-            return { ok: false, reason: `nothing to watch at ${target}` }
-          }
-        }
-      } else if (trigger.kind === 'timer') {
-        if (trigger.everyMs < WATCH_TIMER_MIN_MS) return { ok: false, reason: `the shortest interval is ${WATCH_TIMER_MIN_MS / 1000}s` }
-        const timer = setInterval(() => watchRunner.fire(req.id), trigger.everyMs)
-        // Never keep the app alive for a watcher: quitting with a timer armed
-        // must exit, not wait for the next tick.
-        timer.unref?.()
-        watchTimers.set(req.id, timer)
-      }
-      return { ok: true }
-    },
-    run: (id) => watchRunner.fire(id),
-    stop: (id) => watchRunner.stop(id),
-    dispose: (id) => { disarmWatch(id); watchRunner.remove(id) },
-    list: () => watchRunner.ids().map((id) => ({ id, ...(watchRunner.stateOf(id) ?? { status: 'not-started' as const, tail: '', pending: false }) }))
-  }
+  const toolbox = createToolboxHandlers(state, places)
 
-  const agentHandlers: AgentHandlers = {
-    create: (spec: AgentSessionSpec): AgentCreateResult => {
-      const manager = agentSessions
-      if (manager === null) return { kind: 'refused', reason: 'the agent runtime has not started yet' }
-      // M99. Refused by the backend's ROW: the probe's path for that binary,
-      // and the row's own `noCli` sentence. A lookup, never a switch.
-      const backend = backendOf(spec)
-      const cliPath: Record<AgentBackend, string | null> = { claude: claudePath, codex: codexPath, copilot: copilotPath, acp: copilotPath }
-      if (cliPath[backend] === null) return { kind: 'refused', reason: BACKENDS[backend].reasons.noCli }
-      // M120. A chat with NO place: the app's own folder, made here; the Places
-      // gate is bypassed BY CONSTRUCTION (the folder is the app's), and a
-      // teammate beside it is refused first — a teammate has places.
-      const sandboxRefusal = sandboxTeammateRefusal(spec)
-      if (sandboxRefusal !== null) return { kind: 'refused', reason: sandboxRefusal }
-      let cwd: string
-      if (spec.sandbox === true) {
-        const made = resolveSandboxCwd(app.getPath('userData'), spec.id, realSandboxFs)
-        if (made.kind === 'refused') return { kind: 'refused', reason: made.reason }
-        cwd = made.path
-      } else {
-        // M100. Places first — on the EXPANDED path, before resolveCwd's fallback
-        // to home could turn a refused folder into an allowed one silently.
-        const place = placesGate.check(spec.teammateId, expandTilde(spec.cwd))
-        if (!place.ok) return { kind: 'refused', reason: place.reason }
-        cwd = resolveCwd(spec.cwd)
-      }
-      // M100. The brief rides EVERY spawn from the roster main holds — the
-      // renderer never carries it, and a relaunch's re-create gets it again
-      // (the M81 supervisor rule, reached for an identity).
-      const mate = spec.teammateId === undefined ? undefined : layoutStore.teammates().find((t) => t.id === spec.teammateId)
-      // M131. THE ONE APPEND SITE (M100's rule: never a second path, never a
-      // renderer-side copy). A project-scoped skill outside this teammate's
-      // places is dropped here — never named to the agent — because "You
-      // can use X" for a skill it cannot read would be worse than silence.
-      // M131 fix round 1. A teammate chat's cwd is often a worktree LANE
-      // (M113's board dispatch), never the repository — the SAME
-      // translation `placesGate` already applies via `worktreeRootOf`, so a
-      // project skill whose repository IS in this teammate's places is not
-      // silently dropped just because the chat runs in a lane of it.
-      const skillsRepoRoot = repoRootForBrief(cwd, laneRootOf)
-      const skillsLine = mate === undefined ? '' : skillsBriefLine(skillsForBrief(mate, skillsRepoRoot, fsRealpath).named)
-      const mateText = mate !== undefined && (mate.brief.trim() !== '' || skillsLine !== '')
-        ? `You are ${mate.name}.${mate.brief.trim() !== '' ? ` ${mate.brief.trim()}` : ''}${skillsLine}`
-        : undefined
-      const brief = mateText !== undefined ? { appendSystemPrompt: [spec.appendSystemPrompt, mateText].filter((x): x is string => x !== undefined && x !== '').join('\n\n') } : {}
-      let isDir = false
-      try { isDir = statSync(cwd).isDirectory() } catch { isDir = false }
-      if (!isDir) return { kind: 'refused', reason: `no such directory: ${spec.cwd}` }
-      const snapshot = manager.create({ ...spec, cwd, ...brief })
-      // M77. The SAME capture PtyManager fires, keyed by the chat's panel id,
-      // so review:panel / review:baseline / review:at answer for a chat with
-      // no change to the engine. The store's once-only guard makes a
-      // relaunch's re-create a no-op.
-      captureBaseline(spec.id, cwd)
-      // M76. A reloaded renderer re-creates every chat by id; a question
-      // still pending must light its attention surfaces again.
-      approvals?.resync(spec.id)
-      return { kind: 'created', snapshot }
-    },
-    // M75. Attachments are resolved HERE (the renderer has no fs): every one
-    // must decode or the send is refused whole, naming the one that could not.
-    send: (id, text, attachments) => {
-      const images: { mediaType: string; base64: string; name: string }[] = []
-      for (const attachment of attachments) {
-        const resolved = resolveAttachment(attachment)
-        if (resolved.kind === 'refused') return { refused: resolved.reason }
-        images.push({ mediaType: resolved.mediaType, base64: resolved.base64, name: resolved.name })
-      }
-      const answer = agentSessions?.send(id, text, images) ?? 'no-session'
-      // M118. Every refusal in the SESSION's row's words — the first cut answered codex's for every backend.
-      const row = BACKENDS[agentSessions?.get(id)?.backend ?? 'claude']
-      if (answer === 'refused-backend') return { refused: row.reasons.noCli }
-      if (answer === 'refused-sandbox') return { refused: row.reasons.noSandbox }
-      if (answer === 'refused-images') return { refused: row.reasons.noImages }
-      // M82. The ceiling refuses BY NAME with the fix, in dollars the user set.
-      if (answer === 'refused-budget') {
-        const windowPct = Number(layoutStore.getSetting('agents.budgetWindowPercent')) || 0
-        const util = windowUtilization(agentSessions?.rateLimit() ?? RATE_LIMIT_NONE)
-        if (windowPct > 0 && util !== undefined && util >= windowPct / 100) {
-          return { refused: `over the ${windowPct}% usage-window budget for this canvas — raise agents.budgetWindowPercent in settings, or wait for a window to reset` }
-        }
-        const limit = Number(layoutStore.getSetting('agents.budgetUsd')) || 0
-        return { refused: `over the $${limit.toFixed(2)} budget for this canvas — raise it in settings, or start a new canvas` }
-      }
-      return answer
-    },
-    clipboardImage: () => {
-      const image = clipboard.readImage()
-      if (image.isEmpty()) return null
-      const png = image.toPNG()
-      // Capped BEFORE it crosses the bridge, with the cap the send would apply.
-      if (png.length > ATTACHMENT_MAX_BYTES) return { refused: `the clipboard image is larger than the ${Math.round(ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB attachment cap` }
-      return { mediaType: 'image/png', base64: png.toString('base64'), size: png.length }
-    },
-    // M145. The clipboard image as a FILE, for a terminal: the read is here
-    // (Electron's clipboard), the write and the cap are the module's.
-    clipboardFile: () => writeClipboardImage({
-      dir: join(app.getPath('userData'), 'attachments'),
-      now: () => Date.now(),
-      image: () => { const image = clipboard.readImage(); return image.isEmpty() ? null : image.toPNG() }
-    }),
-    interrupt: (id) => agentSessions?.interrupt(id) ?? false,
-    dispose: ({ id, drop }) => {
-      agentSessions?.dispose(id)
-      // M120. The sandbox folder goes with the chat — on dispose, never on exit.
-      if (drop) { agentTranscripts.drop(id); dropBaseline(id); disposeSandbox(app.getPath('userData'), id, realSandboxFs) }
-    },
-    // M98. `scope: 'session'` GRANTS the pending request's tool first, then
-    // answers through the one `answerPermission` — the grant is keyed by the
-    // tool name main holds in its own pending record, never by a name the
-    // renderer sent. A deny never grants, whatever the scope says.
-    answer: ({ id, requestId, answer, scope }) => {
-      const toolName = scope === 'session' && answer.allow ? agentSessions?.get(id)?.pending.find((p) => p.requestId === requestId)?.toolName : undefined
-      // M119. The grant goes FIRST so the answer itself can carry the vendor's
-      // word for it (ACP's allow_always — the manager reads preAnswer when it
-      // writes). `toolName` is defined only when the request is really PENDING
-      // in main's own record, so a grant for a question the process never heard
-      // cannot be minted here (the pending lookup above is the guard).
-      if (toolName !== undefined) approvals?.grant(id, toolName)
-      return agentSessions?.answerPermission(id, requestId, answer) ?? false
-    },
-    grants: (id) => approvals?.grantsOf(id) ?? [],
-    revokeGrants: (id) => { approvals?.revoke(id) },
-    // M138. The pool: refused by the runtime's own sentence before it exists.
-    poolStart: (req) => poolCaller?.start(req) ?? { kind: 'refused', reason: 'the agent runtime has not started yet' },
-    poolStop: (req) => poolCaller?.stop(req.templateId, req.key) ?? false,
-    list: () => agentSessions?.list() ?? [],
-    transcript: (id) => {
-      const read = agentTranscripts.read(id)
-      return { turns: read.turns, snapshot: agentSessions?.get(id) ?? null, ...(read.meta === undefined ? {} : { meta: read.meta }) }
-    },
-    // M74. Open a terminal's session as a chat. Three refusals, each named
-    // for its fix; the live check is the one-front-end-at-a-time rule.
-    // M97. Main counts, main stops: the request carries a mode and an optional
-    // task; the limit is the mode's unless the caller lowers it.
-    autoStart: (req) => agentSessions?.startAuto(req.id, { mode: req.mode, task: req.task, limit: req.limit }) ?? { kind: 'refused', reason: 'the agent runtime is not available' },
-    autoStop: (id) => agentSessions?.stopAuto(id) ?? false,
-    importSession: ({ fromPanelId, toPanelId }) => {
-      const sessionId = layoutStore.session(fromPanelId)
-      if (sessionId === undefined) return { kind: 'refused', reason: 'that terminal was not started as a claude session — start one from the Claude preset' }
-      if (ptyManager.list().some((s) => s.panelId === fromPanelId)) return { kind: 'refused', reason: 'stop the terminal first — one front-end at a time' }
-      const path = resolveTranscript(sessionId)
-      if (path === undefined) return { kind: 'refused', reason: 'claude has not written a transcript for that session yet' }
-      let text: string
-      try { text = readFileSync(path, 'utf8') } catch { return { kind: 'refused', reason: 'that session\'s transcript could not be read' } }
-      const imported = importClaudeTranscript(text)
-      agentTranscripts.drop(toPanelId)
-      for (const turn of imported.turns) agentTranscripts.appendTurn(toPanelId, turn)
-      agentTranscripts.appendMeta(toPanelId, imported.meta)
-      return { kind: 'imported', sessionId, turns: imported.meta.turns }
-    }
-  }
+  // POSITIONAL, AND THE ORDER IS THE CONTRACT. Every parameter of
+  // `registerIpcHandlers` is documented "appended last so no existing
+  // positional call site shifts" — `scripts/panels-entry.cjs` and the other
+  // Electron harness entries construct it the same way. Inserting, removing
+  // or reordering an argument here silently re-binds every later one to the
+  // wrong collaborator, and the failure is a wrong answer on a channel rather
+  // than a type error.
   registerIpcHandlers(
-    ptyManager,
-    layoutStore,
+    stores.ptyManager,
+    stores.layoutStore,
     () => ({
-      kind: backend.kind,
-      reason: backend.reason
+      kind: state.backend.kind,
+      reason: state.backend.reason
     }),
-    {
-      list: () =>
-        presetRows(
-          resolveAvailability(allPresets(layoutStore.presets()), which),
-          layoutStore.defaultPresetId()
-        ),
-      rename: (id, name) => {
-        const changed = layoutStore.renamePreset(id, name)
-        // The menu lists presets by name, and Cmd+N's template carries none —
-        // but a rename can still change what the menu SAYS, so rebuild. Cheap,
-        // and the alternative is a menu that disagrees with the palette until
-        // relaunch.
-        if (changed) afterPresetChange()
-        return changed
-      },
-      remove: (id) => {
-        const changed = layoutStore.deletePreset(id)
-        if (changed) afterPresetChange()
-        return changed
-      },
-      setDefault: (id) => {
-        layoutStore.setDefaultPreset(id)
-        afterPresetChange()
-      },
-      spawn: (id) => onSpawnPreset(id),
-      markPresetReviewed: (id) => {
-        const changed = layoutStore.markPresetReviewed(id)
-        // The menu labels an unread preset and disables it, so it must learn.
-        if (changed) afterPresetChange()
-        return changed
-      },
-      spawnWith: (req) => {
-        // M100. A teammate's terminal is gated the same way its chat is.
-        const place = placesGate.check(req.teammateId, expandTilde(req.cwd))
-        if (!place.ok) return { kind: 'refused' as const, reason: place.reason }
-        // One pure resolver, shared with the verify harness — see
-        // spawn-request.ts for the rules (absent command stays absent, a
-        // file is refused like a missing path, a typed command is a task).
-        const resolved = resolveSpawnRequest(req, allPresets(layoutStore.presets()), {
-          expand: expandTilde,
-          isDirectory: (p) => { try { return statSync(p).isDirectory() } catch { return false } }
-        })
-        if (resolved.kind === 'refused') return resolved
-        mainWindow?.webContents.send(IPC_EVENTS.PRESET_SPAWN, resolved.template)
-        return { kind: 'spawned' }
-      },
-      recentDirectories: () => layoutStore.recentDirectories(),
-      recentDirectoryUsed: () => layoutStore.recentDirectoryUsed(),
-      savePanel: (captured) => {
-        layoutStore.addPreset(presetFromCapture(layoutStore.presets(), captured))
-        rebuildMenu()
-      },
-      setWorktree: (id, on) => {
-        const changed = layoutStore.setPresetWorktree(id, on)
-        // The template Cmd+N holds carries the flag, so a change has to
-        // re-push it — the same reason setDefault goes through afterPresetChange.
-        if (changed) afterPresetChange()
-        return changed
-      },
-      requestReset: () => {
-        void confirmReset()
-      },
-      listPrompts: (cwd) =>
-        mergePrompts(
-          layoutStore.prompts(),
-          // resolveCwd is pty-manager's — the same expansion a spawn gets, so
-          // the prompts the palette lists come from the directory the panel
-          // is actually in, not from a literal '~' that resolves to nothing.
-          cwd === null ? [] : readProjectPrompts(resolveCwd(cwd))
-        ),
-      savePrompt: (name, body) => {
-        layoutStore.addPrompt({ id: mintPromptId(layoutStore.prompts()), name, body })
-      },
-      removePrompt: (id) => layoutStore.deletePrompt(id),
-      // M80. Built-ins first, then the user's — the preset list's own rule; a
-      // save mints an id when the caller has none; a delete refuses a built-in
-      // by returning false, the same answer a project prompt's id gets.
-      // M80. The resolved template, never a spawn: only main can turn an
-      // absent command into the login shell (M5b), and a template's node
-      // needs that answer before it mints anything.
-      presetTemplate: (id) => {
-        const found = allPresets(layoutStore.presets()).find((p) => p.id === id)
-        if (found === undefined) return null
-        // M253 (the critic, 1). A workflow node bound to a preset mints a
-        // panel straight from this template — the fifth door, and it must
-        // refuse an unread pack preset like the other four, by name.
-        const unread = unreviewedPresetReason(found)
-        return unread === null ? templateOf(found) : { refused: unread }
-      },
-      // M83. The ROOT is resolved HERE, in one place, for every door — the
-      // node, the chat's first-send context and the control verb. A chat
-      // panel's cwd is often a subdirectory, and keying its memory by that
-      // cwd would give the same repository two memories that never see each
-      // other, with nothing on screen saying so. A directory outside a
-      // repository keeps its own path as the key rather than failing: the
-      // store's named refusals are for an ABSENT root, not for a directory
-      // that git does not own.
-      // M89. The audit's read half — rows only, metadata by construction.
-      brokerAudit: (limit, service) => brokerAudit.list(limit, service),
-      // M88. GitHub through the injected requester, over the credential store.
-      // Through the BROKER: the client never reads the store, and the panel's
-      // reads sit in the audit beside the agents' own calls.
-      githubList: (panelId) => listGithubWorkItems({ broker, ...(panelId === undefined ? {} : { panelId }) }),
-      // M85. The vault's read, in main for `file-read.ts`'s reason. The root
-      // is expanded and realpath'd, NEVER resolveCwd'd: that helper falls back
-      // to $HOME for a path that is not there, and a typo'd vault would have
-      // walked the user's entire home directory and listed it as the vault
-      // (M85's verifier). A missing root is the reader's own "no vault" arm.
-      snapshotList: () => layoutSnapshots.list(),
-      // M142. History on #46's ledger; the renderer prices it.
-      ledgerUsage: (since) => runLedger.usage(since),
-      // M181. Both under userData: the picture bytes never cross as a file path the renderer could open.
-      imageRead: (path) => readImage(path),
-      starterPrepare: () => prepareStarter(join(app.getPath('userData'), 'starter')),
-      snapshotRestore: (at, afterId) => {
-        const path = join(app.getPath('userData'), 'layout-snapshots', `${at}.json`)
-        let bytes: string
-        try { bytes = readFileSync(path, 'utf8') } catch { return { kind: 'refused', reason: 'that snapshot is gone — the ring keeps the newest twenty' } }
-        const result = restoreFromSnapshot(layoutStore.current(), bytes, Date.now(), (n) => `n${n}`, afterId)
-        if (result.kind === 'refused') return result
-        const added = result.layout.workspaces[result.layout.workspaces.length - 1]!
-        layoutStore.addWorkspaceRecord(added)
-        return { kind: 'restored', workspaceId: added.id }
-      },
-      vaultRead: (root) => {
-        const expanded = expandTilde(root.trim())
-        let real = expanded
-        try { real = realpathSync(expanded) } catch { /* the reader answers with its reason */ }
-        armVaultWatch(real)
-        return readVault(real)
-      },
-      memoryList: async (root, limit) => {
-        if (root.startsWith(TEAMMATE_ROOT)) return teammateMemory.list(teammateSlug(root), limit)
-        const resolved = await memoryScope(root)
-        if (!resolved.ok) return { root, entries: [], skipped: 0, unresolved: resolved.reason }
-        return { ...memoryStore.list(resolved.root, limit), ...(resolved.scope === undefined ? {} : { scope: resolved.scope }) }
-      },
-      memoryAdd: async (req) => {
-        if (req.root.startsWith(TEAMMATE_ROOT)) {
-          const t = teammateMemory.add({ ...req, root: teammateSlug(req.root) })
-          return t.ok ? { ok: true } : { ok: false, reason: t.reason }
-        }
-        const resolved = await memoryScope(req.root)
-        if (!resolved.ok) return { ok: false, reason: resolved.reason }
-        const r = memoryStore.add({ ...req, root: resolved.root })
-        return r.ok ? { ok: true } : { ok: false, reason: r.reason }
-      },
-      listTemplates: () => allTemplates(layoutStore.templates()),
-      // M127. The shelf, whole. Parsed on the way in by the SAME rules the
-      // file is, so a malformed column reaching the store from the renderer
-      // is dropped by name rather than written back to disk.
-      shelf: () => layoutStore.shelf(),
-      saveShelf: (shelf) => {
-        const warnings: string[] = []
-        const parsed = parseShelf(shelf, warnings)
-        // M137. Said, never swallowed: a column dropped here is a column the
-        // renderer just showed the user, and the only other trace is its
-        // absence from the file. Not thrown (saveTeammate's shape) — the
-        // shelf is many columns and the good ones still land.
-        for (const w of warnings) console.warn(`[shelf] ${w}`)
-        return layoutStore.saveShelf(parsed)
-      },
-      // M100. The roster. A save is an upsert by id; the record is parsed by
-      // the same rules the file is (a relative place never lands).
-      listTeammates: () => layoutStore.teammates(),
-      saveTeammate: (teammate, cwd) => {
-        // A record the parser drops is REFUSED, never replaced with an empty one
-        // (which would wipe its places and services silently — the verifier).
-        const warnings: string[] = []
-        const parsed = parseTeammates([teammate], warnings)[0]
-        if (parsed === undefined) throw new Error(`the teammate could not be kept — ${warnings.join('; ')}`)
-        layoutStore.saveTeammate(parsed)
-        // M131 fix round 2. `cwd` arrives only from the assign door; its
-        // REAL (symlink-resolved) verdict on every project-scoped key just
-        // saved rides back on THIS response — no new channel, and no
-        // silent drop the pane could show as a plain success.
-        const notVisible = cwd === undefined || cwd === ''
-          ? []
-          : notVisibleFor(parsed, repoRootForBrief(cwd, laneRootOf), fsRealpath)
-        return notVisible.length > 0 ? { teammate: parsed, notVisible } : { teammate: parsed }
-      },
-      removeTeammate: (id) => layoutStore.deleteTeammate(id),
-      // M101. A save is refused BY NAME against M96's table and the teammate's
-      // schedule permission; a saved or deleted routine re-arms the runner.
-      listRoutines: () => layoutStore.routines(),
-      saveRoutine: (routine) => {
-        const parsed = parseRoutines([routine], [])[0]
-        if (parsed === undefined) return { kind: 'refused' as const, reason: `the routine could not be kept — the interval is at least ${ROUTINE_MIN_MS / 60_000} minute and it needs a name, a teammate and a prompt` }
-        const mate = layoutStore.teammates().find((t) => t.id === parsed.teammateId)
-        const refusal = routineRefusal(parsed, mate === undefined ? undefined : { name: mate.name, scheduling: mate.scheduling, places: mate.places })
-        if (refusal !== null) return { kind: 'refused' as const, reason: refusal }
-        layoutStore.saveRoutine(parsed)
-        armRoutines()
-        return { kind: 'saved' as const, routine: parsed }
-      },
-      removeRoutine: (id) => { const r = layoutStore.deleteRoutine(id); armRoutines(); return r },
-      runRoutine: (id) => routineRunner.runNow(id),
-      // A place is chosen in the OS dialog: the answer is absolute and real,
-      // which is the only kind the record keeps.
-      choosePlace: async () => {
-        const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'], title: 'Choose a folder this teammate may touch' })
-        return r.canceled || r.filePaths.length === 0 ? null : (r.filePaths[0] ?? null)
-      },
-      saveTemplate: (template, expectedRevision) => {
-        // A built-in saves as a user COPY with a new id (the built-ins are code, M80).
-        const id = template.id !== undefined && template.id !== '' && !isBuiltInTemplate(template.id)
-          ? template.id
-          : `tpl-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`
-        return layoutStore.saveTemplate({ ...template, id }, expectedRevision)
-      },
-      removeTemplate: (id) => (isBuiltInTemplate(id) ? false : layoutStore.deleteTemplate(id))
-    },
-    rebuildMenu,
-    reviewEngine,
-    reviewCommit,
-    credentialStore,
-    fileWatchers,
-    () => mainWindow,
-    toolboxCache,
+    palette.handlers,
+    menu.rebuildMenu,
+    stores.reviewEngine,
+    stores.reviewCommit,
+    stores.credentialStore,
+    stores.fileWatchers,
+    () => state.window,
+    stores.toolboxCache,
     join(app.getPath('userData'), 'diagnostics'),
-    {
-      list: () => layoutStore.worktrees(),
-      remove: (id) => worktreeManager.remove(id),
-      reveal: (id) => {
-        const found = layoutStore.worktrees().find((w) => w.id === id)
-        if (found === undefined) return false
-        shell.showItemInFolder(found.path)
-        return true
-      }
-    },
-    {
-      // The tail answers [] when persistence is off, so a card never shows
-      // lines from a log the user has asked not to keep — even one written
-      // before the toggle.
-      tail: (panelId, lines) =>
-        layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.tail(panelId, lines) : Promise.resolve([]),
-      clear: () => scrollbackLog.clearAll(),
-      // Gated on the SAME setting as tail: search reads the same files, so a
-      // user who turned persistence off must get nothing rather than stale
-      // hits from a log they asked not to keep.
-      // M122. Both logs. The scrollback half stays gated on the setting; the
-      // transcript half is a chat's own durable file and answers regardless
-      // — the palette's off reason says so.
-      search: (panelIds, query) => {
-        const kinds = new Map((layoutStore.mergedWorkspaces().find((w) => w.active)?.panels ?? []).map((p) => [p.id, p.kind ?? 'terminal'] as const))
-        const panels = panelIds.map((id) => ({ id, kind: kinds.get(id) ?? 'terminal' }))
-        return searchPanels(query, panels, {
-          scrollback: (ids, q, caps) => layoutStore.getSetting('scrollback.persist') === true ? scrollbackLog.search(ids, q, caps) : Promise.resolve([]),
-          transcript: (id) => agentTranscripts.read(id).turns
-        }, { maxHits: SEARCH_MAX_HITS, maxPerPanel: SEARCH_MAX_PER_PANEL })
-      }
-    },
-    // M48. The environment report, built on demand from facts this file
-    // already holds: the probe's outcome, the login env, the same which()
-    // the presets use, the backend the probe chose, the layout file.
-    async (again) => {
-      // M107. Check again: ask the login shell once more and REPORT what it
-      // found. The app's own environment (the presets' which, the PTYs' env)
-      // applies on relaunch — said on the row, so a green re-probe does not
-      // read as a fixed spawn.
-      const env2 = again ? await reprobeShellEnv() : loginEnv
-      const which2 = again ? (name: CliName) => whichFromEnv(name, env2) : which
-      return buildEnvReport({
-      env: env2,
-      shell: shellProbeOutcome(),
-      which: which2,
-      backend: { kind: backend.kind, reason: backend.reason, tmuxPath: backend.kind === 'tmux' ? (which('tmux') ?? null) : null },
-      layoutPath: join(app.getPath('userData'), 'layout.json'),
-      backupWritten: layoutStore.backupWritten(),
-      now: again ? Date.now() : probedAt,
-      control: { socket: controlSocketPath, cliPath: join(launcherDir, 'tc') },
-      // M107. Which shells were asked and whether one answered — the third state.
-      probe: shellProbeFacts()
-      })
-    },
-    // M51. The only place a Cmd-clicked link opens. The resolution is pure
-    // (link-open.ts); this does the two shell calls and turns their outcomes
-    // into a result — never a navigation of this window.
-    {
-      open: async (req) => {
-        const cwd = ptyManager.list().find((s) => s.panelId === req.panelId)?.cwd ?? homedir()
-        const r = resolveLinkOpen({ target: req.target, cwd }, { home: homedir(), exists: existsSync })
-        if (r.kind === 'url') { await shell.openExternal(r.url); return { kind: 'opened' } }
-        if (r.kind === 'path') {
-          const err = await shell.openPath(r.path)
-          return err ? { kind: 'refused', reason: err } : (r.note ? { kind: 'opened', reason: r.note } : { kind: 'opened' })
-        }
-        return { kind: 'refused', reason: r.reason }
-      }
-    },
+    createWorktreeHandlers(stores),
+    createScrollbackHandlers(stores),
+    createEnvReporter(state, stores, which),
+    createLinkHandlers(stores),
     // M52. The ledger's read half.
-    (panelId, limit) => runLedger.list(panelId, limit),
-    reviewDiscard,
-    // M58. The save dialog and the composited frame are main's; the arms and
-    // the scrubbing live in export.ts, plain-node tested. A written file is
-    // revealed in the Finder, which is the only "done" the palette can show.
-    {
-    ...createExporters({
-      log: scrollbackLog,
-      persistOn: () => layoutStore.getSetting('scrollback.persist') === true,
-      askPath: async (suggested) => {
-        const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
-        const options = { defaultPath: join(app.getPath('downloads'), suggested) }
-        const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-        return r.canceled || !r.filePath ? null : r.filePath
-      },
-      capture: async () => {
-        if (mainWindow === null || mainWindow.isDestroyed()) throw new Error('no window to capture')
-        return (await mainWindow.webContents.capturePage()).toPNG()
-      },
-      // M251. The same dialog, filtered to .pptx; the arms, the scrub and the
-      // report live in deck-export.ts, plain-node tested by verify:deck.
-      deck: createDeckExporter({
-        askPath: async (suggested) => {
-          const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
-          const options = { title: 'Export deck', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PowerPoint', extensions: ['pptx'] }] }
-          const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-          return r.canceled || !r.filePath ? null : r.filePath
-        }
-      })
-    }),
-    // M248. A deck to PDF: main reads the file, a hidden sandboxed window prints it.
-    deckPdf: createDeckPdf({
-      readText: async (path) => readFile(path),
-      readImage: (path) => readImage(path),
-      render: createPdfRenderer(BrowserWindow, app.getPath('temp')),
-      askPath: async (suggested) => {
-        const win = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : undefined
-        const options = { defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'PDF', extensions: ['pdf'] }] }
-        const r = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-        return r.canceled || !r.filePath ? null : r.filePath
-      }
-    })
-    },
-    agentHandlers,
-    watcherHandlers,
+    (panelId, limit) => stores.runLedger.list(panelId, limit),
+    stores.reviewDiscard,
+    createExportHandlers(state, stores),
+    createAgentHandlers(state, stores, places),
+    watch.handlers,
     // M103. The guest is resolved by the id the node learned on did-attach;
     // main checks it is a webview before reading anything.
     createBrowserHandlers({ guestOf: (id) => webContents.fromId(id) ?? null }),
-    {
-      ...boardLane,
-      laneStatus: (req) => reviewEngine.laneStatus(req.path, req.root),
-      // M197 (D05). The start flow's repository field: the SAME bounded
-      // one-level walk the lane makes to find one clone, asked for all of
-      // them, so the field can never offer a root the lane could not reach.
-      // Read-only; the arm decision is board-repo.ts's, where a check drives
-      // it — no suite bundles this file.
-      repositories: async (req) => repositoriesAnswer(
-        layoutStore.teammates().find((t) => t.id === req.teammateId),
-        { originOf: originOfDir, subdirs: subdirsOf, isRepoRoot: isRepoRootDir }
-      ),
-      // M115. The return path, in order: the lane's record (ids in, never a
-      // path from the renderer), `git push -u origin <branch>` in the lane
-      // with the USER's own git credentials (the app holds none for git),
-      // then the POST through the broker — whose own write gate asks M102's
-      // spend card on the teammate's chat before the token is read.
-      openPr: async (req) => {
-        const lane = layoutStore.worktrees().find((w) => w.id === req.worktreeId)
-        if (lane === undefined) return { kind: 'no-lane', reason: 'the lane\'s worktree record is gone — check the Worktrees list' }
-        const pushed = await gitRunner(buildPushArgs(lane.path, lane.branch))
-        if (!pushed.ok) return { kind: 'push-failed', reason: pushed.notFound ? 'git could not be run' : (pushed.stderr.split('\n').map((l) => l.trim()).filter((l) => l !== '').find((l) => /^(fatal|error):/i.test(l)) ?? pushed.stderr.trim().split('\n').pop() ?? 'git push failed') }
-        const root = await reviewEngine.status(lane.root)
-        const base = root.kind === 'status' ? root.branch : 'main'
-        return openPullRequest({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, head: lane.branch, base, title: req.title, body: req.body })
-      },
-      commentPr: (req) => commentIssue({ broker, panelId: req.panelId, teammateId: req.teammateId }, { repo: req.repo, number: req.number, body: req.body })
-    },
-    () => listPlugins(runClaudePluginList),
-    // M128. The same CLI, the same login env and the same timeout as the
-    // list above — two calls onto one binary, kept in step deliberately.
-    //
-    // The id is CHECKED against the list first, and never passed through
-    // from the renderer as given: `runClaudePluginDetails` builds an argv
-    // for a real binary, and the only ids this app has any business asking
-    // about are the ones `listPlugins` just answered with. `unknown` with a
-    // why is the same three-state shape every other arm returns, so an id
-    // that is not on the list reads as "we could not look this up" rather
-    // than as a plugin that ships nothing.
-    async (id) => {
-      const listed = await listPlugins(runClaudePluginList)
-      if (listed.kind === 'ok' && !listed.plugins.some((p) => p.id === id)) {
-        return { kind: 'unknown', why: 'not an enabled plugin' }
-      }
-      return describePlugin(runClaudePluginDetails(id), id)
-    },
-    // M129. The four writers, with every dependency resolved HERE and none
-    // of them nameable by the renderer: the writable roots are derived from
-    // the asking panel's own cwd (through `resolveCwd`, the same expansion a
-    // spawn gets) and the home the toolbox reads, the plugin paths are the
-    // CLI's own answer, and `trash` is `shell.trashItem` so a delete is
-    // recoverable in the Finder rather than gone.
-    skillWriteHandlers({
-      resolveCwd,
-      /**
-       * M196 (D04). D02's inherited item, closed — and NARROWED to the door it
-       * is about after the critic found the first cut had closed three others.
-       *
-       * A DISPATCHED chat's cwd is a worktree LANE, so a project skill CREATED
-       * from one landed in `userData/worktrees/…/.claude/skills` and went with
-       * the lane, having never been in the repository the person meant. This
-       * names where a NEW project skill goes and nothing else.
-       *
-       * The first cut wrapped `resolveCwd` instead, which also moved
-       * `skillRoots` — the CONTAINMENT list every verb is judged against — so
-       * `write`, `rename` and `remove` were refused for a project skill opened
-       * from a lane, saying it was "outside every skills folder this app may
-       * write" about a file sitting in the repository's own checkout. A door
-       * that worked before the milestone, closed by it, with a sentence that
-       * was actively wrong. `skillRoots` therefore keeps the asking cwd's own
-       * project root as well (`depsFor` below), so nothing that was writable
-       * stopped being writable.
-       *
-       * `existsSync` is the second half of that narrowing. `resolveCwd` falls
-       * back to the HOME directory for a path that does not exist — its own
-       * comment calls that a spawn-safety fallback that must not be reused —
-       * so a lane whose repository has since been moved or deleted (records
-       * outlive their panels by design) would have written a *project* skill
-       * into `~/.claude/skills`, indistinguishable from a user one, silently.
-       */
-      projectRootOf: (cwd) => { const root = laneRootOf(expandTilde(cwd)); return root !== undefined && existsSync(root) ? root : undefined },
-      home: resolveToolboxHome,
-      realpath: realpathSync,
-      plugins: async () => {
-        const listed = await listPlugins(runClaudePluginList)
-        // `unknown` reads as NO plugin paths, which only ever makes the
-        // plugin refusal miss — never a write into a plugin's folder that
-        // the containment check would then have to be trusted to catch, so
-        // the roots below are what actually bound this.
-        return listed.kind === 'ok' ? listed.plugins : []
-      },
-      trash: (path) => shell.trashItem(path)
-    }),
-    // M130. A chat panel's trail is derived in the renderer from events
-    // already in memory (Task 8) and never asks main — `agentSessions.get`
-    // is keyed by exactly the chat panels this manager tracks, so its
-    // presence is the same fact the chat store itself reads. A terminal
-    // panel here only ever runs claude (`codex.terminalDoor` is false —
-    // §6.1's `codex` refusal has no way to be reached from a terminal in
-    // this app today, and nothing here pretends otherwise): the only
-    // question is whether it has a pinned agent session at all.
-    async (panelId) => {
-      if (agentSessions?.get(panelId) != null) {
-        return { kind: 'unreadable', why: 'this is a chat; its trail is in memory' }
-      }
-      const sessionId = layoutStore.session(panelId)
-      return trailFor({
-        backend: 'claude',
-        panelId,
-        pinnedSession: () => sessionId,
-        resolveTranscript,
-        // Raw bytes + the file's current size — trailFor owns the decoder
-        // and the shrink check itself now (see skill-trail-read.ts), so this
-        // is the same shape transcript-reader.ts's readFrom already returns.
-        readDelta: readTranscriptFrom
-      })
-    },
-    // M123. The update NOTICE's one verb, over the one real fetcher in the
-    // app that is not the broker's. Here and not in update-check.ts so the
-    // module runs under plain node and `verify:meta update.1` can pin that
-    // no suite bundles an `https` call. A GET with a deadline for the whole
-    // call (the M87 rule: node's socket timeout is inactivity, and a byte
-    // every 29 s holds a call open forever), GitHub's required User-Agent,
-    // and NO redirect following — the feed url is fixed, and a 3xx to
-    // somewhere else is a could-not-check naming the status, not a fetch of
-    // wherever it pointed. The repository is package.json's own
-    // `repository.url`; a build without one gets the third state by name.
-    {
-      check: () => {
-        let repo: string | null = null
-        try { repo = repoOf(JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))) } catch { repo = null }
-        if (repo === null) return Promise.resolve({ kind: 'could-not-check', reason: 'this build names no GitHub repository in its package.json' })
-        return checkForUpdate(app.getVersion(), {
-          repo,
-          fetch: (url) => new Promise((resolve, reject) => {
-            const deadline = setTimeout(() => { r.destroy(new Error('GitHub did not answer within 10 seconds')) }, 10_000)
-            const r = httpsGet(url, { headers: { 'User-Agent': 'terminal-canvas', Accept: 'application/vnd.github+json' } }, (res) => {
-              const chunks: Buffer[] = []
-              res.on('data', (c: Buffer) => { chunks.push(c) })
-              res.on('end', () => { clearTimeout(deadline); resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }) })
-            })
-            r.on('error', (error) => { clearTimeout(deadline); reject(error) })
-          })
-        })
-      }
-    },
-    // M185. The preview: discovery READS (one lsof over the pids the renderer
-    // already holds, one package.json at the directory it named) and starts
-    // nothing; capture writes one PNG under `userData/captures` and answers
-    // with the page it is a picture of. The guest is resolved by the id the
-    // node learned on did-attach, and checked to be a webview, exactly as the
-    // read path does — one rule, two doors.
-    {
-      discover: (req) => discoverPreview({
-      // M186. The tree, from ONE `ps` snapshot: the socket is held by a
-      // descendant of the panel's shell, never by the shell.
-      descendants: async (roots) => {
-        try {
-          const out = await new Promise((resolve) => {
-            const child = spawnChild('ps', ['-Ao', 'pid=,ppid='], { stdio: ['ignore', 'pipe', 'ignore'] })
-            let text = ''
-            child.stdout && child.stdout.on('data', (c) => { text += c.toString('utf8') })
-            child.on('error', () => resolve(''))
-            child.on('close', () => resolve(text))
-          })
-          const rows = String(out).split('\n').map((line) => line.trim().split(/\s+/).map(Number)).filter((f) => f.length === 2 && Number.isInteger(f[0]) && Number.isInteger(f[1])).map(([pid, ppid]) => ({ pid, ppid }))
-          return descendantsOf(roots, rows)
-        } catch { return roots }
-      },
-        pids: Array.isArray(req?.pids) ? req.pids.filter((n) => Number.isInteger(n) && n > 0) : [],
-        cwd: typeof req?.cwd === 'string' && req.cwd.trim() !== '' ? req.cwd : app.getPath('home'),
-        run: async (command, args) => {
-          const out = await new Promise<{ code: number; stdout: string }>((resolve) => {
-            const child = spawnChild(command, [...args], { stdio: ['ignore', 'pipe', 'ignore'] })
-            let stdout = ''
-            // M186 (M185's critic, 3). A DEADLINE, and deliberately not
-            // unref'd: lsof blocks indefinitely on a stale network mount and
-            // the invoke would never settle — the pane would say `looking…`
-            // for ever. M128 recorded the same lesson for the same reason.
-            const deadline = setTimeout(() => { try { child.kill() } catch { /* already gone */ } finally { resolve({ code: 1, stdout: '' }) } }, 3000)
-            child.stdout?.on('data', (c: Buffer) => { stdout += c.toString('utf8') })
-            child.on('error', () => { clearTimeout(deadline); resolve({ code: 1, stdout: '' }) })
-            child.on('close', (code: number | null) => { clearTimeout(deadline); resolve({ code: code ?? 0, stdout }) })
-          })
-          return out
-        },
-        readText: async (path) => { try { return readFileSync(path, 'utf8') } catch { return undefined } }
-      }),
-      capture: async (req) => {
-        const guest = typeof req?.webContentsId === 'number' ? webContents.fromId(req.webContentsId) : null
-        if (guest === null || guest === undefined || guest.isDestroyed()) return { kind: 'refused' as const, reason: 'no page is open in this pane — open one, then capture it' }
-        if (guest.getType() !== 'webview') return { kind: 'refused' as const, reason: 'that id is not a page in a browser panel' }
-        const dir = join(app.getPath('userData'), 'captures')
-        try { mkdirSync(dir, { recursive: true }) } catch { /* the write below names the failure */ }
-        return capturePreview({
-          getUrl: () => guest.getURL(),
-          capture: () => guest.capturePage(),
-          write: async (path, data) => { writeFileSync(path, data) },
-          dir,
-          now: () => Date.now()
-        })
-      }
-    },
-    // M186. The asset store: bytes in, an id out. The chooser is the system's
-    // own dialog, so this app never invents a file browser and never sees a
-    // path the person did not point at.
-    {
-      put: (req) => putAsset({ dir: join(app.getPath('userData'), 'assets'), ...(typeof req?.path === 'string' ? { path: req.path } : {}), ...(req?.bytes === undefined ? {} : { bytes: req.bytes }) }),
-      choose: async () => {
-        if (mainWindow === null || mainWindow.isDestroyed()) return null
-        const answer = await dialog.showOpenDialog(mainWindow, {
-          title: 'Choose a picture',
-          properties: ['openFile'],
-          filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
-        })
-        return answer.canceled || answer.filePaths[0] === undefined ? null : answer.filePaths[0]
-      }
-    },
-    // M188. The fetch node's one GET. The real fetcher lives HERE and is
-    // called by no suite (the `verify:meta update.1` shape): every check
-    // drives an injected one, and no suite in this repo reaches the network.
-    {
-      fetch: (req) => runHttpNode({ url: String(req?.url ?? ''), ...(typeof req?.method === 'string' ? { method: req.method } : {}) }, {
-        now: () => Date.now(),
-        fetch: (url) => new Promise((resolve, reject) => {
-          const done = (status: number, body: string): void => { clearTimeout(deadline); resolve({ status, body }) }
-          // M190's critic (4). The GETTER FOLLOWS THE SCHEME: `httpNodeRefusal`
-          // allows http(s), and an `http:` url sent through `https.get` fails
-          // TLS on port 80 and comes back as "the server did not answer" — a
-          // named-refusal system reporting a network fault for a shape this
-          // app decided to allow.
-          const get = url.startsWith('http://') ? httpGet : httpsGet
-          const request = get(url, { headers: { 'User-Agent': 'terminal-canvas' } }, (res) => {
-            const chunks: Buffer[] = []
-            let bytes = 0
-            res.on('data', (c: Buffer) => {
-              // The cap is applied HERE too, not only after: a server that
-              // answers a gigabyte would otherwise be held in memory whole
-              // before `runHttpNode` sliced it — and the request is DESTROYED
-              // at the cap rather than left streaming for the whole deadline
-              // (M190's critic, 6).
-              bytes += c.length
-              if (bytes <= NODE_FETCH_MAX_BYTES) chunks.push(c)
-              else { request.destroy(); done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')) }
-            })
-            res.on('end', () => done(res.statusCode ?? 0, Buffer.concat(chunks).toString('utf8')))
-          })
-          const deadline = setTimeout(() => { request.destroy(new Error(`the server did not answer within ${NODE_FETCH_TIMEOUT_MS / 1000} seconds`)) }, NODE_FETCH_TIMEOUT_MS)
-          request.on('error', (error) => { clearTimeout(deadline); reject(error) })
-        })
-      })
-    },
-    // M189. The portable file on disk. Main writes and reads; the RENDERER
-    // built the record and the renderer decides what to make of a parse —
-    // main never turns a file into a workspace, the same division that keeps
-    // the board's own writes in the renderer (M113).
-    {
-      write: async (req) => {
-        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
-        if (path === undefined) {
-          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
-          const answer = await dialog.showSaveDialog(mainWindow, {
-            title: 'Export this canvas',
-            defaultPath: join(app.getPath('downloads'), typeof req?.suggested === 'string' && req.suggested.trim() !== '' ? req.suggested : 'canvas.tccanvas'),
-            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
-          })
-          if (answer.canceled || answer.filePath === undefined) return { kind: 'cancelled' as const }
-          path = answer.filePath
-        }
-        const text = `${JSON.stringify(req?.file ?? null, null, 2)}\n`
-        try {
-          writeFileSync(path, text, 'utf8')
-        } catch (error) {
-          return { kind: 'refused' as const, reason: `that file could not be written: ${error instanceof Error ? error.message : String(error)}` }
-        }
-        return { kind: 'written' as const, path, bytes: Buffer.byteLength(text, 'utf8') }
-      },
-      read: async (req) => {
-        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path : undefined
-        if (path === undefined) {
-          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
-          const answer = await dialog.showOpenDialog(mainWindow, {
-            title: 'Import a canvas',
-            properties: ['openFile'],
-            filters: [{ name: 'Canvas file', extensions: ['tccanvas', 'json'] }]
-          })
-          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
-          path = answer.filePaths[0]
-        }
-        let text: string
-        try {
-          text = readFileSync(path, 'utf8')
-        } catch (error) {
-          return { kind: 'refused' as const, reason: `that file could not be read: ${error instanceof Error ? error.message : String(error)}` }
-        }
-        return { kind: 'read' as const, path, parse: parsePortable(text) }
-      }
-    },
-    // M250. A .docx into a NEW note beside it. The chooser is the system's own
-    // (a cancel is `cancelled`, never a refusal); pictures go through the SAME
-    // store and caps a dropped picture does; the note through createFile's
-    // `wx`. The docx itself is only read — see main/docx-import.ts.
-    {
-      import: async (req) => {
-        let path = typeof req?.path === 'string' && req.path.trim() !== '' ? req.path.trim() : undefined
-        if (path === undefined) {
-          if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused' as const, reason: 'there is no window to ask' }
-          const answer = await dialog.showOpenDialog(mainWindow, {
-            title: 'Import a Word document',
-            properties: ['openFile'],
-            filters: [{ name: 'Word document', extensions: ['docx'] }]
-          })
-          if (answer.canceled || answer.filePaths[0] === undefined) return { kind: 'cancelled' as const }
-          path = answer.filePaths[0]
-        }
-        return importDocx({ path }, {
-          putAsset: (bytes) => putAsset({ dir: join(app.getPath('userData'), 'assets'), bytes }),
-          createFile
-        })
-      }
-    },
-    // M252. Describe a tool: the SAME claude binary and login environment
-    // sessions use, one run with no tools, and a reply that is only data.
-    createToolGenerator({ runner: claudeCliRunner, command: () => claudePath ?? 'claude', env: () => loginEnv }),
-    // M253. Packs — the ONE factory production and the panels harness both
-    // build (main/pack-handlers.ts), so the suite drives this code and not a
-    // copy. Only the choosers are this file's: the system's own dialogs.
-    createPackHandlers({
-      store: layoutStore,
-      credentials: () => credentialStore.list(),
-      which,
-      afterPresetChange,
-      app: app.getVersion(),
-      sampleDir: join(app.getPath('userData'), 'packs'),
-      chooseOpen: async () => {
-        if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused', reason: 'there is no window to ask' }
-        const answer = await dialog.showOpenDialog(mainWindow, { title: 'Read a pack', properties: ['openFile'], filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
-        return answer.canceled || answer.filePaths[0] === undefined ? { kind: 'cancelled' } : { kind: 'path', path: answer.filePaths[0] }
-      },
-      chooseSave: async (suggested) => {
-        if (mainWindow === null || mainWindow.isDestroyed()) return { kind: 'refused', reason: 'there is no window to ask' }
-        const answer = await dialog.showSaveDialog(mainWindow, { title: 'Export a pack', defaultPath: join(app.getPath('downloads'), suggested), filters: [{ name: 'Pack', extensions: ['tcpack', 'json'] }] })
-        return answer.canceled || answer.filePath === undefined ? { kind: 'cancelled' } : { kind: 'path', path: answer.filePath }
-      }
-    }),
-    // M255. The publisher. The confirmation is the SYSTEM's own dialog, in
-    // main, defaulting to Cancel — the renderer cannot answer it, and it is
-    // asked on every publish (no session grant). The repository is the
-    // draft's own origin, read through the same git runner the lane uses.
-    {
-      publish: async (raw) => {
-        const req = parsePublishRequest(raw)
-        if (typeof req === 'string') return { kind: 'refused', reason: req }
-        return publish({
-          broker,
-          remoteOf: async (dir) => {
-            const answer = await gitRunner(['-C', dir, 'remote', 'get-url', 'origin'])
-            return answer.ok && answer.stdout.trim() !== '' ? answer.stdout.trim() : null
-          },
-          confirm: async (ask) => {
-            if (mainWindow === null || mainWindow.isDestroyed()) return false
-            const verb = ask.kind === 'release' ? 'Publish release' : ask.kind === 'comment' ? 'Post comment' : 'Post discussion'
-            const answer = await dialog.showMessageBox(mainWindow, { type: 'question', buttons: ['Cancel', verb], defaultId: 0, cancelId: 0, noLink: true, message: ask.message, detail: ask.detail })
-            return answer.response === 1
-          }
-        }, req)
-      }
-    }
+    createBoardHandlers(stores, places, control),
+    toolbox.listPlugins,
+    toolbox.pluginDetails,
+    toolbox.skillWrite,
+    createTrailReader(state, stores),
+    createUpdateHandlers(),
+    createPreviewHandlers(),
+    createAssetHandlers(state),
+    createNodeFetchHandlers(),
+    createPortableHandlers(state),
+    createDocxHandlers(state),
+    createToolGeneratorWiring(state),
+    createPackWiring(state, stores, menu.afterPresetChange, which),
+    createPublishHandlers(state, stores, control)
   )
-  createWindow()
+  createWindow(state, stores)
 
   // M55. The restore answer reaches the renderer once it can hold panels;
   // sendToRenderer waits for the load. The ids are the sessions' own.
-  if (recovered.length > 0) sendToRenderer(IPC_EVENTS.SESSION_RECOVER, recovered)
+  if (recovered.length > 0) sendToRenderer(state, stores, IPC_EVENTS.SESSION_RECOVER, recovered)
 
   // M54. The door, on the winning side of the lock only (the gate above),
   // and the launcher that reaches it. The CLI file is read as NODE outside
   // this process, where app.asar is not readable — hence the unpacked path.
-  void createControlServer({ path: controlSocketPath, handle: controlHandler })
-    .then((server) => { controlServer = server })
-    .catch((error: unknown) => console.warn(`[control] could not listen on ${controlSocketPath}: ${String(error)}`))
+  void createControlServer({ path: stores.controlSocketPath, handle: control.handler })
+    .then((server) => { state.controlServer = server })
+    .catch((error: unknown) => console.warn(`[control] could not listen on ${stores.controlSocketPath}: ${String(error)}`))
   try {
     const appPath = app.isPackaged ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked') : app.getAppPath()
     writeLauncher({
-      dir: launcherDir,
+      dir: stores.launcherDir,
       script: launcherScript({ execPath: process.execPath, cliPath: join(appPath, 'out', 'main', 'tc.js') }),
       writeFile: (p, content) => { writeFileSync(p, content); chmodSync(p, 0o755) }
     })
@@ -2403,7 +283,7 @@ app.whenReady().then(async () => {
   if (app.isPackaged) app.setAsDefaultProtocolClient(CONTROL_SCHEME)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (state.window === null || state.window.isDestroyed()) createWindow(state, stores)
   })
 
   // A second launch of this build reaches the running instance here rather
@@ -2412,13 +292,13 @@ app.whenReady().then(async () => {
   // relaunches from the dock to escape, so an implementation that only calls
   // focus() would leave the relaunch looking like it did nothing at all.
   app.on('second-instance', () => {
-    if (mainWindow === null || mainWindow.isDestroyed()) {
-      createWindow()
+    if (state.window === null || state.window.isDestroyed()) {
+      createWindow(state, stores)
       return
     }
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
+    if (state.window.isMinimized()) state.window.restore()
+    state.window.show()
+    state.window.focus()
   })
 })
 
@@ -2430,11 +310,11 @@ app.on('before-quit', () => {
 
   // M54. Unlink the socket on the way out; a stale file is replaced at the
   // next listen anyway, but a clean quit should not leave a door on disk.
-  void controlServer?.close()
+  void state.controlServer?.close()
 
   // The file watchers are the renderer's, not a session's, and go either way.
   try {
-    fileWatchers.closeAll()
+    stores.fileWatchers.closeAll()
   } catch (error) {
     console.warn('[files] closeAll failed during quit', error)
   }
@@ -2446,14 +326,14 @@ app.on('before-quit', () => {
   // ordering inside each arm lives in quit.ts with its reasons, where
   // verify:pty-manager can run it against a real server.
   runQuit({
-    keep: layoutStore.getSetting('session.keepOnQuit') === true && backend.kind === 'tmux',
-    manager: ptyManager,
-    backend,
-    flush: () => layoutStore.flushSync(),
-    agents: agentSessions ?? undefined,
+    keep: stores.layoutStore.getSetting('session.keepOnQuit') === true && state.backend.kind === 'tmux',
+    manager: stores.ptyManager,
+    backend: state.backend,
+    flush: () => stores.layoutStore.flushSync(),
+    agents: state.agents ?? undefined,
     // M84. A watcher's child is an ordinary process: nothing else in this
     // sequence would reach it, and a quit mid-run would orphan it.
-    watchers: watchRunnerRef ?? undefined
+    watchers: state.watchRunner ?? undefined
   })
 })
 

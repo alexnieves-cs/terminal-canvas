@@ -126,7 +126,7 @@ the same mechanism — one file, behind `LayoutStore` — rather than inventing 
 a fourth toggle.
 
 **One operation became three (`window-lifecycle.ts`, `pty-manager.ts`,
-`main/index.ts`).** Before M4c a single `killAll()` served every teardown path,
+`main/bootstrap/window.ts`).** Before M4c a single `killAll()` served every teardown path,
 because under `node-pty` those paths genuinely meant the same thing. Under tmux
 they do not: a renderer teardown calls **`detachAll()`** (local handles die, tmux
 sessions live), closing a panel calls **`kill(id)`** which also calls
@@ -325,7 +325,7 @@ baseline survive an app relaunch even though `capturedBaselineIds` itself does
 not.
 
 **...but "once" means once per SESSION, and a relaunch is a new session
-(`main/index.ts`'s startup sweep, `baseline-capture.ts`'s `staleBaselineIds`).**
+(`main/bootstrap/orphan-sweep.ts`'s startup sweep, `baseline-capture.ts`'s `staleBaselineIds`).**
 The two guards above answer "has this panel already been captured", and until
 M9a's final fix wave the persistent half answered it for too long. Quitting
 runs `shutdown()` — `kill-server` on the private socket — so at the next launch
@@ -349,7 +349,7 @@ recapturing against a tree the agent has already rewritten, which is the exact
 "no changes" failure this whole milestone turns on.
 
 **git is resolved by absolute path from the login env, exactly like tmux
-(`main/index.ts`'s `gitPath`, `git-runner.ts`).** `createGitRunner` spawned the
+(`main/index.ts`'s probe loop, `main/bootstrap/context.ts`'s `gitPath`, `git-runner.ts`).** `createGitRunner` spawned the
 bare name `git` until M9a's final fix wave, against whatever PATH launchd
 handed the app — the identical defect `shell-env.ts` and `tmux-probe.ts` exist
 to prevent, and the app already computed the right answer for its startup
@@ -2174,7 +2174,7 @@ trap `attentionSnapshot` and `useLiveSession` both already avoid.
 
 **`FileWatchers` has exactly two teardown seams, and they are the same two
 `window-lifecycle.ts` already established for a PTY (`main/file-watch.ts`'s
-`closeAll()`, `main/index.ts`).** A renderer navigation (`Cmd+R`/`Cmd+W`) does
+`closeAll()`, `main/bootstrap/window.ts`, `main/index.ts`).** A renderer navigation (`Cmd+R`/`Cmd+W`) does
 not run React cleanup, so nothing renderer-side ever calls `file:close` on
 its way out — main has to act unprompted, the identical shape as an
 abandoned PTY handle. Without a `closeAll()` wired into the same
@@ -2189,7 +2189,8 @@ crash rather than an orderly exit. `verify:file` 10 is the unit-level pin
 (`closeAll()` really disarms, asserted by writing after the close and
 observing nothing arrive, never by reading the internal count alone — a
 count that reads zero while the `FSWatcher` stayed alive is exactly the leak
-being guarded against), and `main/index.ts`'s two call sites are the same
+being guarded against), and the two call sites (`main/bootstrap/window.ts`'s
+reload seam and `main/index.ts`'s quit seam) are the same
 two lines `fileWatchers.closeAll()` appears on, next to `window-lifecycle.ts`'s
 existing PTY teardown and `before-quit`'s existing `shutdown()`.
 
