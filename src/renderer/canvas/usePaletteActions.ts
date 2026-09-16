@@ -46,7 +46,8 @@ import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } fro
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
-import { SWARM_PRESETS, SWARM_PRESET_IDS, parseSwarmPresetId, type SwarmPresetId } from '@shared/swarm'
+import { SWARM_PRESETS, SWARM_PRESET_IDS, parseSwarmPresetId } from '@shared/swarm'
+import type { BoardVerbs } from './useBoardVerbs'
 import { getChat } from '@renderer/chat/chat-store'
 import { templateRefusal, templateHoles } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
@@ -232,7 +233,13 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; swarm?: (itemId: string, teammateId: string, root: string, preset: SwarmPresetId) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
+  /**
+   * The SAME type `useBoardVerbs` fills and `Canvas.tsx` mints, never a
+   * hand-copy of its members. A second spelling stays assignable to the first
+   * after the first gains a member, so a new verb would simply be invisible
+   * here — no red suite, no type error, a door that is only declared.
+   */
+  boardVerbsRef: RefObject<BoardVerbs>
 }
 
 /**
