@@ -1585,10 +1585,16 @@ const isResult = (l) => l.includes('"type":"result"')
       JSON.stringify({ afterExit, listed, afterRevoke, after: tracker.grantsOf('g1') }))
 
     const src = (f) => readFileSync(join(__dirname, '..', 'src', f), 'utf8')
+    // M278. The layout schema is a DIRECTORY plus its barrel — reading only
+    // the barrel would pass this check by reading a file that holds no fields.
+    const schemaSrc = () => {
+      const dir = join(__dirname, '..', 'src', 'shared', 'layout-schema')
+      return src('shared/layout-schema.ts') + readdirSync(dir).map((n) => readFileSync(join(dir, n), 'utf8')).join('')
+    }
     const approvalsSrc = src('main/approvals.ts')
     ok('grant.2 grants are never persisted: approvals.ts imports no filesystem and no store, and neither the layout schema, the layout store nor the transcript log mentions a grant',
       !/node:fs|writeFile|layout-store|JSON\.stringify/.test(approvalsSrc) && /grant/.test(approvalsSrc) &&
-        !/grant/i.test(src('shared/layout-schema.ts')) && !/grant/i.test(src('main/layout-store.ts')) && !/grant/i.test(src('main/agent-transcript-log.ts')),
+        !/grant/i.test(schemaSrc()) && !/grant/i.test(src('main/layout-store.ts')) && !/grant/i.test(src('main/agent-transcript-log.ts')),
       '')
   } catch (e) { if (String(e && e.message) !== 'skip-grant') throw e }
 
@@ -1754,7 +1760,9 @@ const isResult = (l) => l.includes('"type":"result"')
     walk(root)
     const pattern = /backend\s*[!=]==\s*'(?:claude|codex|copilot|acp)'|case '(?:claude|codex|copilot|acp)':/
     const hits = files.filter((f) => pattern.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
-    const expected = ['shared/layout-schema.ts']
+    // M278. The panel parser is where the discriminant lives after the split;
+    // the barrel re-exports and decides nothing, so it must not appear here.
+    const expected = ['shared/layout-schema/panels.ts']
     ok('registry.1 no file compares a `backend` field to a literal member of the union, and no `case` names one, except the layout parser (absent-vs-malformed needs the literal) — the sheet\'s own `what.kind` vocabulary is outside this grep and is named in the act log',
       JSON.stringify(hits) === JSON.stringify(expected), JSON.stringify(hits))
     const B = M.backends

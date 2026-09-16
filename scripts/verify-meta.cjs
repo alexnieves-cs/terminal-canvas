@@ -497,8 +497,10 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
   const expectedMain = ['layout-snapshots.ts']
   const inShared = names('src/shared')
   const inRenderer = names('src/renderer')
-  // shared: the rule itself, and the parser that reads one off disk.
-  const expectedShared = ['layout-schema.ts', 'preview.ts']
+  // shared: the rule itself, the RECORD that declares the field (M278 split the
+  // schema's shapes out of its readers), and the parser that reads one off disk.
+  // The barrel is not here and must not be: it re-exports and decides nothing.
+  const expectedShared = ['layout-schema/panels.ts', 'layout-schema/types.ts', 'preview.ts']
   // renderer: the record and its two copy sites, the two doors that WRITE one,
   // the rule's caller, and the two surfaces that RENDER one.
   const expectedRenderer = [
