@@ -191,6 +191,24 @@ export function insertIntoComposer(id: string, text: string, opts?: { focus?: tr
   update(id, { ...prev, insert: { seq: ++insertSeq, text, ...(opts?.focus === true ? { focus: true as const } : {}) } })
 }
 
+/**
+ * M80. A template's first message, delivered once the chat's store entry
+ * exists: `insertIntoComposer` is a no-op for an id the store has not seeded,
+ * and the seeding is the panel's own hook, a render away.
+ *
+ * Lives here, over the two functions it composes, rather than in `Canvas.tsx`
+ * where it was written: `useBoardVerbs.ts` delivers a review's Continue
+ * through it too, and a helper both the hook and its caller reach cannot stay
+ * in the caller's module without an import cycle.
+ */
+export async function deliverToComposer(id: string, text: string, opts?: { focus?: true }): Promise<void> {
+  for (let i = 0; i < 40; i += 1) {
+    const state = getChat(id)
+    if (state.snapshot !== null || state.refusal !== null) { insertIntoComposer(id, text, opts); return }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
+
 /** M122. Ask the chat panel of `id` to scroll the turn at `turnIndex` into view. */
 export function scrollToTurn(id: string, turnIndex: number): void {
   const prev = states.get(id)
