@@ -850,7 +850,18 @@ src/renderer/canvas/
   canvas-constants.ts    module-scope constants + retainSelection/panelLabel. Must stay
                          module scope: a fresh [] or Set() per render is re-render churn
   usePaletteActions.ts   the one `actions` object the palette, top bar, rail and inspector
-                         share. ONE useMemo — splitting it breaks Palette's command memo
+                         share. ONE useMemo — splitting the MEMO breaks Palette's command
+                         memo, so the file is a composition root holding no verb of its own
+  palette-actions/       the 150 verbs, split by domain: executor (the one place a verb's
+                         meaning lives), presets, prompts, arrangement, workspaces,
+                         settings, board, objects. Each is a plain factory returning a
+                         `Pick<PaletteActions, …>`; the root creates ONE empty object, puts
+                         it on the ctx as `self`, and Object.assigns every slice onto it —
+                         which is what lets a verb call a sibling through `self.x(…)` as it
+                         always did. types.ts holds the deps and that contract.
+                         Two checks fence it: `EveryVerbIsCovered` (a compile error if a
+                         verb is covered by no slice) and `verify:verbs slices.1` (a red
+                         suite if two slices declare one, which Object.assign hides)
   useWorkspaceVerbs.ts   switch / merged view / move-panels. Holds the await-before-commit
                          orderings; also owns deleteWorkspaceRef and reloadWorkspacesRef
   useCanvasPointer.ts    the host's mouse gestures. Four handlers stay PLAIN functions —
