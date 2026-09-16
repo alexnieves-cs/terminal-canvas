@@ -220,7 +220,29 @@ const FACTS = {
     walk(root)
     const callers = files.filter((f) => /redactSecrets\(/.test(readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))).map((f) => f.slice(root.length + 1)).sort()
     const readers = files.filter((f) => /scrollback\.tail\(|lastAssistantText\(/.test(readFileSync(f, 'utf8'))).map((f) => f.slice(root.length + 1)).sort()
-    const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
+    // `useBoardVerbs.ts` is named here for a RELOCATION, not a new reader: the
+    // one `lastAssistantText` call it holds is `taskContextFor`'s `account`,
+    // which was exempt under `Canvas.tsx` before that contiguous run was lifted
+    // out. It is a DISPLAY read — the review node renders it as the agent's own
+    // account, labelled "not evidence", and it reaches no exporter. Every path
+    // that carries a task's text OUT (portable, pack, deck, panel search) is in
+    // main and is gated there, which is why the exemption is by name and travels
+    // with the code rather than being widened to a directory.
+    //
+    // ...and its name ALONE is not enough, unlike every other entry here. The
+    // other exempt files are display or storage modules with no way out;
+    // `useBoardVerbs.ts` is where the board's OUTBOUND verbs live, beside
+    // `board.openPr` (a branch pushed and a body POSTed), `board.commentPr` and
+    // `agentSession.send`. None of them carries `account` today. A later edit
+    // that piped a chat's last answer into a PR body would be exactly the
+    // silent widening this check exists to catch, and a whole-file exemption
+    // would swallow it with nothing going red. So the exemption is PINNED to
+    // the one read it was granted for: a second reader in this file fails here
+    // and has to be justified on its own, the same way a new `redactSecrets`
+    // caller has to be added to the list below by name.
+    const boardVerbsReads = (readFileSync(join(root, 'renderer', 'canvas', 'useBoardVerbs.ts'), 'utf8')
+      .match(/scrollback\.tail\(|lastAssistantText\(/g) ?? []).length
+    const unguarded = readers.filter((f) => !/outward\(/.test(readFileSync(join(root, f), 'utf8')) && !/chat-store\.ts$|Canvas\.tsx$|useBoardVerbs\.ts$|scrollback-store\.ts$|ScrollbackPanel|TerminalPanel|useCanvasTestHooks|search|ipc\.ts$|index\.ts$/.test(f))
     // M189 and M190 add the fifth and SIXTH callers by name, which is what
     // this allowlist is for. `shared/portable.ts` scrubs every string that
     // travels in an export and reports the count on the record; it cannot go
@@ -238,8 +260,8 @@ const FACTS = {
     // M255 (merge): M251's deck-export and M253's pack are BOTH the seventh on
     // their own branches; merged, the list is eight, each named for its reason.
     ok('gate.2 redactSecrets has exactly eight callers (the outward gate, the memory store\'s write scrub, telemetry\'s event scrubber, M122\'s panel search — pane content leaving through main — M189\'s portable export, which scrubs field by field and reports its count, M190\'s feedback draft, whose count is stated in the draft itself, M251\'s deck export to .pptx, scrubbed field by field with its count in the export sentence, and M253\'s pack export, scrubbed and counted like the portable file), and every module that reads a panel\'s tail or a chat\'s last answer for another reader calls outward',
-      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0,
-      JSON.stringify({ callers, readers, unguarded }))
+      JSON.stringify(callers) === JSON.stringify(['main/deck-export.ts', 'main/memory-store.ts', 'main/panel-search.ts', 'main/telemetry.ts', 'shared/feedback.ts', 'shared/outward.ts', 'shared/pack.ts', 'shared/portable.ts', 'shared/redact.ts']) && unguarded.length === 0 && boardVerbsReads === 1,
+      JSON.stringify({ callers, readers, unguarded, boardVerbsReads }))
   }
 
   // routine.1 (M101) — the save-time refusal against M96's table: a
@@ -476,9 +498,13 @@ const FACTS = {
     // verdict list with one false in it.
     const fitDoor = doors?.['fit-task']
     const fitBound = V.VERBS.some((v) => v.id === 'fit-task') ? P.buildPlan(P.parsePlanLine('fit-task'), facts) : null
-    const canvasSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'Canvas.tsx'), 'utf8')
+    // The board's verbs live in `useBoardVerbs.ts`, not `Canvas.tsx`: the
+    // contiguous run that installs them into `boardVerbsRef` was lifted there
+    // whole. The install is still a render-time statement in the same order —
+    // only the file changed.
+    const verbsSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'useBoardVerbs.ts'), 'utf8')
     const hudSrc = readFileSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'CanvasHud.tsx'), 'utf8')
-    const fitTaskFn = canvasSrc.match(/boardVerbsRef\.current\.fitTask = \(\) => \{[\s\S]*?\n  \}/)?.[0] ?? ''
+    const fitTaskFn = verbsSrc.match(/boardVerbsRef\.current\.fitTask = \(\) => \{[\s\S]*?\n  \}/)?.[0] ?? ''
     const fitTaskAt = hudSrc.indexOf('data-hud-fit-task')
     const fitAllAt = hudSrc.search(/data-hud-fit(?!-task)/)
     const fitBeforeAll = fitTaskAt !== -1 && fitAllAt !== -1 && fitTaskAt < fitAllAt

@@ -329,6 +329,23 @@ export function isWorkPanel(panel: Panel): panel is WorkPanel {
   return panel.kind === 'work'
 }
 
+/**
+ * M114. The item a work card renders, or undefined for every other kind.
+ *
+ * Lives here, beside its own guard, rather than in `Canvas.tsx` where it was
+ * written: `useBoardVerbs.ts` reads it too, and a helper reached from a hook
+ * AND from the component that calls the hook cannot live in the component's
+ * own module without an import cycle.
+ *
+ * `task-members.ts`'s `cardItemOf` is the same question asked of a
+ * STRUCTURAL panel shape, so the plain-node checks can put plain objects to
+ * it. Two spellings for two type worlds, deliberately: this one narrows
+ * through `isWorkPanel` and that one cannot.
+ */
+export function workCardItemId(panel: Panel): string | undefined {
+  return isWorkPanel(panel) ? panel.work.itemId : undefined
+}
+
 export function isSkillPanel(panel: Panel): panel is SkillPanel {
   return panel.kind === 'skill'
 }

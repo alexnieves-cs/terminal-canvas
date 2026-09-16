@@ -320,8 +320,11 @@ ok('swarm.rows.1 every arrangement has a LITERAL palette row id in commands.ts, 
 // --- The executor, as static fact -------------------------------------------
 
 {
-  const canvas = src('src/renderer/canvas/Canvas.tsx')
-  const body = canvas.slice(canvas.indexOf('const startSwarmAttempt'), canvas.indexOf('boardVerbsRef.current.swarm ='))
+  // The executor lives in `useBoardVerbs.ts`: `startSwarmAttempt` and the
+  // dispatch it is built on were lifted out of `Canvas.tsx` as one contiguous
+  // run. The slice below is unchanged — same two landmarks, same file-order.
+  const verbs = src('src/renderer/canvas/useBoardVerbs.ts')
+  const body = verbs.slice(verbs.indexOf('const startSwarmAttempt'), verbs.indexOf('boardVerbsRef.current.swarm ='))
   ok('swarm.exec.1 the PRIMARY seat goes through `dispatchWorkItem` — the arrangement never mints a second kind of lane',
     body.includes('await dispatchWorkItem(itemId, teammateId, root, { preset: presetId, role: primary.role })') && !body.includes('window.canvas.board.lane({ itemId, chatPanelId: chatId'),
     body.slice(0, 160))
@@ -335,7 +338,7 @@ ok('swarm.rows.1 every arrangement has a LITERAL palette row id in commands.ts, 
     /if \(edge\.automate\) next = setLinkAutomation\(/.test(body) && /next = setLinkLabel\(next, from, to, edge\.label\)/.test(body),
     'expected setLinkLabel for every edge and setLinkAutomation only when automate')
   ok('swarm.exec.5 one attempt per item — two arrangements racing on one card would mint two hubs over one lane',
-    /swarmAttemptsRef\.current\.get\(itemId\)/.test(canvas) && /swarmAttemptsRef\.current\.set\(itemId, attempt\)/.test(canvas),
+    /swarmAttemptsRef\.current\.get\(itemId\)/.test(verbs) && /swarmAttemptsRef\.current\.set\(itemId, attempt\)/.test(verbs),
     'expected the standing-attempt map the dispatch already uses')
 }
 
