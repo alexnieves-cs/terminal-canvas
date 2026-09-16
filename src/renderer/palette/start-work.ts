@@ -34,7 +34,8 @@
  */
 import { shortPath } from '@shared/display-path'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
-import { teammateRefusal, workItemRefusal } from '@shared/work-items'
+import { teammateRefusal, workItemRefusal, type WorkItemState } from '@shared/work-items'
+import { SWARM_PRESETS, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 
 /** The three inputs, in the order they are asked. */
 export type StartWorkNeedField = 'task' | 'agent' | 'repository'
@@ -49,6 +50,15 @@ export interface StartWorkChoice {
   teammateId?: string
   /** An absolute repository root the user picked. When absent, an `auto` resolution may still supply one. */
   root?: string
+  /**
+   * M275. THE ARRANGEMENT — which swarm preset this start opens, or ABSENT
+   * for the solo lane M197 shipped. It is deliberately NOT a fourth member of
+   * the triple: the triple is what the app cannot DERIVE, and an arrangement
+   * always has an answer (one conversation in a lane), so it never adds a
+   * need and never blocks Enter. What it can do is REFUSE — see
+   * `startWorkSwarmRefusal`.
+   */
+  swarm?: SwarmPresetId
 }
 
 /**
@@ -62,6 +72,10 @@ export interface StartWorkContext {
   teammates: readonly PersistedTeammate[]
   repos: readonly StartWorkRepo[] | undefined
   wanted: string | null
+  /** M275. Whether any agent CLI answered discovery. Absent reads as available — every pre-M275 caller, which had no arrangement to refuse. */
+  agentAvailable?: boolean
+  /** M275. The card's state, when the start is for a card already on the board. Absent is a task about to be minted, which is `todo`. */
+  itemState?: WorkItemState
 }
 
 export type StartWorkResolution =
@@ -155,7 +169,36 @@ export type StartWorkOutcome =
 /** The triple, stated before anything is minted. The root in the path rule's words; the full path rides the element's `title`, as everywhere. */
 export function startWorkSummary(choice: StartWorkChoice, mate: PersistedTeammate | undefined, root?: string | null): string {
   const where = root === undefined ? choice.root : (root ?? choice.root)
-  return [choice.title.trim(), where === undefined || where === '' ? undefined : shortPath(where), mate === undefined ? undefined : teammateWord(mate)]
+  return [
+    choice.title.trim(),
+    where === undefined || where === '' ? undefined : shortPath(where),
+    mate === undefined ? undefined : teammateWord(mate),
+    // M275. The arrangement joins the summary rather than replacing a member
+    // of it: a swarm is still a task, a teammate and a repository, and the
+    // person is owed the shape as well as the triple before anything mints.
+    choice.swarm === undefined ? undefined : `${SWARM_PRESETS[choice.swarm].label} arrangement`
+  ]
     .filter((p): p is string => p !== undefined && p !== '')
     .join(' · ')
+}
+
+/**
+ * M275. Why the CHOSEN arrangement cannot start — null for the solo lane,
+ * which is always available, and null when the swarm can run.
+ *
+ * It is separate from `startWorkRefusal` (the grants a sheet cannot answer)
+ * and from `startWorkNeeds` (the questions a sheet asks) because it is a third
+ * kind of thing: the triple is answered and the arrangement still does not
+ * apply — no CLI for the seats, or a card in a state this shape makes no
+ * sense from. Kept as one function so the sheet's disabled Start, the palette
+ * row's reason and the executor's last gate cannot disagree.
+ */
+export function startWorkSwarmRefusal(choice: StartWorkChoice, ctx: StartWorkContext): string | null {
+  if (choice.swarm === undefined) return null
+  const mate = mateOf(ctx, choice.teammateId)
+  return swarmRefusal(SWARM_PRESETS[choice.swarm], {
+    agentAvailable: ctx.agentAvailable !== false,
+    ...(mate === undefined ? {} : { teammate: { name: teammateWord(mate), places: mate.places } }),
+    ...(ctx.itemState === undefined ? {} : { item: { state: ctx.itemState } })
+  })
 }

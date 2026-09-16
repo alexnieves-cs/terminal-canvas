@@ -249,7 +249,15 @@ export const VERBS: readonly VerbDef[] = [
   // the one outward write (Open PR) asks its own spend card and is excluded
   // below by name.
   { id: 'dispatch', label: 'Dispatch', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }], destructive: false, actions: ['dispatchWorkItem', 'startWork'], target: 'canvas', hint: 'hand a work item to a teammate in a fresh worktree lane' },
-  { id: 'board', label: 'Board', args: [{ name: 'op', kind: 'key' }, { name: 'what', kind: 'text', rest: true }], destructive: false, actions: ['addWorkItem', 'markDone'], target: 'canvas', hint: 'board add <title> · board done <id>' }
+  { id: 'board', label: 'Board', args: [{ name: 'op', kind: 'key' }, { name: 'what', kind: 'text', rest: true }], destructive: false, actions: ['addWorkItem', 'markDone'], target: 'canvas', hint: 'board add <title> · board done <id>' },
+  // M275. THE ARRANGEMENT. Not destructive, for `dispatch`'s reason and one
+  // more: it spends nothing itself (worktrees and conversations, both of which
+  // a person closes), and the one outward write it could lead to — Open PR —
+  // is excluded by name and stays behind its own spend card. It IS on
+  // `TEAMMATE_REFUSED_VERBS` (plan.ts), where `dispatch` already is and for
+  // four times the reason: a place-bounded teammate opening five sessions
+  // through a plan is exactly the fold the Places gate exists to refuse.
+  { id: 'swarm', label: 'Swarm', args: [{ name: 'item', kind: 'key' }, { name: 'teammate', kind: 'key' }, { name: 'arrangement', kind: 'key' }], destructive: false, actions: ['startSwarm'], target: 'canvas', hint: 'start a task as an explore, implement, test or review arrangement — a supervisor, workers with roles, and the handoff edges between them' }
 ]
 
 /**
@@ -458,5 +466,12 @@ export const V9_DOORS: Record<string, { canvas: DoorEntry; palette: string; agen
   'workflow-copy': { canvas: 'Save a copy on the workflow panel (a built-in\'s only save, and the way out of a stale one)', palette: 'workflow.copy', agent: 'tc plan workflow-copy t1', workflow: 'an action node whose line is: workflow-copy t1' },
   'workflow-run': { canvas: 'Run on the workflow panel', palette: 'workflow.run', agent: 'tc plan workflow-run t1', workflow: 'an action node whose line is: workflow-run t1' },
   'workflow-stop': { canvas: 'Stop on the workflow panel', palette: 'workflow.stop', agent: 'tc plan workflow-stop t1', workflow: 'an action node whose line is: workflow-stop t1' },
-  'workflow-unedge': { canvas: 'Delete on a selected edge (click its word)', palette: 'workflow.unedge', agent: 'tc plan workflow-unedge t1 n1 n2', workflow: 'an action node whose line is: workflow-unedge t1 n1 n2' }
+  'workflow-unedge': { canvas: 'Delete on a selected edge (click its word)', palette: 'workflow.unedge', agent: 'tc plan workflow-unedge t1 n1 n2', workflow: 'an action node whose line is: workflow-unedge t1 n1 n2' },
+  // M275. All four are real. The canvas gesture is the work card's own
+  // `Swarm…` menu (four rows, each disabled by `swarmRefusal`'s sentence);
+  // the palette door is the Explore row of the four the palette offers; the
+  // agent line and the action node's line bind to the same verb and reach the
+  // same executor, so an arrangement cannot behave one way when a person
+  // starts it and another when a workflow does.
+  swarm: { canvas: 'Swarm… on a work card, then one of the four arrangements', palette: 'work.swarm.explore', agent: 'tc plan swarm wk1 ada explore', workflow: 'an action node whose line is: swarm wk1 ada explore' }
 }

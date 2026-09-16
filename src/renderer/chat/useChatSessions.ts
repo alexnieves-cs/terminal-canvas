@@ -6,6 +6,7 @@ import { applyChatEvent, clearChat, getChat, seedChat, setChatGrants } from './c
 import { applyRateLimit } from '@renderer/session/rate-limit-store'
 import { DISPATCH_PROMPT, SUPERVISOR_PROMPT } from '@shared/agent-session'
 import { ROUTINE_PROMPT } from '@shared/routines'
+import { swarmSystemPrompt } from '@shared/swarm'
 
 /**
  * M73. The renderer's side of the two lifetimes for a chat panel.
@@ -53,7 +54,14 @@ export function ensureChatSession(panel: Extract<Panel, { kind: 'chat' }>): void
     // M81. A restored SUPERVISOR carries its system prompt again: the CLI
     // keeps no record of an appended prompt, so a resume without it would
     // leave a panel that looks like a supervisor and is not one.
-    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : panel.chat.dispatch === true ? { appendSystemPrompt: DISPATCH_PROMPT } : panel.chat.routine === true ? { appendSystemPrompt: ROUTINE_PROMPT } : panel.chat.orchestrator !== undefined ? { appendSystemPrompt: panel.chat.orchestrator } : {}) })
+    // M275. A SWARM SEAT is FIRST in the chain, and it has to be: a swarm's
+    // hub carries `supervisor` as well (it is the canvas's one supervisor)
+    // and its primary seat carries `dispatch` as well (it is the task's
+    // lane), so either earlier arm would win and the seat's own brief — the
+    // thing that makes it an explorer rather than a generic lane — would be
+    // dropped on every relaunch, silently. `swarmSystemPrompt` composes
+    // M81's supervisor prompt back in for the hub, so nothing is lost.
+    .create({ id, cwd: panel.chat.cwd, sessionId: panel.chat.sessionId, ...carryBackend(panel.chat), ...(panel.chat.teammateId === undefined ? {} : { teammateId: panel.chat.teammateId }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}), ...(panel.chat.agentOptions === undefined ? {} : { agentOptions: panel.chat.agentOptions }), ...(panel.chat.swarm !== undefined ? { appendSystemPrompt: swarmSystemPrompt(panel.chat.swarm, SUPERVISOR_PROMPT) } : panel.chat.supervisor === true ? { appendSystemPrompt: SUPERVISOR_PROMPT } : panel.chat.dispatch === true ? { appendSystemPrompt: DISPATCH_PROMPT } : panel.chat.routine === true ? { appendSystemPrompt: ROUTINE_PROMPT } : panel.chat.orchestrator !== undefined ? { appendSystemPrompt: panel.chat.orchestrator } : {}) })
     .then((result) => {
       if (!created.has(id)) return
       if (result.kind === 'refused') {

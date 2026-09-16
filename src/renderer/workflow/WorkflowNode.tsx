@@ -17,6 +17,7 @@ import type { PersistedRun } from '@shared/runs'
 import { buildDiagram, edgeWord, runsForTemplate, BLOCK_H, BLOCK_W, DIAGRAM_PAD } from './workflow-diagram'
 import { autoLayout, completedWalk, diagramIssues, edgeGeometry, neighbourhood, runTimeline } from './workflow-graph'
 import { AutoLayout, Check, History, More, Plus, Trigger, Warn, WORKFLOW_NODE_GLYPH } from '@renderer/icons'
+import { WorkflowFlow } from './WorkflowFlow'
 
 /** M183. Extra SVG room beyond the diagram's extent, for a drop or a wire past the last block. */
 const DROP_ROOM = 220
@@ -25,14 +26,9 @@ const DROP_ROOM = 220
  * M133. THE WORKFLOW PANEL — the FOURTEENTH kind, sessionless like the work
  * card, and a VIEW of a template rather than a second editor of one.
  *
- * The graph draws `buildDiagram`'s projection as an SVG sibling
- * layer, the way `AnnotationLayer.tsx` sits beside the link layer: one
- * `<svg>` under the panel's own body, with no camera, no selection and no
- * undo of its own. That absence is the design — spec §9 — and it is why
- * `@xyflow/react` is declined: **the live canvas is the editor and the
- * template is the truth.** Editing a workflow means editing the panels on
- * the canvas and saving them as a template again; this panel never writes
- * a node.
+ * The graph is a React Flow island under the panel's own body. Its camera
+ * and interaction state belong to this workflow only; template drafts remain
+ * the truth and are still the only route that writes an authored node.
  *
  * The History drawer (M259; the Runs tab before it) is M79's records
  * filtered to this template — data that has existed since M79, needing no
@@ -441,6 +437,9 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
     : verb('save', 'Save', dirty ? null : REASON_NOTHING_TO_SAVE, () => { void props.onSave(id).then((r) => { if (r.kind === 'stale') setStale(r.reason); else if (r.kind === 'refused') say(r.reason); else setStale(null) }) })
   const deleteVerb = verb('delete', 'Delete', props.deleteReason, () => props.onDelete(id))
   const buildVerb = verb('build', 'Build with AI', null, () => props.onBuildWithAi(id))
+  // Kept temporarily while the React Flow migration is reviewed; this branch
+  // never renders, and all visible graph interaction is the Flow island.
+  const renderLegacyDiagram: boolean = false
 
   return (
     <PanelFrame
@@ -580,11 +579,9 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                     ))}
                   </div>
                 )}
-                {/* The SVG is a sibling LAYER, not a canvas: it has a viewBox
-                    and nothing else — no pan, no zoom, no hit testing.
-                    M183: ROOM to drop and wire into past the last block. */}
+                {/* This scroller hosts a self-contained React Flow camera. */}
                 <div className="workflow-node__scroll" data-workflow-scroll>
-                <svg ref={svgRef} className={`workflow-node__diagram${wire !== null ? ' workflow-node__diagram--wiring' : ''}${litBlocks !== null ? ' workflow-node__diagram--focus' : ''}`} data-workflow-diagram viewBox={`0 0 ${diagram.width + (readOnly ? 0 : DROP_ROOM)} ${diagram.height + (readOnly ? 0 : DROP_ROOM)}`}
+                {renderLegacyDiagram && <svg ref={svgRef} className={`workflow-node__diagram${wire !== null ? ' workflow-node__diagram--wiring' : ''}${litBlocks !== null ? ' workflow-node__diagram--focus' : ''}`} data-workflow-diagram viewBox={`0 0 ${diagram.width + (readOnly ? 0 : DROP_ROOM)} ${diagram.height + (readOnly ? 0 : DROP_ROOM)}`}
                   width={diagram.width + (readOnly ? 0 : DROP_ROOM)} height={diagram.height + (readOnly ? 0 : DROP_ROOM)} role="img" aria-label={`${template.name}, ${blockCount(template)} blocks`}
                   onMouseDown={(e) => { if (e.target === e.currentTarget) select(panel.workflow.templateId, null) }}>
                   {/* An edge has a DIRECTION and the record knows it. One
@@ -695,7 +692,17 @@ export function WorkflowNode(props: WorkflowNodeProps): JSX.Element {
                     </g>
                   )}
                   {ghost !== null && <rect className="workflow-node__ghost" data-workflow-ghost x={ghost.x - BLOCK_W / 2} y={ghost.y - BLOCK_H / 2} width={BLOCK_W} height={BLOCK_H} rx={8} />}
-                </svg>
+                </svg>}
+                <WorkflowFlow
+                  panelId={panel.rect.id}
+                  template={drawn ?? template}
+                  readOnly={readOnly}
+                  selected={selectedRaw}
+                  issues={issues}
+                  onSelect={(key) => { select(panel.workflow.templateId, key); props.onFocus(panel.rect.id) }}
+                  onMove={(key, dx, dy) => { const result = applyDraftOp(panel.workflow.templateId, saved, { type: 'move', key, dx, dy }); if (result.kind === 'refused') say(result.reason) }}
+                  onConnect={(from, to) => { const result = applyDraftOp(panel.workflow.templateId, saved, { type: 'edge', from, to, trigger: 'exit' }); if (result.kind === 'refused') say(result.reason) }}
+                />
                 </div>
                 {runNotice !== undefined && (() => {
                   const [key, supervision] = runNotice

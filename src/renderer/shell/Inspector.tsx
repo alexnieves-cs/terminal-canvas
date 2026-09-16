@@ -11,6 +11,7 @@ import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
+import { Popover, PopoverTrigger, PopoverContent } from '@renderer/primitives'
 import { Close, More, Pencil, RotateCw } from '@renderer/icons'
 import type { PersistedTemplate } from '@shared/templates'
 import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from '@renderer/workflow/template-draft-store'
@@ -1110,27 +1111,40 @@ function InspectorPanel({
             until this button's own `onFocus` below opens them — which is
             what a `.focus()` aimed past this button skips.
           */}
-          <button
-            type="button"
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+          <PopoverTrigger
             className="inspector__action inspector__action--secondary inspector__menu-open"
             data-inspector-action="menu"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
             title={menuOpen ? 'Hide panel actions' : 'Layout, naming and linking actions'}
             onFocus={() => setMenuOpen(true)}
-            {...shellControl(() => setMenuOpen((v) => !v))}
           >
             <More size={14} />
-          </button>
-          {/* M207's rule kept: every verb below stays MOUNTED (only `hidden`
-              toggles), so it is discoverable to checks and assistive
-              technology whether or not the menu has ever been opened. */}
+          </PopoverTrigger>
+          {/* A POPOVER, not a Menu — and the difference is this pane's
+              keyboard contract, not a preference. The trigger's `onFocus`
+              above opens the surface so that TAB WALKS EVERY ACTION, which is
+              the M71–M93 promise verify:panels:product `reach.1` pins ("in the
+              tab order, not click-only"). A Radix menu deliberately replaces
+              that model: its roving focus group leaves exactly one tab stop
+              and expects the arrow keys, so Tab would skip the whole menu.
+              A popover's content is ordinary tabbable markup, so the contract
+              survives untouched and the surface still gains Escape,
+              outside-click dismissal, focus returned to the trigger and
+              aria-expanded that cannot drift.
+
+              `forceMount` keeps M207's own rule: every verb below stays
+              MOUNTED (only `hidden` toggles), discoverable whether or not the
+              surface has been opened. Radix would otherwise unmount it and
+              take `[data-inspector-action="close"]` with it — which
+              verify-panels-agents clicks WITHOUT opening this menu. The
+              `.inspector__menu[hidden] { display: none }` rule that
+              verify:styles m207.context.1 pins still does the hiding. */}
+          <PopoverContent forceMount>
           <div
             className="inspector__menu"
             role="menu"
             data-inspector-menu
             hidden={!menuOpen}
-            onMouseDown={(e) => e.stopPropagation()}
             onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setMenuOpen(false) } }}
           >
             {/* M92. Three toggles, each reading the model's marks; the word says what the click DOES. */}
@@ -1220,6 +1234,8 @@ function InspectorPanel({
               {closeArmed ? 'close?' : 'Close'}
             </button>
           </div>
+          </PopoverContent>
+          </Popover>
         </span>
       </div>
     </div>

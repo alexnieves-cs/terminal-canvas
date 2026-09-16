@@ -246,6 +246,13 @@ function IsoCube(props: {
   const synthetic = node.synthetic === true || node.id === '__hub__' || overflow
   const live = isLiveRosterState(node.state)
   const needs = node.state === 'wants-you'
+  // Remember that the person looked until the underlying attention episode ends.
+  const [acknowledged, setAcknowledged] = useState(false)
+  useEffect(() => {
+    if (!needs) setAcknowledged(false)
+    else if (selected) setAcknowledged(true)
+  }, [needs, selected])
+  const attention = needs && !selected && !acknowledged
   // State skins (M275): each state wears a distinct body, not one neon cube.
   // `tone` is the CSS hook; the classes below only name the moments CSS animates.
   const tone = toneFromState(node.state)
@@ -256,6 +263,7 @@ function IsoCube(props: {
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: synthetic && !overflow ? 'default' : 'pointer' }}
       data-tone={tone}
+      data-attention={attention || undefined}
       data-depth={props.band}
       data-orch-overflow={overflow ? node.overflow!.length : undefined}
       onClick={() => { if (overflow) onOverflow(); else if (!synthetic) onSelect(node.id) }}
@@ -283,7 +291,7 @@ function IsoCube(props: {
       </foreignObject>
       {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
           cube is selected — the person has looked, so the graph stops calling. */}
-      {needs && !selected ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
+      {attention ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
       <text x={props.labelOffset.x} y={node.size * 1.15 + props.labelOffset.y} textAnchor="middle" className="orch__cube-label">{node.title}</text>
     </g>
   )

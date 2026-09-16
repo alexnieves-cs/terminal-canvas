@@ -60,7 +60,10 @@ export function orchProjectNode(
     depth,
     band: orchDepthBand(depth),
     rate,
-    calloutDrift: { x: cam.x * (ORCH_PARALLAX.callout - rate), y: cam.y * (ORCH_PARALLAX.callout - rate) }
+    calloutDrift: {
+      x: (cam.x + (node.x - stage.w / 2) * (cam.k - 1)) * (ORCH_PARALLAX.callout - rate),
+      y: (cam.y + (fy - stage.h / 2) * (cam.k - 1)) * (ORCH_PARALLAX.callout - rate)
+    }
   }
 }
 

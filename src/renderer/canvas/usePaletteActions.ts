@@ -35,7 +35,7 @@ import { allTemplates } from '@shared/templates'
 import type { GithubPublishRequest, SpawnResult } from '@shared/ipc-contract'
 import { WORK_ITEM_STATES, upsertWorkItem, workItemRefusal, type PersistedWorkItem } from '@shared/work-items'
 import { repoOfKey } from '@shared/work-items'
-import { startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
+import { resolveRepository, startWorkNeeds, type StartWorkOutcome, type StartWorkRepo } from '@renderer/palette/start-work'
 import type { Registry } from '@renderer/session/session-registry'
 import { tidyPanels } from './placement'
 import type { PanelSpecTemplate } from '@renderer/session/panel-session'
@@ -46,6 +46,7 @@ import { beginUpdateCheck, getUpdateState, setUpdateResult, updateSentence } fro
 import { clearLiveSession, getLiveSession } from '@renderer/session/live-session-store'
 import { buildSpawnRequest } from '@renderer/palette/spawn-sheet'
 import { LINEUPS, lineupPlan, type Lineup } from '@shared/lineups'
+import { SWARM_PRESETS, SWARM_PRESET_IDS, parseSwarmPresetId, type SwarmPresetId } from '@shared/swarm'
 import { getChat } from '@renderer/chat/chat-store'
 import { templateRefusal, templateHoles } from '@renderer/palette/template-model'
 import { SUPERVISOR_PROMPT, type AgentBackend } from '@shared/agent-session'
@@ -231,7 +232,7 @@ export interface PaletteActionsDeps {
    * over the chat and broker doors that live there); a ref rather than four
    * deps so the memo does not rebuild when Canvas re-creates them.
    */
-  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
+  boardVerbsRef: RefObject<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; swarm?: (itemId: string, teammateId: string, root: string, preset: SwarmPresetId) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>
 }
 
 /**
@@ -562,6 +563,32 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             // that fails silently.
             const outcome = await self.startWork(item.id, mate.id)
             return outcome.kind === 'started' ? { kind: 'ran', note: `started on ${outcome.panelId}` } : { kind: 'refused', reason: outcome.reason }
+          }
+          // M275. The arrangement, through the SAME executor the sheet's Start
+          // and the card's menu reach. Each of the three arguments binds by
+          // KEY and refuses by name — the pattern `dispatch` set — and the
+          // ROOT is resolved the way a start with no sheet resolves it: the
+          // teammate's places are walked and the item's own clone is taken
+          // when exactly one matches. A plan has no typist to answer
+          // `ambiguous` or `none`, so both refuse with the sentence that names
+          // the choice, rather than picking one.
+          case 'swarm': {
+            const item = (workItemsRef.current ?? []).find((w) => w.id === a.item || w.key === a.item)
+            if (item === undefined) return { kind: 'refused', reason: `no work item is called ${a.item} — name one by its id or key` }
+            const mate = teammatesRef.current.find((t) => t.id === a.teammate || t.name === a.teammate)
+            if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${a.teammate}` }
+            const presetId = parseSwarmPresetId(a.arrangement)
+            if (presetId === null) return { kind: 'refused', reason: `no arrangement is called ${a.arrangement} — one of ${SWARM_PRESET_IDS.join(', ')}` }
+            const answer = await window.canvas.board.repositories({ teammateId: mate.id })
+            const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
+            const wanted = item.key === undefined ? null : repoOfKey(item.key)
+            const resolved = resolveRepository(repos, wanted)
+            if (resolved.kind !== 'auto') {
+              const needs = startWorkNeeds({ title: item.title, teammateId: mate.id }, { teammates: teammatesRef.current ?? [], repos, wanted })
+              return { kind: 'refused', reason: needs[0]?.why ?? `choose which of ${mate.name}'s repositories to work in — a plan cannot answer that` }
+            }
+            const outcome = await self.startSwarm(item.id, mate.id, resolved.path, presetId)
+            return outcome.kind === 'started' ? { kind: 'ran', note: `${SWARM_PRESETS[presetId].label} arrangement on ${outcome.panelId}` } : { kind: 'refused', reason: outcome.reason }
           }
           case 'board': {
             const what = String(a.what ?? '').trim()
@@ -2443,6 +2470,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
      */
     beginStartWork: (opts) => {
       const openSheet = (title: string, titleFixed: boolean, wanted: string | null, itemId: string | undefined, teammateId: string | undefined): void => {
+        const item = itemId === undefined ? undefined : (workItemsRef.current ?? []).find((i) => i.id === itemId)
         setInputMode({
           kind: 'start',
           label: 'Start work',
@@ -2455,6 +2483,18 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
             wanted,
             teammates: teammatesRef.current ?? [],
             ...(teammateId === undefined ? {} : { teammateId }),
+            // M275. What an ARRANGEMENT needs to judge itself, read at open:
+            // whether any CLI can take a seat at all, the card's own state,
+            // and the ceiling — so the sheet can say who would queue before
+            // Enter rather than after the fourth agent has already started.
+            agentAvailable: claudeAvailable(presetRows) || codexAvailable(presetRows),
+            ...(item === undefined ? {} : { itemState: item.state }),
+            ceiling: {
+              maxConcurrent: Number(settingRows.find((r) => r.id === 'agents.maxConcurrent')?.value ?? 0),
+              liveAgents: panelsRef.current.filter((p) => isChatPanel(p) && (getChat(p.rect.id).snapshot?.status === 'streaming' || getChat(p.rect.id).snapshot?.status === 'starting')).length,
+              queued: panelsRef.current.reduce((n, p) => n + (isChatPanel(p) ? (getChat(p.rect.id).snapshot?.queued ?? 0) : 0), 0)
+            },
+            ...(opts?.swarm === undefined ? {} : { swarm: opts.swarm }),
             repositories: (id) => window.canvas.board.repositories({ teammateId: id }),
             submit: async (choice) => {
               // The task is minted only once the triple is answered: a sheet
@@ -2462,7 +2502,13 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               // M149 reached for `New workspace from` (an Escape used to
               // strand the user in an empty workspace).
               const id = itemId ?? self.addWorkItem({ source: 'typed', title: choice.title, state: WORK_ITEM_STATES[0] as PersistedWorkItem['state'] })
-              const outcome = await self.startWork(id, choice.teammateId, choice.root)
+              // ONE route in, two executors out. The arrangement decides which,
+              // and nothing else does: a swarm that fell through to `startWork`
+              // would open one lane and report `started`, which is the silent
+              // half of a feature that looks like it ran.
+              const outcome = choice.swarm === undefined
+                ? await self.startWork(id, choice.teammateId, choice.root)
+                : await self.startSwarm(id, choice.teammateId, choice.root, choice.swarm)
               return outcome.kind === 'started' ? { kind: 'started' } : { kind: 'refused', reason: outcome.reason }
             },
             openTeammates: () => chooseNavigator('teammates'),
@@ -2479,7 +2525,12 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       const teammateId = opts?.teammateId
       // With no teammate chosen there is nothing to read and nothing to
       // derive: the sheet opens on the question it can answer.
-      if (teammateId === undefined || item === undefined) { openSheet(title, item !== undefined, wanted, item?.id, teammateId); return }
+      // M275. An ARRANGEMENT always opens the sheet, even when the triple is
+      // complete. The empty-needs fast path exists so M114's one-gesture drop
+      // stays one gesture; a shape that opens five panels, two worktrees and
+      // three handoffs is not that, and the seats must be stated before any
+      // of them is minted (the sheet's own standing rule).
+      if (teammateId === undefined || item === undefined || opts?.swarm !== undefined) { openSheet(title, item !== undefined, wanted, item?.id, teammateId); return }
       void window.canvas.board.repositories({ teammateId }).then((answer) => {
         const repos: readonly StartWorkRepo[] = answer.kind === 'repos' ? answer.repos : []
         const needs = startWorkNeeds({ title, teammateId }, { teammates: teammatesRef.current ?? [], repos, wanted })
@@ -2490,6 +2541,9 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     /** M197. The executor, unchanged in shape: the same `dispatchWorkItem` every door already ran through, now answering. */
     startWork: async (itemId, teammateId, root): Promise<StartWorkOutcome> =>
       (await boardVerbsRef.current?.dispatch?.(itemId, teammateId, root)) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
+    /** M275. The arrangement's executor — Canvas's, installed the same way, and a no-op refusal before it is installed rather than a throw. */
+    startSwarm: async (itemId, teammateId, root, preset): Promise<StartWorkOutcome> =>
+      (await boardVerbsRef.current?.swarm?.(itemId, teammateId, root, preset)) ?? { kind: 'refused', reason: 'the canvas is not ready yet' },
     beginNewWorkItem: () => {
       setInputMode({
         kind: 'text',

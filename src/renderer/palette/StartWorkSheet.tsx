@@ -5,7 +5,9 @@ import type { BoardRepositoriesResult } from '@shared/ipc-contract'
 import { shortPath } from './panel-name'
 import { SheetHeader } from './SpawnSheet'
 import { runtimeDefaultsLine } from '@shared/first-run'
-import { startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, type StartWorkRepo } from './start-work'
+import type { WorkItemState } from '@shared/work-items'
+import { SWARM_LIST, SWARM_PRESETS, swarmPlan, type SwarmPresetId } from '@shared/swarm'
+import { startWorkNeeds, startWorkRefusal, startWorkRoot, startWorkSummary, startWorkSwarmRefusal, type StartWorkRepo } from './start-work'
 
 /**
  * M197 (D05). THE START WORK SHEET — the one place a task, an agent and a
@@ -46,11 +48,19 @@ export interface StartWorkSheetModel {
   teammateId?: string
   /** Main's answer: the repositories under this teammate's places. Three arms. */
   repositories(teammateId: string): Promise<BoardRepositoriesResult>
-  submit(choice: { title: string; teammateId: string; root: string }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
+  submit(choice: { title: string; teammateId: string; root: string; swarm?: SwarmPresetId }): Promise<{ kind: 'started' } | { kind: 'refused'; reason: string }>
   /** The named route to the grant. */
   openTeammates(): void
   /** M262. The expert route: close this sheet and open New panel. Absent hides the switch. */
   openPanel?(): void
+  /** M275. Whether an agent CLI answered discovery — an arrangement of agents is refused by name without one. Absent reads as available. */
+  agentAvailable?: boolean
+  /** M275. The card's own state, when this start is for a card already on the board; absent for a task about to be minted. */
+  itemState?: WorkItemState
+  /** M275. The ceiling, read live: the preview says who would queue BEFORE Enter (M104's rule, M121's arithmetic). */
+  ceiling?: { maxConcurrent: number; liveAgents: number; queued: number }
+  /** M275. Pre-chosen by the palette's per-arrangement rows; absent is the solo lane, which stays the default of the plain door. */
+  swarm?: SwarmPresetId
 }
 
 export interface StartWorkSheetProps {
@@ -63,6 +73,10 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
   const [title, setTitle] = useState(model.title)
   const [teammateId, setTeammateId] = useState<string>(model.teammateId ?? '')
   const [root, setRoot] = useState('')
+  // M275. '' is the SOLO lane — the start M197 shipped — and it is the
+  // default, because a person who opened this sheet to start one task must
+  // not get five agents for pressing Enter.
+  const [swarm, setSwarm] = useState<'' | SwarmPresetId>(model.swarm ?? '')
   const [repos, setRepos] = useState<readonly StartWorkRepo[] | undefined>(undefined)
   const [noPlaces, setNoPlaces] = useState<string | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -91,18 +105,34 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teammateId])
 
-  const ctx = useMemo(() => ({ teammates: model.teammates, repos, wanted: model.wanted }), [model.teammates, repos, model.wanted])
-  const choice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }) }
+  const ctx = useMemo(() => ({
+    teammates: model.teammates, repos, wanted: model.wanted,
+    ...(model.agentAvailable === undefined ? {} : { agentAvailable: model.agentAvailable }),
+    ...(model.itemState === undefined ? {} : { itemState: model.itemState })
+  }), [model.teammates, repos, model.wanted, model.agentAvailable, model.itemState])
+  const choice = { title, ...(teammateId === '' ? {} : { teammateId }), ...(root === '' ? {} : { root }), ...(swarm === '' ? {} : { swarm }) }
   const needs = startWorkNeeds(choice, ctx)
   const blocking = startWorkRefusal(choice, ctx)
+  // M275. The arrangement's own refusal is a THIRD kind: the triple can be
+  // answered and the shape still not apply. It disables Start by itself, so a
+  // swarm cannot half-land and then report why.
+  const swarmBlocked = startWorkSwarmRefusal(choice, ctx)
   const mate = model.teammates.find((t) => t.id === teammateId)
   const chosenRoot = startWorkRoot(choice, ctx)
   const summary = startWorkSummary(choice, mate, chosenRoot)
+  // The shape, stated before anything is minted — the sheet's standing rule
+  // applied to the arrangement. Solo has no plan to show: it is one lane.
+  const plan = swarm === '' ? null : swarmPlan(SWARM_PRESETS[swarm], {
+    maxConcurrent: model.ceiling?.maxConcurrent ?? 0,
+    liveAgents: model.ceiling?.liveAgents ?? 0,
+    queued: model.ceiling?.queued ?? 0,
+    ...(chosenRoot === null ? {} : { rootWords: shortPath(chosenRoot, 2) })
+  })
 
   const submit = (): void => {
-    if (busy || blocking !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
+    if (busy || blocking !== null || swarmBlocked !== null || needs.length > 0 || teammateId === '' || chosenRoot === null) return
     setBusy(true); setRefusal(null)
-    void model.submit({ title: title.trim(), teammateId, root: chosenRoot }).then((result) => {
+    void model.submit({ title: title.trim(), teammateId, root: chosenRoot, ...(swarm === '' ? {} : { swarm }) }).then((result) => {
       setBusy(false)
       if (result.kind === 'refused') { setRefusal(result.reason); return }
       onDone()
@@ -166,13 +196,43 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         </select>
       </label>
 
+      {/* M275. THE ARRANGEMENT. Last of the fields, and after the repository
+          on purpose: the seats' folders are that repository's, so a shape
+          chosen before it would preview worktrees of nowhere. Solo is first
+          and selected, because the default must stay the start that shipped. */}
+      <label className="sheet__field">
+        <span className="sheet__label">Arrangement</span>
+        <select className="sheet__select" data-start-swarm value={swarm} aria-label="arrangement"
+          onChange={(e) => { setSwarm(e.target.value as '' | SwarmPresetId); setRefusal(null) }}>
+          <option value="" data-start-swarm-row="solo">Solo — one conversation in its own lane</option>
+          {SWARM_LIST.map((preset) => (
+            <option key={preset.id} value={preset.id} data-start-swarm-row={preset.id}>{preset.label} — {preset.hint}</option>
+          ))}
+        </select>
+      </label>
+
       {/* M262. What runs, said: a lane is Claude Code with the CLI's own
           defaults — nothing on this sheet changes them, and saying so is
           what stops a person hunting for a knob that is not here. */}
       <div className="sheet__field sheet__field--how">
         <span className="sheet__label">Runtime</span>
-        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine('Claude Code', {})} · in its own worktree</span>
+        <span className="sheet__defaults" data-start-defaults>{runtimeDefaultsLine('Claude Code', {})} · {plan === null ? 'in its own worktree' : `${plan.line} · the person opens the pull request`}</span>
       </div>
+
+      {/* M275. The seats, one row each, BEFORE anything is minted — the
+          sheet's own rule extended to the shape. A seat names its role and
+          the folder it works in, because those are the two facts a person
+          needs to judge whether the arrangement is the one they meant. */}
+      {plan !== null && (
+        <div className="sheet__field sheet__field--how" data-start-swarm-plan>
+          <span className="sheet__label">Seats</span>
+          <span className="sheet__defaults">
+            {plan.seats.map((seat) => (
+              <span key={seat.key} className="sheet__seat" data-start-swarm-seat={seat.key}>{seat.title} · {seat.role} · {seat.where}</span>
+            ))}
+          </span>
+        </div>
+      )}
 
       <div className="sheet__foot">
         {/* The triple, before anything is minted. */}
@@ -187,6 +247,15 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
         )}
         {blocking !== null && (
           <span className="sheet__refusal" data-start-blocked role="alert">{blocking}</span>
+        )}
+        {/* M275. The arrangement's own two sentences. The ceiling line is a
+            WARNING and not a refusal — queueing is what the ceiling is for —
+            so it never disables Start; the refusal does. */}
+        {swarmBlocked !== null && blocking === null && (
+          <span className="sheet__refusal" data-start-swarm-refusal role="alert">{swarmBlocked}</span>
+        )}
+        {plan !== null && plan.ceilingLine !== '' && swarmBlocked === null && (
+          <span className="sheet__hint" data-start-swarm-ceiling>{plan.ceilingLine}</span>
         )}
         {refusal !== null && <span className="sheet__refusal" data-start-refusal role="alert">{refusal}</span>}
         {/* The route to the grant, named — never a widening from inside a start. */}
@@ -204,10 +273,10 @@ export function StartWorkSheet({ model, onDone, onCancel }: StartWorkSheetProps)
           <button type="button" className="sheet__button" data-start-cancel
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
             onClick={(e) => { e.preventDefault(); onCancel() }}>Cancel</button>
-          <button type="button" className="sheet__button is-primary" data-start-submit disabled={busy || blocking !== null || needs.length > 0 || chosenRoot === null}
-            title={needs[0]?.why ?? blocking ?? undefined}
+          <button type="button" className="sheet__button is-primary" data-start-submit disabled={busy || blocking !== null || swarmBlocked !== null || needs.length > 0 || chosenRoot === null}
+            title={needs[0]?.why ?? blocking ?? swarmBlocked ?? undefined}
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-            onClick={(e) => { e.preventDefault(); submit() }}>{busy ? 'Starting the lane…' : 'Start task'}</button>
+            onClick={(e) => { e.preventDefault(); submit() }}>{busy ? (plan === null ? 'Starting the lane…' : 'Making the arrangement…') : 'Start task'}</button>
         </div>
       </div>
     </div>

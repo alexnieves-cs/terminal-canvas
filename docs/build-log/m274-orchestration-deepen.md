@@ -198,5 +198,44 @@ multiplayer) remains out of scope from the CoS plan.
   paints, lifts the task frame, selects a back satellite so the flipped card is
   in frame, and hides only the clock values and greeting (they change every
   run) — disclosed in its intent.
+- **Critic's sentence for the changed golden** (written after LOOKING at three
+  successive captures, each one fixing what the last one showed): the ring reads
+  as one lit stage — nine solid cubes on an elliptical ground plane with contact
+  shadows, the selected cube lifted on iris edges while its siblings dim WITHOUT
+  flattening, and its glass card hanging below it, whole, over the hub, with the
+  stem and Jump reachable. The golden was written by hand from
+  `out/shots/orchestration.png` through `verify:visual`'s own nativeImage 0.5
+  resize (never `UPDATE_GOLDENS=1`, which would have rewritten the 58 other
+  scenes that fail on pre-existing drift).
 - Checks: `verify:orchestration` 49/49, `verify:styles` 75/75, web typecheck
-  clean, build passes. `starter` still fails in the shot harness, unchanged.
+  clean, build passes. `verify:visual` repaints and the orchestration scene
+  matches at **0.000% (0 px)** — the scene is reproducible, not merely re-baselined.
+  `starter` still fails in the shot harness, unchanged; the other visual reds
+  predate this work (the CoS restyle landed without its goldens) and none of
+  them paint an `.orch` selector.
+
+### Living diorama follow-up — 2026-09-15
+
+Completed the remaining motion details on the existing depth scene: attention
+beacons are finite, selecting a cube acknowledges that episode until its state
+changes, and hub attention takes precedence over its steady glow. Selection
+holds its Z lift even while busy. Idle/exited hub faces keep their factual skin.
+Working rims borrow amber through the central tone binding; callout panels unfold
+from their cube-facing edge and their projection now includes zoom parallax.
+Reduced motion retains the static scene and removes the added motion.
+
+Validation: orchestration projection checks and style checks pass; production
+build passes. The captured orchestration visual passes its comparison. Visual
+review: the selected rear cube remains solid and lifted, its upright card clears
+the label, and the overflow cube remains visible and named. Other scenes retain
+the visual drift documented above; no unrelated goldens were rewritten.
+
+The final packaged build passes. The full `npm run verify` retry got past
+sandbox file-watcher/socket failures, but reports canvas panel failures (workspace
+move check 147, a kinds infrastructure script error, and agents detail.1).
+These checks do not exercise the Orchestration view; the full gate is not green.
+Detailed run output is in `out/diorama-verify.log`, with separate visual, packaged,
+style, and orchestration logs alongside it.
+Final full-run summary: 49/51 suites passed; `verify:panels:kinds` and
+`verify:panels:agents` failed. The product panel suite passed. Final focused
+rechecks after the tone binding correction remain green.

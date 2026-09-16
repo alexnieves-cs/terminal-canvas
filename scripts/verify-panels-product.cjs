@@ -3733,8 +3733,13 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
             // two hundred checks select on. The count is asserted rather than
             // loosened so a sixth cannot arrive unnoticed. M203 (D08) IS that
             // sixth, on purpose: `show`, the card's door onto Show this task —
-            // an addition beside the five, never a rename of one.
-            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) && card.verbs.length === 6 && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
+            // an addition beside the five, never a rename of one. M275 is the
+            // SEVENTH, again by addition: `swarm`, the card's door onto the four
+            // arrangements. The aliases are NAMED here as well as counted, so the
+            // next arrival reads as "a verb was added" rather than as "a number
+            // moved" — a bare count says nothing about which one went missing.
+            card && card.kind === 'work' && card.state === WORKING && (card.word ?? '').startsWith(WORKING) &&
+            card.verbs.map((v) => v[0]).join(',') === 'assign,resume,open-pr,review,show,swarm,done' && card.verbs.every((v) => v[1] === false || (v[2] ?? '') !== '') &&
             moved !== false && before && after && before.focus === 'bdT' && after.focus === 'bdT',
           JSON.stringify({ pane, card, before, after, moved }))
       } catch (bdErr) {
@@ -5400,7 +5405,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       const fileId = await waitUntil(() => wc.executeJavaScript(`(() => { const p = [...document.querySelectorAll('.panel[data-panel-kind="file"]')].find((el) => (el.getAttribute('data-file-path') || el.textContent || '').includes('greet.md')); return p ? p.getAttribute('data-panel-id') : false })()`), 8000)
       const editOpened = fileId ? await (async () => {
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-edit]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
-        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]') !== null`), 6000)
+        return waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]:not([data-file-node-editor-loading])') !== null`), 12000)
       })() : false
       // The typed text goes through JSON.stringify: a `\n` written inside
       // this template literal reaches the renderer as a REAL newline inside
@@ -5408,8 +5413,7 @@ runPanelsSuite('product', WATCHDOG_MS, async (ctx) => {
       // token` — the whole check reading as a failed Open door.
       const saved = editOpened ? await (async () => {
         await wc.executeJavaScript(`(() => { const t = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-editor]'); if (!t) return false
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set
-          setter.call(t, ${JSON.stringify('Say hello to the user, warmly.\n')}); t.dispatchEvent(new Event('input', { bubbles: true })); return true })()`)
+          return window.__m276Type(t, ${JSON.stringify('Say hello to the user, warmly.\n')}) })()`)
         await settle()
         await wc.executeJavaScript(`(() => { const b = document.querySelector('.panel[data-panel-id=${JSON.stringify(fileId)}] [data-file-node-save]'); if (b) b.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
         return waitUntil(() => readFileSync(cmdFile, 'utf8').includes('warmly'), 6000)

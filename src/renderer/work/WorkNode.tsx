@@ -5,11 +5,13 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { panelState, providerState } from '@renderer/panels/panel-state'
 import { useNow } from '@renderer/components/useNow'
 import { shellControl } from '@renderer/shell/shell-control'
+import { Menu, MenuTrigger, MenuContent, MenuItem } from '@renderer/primitives'
 import { teammateWord, type PersistedTeammate } from '@shared/teammates'
 import { WORK_ITEM_MIME, type PersistedWorkItem } from '@shared/work-items'
 import type { RunNodeSupervision } from '@shared/run-outcome'
 import { retainedNextAction, type RetainedOutcome } from '@shared/retained-outcomes'
 import type { ReviewHandoff } from '@shared/review-readiness'
+import { SWARM_LIST, swarmRefusal, type SwarmPresetId } from '@shared/swarm'
 
 /**
  * M116. THE WORK CARD — the board's row in the world, the twelfth kind,
@@ -71,6 +73,16 @@ export interface WorkNodeProps {
   onDispatch: (itemId: string, teammateId: string) => void
   /** M114. Why a teammate cannot be picked, before main is asked; null when it can. */
   teammateReason: (teammate: PersistedTeammate) => string | null
+  /**
+   * M275. THE CARD'S ARRANGEMENT DOOR — the canvas gesture behind the `swarm`
+   * verb. It opens the start sheet with the arrangement already chosen rather
+   * than starting one from here: a shape that opens five panels, two worktrees
+   * and three handoffs is stated before it is minted, and this card has no
+   * room to state it.
+   */
+  onSwarm: (itemId: string, preset: SwarmPresetId) => void
+  /** M275. Whether any agent CLI answered discovery — a row of seats needs one, and the refusal says so by name. */
+  agentAvailable?: boolean
   /** M115. Open the pull request from the lane. */
   onOpenPr: (itemId: string) => void
   /** M115. The PR door's synchronous refusal (`prRefusalSync`), or null when the door is open — the lane's standing is asked at the click. */
@@ -97,6 +109,7 @@ const REMOTE_COPY_STALE_MS = 60 * 60 * 1000
 export function WorkNode(props: WorkNodeProps): JSX.Element {
   const { panel, item } = props
   const [assignOpen, setAssignOpen] = useState(false)
+  const [swarmOpen, setSwarmOpen] = useState(false)
   const readOnly = props.readOnly === true
   const now = useNow(item?.remoteState !== undefined, 60_000)
   const state = panelState({ kind: 'work', status: undefined, dormant: false, ...(item === undefined ? {} : { work: { state: item.state } }) }, undefined)
@@ -111,6 +124,27 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
     return (
       <button type="button" className="pf__verb pf__verb--word" data-work-verb={key} disabled={reason !== null}
         title={reason ?? label} onMouseDown={press(() => { if (reason === null) run() })} {...extra}>{label}</button>
+    )
+  }
+  /**
+   * A verb that OPENS A MENU rather than running an action.
+   *
+   * It cannot go through `verb()`: that mounts `press()`, which acts on
+   * MOUSEDOWN, and Radix opens on pointerdown — the two would toggle the same
+   * menu twice in one press and leave it shut. Radix owns the open here, and
+   * this keeps everything else `verb()` gives a row: the class, the
+   * `data-work-verb` alias the checks select on, and the refusal BY NAME in
+   * the title. `aria-haspopup` and `aria-expanded` are gone on purpose —
+   * Radix derives both from the open flag, so they cannot fall out of step.
+   *
+   * stopPropagation is this card's own rule, not the primitive's: without it
+   * the canvas reads the press as a background click and deselects the panel.
+   */
+  const menuVerb = (key: string, label: string, own: string | null, extra?: Record<string, string | boolean | undefined>): JSX.Element => {
+    const reason = readOnly ? REASON_MERGED_VIEW : own
+    return (
+      <MenuTrigger className="pf__verb pf__verb--word" data-work-verb={key} disabled={reason !== null}
+        title={reason ?? label} onMouseDown={(e) => e.stopPropagation()} {...extra}>{label}</MenuTrigger>
     )
   }
   const openLink = (target: string): void => { void window.canvas.links.open({ panelId: panel.rect.id, target }) }
@@ -238,7 +272,31 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   sometimes the right thing to press. `assign` also carries
                   the `start` arm's own label, so a lost lane says `Start work
                   again…` and never names a door that does not exist. */}
-              {verb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : props.retainedOutcome !== undefined && props.laneLabel === undefined ? 'Start work again…' : 'Start work…', null, () => setAssignOpen((v) => !v), { 'aria-haspopup': 'menu', 'aria-expanded': assignOpen, ...(props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : {}) })}
+              <Menu open={assignOpen} onOpenChange={setAssignOpen}>
+                {menuVerb('assign', props.handoff?.action === 'start' && props.handoff.state !== 'no-lane' ? props.handoff.actionLabel : props.retainedOutcome !== undefined && props.laneLabel === undefined ? 'Start work again…' : 'Start work…', null, props.handoff?.action === 'start' ? { 'data-work-next': 'start' } : undefined)}
+                {/* The menu UNMOUNTS while closed — Radix's default, and the
+                    contract verify:swarm reads on the sibling swarm menu: a
+                    card at rest must not carry a menu in its markup. It moved
+                    up beside its trigger because Radix pairs the two through
+                    one root; placement is unchanged, since
+                    `.work-node__menu` positions from `.work-node__verbs`. */}
+                <MenuContent>
+                  <ul className="work-node__menu" role="menu" data-work-assign-menu>
+                    {props.teammates.length === 0 ? (
+                      <li><p className="work-node__menu-empty" data-work-assign-empty>{REASON_NO_TEAMMATES}</p></li>
+                    ) : props.teammates.map((t) => {
+                      const why = props.teammateReason(t)
+                      return (
+                        <li key={t.id} role="none">
+                          <MenuItem className="pf__verb pf__verb--word" data-work-assign={t.id} disabled={why !== null}
+                            title={why ?? `Start work on ${item.key ?? item.title} as ${teammateWord(t)}`}
+                            onSelect={() => props.onDispatch(item.id, t.id)}>{teammateWord(t)}</MenuItem>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </MenuContent>
+              </Menu>
               {/* M202 (D07). Start / Resume / Review, the three the guide asks
                   the card to offer. `resume` is a new alias beside the four
                   that existed, never a rename of one: roughly two hundred
@@ -269,24 +327,36 @@ export function WorkNode(props: WorkNodeProps): JSX.Element {
                   older than D08 and recorded, not changed. */}
               <button type="button" className="pf__verb pf__verb--word" data-work-verb="show"
                 title="Frame this task — its conversation, lane, reviews and links; nothing moves" {...shellControl(() => props.onShow(panel.rect.id))}>Show</button>
+              {/* M275. The four arrangements, under one verb: a card offers the
+                  SHAPES rather than a second teammate list, because the
+                  teammate is already the `assign` menu's question and asking it
+                  twice is how two doors start disagreeing. Each row is disabled
+                  BY NAME through `swarmRefusal` — the same function the sheet's
+                  Start reads — so a review arrangement over a `todo` card says
+                  why here and says the same thing there. */}
+              <Menu open={swarmOpen} onOpenChange={setSwarmOpen}>
+                {menuVerb('swarm', 'Swarm…', null)}
+                <MenuContent>
+                  <ul className="work-node__menu" role="menu" data-work-swarm-menu>
+                    {SWARM_LIST.map((preset) => {
+                      // The teammate is not known at this door (the sheet asks
+                      // it), so only the arms this card CAN answer are judged
+                      // here: the CLI and the card's own state. The rest is the
+                      // sheet's, and it uses the same function.
+                      const why = swarmRefusal(preset, { agentAvailable: props.agentAvailable !== false, item: { state: item.state } })
+                      return (
+                        <li key={preset.id} role="none">
+                          <MenuItem className="pf__verb pf__verb--word" data-work-swarm={preset.id} disabled={why !== null}
+                            title={why ?? preset.hint}
+                            onSelect={() => props.onSwarm(item.id, preset.id)}>{preset.label}</MenuItem>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </MenuContent>
+              </Menu>
               {verb('done', 'Done', null, () => props.onDone(item.id))}
               {props.retainedOutcome !== undefined && verb('clear-history', 'Clear history', null, () => props.onClearHistory(item.id))}
-              {assignOpen && (
-                <ul className="work-node__menu" role="menu" data-work-assign-menu onMouseDown={(e) => e.stopPropagation()}>
-                  {props.teammates.length === 0 ? (
-                    <li><p className="work-node__menu-empty" data-work-assign-empty>{REASON_NO_TEAMMATES}</p></li>
-                  ) : props.teammates.map((t) => {
-                    const why = props.teammateReason(t)
-                    return (
-                      <li key={t.id} role="none">
-                        <button type="button" role="menuitem" className="pf__verb pf__verb--word" data-work-assign={t.id} disabled={why !== null}
-                          title={why ?? `Start work on ${item.key ?? item.title} as ${teammateWord(t)}`}
-                          {...shellControl(() => { if (why !== null) return; setAssignOpen(false); props.onDispatch(item.id, t.id) })}>{teammateWord(t)}</button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
             </div>
           </>
         )}

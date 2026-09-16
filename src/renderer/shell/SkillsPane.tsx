@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { SkillsWorkspace } from './SkillsWorkspace'
 import type { SkillUse } from '@renderer/skills/skill-trail-store'
 import { shellControl } from './shell-control'
+import { Popover, PopoverTrigger, PopoverContent } from '@renderer/primitives'
 import { ChevronLeft, Maximize, More } from '@renderer/icons'
 import { UNGROUPED_COLUMN_ID, type SkillKey } from '@shared/skills'
 import type { ToolScope } from '@shared/toolbox'
@@ -179,7 +180,6 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
   // M256. The dedicated workspace view — local, like the draft: whether it is
   // open is nothing anything outside the pane needs to know.
   const [workspace, setWorkspace] = useState(false)
-  const toggleMenu = (key: string): void => setOpenMenu((m) => (m === key ? null : key))
   const dropHandlers = (columnId: string): { onDragOver: (e: DragEvent) => void; onDrop: (e: DragEvent) => void } => ({
     onDragOver: (e) => {
       if (e.dataTransfer.types.includes(SKILL_CARD_MIME)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
@@ -329,30 +329,41 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                 <h3 className="skills-pane__heading">
                   <span className="skills-pane__column-title" title={col.title}>{col.title}</span>
                   <span className="skills-pane__count">{col.cards.length}</span>
+                  {/* M276. A POPOVER, not a menu — and that is a correction,
+                      not a preference. The surface holds a native <select>,
+                      which a `role="menu"` promises does not exist: a menu
+                      says its children are menuitems reached with the arrow
+                      keys, and a select claims those same keys for its own
+                      options. The two fought, silently, and a screen reader
+                      was told to expect rows it would never find. Tab walks
+                      this, which is what its content actually supports.
+
+                      The class, the host and the data attributes are
+                      unchanged, so nothing moves and nothing looks different;
+                      only the promise made to the keyboard is now true. */}
                   <span className="skills-pane__menu-host">
-                    <button type="button" className="icon-button skills-pane__menu-button" data-skills-column-menu={col.id}
-                      aria-haspopup="menu" aria-expanded={menuOpen}
-                      title={`Actions for ${col.title}`} aria-label={`Actions for ${col.title}`}
-                      {...shellControl(() => toggleMenu(menuKey))}><More /></button>
-                    {menuOpen && (
-                      <div className="skills-pane__menu" role="menu" data-skills-column-menu-open={col.id}
-                        onMouseDown={(e) => e.stopPropagation()}>
-                        <select className="skills-pane__assign" data-skills-assign-column={col.id}
-                          aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
-                          disabled={col.cards.length === 0 || props.teammates.length === 0}
-                          onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignColumn(col.id, id); setOpenMenu(null) } }}>
-                          <option value="">Assign to teammate…</option>
-                          {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
-                        </select>
-                        {/* Ungrouped's Delete stays PRESENT and disabled with its
-                            reason: a verb that vanished inside the menu would read
-                            as a feature that was never built. */}
-                        <button type="button" role="menuitem" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
-                          disabled={undeletable}
-                          title={undeletable ? UNGROUPED_DELETE_REASON : `Delete ${col.title}; its cards go back to where they derive`}
-                          {...shellControl(() => { if (!undeletable) { props.onDeleteColumn(col.id); setOpenMenu(null) } })}>Delete</button>
-                      </div>
-                    )}
+                    <Popover open={menuOpen} onOpenChange={(open) => setOpenMenu(open ? menuKey : null)}>
+                      <PopoverTrigger className="icon-button skills-pane__menu-button" data-skills-column-menu={col.id}
+                        title={`Actions for ${col.title}`} aria-label={`Actions for ${col.title}`}><More /></PopoverTrigger>
+                      <PopoverContent>
+                        <div className="skills-pane__menu" data-skills-column-menu-open={col.id}>
+                          <select className="skills-pane__assign" data-skills-assign-column={col.id}
+                            aria-label={`Assign ${col.title} to teammate`} title="Assign to teammate" value=""
+                            disabled={col.cards.length === 0 || props.teammates.length === 0}
+                            onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignColumn(col.id, id); setOpenMenu(null) } }}>
+                            <option value="">Assign to teammate…</option>
+                            {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                          </select>
+                          {/* Ungrouped's Delete stays PRESENT and disabled with its
+                              reason: a verb that vanished inside the menu would read
+                              as a feature that was never built. */}
+                          <button type="button" className="rail-row__verb skills-pane__delete" data-skills-delete={col.id}
+                            disabled={undeletable}
+                            title={undeletable ? UNGROUPED_DELETE_REASON : `Delete ${col.title}; its cards go back to where they derive`}
+                            {...shellControl(() => { if (!undeletable) { props.onDeleteColumn(col.id); setOpenMenu(null) } })}>Delete</button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </span>
                 </h3>
                 {columnWhy(col) !== null && (
@@ -369,22 +380,25 @@ function SkillsPaneImpl(props: SkillsPaneProps): JSX.Element {
                       data-skill-installed={card.installed ? 'yes' : 'no'} draggable
                       onDragStart={(e) => { e.dataTransfer.setData(SKILL_CARD_MIME, card.key); e.dataTransfer.effectAllowed = 'move' }}>
                       <span className="rail-row__label skill-card__name" title={card.name}>{card.name}</span>
+                      {/* The same correction as the column's, and starker: this
+                          surface's ONLY child is a <select>, so `role="menu"`
+                          described a list of commands that never existed. */}
                       <span className="skills-pane__menu-host skill-card__menu-host">
-                        <button type="button" className="icon-button skills-pane__menu-button" data-skill-card-menu={card.key}
-                          aria-haspopup="menu" aria-expanded={cardMenuOpen}
-                          title={`Assign ${card.name} to teammate`} aria-label={`Assign ${card.name} to teammate`}
-                          {...shellControl(() => toggleMenu(cardMenuKey))}><More /></button>
-                        {cardMenuOpen && (
-                          <div className="skills-pane__menu" role="menu" onMouseDown={(e) => e.stopPropagation()}>
-                            <select className="skills-pane__assign" data-skills-assign-card={card.key}
-                              aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
-                              disabled={props.teammates.length === 0}
-                              onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignCard(card.key, id); setOpenMenu(null) } }}>
-                              <option value="">Assign to teammate…</option>
-                              {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
-                            </select>
-                          </div>
-                        )}
+                        <Popover open={cardMenuOpen} onOpenChange={(open) => setOpenMenu(open ? cardMenuKey : null)}>
+                          <PopoverTrigger className="icon-button skills-pane__menu-button" data-skill-card-menu={card.key}
+                            title={`Assign ${card.name} to teammate`} aria-label={`Assign ${card.name} to teammate`}><More /></PopoverTrigger>
+                          <PopoverContent>
+                            <div className="skills-pane__menu">
+                              <select className="skills-pane__assign" data-skills-assign-card={card.key}
+                                aria-label={`Assign ${card.name} to teammate`} title="Assign to teammate" value=""
+                                disabled={props.teammates.length === 0}
+                                onChange={(e) => { const id = e.target.value; if (id !== '') { props.onAssignCard(card.key, id); setOpenMenu(null) } }}>
+                                <option value="">Assign to teammate…</option>
+                                {props.teammates.map((t) => <option key={t.id} value={t.id}>{teammateWord(t)}</option>)}
+                              </select>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </span>
                       {card.description !== '' && <span className="skill-card__description" data-skill-description>{card.description}</span>}
                       {/* M127 critic wave. TWO lines, not one ellipsised

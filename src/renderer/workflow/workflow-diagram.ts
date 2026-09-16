@@ -6,12 +6,9 @@ import type { HandoffTrigger } from '@shared/handoff'
 
 /**
  * M133. The block diagram is a PROJECTION of the template record. It computes
- * geometry and returns it; it stores nothing and owns no camera.
- *
- * This is why `@xyflow/react` is declined in spec §11: a graph library brings
- * a second canvas with its own pan, zoom, selection and undo, and this app
- * already has one. The live canvas is the editor; the template is the truth;
- * this draws it.
+ * geometry and returns it; it stores nothing and owns no camera. React Flow
+ * consumes this projection in the workflow view, while the template remains
+ * the truth for authored positions and edges.
  *
  * `dagre` stays declined for the same reason from the other side: template
  * nodes carry AUTHORED `dx`/`dy` (M80), so there is nothing to lay out. If

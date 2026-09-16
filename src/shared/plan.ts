@@ -66,6 +66,10 @@ const HUMAN_ANSWER_VERBS = new Set(['type', 'submit', 'interrupt'])
  */
 const TEAMMATE_REFUSED_VERBS = new Set([
   'new-chat', 'spawn', 'workspace-from-template', 'run-template', 'dispatch', 'restart', 'set-setting', 'workspace', 'reset-canvas',
+  // M275. Beside `dispatch`, at four times the scale: an arrangement opens a
+  // hub, workers, worktrees and a terminal. A teammate's plan does not open
+  // sessions, and five of them is not an exception to that.
+  'swarm',
   'workflow-add', 'workflow-set', 'workflow-remove', 'workflow-edge', 'workflow-unedge', 'workflow-move', 'workflow-save', 'workflow-copy', 'workflow-run', 'node-test',
   // M189's export writes a FILE at a path the caller names; a teammate's plan
   // does not choose where this app writes.

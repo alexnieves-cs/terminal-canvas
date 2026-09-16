@@ -4671,3 +4671,67 @@ recorded before M262 has no time and the row says nothing rather than inventing 
 (`verify:first-run` `fr.pure.1`, `fr.recent.1`; `verify:layout` `recent.3`). **The launcher's
 primary stays FILLED while disabled** — the shared `.is-primary:disabled` outline is what read as
 "not a button" — and is dimmed by mixing toward the ground, never `opacity` (`verify:styles` 3).
+
+**A NEW appended-system-prompt mark on a chat goes FIRST in `ensureChatSession`'s chain, not last
+(`chat/useChatSessions.ts`, `shared/chat-panel.ts`, `shared/swarm.ts`, M275).** The chain is a
+ladder of ternaries — `swarm`, then `supervisor`, then `dispatch`, then `routine`, then
+`orchestrator` — and the marks are NOT mutually exclusive: a swarm's hub carries `supervisor` as
+well (it is the canvas's one supervisor) and a swarm's primary seat carries `dispatch` as well (it
+is the task's lane). A mark appended at the END of the ladder is therefore unreachable for exactly
+the panels that need it, and the loss is invisible: the session spawns, the panel renders, and the
+agent has simply forgotten what seat it is. M81's rule is why it matters at all — the CLI keeps no
+record of an appended prompt, so the mark is the only thing that survives a relaunch.
+`swarmSystemPrompt` composes `SUPERVISOR_PROMPT` back in for the hub, so going first costs nothing.
+Pinned by `verify:swarm swarm.resume.1`, which reads the ternary's ORDER as text.
+
+**A palette row whose `id` is not a STRING LITERAL in `commands.ts` is a door `closure.v9.1` cannot
+see (`shared/verb-table.ts`'s `V9_DOORS`, `scripts/verify-verbs.cjs`, M275).** The door check reads
+`commands.ts` as text and looks for `id: '<the door's palette id>'`; a row built in a loop
+(`id: \`work.swarm.${preset.id}\``) or by object shorthand (`{ id, title, … }`) satisfies the
+compiler, renders correctly, runs correctly — and fails the four-door rule for a door that is
+genuinely there, or worse, PASSES nothing and is never noticed because the verb was added without
+a `V9_DOORS` row at all. Write the four rows out. `verify:swarm swarm.rows.1` is the other half:
+it fails for a swarm preset with no literal row, so neither the presets nor the doors can drift
+alone.
+
+**A swarm's automated edges must be a DAG, and the hub's edges are STATEMENTS for that reason
+(`shared/swarm.ts`, `panels/panels.ts`'s `setLinkAutomation`, M275).** `setLinkAutomation` returns
+the IDENTICAL array when the new rule would close a cycle — no throw, no log, no red. An
+arrangement whose workers hand off into a hub that also hands off back would therefore be drawn in
+full and wired in part, and the missing automation is invisible on the canvas because the edge is
+still painted. So `SwarmEdge.automate` is false for every edge out of the supervisor, and
+`verify:swarm swarm.edges.2`/`.3` walk the automated subgraph for a cycle.
+
+**Stopping a keydown on Monaco's `onKeyDown` emitter kills every keybinding Monaco has
+(`renderer/file/CodeEditor.tsx`, M276).** The file panel's draft surface has to swallow keys so a
+⌘N typed into it does not reach `useViewport`'s and `usePalette`'s `window` listeners and spawn a
+panel behind the file — the guard the textarea it replaced carried. `editor.onKeyDown(e =>
+e.browserEvent.stopPropagation())` reads like the same guard in Monaco's own vocabulary and is not:
+the public emitter fires from a handler on the inner `textarea.inputarea`, while Monaco's
+KEYBINDING SERVICE listens on the editor container, an ANCESTOR of that textarea. Stopping
+propagation in the emitter therefore runs before Monaco has decided what the key meant, and cancels
+its whole dispatch — ⌘S saves nothing, ⌘F opens no find widget, the editor's own undo never fires.
+Nothing throws and nothing logs; it looks like "Monaco ignores keys". The guard belongs on the HOST
+element, outside everything Monaco listens on and still inside `window`. The textarea was safe only
+by accident of shape: a textarea has no descendants, so "on the element itself" and "outside
+everything that listens" were the same place. Measured 2026-09-15: the key arrived correctly
+(`keyCode=49`, `meta=true`) and the command never ran.
+
+**A dispatched `KeyboardEvent` can never drive Monaco, and not for the usual untrusted-event reason
+(`scripts/verify-panels-kinds.cjs` 169/171, M276).** Monaco's keybinding service reads the legacy
+numeric `keyCode`, and Chromium's `KeyboardEventInit` has no `keyCode` member at all — `new
+KeyboardEvent('keydown', { key: 's', keyCode: 83, metaKey: true })` arrives at Monaco as keyCode 0
+and matches no binding. The suite's standing rule already covers it (a dispatched event is
+untrusted and Blink runs no default action for one), so the press is `wc.sendInputEvent` — the same
+answer the marquee block reached for mouse input.
+
+**Typing into Monaco reaches React a tick LATER than the native-value-setter trick did
+(`scripts/verify-panels-kinds.cjs` 169/170/171, M276).** The old checks called
+`HTMLTextAreaElement.prototype.value`'s setter and dispatched `input`, which React handles INSIDE
+its own event handler and flushes before `executeJavaScript` resolves. Monaco's
+`onDidChangeModelContent` is not a React event, so the `setDraft` it causes is scheduled, not
+flushed. A check that types and immediately presses ⌘S saves the text from before the edit; one
+that types and immediately writes the file from outside finds a CLEAN draft and correctly reseeds
+it, so no conflict banner is ever raised. Both read as product bugs and are the check's own race.
+`[data-file-node-dirty]` is React's own answer to "have you got it yet", so it is the wait — scoped
+to the panel under test, since an earlier check deliberately leaves its own panel open and dirty.

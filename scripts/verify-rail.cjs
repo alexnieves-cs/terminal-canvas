@@ -2917,21 +2917,34 @@ const session = (id, over = {}) => ({
   const { readdirSync, statSync, readFileSync } = require('node:fs')
   const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : (p.endsWith('.tsx') ? [p] : []) })
   const unlabelled = [], iconBare = []
+  // M276. A control is no longer always a literal <button>: the headless
+  // primitives render one for the caller, so `<MenuTrigger>`, `<MenuItem>`
+  // and their siblings ARE buttons as far as a person is concerned and are
+  // read here under the same rule. Without this the check would still pass on
+  // a screenful of unlabelled controls — every migrated surface would simply
+  // stop being scanned, which is the quiet way a guard like this dies.
+  //
+  // src/renderer/primitives itself is skipped: the <button> in each wrapper is
+  // a generic passthrough (`{...rest}`) whose label is supplied by the call
+  // site the loop below now reads. Labelling it there would be labelling every
+  // adopter the same thing.
+  const CONTROL = '(?:button|MenuTrigger|MenuItem|MenuCheckboxItem|MenuRadioItem|PopoverTrigger|DialogTrigger|DialogClose|TooltipTrigger)'
   for (const file of walk(join(__dirname, '..', 'src', 'renderer'))) {
     const text = readFileSync(file, 'utf8').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
     const rel = file.split('/src/renderer/')[1]
+    if (rel.startsWith('primitives/')) continue
     // Attributes may contain `=>` (a shellControl spread); a `>` closes the
     // tag only when it is not an arrow's.
-    for (const m of text.matchAll(/<button\b((?:=>|[^>])*?)>([\s\S]*?)<\/button>/g)) {
-      const attrs = m[1], body = m[2]
+    for (const m of text.matchAll(new RegExp(`<(${CONTROL})\\b((?:=>|[^>])*?)>([\\s\\S]*?)</\\1>`, 'g'))) {
+      const attrs = m[2], body = m[3]
       const named = /aria-label=|title=/.test(attrs)
       // A `{t.name}` / `{label}` expression is text a person reads too.
       const visibleText = /[A-Za-z…]{2,}/.test(body.replace(/<[^>]*>/g, '').replace(/\{[^}]*\}/g, (x) => (/['"`][A-Za-z…]{2,}|\.(name|label|title)\b|\b(label|title|name|text|word)\b/.test(x) ? 'text' : '')))
-      if (!named && !visibleText) unlabelled.push(`${rel}: <button${attrs.trim().slice(0, 50)}`)
-      if (/icon-button/.test(attrs) && !named) iconBare.push(`${rel}: <button${attrs.trim().slice(0, 50)}`)
+      if (!named && !visibleText) unlabelled.push(`${rel}: <${m[1]}${attrs.trim().slice(0, 50)}`)
+      if (/icon-button/.test(attrs) && !named) iconBare.push(`${rel}: <${m[1]}${attrs.trim().slice(0, 50)}`)
     }
   }
-  ok('labels.1 every <button in the renderer carries an aria-label, a title, or visible text', unlabelled.length === 0, unlabelled.join(' | ') || 'clean')
+  ok('labels.1 every <button — and every primitive that renders one — carries an aria-label, a title, or visible text', unlabelled.length === 0, unlabelled.join(' | ') || 'clean')
   ok('labels.2 every .icon-button carries an aria-label or a title on the same element', iconBare.length === 0, iconBare.join(' | ') || 'clean')
 }
 

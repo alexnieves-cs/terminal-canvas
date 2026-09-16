@@ -10,6 +10,7 @@ import { Maximize, Pencil, Refresh } from '@renderer/icons'
 import { displayPath } from '@shared/display-path'
 import { importedNoteReason } from '@shared/imported-note'
 import { RichNoteEditor, type RichNoteHandle } from './RichNoteEditor'
+import { CodeEditor } from './CodeEditor'
 
 /**
  * The conflict banner's wording.
@@ -884,37 +885,28 @@ function FileNodeImpl({
             </div>
             {model.prose && mode === 'rich' ? (
               <RichNoteEditor text={draft} onChange={setDraft} handleRef={richRef} onSave={() => save(false)} onEscape={onEditorEscape} />
-            ) : <textarea
-              className="file-node__editor"
-              data-file-node-editor
-              autoFocus
-              spellCheck={false}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                // Every key, not only the two handled here — useViewport's and
-                // usePalette's listeners are on `window`, above this in the
-                // bubble path, so without this a Cmd+N typed into a draft
-                // spawns a panel behind the file. useNavGrid's listener is
-                // CAPTURE-phase on `window` and has already run by the time
-                // this stopPropagation could reach it — that guard is widened
-                // separately, in useNavGrid.ts itself, to name this class.
-                event.stopPropagation()
-                if (event.metaKey && event.key === 's') { event.preventDefault(); save(false) }
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  // Escape on a DIRTY draft arms rather than discards. It is
-                  // the most reflexive key on this surface — the way out of
-                  // every other overlay in this app — and until this guard it
-                  // was also the fastest way to lose typed work with no
-                  // confirmation and no undo. A clean draft still leaves on
-                  // one press: there is nothing to lose, and making the
-                  // ordinary exit ask twice is how a confirmation stops being
-                  // read.
-                  onEditorEscape()
-                }
-              }}
-            />}
+            ) : (
+              /* M276. Monaco, in the textarea's place and under the textarea's
+                 contract: the same controlled `draft`, the same ⌘S, and the
+                 same Escape — which on a DIRTY draft ARMS a discard rather
+                 than taking it. Escape is the most reflexive key on this
+                 surface (the way out of every other overlay in this app) and
+                 was once the fastest way to lose typed work with no
+                 confirmation and no undo; a clean draft still leaves on one
+                 press, because making the ordinary exit ask twice is how a
+                 confirmation stops being read.
+                 The window-listener guard and the focus contract moved WITH
+                 the surface — see CodeEditor's `onKeyDown` note and
+                 `restoreFocus` above. */
+              <CodeEditor
+                value={draft}
+                onChange={setDraft}
+                onSave={() => save(false)}
+                onEscape={onEditorEscape}
+                path={path}
+                readOnly={readOnly === true}
+              />
+            )}
           </>
         ) : result?.kind === 'missing' ? (() => {
           // M256. The missing file's recovery, CENTRED, with the story of what

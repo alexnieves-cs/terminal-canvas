@@ -1033,7 +1033,7 @@ body {
    edge at all). */
 [data-tone="none"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
 [data-tone="starting"] { --tone: var(--line); --tone-dim: var(--s-4); }
-[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); }
+[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--amber); }
 [data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
 [data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
@@ -3829,21 +3829,62 @@ body {
   font-size: var(--t-xs);
 }
 
-/* The draft surface. --s-1 matches the read view's own ground, and the mono
-   font/size/line-height match .file-node__body so switching into edit mode
-   does not reflow the text the user was just reading. */
+/* The draft surface — M276: Monaco's host, where a textarea used to be.
+   --s-1 matches the read view's own ground, and the mono font/size/line-height
+   match .file-node__body so switching into edit mode does not reflow the text
+   the user was just reading. Monaco reads the face and the metrics off THIS
+   element (it measures the host before it paints), so the tokens stay here and
+   are not restated in monaco.ts — only the colours are, and those are read
+   back off the document rather than written down twice.
+
+   `padding` moves to Monaco's own `padding` option: padding on the host would
+   sit OUTSIDE the scroller, so the first line would clip under the top edge
+   while scrolling instead of the text starting clear of it. */
 .file-node__editor {
   width: 100%;
   flex: 1;
   min-height: 0;
-  resize: none;
-  border: none;
+  /* Monaco measures its host and paints absolutely inside it. Without a
+     definite size it measures 0 and renders an empty box with no error — the
+     silent-failure shape; `min-height: 0` above plus `flex: 1` is the size. */
+  position: relative;
+  overflow: hidden;
   background: var(--s-1);
   color: var(--fg);
   font-family: var(--font-mono);
   font-size: var(--t-sm);
   line-height: var(--lh-body);
-  padding: var(--sp-4);
+}
+
+/* Monaco ships its own ground on .monaco-editor-background; the theme in
+   monaco.ts sets it from --s-1, and this is the belt for the one frame
+   between mount and first paint. */
+.file-node__editor .monaco-editor,
+.file-node__editor .monaco-editor .overflow-guard { background: var(--s-1); }
+
+/* Monaco's own element. Its own box because React owns the element ABOVE it
+   and Monaco owns everything inside this one — see CodeEditor. */
+.file-node__editor-host { position: absolute; inset: 0; }
+
+/* The pre-paint: the draft's text, shown while the editor is still arriving,
+   because a note opens INTO its editor and an empty box is not what the
+   person's file says. Same face, size, line-height and padding as Monaco's
+   own options, so the text does not jump when the editor takes over.
+   Inert: no pointer events, no selection, gone the moment the editor is up. */
+.file-node__editor-preload {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  padding: var(--sp-5) var(--sp-4);
+  background: var(--s-1);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* M250. The note's Source | Rich toggle and the rich editor. The editor is a
@@ -5298,6 +5339,21 @@ body {
   background-size: 16px 16px; background-attachment: local;
   box-shadow: inset 0 0 0 1px var(--line);
 }
+/* React Flow is a local camera inside the workflow panel; it never shares the
+   canvas viewport. Keeping its height on the scroller preserves the existing
+   panel layout while its own controls remain within this island. */
+.workflow-flow { width: 100%; height: 100%; min-width: 420px; min-height: 260px; }
+.workflow-flow .react-flow { background: transparent; }
+.workflow-flow .react-flow__controls, .workflow-flow .react-flow__minimap { border-color: var(--line); background: var(--s-3); box-shadow: none; }
+.workflow-flow .react-flow__controls-button { border-color: var(--line); background: var(--s-3); fill: var(--fg-2); }
+.workflow-flow .react-flow__edge-path { stroke: var(--line-strong); stroke-width: 2; }
+.workflow-flow .react-flow__edge-text { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
+.workflow-flow__block { position: relative; width: 168px; min-height: 64px; box-sizing: border-box; padding: var(--sp-4) var(--sp-7) var(--sp-4) calc(var(--sp-4) + var(--sp-1)); border: 1px solid var(--line-strong); border-radius: var(--r-md); background: color-mix(in srgb, var(--wf-hue) 4%, var(--s-3)); color: var(--fg); font-family: var(--font-ui); }
+.workflow-flow__block--selected { border: 2px solid var(--iris); }
+.workflow-flow__kind { display: block; overflow: hidden; color: var(--wf-hue); font-size: var(--t-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-flow__label { display: block; overflow: hidden; font-size: var(--t-sm); line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.workflow-flow__handle { width: 8px; height: 8px; border: 2px solid var(--s-3); background: var(--iris); }
+.workflow-flow__issue { position: absolute; top: 7px; right: 8px; color: var(--amber); font-weight: 700; }
 /* THE LIBRARY: a left drawer of kinds, each a glyph tile, a name and one
    sentence, with its Add control. It closes after a placement. */
 .workflow-node__library { flex: 0 0 208px; align-self: stretch; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-1); margin: 0; padding: 0 var(--sp-3) 0 0; list-style: none; border-right: 1px solid var(--line); }
@@ -6693,6 +6749,12 @@ body {
 .sheet__explain { margin: calc(var(--sp-2) * -1) 0 0 calc(5.5em + var(--sp-5)); font-size: var(--t-sm); line-height: var(--lh-body); color: var(--fg-3); }
 .sheet__defaults { flex: 1 1 100%; font-size: var(--t-sm); color: var(--fg); padding: var(--sp-2) 0; }
 [data-start-sheet] .sheet__defaults { flex: 1; }
+/* M275. The arrangement's seats: one row per seat, so a person reads the
+   shape down the sheet rather than across a wrapped sentence. `block` and not
+   a flex column because these are sentences, not controls, and a sentence
+   that wraps must wrap under itself. */
+[data-start-swarm-plan] .sheet__seat { display: block; color: var(--fg-3); }
+[data-start-swarm-plan] .sheet__seat:first-child { color: var(--fg); }
 .sheet__advanced { margin: 0; }
 .sheet__advanced-toggle { cursor: pointer; font-family: var(--font-ui); font-size: var(--t-sm); color: var(--fg-3); padding: var(--sp-2) 0; }
 .sheet__advanced-toggle:hover { color: var(--fg); }
@@ -7042,7 +7104,7 @@ body {
 .orch__cube-face--right { background: linear-gradient(145deg, color-mix(in srgb, var(--tone, var(--iris)) 14%, var(--s-1)), var(--s-1)); }
 
 /* Working: warm top-face breath + a faint processing shimmer on the rim + a slow Y-bob. */
-.orch__cube--busy .orch__cube-face { filter: drop-shadow(0 0 8px color-mix(in srgb, var(--tone, var(--iris)) 50%, transparent)); animation: orch-rim-shimmer var(--dur-shimmer) ease-in-out infinite; }
+.orch__cube--busy .orch__cube-face { border-color: color-mix(in srgb, var(--orch-rim) 60%, var(--tone)); filter: drop-shadow(0 0 8px color-mix(in srgb, var(--tone, var(--iris)) 50%, transparent)); animation: orch-rim-shimmer var(--dur-shimmer) ease-in-out infinite; }
 .orch__cube--busy .orch__cube-face--top { animation: orch-breath var(--dur-bob) ease-in-out infinite; }
 .orch__cube--busy .orch__cube-lift { animation: orch-bob var(--dur-bob) ease-in-out infinite; }
 
@@ -7051,7 +7113,7 @@ body {
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--amber) 70%, transparent));
   animation: orch-needs-pulse var(--dur-breath) var(--ease) 3;
 }
-.orch__cube-beacon { fill: var(--amber); filter: drop-shadow(0 0 4px var(--amber)); transform-box: fill-box; transform-origin: center; animation: orch-beacon var(--dur-breath) ease-in-out infinite; pointer-events: none; }
+.orch__cube-beacon { fill: var(--amber); filter: drop-shadow(0 0 4px var(--amber)); transform-box: fill-box; transform-origin: center; animation: orch-beacon var(--dur-breath) ease-in-out 3; pointer-events: none; }
 
 /* Idle: cooler, flatter, lower — no glow, less gradient, sits 3px down. */
 .orch__cube--idle .orch__cube-lift { transform: translateY(3px); }
@@ -7069,7 +7131,7 @@ body {
 /* Selection: a true 3D lift toward the viewer, a larger contact shadow, and
    siblings dimmed so the graph becomes a control surface. */
 .orch__cube--on .orch__cube-face { border-color: var(--iris); border-width: 2px; }
-.orch__cube--on .orch__cube-lift { transform: translateZ(22px); }
+.orch__cube--on .orch__cube-lift { transform: translateZ(22px); animation: none; }
 .orch__cube--on .orch__cube-shadow { transform: scale(1.35); fill: color-mix(in srgb, var(--s-1) 85%, transparent); }
 /* The dim lands on the FACES, never on .orch__cube-solid: any `filter` on a
    preserve-3d element computes its transform-style to flat, and every sibling
@@ -7079,8 +7141,11 @@ body {
 
 /* Hub: a different object — larger by the model, steadier core glow, no micro-motion.
    A synthetic hub is layout only: it keeps its “No supervisor yet” label, and no glow. */
-.orch__cube--hub .orch__cube-face { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--iris) 60%, transparent)); animation: none; }
+.orch__cube--hub:not(.orch__cube--exited):not(.orch__cube--idle) .orch__cube-face { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--iris) 60%, transparent)); animation: none; }
 .orch__cube--hub .orch__cube-lift { animation: none; }
+/* Attention outranks the hub glow; acknowledgement stays quiet after deselection. */
+.orch__cube--needs:not([data-attention]) .orch__cube-face { animation: none; }
+.orch__cube--hub.orch__cube--needs[data-attention] .orch__cube-face { animation: orch-needs-pulse var(--dur-breath) var(--ease) 3; filter: drop-shadow(0 0 12px var(--amber)); }
 .orch__cube--synthetic .orch__cube-face { filter: none; border-style: dashed; border-color: color-mix(in srgb, var(--line-strong) 70%, transparent); }
 .orch__cube--synthetic .orch__cube-face--top { background: linear-gradient(135deg, var(--s-2), var(--s-1)); }
 .orch__cube--synthetic .orch__cube-label { fill: var(--fg-3); font-style: italic; }
@@ -7449,8 +7514,8 @@ body {
   50% { filter: brightness(1.18); }
 }
 @keyframes orch-rim-shimmer {
-  0%, 100% { border-color: color-mix(in srgb, var(--tone, var(--iris)) 70%, var(--line)); }
-  50% { border-color: color-mix(in srgb, var(--tone, var(--iris)) 100%, var(--fg)); }
+  0%, 100% { border-color: color-mix(in srgb, var(--orch-rim) 55%, var(--tone)); }
+  50% { border-color: color-mix(in srgb, var(--orch-rim) 80%, var(--fg)); }
 }
 @keyframes orch-bob {
   0%, 100% { transform: translateY(0); }
@@ -7503,7 +7568,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .canvas--behind-orch { transform: none; transition: none; }
   .shell__orch--on { animation: none; }
-  .orch__cube--needs .orch__cube-face, .orch__cube--busy .orch__cube-face, .orch__cube--busy .orch__cube-face--top,
+  .orch__cube--hub.orch__cube--needs[data-attention] .orch__cube-face, .orch__cube--needs .orch__cube-face, .orch__cube--busy .orch__cube-face, .orch__cube--busy .orch__cube-face--top,
   .orch__cube--busy .orch__cube-lift, .orch__cube--starting .orch__cube-lift, .orch__cube-beacon { animation: none; }
   .orch__cube-lift, .orch__cube-solid, .orch__cube-shadow { transition: none; }
   .orch__edge[data-edge-activity="firing"] { animation: none; stroke-dasharray: none; }
@@ -7516,7 +7581,7 @@ body {
 /* Upright projected billboards: only the cube faces rotate in 3D. */
 .orch__callout-host[data-ghost] { filter: opacity(20%); }
 .orch__callout-stem { stroke: var(--line-strong); stroke-width: 1; fill: none; }
-.orch__callout-slot { height: 100%; display: flex; align-items: flex-end; box-sizing: border-box; padding-bottom: calc(var(--sp-6) + var(--sp-3)); }
+.orch__callout-slot { perspective: 700px; height: 100%; display: flex; align-items: flex-end; box-sizing: border-box; padding-bottom: calc(var(--sp-6) + var(--sp-3)); }
 .orch__callout-card { width: 100%; box-sizing: border-box; padding: var(--sp-4) var(--sp-5); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: color-mix(in srgb, var(--s-1) 90%, transparent); backdrop-filter: blur(16px); color: var(--fg); font: var(--t-sm) var(--font-ui); box-shadow: var(--e-3); animation: orch-callout-rise var(--dur-2) var(--ease); }
 .orch__callout-card > strong, .orch__callout-card > span, .orch__callout-detail > code { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 17px; }
 /* A card flipped under its cube grows downward from the stem, not up into it. */
@@ -7529,7 +7594,9 @@ body {
 .orch__callout-card[data-expanded] .orch__callout-detail { opacity: 1; max-height: 100px; margin-top: var(--sp-4); border-top: 1px solid var(--line); padding-top: var(--sp-3); }
 .orch__callout-detail > code { font-family: var(--font-mono); }
 .orch__callout-actions { display: flex; gap: var(--sp-4); margin-top: var(--sp-3); }
-@keyframes orch-callout-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.orch__callout-card { transform-origin: center bottom; }
+.orch__callout-slot[data-below] .orch__callout-card { transform-origin: center top; }
+@keyframes orch-callout-rise { from { opacity: 0; transform: translateY(8px) rotateX(-12deg) scale(0.94); } to { opacity: 1; transform: translateY(0) rotateX(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .orch__callout-card { animation: none; } .orch__callout-detail { transition: none; } }
 /* The card is the cube's other face: click selects, double-click jumps. */
 .orch__callout-card { cursor: pointer; }
@@ -7560,3 +7627,31 @@ body {
 }
 /* Reduced motion: the rim holds still for the window, so the fact survives the motion. */
 @media (prefers-reduced-motion: reduce) { .orch__cube-wash { animation: none; stroke-width: 2px; } }
+
+/* ── Headless primitives (Radix) ────────────────────────────────────────────
+   THE ONE RULE THE PRIMITIVES ADD, and the only place the stylesheet knows
+   they exist. It declares no token, no colour and no literal length, so the
+   token contract and every lint in checks 1–8 are untouched.
+
+   Radix renders each floating overlay — Menu, Popover, Tooltip — inside a
+   wrapper div carrying INLINE `position: fixed` and a Floating UI
+   `transform: translate(...)`. This app places its overlays the other way:
+   from a positioned host, in CSS, with offsets in spacing tokens —
+   `.shell__view-menu` is `absolute; top: calc(100% + var(--sp-3)); right: 0`
+   under `.shell__view`, and `.inspector__menu` is PINNED to `position:
+   absolute` by verify:styles m207.context.1, so the rule cannot be given up
+   in favour of Floating UI. Nested inside a fixed, transformed wrapper those
+   offsets resolve against the WRAPPER rather than the host, and every
+   migrated menu lands somewhere else — with no error, no red suite, and only
+   a screenshot to see it.
+
+   `display: contents` deletes the wrapper's box entirely, so its child
+   participates in the host's layout directly and `position: absolute`
+   resolves against the host exactly as it did before Radix. `position:
+   static` is NOT enough: it leaves a flow box that becomes a zero-size flex
+   item in `.shell__view` and `.work-node__verbs` and opens their gaps.
+
+   `!important` is required because Radix writes those styles inline, and the
+   rule lives here rather than in a second stylesheet because verify:styles
+   reads this file alone — a rule it cannot see is a rule that drifts. */
+[data-radix-popper-content-wrapper] { display: contents !important; }

@@ -79,6 +79,7 @@ import { checklistFocused } from '@renderer/file/checklist-controllers'
 import { pillFocused, orchestratorTarget } from './command-pill'
 import { CommandPill, orchestratorCandidates } from './CommandPill'
 import { noteEditorFocused } from '@renderer/file/rich-note-focus'
+import { typeIntoEditor, editorText, focusEditor } from '@renderer/file/editor-registry'
 import type { ImportedNote } from '@shared/imported-note'
 import { DeckNode } from '@renderer/file/DeckNode'
 import { deckFocused } from '@renderer/file/deck-controllers'
@@ -202,7 +203,8 @@ import { setLastLine, clearUnread, clearLastLine, getLastLine } from '@renderer/
 import { clearLastActive } from '@renderer/session/last-active-store'
 import { beginUpdateCheck, getUpdateState, setUpdateResult, useUpdateState } from '@renderer/session/update-store'
 import { lastLineOf } from '../shell/rail-rows'
-import { emptyTeammate, type PersistedTeammate } from '@shared/teammates'
+import { emptyTeammate, teammateWord, type PersistedTeammate } from '@shared/teammates'
+import { SWARM_PRESETS, primarySeat, swarmRefusal, swarmSeatRefusal, swarmSystemPrompt, type SwarmMark, type SwarmPresetId } from '@shared/swarm'
 import { parseSkillKey, renameInShelf, skillKey, UNGROUPED_COLUMN_ID, type Shelf, type ShelfColumn, type SkillKey } from '@shared/skills'
 import type { NamedToolEntry, ToolInventoryResult, ToolScope } from '@shared/toolbox'
 import { buildSkillColumns, SKILL_CARD_MIME, type SkillPaneKind } from '@renderer/shell/skills-pane-model'
@@ -377,7 +379,7 @@ export function Canvas({
   const [resumeDismissed, setResumeDismissed] = useState(false)
   const [resumeSummary, setResumeSummary] = useState<ResumeSummary | null>(null)
   // M114/M115. The board verbs Canvas installs after the palette memo exists (see usePaletteActions' boardVerbsRef).
-  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
+  const boardVerbsRef = useRef<{ dispatch?: (itemId: string, teammateId: string, root?: string) => Promise<StartWorkOutcome>; swarm?: (itemId: string, teammateId: string, root: string, preset: SwarmPresetId) => Promise<StartWorkOutcome>; openPr?: (itemId: string) => void; commentPr?: (itemId: string) => void; markDone?: (itemId: string) => void; review?: (itemId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; show?: (panelId: string) => { kind: 'ran'; note?: string; partial?: true } | { kind: 'refused'; reason: string }; related?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; arrange?: (panelId: string) => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string }; fitTask?: () => { kind: 'ran'; note?: string } | { kind: 'refused'; reason: string } }>({})
   const markLaneClosed = useCallback((chatId: string) => {
     const item = workItemsRef.current.find((candidate) => candidate.panelId === chatId)
     if (item !== undefined) {
@@ -3869,6 +3871,16 @@ export function Canvas({
     // a parallel one, the rule __m13Open already obeys.
     w.__m20Toolbox = (cwd: string, label: string): void =>
       openToolboxPanel(cwd, label, worldCentre())
+    // M276. The file editor's door, for the checks that used to type by
+    // calling the native textarea value setter — Monaco has no such surface.
+    // It executes a REAL edit on the REAL model, so the change event React
+    // listens to fires exactly as it does under a keystroke: the rule
+    // __m13Open established, applied to a widget instead of a verb. The
+    // refused alternative (a hidden mirror textarea, so those checks passed
+    // untouched) is written up in monaco.ts.
+    w.__m276Type = (node: Element | null, text: string): boolean => typeIntoEditor(node, text)
+    w.__m276Text = (node: Element | null): string | null => editorText(node)
+    w.__m276Focus = (node: Element | null): boolean => focusEditor(node)
     // M24's mint, through the SAME openJiraPanel the palette row calls — so
     // the hook proves the real gesture rather than a parallel mint, the rule
     // __m13Open and __m20Toolbox already obey.
@@ -4783,7 +4795,7 @@ export function Canvas({
    * effect above), never the click's.
    */
   const dispatchAttemptsRef = useRef<Map<string, Promise<StartWorkOutcome>>>(new Map())
-  const dispatchWorkItemAttempt = useCallback(async (itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
+  const dispatchWorkItemAttempt = useCallback(async (itemId: string, teammateId: string, root?: string, swarm?: SwarmMark): Promise<StartWorkOutcome> => {
     if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
     const item = workItemsRef.current.find((i) => i.id === itemId)
     if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
@@ -4825,7 +4837,12 @@ export function Canvas({
     let panel = standingPanel
     if (panel === undefined) {
       const sessionId = crypto.randomUUID()
-      const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: DISPATCH_PROMPT })
+      // M275. A swarm's PRIMARY seat is still a dispatched lane — it takes the
+      // item's `panelId` and its worktree — but its brief is the seat's, not
+      // the generic one: an explorer told to commit as it goes is an explorer
+      // that writes. `swarmSystemPrompt` folds the lane's own rules (never
+      // push, never open a PR) back into every seat brief that needs them.
+      const created = await window.canvas.agentSession.create({ id: chatId, cwd: lane.path, sessionId, teammateId, appendSystemPrompt: swarm === undefined ? DISPATCH_PROMPT : swarmSystemPrompt(swarm, SUPERVISOR_PROMPT) })
       if (created.kind === 'refused') { patch({ note: `the lane is ready, but the conversation was refused — ${created.reason}` }); return { kind: 'refused', reason: created.reason } }
       const GAP = 48
       // The card and the offset are computed HERE, from the ref, not inside
@@ -4836,7 +4853,7 @@ export function Canvas({
       const centre = card === undefined
         ? cascadeCentre(screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, viewportRef.current), before)
         : { x: card.rect.x + card.rect.w + GAP + CHAT_W / 2, y: card.rect.y + card.rect.h / 2 }
-      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true }), title: item.key ?? item.title }
+      const chatPanel = { ...makeChatPanel(chatId, centre, nextZ(before), { cwd: lane.path, sessionId, teammateId, dispatch: true, ...(swarm === undefined ? {} : { swarm }) }), title: item.key ?? item.title }
       const anchor: PersistedWorkItem['anchor'] = card === undefined ? undefined : { panelId: chatId, dx: card.rect.x - chatPanel.rect.x, dy: card.rect.y - chatPanel.rect.y }
       let next: Panel[] = [...before, chatPanel]
       if (card !== undefined) next = setLinkLabel(addLink(next, card.rect.id, chatId), card.rect.id, chatId, 'dispatched')
@@ -4865,10 +4882,10 @@ export function Canvas({
     patch({ note: undefined })
     return { kind: 'started', itemId, panelId: chatId }
   }, [commitHistory, selectOnly])
-  const dispatchWorkItem = useCallback((itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome> => {
+  const dispatchWorkItem = useCallback((itemId: string, teammateId: string, root?: string, swarm?: SwarmMark): Promise<StartWorkOutcome> => {
     const standing = dispatchAttemptsRef.current.get(itemId)
     if (standing !== undefined) return standing
-    const attempt = dispatchWorkItemAttempt(itemId, teammateId, root)
+    const attempt = dispatchWorkItemAttempt(itemId, teammateId, root, swarm)
     dispatchAttemptsRef.current.set(itemId, attempt)
     void attempt.finally(() => {
       if (dispatchAttemptsRef.current.get(itemId) === attempt) dispatchAttemptsRef.current.delete(itemId)
@@ -4876,6 +4893,176 @@ export function Canvas({
     return attempt
   }, [dispatchWorkItemAttempt])
   boardVerbsRef.current.dispatch = (itemId, teammateId, root) => dispatchWorkItem(itemId, teammateId, root)
+  /**
+   * M275. START A SWARM — the arrangement, on top of the dispatch above and
+   * never beside it.
+   *
+   * Step one is `dispatchWorkItem` itself, for the PRIMARY seat. That is the
+   * whole reason this reads as short: the lane, the Places gate, the worktree,
+   * the card's `dispatched` edge, the item's `panelId`/`worktreeId` and the
+   * first send are M114's and stay M114's, so a task a swarm started is the
+   * same kind of thing as a task a solo start made — Open PR, Review the lane
+   * and M202's readiness all keep working, with no arm for "but it was a
+   * swarm". A second lane-maker here would be a second author of what a task
+   * is, and the two would drift in whichever arm nobody opens.
+   *
+   * Everything after step one is ADDITIVE and cannot unmake it. A seat refused
+   * half way disposes the sessions THIS call created and leaves the primary
+   * lane standing, because that lane is exactly what a solo start would have
+   * produced and throwing it away to punish a later refusal would destroy real
+   * work. The card's note says which seat was refused and why, which is the
+   * recoverable state — the same shape M197 gave the refused first send.
+   */
+  const swarmAttemptsRef = useRef<Map<string, Promise<StartWorkOutcome>>>(new Map())
+  const startSwarmAttempt = useCallback(async (itemId: string, teammateId: string, root: string, presetId: SwarmPresetId): Promise<StartWorkOutcome> => {
+    if (mergedRef.current) return { kind: 'refused', reason: 'the merged view is read-only' }
+    const preset = SWARM_PRESETS[presetId]
+    const item = workItemsRef.current.find((i) => i.id === itemId)
+    if (item === undefined) return { kind: 'refused', reason: `no work item is called ${itemId} — it may have been closed` }
+    const mate = teammatesRef.current.find((t) => t.id === teammateId)
+    // Named here rather than left to `swarmRefusal`, which SKIPS the teammate
+    // arms for the doors that never ask for one (the card's menu). An executor
+    // that reached main with a teammate id nothing answers to would be refused
+    // by `board:lane` one step later, in main's words, after a seat was minted.
+    if (mate === undefined) return { kind: 'refused', reason: `no teammate is called ${teammateId} — it may have been deleted; open the Teammates pane` }
+    // THE LAST GATE, and the same function the sheet's disabled Start read.
+    // A caller that reached here another way (the verb, a card's menu) is
+    // judged by the same sentences rather than by a second opinion.
+    const blocked = swarmRefusal(preset, {
+      agentAvailable: claudeAvailable(presetRowsRef.current) || codexAvailable(presetRowsRef.current),
+      teammate: { name: teammateWord(mate), places: mate.places },
+      item: { state: item.state }
+    })
+    if (blocked !== null) return { kind: 'refused', reason: blocked }
+    const primary = primarySeat(preset)
+    if (primary === undefined) return { kind: 'refused', reason: `the ${preset.label} arrangement names no primary seat` }
+
+    const started = await dispatchWorkItem(itemId, teammateId, root, { preset: presetId, role: primary.role })
+    if (started.kind === 'refused') return started
+    const primaryId = started.panelId
+    const anchor = panelsRef.current.find((p) => p.rect.id === primaryId)
+    if (anchor === undefined) return { kind: 'refused', reason: `the ${preset.label} lane was made but its panel is gone — the arrangement was not built` }
+    // The lane's own folder, read from the panel the dispatch just committed
+    // rather than carried out of `board:lane`: a seat sharing the task lane
+    // must share the folder the primary seat is ACTUALLY in, and the panel is
+    // where that fact ended up.
+    const lanePath = isChatPanel(anchor) ? anchor.chat.cwd : root
+    const centre = { x: anchor.rect.x + anchor.rect.w / 2, y: anchor.rect.y + anchor.rect.h / 2 }
+    // M81's one-supervisor rule, asked once and honoured rather than fought:
+    // a canvas that already has a supervisor keeps it, and the arrangement
+    // says so instead of refusing the whole start over a hub it can borrow.
+    const standingSupervisor = panelsRef.current.find((p) => isChatPanel(p) && p.chat.supervisor === true)
+
+    const minted = new Map<string, string>([[preset.primary, primaryId]])
+    const madePanels: Panel[] = []
+    const createdChats: string[] = []
+    const sends: Array<{ id: string; text: string }> = []
+    const notes: string[] = []
+    const undoCreated = (): void => { for (const id of createdChats) void window.canvas.agentSession.dispose({ id, drop: true }) }
+    const patchNote = (note: string | undefined): void => {
+      const next = workItemsRef.current.map((i) => (i.id === itemId ? carryWorkItem({ ...i, ...(note === undefined ? {} : { note }), updatedAt: Date.now() }) : i))
+      workItemsRef.current = next
+      setWorkItems(next)
+    }
+
+    for (const seat of preset.seats) {
+      if (seat.key === preset.primary) continue
+      if (seat.role === 'supervisor' && standingSupervisor !== undefined) {
+        // Borrowed, not minted — and it joins `minted` so the arrangement's
+        // edges still reach it. An arrangement whose hub edges silently went
+        // nowhere would look wired and be a drawing.
+        minted.set(seat.key, standingSupervisor.rect.id)
+        notes.push('this canvas already had a supervisor — the arrangement uses it as its hub')
+        continue
+      }
+      const at = { x: centre.x + seat.dx, y: centre.y + seat.dy }
+      if (seat.kind === 'terminal') {
+        // A terminal seat is minted HERE from a resolved spec, never spawned
+        // through the event path — M80's rule: the event path places the panel
+        // itself, commits its own history entry, and leaves this loop guessing
+        // which panel arrived, which is exactly what the edges cannot tolerate.
+        const id = `n${nextIdRef.current++}`
+        madePanels.push({ ...makePanel(id, at, 1, { panelId: id, cwd: seat.place === 'root' ? root : lanePath, command: '/bin/sh', args: ['-lc', seat.command ?? ''] }, { ...(seat.w === undefined ? {} : { w: seat.w }), ...(seat.h === undefined ? {} : { h: seat.h }) }), title: seat.title })
+        minted.set(seat.key, id)
+        continue
+      }
+      let cwd = seat.place === 'root' ? root : lanePath
+      if (seat.place === 'own-lane') {
+        // Its own worktree, through the SAME `board:lane` the primary took —
+        // keyed on this seat's own chat id, which is what makes it a different
+        // lane rather than the same one under another name.
+        const laneId = `c${nextIdRef.current++}`
+        nextIdRef.current = seedAfter([laneId], nextIdRef.current)
+        const repo = item.key === undefined ? null : repoOfKey(item.key)
+        const lane = await window.canvas.board.lane({ itemId, chatPanelId: laneId, teammateId, root, ...(repo === null ? {} : { repo }) })
+        if (lane.kind === 'refused') { undoCreated(); patchNote(swarmSeatRefusal(seat, lane.reason)); return { kind: 'refused', reason: swarmSeatRefusal(seat, lane.reason) } }
+        cwd = lane.path
+      }
+      const id = `c${nextIdRef.current++}`
+      nextIdRef.current = seedAfter([id], nextIdRef.current)
+      const sessionId = crypto.randomUUID()
+      const mark: SwarmMark = { preset: presetId, role: seat.role }
+      const create = await window.canvas.agentSession.create({ id, cwd, sessionId, teammateId, appendSystemPrompt: swarmSystemPrompt(mark, SUPERVISOR_PROMPT) })
+      if (create.kind === 'refused') { undoCreated(); patchNote(swarmSeatRefusal(seat, create.reason)); return { kind: 'refused', reason: swarmSeatRefusal(seat, create.reason) } }
+      createdChats.push(id)
+      const chat = { cwd, sessionId, teammateId, swarm: mark, ...(seat.role === 'supervisor' ? { supervisor: true as const } : {}) }
+      madePanels.push({ ...makeChatPanel(id, at, 1, chat, { ...(seat.w === undefined ? {} : { w: seat.w }), ...(seat.h === undefined ? {} : { h: seat.h }) }), title: seat.title })
+      minted.set(seat.key, id)
+      // A seat with no message opens QUIET and waits for the edge that feeds
+      // it (swarm.ts's rule): a seat sent a message AND fed by a handoff
+      // answers the wrong question first, with the real input arriving
+      // mid-turn where nobody will read it as an input at all.
+      if (seat.message !== undefined && seat.message !== '') sends.push({ id, text: seat.message })
+    }
+
+    setPanels((current) => {
+      let next: Panel[] = [...current]
+      let z = nextZ(current)
+      for (const panel of madePanels) next = [...next, { ...panel, z: z++ }]
+      for (const edge of preset.edges) {
+        const from = minted.get(edge.from)
+        const to = minted.get(edge.to)
+        if (from === undefined || to === undefined) continue
+        next = addLink(next, from, to)
+        next = setLinkLabel(next, from, to, edge.label)
+        // A STATEMENT edge gets no automation at all — see `SwarmEdge.automate`.
+        // `setLinkAutomation` returns the identical array for a cycle, which is
+        // why the hub's edges are statements: an enabled edge out of a hub that
+        // its own workers feed would be refused there and leave a drawing.
+        if (edge.automate) next = setLinkAutomation(next, from, to, { kind: 'handoff', enabled: true, trigger: edge.trigger })
+      }
+      commitHistory(next)
+      return next
+    })
+    panelsRef.current = [...panelsRef.current, ...madePanels]
+    // The sends go out AFTER the panels are committed: the chat store is
+    // seeded by each panel's own hook, and a send into an unseeded chat is
+    // dropped by the store's never-seeded guard (M80's insert learned this).
+    for (const { id, text } of sends) void window.canvas.agentSession.send(id, text, [])
+    // M275. The review node is the arrangement's, not a seat: it is this app's
+    // own object for "gather the diff", and minting a chat to describe one
+    // would be a worse answer to the same question.
+    if (preset.opensReview === true) {
+      const opened = boardVerbsRef.current.review?.(itemId)
+      if (opened !== undefined && opened.kind === 'refused') notes.push(`the review node was not opened — ${opened.reason}`)
+    }
+    patchNote(notes.length === 0 ? undefined : notes.join(' · '))
+    return { kind: 'started', itemId, panelId: primaryId }
+  }, [commitHistory, dispatchWorkItem])
+  const startSwarm = useCallback((itemId: string, teammateId: string, root: string, presetId: SwarmPresetId): Promise<StartWorkOutcome> => {
+    // The same one-attempt-per-item rule the dispatch has, and for the same
+    // reason at four times the cost: two arrangements racing on one card would
+    // mint two hubs, two runners and two sets of edges over one lane.
+    const standing = swarmAttemptsRef.current.get(itemId)
+    if (standing !== undefined) return standing
+    const attempt = startSwarmAttempt(itemId, teammateId, root, presetId)
+    swarmAttemptsRef.current.set(itemId, attempt)
+    void attempt.finally(() => {
+      if (swarmAttemptsRef.current.get(itemId) === attempt) swarmAttemptsRef.current.delete(itemId)
+    })
+    return attempt
+  }, [startSwarmAttempt])
+  boardVerbsRef.current.swarm = (itemId, teammateId, root, presetId) => startSwarm(itemId, teammateId, root, presetId)
   /**
    * M115. THE RETURN PATH. `openPr` refuses by name through `prRefusal` (the
    * one function the card's disabled title also reads) BEFORE main is asked;
@@ -7871,6 +8058,11 @@ export function Canvas({
                 // M114/M115. The verbs, through the SAME palette members the rows call.
                 onDispatch={(itemId, teammateId) => paletteActionsRef.current?.beginStartWork({ itemId, teammateId })}
                 teammateReason={teammateRefusal}
+                // M275. The card's arrangement door, into the SAME one start
+                // action every other door takes — with the shape chosen, so
+                // the sheet opens on it rather than on a blank arrangement.
+                onSwarm={(itemId, preset) => paletteActionsRef.current?.beginStartWork({ itemId, swarm: preset })}
+                agentAvailable={claudeAvailable(presetRows) || codexAvailable(presetRows)}
                 onOpenPr={(itemId) => paletteActionsRef.current?.openPr(itemId)}
                 prReason={item === undefined ? 'this item is no longer on the board' : prRefusalSync(item, credentialRows.some((c) => c.service === 'github' && c.rejectedAt === undefined), item.teammateId === undefined ? undefined : teammates?.find((t) => t.id === item.teammateId))}
                 // M202 (D07). ONE action for all four doors. It replaces the

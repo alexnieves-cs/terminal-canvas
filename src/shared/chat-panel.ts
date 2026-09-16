@@ -1,5 +1,6 @@
 import type { AgentOptions } from './cost'
 import type { AgentBackend } from './agent-session'
+import type { SwarmMark } from './swarm'
 
 /**
  * M73. What a chat PANEL persists: the directory its agent works in, the CLI
@@ -44,6 +45,14 @@ export interface ChatSource {
    * not a flag, because the prompt is the block's own.
    */
   orchestrator?: string
+  /**
+   * M275. This chat is a SEAT in a swarm arrangement: two short strings, from
+   * which `swarmSystemPrompt` rebuilds the brief on EVERY spawn (M81's rule
+   * again — the CLI keeps no record of an appended prompt, so a resumed seat
+   * without this mark silently stops being that seat). The prose stays in
+   * code; see `swarm.ts`. Absent for every other chat.
+   */
+  swarm?: SwarmMark
 }
 
 /**
@@ -51,11 +60,14 @@ export interface ChatSource {
  * carry: absent stays absent, and only `true` is ever written. Spread beside
  * `carryBackend` at every site that rebuilds a ChatSource field by field.
  */
-export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string }): { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string } {
+export function carryChatMarks(chat: { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark }): { dispatch?: true; sandbox?: true; routine?: true; orchestrator?: string; swarm?: SwarmMark } {
   return {
     ...(chat.dispatch === true ? { dispatch: true as const } : {}),
     ...(chat.sandbox === true ? { sandbox: true as const } : {}),
     ...(chat.routine === true ? { routine: true as const } : {}),
-    ...(typeof chat.orchestrator === 'string' ? { orchestrator: chat.orchestrator } : {})
+    ...(typeof chat.orchestrator === 'string' ? { orchestrator: chat.orchestrator } : {}),
+    // A FRESH object, never the caller's: a shared reference lets a later
+    // mutation rewrite the seat of a panel already on the canvas.
+    ...(chat.swarm === undefined ? {} : { swarm: { preset: chat.swarm.preset, role: chat.swarm.role } })
   }
 }

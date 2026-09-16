@@ -2222,8 +2222,21 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           document.querySelector('[data-panel-kind="file"] [data-file-node-edit]')
             .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
         `)
+        // M276. TWO things changed on this wait, and both are the same cause:
+        // the draft surface is Monaco now, and Monaco is import()ed the first
+        // time a draft opens rather than shipped in the app's first chunk.
+        //
+        // `:not([data-file-node-editor-loading])` — the host element exists a
+        // frame before the editor behind it does. A wait on the bare attribute
+        // returns at the host and the very next line types into nothing: a red
+        // that reads as "save is broken" and is really "the check was early".
+        // CodeEditor drops the attribute when the editor is up.
+        //
+        // 5000 → 12000 — the first draft in a run pays for a ~6MB chunk off
+        // disk. It is milliseconds warm and seconds cold, and this is the one
+        // wait in the suite that can be cold, so the budget is the COLD one.
         await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-editor]')`), 5000)
+          `!!document.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
         // M67 — frame.2a. Save lives in the CHROME row beside the toggle,
         // never over the body (brief, The panel frame): a Save at the foot of
         // the body was the one control the frame rule did not cover.
@@ -2232,16 +2245,41 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         ok('frame.2a the file panel\'s Save sits in the chrome row while a draft is open', saveInChrome === true, JSON.stringify({ saveInChrome }))
         await wc.executeJavaScript(`
           (() => {
+            // M276. The draft surface is Monaco, so typing goes through the
+            // editor's own model — see editor-registry.ts for why a hidden
+            // mirror textarea (which would have left these four lines alone)
+            // was refused. __m276Type returns false if it addressed no live
+            // editor, which is what tells a mis-aimed check from a real red.
             const ta = document.querySelector('[data-file-node-editor]')
-            const setter = Object.getOwnPropertyDescriptor(
-              window.HTMLTextAreaElement.prototype, 'value').set
-            setter.call(ta, 'after my edit\\n')
-            ta.dispatchEvent(new Event('input', { bubbles: true }))
-            ta.dispatchEvent(new KeyboardEvent('keydown',
-              { key: 's', metaKey: true, bubbles: true }))
+            if (!window.__m276Type(ta, 'after my edit\\n')) return 'no editor'
           })()
         `)
-        await waitUntil(async () => readFileSync(FIXTURE, 'utf8') === 'after my edit\n', 4000)
+        // M276. The typed text reaches React through Monaco's model-change
+        // event, which is NOT a React event handler — so the setDraft it
+        // causes is scheduled, not flushed by the time executeJavaScript
+        // resolves. The save below reads React's `draft`, so pressing Cmd+S
+        // first would save the text from BEFORE the edit and this check would
+        // go red against a perfectly working editor. The dirty marker is
+        // React's own answer to "have you got it yet", so it is the wait.
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-file-node-dirty]')`), 5000)
+        // The key needs the editor to hold the keyboard. Ordinary setup, not
+        // a stand-in for the gesture under test — the press below is still a
+        // real event and Monaco's own keybinding dispatch still decides what
+        // it means; this only puts the caret where a typing user's would be.
+        await wc.executeJavaScript(`window.__m276Focus(document.querySelector('[data-file-node-editor]'))`)
+        // A REAL Cmd+S: `wc.sendInputEvent` produces a TRUSTED key event
+        // delivered to whatever has focus, which is this suite's own standing
+        // rule for input ("a dispatched event is untrusted and Blink runs no
+        // default action for one" — see the marquee block's header). A
+        // dispatched KeyboardEvent cannot carry a `keyCode` through its init
+        // dict in Chromium at all, and Monaco's keybinding service reads
+        // exactly that; the event arrives as keyCode 0 and matches no binding,
+        // which reads as "Cmd+S is broken" and is really "the event was a
+        // forgery Blink declined to honour".
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 's', modifiers: ['meta'] })
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 's', modifiers: ['meta'] })
+        await waitUntil(async () => readFileSync(FIXTURE, 'utf8') === 'after my edit\n', 6000)
         const disk138 = readFileSync(FIXTURE, 'utf8')
         ok('169 typing then Cmd+S writes the edited bytes to disk',
           disk138 === 'after my edit\n',
@@ -2284,23 +2322,27 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           })()
         `)
         await waitUntil(() => wc.executeJavaScript(
-          `!!document.querySelector('[data-file-node-editor]')`), 5000)
+          `!!document.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
         await wc.executeJavaScript(`
           (() => {
             const ta = document.querySelector('[data-file-node-editor]')
-            const setter = Object.getOwnPropertyDescriptor(
-              window.HTMLTextAreaElement.prototype, 'value').set
-            setter.call(ta, 'my unsaved work\\n')
-            ta.dispatchEvent(new Event('input', { bubbles: true }))
+            if (!window.__m276Type(ta, 'my unsaved work\\n')) return 'no editor'
           })()
         `)
+        // M276. Wait for React to have the typed draft before the outside
+        // write lands — see 169. The banner this check waits for is raised
+        // only when the watcher push finds the draft DIRTY, so a push that
+        // overtakes the setDraft finds a clean draft and correctly reseeds it
+        // instead: no banner, and a red that is entirely the check's own race.
+        await waitUntil(() => wc.executeJavaScript(
+          `!!document.querySelector('[data-file-node-dirty]')`), 5000)
         // "The agent" writes, from outside the app entirely.
         writeFileSync(FIXTURE, 'the agent wrote this\n')
         await waitUntil(() => wc.executeJavaScript(
           `!!document.querySelector('[data-file-node-conflict]')`), 5000)
         const state139 = await wc.executeJavaScript(`
           ({
-            draft: document.querySelector('[data-file-node-editor]')?.value ?? null,
+            draft: window.__m276Text(document.querySelector('[data-file-node-editor]')),
             banner: !!document.querySelector('[data-file-node-conflict]')
           })
         `)
@@ -2367,7 +2409,7 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
         // the keystroke never reached this panel at all.
         const NEWEST = `[...document.querySelectorAll('[data-panel-kind="file"]')].pop()`
         await waitUntil(() => wc.executeJavaScript(
-          `!!${NEWEST}.querySelector('[data-file-node-editor]')`), 5000)
+          `!!${NEWEST}.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
 
         // "The agent" appends a generated file's worth of lines. Past the
         // cap read from the SOURCE OF TRUTH, never a literal — a hardcoded
@@ -2390,14 +2432,22 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
           (() => {
             const node = [...document.querySelectorAll('[data-panel-kind="file"]')].pop()
             const ta = node.querySelector('[data-file-node-editor]')
-            const setter = Object.getOwnPropertyDescriptor(
-              window.HTMLTextAreaElement.prototype, 'value').set
-            setter.call(ta, 'my one line edit\\n')
-            ta.dispatchEvent(new Event('input', { bubbles: true }))
-            ta.dispatchEvent(new KeyboardEvent('keydown',
-              { key: 's', metaKey: true, bubbles: true }))
+            if (!window.__m276Type(ta, 'my one line edit\\n')) return 'no editor'
           })()
         `)
+        // M276. React must have the typed draft before the key, and the wait
+        // is scoped to the NEWEST panel for this block's own stated reason:
+        // 139's panel is still open and still dirty, so a bare
+        // [data-file-node-dirty] would match it and return instantly —
+        // "passing while exercising nothing" a third time, in the check whose
+        // header warns about exactly that.
+        await waitUntil(() => wc.executeJavaScript(
+          `!!${NEWEST}.querySelector('[data-file-node-dirty]')`), 5000)
+        await wc.executeJavaScript(`window.__m276Focus(${NEWEST}.querySelector('[data-file-node-editor]'))`)
+        // A REAL Cmd+S — see 169 for why a dispatched KeyboardEvent cannot
+        // reach Monaco's keybinding service at all.
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 's', modifiers: ['meta'] })
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 's', modifiers: ['meta'] })
         // A write, if one escaped, is a synchronous main-side rename behind
         // one IPC round trip, so this window is generous rather than tight.
         await new Promise((r) => setTimeout(r, 1500))

@@ -17,6 +17,7 @@ import type { ReviewBaseline, ReviewSubject } from './review'
 import type { FileSource } from './file-panel'
 import type { ToolboxSource, ToolScope } from './toolbox'
 import type { ChatSource } from './chat-panel'
+import { parseSwarmMark } from './swarm'
 import { HANDOFF_TRIGGERS, type HandoffTrigger, type LinkAutomation } from './handoff'
 import { WATCH_TIMER_MIN_MS, type WatchTrigger } from './watch-trigger'
 import { GROUP_COLOURS, type PersistedGroup } from './groups'
@@ -887,6 +888,16 @@ function parseChatSource(raw: unknown, id: string, warnings: string[]): ChatSour
   if (raw.orchestrator !== undefined) {
     if (isStr(raw.orchestrator) && raw.orchestrator.trim() !== '') chat.orchestrator = raw.orchestrator
     else warnings.push(isStr(raw.orchestrator) ? `chat panel ${id}: orchestrator was an empty prompt - the chat is kept, the mark dropped` : `chat panel ${id}: orchestrator was not a string - the chat is kept, its prompt dropped`)
+  }
+  // M275. The swarm seat keeps its brief across a relaunch, the same way —
+  // rebuilt from two strings rather than stored as prose. A malformed mark
+  // costs the MARK and not the panel: a chat whose seat cannot be read is
+  // still a chat, and it spawns with no appended prompt rather than a guessed
+  // one.
+  if (raw.swarm !== undefined) {
+    const mark = parseSwarmMark(raw.swarm)
+    if (mark !== null) chat.swarm = mark
+    else warnings.push(`chat panel ${id}: swarm seat ${JSON.stringify(raw.swarm)} is not a { preset, role } this app knows - the chat is kept, the seat dropped`)
   }
   // M90. The backend: absent is claude and stays absent; a present value that
   // is not a known backend warns and is dropped (the panel keeps claude).

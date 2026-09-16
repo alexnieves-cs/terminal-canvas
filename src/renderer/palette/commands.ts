@@ -2,6 +2,7 @@ import { noteFormSentence } from '@shared/notes'
 import { CREATABLE_OBJECTS, creationReason, type CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
+import { SWARM_LIST, SWARM_PRESETS, type SwarmPresetId } from '@shared/swarm'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
 import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
@@ -568,9 +569,17 @@ export interface PaletteActions {
    * only for what it cannot derive: with the triple complete it dispatches
    * with no sheet, and otherwise it opens the sheet on the missing input.
    */
-  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string }): void
+  beginStartWork(opts?: { itemId?: string; teammateId?: string; title?: string; swarm?: SwarmPresetId }): void
   /** M197. The executor behind it, ANSWERING — the awaited half the agent's `dispatch` arm needs. */
   startWork(itemId: string, teammateId: string, root?: string): Promise<StartWorkOutcome>
+  /**
+   * M275. START A SWARM — the same triple, plus an arrangement. It is a
+   * SECOND member beside `startWork` rather than a fourth argument to it,
+   * because the two answer differently: a swarm needs the root resolved
+   * (its seats' folders are computed from it) where a solo start may still
+   * derive one, and a swarm has refusals a solo start does not have.
+   */
+  startSwarm(itemId: string, teammateId: string, root: string, preset: SwarmPresetId): Promise<StartWorkOutcome>
   /** M115. A broker WRITE behind the teammate's spend card — excluded from plans by name. */
   openPr(itemId: string): void
   /** M115. The optional comment on the issue after done — the second card. */
@@ -1638,6 +1647,28 @@ export function buildCommands(ctx: PaletteContext): Command[] {
     group: 'canvas',
     run: () => actions.beginStartWork()
   })
+  // M275. THE ARRANGEMENT DOORS, one row per preset. Four rows rather than one
+  // row that then asks which: the arrangements are not variants of a setting,
+  // they are four different shapes of work, and a person searching for
+  // "review" should find the review arrangement rather than a menu. Present
+  // always and never disabled, for `start.work`'s own reason — every empty
+  // case has a sentence of its own naming its fix, and the sheet is where it
+  // is said. The sheet opens with the arrangement already chosen.
+  //
+  // WRITTEN OUT, not looped. `closure.v9.1` finds a verb's palette door by
+  // reading this file as TEXT (`id: '<row>'`), so a row built from a template
+  // literal is a door the door-check cannot see — declared and unprovable.
+  // `verify:swarm rows.1` fails for a preset with no row here, which is the
+  // other half: neither can drift without a red.
+  const swarmRow = (preset: typeof SWARM_LIST[number]): Omit<Command, 'id'> => ({
+    title: `Start work as a ${preset.label} swarm…`, subtitle: preset.hint,
+    searchText: `swarm arrangement start work ${preset.id} ${preset.label} supervisor handoff worktree lane multi agent seats`,
+    group: 'canvas', run: () => actions.beginStartWork({ swarm: preset.id })
+  })
+  out.push({ id: 'work.swarm.explore', ...swarmRow(SWARM_PRESETS.explore) })
+  out.push({ id: 'work.swarm.implement', ...swarmRow(SWARM_PRESETS.implement) })
+  out.push({ id: 'work.swarm.test', ...swarmRow(SWARM_PRESETS.test) })
+  out.push({ id: 'work.swarm.review', ...swarmRow(SWARM_PRESETS.review) })
   out.push({
     id: 'board.new',
     title: 'New work item…',

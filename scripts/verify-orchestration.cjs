@@ -362,6 +362,9 @@ if (typeof D.orchProjectNode === 'function') {
   ok('orch.depth.2 parallax: hub pans slowest, satellites faster the nearer, callouts fastest',
     moved(hub) < moved(back) && moved(back) < moved(front) &&
       Math.abs(moved(front) + p(front, pan).calloutDrift.x - 100) < 1e-9 && p(hub, pan).calloutDrift.x > 0)
+  const zoom = p(front, { x: 0, y: 0, k: 1.5 })
+  ok('orch.depth.zoom callouts zoom at the foreground rate while their cubes retain depth parallax',
+    Math.abs(zoom.y + zoom.calloutDrift.y - (stage.h / 2 + (front.y - stage.cy) * D.ORCH_COS_TILT * 1.5)) < 1e-9)
   const g = D.orchGroundPlane(stage, pan, 20)
   ok('orch.depth.3 the ground plane moves with the hub layer and is an ellipse flattened by the same tilt',
     g.x - D.orchGroundPlane(stage, still, 20).x === moved(hub) && Math.abs(g.ry / g.rx - D.ORCH_COS_TILT) < 1e-9)

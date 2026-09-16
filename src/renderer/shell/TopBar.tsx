@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { useState, type JSX } from 'react'
 import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
+import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem } from '@renderer/primitives'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -59,20 +60,10 @@ export function TopBar({
   // being on PATH.
   const fallback = presets.find((p) => p.available)
   const preferred = presets.find((p) => p.isDefault && p.available) ?? fallback
+  // The outside-click listener this used to mount is Radix's now
+  // (DismissableLayer), along with Escape, the arrow keys, Home/End, typeahead
+  // and focus returned to the trigger — none of which this menu had.
   const [viewOpen, setViewOpen] = useState(false)
-  const viewRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!viewOpen) return
-    const close = (event: MouseEvent): void => {
-      if (!viewRef.current?.contains(event.target as Node)) setViewOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [viewOpen])
-  const chooseTheme = (value: 'system' | 'light' | 'dark'): void => {
-    onSetTheme(value)
-    setViewOpen(false)
-  }
 
   return (
     <header className="shell__top" aria-label="Toolbar">
@@ -121,37 +112,69 @@ export function TopBar({
 
       <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
         {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
-      <div className="shell__view" ref={viewRef}>
-        <button type="button" className="shell__view-trigger" aria-haspopup="menu" aria-expanded={viewOpen}
-          {...shellControl(() => setViewOpen((open) => !open))}>View <ChevronDown /></button>
-        <div className="shell__view-menu" role="menu" aria-label="View" hidden={!viewOpen}>
-          <div className="shell__view-heading">Appearance</div>
-          {(['system', 'light', 'dark'] as const).map((value) => (
-            <button key={value} type="button" role="menuitemradio" aria-checked={theme === value}
-              {...shellControl(() => chooseTheme(value))}><span className="shell__view-check">{theme === value && <Check />}</span>{value === 'system' ? 'System theme' : `${value[0]!.toUpperCase()}${value.slice(1)} theme`}</button>
-          ))}
-          <div className="shell__view-heading">Layout</div>
-          <button type="button" role="menuitemcheckbox" aria-checked={contextOpen}
-            className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
-            {...shellControl(onToggleContext)}><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>⇧⌘\\</kbd></button>
-          {/* (this redesign) Pin the inspector open THROUGH the Compact
-              breakpoint's own auto-collapse — a separate axis from
-              contextOpen above (open/closed at all), the way
-              `shell--inspector-pinned` is a separate class from
-              `shell--inspector-collapsed` in the stylesheet. */}
-          <button type="button" role="menuitemcheckbox" aria-checked={inspectorPinned}
-            className={`shell__inspector-pin${inspectorPinned ? ' shell__inspector-pin--on' : ''}`}
-            title={inspectorPinned ? 'Stop keeping the inspector open on a narrow window' : 'Keep the inspector open even when the window narrows'}
-            {...shellControl(onToggleInspectorPinned)}><span className="shell__view-check">{inspectorPinned && <Check />}</span>{Pin} Pin inspector open</button>
-          <button type="button" role="menuitemcheckbox" aria-checked={merged} aria-pressed={merged}
-            className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
-            {...shellControl(onToggleMerged)}><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</button>
-          <button type="button" role="menuitemradio" aria-checked={centerView === 'orchestration'}
-            {...shellControl(() => { onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration'); setViewOpen(false) })}>
-            <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
-            Orchestration view
-          </button>
-        </div>
+      {/* M276. The menu's BEHAVIOUR is the Menu primitive's; its look is these
+          same classes, unchanged. `.shell__view` stays the positioned host and
+          `.shell__view-menu` keeps its own `position: absolute` rule — Radix's
+          popper wrapper is neutralised app-wide so the stylesheet still places
+          this exactly where it placed it (styles.css, the one
+          `[data-radix-popper-content-wrapper]` rule).
+
+          `aria-haspopup` and `aria-expanded` are no longer written here: Radix
+          derives both from the open flag, which is the point of adopting it —
+          the pair cannot drift out of step with the state any more. */}
+      <div className="shell__view">
+        <Menu open={viewOpen} onOpenChange={setViewOpen}>
+          <MenuTrigger className="shell__view-trigger">View <ChevronDown /></MenuTrigger>
+          {/* forceMount + hidden, NOT Radix's unmount-on-close: `.shell__merge`
+              below is clicked from outside this menu — by verify-panels-agents,
+              verify-panels-kinds and shot.cjs's `merged` scene — and a row that
+              is absent while closed reads to all of them as a deleted control.
+              See MenuContent's note. */}
+          <MenuContent forceMount>
+            <div className="shell__view-menu" role="menu" aria-label="View" hidden={!viewOpen}>
+              <div className="shell__view-heading">Appearance</div>
+              {/* The three themes are mutually exclusive, so they are a real
+                  radio group: a screen reader now says "2 of 3" where before
+                  it read three unrelated checked states. The wrapping div the
+                  group renders is layout-neutral HERE because
+                  `.shell__view-menu` declares no `display` and its rows stack
+                  as blocks — see MenuRadioGroup's note before reusing it. */}
+              <MenuRadioGroup value={theme} onValueChange={(value) => onSetTheme(value as 'system' | 'light' | 'dark')}>
+                {(['system', 'light', 'dark'] as const).map((value) => (
+                  <MenuRadioItem key={value} value={value}><span className="shell__view-check">{theme === value && <Check />}</span>{value === 'system' ? 'System theme' : `${value[0]!.toUpperCase()}${value.slice(1)} theme`}</MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+              <div className="shell__view-heading">Layout</div>
+              <MenuCheckboxItem checked={contextOpen} onSelect={onToggleContext}
+                className={`shell__inspector-toggle${contextOpen ? ' shell__inspector-toggle--on' : ''}`}
+              ><span className="shell__view-check">{contextOpen && <Check />}</span><PanelRight /> Context pane <kbd>⇧⌘\\</kbd></MenuCheckboxItem>
+              {/* (this redesign) Pin the inspector open THROUGH the Compact
+                  breakpoint's own auto-collapse — a separate axis from
+                  contextOpen above (open/closed at all), the way
+                  `shell--inspector-pinned` is a separate class from
+                  `shell--inspector-collapsed` in the stylesheet. */}
+              <MenuCheckboxItem checked={inspectorPinned} onSelect={onToggleInspectorPinned}
+                className={`shell__inspector-pin${inspectorPinned ? ' shell__inspector-pin--on' : ''}`}
+                title={inspectorPinned ? 'Stop keeping the inspector open on a narrow window' : 'Keep the inspector open even when the window narrows'}
+              ><span className="shell__view-check">{inspectorPinned && <Check />}</span>{Pin} Pin inspector open</MenuCheckboxItem>
+              {/* aria-pressed is kept BESIDE Radix's aria-checked: verify:panels
+                  reads it (`.shell__merge` → aria-pressed) as the merged
+                  view's state, and it is the same fact under another name. */}
+              <MenuCheckboxItem checked={merged} onSelect={onToggleMerged} aria-pressed={merged}
+                className={`shell__merge${merged ? ' shell__merge--on' : ''}`}
+              ><span className="shell__view-check">{merged && <Check />}</span><Lanes /> Merged view</MenuCheckboxItem>
+              {/* A toggle, not one of a set — so a checkbox row, which is what
+                  it always behaved as. It was announced as `menuitemradio`
+                  with no group to be one of. */}
+              <MenuCheckboxItem checked={centerView === 'orchestration'}
+                onSelect={() => onSetCenterView(centerView === 'orchestration' ? 'canvas' : 'orchestration')}
+              >
+                <span className="shell__view-check">{centerView === 'orchestration' && <Check />}</span>
+                Orchestration view
+              </MenuCheckboxItem>
+            </div>
+          </MenuContent>
+        </Menu>
       </div>
     </header>
   )
