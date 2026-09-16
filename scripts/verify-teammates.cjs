@@ -22,7 +22,7 @@ buildSync({
 })
 const M = require(OUT)
 const P = M.places, T = M.teammates, G = M.gate, S = M.skills, A = M.assign, W = M.scope
-const { readFileSync } = require('node:fs')
+const { readFileSync, readdirSync } = require('node:fs')
 
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 
@@ -194,9 +194,23 @@ const PLACES = ['/home/u/work/api', '/home/u/notes/']
   // (the actionable fix) and never a worktree path; an unknown teammate is
   // refused; carryTeammate writes no undefined skills key.
   {
-    const src = readFileSync(join(__dirname, '..', 'src', 'main', 'index.ts'), 'utf8')
-    const mainAppendCount = (src.match(/skillsBriefLine\(skillsForBrief\(/g) ?? []).length
-    ok('assign.1a the brief append happens ONCE and in main', mainAppendCount === 1,
+    // The WHOLE of src/main, not one file: the rule is "once, and in main",
+    // and pinning `index.ts` by name made it "once, and in that file" — which
+    // went red when the append moved to `bootstrap/agent-handlers.ts` without
+    // a second copy existing anywhere, and would have stayed GREEN if a
+    // second copy had been added to any other main module.
+    const mainFiles = []
+    const walkMain = (d) => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        const full = join(d, entry.name)
+        if (entry.isDirectory()) walkMain(full)
+        else if (entry.name.endsWith('.ts')) mainFiles.push(full)
+      }
+    }
+    walkMain(join(__dirname, '..', 'src', 'main'))
+    const mainAppendCount = mainFiles
+      .reduce((n, f) => n + (readFileSync(f, 'utf8').match(/skillsBriefLine\(skillsForBrief\(/g) ?? []).length, 0)
+    ok('assign.1a the brief append happens ONCE and in main — counted across every module under src/main, not pinned to one filename', mainAppendCount === 1,
       'M100: main appends the brief from its own roster on every spawn — never a renderer copy')
 
     const key = S.skillKey('project', 'plan')

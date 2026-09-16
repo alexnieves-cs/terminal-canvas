@@ -2184,10 +2184,16 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
       const registrySrc = readFileSync(
         join(__dirname, '..', 'src', 'renderer', 'session', 'session-registry.ts'), 'utf8')
       const canvasDir = join(__dirname, '..', 'src', 'renderer', 'canvas')
-      const canvasSrc = readdirSync(canvasDir)
-        .filter((name) => name.endsWith('.ts') || name.endsWith('.tsx'))
-        .map((name) => readFileSync(join(canvasDir, name), 'utf8'))
-        .join('\n')
+      // RECURSIVE, and that is the point the paragraph above makes twice: the
+      // invariant is the LAYER's, not one directory level's. The palette-action
+      // hook was later split again into `canvas/palette-actions/`, taking the
+      // workspace-delete site with it — a flat read saw four and went red on a
+      // pure code move, which is the failure this check was written to avoid
+      // inviting a "fix" for. Walk the tree; the number stays five.
+      const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory() ? walk(join(d, e.name))
+          : /\.tsx?$/.test(e.name) ? [readFileSync(join(d, e.name), 'utf8')] : [])
+      const canvasSrc = walk(canvasDir).join('\n')
       const kills = (registrySrc.match(/bridge\.pty\.kill\(/g) ?? []).length
       const disposes = (canvasSrc.match(/registry\.dispose\(/g) ?? []).length
       ok('94 pty.kill still has exactly two callers, and the canvas layer has five dispose sites',

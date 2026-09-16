@@ -10,7 +10,7 @@
    it is either a verb or an excluded name with a reason. */
 const { buildSync } = require('esbuild')
 const { join } = require('node:path')
-const { mkdirSync, readFileSync, mkdtempSync, rmSync } = require('node:fs')
+const { mkdirSync, readFileSync, readdirSync, mkdtempSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 
 const OUT = join(__dirname, '..', 'out', 'verify', 'verbs.cjs')
@@ -59,7 +59,12 @@ const FACTS = {
   // un-inert its own answer, and nothing on screen would say so.
   {
     const src = (p) => readFileSync(join(__dirname, '..', 'src', p), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
-    const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts']
+    // The action hook is a DIRECTORY since the domain split, and every slice in
+    // it is a door — listing only the composition root would pass vacuously,
+    // because the root holds no verb of its own any more.
+    const actionSlices = readdirSync(join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions'))
+      .filter((f) => f.endsWith('.ts')).map((f) => `renderer/canvas/palette-actions/${f}`)
+    const doors = ['shared/verb-table.ts', 'shared/plan.ts', 'renderer/palette/commands.ts', 'renderer/canvas/usePaletteActions.ts', ...actionSlices]
     // A WRITE of `reviewed` (`reviewed:` or `reviewed =`), never a read: M253's
     // palette greys an unread preset with `preset.reviewed === false`, and the
     // old `[:=]` matched that `===` as if commands.ts cleared the mark.
@@ -310,13 +315,52 @@ const FACTS = {
   // an ARM in the executor: `closure.1` proves the table covers the interface,
   // and nothing proved the executor covers the table — `workspace-from-template`
   // sat in the table and fell to `has no executor` at run time.
+  //
+  // Read across the palette-action MODULE SET rather than one file. The verbs
+  // hook was split by domain, and the arms live in `palette-actions/executor.ts`
+  // — but a future move may put one elsewhere in that directory, and this check
+  // must keep counting arms rather than tracking a filename. Same reason
+  // `verify:panels` 94 reads the canvas DIRECTORY for `registry.dispose`.
   {
-    const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'renderer', 'canvas', 'usePaletteActions.ts'), 'utf8')
+    const fs = require('node:fs'), path = require('node:path')
+    const dir = path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions')
+    const src = fs.readdirSync(dir).filter((f) => f.endsWith('.ts'))
+      .map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n')
     const ids = V.VERBS.map((v) => v.id)
     const registryDispatch = src.includes('CREATABLE_OBJECTS.find((entry) => entry.verb === step.verb)') && src.includes('self.createObject(creation.id, a.value)')
     const missing = ids.filter((id) => !src.includes(`case '${id}'`) && !(registryDispatch && V.CREATABLE_OBJECTS.some((entry) => entry.verb === id && typeof entry.create === 'function')))
     ok('executor.1 every verb has an executor case or an executable creation registry entry routed by the shared dispatcher',
       ids.length > 0 && missing.length === 0, JSON.stringify({ ids: ids.length, missing }))
+  }
+
+  // slices.1 — the palette-action slices PARTITION the actions object.
+  //
+  // `usePaletteActions` builds one object by `Object.assign`ing each slice onto
+  // it, and Object.assign is silent about a collision: two slices declaring the
+  // same verb means whichever runs last wins, with no error anywhere and the
+  // other implementation simply never called. TypeScript cannot see it — each
+  // slice type-checks against its own `Pick`, and the composition is an assign
+  // rather than a spread into a checked literal.
+  //
+  // The MISSING direction is already a compile error (`EveryVerbIsCovered` in
+  // usePaletteActions.ts). This is the duplicate direction, which is not.
+  {
+    const fs = require('node:fs'), path = require('node:path')
+    const dir = path.join(__dirname, '..', 'src', 'renderer', 'canvas', 'palette-actions')
+    const owners = new Map()
+    const duplicated = []
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.ts') && n !== 'types.ts')) {
+      const text = fs.readFileSync(path.join(dir, f), 'utf8')
+      const from = text.indexOf('= Pick<PaletteActions,')
+      if (from < 0) continue
+      for (const m of text.slice(from, text.indexOf('\n>\n', from)).matchAll(/\|\s*'([^']+)'/g)) {
+        if (owners.has(m[1])) duplicated.push(`${m[1]}: ${owners.get(m[1])} and ${f}`)
+        owners.set(m[1], f)
+      }
+    }
+    ok('slices.1 every palette-action verb is declared by exactly one slice — Object.assign would let a second one silently win',
+      owners.size > 0 && duplicated.length === 0,
+      JSON.stringify({ verbs: owners.size, slices: new Set(owners.values()).size, duplicated }))
   }
 
   // M180. Agent admission checks the entire plan before any operation runs.

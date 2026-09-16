@@ -2,7 +2,7 @@
 // and its forget sites, and the level-of-detail plan. Plain node. See the
 // M247 spec for the rules.
 const { buildSync } = require('esbuild')
-const { existsSync, mkdirSync, readFileSync } = require('node:fs')
+const { existsSync, mkdirSync, readFileSync, readdirSync } = require('node:fs')
 const { join } = require('node:path')
 const { ok, results } = require('./lib/checks.cjs').createChecks()
 const root = join(__dirname, '..')
@@ -87,12 +87,23 @@ if (typeof offB === 'function') offB()
 
 // ── every panel-removing site forgets, the CLAUDE.md rule ────────────────
 const callCount = (text, name) => (text.match(new RegExp(`\\b${name}\\(`, 'g')) ?? []).length - (text.match(new RegExp(`function ${name}\\(`, 'g')) ?? []).length
-const sites = ['src/renderer/canvas/Canvas.tsx', 'src/renderer/canvas/usePaletteActions.ts'].map((f) => {
-  const text = readFileSync(join(root, f), 'utf8')
-  return { f, clears: callCount(text, 'clearAgentState'), forgets: callCount(text, 'forgetAgentLinksFor') }
-})
+// DISCOVERED, not listed. The two files this named by hand became a file and a
+// directory when the palette actions were split by domain, and a hand-kept list
+// answers a move by going green on a file that no longer clears anything —
+// which is the one failure this check exists to prevent. So: walk the canvas
+// layer, take every file that clears agent state, and require each to forget
+// links at least as often. A clearing site added anywhere is covered the day it
+// is written, and one that MOVES is covered without anyone editing this line.
+const walkTs = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walkTs(join(d, e.name)) : /\.tsx?$/.test(e.name) ? [join(d, e.name)] : [])
+const sites = walkTs(join(root, 'src/renderer/canvas'))
+  .map((p) => {
+    const text = readFileSync(p, 'utf8')
+    return { f: p.slice(root.length + 1), clears: callCount(text, 'clearAgentState'), forgets: callCount(text, 'forgetAgentLinksFor') }
+  })
+  .filter((s) => s.clears > 0)
 ok('agent-links.forget.1 every file that clears agent state at a panel-removing site forgets agent links as often',
-  sites.every((s) => s.clears > 0 && s.forgets >= s.clears), JSON.stringify(sites))
+  sites.length > 0 && sites.every((s) => s.forgets >= s.clears), JSON.stringify(sites))
 ok('agent-links.forget.2 the store never rides registry.version()', !/version\(\)/.test(existsSync(join(root, 'src/renderer/canvas/agent-links-store.ts')) ? readFileSync(join(root, 'src/renderer/canvas/agent-links-store.ts'), 'utf8').replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '') : 'version()'))
 
 // ── level of detail ──────────────────────────────────────────────────────

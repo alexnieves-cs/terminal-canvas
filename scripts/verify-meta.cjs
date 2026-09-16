@@ -507,7 +507,12 @@ const DIAGRAM = fences.find((f) => f.includes('--invoke-->')) ?? ''
     'browser/BrowserNode.tsx',
     'browser/usePreviewReload.ts',
     'canvas/Canvas.tsx',
-    'canvas/usePaletteActions.ts',
+    // Was `canvas/usePaletteActions.ts` until that hook was split by domain.
+    // The SAME two consumers, at their new paths and no others: the spawn
+    // sheet's lineup seat, which mints a pane already bound to the lineup's
+    // folder, and the deps interface that declares the door it calls to do it.
+    'canvas/palette-actions/presets.ts',
+    'canvas/palette-actions/types.ts',
     'panels/layout-adapt.ts',
     'panels/panels.ts',
     'shell/inspector-fields.ts'
@@ -684,8 +689,20 @@ console.log('\n' + '='.repeat(60))
 // audit document: a reason nobody wrote down is a reason nobody reviewed,
 // and the next row added with a fresh constant turns this red until the
 // audit says what the user does about it.
+//
+// M278: walks the palette DIRECTORY rather than naming commands.ts. The rule
+// was always "every REASON_* constant in the palette", but pinning it to one
+// filename made it go red when commands.ts was split and — far worse — left
+// it silent on a real violation: with no names found, `missing` is vacuously
+// empty, so only the `>= 20` floor said anything was wrong. Walking the
+// directory is the rule as written, and it now also catches a reason added to
+// any other palette module, which the filename pin never could.
 {
-  const src = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+  const { readdirSync } = require('node:fs')
+  const dir = join(__dirname, '..', 'src', 'renderer', 'palette')
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.ts') ? [join(d, e.name)] : [])
+  const src = walk(dir).map((f) => readFileSync(f, 'utf8')).join('\n')
   const auditPath = join(__dirname, '..', 'docs', 'dead-end-audit.md')
   const audit = existsSync(auditPath) ? readFileSync(auditPath, 'utf8') : ''
   const names = [...new Set([...src.matchAll(/export const (REASON_[A-Z_]+) =/g)].map((m) => m[1]))]
@@ -741,7 +758,7 @@ console.log('\n' + '='.repeat(60))
 // M103 — browser.1. THE GUEST'S FIVE PROPERTIES, AS TEXT. `webviewTag: true`
 // is the one setting Electron's own docs discourage, and the argument for it
 // is that every property the docs warn about is closed by name in
-// main/index.ts: the tag itself; `will-attach-webview` stripping any
+// main/bootstrap/window.ts: the tag itself; `will-attach-webview` stripping any
 // `preload` a page could set and forcing nodeIntegration OFF and
 // contextIsolation ON; the browser partition's permission handler answering
 // `false` (camera, mic, geolocation, notifications — every ask); the guest's
@@ -749,7 +766,7 @@ console.log('\n' + '='.repeat(60))
 // on the guest's `src`. None of these has a runtime symptom when removed —
 // a page that reaches node prints nothing — so the source text is the check.
 {
-  const src = stripComments(read('src/main/index.ts') ?? '')
+  const src = stripComments(read('src/main/bootstrap/window.ts') ?? '')
   const at = src.indexOf("'will-attach-webview'")
   const attach = at < 0 ? '' : src.slice(at, at + 900)
   const webviewTag = /webviewTag:\s*true/.test(src)
@@ -759,7 +776,7 @@ console.log('\n' + '='.repeat(60))
   const permission = /fromPartition\(\s*'persist:tc-browser'\s*\)[\s\S]{0,80}setPermissionRequestHandler\(\s*\([^)]*\)\s*=>\s*\w+\(false\)\s*\)/.test(src)
   const da = src.indexOf("'did-attach-webview'")
   const guestDeny = da >= 0 && /setWindowOpenHandler\(\s*\(\)\s*=>\s*\(\{\s*action:\s*'deny'\s*\}\)\s*\)/.test(src.slice(da, da + 600))
-  ok('browser.1 main/index.ts turns the webview tag on and closes every property the docs warn about by name: will-attach-webview strips preload and forces nodeIntegration false / contextIsolation true, the guest src is gated to http(s), the persist:tc-browser partition denies every permission ask, and the attached guest denies every new window',
+  ok('browser.1 main/bootstrap/window.ts turns the webview tag on and closes every property the docs warn about by name: will-attach-webview strips preload and forces nodeIntegration false / contextIsolation true, the guest src is gated to http(s), the persist:tc-browser partition denies every permission ask, and the attached guest denies every new window',
     webviewTag && stripsPreload && noNode && srcGate && permission && guestDeny,
     JSON.stringify({ webviewTag, stripsPreload, noNode, srcGate, permission, guestDeny }))
 }
@@ -843,7 +860,7 @@ console.log('\n' + '='.repeat(60))
 // could turn on a launch-time network call has the shape of exfiltration,
 // the same reason telemetry's keys carry no flag. (b) `main/update-check.ts`
 // imports no `https` — the fetcher is injected and the real one lives in
-// `main/index.ts`, which no suite bundles — so the module runs under plain
+// `main/bootstrap/workspace-handlers.ts`, which no suite bundles — so it runs under plain
 // node in verify:file. (c) No suite script holds a real fetcher: `https.get(`,
 // an `https` module import, or a TEMPLATED `api.github.com/repos/${…}` url
 // (a recorded fixture body carries the literal host — verify-panels and

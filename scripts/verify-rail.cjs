@@ -3416,7 +3416,8 @@ console.log('\n' + '='.repeat(60))
   const CONSUMERS = [
     ['src/renderer/canvas/useFileTree.ts', 'the Files pane'],
     ['src/renderer/canvas/useInspectorDetail.ts', "the inspector's Tools section"],
-    ['src/renderer/canvas/usePaletteActions.ts', 'the Open toolbox verb'],
+    // M28's action hook split by domain; `openToolbox` went to the presets slice.
+    ['src/renderer/canvas/palette-actions/presets.ts', 'the Open toolbox verb'],
     ['src/renderer/canvas/Canvas.tsx', "the Skills pane's cwd"]
   ]
   const asks = CONSUMERS.filter(([f]) => /inspectionDirectory\(/.test(require('node:fs').readFileSync(join(__dirname, '..', ...f.split('/')), 'utf8')))

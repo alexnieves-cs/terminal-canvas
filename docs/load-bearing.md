@@ -72,7 +72,7 @@ they inherit a bare PATH and no dotfile exports — `claude`/`codex` work in Ter
 "command not found" in the app. We probe `$SHELL -ilc env` once at startup (`-i` is what
 makes zsh read `.zshrc`) and use that env for every PTY. A non-zero exit from the probe is
 normal; success is judged by whether a `PATH` came back. The fallback logs loudly on purpose.
-`tmux` (`tmux-probe.ts`) and `git` (`main/index.ts`'s `gitPath`) are resolved by absolute path
+`tmux` (`tmux-probe.ts`) and `git` (`main/index.ts`'s probe loop into `main/bootstrap/context.ts`'s `gitPath`) are resolved by absolute path
 from this same login env, for the identical reason and after it: spawning either by bare name
 against launchd's bare PATH silently fails or resolves the wrong binary, and both are logged
 loudly, once, when unresolved — a git-dependent feature (the Changes section) used to render as
@@ -126,7 +126,7 @@ has no local session for, because under tmux a never-spawned panel can still own
 session (off-screen or over `LIVE_BUDGET`), and skipping the kill there would leak it forever.
 `dispose(id)` has five call sites in the canvas layer — close button, undo/redo removing a
 panel, canvas reset, and restart-in-place in `Canvas.tsx`, plus workspace delete, which M28
-carried out into `canvas/usePaletteActions.ts` — and every one keeps the `pty.kill` count
+carried out into `canvas/palette-actions/workspaces.ts` — and every one keeps the `pty.kill` count
 at two precisely by routing through `dispose(id)` instead of calling it directly; re-derive
 this count from source (`grep -rn "registry.dispose" src/renderer/canvas/` / count `pty.kill` callers in
 `session-registry.ts`) rather than trusting a stale number here — `verify:panels` 94 pins both
@@ -202,7 +202,7 @@ correcting rather than gating (above): `getBoundingClientRect()` is transform-aw
 its own page-zoom gesture; without `preventDefault()` a pinch zooms the whole UI. React's
 `onWheel` prop may attach passively (where `preventDefault()` silently does nothing), hence a
 manual `addEventListener('wheel', handler, { passive: false })` in an effect, plus
-`setVisualZoomLevelLimits(1, 1)` in `src/main/index.ts` as a second line of defence.
+`setVisualZoomLevelLimits(1, 1)` in `src/main/bootstrap/window.ts` as a second line of defence.
 
 **Clamp scale before deriving translation (`zoomAt`).** Deriving the translation from a
 *requested* scale while applying a *clamped* one makes the canvas drift sideways while
@@ -375,7 +375,7 @@ sixty times as the pointer moves; pushing an undo entry there makes one drag tak
 **Undo removing a panel must dispose its session, and the call-site count only moves by
 addition (`src/renderer/canvas/`, `session-registry.ts`).** `registry.dispose` has five call
 sites in the canvas LAYER today — close button, undo/redo removing a panel, canvas reset and
-restart-in-place in `Canvas.tsx`, workspace delete in `usePaletteActions.ts` — and adding a new one that forgets to route through `dispose()` (calling
+restart-in-place in `Canvas.tsx`, workspace delete in `palette-actions/workspaces.ts` — and adding a new one that forgets to route through `dispose()` (calling
 `pty.kill` directly, say) breaks the two-caller invariant `session-registry.ts` depends on.
 Re-derive the count from `grep -rn "registry.dispose" src/renderer/canvas/` rather than a number
 written down here — this file has gone stale on this exact count before, inside the very commit
@@ -575,14 +575,14 @@ subscribes to the same two events and inserts at the caret. The copy half is asy
 a selection inside an `<input>` is not part of `window.getSelection()` in Chromium — the palette
 reads `selectionStart`/`selectionEnd` off the input instead.
 
-**A prompt insert is `paste()`, never `write()` (`canvas/usePaletteActions.ts`'s `insertPrompt`).** `term.paste`
+**A prompt insert is `paste()`, never `write()` (`palette-actions/prompts.ts`'s `insertPrompt`).** `term.paste`
 wraps the payload in bracketed-paste markers and normalises LF to CR, delivering a multi-line
 prompt as ONE input; a raw write submits every newline separately, firing incomplete fragments.
 Every prompt worth saving is multi-line, so this affects the whole feature. `verify:panels` 40
 is the only check that can tell the two apart, since its fixture panel deliberately enables
 bracketed paste itself.
 
-**Navigating must not wake (`canvas/usePaletteActions.ts`'s `goToPanel`).** Waking hangs off *selection*
+**Navigating must not wake (`palette-actions/presets.ts`'s `goToPanel`).** Waking hangs off *selection*
 (`onSelectPanel` clears the dormant id and calls `registry.wake`), so reusing it for the
 switcher would spawn an agent as a side effect of navigating — on a restored twelve-panel canvas
 that's twelve CLIs launched by a keyboard tour. `goToPanel` factors out just the select-and-raise
@@ -1488,7 +1488,7 @@ drives production code, not a copy.
 
 **An unread pack preset is refused in MAIN, at every door that resolves a preset
 (`main/presets.ts` `unreviewedPresetReason`, `main/spawn-request.ts`, `main/control-handler.ts`,
-`main/index.ts` `onSpawnPreset`, `main/menu.ts`).** A preset carries a command, so an imported one
+`main/bootstrap/menu-actions.ts` `onSpawnPreset`, `main/menu.ts`).** A preset carries a command, so an imported one
 is a stranger's process one click away. Guarding one door is not enough: the menu, the palette,
 the spawn sheet and `tc spawn` each resolve presets independently, and an unguarded door silently
 reopens the gate. All four ask the one function for the one sentence. The menu disables the item
@@ -1532,7 +1532,7 @@ recoverable. Log lines defend the identical rule from a second angle: neither a 
 nor a warning may ever quote the submitted token, even when `encrypt` itself THROWS while
 holding the plaintext.
 
-**`credentials.json` is its own file, not a key in `layout.json` (`main/index.ts`).** Reusing
+**`credentials.json` is its own file, not a key in `layout.json` (`main/bootstrap/stores.ts`).** Reusing
 `LayoutStore` breaks three of its own deliberate properties: its 500ms debounce would write a
 secret repeatedly at an arbitrary moment rather than once at a moment the user can point to;
 hand-editing `layout.json` is a documented SUPPORTED path, so the file people are invited to
@@ -1840,7 +1840,7 @@ must treat a refused switch as an ABORT rather than proceeding to remove the wor
 proceeding would remove the still-active record without ever having left it.
 
 **The inspector's Save reads what's DISPLAYED, not what's stored, and this is the one place the
-read-only/write-only split runs the other way (`canvas/usePaletteActions.ts`'s `savePanelAsPreset`).** Everything
+read-only/write-only split runs the other way (`palette-actions/presets.ts`'s `savePanelAsPreset`).** Everything
 that acts on what's SAVED reads the stored panel array; everything that acts on what's DISPLAYED
 reads the merged/lane-shifted one — Save was on the wrong side of that split, so saving a preset
 from a foreign panel while merged silently found nothing and did nothing, an affordance that
@@ -2116,7 +2116,7 @@ the commit.
 
 **`fontSize` is the sixth field-by-field copy site of the absent-stays-absent rule, and rename
 was a seventh nobody had counted (`layout-adapt.ts`, `layout-schema.ts`'s `parsePanel`,
-`usePaletteActions.ts`'s rename and `setPanelFontSize`).** A spread writes `fontSize: undefined`,
+`palette-actions/presets.ts`'s rename and `setPanelFontSize`).** A spread writes `fontSize: undefined`,
 which survives IPC and reads as present. `verify:viewport` `type.1` pins `toPanels`/`fromPanels`;
 `verify:layout` `type.1` pins the parse (present-but-out-of-range costs the FIELD with a warning,
 never the panel). Adding the field found that the rename action rebuilt a terminal panel from
@@ -2141,7 +2141,7 @@ ride the one transform; they are cleared on commit. `placement.snap` turns the w
 because a user aligning by eye against a snap is fighting the app.
 
 **Tidy compacts WITHOUT reordering and WITHOUT resizing, in ONE undoable step
-(`placement.ts`'s `tidyPanels`, `usePaletteActions.ts`'s `tidyPanels`).** Rows are formed by
+(`placement.ts`'s `tidyPanels`, `palette-actions/arrangement.ts`'s `tidyPanels`).** Rows are formed by
 the panels' current vertical overlap, ordered top to bottom, and packed left to right from the
 selection's origin — a panel that was left of another stays left of it. A tidy that sorted by id
 would destroy exactly the information the canvas was carrying (panels grouped by project), and
@@ -2184,7 +2184,7 @@ subscribes to, which is why `RailRow` carries `state` and why the signature does
 the agent word.
 
 **The spawn sheet's directory is checked with `expandTilde`, never `resolveCwd`
-(`main/index.ts` `spawnWith`, and the same stub in `verify-panels.cjs`).** `resolveCwd` falls
+(`main/bootstrap/palette-handlers.ts` `spawnWith`, and the same stub in `verify-panels.cjs`).** `resolveCwd` falls
 back to the home directory when a path is missing — right for a restored panel whose
 directory went away, and exactly wrong for a path a person just typed: the sheet's first
 check run spawned two panels at `~` from a typo and refused nothing, because the fallback
@@ -2219,7 +2219,7 @@ bytes. Native minidumps are process memory and no scrubber reads them, which is 
 SEPARATE setting whose description says so.
 
 **`scrubEvent` only sees EVENT envelopes, and the renderer's integration list is the one thing
-holding that true (`main/index.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
+holding that true (`main/bootstrap/telemetry-init.ts`'s `sentryInit` call, `renderer/main.tsx`'s `init()` call).**
 `beforeSend` is Sentry's own event hook: in the installed `@sentry/electron` 7.18.0,
 `main/ipc.js`'s `handleEnvelope` calls it only on the branch that resolves an incoming envelope
 to an event, and hands every other envelope kind — profile chunks, span containers, replays —
@@ -2247,7 +2247,7 @@ double-open. The size trade itself stays accepted and unmeasured further here; w
 that the packaging path is no longer an owed pre-release gate.
 
 **Telemetry reaches the renderer as an argv flag and a bridge FIELD, not a channel
-(`main/index.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
+(`main/bootstrap/telemetry-init.ts`, `main/bootstrap/window.ts`, `preload/index.ts`).** Main decides once, after the store loads and before the
 window exists, and stamps `--tc-telemetry=1` on `additionalArguments`; the preload reads
 `process.argv` (sandbox is false) and exposes `canvas.telemetry.enabled`. A channel would have
 added a handler to pin, a diagram row, and a renderer that loads the SDK before it knows the
@@ -2279,7 +2279,7 @@ backwards silently), never the feed's first row (a backported 2.x cut after 3.0 
 it). **The fetcher is injected and the module imports no `https`:** the real one (`https.get`,
 a 10 s deadline for the whole call — M87's rule, node's socket timeout is inactivity — GitHub's
 required `User-Agent`, and NO redirect following: the url is fixed and a 3xx is a
-`could-not-check` naming the status) lives in `main/index.ts` alone, which no suite bundles,
+`could-not-check` naming the status) lives in `main/bootstrap/workspace-handlers.ts` alone, which no suite bundles,
 so `verify:file update.1` drives every arm under plain node and `verify:meta update.1` greps
 the scripts for `https.get(`, an `https` import or a templated `api.github.com/repos/${…}`
 url. **The setting is boolean, off, and NOT `planWritable`, and `checkForUpdates` is on
@@ -2293,7 +2293,7 @@ store. Three doors, one sentence: `updateSentence` is the only place the words l
 
 **The manual-only list, M123's own item.** *A real GET of the real feed.* `verify:file
 update.1` drives a fake fetcher over a hand-written feed; that the fetcher in
-`main/index.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's
+`main/bootstrap/workspace-handlers.ts` reaches `api.github.com` with the app's `User-Agent`, that the repository's
 releases page answers the recorded shape, and that `Open release` lands on the release in
 the default browser were not watched by any suite and — until the first release exists on
 the feed (M125 cuts it) — could not have been. Unproven, by construction, at merge.
@@ -2303,12 +2303,12 @@ confirmed once, by hand, against a real machine/keyboard/CLI/build rather than b
 `npm run verify` re-runs — treat a green suite as silent on each of them, not as proof:
 
 - **The real OS attention surfaces (M43)** — `new Notification(...).show()` and its click
-  handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/index.ts`. No suite reaches
+  handler, `app.dock.setBadge`, and `shell.beep`, all wired in `main/bootstrap/stores.ts`. No suite reaches
   them: `verify:pty-manager` drives a FAKE `AttentionSink` and counts its calls. That a real
   notification appears when the window is behind another, that clicking it focuses the window and
   flies to the panel, that the dock shows the count, and that the beep uses the user's own alert
   sound were each confirmed once by hand.
-- **`scrollback.persist` off in the REAL main process** — `main/index.ts` wires the sink's
+- **`scrollback.persist` off in the REAL main process** — `main/bootstrap/stores.ts` wires the sink's
   `enabled()` and the `scrollback:tail` gate to `layoutStore.getSetting('scrollback.persist')`,
   and no suite runs that line: `verify:pty-manager` drives the sink with a fake `enabled()`, and
   `verify:panels`' harness wires `enabled: () => true`. That turning the setting off stops the
@@ -2855,7 +2855,7 @@ that redacts a commit sha is one nobody can act on. `verify:usage` `redact.3` pi
 over-match direction, which is the failure a scrubber grows into.
 
 **Broadcast has three exits and ONE guard (`Canvas.tsx`, `useBroadcastChord.ts`,
-`usePaletteActions.ts`).** M31 shipped the mode with a single way out — find the palette
+`palette-actions/arrangement.ts`).** M31 shipped the mode with a single way out — find the palette
 row again — which is a dead end for whoever armed it from the chord M40 adds (`Cmd+Shift+I`;
 `Cmd+Shift+B`, the obvious spelling, is NOT free: `useShellChrome` matches `KeyB` without
 testing Shift, so it toggles the tree). The banner's Stop and the chord both call
@@ -2930,10 +2930,10 @@ distinction the three empty states depend on (off / no matches / nothing typed y
 
 **Main owns `wants-you` and every out-of-window surface is a READER; the reload SNAPSHOT is a
 no-op and must not be claimed otherwise (`main/pty-manager.ts` AttentionSink/`syncAttention`,
-`main/index.ts`, `main/window-lifecycle.ts`).** M43 hangs the dock badge, an OS notification and
+`main/bootstrap/stores.ts`, `main/window-lifecycle.ts`).** M43 hangs the dock badge, an OS notification and
 a beep off the SAME detectors M6d built, through an injected `AttentionSink` so the whole
 decision path (when to notify, when to beep, the window-focus gate) runs under plain node in
-`verify:pty-manager`; the real `Notification`/`app.dock`/`shell.beep` live in `main/index.ts` and
+`verify:pty-manager`; the real `Notification`/`app.dock`/`shell.beep` live in `main/bootstrap/stores.ts` and
 are on the manual-only list. Nothing here CLEARS a state — focus (`agent:acknowledge`) and a
 `pty:write` stay the only two clearers, so a notification click frames the panel (through
 `goToPanel`, the `Cmd+J` never-wake path, over the new `attention:jump` EVENT — an event, not an
@@ -3102,7 +3102,7 @@ injected connect and exits 0 / 1 / 2 for ok / refused / not running — three an
 apart without parsing prose.
 
 **An orphan session is ASKED about, never adopted silently, and "known" means every workspace
-(`main/orphans.ts`, `index.ts`'s boot block, `renderer/panels/recover.ts`, `session:recover`).**
+(`main/orphans.ts`, `main/bootstrap/orphan-sweep.ts`, `renderer/panels/recover.ts`, `session:recover`).**
 Three rules, each with a quiet failure. **The known set is every workspace's ids**
 (`layoutStore.workspaces()`), not `initial().panels`: the latter is the active workspace only,
 and until M55 a session kept across quit (M38's keep arm) for a panel in a HIDDEN workspace was
@@ -3287,7 +3287,7 @@ close sends no kill and does drop the session and its file.
 
 **The durable chat transcript is written by MAIN from the runtime's own events, and a
 restored panel renders it before any process exists (`main/agent-transcript-log.ts`,
-`main/index.ts`).** One append-only file per panel under `userData/agent-transcripts`,
+`main/bootstrap/agent-runtime.ts`).** One append-only file per panel under `userData/agent-transcripts`,
 a `turn` line per `turn` event (a merged turn re-written whole; the reader keeps the last
 line per turn id in first-seen order) and a `meta` line per `result`. The renderer never
 echoes a turn back, so a chat that streamed while the window was closed is still on disk.
@@ -3307,7 +3307,7 @@ seeds a claude-kind preset over `/bin/sh` to make that gate answer the way a mac
 the CLI does, through the real path.
 
 **One front-end at a time: a Claude session moves between a terminal and a chat, it is never
-shared (`main/index.ts`'s `importSession`, `Canvas.tsx`'s `openAsChat`/`openInTerminal`).**
+shared (`main/bootstrap/agent-handlers.ts`'s `importSession`, `Canvas.tsx`'s `openAsChat`/`openInTerminal`).**
 Two processes on one session id would both append to the CLI's transcript, and the CLI's
 `--resume` reads that file: the conversation would fork silently and each front-end would
 show a different half. So `Open as chat` refuses BY NAME while the terminal's process is
@@ -3348,7 +3348,7 @@ before the `@` is not inside the token; without the rule every path typed by han
 list over the transcript. `verify:rail composer.1` names the four non-triggers.
 
 **A saved prompt's holes are filled before insertion; a project prompt is NEVER expanded
-(`composer-model.ts`, `ChatNode.tsx`, `usePaletteActions.ts`).** M5b decided a project
+(`composer-model.ts`, `ChatNode.tsx`, `palette-actions/prompts.ts`).** M5b decided a project
 prompt is a file this app does not own, and expanding a placeholder the CLI's own format
 does not define would make the same file behave differently inside the app than in a plain
 terminal. So only the SAVED library gets the fill step — in the composer's popup, or in
@@ -3357,7 +3357,7 @@ never blanked into a prompt that silently says less. `composer.2` and `verify:pa
 composer.3` (a project prompt inserted verbatim, `{{target}}` intact).
 
 **A chat's `needs you` is decided in MAIN and travels on the terminal's channel; the
-renderer's store is a cache, never a second author (`main/approvals.ts`, `main/index.ts`,
+renderer's store is a cache, never a second author (`main/approvals.ts`, `main/bootstrap/agent-runtime.ts`,
 `chat-store.ts`).** The obvious renderer-side version — derive the attention set from the chat
 store's pending lists — makes two authors of "who wants me": the store fed by `agent:state` and
 a second list fed by `agent:event`, which agree until a dispose races an event and then differ
@@ -3384,7 +3384,7 @@ panel is done while a question is still open. `approve.1`; `approve.3` for focus
 settings.
 
 **A chat's baseline is captured by `agent:create` through the SAME capture PtyManager uses, and
-it SURVIVES a relaunch (`main/index.ts`, `baseline-capture.ts`).** The obvious alternative — a
+it SURVIVES a relaunch (`main/bootstrap/agent-handlers.ts`, `main/bootstrap/stores.ts`, `baseline-capture.ts`).** The obvious alternative — a
 second capture path for chats — would drift from the terminal's once-only guard and epoch
 poisoning silently. The relaunch rule is the opposite of the terminal's on purpose: a terminal's
 next launch spawns a NEW agent, so a surviving baseline would blame it for yesterday's edits;
@@ -3553,8 +3553,8 @@ budget.2` drives two sessions and a second result.
 manager without `limits`, and every canvas that has never opened the settings page, behaves
 exactly as before M82 — the arms are unreachable rather than merely lenient.
 
-**The repository ROOT is resolved in ONE place, and it is main (`main/index.ts`'s
-`memoryRoot`).** A memory node is opened on a panel's directory, a chat carries its own
+**The repository ROOT is resolved in ONE place, and it is main (`main/bootstrap/places.ts`'s
+`scopeResolver`/`memoryScope`).** A memory node is opened on a panel's directory, a chat carries its own
 `cwd`, and `tc memory add` passes whatever the agent's shell was standing in — three doors
 onto one store, and each of them is usually a SUBDIRECTORY of the repository. Keying the
 file by the path each door happened to hold gives one repository several memories that never
@@ -3617,7 +3617,7 @@ What is durable is M52's run ledger, whose rows are metadata by construction, wh
 what keeps a command's output out of a file that gets pasted into an issue.
 
 **A directory and a file are watched DIFFERENTLY, and confusing them fails silently
-(`main/index.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
+(`main/bootstrap/watch-handlers.ts`'s watcher arming).** `FileWatchers` watches a file by watching its parent
 and filtering on its basename — M22's atomic-rename rule, which is how every editor and every
 agent writes a file — and handed a DIRECTORY it reads it as a file and refuses. The
 commonest trigger of all is "anything under src", so a directory is watched recursively
@@ -3676,7 +3676,7 @@ refused at both, silently, because each compared `typeof value` against the def'
 and `'text'` is not what `typeof` answers — the pane read `not set` after the setting was set,
 and only the panels check said so.
 
-**The vault root is expanded and realpath'd in main, NEVER `resolveCwd`'d (`main/index.ts`'s
+**The vault root is expanded and realpath'd in main, NEVER `resolveCwd`'d (`main/bootstrap/palette-handlers.ts`'s
 `vaultRead`).** `resolveCwd` falls back to `$HOME` for a path that is not there — the right
 answer for a spawn, and exactly wrong here: a typo'd vault folder walked the user's entire
 home directory synchronously on main, listed Documents and Desktop as the vault, and the
@@ -3831,8 +3831,8 @@ and that is exactly wrong for a restore, where the user asked for THIS file: the
 checked first and refused by name. `verify:layout snap.1`/`snap.2` pin both halves.
 
 **The verb table is DATA and its closure is a text check; a plan's confirmation is a step
-the runtime refuses to skip (`shared/verb-table.ts`, `shared/plan.ts`, `usePaletteActions`'
-`beginRunVerb`, M96).** Three later milestones ask "is this destructive?" — M97's Auto modes,
+the runtime refuses to skip (`shared/verb-table.ts`, `shared/plan.ts`,
+`palette-actions/executor.ts`'s `beginRunVerb`, M96).** Three later milestones ask "is this destructive?" — M97's Auto modes,
 M101's routines, M102's spend card — and if each answered at its own call site they would
 disagree in exactly the case nobody tests. So `destructive` is a boolean on the table, and a
 plan built from it CARRIES its confirmation (`confirm: { reason }`) rather than being refused:
@@ -4303,7 +4303,7 @@ there reaches its controls, not xterm. Core check 9 (a double-click at 50 %) wri
 rows first so its word sits below the overhang; it had been reaching xterm THROUGH the chrome.
 
 **`New workspace from <template>` asks the sheet FIRST and mints on its Enter, never before
-(M149, `usePaletteActions.ts`'s `intoNewWorkspace` and `beginSpawnSheet`'s `into`).** The
+(M149, `usePaletteActions.ts`'s `intoNewWorkspace` and `palette-actions/presets.ts`'s `beginSpawnSheet`'s `into`).** The
 first cut minted the workspace, switched to it, then opened the sheet for the template's
 holes — so an Escape on the sheet left the user in an empty workspace named after the
 template, with nothing saying why. The shot harness found it: every scene after `templates`
@@ -4364,7 +4364,7 @@ knows, and with no list the origin is taken to be the conversation rather than r
 `registry.get(id)?.spec` alone dropped every sleeping terminal in a lane out of its task. Live cwd
 first, then the panel record.
 
-**`say()` OPENS THE PALETTE (`usePaletteActions.ts`, M149).** It is the feedback line for a refusal
+**`say()` OPENS THE PALETTE (`palette-actions/objects.ts`, M149).** It is the feedback line for a refusal
 that would otherwise be swallowed. A camera move that reported success through it put the palette
 over the task it had just framed, and the open palette then swallowed Cmd+[ (`shouldIgnoreKeys`).
 D08's surfaces speak only on a refusal or when part of the task is missing (`partial`).
@@ -4537,7 +4537,7 @@ README row was added (`verify:meta milestones.1`).
 
 **Keeping against a moved file is a named CONFLICT, never a merge (`deck.ts`'s `applyKept`, `draft-review.ts`'s `draftState`, M248).** The draft records the hash of the text it was computed against; a keep on a disk that no longer hashes to it names the file and the slides and writes nothing. A merge would place an agent's slide somewhere the person never saw it proposed. `draftState` is three-state — none / pending / conflict — because "no proposal" and "a proposal on yesterday's file" need different words and different buttons.
 
-**The executor learns WHO asked from the call path, not from the step (`usePaletteActions.ts`'s `execute(step, origin)`, M248).** The palette's `runPlan` calls `execute(step)` — a person; `runAgentPlan` — the agent door AND a workflow action node, which runs its line through the same function — wraps it as `'door'`. A deck edit through a door STAGES into `source.deck.draft` and leaves the file byte-identical; `deck-review keep` through a door is refused by name (an agent may withdraw its proposal, never accept it). A new verb whose meaning depends on the asker reads `origin`; one that ignores it treats an agent's line as a person's.
+**The executor learns WHO asked from the call path, not from the step (`palette-actions/executor.ts`'s `execute(step, origin)`, M248).** The palette's `runPlan` calls `execute(step)` — a person; `runAgentPlan` — the agent door AND a workflow action node, which runs its line through the same function — wraps it as `'door'`. A deck edit through a door STAGES into `source.deck.draft` and leaves the file byte-identical; `deck-review keep` through a door is refused by name (an agent may withdraw its proposal, never accept it). A new verb whose meaning depends on the asker reads `origin`; one that ignores it treats an agent's line as a person's.
 
 **The deck PDF page is a temp FILE, not a `data:` URL (`deck-pdf.ts`'s `createPdfRenderer`, M248).** Images are inlined as base64 so the page loads nothing; a data URL past Chromium's navigation cap (about 2 MB) loads no page at all, so a deck with three screenshots would export nothing. The window runs with JavaScript off, sandboxed, no preload, and the page carries `default-src 'none'`. Every slide's text goes through `outward()` — no new `redactSecrets` caller (`verify:verbs gate.2`) — and speaker notes never reach the page. The `/Type /Page` count in `verify:canvas deck.pdf.1` is the one observable a stray `break-after` on the last slide changes.
 
@@ -4593,7 +4593,7 @@ save wrong the same way. **Read with `cellNF: true`**: without it SheetJS leaves
 date is recognisable, and every date shows — and is retyped — as a serial number.
 
 **An agent's sheet edit PROPOSES; the caller decides, and it rides into `execute`
-(`usePaletteActions.ts`'s `execute(step, caller)`, `sheet-draft.ts`'s `sheetEditRoute`, M246).**
+(`palette-actions/executor.ts`'s `execute(step, caller)`, `sheet-draft.ts`'s `sheetEditRoute`, M246).**
 `runAgentPlan` is shared by the agent door and the workflow action node, and `execute` used to
 receive only the step — so no verb could tell a person's line from an agent's. The caller is
 now threaded through; `caller.panelId` present means an agent is asking, and `sheet-edit` stages
@@ -4610,7 +4610,7 @@ records the draft as it stood, and a traversal re-derives it (merge, minus disca
 otherwise undoing a person's edit reads as a conflict and loses the proposal it had dropped.
 
 **Agent links are forgotten BEFORE the palette close loop's sessionless `continue`
-(`usePaletteActions.ts`, `agent-links-store.ts`, M247).** That loop `continue`s past every clear
+(`palette-actions/workspaces.ts`, `agent-links-store.ts`, M247).** That loop `continue`s past every clear
 for a sessionless panel — a file, note, checklist or sheet — which is exactly what a link points
 AT; a `forgetAgentLinksFor` beside `clearAgentState` would never run for them. The store forgets in
 both directions (a closed agent loses its links; a closed object is dropped from every agent's),
@@ -4747,3 +4747,36 @@ import. So the registry knows the SHAPE of an editor (two methods, written struc
 not the library; Monaco's `IStandaloneCodeEditor` satisfies it exactly and nothing is cast, so
 a Monaco upgrade that changed either signature is a type error here rather than a runtime
 surprise inside a check. Merging the two files is the obvious cleanup and is the regression.
+
+**`commands.ts` keeps `PaletteActions` and `buildCommands`, because FOUR checks read that one
+file as TEXT (`palette/commands/`, `scripts/verify-verbs.cjs`, `verify-swarm.cjs`,
+`verify-meta.cjs`, M278).** The split moved out everything DECLARATIVE — the row types, the
+refusal sentences, `withReason`, and the three builders that never read `PaletteContext` — and
+stopped there. `closure.1` slices `export interface PaletteActions {` out of `commands.ts` by
+string index; `closure.v9.1`, `fit-task.doors.1` and `swarm.rows.1` grep the same file for
+literal `id: '<door>'`. A row moved into `commands/` is a door those checks cannot see, and
+`closure.v9.1` reports it as a MISSING door for a verb that is genuinely wired. The fourth,
+`verify:meta audit.1`, was the one that actually fired: it named `commands.ts` too, and with the
+reasons gone it found zero constants — at which point its `missing` list is vacuously empty and
+only the `names.length >= 20` floor said anything was wrong. It now walks every `.ts` under
+`renderer/palette/`, which is the rule as it was always written ("every REASON_* constant in the
+palette") and which also catches a reason added to any other palette module. **A check that pins
+its rule to a FILENAME goes red on a move and silent on a real violation;** look for that shape
+before moving code, not after.
+
+**`export * from './commands/reasons'` re-exports without BINDING, and the failure is a runtime
+ReferenceError inside a bundled suite, not a type error (`palette/commands.ts`, M278).**
+`buildCommands` names ~43 reason constants directly, so `commands.ts` must both import them and
+re-export them; the barrel alone compiles clean and dies at `verify:palette` check 19 with
+`REASON_NO_FOCUS` undefined. The same hop caught `buildCredentialRows` and `buildEnvironmentRows`.
+Worse, the compiler was silent the first time for an unrelated reason: **`tsc --noEmit -p
+tsconfig.json` checks NOTHING here** — the root config is `{"files": [], "references": [...]}`,
+so it exits 0 having compiled zero files. `npm run typecheck` is the only real typecheck.
+
+**The proof a `commands.ts` split changed nothing is the ROW DUMP, not a green suite
+(`scripts/palette-entry.cjs`, M278).** M244/M250 measured that moving `object.create.*` below
+`spawn.sheet` leaves `verify:palette` greener and makes `verify:panels:agents search.1` fail at
+SEEDING in two of two runs, by a mechanism nobody found. No plain-node suite covers row ORDER
+across the whole list, so a split is verified by bundling `palette-entry.cjs` in both worktrees,
+calling `buildCommands` on one fixture, and diffing the JSON: 193 rows, same order, same
+reasons, same 117 export names, byte-identical. Run that before trusting a green tier.
