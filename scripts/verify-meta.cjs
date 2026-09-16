@@ -682,8 +682,20 @@ console.log('\n' + '='.repeat(60))
 // audit document: a reason nobody wrote down is a reason nobody reviewed,
 // and the next row added with a fresh constant turns this red until the
 // audit says what the user does about it.
+//
+// M278: walks the palette DIRECTORY rather than naming commands.ts. The rule
+// was always "every REASON_* constant in the palette", but pinning it to one
+// filename made it go red when commands.ts was split and — far worse — left
+// it silent on a real violation: with no names found, `missing` is vacuously
+// empty, so only the `>= 20` floor said anything was wrong. Walking the
+// directory is the rule as written, and it now also catches a reason added to
+// any other palette module, which the filename pin never could.
 {
-  const src = readFileSync(join(__dirname, '..', 'src', 'renderer', 'palette', 'commands.ts'), 'utf8')
+  const { readdirSync } = require('node:fs')
+  const dir = join(__dirname, '..', 'src', 'renderer', 'palette')
+  const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.ts') ? [join(d, e.name)] : [])
+  const src = walk(dir).map((f) => readFileSync(f, 'utf8')).join('\n')
   const auditPath = join(__dirname, '..', 'docs', 'dead-end-audit.md')
   const audit = existsSync(auditPath) ? readFileSync(auditPath, 'utf8') : ''
   const names = [...new Set([...src.matchAll(/export const (REASON_[A-Z_]+) =/g)].map((m) => m[1]))]

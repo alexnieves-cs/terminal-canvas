@@ -4747,3 +4747,36 @@ import. So the registry knows the SHAPE of an editor (two methods, written struc
 not the library; Monaco's `IStandaloneCodeEditor` satisfies it exactly and nothing is cast, so
 a Monaco upgrade that changed either signature is a type error here rather than a runtime
 surprise inside a check. Merging the two files is the obvious cleanup and is the regression.
+
+**`commands.ts` keeps `PaletteActions` and `buildCommands`, because FOUR checks read that one
+file as TEXT (`palette/commands/`, `scripts/verify-verbs.cjs`, `verify-swarm.cjs`,
+`verify-meta.cjs`, M278).** The split moved out everything DECLARATIVE — the row types, the
+refusal sentences, `withReason`, and the three builders that never read `PaletteContext` — and
+stopped there. `closure.1` slices `export interface PaletteActions {` out of `commands.ts` by
+string index; `closure.v9.1`, `fit-task.doors.1` and `swarm.rows.1` grep the same file for
+literal `id: '<door>'`. A row moved into `commands/` is a door those checks cannot see, and
+`closure.v9.1` reports it as a MISSING door for a verb that is genuinely wired. The fourth,
+`verify:meta audit.1`, was the one that actually fired: it named `commands.ts` too, and with the
+reasons gone it found zero constants — at which point its `missing` list is vacuously empty and
+only the `names.length >= 20` floor said anything was wrong. It now walks every `.ts` under
+`renderer/palette/`, which is the rule as it was always written ("every REASON_* constant in the
+palette") and which also catches a reason added to any other palette module. **A check that pins
+its rule to a FILENAME goes red on a move and silent on a real violation;** look for that shape
+before moving code, not after.
+
+**`export * from './commands/reasons'` re-exports without BINDING, and the failure is a runtime
+ReferenceError inside a bundled suite, not a type error (`palette/commands.ts`, M278).**
+`buildCommands` names ~43 reason constants directly, so `commands.ts` must both import them and
+re-export them; the barrel alone compiles clean and dies at `verify:palette` check 19 with
+`REASON_NO_FOCUS` undefined. The same hop caught `buildCredentialRows` and `buildEnvironmentRows`.
+Worse, the compiler was silent the first time for an unrelated reason: **`tsc --noEmit -p
+tsconfig.json` checks NOTHING here** — the root config is `{"files": [], "references": [...]}`,
+so it exits 0 having compiled zero files. `npm run typecheck` is the only real typecheck.
+
+**The proof a `commands.ts` split changed nothing is the ROW DUMP, not a green suite
+(`scripts/palette-entry.cjs`, M278).** M244/M250 measured that moving `object.create.*` below
+`spawn.sheet` leaves `verify:palette` greener and makes `verify:panels:agents search.1` fail at
+SEEDING in two of two runs, by a mechanism nobody found. No plain-node suite covers row ORDER
+across the whole list, so a split is verified by bundling `palette-entry.cjs` in both worktrees,
+calling `buildCommands` on one fixture, and diffing the JSON: 193 rows, same order, same
+reasons, same 117 export names, byte-identical. Run that before trusting a green tier.

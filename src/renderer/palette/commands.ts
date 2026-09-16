@@ -1,27 +1,27 @@
 import { noteFormSentence } from '@shared/notes'
-import { CREATABLE_OBJECTS, creationReason, type CreationResult } from '@shared/verb-table'
+import type { CreationResult } from '@shared/verb-table'
 import type { PersistedWorkItem } from '@shared/work-items'
 import type { StartWorkOutcome } from './start-work'
 import { SWARM_LIST, SWARM_PRESETS, type SwarmPresetId } from '@shared/swarm'
 import type { ToolScope } from '@shared/toolbox'
 import type { Command } from './palette-model'
-import { REASON_CHAT_NO_CLAUDE } from '@renderer/chat/chat-model'
-// Type-only: SettingRow/SettingValue are Task 4's ipc-contract additions.
+// Type-only: SettingValue is Task 4's settings-schema addition.
 // Erased by esbuild, so it costs verify:palette nothing that the bundle
 // otherwise has no @shared VALUE import at all (that alias is wired
 // pre-emptively for exactly this day). The @renderer import below is a
 // different matter and this comment used to be read as covering it: waitingCount
 // is a VALUE, so verify-palette.cjs's @renderer alias is load-bearing, not
 // pre-emptive. Measured in M14 by deleting the alias and building.
-import type { SettingRow, WorkspaceRow, WorktreeListRow, PanelSearchResult } from '@shared/ipc-contract'
-import { PERMISSION_MODES, type PermissionMode, type AgentKind, type AgentOptions } from '@shared/cost'
+import { PERMISSION_MODES, type PermissionMode } from '@shared/cost'
 import type { SettingValue } from '@shared/settings-schema'
-import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId, type AutoStatus } from '@shared/auto'
-import type { EnvReport } from '@shared/env-report'
-import { updateSentence, type UpdateState } from '@renderer/session/update-store'
-import type { CanvasGroup } from '@renderer/groups/groups'
-import { statePriority, type StateInput } from '@renderer/panels/panel-state'
+import { AUTO_MODES, AUTO_MODE_IDS, type AutoModeId } from '@shared/auto'
+import { updateSentence } from '@renderer/session/update-store'
+import { statePriority } from '@renderer/panels/panel-state'
 import { waitingCount } from '@renderer/shell/rail-sections'
+import type { AgentBackend } from '@shared/agent-session'
+import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
+import { pinRefusal } from '@renderer/canvas/lod'
+import { displayPath, displayLabel } from '@shared/display-path' // M178 (F.2): a verb row's target never prints a raw path
 // A VALUE import, not a type-only one: SERVICES is the fixed, app-wide list
 // of credential-holding services, and credential-schema.ts imports nothing —
 // not electron, not node, not a sibling — so pulling it in here costs this
@@ -29,7 +29,46 @@ import { waitingCount } from '@renderer/shell/rail-sections'
 // stays out of this file; the palette only needs the id/label/help triple
 // SERVICES already carries, and the label lookup for a REFUSAL message lives
 // in Canvas.tsx, where the input-mode re-prompt actually happens.
-import { SERVICES, notConnectedReason, type CredentialMeta, type CredentialService } from '@shared/credential-schema'
+import { SERVICES, notConnectedReason } from '@shared/credential-schema'
+import type { PaletteContext } from './commands/context'
+// `export *` below re-exports these for consumers but does NOT bind them in
+// this module’s scope — buildCommands names them directly, so they are imported too.
+import {
+  REASON_NO_FOCUS, REASON_NO_SELECTION, REASON_BUILT_IN_RENAME, REASON_BUILT_IN_DELETE,
+  REASON_PROJECT_PROMPT, REASON_NOT_ON_PATH, REASON_UNREAD_PRESET, REASON_NOT_TERMINAL,
+  REASON_TIDY_NEEDS_TWO, REASON_NOT_TERMINAL_OUTPUT, REASON_NOTHING_TO_EXPORT,
+  REASON_ALREADY_DEFAULT, REASON_BUILT_IN_WORKTREE, REASON_NO_REVIEW_TARGET_ACROSS,
+  REASON_NO_GITHUB, REASON_NO_WORKTREES, REASON_WORKTREE_ATTACHED, REASON_SEARCH_OFF,
+  REASON_SEARCH_NO_MATCHES, REASON_NO_PROMPTS, REASON_ALREADY_ACTIVE, REASON_NOT_STARTED,
+  REASON_NOT_AN_AGENT, REASON_NO_PANELS_SELECTED, REASON_GROUP_NEEDS_TWO, REASON_NOT_IN_GROUP,
+  REASON_MERGED_READ_ONLY, REASON_NOTHING_TO_LINK, REASON_BROADCAST_NEEDS_TWO, REASON_NO_NOTE_ROOT,
+  REASON_NO_CLAUDE, REASON_TERMINAL_LIVE, REASON_NOT_CLAUDE_SESSION, REASON_CHAT_BUSY,
+  REASON_CHAT_EMPTY, REASON_NOT_CHAT, REASON_NO_SELECTION_TEMPLATE, REASON_NO_WATCH_ROOT,
+  REASON_NO_REPO_MEMORY, REASON_NO_TEMPLATES, REASON_NO_APPROVALS, claudeAvailable,
+  backendAvailable
+} from './commands/reasons'
+import { withReason } from './commands/with-reason'
+import { creationCommands } from './commands/creation-rows'
+import { buildCredentialRows } from './commands/credential-rows'
+import { buildEnvironmentRows } from './commands/environment-rows'
+
+// --- The commands/ directory ------------------------------------------------
+// M278 split commands.ts by moving out everything that is DECLARATION rather
+// than row-building: the plain-data row types, the refusal sentences, and the
+// three row builders that never read PaletteContext. `buildCommands` and
+// `PaletteActions` stay here because three verify checks read THIS FILE as
+// text — `closure.1` slices the interface out of it, and `closure.v9.1`,
+// `fit-task.doors.1` and `swarm.rows.1` grep it for literal `id: '…'` rows.
+// Re-exported so every existing importer of `palette/commands` is unchanged.
+export type { PresetRow, PromptRow, PanelRow } from './commands/row-types'
+export type { ApprovalRow } from './commands/approval-row'
+export type { PaletteContext } from './commands/context'
+export * from './commands/reasons'
+export { buildCredentialRows }
+export { creationCommands }
+export { buildEnvironmentRows }
+export { REASON_NO_ENV_REPORT } from './commands/environment-rows'
+
 // Re-exported so verify-palette.cjs's bundle (fuzzy.ts + palette-model.ts +
 // commands.ts) can drive buildCredentialRows directly against the same
 // SERVICES this module builds rows from, rather than bundling
@@ -44,109 +83,6 @@ export { SERVICES }
  * session-registry.ts makes with its bridge and terminal factory. The callers
  * of these callbacks live in Canvas.tsx, where the registry actually is.
  */
-
-/** A preset as the palette needs it: main answers preset:list with these. */
-export interface PresetRow {
-  /** M253. Arrived in a pack and not yet read; the spawn row is disabled by name and a read row sits beside it. */
-  reviewed?: false
-  id: string
-  name: string
-  /** Its command is on the resolved login PATH. Only main can know this. */
-  available: boolean
-  /** Built-ins are code, not data: they refuse rename and delete. */
-  builtIn: boolean
-  isDefault: boolean
-  /** cwd, and the command if there is one. Searchable via filterCommands. */
-  subtitle: string
-  /** M37. Spawns in a fresh worktree. Absent means no. */
-  worktree?: boolean
-  /** M65. The preset's agent kind and directory — see PresetListRow. */
-  agent?: AgentKind
-  cwd?: string
-  /** M174. The preset's command word, when it has one — see PresetListRow. */
-  command?: string
-  agentOptions?: AgentOptions
-}
-
-export interface PromptRow {
-  id: string
-  name: string
-  /** 'saved' is the store in layout.json; 'project' is .claude/commands. */
-  source: 'saved' | 'project'
-}
-
-export interface PanelRow {
-  id: string
-  label: string
-  /** M49. The kind, so a row that only means anything on a terminal can say so. */
-  kind: 'terminal' | 'review' | 'file' | 'jira' | 'github' | 'toolbox' | 'chat' | 'memory' | 'watcher' | 'browser' | 'work' | 'skill' | 'workflow' | 'image' | 'note'
-  /** M49. A per-panel font override, when set. Absent means the global. */
-  fontSize?: number
-  /** The user's name for it, if set. Shown so the rename row can echo it. */
-  title?: string
-  /**
-   * M64. What the Go-to row LEADS with (the user's title, else the honest
-   * name without path or id), the directory it trails, and the state word
-   * with its `state:` ordering. All optional so every older fixture builds;
-   * absent, the row falls back to `label`.
-   */
-  name?: string
-  path?: string
-  /** The vocabulary's input, so the row can render the word live in its tone. */
-  state?: StateInput
-  /** M74. Whether the SESSION's agent is claude — the only session `Open as chat` can follow. */
-  claude?: boolean
-  /** M74. A chat panel with a turn in flight or a permission waiting — the open-in-terminal row's named refusal. */
-  busy?: boolean
-  /** M92. Layout facts, absent unless set. */
-  locked?: boolean
-  pinned?: boolean
-  /** M97. The chat's auto run, when one is live or just resolved. */
-  auto?: AutoStatus
-  /** M100. The teammate a chat speaks as, when one. */
-  teammateId?: string
-  maximised?: boolean
-  /** M90. A chat's backend; absent is claude. */
-  backend?: AgentBackend
-  /** M74. A chat panel's completed turns; zero refuses open-in-terminal by name. */
-  turns?: number
-  /** M77. Whether Open review can act, with the kind's own reason when not. Absent falls back to `restartable`. */
-  reviewable?: boolean
-  reviewReason?: string
-  /** The word at build time — the `state:` query's key and order. */
-  stateWord?: string
-  /**
-   * isRestartable(status) — computed in Canvas, where the registry is, and
-   * passed in as plain data like everything else this module reads.
-   *
-   * REQUIRED, not optional, for the reason toggleSetting's comment below
-   * gives: an optional flag lets a half-finished wiring compile while the
-   * Restart row is silently always-disabled (undefined !== true) or always
-   * enabled, and tsc says nothing at all about it.
-   */
-  restartable: boolean
-  /**
-   * M20. Whether this panel runs an agent CLI whose flags this app knows —
-   * `spec.agent !== undefined`, computed in Canvas like `restartable` beside
-   * it and passed in as plain data.
-   *
-   * REQUIRED for exactly the reason `restartable` states one field up: an
-   * optional flag lets a half-finished wiring compile with every mode row
-   * permanently disabled (undefined !== true), and tsc says nothing.
-   */
-  agent: boolean
-  /**
-   * M112 (review round 1, CRITICAL 2). Whether the SESSION has ever spawned
-   * — `registry.get(id)?.spawned`, computed in Canvas like `restartable`
-   * and `agent` beside it. The export row's own refusal needs this fact
-   * that `restartable` doesn't carry: a panel can be non-restartable (still
-   * running) and fully exportable, or restartable (exited) and still hold a
-   * live buffer from before it exited. REQUIRED for the same reason as
-   * `restartable`/`agent` one field up: optional would let a half-wired
-   * row compile disabled forever with tsc silent about it.
-   */
-  spawned: boolean
-}
 
 export interface PaletteActions {
   createObject(kind: string, value?: string): Promise<CreationResult>
@@ -605,272 +541,10 @@ export interface PaletteActions {
   checkForUpdates(): void
 }
 
-export interface PaletteContext {
-  /** M92. How many panels are pinned on this canvas — the ninth pin is refused by count. */
-  pinnedCount?: number
-  presets: PresetRow[]
-  prompts: PromptRow[]
-  panels: PanelRow[]
-  /**
-   * Empty until Task 7 loads it from `window.canvas.settings.list()`.
-   * REQUIRED for the same reason toggleSetting is required above — leaving it
-   * optional is a compile-time hole a half-finished Task 7 wiring could pass
-   * straight through.
-   */
-  settings: SettingRow[]
-  /**
-   * M48. The environment report, or null before the invoke has answered.
-   * Read by buildEnvironmentRows; the launcher reads the same object.
-   */
-  envReport?: EnvReport | null
-  /** M181. Why the starter cannot be opened now (every key applied, no engine), or null/absent when it can. */
-  starterReason?: string | null
-  /** M182. A workflow panel's template id, by panel id — the editing rows' target. */
-  workflowTemplateOf?: (panelId: string) => string | undefined
-  /**
-   * M123. The last update check's answer (update-store.ts), or null/absent
-   * when none has been asked. Read by the `update.check` row's subtitle and
-   * the `env.update` row; the launcher reads the same store.
-   */
-  update?: UpdateState | null
-  /** M49. The global terminal font size, for the font rows' titles. */
-  globalFontSize?: number
-  /** M56. This workspace's bookmarks, and whether the camera trail can step each way. */
-  bookmarks?: readonly { id: string; name: string }[]
-  cameraTrail?: { back: boolean; forward: boolean }
-  workspaces: WorkspaceRow[]
-  /**
-   * Metadata only, from window.canvas.credential.list() — never a token, and
-   * there is no bridge member that would hand one back. See CLAUDE.md and
-   * credential-schema.ts's own comment on CredentialMeta for why that absence
-   * is the design rather than an omission.
-   */
-  credentials: readonly CredentialMeta[]
-  /**
-   * M37. Every worktree this app created, from window.canvas.worktree.list(),
-   * loaded on palette open beside `credentials` and for the same reason.
-   */
-  worktrees: readonly WorktreeListRow[]
-  /**
-   * M42. The search scope's inputs, filled by Canvas only while the scope is
-   * `search`. `searchResults` is null before the first answer (a distinct
-   * empty state from []), and `scrollbackEnabled` decides the "off" state.
-   */
-  searchQuery: string
-  /** M122. The whole answer: hits over both logs, the cap stated, the redaction count. */
-  searchResults: PanelSearchResult | null
-  scrollbackEnabled: boolean
-  /**
-   * Panel ids currently in wants-you, from the renderer's own attention set.
-   * Intersected with each row's panelIds — which is why WORKSPACE_LIST returns
-   * ids and not a count: main does not hold this fact, the renderer does.
-   */
-  attentionIds: readonly string[]
-  /** M83. The captured panel's repository, when it has one — the memory row's subject. */
-  memoryRoot?: string
-  /** M80. Saved shapes of work, built-ins first, each with its named refusal when it cannot run. */
-  /** M100. How many teammates the roster holds, for the door's hint. */
-  teammateCount?: number
-  templates?: readonly { id: string; name: string; nodes: number; edges: number; refusal?: string }[]
-  /**
-   * M76. Every pending permission request on this renderer, with the panel's
-   * label. Optional so every older fixture builds; absent is none.
-   */
-  approvals?: readonly ApprovalRow[]
-  /**
-   * focusedId as it was when the palette OPENED, not now. Opening moves DOM
-   * focus to the input; the app-level focus is deliberately left alone, and
-   * every panel-acting command targets the panel the user was in.
-   */
-  capturedId: string | null
-  /**
-   * M27. The directory a new note would be created in, or null when there is
-   * none — the SELECTED panel's live cwd, which is the same value the file
-   * tree already roots on (Canvas.tsx's `treeRoot`).
-   *
-   * Selected rather than captured, and that is deliberate: a rail-row click
-   * selects a panel without focusing it, so a user browsing a project has it
-   * selected while some other panel still holds `capturedId`. A note belongs
-   * to the project the user is looking at.
-   *
-   * REQUIRED rather than optional, the rule `settings` above already states:
-   * an optional field lets a half-finished wiring compile with the row
-   * permanently disabled, and `tsc` says nothing.
-   */
-  noteRoot: string | null
-  hasSelection: boolean
-  /**
-   * The rubber-band selection, as ids. A plain array rather than the Set
-   * Canvas holds, for the reason every other field here is plain data: this
-   * module stays in the plain-node verify tier and its fixtures stay literals.
-   */
-  selectedIds: string[]
-  /** At least two selected terminals can receive keyboard input right now. */
-  broadcastReady: boolean
-  /** The visible broadcast route is currently armed. */
-  broadcastActive: boolean
-  /**
-   * Whether the merged view is open. REQUIRED, not optional, for the reason
-   * `settings` is: an optional flag here is a compile-time hole a surface
-   * that forgot to wire it passes straight through — and what it gates is a
-   * WRITE into a workspace record the user is not in (see the move rows
-   * below), which is the last thing that should degrade quietly to "false".
-   */
-  merged: boolean
-  /**
-   * M61. Every group on this canvas, as plain data — id, label, collapsed
-   * and members — so the group rows can find the one holding the captured
-   * panel. Optional only for the checks' older contexts: an absent list is
-   * "no groups", which is a real state, not a hole.
-   */
-  groups?: readonly CanvasGroup[]
-  actions: PaletteActions
-}
 
-// Reasons are exported so the checks assert the same strings the user reads,
-// rather than a paraphrase that can drift away from the UI.
-export const REASON_NO_FOCUS = 'click into a panel first'
-export const REASON_NO_SELECTION = 'select some text in a panel first'
-export const REASON_BUILT_IN_RENAME = "built-in presets can't be renamed"
-export const REASON_BUILT_IN_DELETE = "built-in presets can't be deleted"
-export const REASON_PROJECT_PROMPT = 'this prompt is a file in your project'
-export const REASON_NOT_ON_PATH = 'not found on PATH'
-/** M253. A pack preset refused until read — the row beside it is where reading happens. */
-export const REASON_UNREAD_PRESET = 'from a pack, not read yet — choose "I\'ve read this preset" first'
-/** M49. A font size belongs to a terminal; the other kinds set their own text. */
-export const REASON_NOT_TERMINAL = 'only a terminal panel has a font size'
-/** M50. One panel has nothing to be tidied against. */
-export const REASON_TIDY_NEEDS_TWO = 'needs two panels on the canvas'
-export const REASON_NOT_TERMINAL_OUTPUT = 'only a terminal panel has output to export'
-/**
- * M112 (review round 1, CRITICAL 2). Renamed from REASON_SCROLLBACK_OFF: the
- * row is no longer refused just because scrollback is off — a spawned
- * panel exports from its live buffer instead (M112). What is STILL
- * genuinely refusable is a panel with `spawned !== true` AND scrollback
- * off: neither source has anything to give.
- *
- * Final review, MINOR: the sentence used to say "this panel has never
- * started", which is untrue for a DORMANT panel restored from a saved
- * layout — `registry.get(id).spawned` reads false until the panel is
- * woken, even though a real tmux session is running behind it and would
- * answer with scrollback if this row let it try. "hasn't been opened in
- * this window" is true in both the genuinely-fresh case and the
- * dormant-but-alive one, and the fix named is unchanged either way.
- */
-export const REASON_NOTHING_TO_EXPORT = "this panel hasn't been opened in this window, and scrollback is off — turn on scrollback.persist in Settings, or open the panel first"
-export const REASON_ALREADY_DEFAULT = 'already the default'
-/** M37. Three distinct reasons, never one shared "unavailable". */
-export const REASON_BUILT_IN_WORKTREE = "built-in presets can't be changed — save a panel as a preset first"
-export const REASON_NO_REVIEW_TARGET_ACROSS = 'select a panel inside a repository first'
-export const REASON_NO_GITHUB = notConnectedReason('github')
-export const REASON_NO_WORKTREES = 'no worktrees yet — spawn a panel from a preset that asks for one'
-export const REASON_WORKTREE_ATTACHED = 'a panel is still running in it — close that panel first'
-/** M42. Search's two failure states, distinct so the user gets the right fix. */
-export const REASON_SEARCH_OFF = 'terminal output is not being kept — turn on Keep recent output on disk; chats still answer'
-export const REASON_SEARCH_NO_MATCHES = 'try another word'
-export const REASON_NO_PROMPTS = 'no prompts saved yet'
-export const REASON_ALREADY_ACTIVE = 'already the active workspace'
-export const REASON_NOT_STARTED = 'that panel has not started'
-/**
- * M20. A THIRD distinct blocked situation for the mode rows, beside
- * REASON_NO_FOCUS and REASON_NOT_STARTED. Its fix is different from both:
- * not "click a panel" and not "start this one", but "this panel is not
- * running an agent CLI this app knows the flags for". agentArgs is gated on
- * spec.agent, so offering the verb here would promise a flag that is never
- * emitted — a row that appears to work and silently does nothing.
- */
-export const REASON_NOT_AN_AGENT = 'that panel is not running a known agent'
-// Deliberately NOT REASON_NO_SELECTION, which is about a TEXT selection inside
-// a panel (the save-prompt row). Two different selections with two different
-// gestures: collapsing them would tell a user who has selected text that they
-// need to select text, which sends them to do the thing they already did.
-export const REASON_NO_PANELS_SELECTED = 'select panels with a rubber-band drag first'
-export const REASON_GROUP_NEEDS_TWO = 'select at least two panels to make a group'
-/**
- * M61. Its own reason, not REASON_NO_FOCUS: the fix is "put this panel in a
- * group", which is a different gesture from "click a panel".
- */
-export const REASON_NOT_IN_GROUP = 'the focused panel is not in a group'
-/**
- * The merged view is read-only, so the move rows refuse there.
- *
- * An EXPORTED constant, like every reason above it, so that a check CAN
- * compare against the constant rather than against the literal — the rule
- * verify:palette 66b records, where a reason asserted as a string literal
- * keeps passing while the text the user actually reads says something else
- * entirely. Be honest about the tense: nothing imports this one yet. No check
- * asserts this reason today, and the export is what makes writing one a
- * one-line import rather than a temptation to paste the sentence.
- */
-export const REASON_MERGED_READ_ONLY = 'the merged view is read-only — leave it to move panels'
-export const REASON_NOTHING_TO_LINK = 'this canvas has only one panel'
-export const REASON_BROADCAST_NEEDS_TWO = 'select at least two live terminal panels'
-/**
- * Its OWN reason rather than REASON_NO_FOCUS, because the fix is different:
- * a note is rooted on the SELECTED panel, and selecting one is not the same
- * gesture as focusing one — a rail click does the first and never the second.
- * Telling a user to click into a panel when what they need is to select one
- * sends them to the wrong gesture.
- */
-export const REASON_NO_NOTE_ROOT = 'select a panel first — a note is saved in its directory'
-/** M73. One sentence for the palette row, the launcher line and the composer. */
-export const REASON_NO_CLAUDE = REASON_CHAT_NO_CLAUDE
-import type { AgentBackend } from '@shared/agent-session'
-import { BACKENDS, BACKEND_IDS } from '@shared/agent-backends'
-import { pinRefusal } from '@renderer/canvas/lod'
-import { displayPath, displayLabel } from '@shared/display-path' // M178 (F.2): a verb row's target never prints a raw path
-/** M74. The two front-end verbs' refusals, each naming its fix. */
-export const REASON_TERMINAL_LIVE = 'stop the terminal first — one front-end at a time'
-export const REASON_NOT_CLAUDE_SESSION = 'only a terminal started as a claude session can open as chat'
-export const REASON_CHAT_BUSY = 'the chat is still answering — interrupt it first'
-export const REASON_CHAT_EMPTY = 'send a message first — an empty chat has nothing to move'
-export const REASON_NOT_CHAT = 'only a chat panel can open in a terminal'
-/** M77. A chat with no baseline yet: the review row's own reason. */
-export const REASON_NO_SELECTION_TEMPLATE = 'select the panels to save first'
-/** M80. No template is saved yet — the row still says so rather than vanishing. */
-/** M83. Outside a repository there is nothing to remember about. */
-export const REASON_NO_WATCH_ROOT = 'select a panel first — a watcher runs its command in that panel\'s directory'
-export const REASON_NO_REPO_MEMORY = 'open a panel inside a repository first — memory is kept per repository'
-/** M80. No template is saved yet — the row still says so rather than vanishing. */
-export const REASON_NO_TEMPLATES = 'no templates yet — select some panels and save them as one'
-/** M77. A chat with no baseline yet: the review row's own reason. */
-export const REASON_CHAT_NO_BASELINE = 'send a message first — a chat has no baseline until its agent runs'
-/** M76. The one disabled row when nothing pends. */
-export const REASON_NO_APPROVALS = 'no agent is asking for permission'
 
-/** M76. A pending request as the palette lists it. */
-export interface ApprovalRow {
-  id: string
-  requestId: string
-  toolName: string
-  argument: string
-  label: string
-}
 
-/** M73. Whether a claude preset is available — the one fact the three chat doors share. */
-export function claudeAvailable(presets: readonly PresetRow[]): boolean {
-  return presets.some((p) => p.agent === 'claude-code' && p.available)
-}
 
-/** M90. The same fact for codex — the built-in codex preset's probe. */
-export function codexAvailable(presets: readonly PresetRow[]): boolean {
-  return presets.some((p) => p.agent === 'codex' && p.available)
-}
-
-/** M118. The same fact for copilot — the built-in copilot preset's probe; the acp row shares the binary. */
-export function copilotAvailable(presets: readonly PresetRow[]): boolean {
-  return presets.some((p) => p.agent === 'copilot' && p.available)
-}
-
-/** M99. The fact by ROW: a panel asks for its own backend's availability without naming one. */
-export function backendAvailable(presets: readonly PresetRow[], backend: AgentBackend): boolean {
-  const probes: Record<AgentBackend, (rows: readonly PresetRow[]) => boolean> = { claude: claudeAvailable, codex: codexAvailable, copilot: copilotAvailable, acp: copilotAvailable }
-  return probes[backend](presets)
-}
-
-/** Present-means-unrunnable, so an undefined reason must not become a key. */
-const withReason = (command: Command, reason: string | undefined): Command =>
-  reason === undefined ? command : { ...command, disabledReason: reason }
 
 /**
  * The words a section header now supplies, kept searchable.
@@ -886,79 +560,7 @@ const withReason = (command: Command, reason: string | undefined): Command =>
 const SPAWN_TERMS = 'new panel from preset spawn'
 const INSERT_TERMS = 'insert prompt paste'
 
-/**
- * One row per declared service (an ADD row) or two (VERIFY and DELETE),
- * standalone and testable without going through buildCommands — the same
- * split waitingCount already earns for a shared derivation. A service absent
- * from `stored` renders its add row; a service WITH a stored credential
- * never renders that row again, which is what makes "paste a token" and
- * "manage the one you already pasted" two different questions the palette
- * never conflates.
- *
- * A service that vanished from this list entirely — rather than rendering an
- * add row with no credential — would be indistinguishable from a service
- * this app does not support at all: verify:palette 31's rule, stated there
- * for the four preset/prompt admin row kinds, applies here unchanged.
- *
- * Every row is hiddenAtRest and scoped to 'credentials': a resting palette
- * with one row per declared service is exactly the kind of growth M6p sized
- * the resting list against, and the always-visible door into this scope is
- * `manage.credentials` below.
- */
-export function buildCredentialRows(
-  stored: readonly CredentialMeta[],
-  services: readonly CredentialService[],
-  actions: Pick<PaletteActions, 'beginSetCredential' | 'verifyCredential' | 'beginDeleteCredential'>
-): Command[] {
-  return services.flatMap((svc): Command[] => {
-    const meta = stored.find((m) => m.service === svc.id)
-    const base = { group: 'credential' as const, scope: 'credentials' as const, hiddenAtRest: true as const }
-    if (!meta) {
-      return [{
-        ...base,
-        id: `credential.set.${svc.id}`,
-        title: `Add ${svc.label} token…`,
-        searchText: `credential token sign in ${svc.label}`,
-        run: () => actions.beginSetCredential(svc.id)
-      }]
-    }
-    return [
-      {
-        ...base,
-        id: `credential.verify.${svc.id}`,
-        // The LABEL — what the remote service says the account is called, or
-        // the service's own label before a first successful verify — never
-        // anything derived from the token. See CredentialMeta's own comment.
-        title: `Verify ${svc.label} (${meta.label})`,
-        searchText: `credential check ${svc.label}`,
-        run: () => actions.verifyCredential(svc.id)
-      },
-      {
-        ...base,
-        id: `credential.delete.${svc.id}`,
-        title: `Delete ${svc.label} token`,
-        destructive: true,
-        searchText: `credential remove ${svc.label}`,
-        run: () => actions.beginDeleteCredential(svc.id)
-      }
-    ]
-  })
-}
 
-/**
- * Build the whole list. Section membership — not position — is what orders it:
- * filterCommands sorts by SECTIONS index first, so unlike M5b this function no
- * longer carries the grouping in its construction order. It is still written
- * in display order, because a reader who has to jump around the file to work
- * out what the palette looks like is a reader who will put a row in the wrong
- * section.
- */
-export function creationCommands(ctx: { actions: Pick<PaletteActions, 'createObject'>; merged?: boolean; noteRoot: string | null; agentReason?: string }): Command[] {
-  return CREATABLE_OBJECTS.map((entry) => withReason({
-    id: entry.palette, title: `New ${entry.label}`, searchText: `create add new object ${entry.label}`,
-    group: 'spawn', run: () => { void ctx.actions.createObject(entry.id) }
-  }, creationReason(entry, ctx)))
-}
 
 export function buildCommands(ctx: PaletteContext): Command[] {
   const { actions } = ctx
@@ -2587,95 +2189,3 @@ export function buildCommands(ctx: PaletteContext): Command[] {
 
   return out
 }
-
-
-/**
- * M48. The Environment scope: a door at rest, and one INFORMATION row per
- * fact of the report. Information rows run nothing — they exist so "why does
- * Claude not appear" has an answer one Cmd+K away, in the same surface every
- * other answer lives in. Exported so verify:palette drives it from a report
- * fixture; `null` (the invoke has not answered) yields the door alone,
- * disabled with a reason, never an absent door.
- */
-export const REASON_NO_ENV_REPORT = 'the environment has not been read yet'
-
-export function buildEnvironmentRows(report: EnvReport | null, update: UpdateState | null = null): Command[] {
-  const rows: Command[] = []
-  const info = (id: string, title: string, subtitle: string, searchText: string): Command => ({
-    id, title, subtitle, group: 'manage', scope: 'environment', hiddenAtRest: true, searchText, run: () => {}
-  })
-  rows.push(
-    withReason(
-      {
-        id: 'manage.environment',
-        title: 'Environment…',
-        subtitle: report === null
-          ? 'what the app found at startup'
-          : `${report.clis.filter((c) => c.path !== null).length} of ${report.clis.length} CLIs found · ${report.tmux.kind === 'tmux' ? 'tmux' : 'no tmux'}`,
-        group: 'manage',
-        entersScope: 'environment',
-        searchText: 'environment path claude codex git tmux shell found not found install report',
-        run: () => {}
-      },
-      report === null ? REASON_NO_ENV_REPORT : undefined
-    )
-  )
-  if (report === null) return rows
-  rows.push(info('env.shell',
-    report.shell.ok ? `Login shell read: ${report.shell.path || 'default'}` : `Login shell could not be read: ${report.shell.path || 'default'}`,
-    report.shell.ok
-      ? `${report.pathEntries.length} PATH entries resolved from it`
-      : `${report.shell.reason ?? 'the probe failed'} — CLIs installed through your shell's rc files may not be found`,
-    'shell zsh bash login probe failed'))
-  const INSTALL: Record<string, string> = {
-    claude: 'install the Claude Code CLI so `claude` is on your PATH',
-    codex: 'install the Codex CLI so `codex` is on your PATH',
-    git: 'install git (Xcode command line tools, or Homebrew)'
-  }
-  for (const cli of report.clis) {
-    rows.push(info(`env.cli.${cli.name}`,
-      cli.path === null ? `${cli.name}: not found` : `${cli.name}: found`,
-      cli.path ?? INSTALL[cli.name] ?? 'not on PATH',
-      `${cli.name} cli found missing install path`))
-  }
-  rows.push(info('env.tmux',
-    report.tmux.kind === 'tmux' ? 'tmux: in use' : 'tmux: not in use — sessions end with the window',
-    report.tmux.path ? `${report.tmux.path} — ${report.tmux.reason}` : report.tmux.reason,
-    'tmux backend session survive'))
-  rows.push(info('env.path', `PATH: ${report.pathEntries.length} entries`, report.pathEntries.join(' · ') || '(empty)', 'path entries'))
-  rows.push(info('env.layout',
-    report.layout.backupWritten ? 'Layout file: a newer file was preserved as .bak' : 'Layout file',
-    report.layout.path || '(not yet written)', 'layout file json bak'))
-  // M54. The door. The launcher is on PATH inside every panel already; the
-  // subtitle is the one line that puts it on PATH outside.
-  // `?? null`: a report built by an older main (or a fixture) has no key at
-  // all, and absent reads as null rather than as a crash.
-  const control = report.control ?? null
-  rows.push(info('env.tc',
-    control === null ? 'tc: not available in this instance' : `tc: ${control.cliPath}`,
-    control === null
-      ? 'another instance of this build owns the control socket'
-      : `on PATH inside every panel; outside, export PATH="${control.cliPath.replace(/\/tc$/, '')}:$PATH" — or open terminal-canvas://open?preset=…`,
-    'tc cli command line socket url scheme'))
-    rows.push(info('env.probed', `Read at ${new Date(report.probedAt).toLocaleTimeString()}`,
-    'once, at launch — a CLI installed since is not seen until relaunch', 'probed at time relaunch'))
-  // M123. FOUR sentences for the update notice — not checked, up to date,
-  // newer, could not check — and `not checked` is the rest state: the
-  // launch check is off by default, and "never asked" must not read as
-  // "up to date". Never a fifth row for `newer` with a verb: the
-  // information rows do nothing on Enter (their `run` is a no-op by the
-  // scope's rule); the door with the verb is `Check for updates…`.
-  const u = update ?? EMPTY_UPDATE
-  rows.push(info('env.update',
-    `Update: ${updateSentence(u)}`,
-    u.result === null
-      ? 'Check for updates… asks GitHub by hand; the launch check is a setting, off by default'
-      : u.result.kind === 'newer'
-        ? `${u.result.url} — nothing is downloaded or installed; download the release by hand`
-        : u.result.kind === 'current'
-          ? `read at ${new Date(u.at).toLocaleTimeString()} from the releases feed`
-          : 'the releases feed was asked and did not answer usefully — try again later',
-    'update release version newer github check'))
-  return rows
-}
-const EMPTY_UPDATE: UpdateState = { result: null, checking: false, at: 0 }
