@@ -5673,6 +5673,10 @@ export function Canvas({
     if (isBuiltInTemplate(templateId)) return { kind: 'refused', reason: 'a built-in workflow saves as a copy' }
     const result = await window.canvas.template.save(draft.template, draft.baseRevision)
     if (result.kind === 'stale') return { kind: 'stale', reason: result.reason }
+    // Round 6. A refusal is passed through as itself, never turned into a
+    // stale: the panel's stale arm offers Reload, and reloading a record
+    // whose shape main would not accept walks a person in a circle.
+    if (result.kind === 'refused') return { kind: 'refused', reason: result.reason }
     resetDraft(templateId, result.template)
     reloadTemplates()
     return { kind: 'saved' }
@@ -5687,7 +5691,7 @@ export function Canvas({
     for (let n = 2; taken.has(name); n += 1) name = `${base.name} (copy ${n})`
     const { id: _id, revision: _revision, ...rest } = base
     const result = await window.canvas.template.save({ ...rest, name })
-    if (result.kind === 'stale') return { kind: 'refused', reason: result.reason }
+    if (result.kind !== 'saved') return { kind: 'refused', reason: result.reason }
     // M184 (the critic, finding 4). REBIND the panel to the copy, and only
     // then drop the draft: dropping it first snapped the diagram back to the
     // original record, so the edits left the screen with no message and the

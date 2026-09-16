@@ -511,7 +511,11 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // the canvas as one instrument and wears the overlay elevation (the brief's
   // "stronger separation"); both are named here rather than let --e-3 loose.
   // The expanded command pill overlays the canvas; its resting button stays flat.
-  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$/
+  // Round 8. `.canvas-toast` is the toast card. It is an overlay by every test
+  // this list applies — it floats over the canvas, it is transient, and it
+  // separates from whatever happens to be under it — so it takes --e-3 and is
+  // named here rather than being the one surface that dodges the rule.
+  const OVERLAY = /\.orch__callout-card$|\.command-pill__panel$|\.minimap$|\.canvas-hud$|\.palette\b|\.dock__popover|\.shell__view-menu|\.shell--(nav|ctx)-drawer|\.diagnostics-overlay|\.sheet__suggestions|\.resume-banner$|\.canvas-toast$/
   const overlayMisuse = bodyRules.filter((r) => /var\(--e-[34]\)/.test(r.body) && !OVERLAY.test(r.sel)).map((r) => r.sel)
   // M109. AMENDED: ONE resting shadow exists and it is named — `--lift`, on
   // the panel frame (and the launcher, which wears the frame) and nowhere

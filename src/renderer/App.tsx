@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import type { CanvasState } from '@shared/layout-schema'
 import type { PresetTemplate } from '@shared/ipc-contract'
 import { Canvas } from './canvas/Canvas'
+import { CanvasToaster } from './shell/CanvasToaster'
 
 /**
  * M4b: the starting canvas arrives from main rather than from a constant.
@@ -38,6 +39,16 @@ export function App({
         defaultTemplate={defaultTemplate}
         allPanelIds={allPanelIds}
       />
+      {/* Round 8. One-shot outcomes only — see shell/toast.ts for the line
+          between this and the attention system, which stays the source of
+          truth for anything still true after the toast has gone.
+
+          It sits HERE rather than inside Canvas for one reason: it owns no
+          canvas state and subscribes to nothing, so mounting it beside Canvas
+          keeps it out of the render path that a mousemove walks. It is not
+          portalled (sonner does not portal), so the Electron suites can still
+          address it as a descendant of `.app`. */}
+      <CanvasToaster />
     </div>
   )
 }

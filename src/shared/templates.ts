@@ -73,8 +73,20 @@ export interface PersistedTemplate {
   nextKey?: number
 }
 
-/** M182. What the store answers a save with: the record as written, or the record that stands and why. */
-export type TemplateSaveResult = { kind: 'saved'; template: PersistedTemplate } | { kind: 'stale'; current?: PersistedTemplate; reason: string }
+/**
+ * M182. What the store answers a save with: the record as written, or the
+ * record that stands and why.
+ *
+ * Round 6 added the third arm, and it is a DIFFERENT answer from `stale`:
+ * stale means the record you saved over moved, and the way out is Reload or
+ * Save a copy; `refused` means what you sent is not a workflow, and no
+ * reload helps. Folding the second into the first would have offered a
+ * person Reload against a record that was never going to be written.
+ */
+export type TemplateSaveResult =
+  | { kind: 'saved'; template: PersistedTemplate }
+  | { kind: 'stale'; current?: PersistedTemplate; reason: string }
+  | { kind: 'refused'; reason: string }
 
 /** The newest kept; a library, not a history. */
 export const TEMPLATES_MAX = 30

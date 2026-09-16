@@ -15,6 +15,7 @@ import {
   buildInspectorSummary, buildReviewFields, buildToolboxFields, foldUsageHistory,
   reviewSignature, toolboxSignature, type ReviewFieldModel, type UsageHistory
 } from '../shell/inspector-fields'
+import { buildUsageSeries, type UsageSeries } from '../shell/usage-series'
 
 export interface InspectorDetailDeps {
   registry: Registry
@@ -239,27 +240,34 @@ export function useInspectorDetail(deps: InspectorDetailDeps) {
   // read's three fates are three values: unanswered (undefined), rejected
   // (null — the sentence names it), answered (the fold). Never a two-state.
   const [history, setHistory] = useState<UsageHistory | null | undefined>(undefined)
+  // Round 7. The SAME read, bucketed by day as well as folded. The rows carry
+  // `endedAt` and this was the one place in the app that had them; folding
+  // here and keeping nothing else meant the pane could say "$4.12 across 9
+  // sessions" and could never say whether that was one afternoon or a week.
+  // Built beside the fold rather than derived from it — a fold is not
+  // invertible — and it costs no second IPC call.
+  const [usageSeries, setUsageSeries] = useState<UsageSeries | null | undefined>(undefined)
   const panelCount = panels.length
   useEffect(() => {
     let live = true
     const read = (): void => {
       window.canvas.ledger.usage(Date.now() - 7 * 24 * 60 * 60 * 1000).then(
-        (rows) => { if (live) setHistory(foldUsageHistory(rows)) },
-        () => { if (live) setHistory(null) })
+        (rows) => { if (!live) return; setHistory(foldUsageHistory(rows)); setUsageSeries(buildUsageSeries(rows, Date.now())) },
+        () => { if (!live) return; setHistory(null); setUsageSeries(null) })
     }
     read()
     const timer = setInterval(read, 60_000)
     return () => { live = false; clearInterval(timer) }
   }, [panelCount])
   const summaryBuilt = buildInspectorSummary(
-    panels, (id) => registry.get(id)?.status, waitingIds, getUsage, history)
+    panels, (id) => registry.get(id)?.status, waitingIds, getUsage, history, usageSeries)
   const rateLimit = useRateLimit()
   const summaryWithRate = { ...summaryBuilt, rateLimit }
   // M46: the canvas-wide totals join the signature, so a usage tick moves
   // the summary the way it moves a selected panel's Cost section. M142: the
   // history's word joins it, so the ledger's answer moves it too. Rate-limit
   // windows join so the no-selection gauge moves without touching registry.version().
-  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}/${history === undefined ? 'reading' : history === null ? 'failed' : `${history.sessions}/${history.tokens}/${history.costUsd}`}/${rateLimit.kind}/${rateLimit.kind === 'none' ? '' : `${rateLimit.windows.five_hour?.utilization ?? ''}/${rateLimit.windows.seven_day?.utilization ?? ''}/${rateLimit.kind === 'limited' ? rateLimit.until : ''}`}`
+  const summarySig = `${summaryBuilt.panels}/${summaryBuilt.running}/${summaryBuilt.waiting}/${summaryBuilt.tokens}/${summaryBuilt.cost}/${history === undefined ? 'reading' : history === null ? 'failed' : `${history.sessions}/${history.tokens}/${history.costUsd}`}/${usageSeries == null ? String(usageSeries) : usageSeries.buckets.map((b) => `${b.dayStart}:${b.tokens}:${b.costUsd}`).join(',')}/${rateLimit.kind}/${rateLimit.kind === 'none' ? '' : `${rateLimit.windows.five_hour?.utilization ?? ''}/${rateLimit.windows.seven_day?.utilization ?? ''}/${rateLimit.kind === 'limited' ? rateLimit.until : ''}`}`
   const inspectorSummary = useMemo(() => summaryWithRate, [summarySig])
 
   // Cheap, and read once per render of the palette: getSelection() is a string

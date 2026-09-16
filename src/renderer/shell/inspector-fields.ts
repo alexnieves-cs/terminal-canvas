@@ -11,6 +11,7 @@ import { AGENT_CAPABILITIES, type AgentOptions, type PanelUsage, type TokenTotal
 import { BACKENDS, backendOf, type AgentBackend } from '@shared/agent-backends'
 import type { PermissionCounts, ToolActive, ToolEntry, ToolInventoryResult, ToolKind } from '@shared/toolbox'
 import { costOf } from '@shared/pricing'
+import type { UsageSeries } from './usage-series'
 import type { RateLimitState } from '@shared/rate-limit'
 import type { UsageRow as LedgerUsageRow } from '@shared/run-ledger'
 import { HANDOFF_MAX_CHARS, HANDOFF_MAX_LINES, type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
@@ -179,6 +180,16 @@ export interface InspectorSummary {
   cost: number | undefined
   /** M142. This week's closed sessions from the run ledger; absent until the ledger has answered. */
   history?: UsageHistory | null
+  /**
+   * Round 7. The same week, bucketed by day.
+   *
+   * Carried BESIDE `history` rather than replacing it: the fold answers "how
+   * much this week", the series answers "when", and the `this week` line is
+   * still the rest-layer fact a person reads without opening anything. Absent
+   * for exactly the same reasons `history` is — the ledger has not answered,
+   * or it rejected.
+   */
+  usageSeries?: UsageSeries | null
   /** Account-level Claude usage windows for the no-selection gauge. */
   rateLimit?: RateLimitState
 }
@@ -1070,7 +1081,9 @@ export function buildInspectorSummary(
   /** M46. Per-panel usage for the canvas-wide totals; absent means none. */
   usageOf: (id: string) => PanelUsage | undefined = () => undefined,
   /** M142. This week's fold when the ledger has answered; `null` when the read rejected. */
-  history?: UsageHistory | null
+  history?: UsageHistory | null,
+  /** Round 7. The same week by day, carried through untouched — this function does not build it, because it has no clock. */
+  usageSeries?: UsageSeries | null
 ): InspectorSummary {
   const ids = new Set(panels.map((p) => p.rect.id))
   // The totals are priced PER MODEL, exactly as one panel's Cost section is
@@ -1096,7 +1109,8 @@ export function buildInspectorSummary(
     waiting: waitingIds.filter((id) => ids.has(id)).length,
     tokens,
     cost,
-    ...(history === undefined ? {} : { history })
+    ...(history === undefined ? {} : { history }),
+    ...(usageSeries === undefined ? {} : { usageSeries })
   }
 }
 

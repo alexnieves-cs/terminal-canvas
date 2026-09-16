@@ -26,6 +26,12 @@
      one. A gutter narrower than its widest number reflows the text column
      partway down a long file. */
   --file-gutter-w: 40px;
+  /* R8/R7. The sparkline's figure column. Wide enough for `100%` and for
+     `999 MB` at --t-xs, so the two plots beside them start at the same x and
+     their shapes can be compared straight down the column. Its own token
+     rather than --file-gutter-w, which happens to be the same 40px and means
+     something else entirely. */
+  --spark-word-w: 40px;
 
   /* Radius. Nested corners must DECREASE by roughly the inset or the
      concentric offset reads as sloppy: a --r-md control inside a --r-lg panel
@@ -5633,6 +5639,95 @@ body {
 /* M163. The inspector's Machine section (the metrics rule): the one place the
    per-panel CPU · RAM figure lives. */
 .inspector__machine { font-variant-numeric: tabular-nums; }
+
+/* ----------------------------------------------------------------- R7 --
+   CHARTS IN THE CONTEXT PANE. Two of them: this week's spend by day, and one
+   panel's last two minutes of CPU and RAM.
+
+   NO COLOUR IS SET HERE, and that is deliberate rather than an omission. A
+   chart's marks are SVG presentation attributes, which do not resolve var(),
+   so the series colours are read off the live theme in chart-tokens.ts and
+   handed to the library as values. What is left for the stylesheet is
+   geometry — which is all a stylesheet should have been deciding about a
+   chart anyway.
+
+   Both sit in a 260px pane (--shell-ctx-w), which is the whole reason there
+   is no legend and no axis title in either: the caption below the chart is
+   cheaper than a legend and says more, and an axis label in this width costs
+   a quarter of the plot. */
+.inspector__chart { margin-top: var(--sp-4); }
+/* The caption carries what the shape cannot — the window, and whether money
+   is missing from it. --fg-4 is the deep-detail step and clears 3:1. */
+.inspector__chart-caption { margin: var(--sp-2) 0 0; font-size: var(--t-xs); color: var(--fg-4); line-height: var(--lh-body); }
+
+/* The two sparkline strips. A row each: the current figure, then the shape —
+   the figure first because it is the fact, and the shape reads as its
+   qualifier rather than the other way round. */
+.inspector__sparks { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
+.inspector__spark { display: flex; align-items: center; gap: var(--sp-3); }
+/* Fixed width so the two plots start at the same x and their shapes can be
+   compared down the column; tabular figures so the number does not reflow the
+   plot every sample. */
+.inspector__spark-word { flex: 0 0 auto; min-width: var(--spark-word-w); font-size: var(--t-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.inspector__spark-plot { flex: 1 1 auto; min-width: 0; }
+
+/* Recharts measures its container and would grow without bound inside a flex
+   column that has no basis of its own. */
+.inspector__chart .recharts-responsive-container, .inspector__spark-plot .recharts-responsive-container { min-width: 0; }
+
+/* ----------------------------------------------------------------- R8 --
+   THE TOAST LAYER. One-shot outcomes only; the attention system owns
+   everything that is still true after the toast has gone (see shell/toast.ts,
+   and docs/product-rules.md, which forbids restating the queue count here).
+
+   EVERY COLOUR IS SET THROUGH SONNER'S OWN CUSTOM PROPERTIES. The library
+   paints from those; this app declares colour only in a theme block. Pointing
+   the first at the second is what lets a third-party toast follow light, dark
+   AND high contrast without one hex leaving the theme block and without this
+   file learning any of the library's internal class names.
+
+   Z-ORDER, and it is a rule rather than a number picked to look right: the
+   toast sits ABOVE the command pill (930), because it is usually reporting
+   what the pill just ran, and BELOW the attention popover (950), because
+   attention is persistent state and a transient rectangle may never cover
+   the list of things still waiting on a person. */
+.canvas-toaster { position: absolute; z-index: 940; font-family: var(--font-ui); }
+.canvas-toaster[data-sonner-toaster] {
+  --normal-bg: var(--s-3);
+  --normal-text: var(--fg);
+  --normal-border: var(--line-strong);
+  --success-bg: var(--s-3);
+  --success-text: var(--green);
+  --success-border: var(--green-dim);
+  --warning-bg: var(--s-3);
+  --warning-text: var(--amber);
+  --warning-border: var(--amber-dim);
+  --error-bg: var(--s-3);
+  --error-text: var(--red);
+  --error-border: var(--red-dim);
+  --info-bg: var(--s-3);
+  --info-text: var(--blue);
+  --info-border: var(--blue-dim);
+}
+/* The ground stays --s-3 on all four arms and only the TEXT and the border
+   take the accent. A fully tinted card at this size is a colour field with
+   words on it, and the amber one would read as the attention ring — the one
+   confusion this layer must not create. */
+.canvas-toast {
+  border-radius: var(--r-md);
+  box-shadow: var(--e-3);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+}
+.canvas-toast [data-description] { color: var(--fg-3); font-size: var(--t-xs); }
+
+/* Reduced motion: sonner animates entry, exit and the stack's reflow from its
+   own injected stylesheet, which this repo's style audit cannot see (it greps
+   THIS file). So the opt-out is declared here, against the library's stable
+   data attributes, rather than assumed. */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-toaster [data-sonner-toast] { transition: none; animation: none; }
+}
 .panel__resize--se { transform-origin: right bottom; }
 .pf__menu { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; padding: var(--sp-2); background: var(--s-3); border: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--sp-1); }
 .pf__menu-title { font-size: var(--t-xs); white-space: normal; word-break: break-word; }

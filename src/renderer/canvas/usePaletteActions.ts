@@ -3,7 +3,7 @@ import { CREATABLE_OBJECTS, type CreationResult } from '@shared/verb-table'
 import { checklistController } from '@renderer/file/checklist-controllers'
 import { deckController } from '@renderer/file/deck-controllers'
 import { sheetController } from '@renderer/file/sheet-controllers'
-import { isAttentionQueueRestatement } from './command-pill'
+import { notify, notifyDone, notifyFailed } from '../shell/toast'
 import { normalisePreviewPath, type PreviewBinding } from '@shared/preview'
 import { inspectionDirectory } from './inspection-directory'
 import { forgetAgentLinksFor } from './agent-links-store'
@@ -1106,17 +1106,30 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
       // silently flip an unspawned panel's `off` result to `empty`.
       const buffer = session && session.spawned ? session.handle.serialize() ?? undefined : undefined
       void window.canvas.export.panelText({ panelId, buffer }).then((r) => {
-        // M112 (review round 1, IMPORTANT 3). The one place `source` is
-        // read: the palette has no toast, so console feedback is the whole
-        // of "the palette's feedback says which" — a written result names
-        // which of the two sources actually answered.
-        if (r.kind === 'written') console.info(`[export] panel text written from the ${r.source} — ${r.path}`)
-        else if (r.kind !== 'cancelled') console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
+        // M112 (review round 1, IMPORTANT 3). The one place `source` is read:
+        // a written result names which of the two sources actually answered.
+        //
+        // Round 8. That comment used to end "the palette has no toast, so
+        // console feedback is the whole of it" — which meant an export
+        // announced its success to nobody, and a person who had just written
+        // a file had no way to know it or to find where it went. There is a
+        // toast layer now, and the PATH is the detail line, because "exported"
+        // without a location is half an answer.
+        if (r.kind === 'written') {
+          console.info(`[export] panel text written from the ${r.source} — ${r.path}`)
+          notifyDone(`Exported this panel's text from the ${r.source}`, r.path)
+        } else if (r.kind !== 'cancelled') {
+          // Cancelled is the person's own choice and is never reported back
+          // to them — a toast saying "you cancelled" is the app narrating.
+          console.warn(`[export] panel text: ${r.kind}${'reason' in r ? ` — ${r.reason}` : ''}`)
+          notifyFailed("Couldn't export this panel's text", 'reason' in r ? r.reason : r.kind)
+        }
       })
     },
     exportCanvasPng: () => {
       void window.canvas.export.canvasPng().then((r) => {
-        if (r.kind === 'failed') console.warn(`[export] canvas png — ${r.reason}`)
+        if (r.kind === 'failed') { console.warn(`[export] canvas png — ${r.reason}`); notifyFailed("Couldn't export the canvas", r.reason); return }
+        if (r.kind !== 'cancelled') notifyDone('Exported the canvas as a picture', 'path' in r ? r.path : undefined)
       })
     },
     toggleSetting: (id, value) => {
@@ -1801,11 +1814,22 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
     // Escape closes it; nothing is submitted.
     // M265. Suppress a queue-count restatement the pill already owns — the
     // polite live region still names which panel arrived.
-    say: (sentence: string) => {
-      if (isAttentionQueueRestatement(sentence)) return
-      setInputMode({ kind: 'text', label: sentence, initial: '', feedback: true as const, submit: () => setInputMode(null) })
-      palette.openPalette()
-    },
+    // Round 8. It is a TOAST now, not the palette.
+    //
+    // What this line used to do was open the entire command palette — a modal
+    // surface with a text input, over the canvas — in order to show one
+    // sentence like "copied". A person who pressed Cmd+C got their canvas
+    // covered and owed a keystroke to get it back. The palette's feedback
+    // line is still exactly right where it started: for a refusal of
+    // something typed IN the palette, where the line is kept beside the text
+    // so it can be corrected (see the `refused` sites above, and
+    // `verbs.1`). This door is the other case — an outcome that arrived while
+    // the person was looking at their work — and it belongs in a layer that
+    // does not take the screen.
+    //
+    // The attention suppression moves INTO `notify`, unchanged, so there is
+    // one table and not two.
+    say: (sentence: string) => { notify({ sentence }) },
     // M174. `seed.cwd` is the launcher's recents chip: the sheet opens ON that folder.
     beginSpawnSheet: (templateId?: string, into?: { intoNewWorkspace: true }, seed?: { cwd: string }) => {
       // The focused panel's LIVE directory first (M12's poll, falling back to
@@ -2038,6 +2062,17 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
               }
               setInputMode(null)
               reloadCredentials()
+              // Round 8. A saved credential said NOTHING before this: the
+              // palette closed and the row reloaded, which looks identical to
+              // a dismissal. The one place in the app where silence is most
+              // expensive, because the thing just stored is a secret the
+              // person cannot read back to check — there is no
+              // `credential:get`, by design.
+              //
+              // The LABEL only. The token never leaves the process it was
+              // typed into, and a toast is a surface that can be screenshotted
+              // and shoulder-read.
+              notifyDone(`Saved the ${label} credential`)
             })
           }
         })
@@ -2257,7 +2292,7 @@ export function usePaletteActions(deps: PaletteActionsDeps): PaletteActions {
         }
       }
       const result = await window.canvas.template.save(next, bound.revision ?? 0)
-      if (result.kind === 'stale') return { kind: 'refused', reason: result.reason }
+      if (result.kind !== 'saved') return { kind: 'refused', reason: result.reason }
       resetDraft(bound.id, result.template)
       reloadTemplates()
       return { kind: 'ran', note: `${bound.name} updated to revision ${result.template.revision ?? 0}` }

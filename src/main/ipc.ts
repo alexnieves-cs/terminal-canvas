@@ -18,6 +18,7 @@ import { INERT_LINKS, type LinkHandlers } from './link-open'
 import type { BrowserHandlers } from './browser-read'
 import type { ImageResult, StarterFiles } from '../shared/starter'
 import type { TemplateSaveResult } from '../shared/templates'
+import { incomingWorkflowGraphSchema, graphProblems } from '../shared/workflow-graph-schema'
 import type { BrowserReadRequest } from '../shared/browser-panel'
 import type { BoardLaneRequest, BoardLaneResult, BoardOpenPrRequest, BoardOpenPrResult, BoardCommentRequest, BoardCommentResult, PanelSearchResult, UpdateResult , PoolStartRequest, PoolStartResult, BoardRepositoriesResult } from '../shared/ipc-contract'
 import type { LaneStatus } from '../shared/review'
@@ -714,7 +715,17 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC.MEMORY_LIST, (_event, root: string, limit: number) => palette.memoryList(root, limit))
   ipcMain.handle(IPC.MEMORY_ADD, (_event, req: { root: string; kind: string; text: string; panelId?: string; source?: { conversationId: string; turnId: string; taskId?: string } }) => palette.memoryAdd(req))
   ipcMain.handle(IPC.TEMPLATE_LIST, () => palette.listTemplates())
-  ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: Omit<PersistedTemplate, 'id'> & { id?: string }, expectedRevision?: number) => palette.saveTemplate(template, typeof expectedRevision === 'number' ? expectedRevision : undefined))
+  // Round 6. The payload is READ here, not cast. Everything on the other side
+  // of this bridge is the renderer's — the React Flow editor, the palette's
+  // verb, a draft restored from memory — and a record that the layout reader
+  // will later refuse is a save that appears to succeed and is gone after the
+  // next relaunch, with nothing left pointing at the save that caused it. The
+  // refusal is named here, while the person is still looking at the diagram.
+  ipcMain.handle(IPC.TEMPLATE_SAVE, (_event, template: unknown, expectedRevision?: number): TemplateSaveResult => {
+    const read = incomingWorkflowGraphSchema.safeParse(template)
+    if (!read.success) return { kind: 'refused', reason: `that is not a workflow this app can save — ${graphProblems(read.error)[0] ?? 'it has the wrong shape'}` }
+    return palette.saveTemplate(read.data as Omit<PersistedTemplate, 'id'> & { id?: string }, typeof expectedRevision === 'number' ? expectedRevision : undefined)
+  })
   ipcMain.handle(IPC.TEMPLATE_DELETE, (_event, id: string) => palette.removeTemplate(id))
   ipcMain.handle(IPC.TEAMMATE_LIST, () => palette.listTeammates())
   ipcMain.handle(IPC.TEAMMATE_SAVE, (_event, teammate: PersistedTeammate, cwd?: string) => palette.saveTeammate(teammate, cwd))

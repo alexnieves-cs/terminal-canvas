@@ -1,6 +1,8 @@
 import { memo, useEffect, useRef, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import { useAgentState } from '@renderer/session/agent-state-store'
-import { formatCpu, formatMemory, useMachineCost } from '@renderer/session/machine-cost-store'
+import { formatCpu, formatMemory, useMachineCost, useMachineSeries } from '@renderer/session/machine-cost-store'
+import { MachineChart } from './MachineChart'
+import { UsageChart } from './UsageChart'
 import type { InspectorModel, InspectorSummary, ReviewFieldModel, ToolboxFieldModel } from './inspector-fields'
 import type { InspectorContextBand } from './inspector-context'
 import { agentStateLabel, formatRateLimitGauge, formatRateLimitReset, handoffControl, historyWord, KIND_NOUN, visibleDetailFields } from './inspector-fields'
@@ -449,6 +451,14 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
           <dd className="inspector__value" data-summary="history">{historyWord(summary.history)}</dd>
         </div>
       </dl>
+      {/* Round 7. The same week, by day. It sits UNDER the figure rather than
+          replacing it, because the two answer different questions: the line
+          says how much, the chart says when — one expensive afternoon and a
+          steady week fold to the identical sentence, and that collapse is the
+          thing this adds back. Absent while the ledger is unanswered or
+          rejected (the line above names either), and absent when nothing
+          closed, where a row of seven zeroes is a picture of nothing. */}
+      {summary.usageSeries != null && <UsageChart series={summary.usageSeries} />}
     </div>
   )
 }
@@ -517,6 +527,10 @@ function InspectorPanel({
   const nodeSelected = useSelectedOf(model.kind === 'workflow' && model.templateId !== undefined ? model.templateId : '') !== null
   const state = useAgentState(model.id)
   const machine = useMachineCost(model.id)
+  // Round 7. Its own subscription, on the history's own listener set: this
+  // moves every sample where `machine` above moves only on a CHANGE, and the
+  // two are kept apart so a flat-lining panel still draws a flat line.
+  const machineSeries = useMachineSeries(model.id)
   // M46. Close is DESTRUCTIVE and gated by the same one-click arming the
   // panel's own × uses (never a modal — this app has one modal-shaped surface
   // and keeps it that way). A button pinned at a fixed corner of the pane is
@@ -715,6 +729,12 @@ function InspectorPanel({
               // wrong answer whichever produced it.
               ? `CPU ${machine.cpuPercent < 0.05 ? 'under 1%' : formatCpu(machine.cpuPercent)} · RAM ${formatMemory(machine.memoryBytes)}`
               : arm === 'none' ? 'no reading yet — the process table is sampled every few seconds' : arm === 'not-measured' ? 'not measured — only a terminal\'s process tree is sampled' : 'not running — nothing to measure'}</div>
+            {/* Round 7. The shape UNDER the figure, never instead of it. The
+                line above is the metrics rule's one home for the readout and
+                stays exactly as it was; the sparklines answer the question a
+                single sample cannot — climbing, settling, or flat — and are
+                absent until a second sample gives that question an answer. */}
+            {arm === 'reading' && <MachineChart series={machineSeries} />}
           </section>
           </details>
         )

@@ -2,6 +2,7 @@ import { redactSecrets } from './redact'
 import { parseImportedNote } from './imported-note'
 import type { PersistedPanel } from './layout-schema'
 import type { PersistedTemplate } from './templates'
+import { parseWorkflowGraphs } from './workflow-graph-schema'
 
 /**
  * M189. ONE PORTABLE FILE, and the parts it deliberately does not have.
@@ -214,8 +215,13 @@ export function parsePortable(text: string): PortableParse {
   const workspace = r.workspace as { name?: unknown; panels?: unknown } | undefined
   const panels = Array.isArray(workspace?.panels) ? (workspace?.panels as PersistedPanel[]) : []
   if (!Array.isArray(workspace?.panels)) warnings.push('the file names no panels — an empty workspace is what it will make')
-  const templates = Array.isArray(r.templates) ? (r.templates as PersistedTemplate[]) : []
-  if (r.templates !== undefined && !Array.isArray(r.templates)) warnings.push('the file\'s templates were not a list — none were read')
+  // Round 6. The workflows in this file were written by somebody else's app.
+  // Until now this arm cast them — an `Array.isArray` and nothing more — so
+  // any object at all reached the template library and the LAYOUT reader was
+  // the first thing to look at it, a relaunch later, with no way back to the
+  // import that caused it. `parsePack` already routes its payloads through a
+  // parser; this is the arm that did not.
+  const templates = parseWorkflowGraphs(r.templates, warnings)
   const assets = Array.isArray(r.assets) ? (r.assets as PortableAsset[]).filter((a) => a !== null && typeof a === 'object' && typeof a.id === 'string' && typeof a.base64 === 'string') : []
   if (Array.isArray(r.assets) && assets.length !== (r.assets as unknown[]).length) warnings.push('some pictures in the file were unreadable and were left out')
   return {
