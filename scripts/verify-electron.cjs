@@ -44,15 +44,15 @@ const { ok, results } = require('./lib/checks.cjs').createChecks()
 const ACCEPTED = [
   { check: 'CSP_GLOBAL_CHECK', file: 'src/renderer/index.html', sample: "content=\"default-src 'self'",
     why: "xterm sets inline styles on its layers; script-src stays 'self' and nothing loads remotely" },
-  { check: 'SANDBOX_JS_CHECK', file: 'src/main/index.ts', sample: 'sandbox: false,',
+  { check: 'SANDBOX_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'sandbox: false,',
     why: "the preload needs require('electron') for contextBridge; node-pty stays in main" },
-  { check: 'PRELOAD_JS_CHECK', file: 'src/main/index.ts', sample: "preload: join(__dirname, '../preload/index.js'),",
+  { check: 'PRELOAD_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: "preload: join(__dirname, '../preload/index.js'),",
     why: 'the one bridge; verify:ipc pins every channel it exposes' },
-  { check: 'AUXCLICK_JS_CHECK', file: 'src/main/index.ts', sample: 'new BrowserWindow(',
+  { check: 'AUXCLICK_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'new BrowserWindow(',
     why: 'the renderer is file: and never navigates (drop-guard.ts); a middle-click has no target' },
-  { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/index.ts', sample: 'shell.openExternal(url)',
+  { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/window.ts', sample: 'shell.openExternal(url)',
     why: 'the link:open door — main decides after resolveOpen, the renderer opens nothing' },
-  { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/index.ts', sample: 'shell.openExternal(r.url)',
+  { check: 'OPEN_EXTERNAL_JS_CHECK', file: 'src/main/bootstrap/panel-handlers.ts', sample: 'shell.openExternal(r.url)',
     why: "the browser pane's Open in browser; the url is the guest's own getURL()" },
   { check: 'PROTOCOL_HANDLER_JS_CHECK', file: 'src/main/index.ts', sample: 'app.setAsDefaultProtocolClient(CONTROL_SCHEME)',
     why: 'the tc:// URL door, restricted to open (M54)' }
@@ -146,7 +146,7 @@ ok('eneg.3 every ACCEPTED row still fires — a row that stopped firing describe
    looked at. */
 {
   const strip = (t) => t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
-  const src = strip(readFileSync(join(ROOT, 'src/main/index.ts'), 'utf8'))
+  const src = strip(readFileSync(join(ROOT, 'src/main/bootstrap/window.ts'), 'utf8'))
   const at = src.indexOf("'will-attach-webview'")
   const attach = at < 0 ? '' : src.slice(at, at + 900)
   const webviewTag = /webviewTag:\s*true/.test(src)
