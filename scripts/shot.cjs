@@ -691,7 +691,7 @@ const SCENES = [
       await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await sleep(200)
     } },
-  { name: 'orchestration', intent: 'M271/M274/M275. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, CSS-3D agent cubes (top + side faces under one stage tilt) standing on an elliptical ground plane with contact shadows, the hub painted behind the near satellites, upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
+  { name: 'orchestration', intent: 'M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter\'s order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
     run: async (k) => {
       // Sized so the capture never inherits the previous scene's window (a golden
       // at 865 against an 868 capture was this scene's standing red), and stilled
@@ -701,8 +701,8 @@ const SCENES = [
       try {
         await k.loadMain()
         await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
-        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-solid')`)); i++) await sleep(100)
-        if (!(await k.js(`!!document.querySelector('.orch__cube-solid')`))) throw new Error('orchestration scene: no 3D cube painted')
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
+        if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration scene: no 3D cube painted')
         // The fixture has a focused task, which ghosts every non-member cube and
         // hides its card — a golden of ghosts pins no glass and no depth. Show the
         // whole ring, then select one plain satellite so an EXPANDED callout (the
@@ -720,6 +720,20 @@ const SCENES = [
         await k.shot('orchestration')
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
       } finally {
+        await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+      }
+    } },
+  { name: 'orchestration-dark', intent: 'Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks masked and reduced motion enabled.', size: [1440, 900],
+    run: async (k) => {
+      await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      try {
+        await k.theme('dark')
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await sleep(600)
+        await k.shot('orchestration-dark')
+      } finally {
+        await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
+        await k.theme('light')
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },

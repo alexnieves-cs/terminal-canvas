@@ -368,11 +368,40 @@ if (typeof D.orchProjectNode === 'function') {
   const g = D.orchGroundPlane(stage, pan, 20)
   ok('orch.depth.3 the ground plane moves with the hub layer and is an ellipse flattened by the same tilt',
     g.x - D.orchGroundPlane(stage, still, 20).x === moved(hub) && Math.abs(g.ry / g.rx - D.ORCH_COS_TILT) < 1e-9)
+  ok('orch.depth.fit.1 orchFitViewbox mirrors preserveAspectRatio="xMidYMid meet": uniform scale, centred letterbox',
+    (() => {
+      const wide = D.orchFitViewbox({ w: 720, h: 420 }, { width: 1440, height: 420 })
+      const tall = D.orchFitViewbox({ w: 720, h: 420 }, { width: 720, height: 1000 })
+      return Math.abs(wide.scale - 1) < 1e-9 && wide.offsetX === 360 && wide.offsetY === 0 &&
+        Math.abs(tall.scale - 1) < 1e-9 && tall.offsetX === 0 && tall.offsetY === 290
+    })())
 } else {
   ok('orch.depth.1 orchestration-depth.ts exports orchProjectNode', false)
 }
+
+const CM = load('src/renderer/orchestration/orchestration-cube-motion.ts', 'orchestration-cube-motion.cjs')
+if (typeof CM.orchCubeMotion === 'function') {
+  const base = { tone: 'working', hub: false, synthetic: false, selected: false, attention: false, sinceToneMs: 0, sinceAttentionMs: 0, clockMs: 900 }
+  const moving = CM.orchCubeMotion({ ...base, reducedMotion: false })
+  const stilled = CM.orchCubeMotion({ ...base, reducedMotion: true })
+  const selected = CM.orchCubeMotion({ ...base, reducedMotion: true, selected: true })
+  const idle = CM.orchCubeMotion({ ...base, tone: 'idle', reducedMotion: true })
+  ok('orch.motion.2 reduced motion freezes every oscillation (working bob/breathe/shimmer) but keeps the static selection lift and idle drop',
+    moving.emissiveBoost > 0 && stilled.emissiveBoost === 0 && stilled.rimBoost === 0 && stilled.yOffset === 0 &&
+      selected.lift === CM.ORCH_CUBE_LIFT_PX && idle.yOffset === CM.ORCH_CUBE_IDLE_DROP_PX)
+  const pulseEarly = CM.orchCubeMotion({ ...base, tone: 'needs-you', attention: true, sinceAttentionMs: 100, reducedMotion: false })
+  const pulseLate = CM.orchCubeMotion({ ...base, tone: 'needs-you', attention: true, sinceAttentionMs: 100000, reducedMotion: false })
+  ok('orch.motion.3 the needs-you pulse is finite — it runs early, then holds at rest, same as the beacon it now runs alongside',
+    pulseEarly.emissiveBoost > 0 && pulseLate.emissiveBoost === 0)
+} else {
+  ok('orch.motion.2 orchestration-cube-motion.ts exports orchCubeMotion', false)
+}
+// The tilt itself moved from a CSS rotateX string in OrchestrationView.tsx to a
+// real three.js rotation in the R3F island (OrchestrationCubes.tsx) when the
+// cube body became a mesh; the view still does the 2D projection either way.
+const cubesSrc = readFileSync(join(root, 'src/renderer/orchestration/OrchestrationCubes.tsx'), 'utf8')
 ok('orch.depth.4 every cube wears the one stage tilt, and the view projects through orchProjectNode',
-  /rotateX\(\$\{-ORCH_STAGE_TILT_DEG\}deg\)/.test(viewSrc) && /orchProjectNode\(/.test(viewSrc) && !/far \? -38/.test(viewSrc))
+  /-ORCH_STAGE_TILT_DEG \* Math\.PI\) \/ 180/.test(cubesSrc) && /orchProjectNode\(/.test(viewSrc) && !/far \? -38/.test(viewSrc))
 
 // Helpful, not just pretty: the capped ring, the dimming lens, the stage wash.
 const many = build({

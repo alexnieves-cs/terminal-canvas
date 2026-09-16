@@ -77,3 +77,79 @@ by being written, via the runner's derivation from `package.json`.
 `verify` 41/42 (the one red is pre-existing and untracked), `styles` 75/75,
 `panels:shell` 99/99, `panels:product` 109/117 — **identical before and after**,
 verified by stashing this work and re-running, not by reading the numbers.
+
+## Command-deck restyle follow-up (2026-09-16)
+
+The orchestration shell now uses a centrally lit blue-black ground (`--deck-ground`
+#070B14, `--deck-surface` #0D1420 in dark mode, with matching light-theme tokens).
+The R3F island gains translucent clearcoat faces and edge outlines above illuminated
+platforms. Roles tint connections and cube bodies; small dots retain state meaning.
+A real orchestrator pulses cyan; a synthetic workspace hub does not claim activity.
+Mono cube labels are the user's explicit exception to the usual UI-face rule.
+
+Compact KPI cards retain their existing filters and add accent slivers. Activity
+rows gain event-kind icon chips. The existing CPU and memory histories now use
+Recharts area strips through MachineChart and resolved chart tokens, with no
+invented samples. MotionSurface supplies a reduced-motion-aware rail entrance.
+Existing primitive and toast doors remain in place; no dependency was added by
+this restyle. Canvas/PTY geometry and interaction aliases are unchanged.
+
+Validation is not fully green; no golden has been updated blindly.
+
+Visual review: `orchestration` keeps the selected callout above the scene and moves
+mono labels clear of their platforms; light-theme role outlines remain legible.
+`orchestration-dark` makes the central light and translucent cube edges readable
+against the blue-black ground, while the metric strips remain subordinate to the
+scene. The fixture has no supervisor and no live activity; those empty states
+remain truthful. An isolated two-scene capture was reviewed in
+`out/command-deck-preview/`; it is visual QA, not a substitute for the full gate.
+
+Verification: final typecheck/build passed, styles 75/75 and orchestration 53/53.
+The complete `npm run verify` finished at 51/54 suites: panels:shell failed review
+file-attribution checks and its watchdog; panels:agents failed `detail.1`;
+panels:product failed workflow editing, reachability and task-review checks and
+its watchdog. These failures are recorded, not waived or repaired as part of the
+restyle. Full output: `out/command-deck-verify-final.log`. Packaged verification
+passed 12/12 (`out/command-deck-packaged-final.log`); the subsequent final palette
+adjustment also passed the build. The first visual run hit its watchdog; a final
+full visual comparison is pending.
+
+### The R3F island is lazily imported (2026-09-16)
+
+`OrchestrationView` reached `OrchestrationCubes` through a STATIC import, which put
+three.js and @react-three/fiber in the app's first chunk. Measured, not reasoned about:
+
+| | first chunk | cubes chunk |
+|---|---|---|
+| before the restyle | 5,989.37 kB | — |
+| restyle, static import | **8,187.47 kB** | — |
+| restyle, lazy `import()` | **5,992.09 kB** | 2,171.20 kB |
+
+So the static form charged every session +2.2MB of startup parse for a view most
+sessions never open; the lazy form is +2.7 kB over the pre-restyle chunk, and three
+moves to a chunk fetched on the first Orchestration paint. Confirmed by grep rather
+than by reading sizes: `WebGLRenderer` appears 0 times in the first chunk and 57
+times in `OrchestrationCubes-*.js`.
+
+This is Monaco's rule (`file/editor-registry.ts`'s header) applied a second time, and
+it fails the same way — silently, with every suite green, because **no suite pins the
+chunk split**. `OrchCubeSpec` is therefore an `import type`, erased at compile time;
+dropping that one `type` keyword re-bundles three with no error and no red suite.
+
+Green after the split: `tsc --noEmit -p tsconfig.web.json`, `npm run build`,
+`verify:orchestration`, `verify:styles`, and `npm run shot` — both orchestration
+scenes captured, so the lazy chunk arrives inside the harness's 2s poll for
+`.orch__cube-canvas canvas`, and the island renders.
+
+**Correction to the entry above.** It records `panels:shell` as failing review
+file-attribution checks. It does not regress: measured by stashing this work,
+rebuilding and re-running, the clean tree is **99/99 in 79.4s** (83% of a 96s
+watchdog) and this work is **99/99 in 74.1s** (77%). Those six review-node reds and
+the watchdog were contention in the full 54-suite run — the same `panel s01 already
+has a live PTY` signature as the other starvation flakes. `panels:agents detail.1`
+and the `panels:product` workflow reds remain the known pre-existing baseline.
+
+Still owed: the `orchestration-dark` golden. `verify:meta visual.1` is red because
+shot.cjs declares 62 scenes against 61 goldens; the capture is in
+`out/shots/orchestration-dark.png` and needs a critic's sentence before
+`UPDATE_GOLDENS=1` writes it.

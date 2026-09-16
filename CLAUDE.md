@@ -193,7 +193,7 @@ never imported ambiently. That is the rule; the modules are where to look:
 | `recharts` | `shell/MachineChart.tsx`, `shell/UsageChart.tsx` | Colours come from `shell/chart-tokens.ts`, read off the live theme — `var()` does not resolve in SVG presentation attributes, so the natural spelling paints an invisible series with no error. |
 | `@radix-ui/*` | `renderer/primitives/` | Adopters take the primitive, never the Radix package. |
 | `@xyflow/react` + `zustand` | `renderer/workflow/` | The store is the flow editor's own; it is not an app-wide state layer and should not become one. |
-| `three` + `@react-three/fiber` | `orchestration/OrchestrationCubes.tsx` | The diorama only. |
+| `three` + `@react-three/fiber` | `orchestration/OrchestrationCubes.tsx`, lazily `import()`ed by `OrchestrationView` | The diorama only. Measured at **+2.2MB in the FIRST chunk** when that import was static — the same trap as Monaco's row, and nothing pins it. |
 | `motion` | `primitives/MotionSurface.tsx`, `workflow/` | Motion still answers to the token rules in `styles.css` (`verify:styles`). |
 
 Renderer libraries are vite-bundled, so nothing here ships `node_modules` and the

@@ -68,3 +68,16 @@ export function MachineChart (props: MachineChartProps): JSX.Element | null {
     </div>
   )
 }
+
+/** Compact orchestration history; never manufacture a trend from one reading. */
+export function MachineSparkline({ values, tone = '--blue' }: { values: readonly number[]; tone?: '--blue' | '--green' | '--iris' }): JSX.Element {
+  const colors = useChartColors()
+  return <div className="orch__spark" aria-hidden="true">
+    {values.length >= 2 && <ResponsiveContainer width="100%" height={36}>
+      <AreaChart data={values.map(value => ({ value }))} margin={{ top: 3, bottom: 0, left: 0, right: 0 }}>
+        <YAxis hide domain={[0, Math.max(1, ...values)]} />
+        <Area dataKey="value" type="monotone" stroke={colors[tone]} fill={colors[tone]} fillOpacity={0.16} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls={false} />
+      </AreaChart>
+    </ResponsiveContainer>}
+  </div>
+}

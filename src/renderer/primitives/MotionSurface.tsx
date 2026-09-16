@@ -20,11 +20,12 @@ function elementFor(type: ElementType): ComponentType<Record<string, unknown>> {
 
 export interface MotionSurfaceProps {
   readonly open: boolean
+  readonly enter?: boolean
   readonly onExitComplete?: () => void
   readonly children: ReactNode
 }
 
-export function MotionSurface({ open, onExitComplete, children }: MotionSurfaceProps): ReactElement {
+export function MotionSurface({ open, enter = false, onExitComplete, children }: MotionSurfaceProps): ReactElement {
   if (!isValidElement(children)) throw new Error('a MotionSurface needs one element child')
   const child = children as ReactElement<Record<string, unknown>>
   const MotionElement = useMemo(() => elementFor(child.type as ElementType), [child.type])
@@ -39,7 +40,7 @@ export function MotionSurface({ open, onExitComplete, children }: MotionSurfaceP
   return (
     <MotionElement
       {...child.props}
-      initial={false}
+      initial={enter && !reduced ? { opacity: 0, y: 4, scale: 0.985 } : false}
       animate={open ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: -4, scale: 0.985 }}
       transition={transition}
       // A closing layer must not catch a click while it is on its way out.

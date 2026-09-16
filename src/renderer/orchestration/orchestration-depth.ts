@@ -81,3 +81,17 @@ export function orchGroundPlane(stage: OrchStage, cam: OrchCamera, baseDrop: num
 }
 
 export const ORCH_COS_TILT = COS_TILT
+
+export interface OrchFit { scale: number; offsetX: number; offsetY: number }
+
+/**
+ * Mirrors SVG `preserveAspectRatio="xMidYMid meet"`: a uniform scale plus a
+ * centred letterbox. The R3F cube island shares this with the SVG ground/edge/
+ * callout layers so a mesh always lands under its own hit-target and label,
+ * whatever the container's aspect ratio.
+ */
+export function orchFitViewbox(viewBox: { w: number; h: number }, viewport: { width: number; height: number }): OrchFit {
+  if (viewport.width <= 0 || viewport.height <= 0 || viewBox.w <= 0 || viewBox.h <= 0) return { scale: 1, offsetX: 0, offsetY: 0 }
+  const scale = Math.min(viewport.width / viewBox.w, viewport.height / viewBox.h)
+  return { scale, offsetX: (viewport.width - viewBox.w * scale) / 2, offsetY: (viewport.height - viewBox.h * scale) / 2 }
+}

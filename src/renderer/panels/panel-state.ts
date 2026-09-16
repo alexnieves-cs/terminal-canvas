@@ -42,7 +42,7 @@ export const TONES: readonly Tone[] = ['kind', 'asleep', 'none', 'starting', 'wo
  * vocabulary keeps exactly one home. A third surface that needs to say
  * "working" adds a reader here, never a literal there.
  */
-export const TONE_WORKING: Tone = 'working'
+export const TONE_WORKING = 'working' as const satisfies Tone
 export const TONE_NEEDS_YOU: Tone = 'needs-you'
 
 /** M257. Navigator filters name the same vocabulary without respelling it in a view. */

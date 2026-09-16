@@ -90,6 +90,7 @@
     "verify:toast": "node scripts/verify-toast.cjs"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.4.0",
     "@sentry/electron": "7.18.0",
     "@xyflow/react": "^12.11.6",
     "jszip": "3.10.2",
@@ -98,6 +99,7 @@
     "motion": "^13.3.0",
     "node-pty": "1.1.0",
     "pptxgenjs": "4.0.1",
+    "three": "^0.186.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
@@ -111,6 +113,7 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/addon-unicode11": "^0.8.0",

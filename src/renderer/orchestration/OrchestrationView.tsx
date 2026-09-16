@@ -4,7 +4,9 @@
  * markDone, setCenterView). Selection here drives the other panes; a jump
  * returns to the canvas so pan/zoom/PTY stay the canvas's.
  */
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
+import { MachineSparkline as Sparkline } from '@renderer/shell/MachineChart'
+import { MotionSurface } from '@renderer/primitives/MotionSurface'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react'
 import type { Panel } from '@renderer/panels/panels'
 import {
   isChatPanel, isFilePanel, isTerminalPanel, isWatcherPanel, isWorkflowPanel, isWorkPanel
@@ -24,7 +26,7 @@ import { USER_SET_STATES, WORK_ITEM_STATES, type WorkItemState } from '@shared/w
 import { displayPath } from '@shared/display-path'
 import { shellControl } from '@renderer/shell/shell-control'
 import { railLabel } from '@renderer/shell/rail-rows'
-import { agentWord, TONE_WORKING } from '@renderer/panels/panel-state'
+import { agentWord, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, ProductMark, Search, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import {
@@ -74,7 +76,25 @@ import {
   pushOrchActivity,
   subscribeOrchActivity
 } from './orchestration-activity'
-import { ORCH_STAGE_TILT_DEG, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
+import { orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
+import type { OrchCubeSpec } from './OrchestrationCubes'
+import type { OrchCubeTone } from './orchestration-cube-motion'
+
+/**
+ * The R3F island is `import()`ed the first time Orchestration paints, never at
+ * module scope, and the split is load-bearing rather than tidy. This view is in
+ * the app's FIRST chunk, so a static import of OrchestrationCubes puts three.js
+ * and @react-three/fiber — measured at +2.2MB — into startup for every session,
+ * including the many that never open Orchestration at all. Monaco is kept out of
+ * that chunk the same way, by CodeEditor (see file/editor-registry.ts's header);
+ * this is the same rule, and it fails the same way: silently, with every suite
+ * still green, because nothing here pins the chunk split.
+ *
+ * `OrchCubeSpec` above is an `import type`, erased at compile time, so naming the
+ * module for its type costs nothing at runtime. That is easy to undo by accident
+ * — dropping the `type` keyword re-bundles three with no error and no red suite.
+ */
+const OrchestrationCubes = lazy(async () => ({ default: (await import('./OrchestrationCubes')).OrchestrationCubes }))
 
 export interface OrchTemplateInput {
   id: string
@@ -171,26 +191,6 @@ function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplat
   })
 }
 
-function Sparkline({ values, tone }: { values: number[]; tone?: string }): JSX.Element {
-  const w = 120
-  const h = 28
-  if (values.length < 2) {
-    return <svg className="orch__spark" width={w} height={h} aria-hidden="true" />
-  }
-  const max = Math.max(...values, 1)
-  const min = Math.min(...values, 0)
-  const span = Math.max(max - min, 1)
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * w
-    const y = h - ((v - min) / span) * (h - 4) - 2
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-  return (
-    <svg className="orch__spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polyline fill="none" stroke={tone ?? 'var(--iris)'} strokeWidth="1.5" points={pts} />
-    </svg>
-  )
-}
 
 function stateWord(row: Pick<OrchRosterRow, 'state'>): string {
   if (row.state === 'wants-you' || row.state === 'busy' || row.state === 'idle' || row.state === 'starting' || row.state === 'exited') {
@@ -203,7 +203,7 @@ function stateWord(row: Pick<OrchRosterRow, 'state'>): string {
   return agentWord('idle').word
 }
 
-function toneFromState(state: OrchRosterRow['state']): string {
+function toneFromState(state: OrchRosterRow['state']): Tone {
   if (state === 'wants-you') return 'needs-you'
   if (state === 'busy' || state === 'watching' || state === 'pool') return TONE_WORKING
   if (state === 'starting') return 'starting'
@@ -229,32 +229,37 @@ function kindGlyph(kind: OrchRosterRow['kind']): JSX.Element {
   return <Orbit />
 }
 
+/**
+ * The cube's SVG surface: hit-target, beacon and label. The 3D body itself is
+ * a real-lit mesh painted by `<OrchestrationCubes>` (a WebGL canvas sandwiched
+ * between this layer's ground/edges and its callouts in `.orch__graph-wrap`)
+ * — this element keeps the same classes/data attributes the old CSS-3D body
+ * carried (`orch__cube`, `data-tone`, `data-attention`, `data-depth`, …) so
+ * click/dblclick, keyboard nav, `verify-orchestration.cjs` and `shot.cjs`'s
+ * selectors are all unchanged. `attention` is computed once for both this
+ * element and its mesh by `useAttentionAck` in `GraphBoard`, not locally —
+ * two independent acknowledgment clocks would drift.
+ */
 function IsoCube(props: {
   node: OrchGraphNode
   labelOffset: { x: number; y: number }
   band: OrchDepthBand
   selected: boolean
+  attention: boolean
   /** The board stage this cube's task just entered, while the wash is live. */
   wash?: OrchWash
   onSelect: (id: string) => void
   onJump: (id: string) => void
   onOverflow: () => void
 }): JSX.Element {
-  const { node, selected, onSelect, onJump, onOverflow } = props
+  const { node, selected, attention, onSelect, onJump, onOverflow } = props
   const overflow = node.overflow !== undefined
   // The overflow node is not a panel: nothing to select or jump to, its verb is the roster.
   const synthetic = node.synthetic === true || node.id === '__hub__' || overflow
   const live = isLiveRosterState(node.state)
   const needs = node.state === 'wants-you'
-  // Remember that the person looked until the underlying attention episode ends.
-  const [acknowledged, setAcknowledged] = useState(false)
-  useEffect(() => {
-    if (!needs) setAcknowledged(false)
-    else if (selected) setAcknowledged(true)
-  }, [needs, selected])
-  const attention = needs && !selected && !acknowledged
-  // State skins (M275): each state wears a distinct body, not one neon cube.
-  // `tone` is the CSS hook; the classes below only name the moments CSS animates.
+  // State skins (M275, now carried by the mesh's material/motion, not CSS):
+  // `tone` is still the DOM hook other suites and the callout card read.
   const tone = toneFromState(node.state)
   const skin = `${node.hub ? ' orch__cube--hub' : ''}${overflow ? ' orch__cube--overflow' : synthetic ? ' orch__cube--synthetic' : ''}${selected ? ' orch__cube--on' : ''}${live ? ' orch__cube--live' : ''}${needs ? ' orch__cube--needs' : ''}${tone === TONE_WORKING ? ' orch__cube--busy' : ''}${tone === 'starting' ? ' orch__cube--starting' : ''}${tone === 'exited' ? ' orch__cube--exited' : ''}${tone === 'idle' && !synthetic ? ' orch__cube--idle' : ''}`
   return (
@@ -263,6 +268,7 @@ function IsoCube(props: {
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: synthetic && !overflow ? 'default' : 'pointer' }}
       data-tone={tone}
+      data-role={node.hub ? 'orchestrator' : node.kind}
       data-attention={attention || undefined}
       data-depth={props.band}
       data-orch-overflow={overflow ? node.overflow!.length : undefined}
@@ -275,26 +281,34 @@ function IsoCube(props: {
         <ellipse key={props.wash.at} className="orch__cube-wash" data-stage={props.wash.stage} data-orch-wash={props.wash.stage}
           cy={node.size * 0.65} rx={node.size * 0.98} ry={node.size * 0.3} aria-hidden="true" />
       )}
-      <ellipse className="orch__cube-shadow" cy={node.size * 0.65} rx={node.size * 0.7} ry={node.size * 0.18} />
-      <foreignObject x={-node.size} y={-node.size} width={node.size * 2} height={node.size * 2} className="orch__cube-viewport">
-        <div className="orch__cube-scene">
-          {/* The lift wrapper owns every state transform (settle, bob, selection translateZ);
-              the solid keeps the per-node rotation so the two never fight over one property. */}
-          <div className="orch__cube-lift">
-          <div className="orch__cube-solid" style={{ width: node.size, height: node.size, transform: `rotateX(${-ORCH_STAGE_TILT_DEG}deg) rotateY(${node.hub ? 45 : 40 + (node.x / ORCH_GRAPH_SIZE.w) * 10}deg)` }}>
-            <div className="orch__cube-face orch__cube-face--left" style={{ transform: `translateZ(${node.size / 2}px)` }} />
-            <div className="orch__cube-face orch__cube-face--right" style={{ transform: `rotateY(-90deg) translateZ(${node.size / 2}px)` }} />
-            <div className="orch__cube-face orch__cube-face--top" style={{ transform: `rotateX(90deg) translateZ(${node.size / 2}px)` }} />
-          </div>
-          </div>
-        </div>
-      </foreignObject>
+      {/* Transparent hit-target standing in for the old foreignObject body — same
+          footprint, so pointer capture, hover and the label's baseline don't move. */}
+      <rect x={-node.size} y={-node.size} width={node.size * 2} height={node.size * 2} className="orch__cube-hit" fill="transparent" />
       {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
           cube is selected — the person has looked, so the graph stops calling. */}
       {attention ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
-      <text x={props.labelOffset.x} y={node.size * 1.15 + props.labelOffset.y} textAnchor="middle" className="orch__cube-label">{node.title}</text>
+      <circle className="orch__cube-state" cx={node.size * 0.7} cy={-node.size * 0.65} r={3} aria-hidden="true" />
+      <text x={props.labelOffset.x} y={node.size * 1.4 + props.labelOffset.y} textAnchor="middle" className="orch__cube-label">{node.title}</text>
+      <text x={props.labelOffset.x} y={node.size * 1.4 + props.labelOffset.y + 15} textAnchor="middle" className="orch__cube-role">{node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : node.kind}</text>
     </g>
   )
+}
+
+/**
+ * Attention acknowledgment for every cube, computed once here (not per-cube
+ * inside IsoCube) so the SVG hit-target's beacon and the mesh's finite pulse
+ * read the exact same clock. Mutating the ref during render is deliberate:
+ * with at most nine cubes this is cheap bookkeeping, not a render side effect
+ * anyone observes, and it avoids nine independent effects for a dynamic list.
+ */
+function useAttentionAck(): (node: OrchGraphNode, selected: boolean) => boolean {
+  const ack = useRef(new Map<string, boolean>())
+  return (node, selected) => {
+    const needs = node.state === 'wants-you'
+    if (!needs) ack.current.set(node.id, false)
+    else if (selected) ack.current.set(node.id, true)
+    return needs && !selected && !(ack.current.get(node.id) ?? false)
+  }
 }
 
 /** The last non-blank line of a chat reply or terminal tail, scrubbed for the HUD. */
@@ -448,6 +462,9 @@ function GraphBoard(props: {
 }): JSX.Element {
   const { nodes, edges, selectedId, selectedIds, firingKeys, litIds, wash, onSelect, onJump, onOverflow } = props
   const lensedOut = (id: string): boolean => litIds !== null && !litIds.has(id)
+  const hasSelection = selectedId !== null || selectedIds.length > 0
+  const isSelected = (n: OrchGraphNode): boolean => selectedId === n.id || selectedIds.includes(n.id)
+  const attentionOf = useAttentionAck()
   const [hovered, setHovered] = useState<string | null>(null)
   const [cam, setCam] = useState({ x: 0, y: 0, k: 1 })
   useEffect(() => props.onCamera(cam), [cam, props.onCamera])
@@ -498,6 +515,21 @@ function GraphBoard(props: {
     offsets.set(n.id, placed.x + w / 2 - n.x)
   }
 
+  const cubeSpecs: OrchCubeSpec[] = projected.map((n) => {
+    const overflow = n.overflow !== undefined
+    const synthetic = n.synthetic === true || n.id === '__hub__' || overflow
+    const selected = isSelected(n)
+    return {
+      id: n.id, x: n.x, y: n.y, size: n.size, depth: n.depth, hub: n.hub, synthetic,
+      // toneFromState's five real returns are exactly OrchCubeTone's members;
+      // its declared type is the wider Tone only because TONE_WORKING/TONE_NEEDS_YOU are.
+      tone: toneFromState(n.state) as OrchCubeTone, selected,
+      roleColor: n.hub || n.kind === 'chat' ? '--iris' : n.kind === 'terminal' || n.kind === 'file' ? '--green' : n.kind === 'watcher' ? '--amber' : '--deck-violet',
+      dimmed: hasSelection && !selected, lensedOut: lensedOut(n.id),
+      attention: attentionOf(n, selected)
+    }
+  })
+
   const onWheel = (event: ReactWheelEvent<SVGSVGElement>): void => {
     event.preventDefault()
     const factor = event.deltaY > 0 ? 0.92 : 1.08
@@ -528,44 +560,37 @@ function GraphBoard(props: {
   }
 
   return (
-    <svg
-      className="orch__graph"
-      data-has-selection={selectedId !== null || selectedIds.length > 0 ? 'true' : undefined}
-      data-lens={litIds !== null ? 'true' : undefined}
-      viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}
-      role="group"
-      aria-label="Agent graph"
-      aria-describedby={props.describedBy}
-      onWheel={onWheel}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-    >
-      <defs>
-        <radialGradient id="orch-hub-glow" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--iris)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--iris)" stopOpacity="0" />
-        </radialGradient>
-        <filter id="orch-glow" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="3.5" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        {/* In the ground group's own coordinates (it is translated and scaled). */}
-        <clipPath id="orch-ground-clip"><ellipse rx={ground.rx} ry={ground.ry} /></clipPath>
-        <radialGradient id="orch-ground-fade-g" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#fff" stopOpacity="1" />
-          <stop offset="70%" stopColor="#fff" stopOpacity="0.55" />
-          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-        </radialGradient>
-        <mask id="orch-ground-fade" maskContentUnits="userSpaceOnUse">
-          <ellipse rx={ground.rx} ry={ground.ry} fill="url(#orch-ground-fade-g)" />
-        </mask>
-      </defs>
-      <g>
+    <div className="orch__graph-scene" role="group" aria-label="Agent graph" aria-describedby={props.describedBy} data-lens={litIds !== null ? 'true' : undefined}>
+      {/* Ground layer: defs, ground plane, edges — everything the cube meshes
+          must paint OVER. Owns pan/zoom; a pointerdown that starts on a cube or
+          callout never reaches here because the overlay layer above it claims
+          those hit-targets first (pointer-events re-enabled per element). */}
+      <svg
+        className="orch__graph orch__graph--ground"
+        viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}
+        aria-hidden="true"
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <defs>
+          <radialGradient id="orch-hub-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="var(--iris)" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="var(--iris)" stopOpacity="0" />
+          </radialGradient>
+          {/* In the ground group's own coordinates (it is translated and scaled). */}
+          <clipPath id="orch-ground-clip"><ellipse rx={ground.rx} ry={ground.ry} /></clipPath>
+          <radialGradient id="orch-ground-fade-g" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#fff" stopOpacity="1" />
+            <stop offset="70%" stopColor="#fff" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+          </radialGradient>
+          <mask id="orch-ground-fade" maskContentUnits="userSpaceOnUse">
+            <ellipse rx={ground.rx} ry={ground.ry} fill="url(#orch-ground-fade-g)" />
+          </mask>
+        </defs>
         {/* Ground plane: a grid clipped to the tilted ellipse and faded at its rim,
             under concentric rings; the ring at 1/1.45 is the orbit track. It moves
             with the hub layer, so the hub stays planted while satellites parallax. */}
@@ -583,6 +608,7 @@ function GraphBoard(props: {
           </g>
           {[0.4, 1 / 1.45, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / 1.45 ? ' orch__ground-ring--track' : ''}`} />)}
         </g>
+        {projected.map(n => <ellipse key={`platform-${n.id}`} className="orch__platform" data-role={n.hub ? 'orchestrator' : n.kind} cx={n.x} cy={n.y + n.size * 0.8} rx={n.size * 1.15} ry={n.size * 0.34} />)}
         {orchEdgePaintOrder(edges).map((e) => {
           const from = projected.find((n) => n.id === e.from)
           const to = projected.find((n) => n.id === e.to)
@@ -593,12 +619,39 @@ function GraphBoard(props: {
               key={`${e.from}-${e.to}-${e.authored === true ? 'a' : 'h'}`}
               x1={from.x} y1={from.y} x2={to.x} y2={to.y}
               className={`orch__edge${e.authored === true ? ' orch__edge--authored' : ''}${firing ? ' orch__edge--current' : ''}${lensedOut(e.from) || lensedOut(e.to) ? ' orch__edge--lensed' : ''}`}
+              data-role={to.hub ? from.kind : to.kind}
+              data-connected-live={!from.synthetic && !to.synthetic && (isLiveRosterState(from.state) || isLiveRosterState(to.state)) || undefined}
               data-edge-activity={firing ? 'firing' : undefined}
             />
           )
         })}
-        {/* Painter's order by depth, hub included: a front satellite and its card
-            occlude the hub and the back of the ring, never the other way round. */}
+      </svg>
+      {/* The R3F island: real-lit cube meshes, painted above the ground/edges and
+          below the hit-targets/callouts. `pointer-events: none` (styles.css) —
+          every click still lands on the SVG layer below or above it. */}
+      {/* The fallback is the same empty box the loaded island renders into, so
+          the layer keeps its place in the sandwich for the frame or two before
+          the chunk arrives — a missing box would let the overlay's hit-targets
+          reflow, and this view is captured as a golden. */}
+      <Suspense fallback={<div className="orch__cube-canvas" aria-hidden="true" />}>
+        <OrchestrationCubes nodes={cubeSpecs} viewBox={ORCH_GRAPH_SIZE} />
+      </Suspense>
+      {/* Overlay layer: hit-targets, beacons, labels and callouts. The svg root
+          is pointer-events:none so an empty-space drag falls through to the
+          ground layer's pan/zoom; each interactive child re-enables its own
+          pointer-events (styles.css), exactly like the single-svg version did
+          via `target.closest('.orch__cube, .orch__callout-host')`. */}
+      <svg className="orch__graph orch__graph--over" data-has-selection={hasSelection ? 'true' : undefined} viewBox={`0 0 ${ORCH_GRAPH_SIZE.w} ${ORCH_GRAPH_SIZE.h}`}>
+        <filter id="orch-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="3.5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        {/* Order among these no longer decides visual occlusion of the cube body
+            (the mesh's real z-buffer does), only of labels/beacons, which rarely
+            overlap — kept sorted anyway so a label still wins the same ties. */}
         {projected.sort((a, b) => a.depth - b.depth || a.y - b.y).map((n) => (
           <g key={n.id} className="orch__callout-host" data-ghost={props.memberIds !== null && !props.memberIds.includes(n.id) || undefined}
             data-lensed={lensedOut(n.id) || undefined}
@@ -615,7 +668,8 @@ function GraphBoard(props: {
             node={n}
             band={n.band}
             labelOffset={{ x: Math.tanh(cam.x / 240) * 12, y: Math.tanh(cam.y / 180) * 9 + (cam.k - 1) * 4 }}
-            selected={selectedId === n.id || selectedIds.includes(n.id)}
+            selected={isSelected(n)}
+            attention={attentionOf(n, isSelected(n))}
             {...(wash !== null && wash.ids.includes(n.id) ? { wash } : {})}
             onSelect={onSelect}
             onJump={onJump}
@@ -628,7 +682,7 @@ function GraphBoard(props: {
             hub, which paints later by depth. The group repeats the host's hover so
             reaching for Jump never reads as leaving the cube and collapses the card. */}
         {projected.filter((n) => offsets.has(n.id)).map((n) => (
-          <g key={`callout-${n.id}`} onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
+          <g key={`callout-${n.id}`} className="orch__callout-wrap" onPointerEnter={() => setHovered(n.id)} onPointerLeave={() => setHovered(null)}>
             <CubeCallout node={n} offsetX={offsets.get(n.id)!} below={below.has(n.id)} drift={n.drift} band={n.band} expanded={expanded(n.id)}
               task={props.workItems.find((w) => w.panelId === n.id)?.title} onSelect={onSelect} onJump={onJump}
               onInterrupt={props.onInterrupt && props.panels.some((p) => p.rect.id === n.id && isChatPanel(p)) && ['busy', 'starting', 'wants-you'].includes(n.state) ? props.onInterrupt : undefined} />
@@ -637,8 +691,8 @@ function GraphBoard(props: {
         {/* Above the cubes so a chip is never hidden behind the object it leaves;
             the packet fades in and out at the ends so it never sits on a face. */}
         <EdgePackets edges={edges} fires={props.fires} points={new Map(projected.map((n) => [n.id, n]))} />
-      </g>
-    </svg>
+      </svg>
+    </div>
   )
 }
 
@@ -1342,7 +1396,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   <span className="orch__perf-label">Memory</span>
                   <span className="orch__perf-value">{machineReadout.memory}</span>
                   {machineReadout.kind === 'live' || machineReadout.kind === 'stale'
-                    ? <Sparkline values={memHistory} tone="var(--green)" />
+                    ? <Sparkline values={memHistory} tone="--green" />
                     : <Sparkline values={[]} />}
                 </div>
               </div>
@@ -1417,7 +1471,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           </div>
         </main>
 
-        <aside className="orch__side" aria-label="Activity">
+        <MotionSurface open enter><aside className="orch__side" aria-label="Activity">
           <div className="orch__tabs" role="tablist">
                 {(['activity', 'terminal', 'files'] as const).map((t) => (
                 <button
@@ -1460,7 +1514,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                       })}
                       onDoubleClick={() => { if (e.panelId) jump(e.panelId) }}
                     >
-                      <span className="orch__dot status-dot" data-tone={e.tone} aria-hidden="true" />
+                      <span className="orch__event-chip" data-tone={e.tone} aria-hidden="true">{e.kind === 'watcher' ? <KindWatcher /> : e.kind === 'task' ? <KindWork /> : e.kind === 'agent' ? <KindChat /> : <Orbit />}</span>
                       <span className="orch__activity-title">{e.title}</span>
                       <span className="orch__activity-detail">{e.detail}</span>
                       <time className="orch__activity-time">{formatAgo(e.at)}</time>
@@ -1519,7 +1573,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
             </ul>
             </>
           )}
-        </aside>
+        </aside></MotionSurface>
       </div>
     </div>
   )
