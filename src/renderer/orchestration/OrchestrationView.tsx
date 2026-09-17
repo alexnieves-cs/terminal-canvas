@@ -525,8 +525,19 @@ function GraphBoard(props: {
   // and x was the only axis clamped — its expanded card drew past the stage top.
   const below = new Set<string>()
   const occupied: { x: number; y: number; w: number; h: number }[] = []
-  // Reserve the selected card's space first so attention cannot cover its verbs.
-  // Keep each card near its anchor; a slanted stem identifies a shifted card.
+  // Every node is an obstacle, not only the other cards: a back-of-ring cube's
+  // card hangs BELOW it, straight down the spoke onto the hub, and with only the
+  // hub reserved it slid sideways onto a neighbour's cube and name plate instead.
+  // Each footprint (cube and plate) costs its overlap. A dense ring has NO free
+  // spot for a 184×154 card — four captures of weight-tuning only moved which
+  // node it hid — so the weights say what is least harmful to hide: a REAL hub
+  // costs double (every connection leads to it), a neighbour costs its area, and
+  // the `No supervisor yet` placeholder costs almost nothing, because it says
+  // nothing. With no supervisor the card hangs over the empty centre, as before;
+  // with one, it slides beside it.
+  const footprints = projected.map((o) => ({ id: o.id, weight: o.hub ? (o.synthetic === true || o.id === '__hub__' ? 0.25 : 2) : 1, x: o.x - o.size * 1.4, y: o.y - o.size, w: o.size * 2.8, h: o.size + calloutBelow(o.size) }))
+  const cover = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }, pad: number): number =>
+    Math.max(0, Math.min(a.x + a.w + pad, b.x + b.w) - Math.max(a.x - pad, b.x)) * Math.max(0, Math.min(a.y + a.h + pad, b.y + b.h) - Math.max(a.y - pad, b.y))
   for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
     const w = n.state === 'wants-you' ? 218 : 184
     const h = expanded(n.id) ? 154 : 76
@@ -534,11 +545,19 @@ function GraphBoard(props: {
     // Below clears the cube's name plate, mirroring the 22px stem above.
     const y = flip ? n.y + calloutBelow(n.size) + 22 : n.y - n.size - h - 22
     if (flip) below.add(n.id)
-    const candidates = [0, ...occupied.flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16].map((dx) => {
+    const others = footprints.filter((f) => f.id !== n.id)
+    const candidates = [0, ...[...occupied, ...others].flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16].map((dx) => {
       const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
-      const overlap = occupied.reduce((sum, r) => sum + Math.max(0, Math.min(x + w + 8, r.x + r.w) - Math.max(x - 8, r.x))
-        * Math.max(0, Math.min(y + h + 8, r.y + r.h) - Math.max(y - 8, r.y)), 0)
-      return { x, y, w, h, overlap, distance: Math.abs(x + w / 2 - n.x) }
+      const box = { x, y, w, h }
+      // Another CARD is never acceptable to cover (its verbs are under it), so it
+      // outweighs any node; among nodes the covered area decides.
+      const overlap = occupied.reduce((sum, r) => sum + cover(box, r, 8) * 8, 0) + others.reduce((sum, r) => sum + cover(box, r, 0) * r.weight, 0)
+      // Nearness is part of the cost, not a tie-break: by covered area alone the
+      // card went to the far side of the ring, its stem crossing three spokes — a
+      // card a long way from its cube reads as somebody else's. 60 px² per px of
+      // drift; 20 was measured too weak (the far side still won on area).
+      const distance = Math.abs(x + w / 2 - n.x)
+      return { x, y, w, h, overlap: overlap + distance * 60, distance }
     }).sort((a, b) => a.overlap - b.overlap || a.distance - b.distance)
     const placed = candidates[0]
     occupied.push(placed)
