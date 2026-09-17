@@ -355,6 +355,21 @@ export const SETTINGS: readonly SettingDef[] = [
     category: SHELL_CATEGORY
   },
   {
+    // M279. The navigator's width, dragged from its own right edge — the
+    // inspector's rule mirrored. 300 is the floor `verify:styles rail-w.1`
+    // pins for the column (a narrower rail truncates every row's tail); 480
+    // is the inspector's own ceiling, for the same reason it has one.
+    id: 'shell.navWidth',
+    label: 'Navigator width',
+    description: 'how wide the left navigator opens — drag its right edge, or set a number here',
+    keywords: ['navigator', 'rail', 'width', 'resize', 'wide', 'sidebar', 'shell'],
+    type: 'number',
+    default: 300,
+    min: 300,
+    max: 480,
+    category: SHELL_CATEGORY
+  },
+  {
     // (this redesign) "Pin" the inspector open through the auto-collapse the Compact
     // breakpoint already applies to both side panes (`.shell[data-bp="compact"]`
     // zeroes `--shell-ctx-w`) — the meaning `Let users … pin the inspector`

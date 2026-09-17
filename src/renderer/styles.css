@@ -940,6 +940,17 @@ body {
 .inspector__resize-handle:hover, .inspector__resize-handle:active { background: var(--iris-dim); }
 .shell--inspector-collapsed .inspector__resize-handle,
 .shell[data-bp="compact"]:not(.shell--inspector-pinned) .inspector__resize-handle { display: none; }
+/* M279. The navigator's handle, on its right edge; the rail is `position:
+   relative` below so the handle can sit on the column's own border. Absent
+   when the column is not resident, exactly as the inspector's is. */
+.shell__rail { position: relative; }
+.navigator__resize-handle {
+  position: absolute; top: 0; bottom: 0; right: -3px; width: 6px;
+  cursor: ew-resize; z-index: 5; background: transparent;
+}
+.navigator__resize-handle:hover, .navigator__resize-handle:active { background: var(--iris-dim); }
+.shell--rail-collapsed .navigator__resize-handle,
+.shell[data-bp="compact"] .navigator__resize-handle { display: none; }
 
 /* M46: the region toggles are .icon-buttons now (the navigator's chevron in
    its header, the context pane's in the top bar). The pressed context
@@ -1533,6 +1544,90 @@ body {
 .icon-button:disabled:hover { background: transparent; }
 .icon-button svg { display: block; }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   M279. STYLED PRIMITIVES. One rule family per piece, and a component over
+   each in renderer/primitives/ (Pill, StatusDot, SegmentedControl, Tabs).
+   A surface that adopts one keeps its own class beside these for the checks
+   that read it — `.shell__center-toggle`, `.context__tab` — so the aliases
+   below are deliberate, not duplication: the primitive is the LOOK, the
+   surface's class is its NAME.
+   ───────────────────────────────────────────────────────────────────────── */
+/* The segmented control: a recessed track, one lit segment. */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  padding: var(--sp-1);
+  flex-shrink: 0;
+}
+.seg__btn {
+  border: 0;
+  border-radius: var(--r-full);
+  padding: 0 var(--sp-4);
+  min-height: 24px;
+  background: transparent;
+  color: var(--fg-3);
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease), background var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.seg__btn:hover { color: var(--fg); background: var(--s-3); }
+.seg__btn--on,
+.seg__btn--on:hover {
+  color: var(--iris);
+  background: var(--iris-dim);
+  box-shadow: inset 0 0 0 1px var(--iris-dim);
+}
+/* The pill: `.badge` is the rule (declared with the frame's chrome); `.pill`
+   is its primitive name. A plain pill carries no dot. */
+.pill--plain::before { display: none; }
+/* The tab strip: `.context__tabs` / `.context__tab` are the rule (the
+   inspector's, M46) and `.tabs` / `.tab` alias them below at that site.
+   A tab's count is a fact set in the muted ink, tabular. */
+.tab__count {
+  margin-left: var(--sp-2);
+  color: var(--fg-4);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+.tab--on .tab__count { color: var(--fg-3); }
+/* The live status cluster (top bar): one reading per active tone, the dot
+   in the tone, the count tabular, the word muted. Needs-you is a verb. */
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+.live-status + .shell__search { margin-left: 0; }
+.shell__top .live-status__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 24px;
+  padding: 0 var(--sp-4) 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--s-1);
+  color: var(--fg-2);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.shell__top .live-status__item .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.live-status__count { font-weight: 600; color: var(--fg); }
+.live-status__word { color: var(--fg-3); }
+/* The verb glows in its own tone on hover — the same amber the panel ring
+   wears, so the button and the thing it jumps to read as one signal. */
+.shell__top .live-status__item--verb { cursor: pointer; border-color: var(--tone-dim); }
+.shell__top .live-status__item--verb:hover { color: var(--fg); background: var(--tone-dim); border-color: var(--tone); }
+
 .rail-row__start,
 .rail-row__rename,
 .rail-row__close {
@@ -1574,6 +1669,7 @@ body {
   border-bottom: 1px solid var(--line);
 }
 .inspector__pid { margin-left: auto; color: var(--fg-3); font-size: var(--t-xs); }
+.tabs,
 .context__tabs {
   flex: none;
   display: flex;
@@ -1581,6 +1677,7 @@ body {
   padding: var(--sp-2) var(--sp-3) 0;
   border-bottom: 1px solid var(--line);
 }
+.tab,
 .context__tab {
   flex: 1;
   min-height: 28px;
@@ -1594,8 +1691,14 @@ body {
   font-weight: 500;
   cursor: pointer;
 }
+.tab:hover,
 .context__tab:hover { color: var(--fg); background: var(--s-4); }
-.context__tab--on { color: var(--fg); border-bottom-color: var(--iris); }
+/* M279. The lit tab: the iris underline, and a faint lift of the same light
+   under the label so the strip reads as illuminated from below the line. */
+.tab--on,
+.context__tab--on { color: var(--fg); border-bottom-color: var(--iris); background: linear-gradient(to top, var(--iris-dim), transparent 70%); }
+.tab--on:hover,
+.context__tab--on:hover { background: linear-gradient(to top, var(--iris-dim), transparent 70%); }
 /* M61. `[hidden]` must beat the class: the UA's `[hidden] { display: none }`
    loses to any authored `display`, and with it every tab body stacked into
    one — a defect no attribute-reading check could see. */
@@ -3160,7 +3263,8 @@ body {
    the state at every tier. The classes stay on the element for the checks
    that read them. */
 /* A badge reports state and cannot be pressed: a capsule with a hairline. */
-.badge {
+.badge,
+.pill {
   font-size: var(--t-xs);
   font-variant-numeric: tabular-nums;
   padding: var(--sp-1) var(--sp-3);
@@ -5862,10 +5966,14 @@ body {
 .dock__button { position: relative; }
 .dock__label { position: absolute; left: calc(100% + var(--sp-2)); top: 50%; transform: translateY(-50%); padding: var(--sp-1) var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--s-3); color: var(--fg); font-family: var(--font-ui); font-size: var(--t-xs); white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity var(--dur-1) var(--ease); z-index: 1; }
 .dock__button:hover .dock__label, .dock__button:focus-visible .dock__label { opacity: 1; }
-.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); }
+.dock__button--on { background: var(--iris-dim); color: var(--iris); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--iris-dim), 0 0 10px var(--iris-dim); }
 /* `.shell__top .shell__search`: the bar's generic button rule is (0,1,1) and won over a bare class — the first golden showed no field (the Act III critic). */
-.shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); }
-.shell__top .shell__search:hover { color: var(--fg); background: var(--s-3); }
+.shell__top .shell__search { border: 1px solid var(--line); border-radius: var(--r-full); background: var(--s-1); padding: 0 var(--sp-5); color: var(--fg-3); font-family: var(--font-ui); transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+/* M279. A field lights its rim on hover rather than filling: the fill is a
+   button's answer, the ring is a field's. */
+.shell__top .shell__search:hover { color: var(--fg); background: var(--s-1); border-color: var(--iris); box-shadow: 0 0 0 1px var(--iris-dim), 0 0 12px var(--iris-dim); }
+.shell__top .shell__search svg { color: var(--fg-3); }
+.shell__top .shell__search:hover svg { color: var(--iris); }
 @media (prefers-reduced-motion: reduce) { .dock__label { transition: none; } }
 
 /* M257. One set of dock buttons serves two densities. Compact/Standard keeps
@@ -6994,22 +7102,15 @@ body {
 .command-pill[data-pill-expanded] .command-pill__rest { animation: pill-beacon var(--dur-spring) var(--ease) 1; }
 
 /* ─── M268. Center view toggle (TopBar) + Orchestration HUD ─── */
-.shell__center-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--r-full);
-  background: var(--s-1);
-  padding: var(--sp-1);
-  -webkit-app-region: no-drag;
-  flex-shrink: 0;
-}
+/* M279. The toggle IS the `.seg` primitive now; these rules only keep the
+   bar's generic button rule ((0,1,1), above) from repainting the segments,
+   and opt the track out of the drag region. */
+.shell__center-toggle { -webkit-app-region: no-drag; }
 .shell__top .shell__center-btn {
   border: 0;
   border-radius: var(--r-full);
-  padding: 0 var(--sp-3);
-  height: 26px;
+  padding: 0 var(--sp-4);
+  min-height: 24px;
   font-size: var(--t-xs);
   font-weight: 500;
   color: var(--fg-3);
@@ -7020,6 +7121,7 @@ body {
 .shell__top .shell__center-btn--on:hover {
   color: var(--iris);
   background: var(--iris-dim);
+  box-shadow: inset 0 0 0 1px var(--iris-dim);
 }
 
 .shell__orch {

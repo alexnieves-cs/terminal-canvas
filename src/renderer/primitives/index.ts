@@ -40,3 +40,21 @@ export { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from './Tool
 export type { TooltipProps, TooltipProviderProps, TooltipContentProps } from './Tooltip'
 
 export { POPPER_WRAPPER_ATTR, INERT_PLACEMENT } from './popper'
+
+/**
+ * M279. STYLED PRIMITIVES — the second half of this folder, and the opposite
+ * rule from the headless set above: each of these DOES carry a look, because
+ * the look is the point. They are the app's own composable pieces (a pill, a
+ * status dot, a segmented control, a tab strip), each a thin component over
+ * ONE rule family in styles.css, so a surface that adopts one gets the same
+ * radius, the same tone binding and the same rest/hover behaviour as every
+ * other. None of them names a colour: the tone block and the tokens do.
+ */
+export { Pill } from './Pill'
+export type { PillProps } from './Pill'
+export { StatusDot } from './StatusDot'
+export type { StatusDotProps } from './StatusDot'
+export { SegmentedControl } from './SegmentedControl'
+export type { SegmentedControlProps, SegmentedOption } from './SegmentedControl'
+export { Tabs } from './Tabs'
+export type { TabsProps, TabOption } from './Tabs'

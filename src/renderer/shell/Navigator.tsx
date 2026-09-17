@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type JSX } from 'react'
+import { memo, useEffect, useState, type JSX, type MouseEvent as ReactMouseEvent } from 'react'
 import type { RailRow } from './rail-rows'
 import type { RailWorkspace } from './rail-sections'
 import type { FileRow } from './file-tree-model'
@@ -22,6 +22,8 @@ import { PANEL_FILTERS, type PanelFilter } from '@renderer/panels/panel-state'
 export interface NavigatorProps {
   navigator: NavigatorPane
   onToggle: () => void
+  /** M279. Mousedown on the pane's right-edge handle; Canvas owns the drag (it holds `shellRef`). */
+  onResizeHandleDown?: (event: ReactMouseEvent) => void
   // Workspaces
   workspaces: RailWorkspace[]
   /** M79. Runs, newest first, with Run again. */
@@ -129,6 +131,8 @@ function NavigatorImpl(props: NavigatorProps): JSX.Element {
   const title = navigator === 'files' ? 'Files' : navigator === 'vault' ? 'Vault' : navigator === 'integrations' ? 'Connections' : navigator === 'teammates' ? 'Teammates' : navigator === 'board' ? 'Board' : navigator === 'skills' ? 'Skills' : navigator === 'workspaces' ? 'Workspaces' : 'Panels'
   return (
     <aside className="shell__rail" aria-label="Navigator" data-navigator={navigator}>
+      {/* M279. Resize from the edge that borders the canvas — the inspector's handle, mirrored. */}
+      {props.onResizeHandleDown !== undefined && <div className="navigator__resize-handle" onMouseDown={props.onResizeHandleDown} title="Drag to resize the navigator" />}
       {navigator === 'skills' ? (
         <SkillsPane {...props.skills} onToggle={onToggle} />
       ) : navigator === 'board' ? (

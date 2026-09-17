@@ -13,7 +13,7 @@ import { type HandoffTrigger, type LinkAutomation } from '@shared/handoff'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { pinRefusal } from '@renderer/canvas/lod'
 import { shellControl } from './shell-control'
-import { Popover, PopoverTrigger, PopoverContent } from '@renderer/primitives'
+import { Popover, PopoverTrigger, PopoverContent, Tabs } from '@renderer/primitives'
 import { Close, More, Pencil, RotateCw } from '@renderer/icons'
 import type { PersistedTemplate } from '@shared/templates'
 import { applyDraftOp, select, useSelectedOf, useTemplateDraft } from '@renderer/workflow/template-draft-store'
@@ -642,21 +642,16 @@ function InspectorPanel({
           tab's figures are as current as the visible one's the instant it is
           switched to — narrowing the signature to the visible tab is the
           obvious optimisation and it freezes hidden tabs stale (§4.3). */}
-      <div className="context__tabs" role="tablist" aria-label="Context">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            className={`context__tab${tab === t.id ? ' context__tab--on' : ''}`}
-            data-context-tab={t.id}
-            aria-selected={tab === t.id}
-            {...shellControl(() => onSelectTab(t.id))}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* M279: the Tabs primitive; `.context__tabs` / `.context__tab` and
+          `data-context-tab` stay on the elements for the suites that read them. */}
+      <Tabs<ContextTab>
+        className="context__tabs"
+        label="Context"
+        value={tab}
+        onSelect={onSelectTab}
+        dataAttr="data-context-tab"
+        tabs={TABS.map((t) => ({ id: t.id, label: t.label, className: 'context__tab' }))}
+      />
       <div className="inspector__body context__body">
       <section className="context__panel" data-context-panel="detail" role="tabpanel" hidden={tab !== 'detail'}>
       {/* M183. THE NODE EDITOR: the selected block's fields from its kind's schema, committed through the draft store's one door. */}

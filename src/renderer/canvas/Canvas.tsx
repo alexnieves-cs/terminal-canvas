@@ -1286,6 +1286,8 @@ export function Canvas({
   // a place, not on a panel that asked for you, and lighting whatever sits
   // there would teach the eye that the glow means nothing.
   const landingTargetRef = useRef<string | null>(null)
+  // M279. The top bar's needs-you pill: forward, always — the same queue ⌘J walks.
+  const jumpToWaiting = useCallback(() => { jumpAttentionImplRef.current(1) }, [])
   const onJumpAttention = useCallback((direction: JumpDirection) => {
     jumpAttentionImplRef.current(direction)
   }, [])
@@ -3049,6 +3051,8 @@ export function Canvas({
   // resize handle must both apply, and only `settings:list` sees both.
   const [inspectorWidth, setInspectorWidth] = useState(260)
   const [inspectorPinned, setInspectorPinned] = useState(false)
+  // M279. The navigator's width, the same way (`shell.navWidth`).
+  const [navWidth, setNavWidth] = useState(300)
   useEffect(() => {
     let live = true
     const read = (): void => {
@@ -3056,6 +3060,8 @@ export function Canvas({
         if (!live) return
         const w = rows.find((r) => r.id === 'shell.inspectorWidth')
         if (w && typeof w.value === 'number') setInspectorWidth(w.value)
+        const nw = rows.find((r) => r.id === 'shell.navWidth')
+        if (nw && typeof nw.value === 'number') setNavWidth(nw.value)
         const p = rows.find((r) => r.id === 'shell.inspectorPinned')
         if (p && typeof p.value === 'boolean') setInspectorPinned(p.value)
       })
@@ -3095,6 +3101,29 @@ export function Canvas({
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   }, [inspectorWidth])
+  // M279. The navigator's handle: on its RIGHT edge, so dragging right widens.
+  const onNavResizeDown = useCallback((event: ReactMouseEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    const shell = shellRef.current
+    if (shell === null) return
+    const startX = event.clientX
+    const startWidth = navWidth
+    const min = 300, max = 480
+    const onMove = (e: globalThis.MouseEvent): void => {
+      const next = Math.min(max, Math.max(min, startWidth + (e.clientX - startX)))
+      shell.style.setProperty('--shell-nav-w', `${next}px`)
+    }
+    const onUp = (e: globalThis.MouseEvent): void => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      const next = Math.min(max, Math.max(min, startWidth + (e.clientX - startX)))
+      setNavWidth(next)
+      void window.canvas.settings.set('shell.navWidth', next)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [navWidth])
   const onToggleInspectorPinned = useCallback((): void => {
     setInspectorPinned((v) => { const next = !v; void window.canvas.settings.set('shell.inspectorPinned', next); return next })
   }, [])
@@ -6948,7 +6977,11 @@ export function Canvas({
       // Also withheld while the pane is hidden outside Compact, for the same
       // reason: set there, it beat `.shell--inspector-collapsed`'s zero, so
       // the Context pane toggle (⇧⌘\) flipped the class and the column stayed.
-      style={((chrome.bp !== 'compact' && chrome.ctxVisible) || (chrome.bp === 'compact' && inspectorPinned)) ? ({ '--shell-ctx-w': `${inspectorWidth}px` } as CSSProperties) : undefined}
+      style={{
+        ...(((chrome.bp !== 'compact' && chrome.ctxVisible) || (chrome.bp === 'compact' && inspectorPinned)) ? { '--shell-ctx-w': `${inspectorWidth}px` } : {}),
+        // M279. The navigator's width, by the same rule: only while it is a resident column.
+        ...((chrome.bp !== 'compact' && chrome.navVisible) ? { '--shell-nav-w': `${navWidth}px` } : {})
+      } as CSSProperties}
       data-bp={chrome.bp}
       onMouseDownCapture={(event) => {
         onMouseDownCapture(event)
@@ -7013,8 +7046,12 @@ export function Canvas({
         onToggleInspectorPinned={onToggleInspectorPinned}
         centerView={chrome.centerView}
         onSetCenterView={chrome.setCenterView}
+        running={inspectorSummary.running}
+        waiting={inspectorSummary.waiting}
+        onJumpWaiting={jumpToWaiting}
       />
       <Navigator
+        onResizeHandleDown={onNavResizeDown}
         hints={hintsLoaded ? contextualHint(hintsSeen, attemptedHint) : []}
         board={boardPaneProps}
         runs={railRuns}

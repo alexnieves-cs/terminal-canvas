@@ -3,7 +3,8 @@ import type { PresetRow } from '../palette/commands'
 import type { CenterView } from './useShellChrome'
 import { shellControl } from './shell-control'
 import { Check, ChevronDown, Lanes, PanelRight, Pin, ProductMark, Search } from '@renderer/icons'
-import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem } from '@renderer/primitives'
+import { Menu, MenuTrigger, MenuContent, MenuCheckboxItem, MenuRadioGroup, MenuRadioItem, SegmentedControl } from '@renderer/primitives'
+import { LiveStatus } from './LiveStatus'
 
 export interface TopBarProps {
   presets: PresetRow[]
@@ -28,6 +29,10 @@ export interface TopBarProps {
   /** M268. Center page: canvas or orchestration. */
   centerView: CenterView
   onSetCenterView: (view: CenterView) => void
+  /** M279. The live status cluster: agents working and waiting, from the inspector's summary. */
+  running: number
+  waiting: number
+  onJumpWaiting: () => void
 }
 
 
@@ -51,7 +56,7 @@ export interface TopBarProps {
 export function TopBar({
   presets, onOpenSheet, onSearch, merged, onToggleMerged, contextOpen, onToggleContext,
   workspaceName, taskName, theme, onSetTheme, inspectorPinned, onToggleInspectorPinned,
-  centerView, onSetCenterView
+  centerView, onSetCenterView, running, waiting, onJumpWaiting
 }: TopBarProps): JSX.Element {
   // The default preset if it can actually run, otherwise the first that can.
   // Availability matters here for the same reason it does in the palette: an
@@ -77,21 +82,19 @@ export function TopBar({
       */}
       <span className="shell__mark" aria-hidden="true"><ProductMark /><span>canvas</span></span>
 
-      {/* M268. Center-page swap: reachable without opening dock labels. */}
-      <div className="shell__center-toggle" role="group" aria-label="Center view">
-        <button
-          type="button"
-          className={`shell__center-btn${centerView === 'canvas' ? ' shell__center-btn--on' : ''}`}
-          aria-pressed={centerView === 'canvas'}
-          {...shellControl(() => onSetCenterView('canvas'))}
-        >Canvas</button>
-        <button
-          type="button"
-          className={`shell__center-btn${centerView === 'orchestration' ? ' shell__center-btn--on' : ''}`}
-          aria-pressed={centerView === 'orchestration'}
-          {...shellControl(() => onSetCenterView('orchestration'))}
-        >Orchestrate</button>
-      </div>
+      {/* M268. Center-page swap: reachable without opening dock labels.
+          M279: the segmented primitive; `.shell__center-toggle` / `.shell__center-btn`
+          stay on the elements as the bar's own hooks. */}
+      <SegmentedControl<CenterView>
+        className="shell__center-toggle"
+        label="Center view"
+        value={centerView}
+        onChange={onSetCenterView}
+        options={[
+          { id: 'canvas', label: 'Canvas', className: 'shell__center-btn' },
+          { id: 'orchestration', label: 'Orchestrate', className: 'shell__center-btn' }
+        ]}
+      />
 
       <button
         type="button"
@@ -109,6 +112,10 @@ export function TopBar({
         <span>{merged ? 'All workspaces' : (workspaceName ?? 'Workspace')}</span>
         {taskName !== undefined && <><span className="shell__breadcrumb-separator">/</span><span className="shell__task">{taskName}</span></>}
       </div>
+
+      {/* M279. What the agents are doing, before the search: the one fact a
+          person returning to the window wants first. Nothing at rest. */}
+      <LiveStatus running={running} waiting={waiting} onJumpWaiting={onJumpWaiting} />
 
       <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
         {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
