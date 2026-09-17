@@ -192,10 +192,7 @@ function InspectorImpl({
         ? <>
             <div className="shell__region-title">Canvas</div>
             <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
-            <InspectorEmpty summary={summary} />
-            {/* M279. With nothing selected, the whole canvas's feed — each row jumps to its panel. */}
-            <div className="shell__region-title">Activity</div>
-            <InspectorActivity panelId={null} onGoToPanel={onGoToPanel} />
+            <InspectorEmpty summary={summary} onGoToPanel={onGoToPanel} />
           </>
         : <InspectorPanel
             templateOf={templateOf}
@@ -379,7 +376,7 @@ function AutomationList({
  * by looking at the canvas once it is larger than the viewport, and M8d's
  * cross-workspace counts land here rather than needing a new surface.
  */
-function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element {
+function InspectorEmpty({ summary, onGoToPanel }: { summary: InspectorSummary; onGoToPanel?: (id: string) => void }): JSX.Element {
   const gauge = formatRateLimitGauge(summary.rateLimit ?? { kind: 'none' })
   return (
     <div className="inspector__body" data-inspector-summary>
@@ -465,6 +462,11 @@ function InspectorEmpty({ summary }: { summary: InspectorSummary }): JSX.Element
           rejected (the line above names either), and absent when nothing
           closed, where a row of seven zeroes is a picture of nothing. */}
       {summary.usageSeries != null && <UsageChart series={summary.usageSeries} />}
+      {/* M279. With nothing selected, the whole canvas's feed — each row jumps
+          to its panel. INSIDE the scrolling body, after the figures: as a
+          sibling it took the column's height and clipped the summary above it. */}
+      <div className="shell__region-title inspector__activity-title">Activity</div>
+      <InspectorActivity panelId={null} onGoToPanel={onGoToPanel} />
     </div>
   )
 }

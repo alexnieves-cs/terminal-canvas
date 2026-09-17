@@ -1652,6 +1652,8 @@ body {
    and one line of detail — deep detail's own shape (inspector only). */
 .activity { list-style: none; margin: 0; padding: var(--sp-2) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); }
 .activity--empty { padding: var(--sp-4) var(--sp-3); }
+/* The canvas-wide feed's title sits inside the summary body, so it pays no side inset of its own. */
+.inspector__activity-title { padding-inline: 0; }
 .activity-row__main {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;
