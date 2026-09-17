@@ -122,9 +122,22 @@ function compare(golden, fresh) {
 }
 
 let shotChild = null // held so the watchdog can kill it: an orphaned child keeps the build and its fixture HOME alive
+/**
+ * `detached: true` is what makes the watchdog's kill REACH the harness, and its
+ * absence failed silently for as long as the watchdog has existed.
+ *
+ * The chain is verify-visual -> npm -> Electron. Without a group of its own the
+ * watchdog's signal lands on NPM, which dies obediently and leaves the Electron
+ * grandchild orphaned; measured once, that orphan was still holding its fixture
+ * HOME and a GPU process ten minutes after the suite had printed FAIL and
+ * exited, and it ignored a SIGTERM aimed at it directly. Detaching puts the
+ * whole chain in one process group, so `process.kill(-pid)` takes all of it;
+ * SIGKILL rather than SIGTERM because a hung Electron main has already shown it
+ * will not honour the polite one.
+ */
 function runShot(dir) {
   return new Promise((resolve) => {
-    const child = spawn('npm', ['run', 'shot'], { cwd: ROOT, env: { ...process.env, SHOT_DIR: dir, ELECTRON_RUN_AS_NODE: undefined }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('npm', ['run', 'shot'], { cwd: ROOT, env: { ...process.env, SHOT_DIR: dir, ELECTRON_RUN_AS_NODE: undefined }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
     shotChild = child
     let out = ''
     child.stdout.on('data', (d) => { out += String(d) })
@@ -141,7 +154,8 @@ const SCRIPT_NAME = 'verify-visual.cjs'
 app.whenReady().then(async () => {
   const watchdog = setTimeout(() => {
     console.error(`\nFAIL  watchdog — run did not finish within ${WATCHDOG_MS}ms`)
-    try { shotChild?.kill('SIGTERM') } catch { /* already gone */ }
+    // The whole group, not the npm wrapper — see runShot's header.
+    try { if (shotChild?.pid) process.kill(-shotChild.pid, 'SIGKILL') } catch { /* already gone */ }
     app.exit(1)
   }, WATCHDOG_MS)
   // The goldens are one machine's captures at a device scale factor of 2,

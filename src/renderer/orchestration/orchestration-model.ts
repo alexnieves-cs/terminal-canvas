@@ -862,3 +862,31 @@ export function orchMachineReadout(input: {
 }
 
 export const ORCH_GRAPH_SIZE = { w: GRAPH_W, h: GRAPH_H } as const
+
+/**
+ * The bottom strip's Code card: the selected file when the selection IS a file, else the first
+ * file panel. Never a guess at "recent" — the model has no edit times, and inventing an order
+ * would read as a fact.
+ */
+export function orchBestFile(files: readonly OrchFileRow[], selectedId: string | null): OrchFileRow | null {
+  return files.find((f) => f.id === selectedId) ?? files[0] ?? null
+}
+
+/**
+ * A chat's phase, as one word and at most one name. The input is deliberately
+ * structural and carries NO `text`: a thinking block's contents cannot reach the
+ * HUD through a function that was never handed them. `live` separates a tool that
+ * is running from one that merely ran last — the same block reads "Using" in one
+ * and "Last tool" in the other, and saying "Using" about a finished turn is the
+ * decorative fiction this row exists to avoid. `idle` means the caller shows the
+ * last turn's tail (scrubbed by outward() at the call site), or nothing.
+ */
+export type OrchPhase = { kind: 'thinking' | 'using' | 'last-tool'; label: string } | { kind: 'idle'; label: '' }
+export function orchPhase(blocks: readonly { type: string; name?: string }[], live: boolean): OrchPhase {
+  const latest = [...blocks].reverse().find((b) => b.type === 'thinking' || b.type === 'tool_use' || b.type === 'text')
+  if (live && latest?.type === 'thinking') return { kind: 'thinking', label: 'Thinking…' }
+  if (latest?.type === 'tool_use' && latest.name) {
+    return live ? { kind: 'using', label: `Using · ${latest.name}` } : { kind: 'last-tool', label: `Last tool: ${latest.name}` }
+  }
+  return { kind: 'idle', label: '' }
+}

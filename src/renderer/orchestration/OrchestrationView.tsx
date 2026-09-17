@@ -69,7 +69,9 @@ import {
   type OrchMode,
   type OrchPanelInput,
   type OrchRosterFilter,
-  type OrchRosterRow
+  type OrchRosterRow,
+  orchBestFile,
+  orchPhase
 } from './orchestration-model'
 import {
   orchActivityEvents,
@@ -246,7 +248,13 @@ function NodePlate({ node, synthetic, overflow, x, y }: { node: OrchGraphNode; s
   const name = node.title.length > PLATE_MAX_CHARS ? `${node.title.slice(0, PLATE_MAX_CHARS - 1).trimEnd()}…` : node.title
   const role = node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : overflow ? 'Other' : node.kind
   // A placeholder has no process, so it has no state to say: the role stands alone.
-  const sub = synthetic ? role : `${stateWord(node)} · ${role}`
+  //
+  // M280: an ordinary satellite's plate says its STATE and nothing else — the
+  // card beside it carries the kind, and the two sat eight pixels apart saying
+  // the same word twice. The hub and the `+N more` node keep their role, because
+  // theirs is not a kind: "Workspace hub", "Orchestrator" and "Other" name a
+  // position in the ring that no card repeats and `node.kind` cannot express.
+  const sub = synthetic ? role : node.hub || overflow ? `${stateWord(node)} · ${role}` : stateWord(node)
   const w = Math.max(92, Math.min(176, Math.max(name.length * 6.7, sub.length * 5.6) + 40))
   return (
     <g className="orch__plate" transform={`translate(${x - w / 2}, ${y})`} aria-hidden="true">
@@ -297,6 +305,15 @@ function IsoCube(props: {
   return (
     <g
       className={`orch__cube${skin}`}
+      // The panel this cube stands for. The shot harness needs to address one
+      // cube by panel to drive it into a state (an all-idle fixture cannot show
+      // a lit ring), and every other DOM hook on this element — data-lit,
+      // data-depth, data-expanded — is already spelled this way.
+      data-node={node.id}
+      // The cube's ROLE. The harness seeds by kind so a lit ring contains more
+      // than one role — a scene in which every working cube is a terminal cannot
+      // show that brightness preserves hue, whatever the shader does.
+      data-kind={node.kind}
       transform={`translate(${node.x}, ${node.y})`}
       style={{ cursor: synthetic && !overflow ? 'default' : 'pointer' }}
       data-tone={tone}
@@ -349,8 +366,35 @@ function outwardTail(panelId: string, isChat: boolean, terminalLine: string): st
   return lines[lines.length - 1] ?? ''
 }
 
+/**
+ * A callout card's box. ONE definition because two readers must agree on it:
+ * the card's own <foreignObject>, and the collision placer that decides where
+ * the card may sit. They were the same two literals written out twice, so the
+ * kind line (M280) grew the card in one of them and the ring silently began
+ * overlapping cards on the crowded side — a layout bug, not a type error.
+ * Collapsed holds a tile beside three lines: name, kind, one state word.
+ */
+export const CALLOUT_H = { rest: 94, expanded: 172 } as const
+export const calloutHeight = (expanded: boolean): number => (expanded ? CALLOUT_H.expanded : CALLOUT_H.rest)
+
 /** How far below the cube centre a flipped card's anchor sits — under the name plate, whose own geometry decides it. */
 const calloutBelow = (size: number): number => size * PLATE_DROP_K + PLATE_H + 2
+
+/** Read only the selected conversation; never expose thinking contents in the HUD. */
+function SelectedChatPhase({ panelId }: { panelId: string }): JSX.Element | null {
+  const chat = useChat(panelId)
+  const liveBlocks = chat.live?.blocks ?? []
+  const turns = chat.turns.filter((turn) => turn.role === 'assistant')
+  const blocks = chat.live ? liveBlocks.map((entry) => entry.block) : turns[turns.length - 1]?.blocks ?? []
+  const liveText = liveBlocks[liveBlocks.length - 1]?.text ?? ''
+  const tail = chat.live
+    ? outward(liveText, `panel ${panelId}`).text.split('\n').map((line) => line.trim()).filter(Boolean).pop() ?? ''
+    : outwardTail(panelId, true, '')
+  // A tool name is the agent's text too, so the label crosses the gate like the tail.
+  const found = orchPhase(blocks, Boolean(chat.live))
+  const phase = found.kind === 'idle' ? tail : outward(found.label, `panel ${panelId}`).text
+  return phase ? <span className="orch__phase" data-phase={found.kind} title={phase}>{phase}</span> : null
+}
 
 /** Cards share the projected cube anchor but never inherit its face rotation. */
 function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
@@ -371,7 +415,11 @@ function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSele
   const live = useLiveSession(node.id)
   const blocks = [...chat.turns.flatMap((t) => t.blocks), ...(chat.live?.blocks.map((b) => b.block) ?? [])]
   const tool = blocks.reverse().find((b) => b.type === 'tool_use')
-  const work = live?.currentCommand || (tool?.type === 'tool_use' ? tool.name : undefined) || task
+  // A LIVE chat's work line is its phase (Thinking… / Using · tool); a terminal has
+  // no thinking channel, so it keeps its command. Same row — CALLOUT_H does not move.
+  const livePhase = chat.live ? orchPhase(chat.live.blocks.map((b) => b.block), true) : null
+  const work = live?.currentCommand || (livePhase && livePhase.kind !== 'idle' ? outward(livePhase.label, `panel ${node.id}`).text : undefined)
+    || (tool?.type === 'tool_use' ? tool.name : undefined) || task
   const cwd = live?.cwd || chat.snapshot?.cwd
   const cost = chat.snapshot?.costUsd ?? chat.meta?.costUsd
   const lastLine = useLastLine(node.id)
@@ -381,7 +429,7 @@ function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSele
   const tail = expanded ? outwardTail(node.id, chat.turns.length > 0 || chat.live !== undefined && chat.live !== null, lastLine.line) : ''
   const needs = node.state === 'wants-you'
   const ask = (chat.snapshot?.pending.length ?? 0) > 0 ? 'Waiting on approval' : needs ? 'Needs input' : undefined
-  const height = expanded ? 154 : 76
+  const height = calloutHeight(expanded)
   const width = needs ? 218 : 184
   // Far cards shrink a little (never grow, so the collision pass stays honest).
   const s = band === 'far' ? 0.92 : band === 'mid' ? 0.96 : 1
@@ -395,7 +443,20 @@ function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSele
       <div className="orch__callout-slot" data-below={below || undefined}><div className="orch__callout-card" data-needs={needs || undefined} data-expanded={expanded || undefined}
         onClick={(e) => onCard(e, () => onSelect(node.id))} onDoubleClick={(e) => onCard(e, () => onJump(node.id))}>
         {ask && <strong className="orch__callout-ask">{ask}</strong>}
-        <strong title={node.title}>{node.title}</strong>
+        <div className="orch__callout-head">
+          {/* The kind's glyph in a role-tinted tile, as the plate under the cube
+              wears it — the card and the plate name the same panel, so they
+              should not disagree about what it looks like. */}
+          <span className="orch__callout-tile" aria-hidden="true">{kindGlyphSized(node.kind, 13)}</span>
+          <div className="orch__callout-names">
+            <strong title={node.title}>{node.title}</strong>
+            {/* Name, kind, one state — the rest layer's three facts, on three
+                lines instead of crushed onto one. `kind` is a real field; the
+                reference's role blurbs ("Web & Docs") have no source here and
+                are not invented to fill the line. */}
+            <span className="orch__callout-kind">{node.kind}</span>
+          </div>
+        </div>
         {!ask && <span>{stateWord(node)}</span>}
         {work && <span className="orch__callout-work" title={work}>{work}</span>}
         <div className="orch__callout-detail">
@@ -540,13 +601,31 @@ function GraphBoard(props: {
     Math.max(0, Math.min(a.x + a.w + pad, b.x + b.w) - Math.max(a.x - pad, b.x)) * Math.max(0, Math.min(a.y + a.h + pad, b.y + b.h) - Math.max(a.y - pad, b.y))
   for (const n of [...calloutNodes].sort((a, b) => Number(expanded(b.id)) - Number(expanded(a.id)))) {
     const w = n.state === 'wants-you' ? 218 : 184
-    const h = expanded(n.id) ? 154 : 76
-    const flip = n.y - n.size - h - 22 < 8
-    // Below clears the cube's name plate, mirroring the 22px stem above.
-    const y = flip ? n.y + calloutBelow(n.size) + 22 : n.y - n.size - h - 22
-    if (flip) below.add(n.id)
+    const h = calloutHeight(expanded(n.id))
     const others = footprints.filter((f) => f.id !== n.id)
-    const candidates = [0, ...[...occupied, ...others].flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16].map((dx) => {
+    // ABOVE and BELOW are both CANDIDATES, not a decision taken before the search.
+    // This was a one-dimensional search on a two-dimensional board: y was fixed
+    // first (above, or below only when above did not fit on the stage) and only x
+    // was ever swept. On a twelve-node ring that is the whole reason the weights
+    // above had to choose what was "least harmful to hide" — the placer was
+    // picking the best seat in one row while the free seat sat in the other. Below
+    // clears the cube's name plate, mirroring the 22px stem above; a row that runs
+    // off the stage is dropped rather than clamped, because a clamped row silently
+    // re-enters the search as a DIFFERENT box from the one its cost was computed
+    // for. If neither row fits, the old clamp is the fallback.
+    const rows = [n.y - n.size - h - 22, n.y + calloutBelow(n.size) + 22]
+      .filter((y) => y >= 8 && y + h <= ORCH_GRAPH_SIZE.h - 8)
+    if (rows.length === 0) rows.push(Math.max(8, Math.min(ORCH_GRAPH_SIZE.h - h - 8, n.y - n.size - h - 22)))
+    // The candidate set is every gap EDGE plus a coarse sweep of the board. Edges
+    // alone were enough while a card was two lines tall; at three (M280's kind
+    // line) a crowded arc can have no edge-derived slot that clears its
+    // neighbours, and the placer then had to pick the least-bad overlap from a
+    // set that never contained the free spot 30px further along. The sweep is
+    // 24px, which is finer than the 12px gap the edge candidates already leave.
+    const sweep = []
+    for (let x = 8; x <= ORCH_GRAPH_SIZE.w - w - 8; x += 24) sweep.push(x + w / 2 - n.x)
+    const drifts = [0, ...[...occupied, ...others].flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16, ...sweep]
+    const candidates = rows.flatMap((y) => drifts.map((dx) => {
       const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
       const box = { x, y, w, h }
       // Another CARD is never acceptable to cover (its verbs are under it), so it
@@ -556,11 +635,15 @@ function GraphBoard(props: {
       // card went to the far side of the ring, its stem crossing three spokes — a
       // card a long way from its cube reads as somebody else's. 60 px² per px of
       // drift; 20 was measured too weak (the far side still won on area).
-      const distance = Math.abs(x + w / 2 - n.x)
+      // Now that y is searched too, the measure is the distance from the CUBE to
+      // the card's centre, so the two rows compete on the same terms — a straight
+      // horizontal comparison would have made every card below free.
+      const distance = Math.hypot(x + w / 2 - n.x, y + h / 2 - n.y)
       return { x, y, w, h, overlap: overlap + distance * 60, distance }
-    }).sort((a, b) => a.overlap - b.overlap || a.distance - b.distance)
+    })).sort((a, b) => a.overlap - b.overlap || a.distance - b.distance)
     const placed = candidates[0]
     occupied.push(placed)
+    if (placed.y > n.y) below.add(n.id)
     offsets.set(n.id, placed.x + w / 2 - n.x)
   }
 
@@ -961,7 +1044,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     ? selectedRow.id
     : liveSnap.terminalSnippet?.panelId ?? null
   const outputKind = selectedRow?.kind ?? (liveSnap.terminalSnippet ? 'terminal' : undefined)
-  const outputLines = useOrchOutput(outputPanelId, outputKind, tab === 'terminal')
+  // Always pulled now: the bottom strip's Terminal card shows the same tail the Logs tab does.
+  const outputLines = useOrchOutput(outputPanelId, outputKind, true)
+  const codeFile = orchBestFile(visibleFiles, selectedId)
 
   const stageItems = useMemo(
     () => filterWorkItems(workItems.map((w) => ({
@@ -1415,6 +1500,10 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               >
                 <span className="orch__float-title">{liveSnap.task.title}</span>
                 <span className="orch__float-state">{liveSnap.task.state}</span>
+                {/* Stage position, not an estimate of work completed. */}
+                <span className="orch__task-fill" aria-hidden="true">
+                  <span style={{ width: `${liveSnap.task.stepIndex / (WORK_ITEM_STATES.length - 1) * 100}%` }} />
+                </span>
                 <div className="orch__steps" aria-hidden="true">
                   {WORK_ITEM_STATES.map((s, i) => (
                     <span
@@ -1503,22 +1592,83 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               )}
             </div>
 
-            <div className="orch__selected" aria-label="Selected agent">
-              <div className="orch__section-title">Selected</div>
-              {selectedRow === null ? (
+            {/* Jump cards (M282): previews that JUMP, never an embedded xterm or Monaco — a second
+                xterm here would refit and SIGWINCH the running agent, and file:read re-arms a watch. */}
+            <div className="orch__jump orch__selected" aria-label="Terminal">
+              <div className="orch__section-title">Terminal</div>
+              {outputPanelId === null ? (
                 <EmptyState id="orch-selected" />
               ) : (
-                <div className="orch__selected-body">
-                  <span className="orch__selected-title">{selectedRow.title}</span>
-                  <span className="orch__roster-state" data-tone={selectedRow.tone}>{stateWord(selectedRow)}</span>
-                  {selectedCost !== undefined ? (
-                    <span className="orch__perf-value">{formatCpu(selectedCost.cpuPercent)} · {formatMemory(selectedCost.memoryBytes)}</span>
-                  ) : (
-                    <span className="orch__caption">No process sample for this panel yet</span>
-                  )}
+                <button
+                  type="button"
+                  className="orch__jump-card"
+                  title="Double-click to jump to the panel"
+                  {...shellControl(() => { select(outputPanelId); setTab('terminal') })}
+                  onDoubleClick={() => jump(outputPanelId)}
+                >
+                  <span className="orch__jump-head">
+                    <span className="orch__selected-title">{selectedRow?.title ?? liveSnap.terminalSnippet?.title}</span>
+                    {selectedRow !== null && <span className="orch__roster-state" data-tone={selectedRow.tone}>{stateWord(selectedRow)}</span>}
+                  </span>
+                  {selectedRow?.kind === 'chat' && <SelectedChatPhase panelId={selectedRow.id} />}
                   {outputCommand !== undefined && outputCommand !== '' && <code className="orch__float-code">{outputCommand}</code>}
-                  {outputCwd !== undefined && <span className="orch__caption" title={outputCwd}>{displayPath(outputCwd).short}</span>}
-                </div>
+                  <pre className="orch__jump-log" aria-label="Scrollback tail">
+                    {outputLines.length === 0 ? 'No recorded output yet.' : outputLines.slice(-6).join('\n')}
+                  </pre>
+                  <span className="orch__caption">
+                    {selectedCost !== undefined ? `${formatCpu(selectedCost.cpuPercent)} · ${formatMemory(selectedCost.memoryBytes)}` : ''}
+                    {outputCwd !== undefined ? `${selectedCost !== undefined ? ' · ' : ''}${displayPath(outputCwd).short}` : ''}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            <div className="orch__jump" aria-label="Code">
+              <div className="orch__section-title">Code</div>
+              {codeFile === null ? (
+                <EmptyState id="orch-files" onVerb={onShowCanvas} />
+              ) : (
+                <button
+                  type="button"
+                  className="orch__jump-card"
+                  title={displayPath(codeFile.path).full}
+                  {...shellControl(() => { select(codeFile.id); jump(codeFile.id) })}
+                >
+                  <span className="orch__jump-head">
+                    <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
+                    <span className="orch__selected-title">{codeFile.title}</span>
+                  </span>
+                  <code className="orch__float-code">{displayPath(codeFile.path).short}</code>
+                  <span className="orch__task-jump">Open in its panel</span>
+                </button>
+              )}
+            </div>
+
+            <div className="orch__jump" aria-label="Files">
+              <div className="orch__section-title">Files</div>
+              {visibleFiles.length === 0 ? (
+                <EmptyState id="orch-files" onVerb={onShowCanvas} />
+              ) : (
+                <>
+                  <ul className="orch__jump-list">
+                    {visibleFiles.slice(0, 5).map((f) => (
+                      <li key={f.id}>
+                        <button
+                          type="button"
+                          className={`orch__jump-row${selectedId === f.id ? ' orch__jump-row--on' : ''}`}
+                          title={displayPath(f.path).full}
+                          {...shellControl(() => select(f.id))}
+                          onDoubleClick={() => jump(f.id)}
+                        >
+                          <KindFile /><span>{f.title}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {onOpenFiles !== undefined && (
+                    <button type="button" className="orch__mini" {...shellControl(() => onOpenFiles())}>Open files</button>
+                  )}
+                </>
               )}
             </div>
           </div>

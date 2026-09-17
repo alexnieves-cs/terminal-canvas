@@ -693,7 +693,7 @@ const SCENES = [
       await k.js(`(() => { const b = document.querySelector('[data-annotate-done]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
       await sleep(200)
     } },
-  { name: 'orchestration', intent: 'M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter\'s order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
+  { name: 'orchestration', intent: 'M271/M274/M275, cubes on an R3F island since the diorama R3F pass. The Orchestration HUD as a diorama over the fixture canvas: glass metrics, real-lit WebGL agent cubes (a shared light rig and shadow-catching ground, one stage tilt) standing on an elliptical ground plane, the hub painted behind the near satellites (a real depth buffer, not painter\'s order), upright callout cards anchored to their cubes, hub spokes quieter than authored links, pipeline stages from the board, the activity ring. The task frame is lifted (Show all) and one back-of-ring satellite is selected: the unselected cubes dim yet stay solid, and its expanded card hangs BELOW it, painted over the hub. Disclosed: the clock values and greeting are hidden, because they change every run, and so are the System card\'s CPU/Memory numbers and their two sparklines — those are a REAL sample of this machine\'s process table, so they differ between two runs a minute apart (measured 2 MB against 1 MB), and the memory tile is the one that failed the dark golden\'s tile budget at 81%. The cards, labels and geometry are unmasked; only the live values are. Captured under prefers-reduced-motion so every cube is at rest (no bob, breath or shimmer) — the static depth, tone colours and callouts are exactly what a reduced-motion person sees. The canvas host stays mounted behind it. No invented CI branding.', size: [1440, 900],
     run: async (k) => {
       // Sized so the capture never inherits the previous scene's window (a golden
       // at 865 against an 868 capture was this scene's standing red), and stilled
@@ -717,7 +717,7 @@ const SCENES = [
         // The one thing hidden: the wall clock, the view-open timer and the
         // time-of-day greeting change every run (a changed word is a red tile), so
         // they keep their boxes but paint nothing. verify:orchestration owns their words.
-        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
         await sleep(600)
         await k.shot('orchestration')
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
@@ -725,12 +725,12 @@ const SCENES = [
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },
-  { name: 'orchestration-dark', intent: 'Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks masked and reduced motion enabled.', size: [1440, 900],
+  { name: 'orchestration-dark', intent: 'Command deck in dark mode: blue-black ground, glass cubes, role-tinted platforms, mono labels and separate state dots. Same selection as the light scene; clocks, greeting and the live machine readouts masked (see the light scene\'s disclosure) and reduced motion enabled.', size: [1440, 900],
     run: async (k) => {
       await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
       try {
         await k.theme('dark')
-        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
         await sleep(600)
         await k.shot('orchestration-dark')
       } finally {
@@ -746,6 +746,68 @@ const SCENES = [
         await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
         for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
         if (await k.js(`!!document.querySelector('.orch__graph-wrap')`)) throw new Error('orchestration-dark: the Orchestrate page is still open, so every later scene would capture it')
+        await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
+      }
+    } },
+  { name: 'orchestration-working', intent: 'M280. The ring with work ACTUALLY RUNNING, which is the state the rest of the diorama is designed for and the one no other scene shows: three agents busy and one waiting on a person, so the bloom tiers, the role-coloured halos and the ground pools under lit nodes are all in frame at once. The companion to `orchestration-dark`, which is the same ring with everything idle — that scene pins that idle does NOT bloom (a dark floor and unlit slabs), this one pins that working does. DISCLOSED, and the only thing faked: the fixture spawns no real agent, so the harness sends the same `agent:state` transitions main would have sent for four of the fixture\'s own panels, addressed by the `data-node` each cube carries; every pixel after that is the real model, the real material and the real composer. Dark theme and reduced motion, so a mid-bob cube cannot move a tile between runs; clocks, greeting and the live machine readouts masked as in the pair above.', size: [1440, 900],
+    run: async (k) => {
+      // RUNS LAST of the three, and opens the page itself rather than
+      // inheriting it. Sequenced between `orchestration` and its dark twin, the
+      // seeded transitions landed in the canvas-wide ACTIVITY FEED, which is a
+      // real event ring — so the next scene's golden gained two rows it did not
+      // ask for. Restoring the tone puts the state back but never the history;
+      // the only way to leave a neighbour untouched is to run after it.
+      await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+      const seeded = []
+      try {
+        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`)); i++) await sleep(100)
+        if (!(await k.js(`!!document.querySelector('.orch__cube-canvas canvas')`))) throw new Error('orchestration-working: no 3D cube painted')
+        await k.theme('dark')
+        await k.js(`(() => { const b = [...document.querySelectorAll('.orch__roster .orch__mini')].find((x) => x.textContent.trim() === 'Show all'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+        await sleep(300)
+        // A ROLE MIX, not the first four cubes in the ring. Taking them in order
+        // lit four TERMINALS, and a scene in which every working cube is the same
+        // role cannot show that brightness preserves hue — the lit cubes were
+        // being compared against UNLIT cubes of other roles, which tests
+        // brightness, not colour. So: one cube of each kind available, chats
+        // first because a chat panel is agentic and therefore also moves the
+        // ACTIVE AGENTS tile, which otherwise reads 1 beside four lit cubes.
+        const ids = await k.js(`(() => {
+          const cubes = [...document.querySelectorAll('.orch__cube:not(.orch__cube--hub):not(.orch__cube--overflow):not(.orch__cube--synthetic)')]
+            .map((c) => ({ id: c.dataset.node, kind: c.dataset.kind })).filter((c) => c.id)
+          const byKind = new Map()
+          for (const c of cubes) if (!byKind.has(c.kind)) byKind.set(c.kind, c)
+          // One per kind, then top up from whatever is left so the ring is busy.
+          const picked = [...byKind.values()]
+          for (const c of cubes) if (picked.length < 4 && !picked.includes(c)) picked.push(c)
+          return picked.slice(0, 4).map((c) => c.id + '::' + c.kind)
+        })()`)
+        if (!Array.isArray(ids) || ids.length < 3) throw new Error(`orchestration-working: expected at least 3 addressable cubes, got ${JSON.stringify(ids)}`)
+        const kinds = ids.map((x) => String(x).split('::')[1])
+        if (new Set(kinds).size < 2) throw new Error(`orchestration-working: every seeded cube is a ${kinds[0]} — this scene exists to show role beside role under the same brightness, so one role cannot carry it`)
+        // Busy on all but the last, wants-you on the last: the two tiers that
+        // clear the bloom threshold, so a regression in either is one changed tile.
+        const states = ids.map((_, i) => (i === ids.length - 1 ? 'wants-you' : 'busy'))
+        for (let i = 0; i < ids.length; i++) {
+          const panelId = String(ids[i]).split('::')[0]
+          k.wc.send('agent:state', { panelId, state: states[i] })
+          seeded.push(panelId)
+        }
+        for (let i = 0; i < 20 && !(await k.js(`!!document.querySelector('.orch__cube--busy')`)); i++) await sleep(100)
+        if (!(await k.js(`!!document.querySelector('.orch__cube--busy')`))) throw new Error('orchestration-working: no cube took the busy tone, so the lit ring this scene exists to show is not in the frame')
+        await k.js(`(() => { const s = document.createElement('style'); s.id = 'shot-orch-mask'; s.textContent = '.orch__clock-value, .orch__greeting, .orch__perf-value, .orch__perf-card svg { visibility: hidden !important; }'; document.head.appendChild(s); return true })()`)
+        await sleep(700)
+        await k.shot('orchestration-working')
+      } finally {
+        for (const id of seeded) k.wc.send('agent:state', { panelId: id, state: 'idle' })
+        await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
+        await k.theme('light')
+        // Same close-and-assert the dark scene uses: leaving this page open made
+        // every later scene a picture of the Orchestrate HUD once already.
+        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
+        if (await k.js(`!!document.querySelector('.orch__graph-wrap')`)) throw new Error('orchestration-working: the Orchestrate page is still open, so every later scene would capture it')
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },

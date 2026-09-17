@@ -18,6 +18,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { ORCH_STAGE_TILT_DEG, orchFitViewbox, type OrchFit } from './orchestration-depth'
 import { orchCubeMotion, type OrchCubeTone } from './orchestration-cube-motion'
+import { OrchestrationBloom } from './orchestration-bloom'
 
 export interface OrchCubeSpec {
   id: string
@@ -123,15 +124,29 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   // translucent coloured box read as tinted jelly on the navy ground (olive, for
   // the terminals). How brightly it is lit is the agent's real tone — working
   // burns, needs-you holds warm, idle is a pilot light, exited is dark.
-  const restEmissive = node.synthetic ? 0.04 : node.tone === 'exited' ? 0.02 : node.tone === 'needs-you' ? 0.5 : node.tone === TONE_WORKING ? 0.5 : node.hub ? 0.36 : 0.24
+  // The tiers now STRADDLE orchestration-bloom's luminance threshold (0.62),
+  // which is what turns tone into light rather than tint: working and needs-you
+  // clear it and bloom, the hub sits just over it, idle stays a pilot light
+  // UNDER it, and exited is dark. The ordering is the one this scene always
+  // had — working burns, needs-you holds warm, idle glows, exited is out — it
+  // is just spread across the threshold now instead of bunched below it.
+  // Raising these without the composer mounted would only wash the faces out.
+  const restEmissive = node.synthetic ? 0.06 : node.tone === 'exited' ? 0.02 : node.tone === 'needs-you' ? 1.45 : node.tone === TONE_WORKING ? 1.4 : node.hub ? 1.05 : 0.3
   const edgeOpacity = node.synthetic ? 0.35 : node.tone === 'exited' ? 0.3 : node.tone === 'idle' || node.tone === 'starting' ? 0.9 : 1
   const half = (node.size * fit.scale) / 2
-  const outline = useMemo(() => {
-    const box = new THREE.BoxGeometry(half * 2, half * 2, half * 2)
-    const edges = new THREE.EdgesGeometry(box)
-    box.dispose()
-    return edges
-  }, [half])
+  // The hub is a faceted crystal, every satellite a slab: the centre of the ring
+  // should not be "another cube, slightly bigger". The radius is half * 1.2 so
+  // the crystal carries the same visual mass as a cube of half-extent `half`
+  // (a cube's corners reach half * 1.73, an icosahedron's hull is tighter) while
+  // still sitting INSIDE the box footprint its SVG hit-target was sized to —
+  // this canvas only has to look right under targets it must not move.
+  const geometry = useMemo(() => (
+    node.hub
+      ? new THREE.IcosahedronGeometry(half * 1.2, 0)
+      : new THREE.BoxGeometry(half * 2, half * 2, half * 2)
+  ), [half, node.hub])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  const outline = useMemo(() => new THREE.EdgesGeometry(geometry), [geometry])
   useEffect(() => () => outline.dispose(), [outline])
   // Same tilt/yaw the CSS-3D body wore: one fixed stage rotateX, plus a per-node
   // yaw so satellites don't all face the camera identically (orchestration-depth.ts).
@@ -171,7 +186,20 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
     // ground's lightness, so the faces separate under the key light without the
     // body ever competing with its own lit edges.
     body.current.setHSL(hsl.h, hsl.s * 0.5, dim ? 0.2 : 0.3)
-    glow.current.setHSL(hsl.h, hsl.s * (node.tone === 'exited' ? 0.3 : 1), Math.min(0.7, hsl.l))
+    // Capped DARKER than it looks like it should be (0.5, not 0.7): the bloom
+    // multiplies this, and a light emissive drives all three channels past 1.0
+    // at once — every clipped channel is white, so a bright role colour blooms
+    // as a colourless blob and role stops being distinguishable from tone. Kept
+    // dark and saturated, the dominant channel clips alone and the halo carries
+    // the hue. Raising this is how the ring goes monochrome with no error.
+    // Saturation is PUSHED UP, not just preserved. A role colour that is already
+    // pale (the steel/cyan the terminals wear) has little hue to lose before the
+    // bloom clips it to white, while a saturated one (the watcher's violet, the
+    // amber of needs-you) survives untouched — so the ring read as "amber holds
+    // its colour, everything else goes white". Boosting saturation before the
+    // multiply gives the pale roles something left to carry at full brightness.
+    const sat = Math.min(1, hsl.s * (node.tone === 'exited' ? 0.3 : 1.45))
+    glow.current.setHSL(hsl.h, sat, Math.min(0.44, hsl.l))
     material.current.color.copy(body.current)
     material.current.emissive.copy(glow.current)
     const hubPulse = node.hub && !node.synthetic && node.tone === TONE_WORKING && !reducedMotion ? (Math.sin(nowMs / 700) + 1) * 0.12 : 0
@@ -195,7 +223,7 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
 
   return (
     <mesh ref={mesh} rotation={rotation} castShadow={!node.synthetic} receiveShadow>
-      <boxGeometry args={[half * 2, half * 2, half * 2]} />
+      <primitive object={geometry} attach="geometry" />
       {/* Opaque and depth-writing: the hub must OCCLUDE the back row, which a
           depthWrite={false} glass body only appeared to do by painter's luck. */}
       <meshPhysicalMaterial ref={material} roughness={0.38} metalness={0.35} clearcoat={0.6} clearcoatRoughness={0.25} />
@@ -206,11 +234,130 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   )
 }
 
+/**
+ * The pool of light a lit node spills onto the floor.
+ *
+ * NOT a point light. The shadow-catching ground below is a `shadowMaterial`,
+ * which renders received shadows and nothing else — it is not lit, so a real
+ * light would pool on nothing, and giving it a lit material instead would make
+ * this canvas OPAQUE and hide the SVG ground rings and edges it is layered
+ * over (see this file's header: the canvas is transparent glass between two
+ * SVG layers). An additively-blended emissive disc ADDS light over that glass
+ * without occluding anything beneath it, and being emissive it blooms through
+ * the composer for free — one shared texture, no per-node shader recompile.
+ */
+function GroundPool({ node, fit, size, texture }: {
+  node: OrchCubeSpec
+  fit: OrchFit
+  size: { width: number; height: number }
+  texture: THREE.Texture
+}): JSX.Element | null {
+  const material = useRef<THREE.MeshBasicMaterial>(null!)
+  const tint = useRef(new THREE.Color())
+  const colorToken = node.synthetic ? '--deck-steel' : node.roleColor
+  const [base, setBase] = useState(() => readCssColor(colorToken))
+  useEffect(() => {
+    const sync = (): void => setBase(readCssColor(colorToken))
+    const observer = new MutationObserver(sync)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-contrast', 'style'] })
+    sync()
+    return () => observer.disconnect()
+  }, [colorToken])
+
+  // Only a node that clears the bloom threshold spills. An idle ring should
+  // leave the floor dark, which is what makes a working node read across the
+  // room — a pool under everything is just a brighter floor.
+  const strength = node.synthetic || node.tone === 'exited' || node.tone === 'idle' || node.tone === 'starting'
+    ? 0
+    : node.tone === TONE_WORKING ? 0.85 : node.tone === 'needs-you' ? 0.8 : node.hub ? 0.5 : 0
+  const dim = (node.dimmed || node.lensedOut) && !node.selected
+
+  useFrame(() => {
+    if (!material.current) return
+    const hsl = { h: 0, s: 0, l: 0 }
+    base.getHSL(hsl)
+    tint.current.setHSL(hsl.h, hsl.s, Math.min(0.62, hsl.l))
+    material.current.color.copy(tint.current)
+    material.current.opacity = strength * (dim ? 0.4 : 1)
+  })
+
+  if (strength === 0) return null
+  const half = (node.size * fit.scale) / 2
+  const screenX = node.x * fit.scale + fit.offsetX
+  const screenY = node.y * fit.scale + fit.offsetY
+  // Wider than tall: the stage is a fixed-tilt fake isometric, so a pool reads
+  // as lying ON the floor only if it is squashed the way the ground ellipse is.
+  return (
+    <mesh
+      position={[screenX - size.width / 2, -(screenY - size.height / 2) - half * 0.9, node.depth * 24 - 2]}
+      scale={[half * 4.2, half * 2.1, 1]}
+    >
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial
+        ref={material}
+        map={texture}
+        transparent
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  )
+}
+
+/** One radial-falloff texture shared by every pool — built once, not per node. */
+/**
+ * Dark theme only. The pools are ADDITIVELY blended, which is what lets them add
+ * light over transparent glass without occluding the SVG ground beneath — but
+ * additive over a LIGHT ground can only make it lighter, so a soft white ellipse
+ * appears under a dark solid cube and reads as a HOLE cut in the floor, not as
+ * spill. There is no additive spelling of "darker"; a light-theme stage needs a
+ * shadow, which the scene already has in its shadow-catching plane. So in light
+ * theme the pools simply stand down and the shadow does the work.
+ */
+function useDarkTheme(): boolean {
+  const [dark, setDark] = useState(() => document.documentElement.getAttribute('data-theme') !== 'light')
+  useEffect(() => {
+    const sync = (): void => setDark(document.documentElement.getAttribute('data-theme') !== 'light')
+    const observer = new MutationObserver(sync)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    sync()
+    return () => observer.disconnect()
+  }, [])
+  return dark
+}
+
+function useGlowTexture(): THREE.Texture {
+  const texture = useGlowTextureOnce()
+  useEffect(() => () => texture.dispose(), [texture])
+  return texture
+}
+
+function useGlowTextureOnce(): THREE.Texture {
+  return useMemo(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 128
+    canvas.height = 128
+    const ctx = canvas.getContext('2d')!
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64)
+    grad.addColorStop(0, 'rgba(255,255,255,1)')
+    grad.addColorStop(0.35, 'rgba(255,255,255,0.45)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, 128, 128)
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    return texture
+  }, [])
+}
+
 function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCubeSpec[]; viewBox: { w: number; h: number }; reducedMotion: boolean }): JSX.Element {
   const size = useThree((s) => s.size)
   const gl = useThree((s) => s.gl)
   const fit = useMemo(() => orchFitViewbox(viewBox, size), [viewBox, size.width, size.height])
   const getClocks = useCubeClocks()
+  const glowTexture = useGlowTexture()
+  const darkTheme = useDarkTheme()
   useEffect(() => {
     // fiber 9.4's `shadows` shorthand still resolves to the removed
     // PCFSoftShadowMap on this three.js version, spamming a deprecation
@@ -221,6 +368,9 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
   return (
     <>
       <FitCamera width={size.width} height={size.height} />
+      {/* Mounted INSIDE the Canvas so it shares the demand loop; it takes the
+          render from fiber at priority 1 and owns tone mapping while mounted. */}
+      <OrchestrationBloom />
       <ambientLight intensity={0.8} />
       <directionalLight position={[160, 260, 340]} intensity={1.3} castShadow={!reducedMotion}>
         <orthographicCamera attach="shadow-camera" args={[-size.width, size.width, size.height, -size.height, 1, 1200]} />
@@ -229,6 +379,9 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
         <planeGeometry args={[size.width * 1.4, size.height * 1.4]} />
         <shadowMaterial transparent opacity={0.28} />
       </mesh>
+      {darkTheme && nodes.map((n) => (
+        <GroundPool key={`pool-${n.id}`} node={n} fit={fit} size={size} texture={glowTexture} />
+      ))}
       {nodes.map((n) => (
         <CubeMesh key={n.id} node={n} fit={fit} size={size} viewBoxW={viewBox.w} reducedMotion={reducedMotion} getClocks={getClocks} />
       ))}

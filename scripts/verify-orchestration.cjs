@@ -340,6 +340,15 @@ ok('orch.gate.1 every HUD chat and scrollback tail reader in OrchestrationView p
     /outward\(raw/.test(viewSrc) && /outward\(got\.join/.test(viewSrc) &&
     !/lastAssistantText\([^)]+\)(?![\s\S]{0,200}outward)/.test(viewSrc.replace(/\s+/g, ' ')))
 
+{
+  const fs = [{ id: 'f1', title: 'a.ts', path: '/a.ts' }, { id: 'f2', title: 'b.ts', path: '/b.ts' }]
+  ok('orch.jump.1 the Code card follows a selected file, falls back to the first, and is null with none',
+    M.orchBestFile(fs, 'f2')?.id === 'f2' && M.orchBestFile(fs, 'term')?.id === 'f1' && M.orchBestFile([], 'f1') === null)
+  // A jump card previews and jumps. An embedded terminal would refit and SIGWINCH the agent; file.read re-arms a watch.
+  ok('orch.jump.2 the Orchestrate view embeds no xterm or editor and never calls file.read',
+    !/from '[^']*(@xterm|CodeEditor|file\/monaco)[^']*'|canvas\.file\.read/.test(viewSrc))
+}
+
 const empties = readFileSync(join(root, 'src/shared/empty-states.ts'), 'utf8')
 ok('orch.empty.1 orch empty states live in empty-states.ts with named next steps and no fake Connect',
   /id: 'orch-roster'/.test(empties) && /id: 'orch-task'/.test(empties) &&
@@ -441,6 +450,19 @@ ok('orch.wash.1 a stage shift is a known item whose state moved; a first sight o
     { id: 'a', state: 'review' }, { id: 'b', state: 'todo' }, { id: 'new', state: 'done' }
   ])) === JSON.stringify([{ id: 'a', from: 'working', to: 'review' }]))
 const viewFlat = viewSrc.replace(/\s+/g, ' ')
+{
+  const think = M.orchPhase([{ type: 'text' }, { type: 'thinking', text: 'SECRET-PLAN' }], true)
+  const using = M.orchPhase([{ type: 'thinking' }, { type: 'tool_use', name: 'Bash' }], true)
+  const ran = M.orchPhase([{ type: 'tool_use', name: 'Bash' }], false)
+  const stale = M.orchPhase([{ type: 'thinking', text: 'x' }], false)
+  ok('orch.phase.1 a live thinking block is the word "Thinking…" and never its contents; a finished turn is never "thinking"',
+    think.label === 'Thinking…' && !JSON.stringify(think).includes('SECRET') && stale.kind === 'idle', { think, stale })
+  ok('orch.phase.2 a running tool reads "Using · <tool>", a finished one "Last tool:", and nothing at all yields idle rather than a placeholder',
+    using.label === 'Using · Bash' && ran.label === 'Last tool: Bash' && M.orchPhase([], true).kind === 'idle', { using, ran })
+  const view = readFileSync(join(__dirname, '..', 'src/renderer/orchestration/OrchestrationView.tsx'), 'utf8')
+  ok('orch.phase.3 every orchPhase label the view paints is scrubbed by outward() on the same line',
+    view.split('\n').filter((l) => /(found|livePhase)\.label/.test(l)).every((l) => l.includes('outward(')) && /found\.label/.test(view) && /livePhase\.label/.test(view))
+}
 ok('orch.gate.2 a callout tail (chat reply or terminal last line) is read inside outwardTail and scrubbed by outward() before it paints, and only for an expanded card',
   /function outwardTail\([^)]*\): string \{ const raw = isChat \? lastAssistantText\(panelId\) : terminalLine [^}]{0,80}const lines = outward\(raw/.test(viewFlat) &&
     /const tail = expanded \? outwardTail\(/.test(viewFlat) && /className="orch__callout-tail"/.test(viewSrc))
@@ -482,6 +504,32 @@ ok('orch.lens.2 the scene is fed the whole frame with a lit set (never filterGra
     /onDoubleClick=\{\(e\) => onCard\(e, \(\) => onJump\(node\.id\)\)\}/.test(viewFlat) &&
     /id="orch-blocker"/.test(viewSrc) && /describedBy: 'orch-blocker'/.test(viewSrc) &&
     /const blocker = orchBlocker\(\{ waiting: liveSnap\.counts\.waiting/.test(viewFlat))
+
+// ---------------------------------------------------------------------------
+// The bloom door. Both halves fail SILENTLY, which is why they are pinned:
+// a second importer costs the FIRST chunk ~85kB with no error and no red
+// suite, and a static import of OrchestrationCubes drags three.js + the
+// composer along with it — the +2.2MB trap the lazy() was introduced to fix.
+// ---------------------------------------------------------------------------
+ok('orch.bloom-door.1 postprocessing is imported in exactly one file, and that file is reached only from the lazily-loaded cube island — a second importer puts the composer in the first chunk with no error anywhere',
+  (() => {
+    const { execFileSync } = require('node:child_process')
+    const hits = execFileSync('grep', ['-rl', "from 'postprocessing'", join(root, 'src')], { encoding: 'utf8' })
+      .trim().split('\n').filter(Boolean).map((x) => x.replace(join(root, 'src/'), ''))
+    return hits.length === 1 && hits[0] === 'renderer/orchestration/orchestration-bloom.tsx'
+  })(),
+  'the composer belongs behind orchestration-bloom.tsx')
+
+ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and nothing imports it for a value — a static import is a HANG-shaped trap, not a type error',
+  (() => {
+    const { execFileSync } = require('node:child_process')
+    const hits = execFileSync('grep', ['-rn', "from './OrchestrationCubes'", join(root, 'src')], { encoding: 'utf8' })
+      .trim().split('\n').filter(Boolean)
+    // OrchestrationView takes the TYPE statically and the component lazily.
+    return hits.every((line) => /import type \{/.test(line)) &&
+      /lazy\(async \(\) => \(\{ default: \(await import\('\.\/OrchestrationCubes'\)\)\.OrchestrationCubes \}\)\)/.test(viewSrc)
+  })(),
+  'the cube island must stay behind lazy()')
 
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)

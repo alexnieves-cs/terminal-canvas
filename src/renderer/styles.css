@@ -7353,7 +7353,7 @@ body {
   margin-bottom: var(--sp-2);
 }
 .orch__section-head .orch__section-title { margin-bottom: 0; }
-.orch__roster, .orch__side, .orch__perf, .orch__task-panel, .orch__selected {
+.orch__roster, .orch__side, .orch__perf, .orch__task-panel, .orch__selected, .orch__jump {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--glass-1);
@@ -7526,11 +7526,32 @@ body {
 }
 .orch__bottom {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
   gap: var(--sp-4);
   flex-shrink: 0;
 }
-.orch__perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: var(--sp-3); }
+/* Five columns is narrow: the stage buttons wrap rather than clip the last stage out of reach. */
+.orch__task-card .orch__steps { flex-wrap: wrap; }
+.orch__task-main { min-width: 0; max-width: 100%; }
+/* Jump cards (M282): previews of canvas panels. Height is capped so a long tail never grows the strip. */
+.orch__jump-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2);
+  width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.orch__jump-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.orch__jump-log {
+  margin: 0; padding: var(--sp-2); max-height: 6.5rem; overflow: hidden;
+  border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--well); color: var(--green);
+  font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.4; white-space: pre; text-overflow: ellipsis;
+}
+.orch__jump-list { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__jump-row {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: var(--sp-1) var(--sp-2);
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--fg-2); font: inherit; font-size: var(--t-xs); text-align: left; cursor: pointer;
+}
+.orch__jump-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__jump-row:hover, .orch__jump-row--on { background: var(--well); color: var(--fg); }
+.orch__perf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .orch__perf-card { display: flex; flex-direction: column; gap: var(--sp-1); }
 .orch__perf-label { font-size: var(--t-xs); color: var(--fg-3); }
 .orch__perf-value { font-size: var(--t-md); font-weight: 600; }
@@ -7578,6 +7599,14 @@ body {
   cursor: pointer;
   text-align: left;
 }
+/* The column flex above is `align-items: flex-start`, so each child shrink-wraps
+   to its CONTENT width on the cross axis — the title span is then exactly as wide
+   as its text, its own `overflow: hidden` never engages, and the ellipsis rule at
+   the top of this block does nothing. What the person sees is the card clipping a
+   task name mid-word with no truncation mark, which reads as a rendering fault
+   rather than elision. It only became visible when M282 took the strip from three
+   cells to five; the same trap is one `align-items` away in any of these cards. */
+.orch__task-main > * { align-self: stretch; max-width: 100%; }
 .orch__task-jump { font-size: var(--t-xs); color: var(--iris); }
 .orch__steps { display: flex; gap: var(--sp-2); width: 100%; margin-top: var(--sp-1); }
 .orch__step { flex: 1; height: 3px; border-radius: var(--r-sm); background: var(--s-5); }
@@ -8043,3 +8072,125 @@ body {
    at the END — edge.flow.css.1 reads the FIRST reduced-motion block in this file
    as the link layer's. */
 @media (prefers-reduced-motion: reduce) { .orch__platform { transition: none; } }
+
+/* ---------------------------------------------------------------------------
+   M280 step 4: the diorama's non-GL half — edges, atmosphere, card rows.
+   Appended at the END for the same reason the M279 block above is: edge.flow.css.1
+   reads the FIRST reduced-motion block in this file as the link layer's, so a new
+   one must never land above it.
+
+   Why these are CSS and not part of the bloom pass: the composer only reaches
+   pixels INSIDE the WebGL canvas, which paints cube meshes and their ground
+   pools and nothing else. Edges, the haze and the cards are SVG/HTML layered
+   over that canvas, so their glow is a filter here — a deliberate approximation
+   of bloom, not the real thing, and it will never match it exactly.
+   --------------------------------------------------------------------------- */
+
+/* Ribbons, not hairlines. A link between two working agents is the busiest
+   thing on the stage and was reading at 1.25px under cubes that now bloom. */
+.orch__edge:not(.orch__edge--authored):not(.orch__edge--lensed) {
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+.orch__edge[data-connected-live]:not(.orch__edge--authored):not(.orch__edge--lensed) {
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--role-light, var(--iris)) 75%, transparent));
+}
+.orch__edge--authored { stroke-width: 3; filter: drop-shadow(0 0 7px color-mix(in srgb, var(--amber) 55%, transparent)); }
+/* A lensed-out edge stays a hairline on purpose: the lens is a way of reading
+   the ring, so what it drops must not compete with what it keeps. */
+.orch__edge--lensed { stroke-width: 1; }
+
+/* Atmosphere. Two layers over the existing ground gradient: a warm-cool haze
+   lifting the horizon behind the ring, and a vignette closing the corners so
+   the stage reads as a lit volume rather than a flat panel. Both are
+   pointer-events: none and sit UNDER the interactive overlay — the SVG
+   hit-targets must keep every click they had. */
+.orch__graph-wrap::before,
+.orch__graph-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.orch__graph-wrap::before {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 38%, color-mix(in srgb, var(--iris) 16%, transparent), transparent 70%),
+    radial-gradient(ellipse 80% 30% at 50% 88%, color-mix(in srgb, var(--iris) 10%, transparent), transparent 72%);
+}
+.orch__graph-wrap::after {
+  background: radial-gradient(ellipse 78% 74% at 50% 50%, transparent 52%, color-mix(in srgb, var(--deck-ground) 78%, transparent) 100%);
+}
+
+/* The card's three rest-layer facts on three lines: name, kind, state — the
+   glyph in a role-tinted tile so the card and the plate under the cube agree
+   about what the panel looks like. */
+.orch__callout-head { display: flex; align-items: flex-start; gap: var(--sp-3); min-width: 0; }
+/* The card's own `> strong, > span` rule is DIRECT-CHILD scoped, so nesting the
+   title one level deeper dropped its block display AND its ellipsis — the kind
+   ran inline into the name ("claude - apiterminal"). Restated here for the
+   nested pair rather than loosening the original, which several other suites
+   read as text. */
+.orch__callout-names { min-width: 0; flex: 1; }
+.orch__callout-names > strong,
+.orch__callout-names > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: 17px;
+}
+.orch__callout-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--role-light, var(--iris)) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--role-light, var(--iris)) 40%, transparent);
+  color: var(--role-light, var(--iris));
+}
+.orch__callout-kind {
+  color: var(--fg-3);
+  font-size: var(--t-xs);
+  text-transform: lowercase;
+}
+
+/* M281: dark HUD glass stays local to Orchestrate; live edges retain M280's recipe. */
+[data-theme="dark"] .orch :is(.orch__metric, .orch__roster, .orch__side, .orch__perf, .orch__task-panel, .orch__selected, .orch__jump, .orch__float, .orch__callout-card) {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--iris) 9%, transparent), transparent 58%), color-mix(in srgb, var(--deck-surface) 88%, transparent);
+  border-color: color-mix(in srgb, var(--iris) 28%, var(--line));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--iris) 18%, transparent), var(--e-2), 0 0 18px color-mix(in srgb, var(--iris) 5%, transparent);
+}
+[data-theme="dark"] .orch :is(.orch__metric:hover, .orch__metric[aria-pressed="true"], .orch__float:hover, .orch__callout-card[data-expanded]) {
+  border-color: color-mix(in srgb, var(--iris) 58%, var(--line));
+}
+[data-theme="dark"] .orch .orch__callout-card[data-needs] { border-color: var(--amber); }
+[data-theme="dark"] .orch .orch__callout[data-depth="far"] .orch__callout-card:not([data-expanded]):not([data-needs]) {
+  border-color: color-mix(in srgb, var(--iris) 18%, var(--line));
+  box-shadow: inset 0 1px 0 var(--edge-light);
+}
+[data-theme="dark"] .orch .orch__perf-card {
+  background: color-mix(in srgb, var(--deck-ground) 66%, transparent);
+  border-color: color-mix(in srgb, var(--iris) 18%, var(--line));
+}
+[data-theme="dark"] .orch .orch__roster-row--on {
+  background: linear-gradient(90deg, var(--iris-dim), transparent);
+  border-color: color-mix(in srgb, var(--iris) 42%, var(--line));
+}
+[data-theme="dark"] .orch .orch__graph-wrap {
+  border-color: color-mix(in srgb, var(--iris) 38%, var(--line));
+  box-shadow: inset 0 0 32px color-mix(in srgb, var(--iris) 7%, transparent);
+}
+[data-theme="dark"] .orch .orch__graph-wrap::before {
+  background: radial-gradient(ellipse 60% 40% at 50% 38%, color-mix(in srgb, var(--iris) 22%, transparent), transparent 70%), radial-gradient(ellipse 80% 30% at 50% 88%, color-mix(in srgb, var(--iris) 14%, transparent), transparent 72%);
+}
+.orch__task-fill { display: none; }
+[data-theme="dark"] .orch .orch__task-fill { display: block; height: 3px; width: 100%; overflow: hidden; border-radius: var(--r-sm); background: var(--s-5); }
+[data-theme="dark"] .orch .orch__task-fill > span { display: block; height: 100%; background: var(--iris); box-shadow: 0 0 8px var(--iris); }
+.orch__phase { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--t-xs); color: var(--fg-2); }

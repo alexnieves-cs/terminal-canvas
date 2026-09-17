@@ -98,6 +98,7 @@
     "monaco-editor": "0.52.2",
     "motion": "^13.3.0",
     "node-pty": "1.1.0",
+    "postprocessing": "^6.39.5",
     "pptxgenjs": "4.0.1",
     "three": "^0.186.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
