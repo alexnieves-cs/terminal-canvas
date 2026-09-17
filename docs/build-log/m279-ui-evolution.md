@@ -181,3 +181,21 @@ open rather than as a flake.
 **Not seen:** the callout placer's real-hub branch (a supervisor present, the card sliding
 beside it). No scene has a supervisor. The Electron tier was not run for this step.
 
+### Gate, step 14 (full `npm run verify` on `m279-diorama`, then three controlled re-runs)
+
+51/54 suites. Each red was placed by running the SAME suite in the SAME worktree at an
+earlier commit — never by recognising its id.
+
+| Suite | Branch | At `567ea305` (main) | At `0fb202d0` (before any of this) | Reading |
+|---|---|---|---|---|
+| `panels:product` | 109/117 | — | 109/117 (ledger) | the M277 eight, name for name |
+| `panels:shell` | 96/99 chained, 98/99 alone (`106`) | — | 95/99 alone (`106`, `126`, `127`, `headroom.1`) | `106` predates the step; `126`/`127`/`headroom.1` come and go with load |
+| `panels:agents` | 79/82 in 3 of 4 runs (`attention.1`, `detail.1`, `headroom.1` at 105 s of 113 s), 81/82 once | **79/82, the same three, 105.6 s** | 81/82 (`detail.1`) | `attention.1` and the slower run are ON MAIN at `567ea305`; this branch's three commits did not add them |
+
+`attention.1` fails at `seededJ`: after a reload the two seeded panels are not in the DOM
+inside 10 s, with no renderer error logged. The suite has no reference to orchestration and
+the page is not mounted unless opened, so the diorama files cannot reach it; what
+`567ea305` added that runs on every canvas load is the always-mounted activity-feed
+producer, the bar's live status and the search field. That is where to look. It is NOT
+diagnosed, and `headroom.1` at 93% says the suite's watchdog is owed a re-pin either way.
+
