@@ -76,11 +76,11 @@ let applied: string | null = null
  */
 export const syncTheme = (): void => {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark'
-  const bg = token('--s-1', dark ? '#12161f' : '#f6f7fa')
-  const fg = token('--fg', dark ? '#e9ecf4' : '#1b1e26')
-  const muted = token('--fg-2', dark ? '#b8bfcd' : '#3f4552')
-  const line = token('--line', dark ? '#262c39' : '#d3d7de')
-  const accent = token('--iris', dark ? '#67e8f9' : '#0b7f97')
+  const bg = token('--s-1', dark ? '#121a2a' : '#f6f7fa')
+  const fg = token('--fg', dark ? '#e8edf7' : '#1b1e26')
+  const muted = token('--fg-2', dark ? '#b7c1d4' : '#3f4552')
+  const line = token('--line', dark ? '#243047' : '#d3d7de')
+  const accent = token('--iris', dark ? '#5fe3ff' : '#0b7f97')
   const key = `${dark}|${bg}|${fg}|${muted}|${line}|${accent}`
   if (key === applied) return
   applied = key

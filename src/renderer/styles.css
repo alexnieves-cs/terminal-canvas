@@ -106,6 +106,16 @@
      no error. Where a chrome does sit at the top, the two coincide at the
      same y and the same colour, which costs a pixel nobody can see. */
   --rim-top: inset 0 1px 0 var(--edge-light);
+  /* M279. THE GLOW RECIPES. Like --rim-top, GEOMETRY on bare :root and the
+     colour a theme's: --glow-iris is the interface's own light (selection,
+     an arrival, a focused field) — a 1px ring and a soft spill of the same
+     hue; --glow-tone is the state edge's spill, read by .pf::before through
+     the tone block's --tone-glow so a busier tone can widen it without a
+     second selector binding a hue. A glow is a box-shadow, never a filter:
+     it composites for free on forty panels where a drop-shadow filter would
+     not. */
+  --glow-iris: 0 0 0 1px var(--iris), 0 0 18px var(--iris-dim);
+  --glow-tone: 0 0 14px 3px var(--tone-dim);
   /* M258. The editorial measure a file or note page reads at — tighter than
      --measure, which is the assistant's prose — and its face: the system's
      own reading serif, local, so the CSP's default-src 'self' is untouched. */
@@ -194,6 +204,11 @@
   /* App identity, never agent state. Iris answers an interaction with the
      interface itself: selection in the palette and rail, links, focus. */
   --iris: #0b7f97;  --iris-dim: rgba(11, 127, 151, .12);
+  /* M279. The FAMILY accent: a workflow's blocks, a pool, the orchestration
+     page's structure — things the app composes, never a state and never the
+     interface's own selection. Restrained by the same 3:1 floor as the
+     others (check 11 measures it). */
+  --violet: #6a4fc4;  --violet-dim: rgba(106, 79, 196, .12);
   --focus: var(--iris);
   /* M258. The navigation cluster's moat — a ring of the ground colour that
      parts the minimap from panels passing under it — and the graph-paper and
@@ -306,37 +321,49 @@
   --deck-violet: #b59af8;
   --deck-ground: #070b14;
   --deck-surface: #0d1420;
-  --s-0: #070910;
-  --s-1: #12161f;
-  --s-2: #0f131b;
-  --s-3: #1a1f2b;
-  --s-4: #232937;
-  --s-5: #2c3344;
+  /* M279. NAVY, not black. The ramp keeps M109's twenty-point span and moves
+     every step a few degrees toward blue, so the ground reads as a deep
+     material rather than an absence — the dark theme was measured at
+     #070910, a hue nobody can name. Every value re-derived against check 11
+     (the contrast script in the ledger); --s-4/--s-5 keep their roles as
+     hover and pressed tints. */
+  --s-0: #080c16;
+  --s-1: #121a2a;
+  --s-2: #0d1322;
+  --s-3: #1a2336;
+  --s-4: #222d43;
+  --s-5: #2b3850;
 
   /* terminal/themes.ts's dark `background`: a half-step below the glass so
      the well reads as a screen set into the frame. The sixteen ANSI colours
      did not move (they are the agent's, not the app's). */
-  --well: #0c0f16;
+  --well: #0a0e19;
 
-  --fg:   #e9ecf4;
-  --fg-2: #b8bfcd;
-  --fg-3: #98a1b3;
-  --fg-4: #7a8396;
+  --fg:   #e8edf7;
+  --fg-2: #b7c1d4;
+  --fg-3: #94a1b8;
+  --fg-4: #7684a0;
 
-  --line:        #262c39;
-  --line-strong: #3b4356;
+  /* Hairlines carry a little of the ground's blue so a boundary reads as
+     part of the material rather than a grey ruled over it. */
+  --line:        #243047;
+  --line-strong: #394764;
   --frame-line: var(--line-strong);
 
-  --blue:  #7aa2f7;  --blue-dim:  rgba(122, 162, 247, .16);
-  --green: #9ece6a;  --green-dim: rgba(158, 206, 106, .16);
-  --amber: #e0af68;  --amber-dim: rgba(224, 175, 104, .18);
-  --red:   #f7768e;  --red-dim:   rgba(247, 118, 142, .16);
+  /* M279. Electric blue for work, mint for idle: the working hue is the one
+     the eye meets most, so it sits nearest the identity cyan without
+     becoming it (selection is cyan; work is blue — M63's rule survives). */
+  --blue:  #6ea8ff;  --blue-dim:  rgba(110, 168, 255, .16);
+  --green: #7fdba0;  --green-dim: rgba(127, 219, 160, .16);
+  --amber: #e5b467;  --amber-dim: rgba(229, 180, 103, .18);
+  --red:   #ff7b8e;  --red-dim:   rgba(255, 123, 142, .16);
 
-  --iris: #67e8f9;  --iris-dim: rgba(103, 232, 249, .14);
+  --iris: #5fe3ff;  --iris-dim: rgba(95, 227, 255, .14);
+  --violet: #b39dff;  --violet-dim: rgba(179, 157, 255, .16);
   --focus: var(--iris);
   --nav-moat: var(--s-0);
-  --grid-line: rgba(233, 236, 244, .05);
-  --lane-line: rgba(233, 236, 244, .07);
+  --grid-line: rgba(232, 237, 247, .05);
+  --lane-line: rgba(232, 237, 247, .07);
 
   --e-1: 0 1px 2px rgba(0, 0, 0, .35);
   --e-2: 0 2px 8px rgba(0, 0, 0, .40);
@@ -344,17 +371,24 @@
   --e-4: 0 14px 40px rgba(0, 0, 0, .60);
   --scrim: rgba(0, 0, 0, .60);
 
-  --glass-1:    rgba(18, 22, 31, .88);   /* M163 (finding 8): one clear step from --s-0; was .74 */
-  --glass-2:    rgba(13, 16, 24, .82);
-  --edge-light: rgba(255, 255, 255, .11); /* M163: a lit edge you can see at the golden's scale; was .06 */
+  /* M279. The glass follows the ramp (same alphas as M163: one clear step
+     from --s-0, the chrome a half-step darker than the panel). The lit edge
+     is CYAN-TINTED white now rather than white: the top light on every
+     surface says, quietly, what colour the room's light is. */
+  --glass-1:    rgba(18, 26, 42, .88);
+  --glass-2:    rgba(13, 19, 34, .82);
+  --edge-light: rgba(170, 225, 255, .13);
   --bezel:      rgba(0, 0, 0, .45);
   --lift:       0 24px 48px -20px rgba(0, 0, 0, .8); /* M163: the lift present, not implied; was 0 20px 40px -22px .75 */
-  --aura-1:     rgba(99, 102, 241, .22);
-  --aura-2:     rgba(45, 212, 191, .12);
-  --aura-working:   rgba(122, 162, 247, .20);
-  --aura-needs-you: rgba(224, 175, 104, .18);
+  /* The ground's light: electric blue at the centre, cyan in the diagonal —
+     the two illumination hues the brief names, at the alphas M109 chose for
+     indigo and teal. */
+  --aura-1:     rgba(56, 130, 255, .20);
+  --aura-2:     rgba(95, 227, 255, .11);
+  --aura-working:   rgba(110, 168, 255, .20);
+  --aura-needs-you: rgba(229, 180, 103, .18);
   --on-iris:    #06111a;
-  --bubble:     #1a2130;
+  --bubble:     #1a2436;
   --blur:       blur(14px) saturate(140%);
 
   /* M227. The depth tokens, DARK. --glass-0 sits BELOW --s-0 in lightness so a
@@ -368,8 +402,8 @@
      eye finds. This is M163's --edge-light finding (.06 was invisible at the
      golden's scale, .11 was not) met a second time, and answered before the
      milestone shipped rather than two versions later. */
-  --glass-0:    rgba(7, 9, 15, .92);
-  --glass-3:    rgba(30, 36, 49, .94);
+  --glass-0:    rgba(8, 12, 22, .92);
+  --glass-3:    rgba(30, 40, 60, .94);
   --rim-inner:  inset 0 2px 3px rgba(0, 0, 0, .9);
 
   --text:      var(--fg);
@@ -1034,7 +1068,7 @@ body {
    this block binds --blue/--amber/--green/--red to a data-tone or an agent
    state, and if a tone panel-state.ts can produce has no rule here.
    ───────────────────────────────────────────────────────────────────────── */
-[data-tone] { --tone: var(--fg-4); --tone-dim: var(--s-4); }
+[data-tone] { --tone: var(--fg-4); --tone-dim: var(--s-4); --tone-glow: var(--glow-tone); }
 [data-tone="kind"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
 /* asleep is the heavier grey (it has a history); not-started and starting
    the lighter. The critic found a dashed asleep edge invisible at 100% and
@@ -1045,8 +1079,12 @@ body {
    edge at all). */
 [data-tone="none"] { --tone: var(--line-strong); --tone-dim: var(--s-4); }
 [data-tone="starting"] { --tone: var(--line); --tone-dim: var(--s-4); }
-[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--amber); }
-[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); }
+/* M279. The two ACTIVE tones spill wider: a working edge and a waiting edge
+   are the facts a glance across the canvas is for, and the glow is how a
+   node at 40% still says which it is. Geometry only — the hue is the same
+   --tone-dim the narrow default reads. */
+[data-tone="working"] { --tone: var(--blue); --tone-dim: var(--blue-dim); --orch-rim: var(--amber); --tone-glow: 0 0 22px 5px var(--tone-dim); }
+[data-tone="needs-you"] { --tone: var(--amber); --tone-dim: var(--amber-dim); --tone-glow: 0 0 22px 5px var(--tone-dim); }
 [data-tone="idle"] { --tone: var(--green); --tone-dim: var(--green-dim); }
 [data-tone="exited"] { --tone: var(--red); --tone-dim: var(--red-dim); }
 
@@ -2591,7 +2629,8 @@ body {
   bottom: 0;
   width: 1px;
   pointer-events: none;
-  box-shadow: 0 0 14px 3px var(--tone-dim);
+  box-shadow: var(--tone-glow);
+  transition: box-shadow var(--dur-2) var(--ease);
 }
 /* M233. THE ARRIVAL FLASH. A join landed here, and the frame says so on the
    glow it already has rather than on a second element: `.pf::before` is

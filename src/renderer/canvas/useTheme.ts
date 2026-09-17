@@ -41,15 +41,16 @@ const HIGH_CONTRAST: Record<ResolvedTheme, Record<string, string>> = {
     '--glass-3': '#ffffff'
   },
   dark: {
-    '--line': '#4a5268',
-    '--line-strong': '#7f8bab',
-    '--frame-line': '#7f8bab',
-    '--fg-4': '#a7afc0',
+    '--line': '#4a5670',
+    '--line-strong': '#7f8fb5',
+    '--frame-line': '#7f8fb5',
+    '--fg-4': '#a7b2c8',
     '--blur': 'none',
-    '--glass-0': '#070910',
-    '--glass-1': '#12161f',
-    '--glass-2': '#0f131b',
-    '--glass-3': '#1e2431'
+    // M279: the opaque stand-ins follow the navy ramp (--s-0/--s-1/--s-2/--s-3).
+    '--glass-0': '#080c16',
+    '--glass-1': '#121a2a',
+    '--glass-2': '#0d1322',
+    '--glass-3': '#1a2336'
   }
 }
 

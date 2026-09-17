@@ -28,7 +28,7 @@ import { useEffect, useState } from 'react'
  * chart that happens to plot an amber series teaches a person to stop reading
  * amber as "this needs you".
  */
-const CHART_TOKENS = ['--blue', '--iris', '--green', '--red', '--fg-3', '--fg-4', '--line', '--s-2'] as const
+const CHART_TOKENS = ['--blue', '--iris', '--violet', '--green', '--red', '--fg-3', '--fg-4', '--line', '--s-2'] as const
 
 export type ChartToken = typeof CHART_TOKENS[number]
 export type ChartColors = Record<ChartToken, string>

@@ -218,7 +218,7 @@ const lum = (h) => {
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05) }
 const grounds = ['--s-0', '--s-1', '--s-2', '--s-3', '--s-4', '--bubble'] // --bubble: M162, the user turn's ground, so text on it is measured
 const texts = { '--fg': 4.5, '--fg-2': 4.5, '--fg-3': 4.5, '--fg-4': 3.0 }
-const accents = ['--blue', '--green', '--amber', '--red', '--iris']
+const accents = ['--blue', '--green', '--amber', '--red', '--iris', '--violet'] // M279: --violet joins the measured set
 const accentGrounds = ['--s-1', '--s-4']
 const bad = []
 const measured = Object.keys(perBlockHex).filter((name) => Object.keys(perBlockHex[name]).length > 0)
