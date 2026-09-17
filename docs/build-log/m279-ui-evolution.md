@@ -55,9 +55,44 @@ still paints red — backlog).
 
 ## Gate
 
-Recorded at the end of the run (below).
+Plain tier (`npm run verify`, wave 1): **41/42** — the one red is `verify:verbs gate.2`
+(redactSecrets' caller count), which M277's ledger already records as pre-existing and
+which touches no file this milestone changed (`git diff 1d925fbe --stat` names none of the
+gate's callers). The runner stops after a red wave, so the Electron tier was run by hand,
+serially, in the same order the runner takes; its numbers are in the table at the end of
+this section.
+
+`verify:visual` after `UPDATE_GOLDENS=1`: **63/64** — every changed scene written against
+the sentences below, and `starter` unpainted in that run ("the arrangement is not on
+screen", a harness timing the M262 ledger also met; its golden is untouched).
 
 ## Goldens
 
-Every scene re-captured after step 9; each changed scene's sentence is recorded before
-`UPDATE_GOLDENS=1` writes it.
+Every scene re-captured after step 9 and LOOKED AT (the out/shots set the plan's method
+names, compared side by side with the pre-M279 set), then `UPDATE_GOLDENS=1` wrote the ones
+that moved past a budget. The chrome changed in EVERY scene — the segmented Canvas /
+Orchestrate control on a recessed track, the field-shaped Search with its rim, the dock's
+lit active tile, the inspector's fourth tab — so every light scene moves by its bar and dock
+alone; the dark scenes move by the ramp as well. One sentence per scene, what was seen:
+
+| Scene | What changed, seen |
+|---|---|
+| launcher | the empty canvas with the new bar: the segmented control reads as one track with `Canvas` lit; the launcher itself and its filled `Start work` are untouched |
+| kinds | every kind's header, body and pill as before; the bar shows `1 working` beside the search field and the dock's Canvas tile carries a faint cyan ring |
+| kinds-dark | the ground reads navy rather than black; the panels' glass is a clear step above it; the working terminal's left edge spills a wider blue glow; the lit top edge on every surface is faintly cyan; the sixteen ANSI colours in the well are unchanged |
+| trail, skills, integrations, github, across, vault, watcher, browser, teammate, routine, board, chat-copilot, memory, supervisor, templates, runs, composer, tool-objects, verbs, auto, subagents, lineup, header, flip, spawn-sheet, start-work, search, search-empty, navigator-panels, navigator-workspaces, navigator-files, attention, overview, group, group-collapsed, merged, ink, file-missing, starter | the bar and dock only: the segmented control, the search field's hairline rim, the live count(s) at the right, the Activity tab where the inspector is open; the scene's own subject is unchanged |
+| chat | the chat's pill still reads `asleep` (no phase word — the phase appears only while a turn is in flight); `2 working` in the bar |
+| graph, edge-firing, edge-waiting | the edge strokes, packet and heads take the re-valued blue and cyan; the selected edge's iris ring; the bar's counts |
+| approval | `2 working` and `1 needs you` as two pills, the second amber and pressable; the inspector's tab strip now Detail / Work / Tools / Activity with Work lit from below the line |
+| palette, palette-query | the palette over the new bar; rows unchanged |
+| palette-dark | the palette on the navy ground: its raised surface a clear step above the chrome, the selected row's iris bar, the hairlines carrying the ground's blue |
+| inspector-detail, inspector-work, inspector-tools | the four-tab strip with the lit tab's gradient under its label; the pane's fields unchanged |
+| inspector-activity | NEW — the Activity tab on the live terminal: one row per transition (`became starting`, `starting → busy`, `busy → idle`) with the dot in the tone, the panel's name, an age and the detail line, newest first |
+| zoomed-out | the far tiers on the new blue and mint tone fills; the bar's counts |
+| zoomed-out-dark | the wall of blocks on the navy ground reads as lights: the working edge's wider spill and the needs-you amber ring both legible at 22%; the minimap's camera rectangle in the re-valued cyan |
+| compact | at 1000px the two pills are a dot and a count each (the word hides below 1600px) and no longer reach the breadcrumb; the drawer over the canvas |
+| workflow, workflow-edit | the agent-family blocks wear violet (`Orchestrator · leads`, `Chat`), the worker pool the working blue; edges and the graph paper unchanged |
+| wide | the labelled dock at 156px with the lit Canvas tile; the inspector with nothing selected lists the canvas-wide Activity feed under the summary figures, each row a real transition from the fixture's spawns, scrolling with the figures rather than clipping them |
+| reduced-motion | as `kinds` at rest — the state edge's glow transition and the feed row's rise are the only motions this milestone added, and both are dropped here |
+| orchestration | the page on the light ground: violet structure lines and cube edges, the KPI slivers on the re-valued accents |
+| orchestration-dark | the page on the navy deck ground with the central light; this golden was MISSING before M279 (recorded in the M277 ledger) and is written for the first time |
