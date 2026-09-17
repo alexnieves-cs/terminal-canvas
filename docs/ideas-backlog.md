@@ -1996,3 +1996,16 @@ module (or one file per subsystem) would cost an agent a few KB instead of a mul
 Deferred from the 2026-09-10 docs pass: splitting the corpus up is a larger, per-module job
 than the pointer and layout fixes that pass made, and each block needs its entries checked,
 not just copied.
+
+
+## 90. `exited 0` paints red — a completed process and a failed one share a tone
+
+M279's audit mapped the brief's eight agent states onto the vocabulary and found one the
+backend already distinguishes and the vocabulary does not: a terminal or chat that exits
+with code 0 reads `exited 0` in the `exited` tone — red, the same as `exited 1`. The state
+edge, the rail dot, the minimap block and the far tiers all say "failed" for a process that
+finished. The fix is a ninth tone (`done`, or `exited` split by code) in
+`panels/panel-state.ts`'s closed set, its `[data-tone]` rule in the tone block, and the five
+suites that enumerate `TONES` (`verify:rail state.1/2`, `verify:styles tone.1`, the minimap
+legend, the far-tier fills) — a milestone of its own, not a restyle's side effect, which is
+why M279 recorded it here rather than widening the closed set in passing.

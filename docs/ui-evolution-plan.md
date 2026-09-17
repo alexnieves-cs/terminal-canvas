@@ -221,3 +221,8 @@ Each step: typecheck + build, `npm run affected`, commit. Electron suites at the
 - 2026-09-16 — no reference image; direction taken from the brief's words.
 - 2026-09-16 — `exited 0` stays red this pass (closed tone set); backlog entry written.
 - 2026-09-16 — no new dependency; React Flow / R3F not adopted for the canvas.
+- 2026-09-16 — two status pills met a long breadcrumb at 1440px; the pill's word hides
+  below 1600px (the count is the fact, the word is on the title).
+- 2026-09-16 — the inspector's tab set grows to four; `verify:panels:agents ctx.1` and
+  `verify:layout shell.1` were extended rather than worked around.
+- 2026-09-16 — the `exited 0` tone is backlog #90.

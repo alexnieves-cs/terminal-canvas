@@ -693,7 +693,7 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         'shell.1 at Standard with nothing persisted the canvas is the window less the dock and one navigator pane, and a panel is still promoted',
         'shell.2 switching navigator panes through real clicks spawns nothing and moves no focus, and the Attention icon carries the waiting count',
         'drawer.1 below Compact the navigator is a drawer: opened from the dock, dismissed by Escape and by an outside click, and a wheel over it moves no camera',
-        'ctx.1 the identity header is on screen with each of the three tabs active, and inactive tabs stay rendered but hidden',
+        'ctx.1 the identity header is on screen with each of the four tabs active, and inactive tabs stay rendered but hidden',
         'ctx.2 Close in the context pane is destructive and gated: one click arms, the second closes, read back from the panel list',
         'hud.1 the zoom cluster lives in the HUD, a wheel over it moves no camera, and Merged is an icon toggle with aria-pressed',
         'empty.1 the Panels pane with no panels says so rather than rendering nothing'
@@ -828,7 +828,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
         const ctxHidden = (await frame()).ctx === 0
         if (ctxHidden) { await wc.executeJavaScript(`(() => { const b = document.querySelector('.shell__inspector-toggle'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`); await settle() }
         const tabs = {}
-        for (const tab of ['detail', 'work', 'tools']) {
+        // M279 added the fourth tab, Activity.
+        for (const tab of ['detail', 'work', 'tools', 'activity']) {
           await wc.executeJavaScript(`(() => { const t = document.querySelector('[data-context-tab="' + ${JSON.stringify(tab)} + '"]'); if (t) t.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!t })()`)
           await settle()
           tabs[tab] = await wc.executeJavaScript(`(() => {
@@ -840,8 +841,8 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
             return { selected: t.getAttribute('aria-selected'), headingVisible: r.height > 0 && r.top >= p.top - 1 && r.bottom <= p.bottom + 1, panels } })()`)
         }
         const tabOk = (t) => tabs[t] && tabs[t].selected === 'true' && tabs[t].headingVisible &&
-          tabs[t].panels.length === 3 && tabs[t].panels.every((p) => p.hidden === (p.id !== t))
-        ok(IDS[3], tabOk('detail') && tabOk('work') && tabOk('tools'), JSON.stringify(tabs))
+          tabs[t].panels.length === 4 && tabs[t].panels.every((p) => p.hidden === (p.id !== t))
+        ok(IDS[3], tabOk('detail') && tabOk('work') && tabOk('tools') && tabOk('activity'), JSON.stringify(tabs))
 
         // ctx.2. Close sB (dormant, so nothing dies) from the pinned bar.
         await wc.executeJavaScript(`(() => { const row = document.querySelector('.rail-row[data-rail-row="sB"] .rail-row__main'); if (row) row.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!row })()`)
