@@ -879,6 +879,14 @@ body {
 .shell__view-heading { padding: var(--sp-3) var(--sp-4) var(--sp-1); color: var(--fg-4); font-size: var(--t-xs); font-weight: 600; }
 .shell__view-check { display: inline-flex; width: 16px; justify-content: center; color: var(--iris); }
 
+/* M279. Below 1600px the live status keeps its dot and count and drops the
+   word — the count is the fact, the word is on the title — so two pills
+   never reach the centred breadcrumb (measured colliding at 1440px with a
+   long task name). */
+@media (max-width: 1600px) {
+  .live-status__word { display: none; }
+  .shell__top .live-status__item { padding-right: var(--sp-3); }
+}
 @media (max-width: 1220px) {
   .shell__search { min-width: 0; }
   .shell__search > span { max-width: 86px; }
