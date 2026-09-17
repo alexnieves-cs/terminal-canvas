@@ -123,8 +123,8 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   // translucent coloured box read as tinted jelly on the navy ground (olive, for
   // the terminals). How brightly it is lit is the agent's real tone — working
   // burns, needs-you holds warm, idle is a pilot light, exited is dark.
-  const restEmissive = node.synthetic ? 0.04 : node.tone === 'exited' ? 0.02 : node.tone === 'needs-you' ? 0.5 : node.tone === TONE_WORKING ? 0.42 : node.hub ? 0.3 : 0.14
-  const edgeOpacity = node.synthetic ? 0.35 : node.tone === 'exited' ? 0.3 : node.tone === 'idle' || node.tone === 'starting' ? 0.75 : 1
+  const restEmissive = node.synthetic ? 0.04 : node.tone === 'exited' ? 0.02 : node.tone === 'needs-you' ? 0.5 : node.tone === TONE_WORKING ? 0.5 : node.hub ? 0.36 : 0.24
+  const edgeOpacity = node.synthetic ? 0.35 : node.tone === 'exited' ? 0.3 : node.tone === 'idle' || node.tone === 'starting' ? 0.9 : 1
   const half = (node.size * fit.scale) / 2
   const outline = useMemo(() => {
     const box = new THREE.BoxGeometry(half * 2, half * 2, half * 2)
@@ -170,14 +170,16 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
     // The slab keeps the role's hue at a fraction of its saturation and near the
     // ground's lightness, so the faces separate under the key light without the
     // body ever competing with its own lit edges.
-    body.current.setHSL(hsl.h, hsl.s * 0.45, dim ? 0.1 : 0.17)
+    body.current.setHSL(hsl.h, hsl.s * 0.5, dim ? 0.2 : 0.3)
     glow.current.setHSL(hsl.h, hsl.s * (node.tone === 'exited' ? 0.3 : 1), Math.min(0.7, hsl.l))
     material.current.color.copy(body.current)
     material.current.emissive.copy(glow.current)
     const hubPulse = node.hub && !node.synthetic && node.tone === TONE_WORKING && !reducedMotion ? (Math.sin(nowMs / 700) + 1) * 0.12 : 0
-    material.current.emissiveIntensity = (restEmissive + hubPulse + motion.emissiveBoost * 0.5 + motion.rimBoost * 0.2) * (dim ? 0.35 : 1)
+    material.current.emissiveIntensity = (restEmissive + hubPulse + motion.emissiveBoost * 0.5 + motion.rimBoost * 0.2) * (dim ? 0.6 : 1)
     edge.current.color.copy(glow.current)
-    edge.current.opacity = edgeOpacity * (dim ? 0.4 : 1)
+    // A dimmed sibling keeps its outline: the first cut took the edges to 40% on a
+    // near-black body and the ring became eight blobs — dim is a step back, not off.
+    edge.current.opacity = edgeOpacity * (dim ? 0.7 : 1)
     // Demand-mode loop: ask for the next frame only while THIS cube still has
     // motion to show. An idle room renders nothing at all between React updates —
     // `frameloop="always"` repainted WebGL at 60fps for a ring of idle agents.
@@ -219,7 +221,7 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
   return (
     <>
       <FitCamera width={size.width} height={size.height} />
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.8} />
       <directionalLight position={[160, 260, 340]} intensity={1.3} castShadow={!reducedMotion}>
         <orthographicCamera attach="shadow-camera" args={[-size.width, size.width, size.height, -size.height, 1, 1200]} />
       </directionalLight>

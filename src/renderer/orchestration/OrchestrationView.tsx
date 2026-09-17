@@ -28,7 +28,7 @@ import { shellControl } from '@renderer/shell/shell-control'
 import { railLabel } from '@renderer/shell/rail-rows'
 import { formatAgo } from '@renderer/shell/format-ago'
 import { agentWord, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
-import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, ProductMark, Search, Stop } from '@renderer/icons'
+import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, Search, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
 import {
   buildOrchestrationSnapshot,
@@ -75,7 +75,7 @@ import {
   orchActivityEvents,
   subscribeOrchActivity
 } from './orchestration-activity'
-import { ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
+import { ORCH_COS_TILT, ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
 import type { OrchCubeSpec } from './OrchestrationCubes'
 import type { OrchCubeTone } from './orchestration-cube-motion'
 
@@ -638,7 +638,12 @@ function GraphBoard(props: {
           </g>
           {[0.4, 1 / ORCH_GROUND_K, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / ORCH_GROUND_K ? ' orch__ground-ring--track' : ''}`} />)}
         </g>
-        {projected.map(n => <ellipse key={`platform-${n.id}`} className="orch__platform" data-role={n.hub ? 'orchestrator' : n.kind} cx={n.x} cy={n.y + n.size * 0.8} rx={n.size * 1.15} ry={n.size * 0.34} />)}
+        {/* A platform is a disc on the GROUND, so it is flattened by the stage's own
+            tilt like the ground is — a fixed 0.34 was the old 32° camera's number
+            written down twice. `data-lit` is the agent's real tone, never a role. */}
+        {projected.map(n => <ellipse key={`platform-${n.id}`} className="orch__platform" data-role={n.hub ? 'orchestrator' : n.kind}
+          data-lit={n.synthetic === true || n.overflow !== undefined ? undefined : toneFromState(n.state)}
+          cx={n.x} cy={n.y + n.size * 0.62} rx={n.size * 1.35} ry={n.size * 1.35 * ORCH_COS_TILT} />)}
         {orchEdgePaintOrder(edges).map((e) => {
           const from = projected.find((n) => n.id === e.from)
           const to = projected.find((n) => n.id === e.to)
@@ -1144,9 +1149,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     <div className="orch" role="region" aria-label="Orchestration">
       <header className="orch__header">
         <div className="orch__brand">
-          <span className="orch__mark" aria-hidden="true"><ProductMark size={18} /></span>
+          {/* No mark and no product name here: the top bar, 40px above, already
+              says both. The page opens on the one line that is about NOW. */}
           <div className="orch__brand-copy">
-            <span className="orch__product">Terminal Canvas</span>
             <p className="orch__greeting">{liveSnap.greeting}</p>
           </div>
           <div className="orch__clocks">

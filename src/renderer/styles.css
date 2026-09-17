@@ -7991,8 +7991,16 @@ body {
 .orch [data-role="terminal"], .orch [data-role="file"] { --role-light: var(--deck-steel); }
 .orch [data-role="workflow"], .orch [data-role="work"], .orch [data-role="watcher"] { --role-light: var(--deck-violet); }
 .orch__graph-wrap { background: radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--iris) 12%, transparent), transparent 65%), var(--deck-ground); }
-.orch__platform { fill: color-mix(in srgb, var(--role-light, var(--iris)) 9%, var(--deck-surface)); stroke: color-mix(in srgb, var(--role-light, var(--iris)) 48%, transparent); stroke-width: 1; }
-.orch__edge:not(.orch__edge--authored):not(.orch__edge--lensed) { stroke: color-mix(in srgb, var(--role-light, var(--iris)) 48%, transparent); }
+.orch__platform { fill: color-mix(in srgb, var(--role-light, var(--iris)) 9%, var(--deck-surface)); stroke: color-mix(in srgb, var(--role-light, var(--iris)) 48%, transparent); stroke-width: 1; transition: filter var(--dur-2) var(--ease), fill var(--dur-2) var(--ease); }
+/* The pool of light under a node answers what the agent is DOING. Working throws
+   its role's light on the ground; needs-you throws amber, the one place the
+   ground takes a tone, because it is the one state that is a call; idle is the
+   resting rim above; exited goes dark. No animation — the cube carries motion. */
+.orch__platform[data-lit="working"] { fill: color-mix(in srgb, var(--role-light, var(--iris)) 22%, var(--deck-surface)); stroke: var(--role-light, var(--iris)); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--role-light, var(--iris)) 70%, transparent)); }
+.orch__platform[data-lit="needs-you"] { fill: color-mix(in srgb, var(--amber) 18%, var(--deck-surface)); stroke: var(--amber); filter: drop-shadow(0 0 10px color-mix(in srgb, var(--amber) 65%, transparent)); }
+.orch__platform[data-lit="exited"] { fill: var(--deck-surface); stroke: var(--line); }
+.orch__edge:not(.orch__edge--authored):not(.orch__edge--lensed) { stroke: color-mix(in srgb, var(--role-light, var(--iris)) 62%, transparent); stroke-width: 1.25; }
+.orch__edge[data-connected-live]:not(.orch__edge--authored):not(.orch__edge--lensed) { stroke: var(--role-light, var(--iris)); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--role-light, var(--iris)) 60%, transparent)); }
 .orch__cube-label { font-family: var(--font-mono); }
 .orch__cube-role { font: var(--t-xs) var(--font-ui); fill: var(--fg-3); }
 .orch__cube-state { fill: var(--tone); }
@@ -8030,3 +8038,8 @@ body {
 @keyframes activity-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .activity-row:first-child { animation: activity-row-in var(--dur-2) var(--ease) both; }
 @media (prefers-reduced-motion: reduce) { .activity-row:first-child { animation: none; } }
+
+/* M279 diorama pass: the platform's pool of light eases between tones. Appended
+   at the END — edge.flow.css.1 reads the FIRST reduced-motion block in this file
+   as the link layer's. */
+@media (prefers-reduced-motion: reduce) { .orch__platform { transition: none; } }
