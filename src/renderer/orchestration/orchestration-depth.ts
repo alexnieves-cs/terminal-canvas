@@ -11,7 +11,13 @@
  * they sit, callouts fastest (they float above the scene, nearest the eye).
  */
 
-export const ORCH_STAGE_TILT_DEG = 32
+// 56°, near an isometric elevation: the ring projects wide and short, which is the
+// stage's own shape, and a cube shows more side face than lid — it reads as an
+// object standing on the ground rather than a tile seen from above. (32° until
+// the M279 diorama pass; nothing pins the value, only that the meshes wear it.)
+export const ORCH_STAGE_TILT_DEG = 56
+/** Ground radius over ring radius. The orbit track is drawn at 1/this, so it is named once. */
+export const ORCH_GROUND_K = 1.36
 const COS_TILT = Math.cos((ORCH_STAGE_TILT_DEG * Math.PI) / 180)
 
 export const ORCH_PARALLAX = { ground: 0.6, hub: 0.6, satFar: 0.78, satNear: 0.92, callout: 1 } as const
@@ -70,7 +76,7 @@ export function orchProjectNode(
 /** The ground ellipse sits under the hub's base and moves with the hub layer. */
 export function orchGroundPlane(stage: OrchStage, cam: OrchCamera, baseDrop: number): { x: number; y: number; k: number; rx: number; ry: number } {
   const k = layerZoom(cam.k, ORCH_PARALLAX.ground)
-  const rx = stage.ringR * 1.45
+  const rx = stage.ringR * ORCH_GROUND_K
   return {
     x: stage.w / 2 + (stage.cx - stage.w / 2) * k + cam.x * ORCH_PARALLAX.ground,
     y: stage.h / 2 + (stage.cy + baseDrop - stage.h / 2) * k + cam.y * ORCH_PARALLAX.ground,

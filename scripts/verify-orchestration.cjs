@@ -98,7 +98,7 @@ const trans = typeof A.agentTransitionActivity === 'function'
   ? A.agentTransitionActivity('c2', 'Coder', 'wants-you', 'busy', 100)
   : null
 ok('orch.activity.4 agentTransitionActivity names the transition and needs-you tone',
-  trans?.detail === 'busy → wants-you' && trans?.tone === 'needs-you' && trans?.panelId === 'c2')
+  trans?.detail === 'working → needs you' && trans?.tone === 'needs-you' && trans?.panelId === 'c2')
 // useSyncExternalStore compares getSnapshot by identity. A slice()/filter that
 // rebuilds every read made OrchestrationView infinite-loop and blank the window.
 const snapA = A.orchActivityEvents()

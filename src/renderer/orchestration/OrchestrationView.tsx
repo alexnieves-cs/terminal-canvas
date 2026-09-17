@@ -75,7 +75,7 @@ import {
   orchActivityEvents,
   subscribeOrchActivity
 } from './orchestration-activity'
-import { orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
+import { ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
 import type { OrchCubeSpec } from './OrchestrationCubes'
 import type { OrchCubeTone } from './orchestration-cube-motion'
 
@@ -213,14 +213,52 @@ function toneFromState(state: OrchRosterRow['state']): Tone {
 // M279. formatAgo moved to shell/format-ago.ts: the inspector's Activity tab
 // reads the same buffer and must age a row the same way.
 
-function kindGlyph(kind: OrchRosterRow['kind']): JSX.Element {
-  if (kind === 'chat') return <KindChat />
-  if (kind === 'terminal') return <KindTerminal />
-  if (kind === 'watcher') return <KindWatcher />
-  if (kind === 'workflow') return <KindWorkflow />
-  if (kind === 'work') return <KindWork />
-  if (kind === 'file') return <KindFile />
-  return <Orbit />
+function kindGlyphSized(kind: OrchRosterRow['kind'], size: number): JSX.Element {
+  if (kind === 'chat') return <KindChat size={size} />
+  if (kind === 'terminal') return <KindTerminal size={size} />
+  if (kind === 'watcher') return <KindWatcher size={size} />
+  if (kind === 'workflow') return <KindWorkflow size={size} />
+  if (kind === 'work') return <KindWork size={size} />
+  if (kind === 'file') return <KindFile size={size} />
+  return <Orbit size={size} />
+}
+const kindGlyph = (kind: OrchRosterRow['kind']): JSX.Element => kindGlyphSized(kind, 16)
+
+/** Where a plate's top edge hangs, in cube sizes below the cube's centre — clear of the platform's rim. */
+const PLATE_DROP_K = 1.2
+const PLATE_H = 34
+const PLATE_MAX_CHARS = 20
+
+/**
+ * A node's name plate: a kind tile, the name, and under it the state dot with
+ * the product's state word and the role. It replaced two bare `<text>` rows,
+ * which had no backing — over the grid and the spokes a name was half
+ * legible, and two neighbours' names ran into each other. Every fact on it is
+ * one the roster already has; nothing here is invented (no progress, no step).
+ *
+ * Plain SVG, never a foreignObject: this layer sits under a pan/zoom
+ * projection, and the file's callouts are the only foreignObjects for the
+ * reason orchestration-depth.ts gives. The width is ESTIMATED from the
+ * character count (the name is mono, so the estimate is close) — measuring
+ * text would be a layout read per node per camera frame.
+ */
+function NodePlate({ node, synthetic, overflow, x, y }: { node: OrchGraphNode; synthetic: boolean; overflow: boolean; x: number; y: number }): JSX.Element {
+  const name = node.title.length > PLATE_MAX_CHARS ? `${node.title.slice(0, PLATE_MAX_CHARS - 1).trimEnd()}…` : node.title
+  const role = node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : overflow ? 'Other' : node.kind
+  // A placeholder has no process, so it has no state to say: the role stands alone.
+  const sub = synthetic ? role : `${stateWord(node)} · ${role}`
+  const w = Math.max(92, Math.min(176, Math.max(name.length * 6.7, sub.length * 5.6) + 40))
+  return (
+    <g className="orch__plate" transform={`translate(${x - w / 2}, ${y})`} aria-hidden="true">
+      <title>{node.title}</title>
+      <rect className="orch__plate-bg" width={w} height={PLATE_H} rx={7} />
+      <rect className="orch__plate-tile" x={6} y={7} width={20} height={20} rx={5} />
+      <g className="orch__plate-glyph" transform="translate(10, 11)">{node.hub && !synthetic ? <Orbit size={12} /> : kindGlyphSized(node.kind, 12)}</g>
+      <text x={32} y={14.5} className="orch__cube-label">{name}</text>
+      {!synthetic && <circle className="orch__cube-state" cx={35} cy={24.5} r={2.5} />}
+      <text x={synthetic ? 32 : 42} y={28} className="orch__cube-role">{sub}</text>
+    </g>
+  )
 }
 
 /**
@@ -281,9 +319,7 @@ function IsoCube(props: {
       {/* Needs-you beacon: a small amber point above the cube. It stops the moment the
           cube is selected — the person has looked, so the graph stops calling. */}
       {attention ? <circle className="orch__cube-beacon" cy={-node.size * 1.02} r={3} aria-hidden="true" /> : null}
-      <circle className="orch__cube-state" cx={node.size * 0.7} cy={-node.size * 0.65} r={3} aria-hidden="true" />
-      <text x={props.labelOffset.x} y={node.size * 1.4 + props.labelOffset.y} textAnchor="middle" className="orch__cube-label">{node.title}</text>
-      <text x={props.labelOffset.x} y={node.size * 1.4 + props.labelOffset.y + 15} textAnchor="middle" className="orch__cube-role">{node.hub ? (synthetic ? 'Workspace hub' : 'Orchestrator') : node.kind}</text>
+      <NodePlate node={node} synthetic={synthetic} overflow={overflow} x={props.labelOffset.x} y={node.size * PLATE_DROP_K + props.labelOffset.y} />
     </g>
   )
 }
@@ -313,8 +349,8 @@ function outwardTail(panelId: string, isChat: boolean, terminalLine: string): st
   return lines[lines.length - 1] ?? ''
 }
 
-/** How far below the cube centre a flipped card's anchor sits, in cube sizes — under the label. */
-const CALLOUT_BELOW_K = 1.4
+/** How far below the cube centre a flipped card's anchor sits — under the name plate, whose own geometry decides it. */
+const calloutBelow = (size: number): number => size * PLATE_DROP_K + PLATE_H + 2
 
 /** Cards share the projected cube anchor but never inherit its face rotation. */
 function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSelect, onJump, onInterrupt }: {
@@ -351,7 +387,7 @@ function CubeCallout({ node, offsetX, below, drift, band, expanded, task, onSele
   const s = band === 'far' ? 0.92 : band === 'mid' ? 0.96 : 1
   // The stem runs 22px from the anchor toward the card on whichever side it hangs.
   const sy = below ? 22 : -22
-  const anchorY = below ? node.y + node.size * CALLOUT_BELOW_K : node.y - node.size
+  const anchorY = below ? node.y + calloutBelow(node.size) : node.y - node.size
   return <g className="orch__callout" data-depth={band} transform={`translate(${node.x}, ${anchorY})`}>
     <path className="orch__callout-stem" d={`M 0 0 L ${offsetX + drift.x} ${sy + drift.y}`} />
     <g transform={`translate(${offsetX + drift.x}, ${sy + drift.y}) scale(${s}) translate(${-offsetX}, ${-sy})`}>
@@ -470,7 +506,7 @@ function GraphBoard(props: {
   const stage: OrchStage = {
     w: ORCH_GRAPH_SIZE.w, h: ORCH_GRAPH_SIZE.h,
     cx: hubNode?.x ?? ORCH_GRAPH_SIZE.w / 2, cy: hubNode?.y ?? ORCH_GRAPH_SIZE.h / 2,
-    ringR: nodes.reduce((r, n) => n.hub || !hubNode ? r : Math.max(r, Math.hypot(n.x - hubNode.x, n.y - hubNode.y)), 0) || 148
+    ringR: nodes.reduce((r, n) => n.hub || !hubNode ? r : Math.max(r, Math.hypot(n.x - hubNode.x, n.y - hubNode.y)), 0) || 250
   }
   const projected = nodes.map((node) => {
     const p = orchProjectNode(node, stage, cam)
@@ -495,8 +531,8 @@ function GraphBoard(props: {
     const w = n.state === 'wants-you' ? 218 : 184
     const h = expanded(n.id) ? 154 : 76
     const flip = n.y - n.size - h - 22 < 8
-    // Below clears the cube's label (it sits at size × 1.15), mirroring the 22px stem above.
-    const y = flip ? n.y + n.size * CALLOUT_BELOW_K + 22 : n.y - n.size - h - 22
+    // Below clears the cube's name plate, mirroring the 22px stem above.
+    const y = flip ? n.y + calloutBelow(n.size) + 22 : n.y - n.size - h - 22
     if (flip) below.add(n.id)
     const candidates = [0, ...occupied.flatMap((r) => [r.x + r.w + 12 + w / 2 - n.x, r.x - 12 - w / 2 - n.x]), w + 16, -w - 16].map((dx) => {
       const x = Math.max(8, Math.min(ORCH_GRAPH_SIZE.w - w - 8, n.x + dx - w / 2))
@@ -518,7 +554,7 @@ function GraphBoard(props: {
       // toneFromState's five real returns are exactly OrchCubeTone's members;
       // its declared type is the wider Tone only because TONE_WORKING/TONE_NEEDS_YOU are.
       tone: toneFromState(n.state) as OrchCubeTone, selected,
-      roleColor: n.hub || n.kind === 'chat' ? '--iris' : n.kind === 'terminal' || n.kind === 'file' ? '--green' : n.kind === 'watcher' ? '--amber' : '--deck-violet',
+      roleColor: n.hub || n.kind === 'chat' ? '--iris' : n.kind === 'terminal' || n.kind === 'file' ? '--deck-steel' : '--deck-violet',
       dimmed: hasSelection && !selected, lensedOut: lensedOut(n.id),
       attention: attentionOf(n, selected)
     }
@@ -586,7 +622,7 @@ function GraphBoard(props: {
           </mask>
         </defs>
         {/* Ground plane: a grid clipped to the tilted ellipse and faded at its rim,
-            under concentric rings; the ring at 1/1.45 is the orbit track. It moves
+            under concentric rings; the ring at 1/ORCH_GROUND_K is the orbit track. It moves
             with the hub layer, so the hub stays planted while satellites parallax. */}
         <g transform={`translate(${ground.x}, ${ground.y}) scale(${ground.k})`} aria-hidden="true">
           <ellipse rx={ground.rx * 1.08} ry={ground.ry * 1.08} fill="url(#orch-hub-glow)" />
@@ -600,7 +636,7 @@ function GraphBoard(props: {
               </g>
             })}
           </g>
-          {[0.4, 1 / 1.45, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / 1.45 ? ' orch__ground-ring--track' : ''}`} />)}
+          {[0.4, 1 / ORCH_GROUND_K, 1].map((r) => <ellipse key={r} rx={ground.rx * r} ry={ground.ry * r} className={`orch__ground-ring${r === 1 / ORCH_GROUND_K ? ' orch__ground-ring--track' : ''}`} />)}
         </g>
         {projected.map(n => <ellipse key={`platform-${n.id}`} className="orch__platform" data-role={n.hub ? 'orchestrator' : n.kind} cx={n.x} cy={n.y + n.size * 0.8} rx={n.size * 1.15} ry={n.size * 0.34} />)}
         {orchEdgePaintOrder(edges).map((e) => {

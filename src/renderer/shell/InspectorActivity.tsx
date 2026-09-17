@@ -1,6 +1,7 @@
-import { memo, useEffect, useMemo, useState, useSyncExternalStore, type JSX } from 'react'
+import { memo, useEffect, useMemo, useState, useSyncExternalStore, type ComponentType, type JSX } from 'react'
 import { orchActivityEvents, subscribeOrchActivity, type OrchActivityEvent } from '@renderer/orchestration/orchestration-activity'
 import { StatusDot } from '@renderer/primitives'
+import { KIND_GLYPH, KindTerminal } from '@renderer/icons'
 import { EmptyState } from './EmptyState'
 import { formatAgo } from './format-ago'
 
@@ -45,9 +46,17 @@ function InspectorActivityImpl({ panelId, onGoToPanel }: InspectorActivityProps)
     <ol className="activity" aria-label="Activity" data-activity-feed={panelId ?? 'canvas'}>
       {rows.map((e) => {
         const jump = panelId === null && onGoToPanel !== undefined && e.panelId !== undefined
+        // M279 (the reference pass). The panel's kind glyph in a tone tile when
+        // the producer knew the panel; the dot otherwise. KIND_GLYPH has no
+        // terminal entry (the rail draws one apart), so it is named here.
+        const Glyph: ComponentType | undefined = e.panelKind === undefined ? undefined
+          : e.panelKind === 'terminal' ? KindTerminal
+          : (KIND_GLYPH as Partial<Record<string, ComponentType>>)[e.panelKind]
         const body = (
           <>
-            <StatusDot tone={e.tone} className="activity-row__dot" />
+            {Glyph !== undefined
+              ? <span className="activity-row__glyph" data-tone={e.tone} aria-hidden="true"><Glyph /></span>
+              : <StatusDot tone={e.tone} className="activity-row__dot" />}
             <span className="activity-row__title">{e.title}</span>
             <time className="activity-row__time" dateTime={new Date(e.at).toISOString()}>{formatAgo(e.at, now)}</time>
             <span className="activity-row__detail">{e.detail}</span>

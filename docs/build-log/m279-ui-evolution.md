@@ -19,6 +19,8 @@ gate, and the critic's sentence for every golden that changed.
 | 9 | Windowed file tree above 200 rows | (this step) | `verify:styles`, typecheck |
 | 10 | Motion: glow transitions on the state edge, feed row arrival (`activity-row-in`) | steps 1, 7 | `verify:styles motion.2` |
 | 11 | Goldens + this ledger | (below) | `verify:visual` |
+| 12 | The reference pass (`docs/design-reference.png` arrived after the gate): wide search field in the bar's middle, live status at its right, `Terminal Canvas` in the mark, aura alphas raised, kind tiles on activity rows (`panelKind` on the event), lit glyph tile on agent headers; the turn line crosses `outward()` | (this step) | `verify:styles`, `verify:verbs` 29/29, `verify:orchestration` 53/53, `verify:visual` |
+| 13 | Polish, from LOOKING at the step-12 captures: the no-selection summary gets a tab's inset and its own scroller with the counts two-up (it was a bare `.inspector__body`, flush on the pane's edge, and the feed under it was clipped, not scrolled); the feed says `working → needs you`, the product's words through `agentWord`, not the wire's `busy → wants-you`; the workflow's map renders only above twelve blocks and its contents are themed (on a four-block flow it was an empty white box over the fourth block) | (this step) | `verify:orchestration` 53/53 (its pinned string moved on purpose), `verify:styles` 75/75, `verify:rail` 223/223, `verify:visual` |
 
 ## Token re-valuations (dark block), with the finding each answers
 
@@ -55,12 +57,15 @@ still paints red — backlog).
 
 ## Gate
 
-Plain tier (`npm run verify`, wave 1): **41/42** — the one red is `verify:verbs gate.2`
-(redactSecrets' caller count), which M277's ledger already records as pre-existing and
-which touches no file this milestone changed (`git diff 1d925fbe --stat` names none of the
-gate's callers). The runner stops after a red wave, so the Electron tier was run by hand,
-serially, in the same order the runner takes; its numbers are in the table at the end of
-this section.
+Plain tier (`npm run verify`, wave 1): **41/42** at step 11 — the one red was
+`verify:verbs gate.2`, which this ledger first recorded as pre-existing. **That was
+wrong.** The check's `unguarded` list named `useActivityFeed.ts`: the finished-turn row
+read a chat's last answer for another reader (the inspector) without crossing
+`outward()`. Step 12 routes the line through the gate and `verify:verbs` is **29/29**.
+The lesson is the one CLAUDE.md gives — a red with a familiar id is not the familiar
+red until its payload has been read. The runner stops after a red wave, so the Electron
+tier was run by hand, serially, in the same order the runner takes; its numbers are in
+the table at the end of this section.
 
 `verify:visual` after `UPDATE_GOLDENS=1`: **63/64** — every changed scene written against
 the sentences below, and `starter` unpainted in that run ("the arrangement is not on
@@ -112,3 +117,44 @@ alone; the dark scenes move by the ramp as well. One sentence per scene, what wa
 | reduced-motion | as `kinds` at rest — the state edge's glow transition and the feed row's rise are the only motions this milestone added, and both are dropped here |
 | orchestration | the page on the light ground: violet structure lines and cube edges, the KPI slivers on the re-valued accents |
 | orchestration-dark | the page on the navy deck ground with the central light; this golden was MISSING before M279 (recorded in the M277 ledger) and is written for the first time |
+
+### Goldens, step 12 (the reference pass)
+
+Every scene re-captured after the pass and LOOKED AT against the reference and the
+step-11 set. The bar changed in EVERY scene again — the mark now reads `Terminal Canvas`,
+the search field fills the bar's middle, the live counts sit at the right before `View` —
+so every scene moves by its bar; the rows below name what else moved.
+
+| Scene | What changed, seen |
+|---|---|
+| every scene not named below | the bar only: `Terminal Canvas` after the mark, the field spanning from the breadcrumb to the counts with `⌘K` at its right edge, the counts beside `View`; the scene's subject is unchanged |
+| kinds-dark, zoomed-out-dark | the room is lit: the blue wash at the top-right and the cyan at the bottom-right are visible on the navy ground where before they were faint; the chat panel's header carries a cyan glyph tile; the sixteen ANSI colours in the well are unchanged |
+| palette-dark | the palette over the lit ground; the field behind it reads as the bar's centre; rows unchanged |
+| chat | the chat's header glyph is a lit rounded tile in the interface light beside the name; the pill still reads `asleep`; `2` in the bar |
+| inspector-activity | each row leads with a 22px kind tile — the terminal glyph on a tone-tinted square — in its own column, the title beside it (a first cut let the tile paint over the title; the grid's first track is `auto` now) |
+| wide | the canvas-wide feed's rows carry kind tiles (terminal, then the chat glyph on the last row); `4 working · 1 needs you` as two labelled pills at the right of the field |
+| compact | at 1000px the field shortens to `Search panel…` between the breadcrumb and the two count pills; nothing collides |
+| approval | `2` and `1` as two pills at the right, the second amber; the field between the breadcrumb and them |
+
+### Goldens, step 13 (polish)
+
+Three goldens written, each looked at first; every other scene was kept byte for byte.
+`header` went red once at 0.541% and green on the next run with no change between — its
+diff was the pid's digits and a subagents note caught between two sentences, which is the
+scene's own nondeterminism, not a change.
+
+| Scene | What changed, seen |
+|---|---|
+| wide | the summary sits on the pane's inset under its headings; `panels`/`running` and `waiting`/`tokens` are two-up, `this week` is a sentence at sentence size, so the feed starts at mid-pane instead of below the fold; its rows read `working → idle`, `working → needs you` |
+| workflow, workflow-edit | the empty white map is gone from the flow's bottom-right and the block it covered — `Collect · joins results / report` — is readable for the first time; both were under the pixel budget, so their goldens were deleted to force the write |
+
+### Gate, step 13
+
+`npm run verify`, whole: **52/54** suites. The two reds are the baseline's two suites —
+`verify:panels:agents` 81/82 (`detail.1`) and `verify:panels:product`, whose eight are
+the M277 set by id. Product first read 108/117, one MORE than the baseline: `browser.1`,
+`"live":false` — the webview guest never came up. Its payload was read before it was
+named: nothing in this step reaches the browser panel, and the suite re-run alone
+(`TC_ONLY=browser.1`, every check still running) passed it. A load flake in the serial
+tier, recorded here so the next 108 is recognised. `verify:visual` 63/64 (`starter`, as
+at step 11).

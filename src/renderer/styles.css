@@ -163,6 +163,7 @@
      --s-4 is the hover fill and --s-5 the pressed/selected fill — a tint, as
      every native macOS control does it, and never a text ground. */
   --deck-violet: #7655b4;
+  --deck-steel: #4f6b8a;
   --deck-ground: #e3e7ee;
   --deck-surface: #f1f4f8;
   --s-0: #e3e7ee;   /* canvas ground (under the aura)                 */
@@ -319,6 +320,7 @@
      pre-M109 ramp spanned ten points; this spans twenty), blue-black rather
      than grey. Every value re-derived against check 11. */
   --deck-violet: #b59af8;
+  --deck-steel: #8fb2d6;
   --deck-ground: #070b14;
   --deck-surface: #0d1420;
   /* M279. NAVY, not black. The ramp keeps M109's twenty-point span and moves
@@ -383,8 +385,8 @@
   /* The ground's light: electric blue at the centre, cyan in the diagonal —
      the two illumination hues the brief names, at the alphas M109 chose for
      indigo and teal. */
-  --aura-1:     rgba(56, 130, 255, .20);
-  --aura-2:     rgba(95, 227, 255, .11);
+  --aura-1:     rgba(56, 130, 255, .28);
+  --aura-2:     rgba(95, 227, 255, .16);
   --aura-working:   rgba(110, 168, 255, .20);
   --aura-needs-you: rgba(229, 180, 103, .18);
   --on-iris:    #06111a;
@@ -838,14 +840,17 @@ body {
   box-shadow: none;
 }
 .shell__spacer { flex: 1; }
+/* M279 (the reference pass). The breadcrumb used to be absolutely centred and
+   the search hard-right. The reference's one defining chrome element is a
+   wide search FIELD in the bar's middle, so the field now fills the bar's
+   free run (flex, capped) and the breadcrumb sits in flow after Create. Flex
+   centring instead of `left: 50%`: an absolute centre collided with the left
+   cluster below ~1700px, measured; a flex fill cannot. */
 .shell__workspace {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  max-width: 34%;
+  max-width: 22%;
   min-width: 0;
   color: var(--fg-2);
   font-size: var(--t-sm);
@@ -855,7 +860,7 @@ body {
 .shell__workspace > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell__breadcrumb-separator { color: var(--fg-4); }
 .shell__task { color: var(--fg); }
-.shell__search { margin-left: auto; min-width: 280px; justify-content: flex-start; }
+.shell__search { flex: 1 1 auto; min-width: 200px; max-width: 560px; margin-inline: auto; justify-content: flex-start; }
 .shell__search > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell__search kbd { margin-left: auto; }
 .shell__view { position: relative; -webkit-app-region: no-drag; }
@@ -1613,7 +1618,6 @@ body {
   margin-left: auto;
   -webkit-app-region: no-drag;
 }
-.live-status + .shell__search { margin-left: 0; }
 .shell__top .live-status__item {
   display: inline-flex;
   align-items: center;
@@ -1656,7 +1660,9 @@ body {
 .inspector__activity-title { padding-inline: 0; }
 .activity-row__main {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
+  /* auto, not 8px: the first cell holds the 7px dot OR the 22px kind tile (the
+     reference pass), and a fixed track let the tile paint over the title. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-rows: auto auto;
   column-gap: var(--sp-3);
   align-items: center;
@@ -1673,6 +1679,16 @@ body {
 .activity-row__main--verb { cursor: pointer; }
 .activity-row__main--verb:hover { background: var(--s-4); border-color: var(--line); }
 .activity-row__dot { grid-row: 1 / span 2; width: 7px; height: 7px; border-radius: 50%; }
+/* M279 (the reference pass). When the row's panel is known, its KIND glyph in a
+   tile tinted by the row's tone stands where the dot stood — the reference's
+   feed is read by its tiles first. The dot stays for rows with no panel. */
+.activity-row__glyph {
+  grid-row: 1 / span 2; width: 22px; height: 22px; border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--tone-dim); color: var(--tone);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tone) 28%, transparent);
+}
+.activity-row__glyph svg { width: 13px; height: 13px; }
 .activity-row__title { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 500; }
 .activity-row__time { grid-column: 3; color: var(--fg-4); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
 .activity-row__detail { grid-column: 2 / span 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); }
@@ -1955,6 +1971,33 @@ body {
   letter-spacing: var(--track-tight);
   font-variant-numeric: tabular-nums;
   margin-top: var(--sp-1);
+}
+
+/* M279 (polish). The no-selection summary is a bare `.inspector__body`, which
+   only CLIPS — the tabs get their inset and their scroller from
+   `.context__panel`, and this body had neither: its figures sat flush on the
+   pane's edge under inset headings, and the canvas-wide feed below them was
+   cut off rather than scrolled. Same inset as a tab, its own scroller, and
+   the counts two-up so the feed starts above the fold. */
+.inspector__body[data-inspector-summary] {
+  overflow-y: auto;
+  padding: var(--sp-2) var(--sp-5) var(--sp-5);
+  box-sizing: border-box;
+}
+[data-inspector-summary] .inspector__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--sp-4);
+}
+/* A gauge and a sentence are read across, not counted: the full row. */
+[data-inspector-summary] .inspector__field--gauge,
+[data-inspector-summary] .inspector__field:has([data-summary="history"]) { grid-column: 1 / -1; }
+/* `history` is a SENTENCE wearing the counts' hook; at the hero size it
+   wrapped to two lines and outweighed every number above it. */
+.inspector__value[data-summary="history"] {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 /* Account-level usage windows on the no-selection summary — denser than the
@@ -2844,6 +2887,21 @@ body {
 .pf--kind-terminal .pf__state { display: none; }
 /* M170. An agent terminal's chat glyph is a `.pf__state--kind` too — shown, beside the (hidden) dot. */
 .pf--kind-terminal .pf__state--kind[data-agent-glyph] { display: inline-flex; }
+/* M279 (the reference pass). An AGENT's glyph — a chat's, or a terminal
+   running one — sits in a lit tile: a rounded square in the interface light,
+   the way the reference's nodes carry theirs. Only agents: a file or a
+   review keeps its quiet glyph, so the tile itself says "this one acts".
+   The tile is the interface light, not the state tone, on purpose — the
+   state is already the edge and the pill, and a third statement of it in a
+   different shape would be noise. */
+.pf--kind-chat .pf__state--kind,
+.pf--kind-terminal .pf__state--kind[data-agent-glyph] {
+  width: 18px; height: 18px; flex-basis: 18px;
+  border-radius: var(--r-sm);
+  background: var(--iris-dim);
+  color: var(--iris);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--iris) 30%, transparent), 0 0 10px var(--iris-dim);
+}
 .pf__body { flex: 1; min-height: 0; isolation: isolate; }
 /* M149 (audit F.12). `isolation: isolate` keeps every z-index INSIDE the body
    (xterm's layers run to 10) in the body's own stacking context, so the
@@ -5552,6 +5610,16 @@ body {
 .workflow-flow { width: 100%; height: 100%; min-width: 420px; min-height: 260px; }
 .workflow-flow .react-flow { background: transparent; }
 .workflow-flow .react-flow__controls, .workflow-flow .react-flow__minimap { border-color: var(--line); background: var(--s-3); box-shadow: none; }
+/* M279 (polish). The map's BOX was themed above and its contents were not:
+   xyflow's default node fill is #e2e2e2 under a 60% grey veil, which on a
+   white `--s-3` paints an empty box — a minimap showing nothing. These are
+   CSS `fill`s read through xyflow's own variables, so `var()` resolves here
+   (unlike an SVG presentation attribute — chart-tokens.ts's trap). */
+.workflow-flow .react-flow {
+  --xy-minimap-node-background-color: var(--fg-4);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--s-1) 70%, transparent);
+  --xy-minimap-mask-stroke-color: var(--line-strong);
+}
 .workflow-flow .react-flow__controls-button { border-color: var(--line); background: var(--s-3); fill: var(--fg-2); }
 .workflow-flow .react-flow__edge-path { stroke: var(--line-strong); stroke-width: 2; }
 .workflow-flow .react-flow__edge-text { fill: var(--fg-3); font-family: var(--font-ui); font-size: var(--t-xs); }
@@ -7913,17 +7981,34 @@ body {
    reads this file alone — a rule it cannot see is a rule that drifts. */
 [data-radix-popper-content-wrapper] { display: contents !important; }
 
-/* Command deck: role light belongs to the topology; state remains on its dot. */
+/* Command deck: role light belongs to the topology; state remains on its dot.
+   A role NEVER wears a tone's hue. Terminals were green and watchers amber, which
+   are `idle` and `needs you` — a terminal read as idle whatever it was doing, and
+   a watcher as asking. Three families, none of them a state: agents in the
+   interface light, automation in violet, tools in steel. The mesh's `roleColor`
+   (OrchestrationView's cubeSpecs) names the same three tokens. */
 .orch [data-role="chat"], .orch [data-role="orchestrator"] { --role-light: var(--iris); }
-.orch [data-role="terminal"], .orch [data-role="file"] { --role-light: var(--green); }
-.orch [data-role="workflow"], .orch [data-role="work"] { --role-light: var(--deck-violet); }
-.orch [data-role="watcher"] { --role-light: var(--amber); }
+.orch [data-role="terminal"], .orch [data-role="file"] { --role-light: var(--deck-steel); }
+.orch [data-role="workflow"], .orch [data-role="work"], .orch [data-role="watcher"] { --role-light: var(--deck-violet); }
 .orch__graph-wrap { background: radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--iris) 12%, transparent), transparent 65%), var(--deck-ground); }
 .orch__platform { fill: color-mix(in srgb, var(--role-light, var(--iris)) 9%, var(--deck-surface)); stroke: color-mix(in srgb, var(--role-light, var(--iris)) 48%, transparent); stroke-width: 1; }
 .orch__edge:not(.orch__edge--authored):not(.orch__edge--lensed) { stroke: color-mix(in srgb, var(--role-light, var(--iris)) 48%, transparent); }
 .orch__cube-label { font-family: var(--font-mono); }
-.orch__cube-role { font: var(--t-xs) var(--font-ui); fill: var(--fg-3); text-transform: capitalize; }
+.orch__cube-role { font: var(--t-xs) var(--font-ui); fill: var(--fg-3); }
 .orch__cube-state { fill: var(--tone); }
+/* The name plate (M279 diorama pass). A backing, because a bare name over the
+   grid and the spokes was half legible; the deck surface mixed toward the
+   ground rather than a glass token, since an SVG rect has no backdrop to blur.
+   The tile is lit in the node's ROLE light and the dot in its TONE — role says
+   what it is, tone says what it is doing, and they never share a mark. */
+.orch__plate { pointer-events: none; }
+.orch__plate-bg { fill: color-mix(in srgb, var(--deck-surface) 88%, transparent); stroke: color-mix(in srgb, var(--role-light, var(--iris)) 22%, var(--line)); stroke-width: 1; }
+.orch__plate-tile { fill: color-mix(in srgb, var(--role-light, var(--iris)) 16%, var(--deck-surface)); stroke: color-mix(in srgb, var(--role-light, var(--iris)) 42%, transparent); stroke-width: 1; }
+.orch__plate-glyph { color: var(--role-light, var(--iris)); }
+.orch__cube--on .orch__plate-bg { stroke: var(--iris); }
+.orch__cube--needs .orch__plate-bg { stroke: color-mix(in srgb, var(--amber) 70%, transparent); }
+.orch__cube[data-depth="far"] .orch__plate-bg { fill: color-mix(in srgb, var(--deck-surface) 72%, transparent); }
+.orch__cube--synthetic .orch__plate-bg, .orch__cube--overflow .orch__plate-bg { stroke-dasharray: 3 3; }
 .orch__metric { position: relative; overflow: hidden; padding: var(--sp-3) var(--sp-4); background: var(--deck-surface); }
 .orch__metric::after { content: ''; height: 2px; width: 28%; position: absolute; bottom: 0; left: var(--sp-4); background: var(--tone, var(--blue)); transition: width var(--dur-2) var(--ease); }
 .orch__metric[aria-pressed="true"]::after { width: 80%; }

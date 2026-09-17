@@ -171,11 +171,18 @@ export interface OrchSnapshot {
   machine: OrchMachineInput
 }
 
-const GRAPH_W = 720
+// The stage is about twice as wide as it is tall, and the board is fitted into it
+// `meet`: a 720-wide board was height-limited and left half the stage's width
+// empty, with eight labels crowded into the rest. The ring stays a CIRCLE in the
+// model — the wide, short footprint comes from the camera's tilt
+// (orchestration-depth.ts), never from an x-only stretch, which would make the
+// ground an ellipse no tilt explains (`orch.depth.3`).
+const GRAPH_W = 860
 const GRAPH_H = 420
 const HUB_X = GRAPH_W / 2
-const HUB_Y = GRAPH_H / 2
-const RING_R = 148
+// Above centre: the front row hangs a name plate BELOW its cube, the back row nothing above.
+const HUB_Y = 196
+const RING_R = 250
 const HUB_SIZE = 56
 const SAT_SIZE = 38
 

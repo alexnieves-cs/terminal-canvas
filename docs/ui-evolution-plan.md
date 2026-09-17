@@ -226,3 +226,23 @@ Each step: typecheck + build, `npm run affected`, commit. Electron suites at the
 - 2026-09-16 — the inspector's tab set grows to four; `verify:panels:agents ctx.1` and
   `verify:layout shell.1` were extended rather than worked around.
 - 2026-09-16 — the `exited 0` tone is backlog #90.
+- 2026-09-17 — the reference image arrived after the gate (`docs/design-reference.png`,
+  1536×1024). Read against the captures: the material, the four KPI cards, the diorama,
+  the activity feed and the current-task card were already in the same places. Taken
+  from it, as a reference pass: a wide search field filling the bar's middle with the
+  live status at its right, the product's name in the mark, a brighter room (the two
+  aura alphas raised), a kind tile on every activity row whose panel is known, and a lit
+  glyph tile on agent headers. Declined, each for a reason the brief already gave: the
+  greeting line and the "System Online" pill (a zero-value statement at rest), the
+  selected agent's progress percentage and step checklist (no backend fact behind
+  either), the deployments card (no backend), an isometric canvas (the diorama is the
+  orchestration page's; the canvas stays the 2D authoring surface), and the icon-and-
+  label sidebar (the dock already labels itself at the wide breakpoint).
+- 2026-09-17 — `verify:verbs gate.2` was NOT pre-existing: it named
+  `useActivityFeed.ts` as an unguarded reader of a chat's last answer. The turn line
+  now crosses `outward()`; the ledger's Gate section is corrected.
+- 2026-09-17 — a polish pass from the captures, not from the reference: the no-selection
+  summary's inset and scroller, the feed's state words through `agentWord`, and the
+  workflow map gated on flow size (`MINIMAP_FROM`). The map is kept, not deleted — an
+  imported flow of thirty blocks is where it pays — and its contents are themed so it
+  does not return as xyflow's grey-on-white.

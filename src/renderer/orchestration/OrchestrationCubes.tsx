@@ -45,14 +45,6 @@ export interface OrchestrationCubesProps {
   viewBox: { w: number; h: number }
 }
 
-const TONE_VAR: Record<OrchCubeTone, string> = {
-  working: '--blue',
-  'needs-you': '--amber',
-  idle: '--green',
-  exited: '--red',
-  starting: '--line'
-}
-
 function readCssColor(varName: string): THREE.Color {
   const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
   try {
@@ -109,7 +101,13 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   const mesh = useRef<THREE.Mesh>(null!)
   const material = useRef<THREE.MeshPhysicalMaterial>(null!)
   const lift = useRef(0)
-  const colorToken = node.synthetic ? TONE_VAR[node.tone] : node.roleColor
+  const edge = useRef<THREE.LineBasicMaterial>(null!)
+  // Scratch colours: useFrame allocated a THREE.Color per cube per frame before.
+  const body = useRef(new THREE.Color())
+  const glow = useRef(new THREE.Color())
+  // A placeholder (no supervisor yet, `+N more`) has no process, so it takes no
+  // tone's hue either — it was green, the colour of `idle`, for an agent that does not exist.
+  const colorToken = node.synthetic ? '--deck-steel' : node.roleColor
   const [base, setBase] = useState(() => readCssColor(colorToken))
   const invalidate = useThree(state => state.invalidate)
   useEffect(() => {
@@ -121,7 +119,12 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
   }, [colorToken])
   // Demand-mode canvases also repaint when a reduced-motion user changes theme.
   useEffect(() => invalidate(), [base, invalidate])
-  const restEmissive = node.synthetic ? 0 : node.hub ? 0.55 : node.tone === 'needs-you' ? 0.3 : node.tone === TONE_WORKING ? 0.18 : 0.06
+  // The body is a dark slab LIT in its role colour, not a slab OF that colour: a
+  // translucent coloured box read as tinted jelly on the navy ground (olive, for
+  // the terminals). How brightly it is lit is the agent's real tone — working
+  // burns, needs-you holds warm, idle is a pilot light, exited is dark.
+  const restEmissive = node.synthetic ? 0.04 : node.tone === 'exited' ? 0.02 : node.tone === 'needs-you' ? 0.5 : node.tone === TONE_WORKING ? 0.42 : node.hub ? 0.3 : 0.14
+  const edgeOpacity = node.synthetic ? 0.35 : node.tone === 'exited' ? 0.3 : node.tone === 'idle' || node.tone === 'starting' ? 0.75 : 1
   const half = (node.size * fit.scale) / 2
   const outline = useMemo(() => {
     const box = new THREE.BoxGeometry(half * 2, half * 2, half * 2)
@@ -162,25 +165,40 @@ function CubeMesh({ node, fit, size, viewBoxW, reducedMotion, getClocks }: {
     // "selected" still reads as "lifted", not just "less dim".
     mesh.current.scale.setScalar(motion.scale * (1 + lift.current / 220))
     const dim = (node.dimmed || node.lensedOut) && !node.selected
-    const sat = node.tone === 'exited' ? 0.35 : 1
     const hsl = { h: 0, s: 0, l: 0 }
     base.getHSL(hsl)
-    // Lifted a touch off the raw tone lightness — the old CSS top face mixed
-    // its tone 48% into --fg for the same reason: a lit box reads as a flat
-    // colour swatch unless it's brighter than the swatch itself.
-    const lightness = Math.min(0.82, hsl.l * 1.3 + 0.08) * (node.tone === 'exited' ? 0.9 : 1) * (dim ? 0.75 : 1)
-    const color = new THREE.Color().setHSL(hsl.h, hsl.s * sat * (dim ? 0.55 : 1), lightness)
-    material.current.color.copy(color)
-    material.current.emissive.copy(color)
-    material.current.emissiveIntensity = (restEmissive + (node.hub && !node.synthetic && !reducedMotion ? (Math.sin(nowMs / 700) + 1) * 0.16 : 0) + motion.emissiveBoost + motion.rimBoost * 0.25) * (dim ? 0.4 : 1)
+    // The slab keeps the role's hue at a fraction of its saturation and near the
+    // ground's lightness, so the faces separate under the key light without the
+    // body ever competing with its own lit edges.
+    body.current.setHSL(hsl.h, hsl.s * 0.45, dim ? 0.1 : 0.17)
+    glow.current.setHSL(hsl.h, hsl.s * (node.tone === 'exited' ? 0.3 : 1), Math.min(0.7, hsl.l))
+    material.current.color.copy(body.current)
+    material.current.emissive.copy(glow.current)
+    const hubPulse = node.hub && !node.synthetic && node.tone === TONE_WORKING && !reducedMotion ? (Math.sin(nowMs / 700) + 1) * 0.12 : 0
+    material.current.emissiveIntensity = (restEmissive + hubPulse + motion.emissiveBoost * 0.5 + motion.rimBoost * 0.2) * (dim ? 0.35 : 1)
+    edge.current.color.copy(glow.current)
+    edge.current.opacity = edgeOpacity * (dim ? 0.4 : 1)
+    // Demand-mode loop: ask for the next frame only while THIS cube still has
+    // motion to show. An idle room renders nothing at all between React updates —
+    // `frameloop="always"` repainted WebGL at 60fps for a ring of idle agents.
+    // The finite windows mirror orchestration-cube-motion.ts (3 × 1200ms pulse,
+    // 520ms settle); past them the cube is at rest and asks for nothing.
+    if (!reducedMotion && (
+      Math.abs(lift.current - motion.lift) > 0.05 ||
+      (node.tone === TONE_WORKING && !node.synthetic) ||
+      (node.tone === 'starting' && sinceToneMs < 600) ||
+      (node.attention && sinceAttentionMs < 3700)
+    )) state.invalidate()
   })
 
   return (
     <mesh ref={mesh} rotation={rotation} castShadow={!node.synthetic} receiveShadow>
       <boxGeometry args={[half * 2, half * 2, half * 2]} />
-      <meshPhysicalMaterial ref={material} roughness={0.16} metalness={0.25} transparent opacity={0.68} depthWrite={false} clearcoat={1} clearcoatRoughness={0.12} />
+      {/* Opaque and depth-writing: the hub must OCCLUDE the back row, which a
+          depthWrite={false} glass body only appeared to do by painter's luck. */}
+      <meshPhysicalMaterial ref={material} roughness={0.38} metalness={0.35} clearcoat={0.6} clearcoatRoughness={0.25} />
       <lineSegments geometry={outline}>
-        <lineBasicMaterial color={base} transparent opacity={0.8} />
+        <lineBasicMaterial ref={edge} color={base} transparent />
       </lineSegments>
     </mesh>
   )
@@ -201,7 +219,7 @@ function CubeScene({ nodes, viewBox, reducedMotion }: { nodes: readonly OrchCube
   return (
     <>
       <FitCamera width={size.width} height={size.height} />
-      <ambientLight intensity={0.85} />
+      <ambientLight intensity={0.55} />
       <directionalLight position={[160, 260, 340]} intensity={1.3} castShadow={!reducedMotion}>
         <orthographicCamera attach="shadow-camera" args={[-size.width, size.width, size.height, -size.height, 1, 1200]} />
       </directionalLight>
@@ -227,7 +245,8 @@ export function OrchestrationCubes({ nodes, viewBox }: OrchestrationCubesProps):
         // shadow re-resolve logged a deprecation warning without this.
         shadows={reducedMotion ? false : 'percentage'}
         dpr={[1, 2]}
-        frameloop={reducedMotion ? 'demand' : 'always'}
+        // Always demand: a cube with motion left invalidates from its own useFrame.
+        frameloop="demand"
         gl={{ antialias: true, alpha: true }}
       >
         <CubeScene nodes={nodes} viewBox={viewBox} reducedMotion={reducedMotion} />

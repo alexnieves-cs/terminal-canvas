@@ -12,6 +12,9 @@ import { createWorkflowFlowStore, type WorkflowFlowState } from './workflow-flow
 type FlowBlock = { key: string; label: string; sublabel: string; kind: string; family: 'agent' | 'worker' | 'hand'; issue?: string[] }
 const FAMILY: Record<string, FlowBlock['family']> = { chat: 'agent', orchestrator: 'agent', collect: 'agent', pool: 'worker', terminal: 'hand', action: 'hand', http: 'hand' }
 
+/** Above this many blocks `fitView` stops being legible and the map starts paying. */
+const MINIMAP_FROM = 12
+
 function WorkflowBlock({ data, selected }: NodeProps<Node<FlowBlock>>): JSX.Element {
   const reduced = useReducedMotion()
   return <motion.div className={`workflow-flow__block${selected ? ' workflow-flow__block--selected' : ''}`} data-workflow-block={data.key} data-workflow-block-kind={data.kind} data-family={data.family} data-workflow-issue={data.issue?.length ? 'true' : undefined}
@@ -64,7 +67,10 @@ export function WorkflowFlow(props: WorkflowFlowProps): JSX.Element {
       onConnect={(connection) => { if (connection.source !== null && connection.target !== null) props.onConnect(connection.source, connection.target) }}>
       <Background gap={16} size={1} />
       <Controls showInteractive={false} />
-      <MiniMap pannable zoomable />
+      {/* M279 (polish). A map earns its corner only when the flow cannot be seen
+          whole: on a four-block flow it covered the fourth block, inside a panel
+          that already sits on a canvas with a map of its own. */}
+      {nodes.length > MINIMAP_FROM && <MiniMap pannable zoomable />}
     </ReactFlow>
   </div>
 }

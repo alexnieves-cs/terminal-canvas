@@ -80,7 +80,7 @@ export function TopBar({
         pays for itself, so it occupies space that was previously dead).
         aria-hidden: it is decoration, and the window already has a title.
       */}
-      <span className="shell__mark" aria-hidden="true"><ProductMark /><span>canvas</span></span>
+      <span className="shell__mark" aria-hidden="true"><ProductMark /><span>Terminal Canvas</span></span>
 
       {/* M268. Center-page swap: reachable without opening dock labels.
           M279: the segmented primitive; `.shell__center-toggle` / `.shell__center-btn`
@@ -113,12 +113,13 @@ export function TopBar({
         {taskName !== undefined && <><span className="shell__breadcrumb-separator">/</span><span className="shell__task">{taskName}</span></>}
       </div>
 
-      {/* M279. What the agents are doing, before the search: the one fact a
-          person returning to the window wants first. Nothing at rest. */}
-      <LiveStatus running={running} waiting={waiting} onJumpWaiting={onJumpWaiting} />
-
       <button type="button" className="shell__search" title="Search panels, files, tasks, commands…"
         {...shellControl(onSearch)}><Search /><span>Search panels, files, tasks, commands…</span><kbd>⌘K</kbd></button>
+
+      {/* M279. What the agents are doing, at the bar's right after the field
+          (the reference pass moved it from before the field): the one fact a
+          person returning to the window wants first. Nothing at rest. */}
+      <LiveStatus running={running} waiting={waiting} onJumpWaiting={onJumpWaiting} />
       {/* M276. The menu's BEHAVIOUR is the Menu primitive's; its look is these
           same classes, unchanged. `.shell__view` stays the positioned host and
           `.shell__view-menu` keeps its own `position: absolute` rule — Radix's

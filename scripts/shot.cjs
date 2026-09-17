@@ -1337,7 +1337,14 @@ app.whenReady().then(async () => {
   await sleep(1500)
 
   const manifest = []
+  // SHOT_ONLY=a,b narrows the run to the named scenes, in SCENES order — for
+  // iterating on one surface. Scenes share a window and some lean on the one
+  // before (orchestration-dark needs orchestration to have opened the page), so
+  // name the pair; a filter matching nothing is an error, not an empty success.
+  const only = (process.env.SHOT_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean)
+  if (only.length > 0 && !SCENES.some((s) => only.includes(s.name))) throw new Error(`SHOT_ONLY matched no scene: ${only.join(', ')}`)
   for (const scene of SCENES) {
+    if (only.length > 0 && !only.includes(scene.name)) continue
     if (scene.size) await kit.resize(scene.size[0], scene.size[1])
     try {
       await scene.run(kit)

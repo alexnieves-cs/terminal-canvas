@@ -772,12 +772,18 @@ runPanelsSuite('kinds', WATCHDOG_MS, async (ctx) => {
       // browser default action, and this click has to move DOM focus off the
       // background the same way a user's would. The header strip (top + 24),
       // never the body — a click into a live panel's slot belongs to xterm.
-      const header = await wc.executeJavaScript(`(() => {
-        const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(subject)}]')
-        if (!p) return null
-        const r = p.getBoundingClientRect()
-        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + 24) }
-      })()`)
+      const RECT = `(() => { const p = document.querySelector('.panel[data-panel-id=${JSON.stringify(subject)}]'); if (!p) return null; const r = p.getBoundingClientRect(); return [r.left, r.top, r.width, r.height] })()`
+      // Two reads 50ms apart that AGREE, not one: the viewport can still be
+      // easing when this runs, and a rect read mid-ease aims the click at
+      // where the header was — it lands on the background and the check
+      // reports a focus bug that is not there.
+      const header = await waitUntil(async () => {
+        const a = await wc.executeJavaScript(RECT)
+        await new Promise((r) => setTimeout(r, 50))
+        const b = await wc.executeJavaScript(RECT)
+        if (!a || !b || a.join() !== b.join()) return null
+        return { x: Math.round(a[0] + a[2] / 2), y: Math.round(a[1] + 24) }
+      }, 6000)
       if (!header) throw new Error(`143: ${subject} has no rect to click`)
       wc.sendInputEvent({ type: 'mouseDown', x: header.x, y: header.y, button: 'left', clickCount: 1 })
       wc.sendInputEvent({ type: 'mouseUp', x: header.x, y: header.y, button: 'left', clickCount: 1 })
