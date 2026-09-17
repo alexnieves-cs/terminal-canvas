@@ -1,4 +1,4 @@
-import { memo, type JSX } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type JSX, type UIEvent } from 'react'
 import type { FileRow } from './file-tree-model'
 import { shellControl } from './shell-control'
 import { ChevronLeft, Refresh, KindMemory } from '@renderer/icons'
@@ -57,9 +57,48 @@ export interface FileTreeProps {
  * arrive frozen on treeSignature, because Canvas re-renders on every
  * mousemove whether or not this pane is up.
  */
+/**
+ * M279. THE WINDOW. A directory with thousands of entries used to put every
+ * one in the DOM; above this many rows the list renders only the rows in
+ * view plus an overscan, with two spacer items holding the scroll height.
+ * Below it the DOM is exactly what it was — the suites that read
+ * `[data-file-path]` rows see the same tree for every fixture they plant.
+ *
+ * The row pitch is MEASURED from the first two rendered rows, never assumed:
+ * `.rail-row` is 28px min plus the list's row-gap, and a note row can be
+ * taller; a wrong constant would leave the window short and paint blank
+ * space at the bottom with no error.
+ */
+const WINDOW_ABOVE = 200
+const OVERSCAN = 12
+
 function FileTreeImpl({
   onToggle, rootPath, rootLabel, rootPanel, rows, rootPending, emptyReason, onToggleDir, onInsertPath, onRefresh, onOpenMemory, memoryReason
 }: FileTreeProps): JSX.Element {
+  const listRef = useRef<HTMLUListElement | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportH, setViewportH] = useState(0)
+  const [pitch, setPitch] = useState(30)
+  const windowed = rows.length > WINDOW_ABOVE
+  const onScroll = useCallback((e: UIEvent<HTMLUListElement>) => { if (windowed) setScrollTop(e.currentTarget.scrollTop) }, [windowed])
+  useEffect(() => {
+    if (!windowed) return
+    const el = listRef.current
+    if (el === null) return
+    const measure = (): void => {
+      setViewportH(el.clientHeight)
+      const items = el.querySelectorAll<HTMLElement>('li.file-row')
+      const a = items[0], b = items[1]
+      if (a !== undefined && b !== undefined && b.offsetTop > a.offsetTop) setPitch(b.offsetTop - a.offsetTop)
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [windowed, rows.length])
+  const start = windowed ? Math.max(0, Math.floor(scrollTop / pitch) - OVERSCAN) : 0
+  const end = windowed ? Math.min(rows.length, Math.ceil((scrollTop + viewportH) / pitch) + OVERSCAN) : rows.length
+  const shown = windowed ? rows.slice(start, end) : rows
   return (
     <div className="shell__tree" aria-label="File tree" data-file-tree>
       <div className="shell__region-title shell__region-title--action navigator__header">
@@ -114,7 +153,7 @@ function FileTreeImpl({
         </span>
       </div>
 
-      <ul className="rail-list rail-list--tree" aria-label="Files">
+      <ul className="rail-list rail-list--tree" aria-label="Files" ref={listRef} onScroll={onScroll} data-tree-windowed={windowed ? `${start}-${end}` : undefined}>
         {rootLabel === null ? (
           // A header with a void under it reads as a broken list, which is the
           // rule all three of SideRail's sections already obey. This state is
@@ -130,7 +169,9 @@ function FileTreeImpl({
         ) : rows.length === 0 ? (
           <li className="rail-empty">empty directory</li>
         ) : (
-          rows.map((row) => {
+          <>
+          {windowed && start > 0 && <li className="file-row--spacer" aria-hidden="true" style={{ height: `${start * pitch}px` }} />}
+          {shown.map((row) => {
             if (row.state === 'loading' || row.state === 'note') {
               // Not a button. There is nothing to act on, and a control that
               // takes a click and does nothing is worse than plain text.
@@ -170,7 +211,9 @@ function FileTreeImpl({
                 </button>
               </li>
             )
-          })
+          })}
+          {windowed && end < rows.length && <li className="file-row--spacer" aria-hidden="true" style={{ height: `${(rows.length - end) * pitch}px` }} />}
+          </>
         )}
       </ul>
     </div>

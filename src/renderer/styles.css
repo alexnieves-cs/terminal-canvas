@@ -2183,6 +2183,9 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* M279. The windowed tree's two spacers hold the scroll height of the rows
+   not in the DOM; no row minimum, no padding, nothing to read. */
+.file-row--spacer { flex: none; min-height: 0; padding: 0; margin: 0; list-style: none; }
 .file-row--note {
   color: var(--muted);
   font-size: var(--t-xs);

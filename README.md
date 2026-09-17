@@ -1055,6 +1055,7 @@ price of not killing something.
 | M275 | Swarm start-work presets — Explore / Implement / Test / Review as reviewed arrangements on one Start work: a supervisor hub, workers with roles, authored handoff edges, worktrees only where isolation is called for, named refusals — `docs/build-log/m275-swarm-presets.md` | ✅ done |
 | M276 | Monaco in the file panel — the draft surface stops being a textarea, worker bundled locally, CSP untouched; the checks drive the real editor rather than a mirror textarea — `docs/build-log/m276-monaco-file-editor.md` | ✅ done |
 | M277 | zod at the two boundaries that had no reader, charts that required inventing the history first, one-shot toasts for outcomes with nowhere to go — each library confined to a named door, none displacing a working reader — `docs/build-log/m277-libraries.md` | ✅ done |
+| M279 | The UI evolution — a navy dark material with cyan and electric-blue illumination and a violet family accent, styled primitives (pill, status dot, segmented control, tabs), live agent status in the top bar, a chat's phase word beside its state, a resizable navigator, a windowed file tree, and an inspector Activity tab fed from the canvas level — no new dependency; planned in `docs/ui-evolution-plan.md`, ledger `docs/build-log/m279-ui-evolution.md` | ✅ done |
 
 ### What's next — the v10 run (D01–D20)
 
