@@ -736,6 +736,16 @@ const SCENES = [
       } finally {
         await k.js(`(() => { document.getElementById('shot-orch-mask')?.remove(); return true })()`)
         await k.theme('light')
+        // BACK TO THE CANVAS. This pair opened the Orchestrate page and nothing
+        // closed it, so every scene after it ran UNDER that page: `file-missing`'s
+        // golden was a picture of the orchestration HUD (greeting and wall clock
+        // unmasked, so it also went red by time of day), and `starter` reported
+        // "the arrangement is not on screen" — recorded in the M279 ledger as a
+        // flake. The dock button is a toggle, so press it only while it is pressed,
+        // and refuse to go on if the page is still there.
+        await k.js(`(() => { const b = document.querySelector('[data-dock="orchestration"][aria-pressed="true"]'); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!b })()`)
+        for (let i = 0; i < 20 && (await k.js(`!!document.querySelector('.orch__graph-wrap')`)); i++) await sleep(100)
+        if (await k.js(`!!document.querySelector('.orch__graph-wrap')`)) throw new Error('orchestration-dark: the Orchestrate page is still open, so every later scene would capture it')
         await k.wc.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] })
       }
     } },

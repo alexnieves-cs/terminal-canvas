@@ -21,6 +21,7 @@ gate, and the critic's sentence for every golden that changed.
 | 11 | Goldens + this ledger | (below) | `verify:visual` |
 | 12 | The reference pass (`docs/design-reference.png` arrived after the gate): wide search field in the bar's middle, live status at its right, `Terminal Canvas` in the mark, aura alphas raised, kind tiles on activity rows (`panelKind` on the event), lit glyph tile on agent headers; the turn line crosses `outward()` | (this step) | `verify:styles`, `verify:verbs` 29/29, `verify:orchestration` 53/53, `verify:visual` |
 | 13 | Polish, from LOOKING at the step-12 captures: the no-selection summary gets a tab's inset and its own scroller with the counts two-up (it was a bare `.inspector__body`, flush on the pane's edge, and the feed under it was clipped, not scrolled); the feed says `working → needs you`, the product's words through `agentWord`, not the wire's `busy → wants-you`; the workflow's map renders only above twelve blocks and its contents are themed (on a four-block flow it was an empty white box over the fourth block) | (this step) | `verify:orchestration` 53/53 (its pinned string moved on purpose), `verify:styles` 75/75, `verify:rail` 223/223, `verify:visual` |
+| 14 | The diorama pass, on branch `m279-diorama` (a worktree — a second session was live on main, and its `567ea305` swept the first half of this step in unbuilt). The board is 860 wide and the stage tilts 56°, so the ring — still a circle, `orch.depth.3` — fills a stage twice as wide as it is tall; `NodePlate` (kind tile, name, the product's state word) replaces two bare text rows that ran into each other; a role never wears a tone's hue (terminals were `--green` = idle, watchers `--amber` = needs you; now `--iris` / `--deck-violet` / new `--deck-steel`); opaque depth-writing bodies lit by tone, platforms `data-lit` by tone; the R3F loop is `demand`, each cube invalidating only while it has motion left (it repainted at 60fps for a ring of idle agents); no second brand under the bar; callout placement counts every node. `SHOT_ONLY=a,b` narrows `npm run shot` | `e25477ea`, `36ef442d`, (this step) | `verify:orchestration` 53/53 (`orch.motion.1` caught the platform transition), `verify:styles` 75/75, plain tier the change reaches all green, `verify:visual` |
 
 ## Token re-valuations (dark block), with the finding each answers
 
@@ -158,3 +159,25 @@ named: nothing in this step reaches the browser panel, and the suite re-run alon
 (`TC_ONLY=browser.1`, every check still running) passed it. A load flake in the serial
 tier, recorded here so the next 108 is recognised. `verify:visual` 63/64 (`starter`, as
 at step 11).
+
+### Goldens, step 14 (the diorama pass)
+
+Three goldens written by copying the suite's own fresh captures over exactly these
+files, each looked at first — never `UPDATE_GOLDENS=1` across the set, so no other scene
+could be re-baselined in passing. Every other scene passed byte-budget unchanged (61/65
+before the write; the fourth red is `starter`, below).
+
+| Scene | What changed, seen |
+|---|---|
+| orchestration | the ring spans the stage instead of its middle third; eight cubes stand as dark lit solids — steel terminals, teal chats, one violet watcher — on discs flattened by the stage's tilt, the unselected ones dimmed yet outlined; every node has a plate (tile, mono name, `idle · terminal`) and no two touch; spokes read on the light ground; the selected back-row cube's card hangs over the `No supervisor yet` placeholder, hiding no neighbour; the header row holds only the two clock boxes, the second `TERMINAL CANVAS` gone |
+| orchestration-dark | the same scene on the navy deck: the cubes separate from the ground by their lit faces rather than by being coloured glass (they were olive), the plates' tiles carry the role light, the state dots stay green because every fixture agent is idle — the one place green now appears |
+| file-missing | **the golden was wrong, not the panel.** `orchestration-dark` never returned to the canvas, so this scene had been capturing the Orchestrate page — with the greeting and wall clock unmasked, so it also went red by time of day. The scene now closes the page and refuses to continue if it cannot; the golden shows what the intent always said: `server.ts was deleted or moved`, the panel's title and chrome kept, the reload in its header |
+
+**Still red, not from this step:** `starter` — "the arrangement is not on screen". It
+ran under the Orchestrate page too, so that was the suspected cause; with the page closed
+it still does not paint, so its cause is something else and is NOT found. Recorded as
+open rather than as a flake.
+
+**Not seen:** the callout placer's real-hub branch (a supervisor present, the card sliding
+beside it). No scene has a supervisor. The Electron tier was not run for this step.
+
