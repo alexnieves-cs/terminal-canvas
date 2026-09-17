@@ -66,6 +66,22 @@ this section.
 the sentences below, and `starter` unpainted in that run ("the arrangement is not on
 screen", a harness timing the M262 ledger also met; its golden is untouched).
 
+Electron tier, serial, after the goldens (commit `69a2897a`), against the M277 baseline
+the electron-tier note records (`docs/build-log/m277-libraries.md:78`):
+
+| Suite | Result | Reds, and whose they are |
+|---|---|---|
+| `verify:canvas` | 7/7 | — |
+| `verify:xterm` | 11/11 | — |
+| `verify:panels:core` | 83/83 | — |
+| `verify:panels:kinds` | 50/50 | — |
+| `verify:panels:agents` | 81/82 | `detail.1` — pre-existing (M275/M277 ledgers); `ctx.1` and `theme.1`, both re-pinned this milestone, are green |
+| `verify:panels:shell` | 99/99 | run at step 2 (`bcc4c141`), the last commit that touched a shell selector; not repeated in the closing run |
+| `verify:panels:product` | 109/117 | the M277 set exactly: `workflow.edit.1`, `workflow.edit.2`, `workflow.lib.1`, `workflow.wire.1`, `workflow.inspect.1`, `workflow.save.1`, `workflow.panel.1e`, `reach.1` |
+
+Nothing this milestone changed moved a number in either direction except `ctx.1`, which
+was red for one build between adding the fourth tab and re-pinning it.
+
 ## Goldens
 
 Every scene re-captured after step 9 and LOOKED AT (the out/shots set the plan's method
