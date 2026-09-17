@@ -3076,10 +3076,11 @@ const filePanelOnDisk = (id, over = {}) => ({
   // M85 added `vault` as the navigator's fourth pane; the check follows the
   // schema rather than pinning a list the app has outgrown.
   // M116 added `board` as the seventh; M127 `skills` as the eighth.
-  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board|skills, default panels) and shell.contextTab (detail|work|tools, default detail) are enums in the Shell category',
+  // M279 added `activity` as the context pane's fourth tab.
+  ok('shell.1 shell.navigator (panels|workspaces|vault|integrations|teammates|board|skills, default panels) and shell.contextTab (detail|work|tools|activity, default detail) are enums in the Shell category',
     nav !== undefined && nav.type === 'enum' && JSON.stringify(nav.values) === JSON.stringify(['panels', 'workspaces', 'vault', 'integrations', 'teammates', 'board', 'skills']) &&
       nav.default === 'panels' && nav.category === L.SHELL_CATEGORY &&
-      tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools']) &&
+      tab !== undefined && tab.type === 'enum' && JSON.stringify(tab.values) === JSON.stringify(['detail', 'work', 'tools', 'activity']) &&
       tab.default === 'detail' && tab.category === L.SHELL_CATEGORY &&
       stray['shell.navigator'] === undefined && stray['shell.contextTab'] === 'work' && w.length === 1,
     JSON.stringify({ nav, tab, stray, w }))

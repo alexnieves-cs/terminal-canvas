@@ -1627,6 +1627,45 @@ body {
    wears, so the button and the thing it jumps to read as one signal. */
 .shell__top .live-status__item--verb { cursor: pointer; border-color: var(--tone-dim); }
 .shell__top .live-status__item--verb:hover { color: var(--fg); background: var(--tone-dim); border-color: var(--tone); }
+/* The phase beside a chat's state pill — `Edit server.ts`, `thinking` — the
+   contextual layer: muted ink, mono because a tool name and a path are
+   values, and the first thing to yield after the summary. */
+.pf__phase {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+}
+/* The activity feed: a list of rows, each a dot in its tone, a title, an age
+   and one line of detail — deep detail's own shape (inspector only). */
+.activity { list-style: none; margin: 0; padding: var(--sp-2) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-1); }
+.activity--empty { padding: var(--sp-4) var(--sp-3); }
+.activity-row__main {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: var(--sp-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+}
+.activity-row__main--verb { cursor: pointer; }
+.activity-row__main--verb:hover { background: var(--s-4); border-color: var(--line); }
+.activity-row__dot { grid-row: 1 / span 2; width: 7px; height: 7px; border-radius: 50%; }
+.activity-row__title { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 500; }
+.activity-row__time { grid-column: 3; color: var(--fg-4); font-size: var(--t-xs); font-variant-numeric: tabular-nums; }
+.activity-row__detail { grid-column: 2 / span 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-3); font-size: var(--t-xs); }
 
 .rail-row__start,
 .rail-row__rename,
@@ -2859,7 +2898,7 @@ body {
 .panel--selected {
   border-color: var(--iris);
   /* M67. A ring. M109: and the lift restated, or a click drops the panel. */
-  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
+  box-shadow: var(--glow-iris), var(--lift), var(--rim-top);
 }
 
 /* M35 Task 5. The panel a release right now would link to. A ring rather
@@ -2948,7 +2987,7 @@ body {
   /* The ring, restated: this rule is the LATER one at equal specificity and
      would otherwise drop it — and the lift with it (M109), and the rim with
      that (M228). */
-  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
+  box-shadow: var(--glow-iris), var(--lift), var(--rim-top);
 }
 
 /* M6d inverts exactly one half of the rule above. wants-you is the only state
@@ -2961,7 +3000,7 @@ body {
    selection never paints over. */
 .panel--selected.panel--agent-wants-you {
   border-color: var(--iris);
-  box-shadow: 0 0 0 1px var(--iris), var(--lift), var(--rim-top);
+  box-shadow: var(--glow-iris), var(--lift), var(--rim-top);
 }
 
 /* STATE EDGE, the last word (M63/M64). Declared AFTER every rule above that
@@ -5526,7 +5565,9 @@ body {
 /* A kind's FAMILY hue, from tokens both themes already declare: agents wear
    the accent, workers over a list wear blue, the workflow's hands stay
    neutral. Nothing here is a new colour. */
-[data-family="agent"] { --wf-hue: var(--iris); --wf-tint: var(--iris-dim); }
+/* M279. The agent family wears VIOLET — the family accent — so a workflow's
+   blocks never borrow the interface's own selection cyan. */
+[data-family="agent"] { --wf-hue: var(--violet); --wf-tint: var(--violet-dim); }
 [data-family="worker"] { --wf-hue: var(--blue); --wf-tint: var(--blue-dim); }
 [data-family="hand"] { --wf-hue: var(--fg-3); --wf-tint: var(--s-4); }
 /* AUTO LAYOUT, floating in the graph's corner — contextual, revealed with
@@ -7883,3 +7924,11 @@ body {
 
 .orch__edge[data-connected-live] { stroke-dasharray: 3 7; animation: edge-current var(--dur-flow) linear infinite; }
 @media (prefers-reduced-motion: reduce) { .orch__edge[data-connected-live] { animation: none; } }
+
+/* M279. The activity feed's arrival: the newest row rises once — a MOMENT
+   (an event landed), never a loop. Declared here, after the link layer's
+   reduced-motion block, because edge.flow.css.1 reads the FIRST
+   reduced-motion block in the file as the link layer's. */
+@keyframes activity-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.activity-row:first-child { animation: activity-row-in var(--dur-2) var(--ease) both; }
+@media (prefers-reduced-motion: reduce) { .activity-row:first-child { animation: none; } }

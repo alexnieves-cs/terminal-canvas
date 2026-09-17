@@ -10,12 +10,12 @@ import { PanelFrame } from '@renderer/components/PanelFrame'
 import { BACKENDS, backendOf } from '@shared/agent-backends'
 import { autoChipWords } from '@shared/auto'
 import { chatHeaderLine, SANDBOX_HEADER } from '@renderer/shell/rail-rows'
-import { panelState, autoTone } from '@renderer/panels/panel-state'
+import { panelState, autoTone, TONE_WORKING } from '@renderer/panels/panel-state'
 import { shellControl } from '@renderer/shell/shell-control'
 import { takeInsert, useChat, dismissAuto } from './chat-store'
 import { refreshChatGrants } from './useChatSessions'
 import { MEMORY_CONTEXT_MAX, memoryContext, teammateMemoryRoot } from './memory-context'
-import { chatRows, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive } from './chat-model'
+import { chatRows, chatPhase, chatPhaseWord, chatStateInput, composerState, toolArgument, DENY_MESSAGE, type ChatRow, type ChatGroup, toolArgumentIsCode, toolGroups, toolVerb, toolState, toolGroupLabel, composerRows, composerLive } from './chat-model'
 import {
   applyCompletion, fileCompletions, fillPlaceholders, placeholders, triggerAt,
   type ComposerTrigger, type FileCompletionRow
@@ -248,6 +248,8 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
   const chat = useChat(id)
   const snapshot = chat.snapshot
   const rows = useMemo(() => chatRows(chat.turns, chat.live), [chat.turns, chat.live])
+  // M279. What the agent is doing while it works, beside the state word.
+  const phaseWord = chatPhaseWord(chatPhase(chat.live))
   const hasHistory = chat.turns.length > 0
   const stateInput = chatStateInput(snapshot, hasHistory)
   const state = panelState({ kind: 'chat', status: undefined, dormant: false, ...(stateInput === undefined ? {} : { chat: stateInput }) }, undefined)
@@ -622,6 +624,11 @@ export function ChatNode(props: ChatNodeProps): JSX.Element {
         <span className="pf__summary chat__header-line" data-chat-header title={chatHeaderLine({ cwd: panel.chat.cwd, ...(branch === null ? {} : { branch }), backend, ...(snapshot?.model === undefined ? {} : { model: snapshot.model }), ...(panel.chat.sandbox === true ? { sandbox: true } : {}) })}>{[panel.chat.sandbox === true ? SANDBOX_HEADER : (panel.chat.cwd.replace(/\/+$/, '').split('/').filter((p) => p !== '').slice(-1)[0] ?? '/'), branch ?? undefined, snapshot?.model].filter((p): p is string => typeof p === 'string' && p !== '').join(' · ')}</span>
         <span className="pf__kind chat__backend" data-chat-backend={backend} title={`a conversation with ${backend}`}>{backend}</span>
         <span className="badge pf__word" data-tone={state.tone} data-state-word data-chat-state title={`${turnCount} completed turn${turnCount === 1 ? '' : 's'}`}>{state.word}</span>
+        {/* M279. The phase, a SIBLING of the pill: the pill's text is the
+            state word alone (the suites read it byte for byte), and the
+            phase is the contextual layer beside it — present only while
+            the tone is working, and only when there is a word worth saying. */}
+        {phaseWord !== '' && state.tone === TONE_WORKING && <span className="pf__phase" data-chat-phase title={phaseWord}>{phaseWord}</span>}
         {/* M97. The auto chip: a PROJECTION of main's count, beside the pill.
             A ring while running; `done` / `stuck — why` / `stopped` resolved,
             with a labelled dismiss. Never a decision — main stops the run. */}

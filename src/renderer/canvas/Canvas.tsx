@@ -47,6 +47,7 @@ import { buildIntegrationRows, INTEGRATION_AUDIT_ROWS } from '@renderer/shell/in
 import { SERVICES } from '@shared/credential-schema'
 import type { BrokerAuditRowWire } from '@shared/ipc-contract'
 import { useInspectorDetail } from './useInspectorDetail'
+import { useActivityFeed } from './useActivityFeed'
 import {
   EMPTY_CREDENTIALS, EMPTY_PRESETS, EMPTY_PROMPTS, EMPTY_WORKTREES,
   EMPTY_SELECTION, EMPTY_SETTINGS, EMPTY_WORKSPACES,
@@ -6940,6 +6941,9 @@ export function Canvas({
   // The inspector's async detail sections, lifted into useInspectorDetail.ts.
   // Each is a three-state result — nothing to show / asked but unanswered / a
   // real answer — and must stay one; see the hook's doc comment.
+  // M279. The activity feed's producer — always mounted, so the inspector's
+  // Activity tab has rows before the orchestration page is ever opened.
+  useActivityFeed({ panels })
   const {
     branchLine, repository,
     toolboxModel, reviewModel, inspectorSummary, hasSelection
@@ -7945,6 +7949,7 @@ export function Canvas({
         toolbox={toolboxModel}
         onOpenToolbox={paletteActions.openToolbox}
         onResizeHandleDown={onInspectorResizeDown}
+        onGoToPanel={paletteActions.goToPanel}
       />
     </div>
   )

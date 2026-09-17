@@ -37,6 +37,8 @@ export const EMPTY_STATES: ReadonlyArray<EmptyState> = [
   /** `{backend}` is filled by the node — the sentence names the engine, as codex.1 reads it. */
   { id: 'chat', sentence: 'No turns yet. Send a message to start {backend} here.' },
   { id: 'attention', sentence: 'nothing waiting' },
+  /** M279. The inspector's Activity tab, per object and canvas-wide. */
+  { id: 'activity', sentence: 'no activity yet — state changes and finished turns are listed here as they happen' },
   { id: 'orch-roster', sentence: 'no agents match this filter — start a chat or terminal on the canvas', verb: 'Show Canvas' },
   { id: 'orch-pipeline', sentence: 'no tasks in this stage — start work from the board or palette', verb: 'Show Canvas' },
   { id: 'orch-task', sentence: 'no task is in progress or in review — start work from the board', verb: 'Show Canvas' },

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ShellBreakpoint } from './useShellBreakpoint'
 
 export type NavigatorPane = 'panels' | 'workspaces' | 'files' | 'vault' | 'integrations' | 'teammates' | 'board' | 'skills'
-export type ContextTab = 'detail' | 'work' | 'tools'
+/** M279: `activity` — what the object has done, from the feed. */
+export type ContextTab = 'detail' | 'work' | 'tools' | 'activity'
 /** M268. Which page fills the center column. The canvas host stays mounted either way. */
 export type CenterView = 'canvas' | 'orchestration'
 
@@ -107,7 +108,7 @@ export function useShellChrome(deps: {
         // M85. A value from a LATER version of this app falls back to panels
         // rather than leaving the navigator on a pane that does not exist.
         if (nav) setNavigatorPref(nav.value === 'workspaces' || nav.value === 'vault' || nav.value === 'integrations' || nav.value === 'teammates' || nav.value === 'board' || nav.value === 'skills' ? nav.value : 'panels')
-        if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' ? tab.value : 'detail')
+        if (tab) setContextTabState(tab.value === 'work' || tab.value === 'tools' || tab.value === 'activity' ? tab.value : 'detail')
         if (center) setCenterViewState(center.value === 'orchestration' ? 'orchestration' : 'canvas')
       })
     }

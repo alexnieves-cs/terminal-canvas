@@ -26,6 +26,7 @@ import { USER_SET_STATES, WORK_ITEM_STATES, type WorkItemState } from '@shared/w
 import { displayPath } from '@shared/display-path'
 import { shellControl } from '@renderer/shell/shell-control'
 import { railLabel } from '@renderer/shell/rail-rows'
+import { formatAgo } from '@renderer/shell/format-ago'
 import { agentWord, TONE_WORKING, type Tone } from '@renderer/panels/panel-state'
 import { KindChat, KindFile, KindTerminal, KindWatcher, KindWorkflow, KindWork, Orbit, ProductMark, Search, Stop } from '@renderer/icons'
 import { EmptyState } from '@renderer/shell/EmptyState'
@@ -71,9 +72,7 @@ import {
   type OrchRosterRow
 } from './orchestration-model'
 import {
-  agentTransitionActivity,
   orchActivityEvents,
-  pushOrchActivity,
   subscribeOrchActivity
 } from './orchestration-activity'
 import { orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
@@ -211,13 +210,8 @@ function toneFromState(state: OrchRosterRow['state']): Tone {
   return 'idle'
 }
 
-function formatAgo(at: number): string {
-  const s = Math.max(0, Math.floor((Date.now() - at) / 1000))
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  return `${Math.floor(m / 60)}h`
-}
+// M279. formatAgo moved to shell/format-ago.ts: the inspector's Activity tab
+// reads the same buffer and must age a row the same way.
 
 function kindGlyph(kind: OrchRosterRow['kind']): JSX.Element {
   if (kind === 'chat') return <KindChat />
@@ -764,10 +758,9 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
     return () => window.clearInterval(t)
   }, [])
 
+  // M279. The feed's PRODUCER lives in canvas/useActivityFeed.ts now (always
+  // mounted); this effect keeps only the page's own reactions to a transition.
   useEffect(() => onAgentTransition((panelId, state, prev) => {
-    const panel = panels.find((p) => p.rect.id === panelId)
-    const title = panel ? railLabel(panel, undefined) : panelId
-    pushOrchActivity(agentTransitionActivity(panelId, title, state, prev, Date.now()))
     setTick((n) => n + 1)
     if (prev !== state) {
       const at = Date.now()

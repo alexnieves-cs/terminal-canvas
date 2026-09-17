@@ -387,10 +387,10 @@ export const SETTINGS: readonly SettingDef[] = [
   {
     id: 'shell.contextTab',
     label: 'Context tab',
-    description: 'open the context pane on Detail (what this panel is), Work (what it did and cost), or Tools (what it can do)',
-    keywords: ['context', 'inspector', 'tab', 'detail', 'work', 'tools', 'shell'],
+    description: 'open the context pane on Detail (what this panel is), Work (what it did and cost), Tools (what it can do), or Activity (what it has done, newest first)',
+    keywords: ['context', 'inspector', 'tab', 'detail', 'work', 'tools', 'activity', 'shell'],
     type: 'enum',
-    values: ['detail', 'work', 'tools'],
+    values: ['detail', 'work', 'tools', 'activity'],
     default: 'detail',
     category: SHELL_CATEGORY
   },

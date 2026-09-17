@@ -126,6 +126,41 @@ export function chatRows(turns: readonly TranscriptTurn[], live: LiveMessage | n
   return rows
 }
 
+/**
+ * M279. WHAT A WORKING CHAT IS DOING, from the message in flight: the LAST
+ * live block decides. A `tool_use` block with no result yet is the tool
+ * running (`Edit server.ts`); a `thinking` block is the model thinking; text
+ * is the answer streaming and reads as nothing extra — the state word
+ * already says `working`. Null when nothing is in flight.
+ *
+ * Renderer-DERIVED, not a backend state: main exposes no phase channel (the
+ * plan's gap table), and this is the honest projection of the stream the
+ * CLI already sends. Pure, so `verify:rail` can pin it.
+ */
+export type ChatPhase =
+  | { kind: 'thinking' }
+  | { kind: 'tool'; name: string; file?: string }
+  | { kind: 'answering' }
+
+export function chatPhase(live: LiveMessage | null): ChatPhase | null {
+  if (live === null || live.blocks.length === 0) return null
+  const last = live.blocks[live.blocks.length - 1]!.block
+  if (last.type === 'thinking') return { kind: 'thinking' }
+  if (last.type === 'tool_use') {
+    const file = toolFilePath(last.input)
+    return { kind: 'tool', name: last.name, ...(file === null ? {} : { file }) }
+  }
+  if (last.type === 'text') return { kind: 'answering' }
+  return null
+}
+
+/** The phase as the frame's chrome says it beside the state word; '' for nothing worth a word. */
+export function chatPhaseWord(phase: ChatPhase | null): string {
+  if (phase === null || phase.kind === 'answering') return ''
+  if (phase.kind === 'thinking') return 'thinking'
+  return phase.file === undefined ? phase.name : `${phase.name} ${shortPath(phase.file)}`
+}
+
 export const REASON_CHAT_STREAMING = 'the agent is still answering — interrupt it, or wait'
 /**
  * M77. Whether this chat's agent has RUN — the one definition `Open review`

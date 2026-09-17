@@ -21,6 +21,7 @@ import { fieldsOf } from '@shared/template-edit'
 import { LIBRARY } from '@shared/template-library'
 import { HANDOFF_TRIGGERS } from '@shared/handoff'
 import type { ContextTab } from './useShellChrome'
+import { InspectorActivity } from './InspectorActivity'
 import type { RunRow } from '@shared/run-ledger'
 
 /**
@@ -149,6 +150,8 @@ export interface InspectorProps {
   onShowTask?: (panelId: string) => void
   /** (this redesign) Mousedown on the pane's own left-edge handle; Canvas owns the drag itself (it holds `shellRef`), this only starts it. */
   onResizeHandleDown: (event: ReactMouseEvent) => void
+  /** M279. The canvas-wide activity list's one verb: fly to the row's panel. */
+  onGoToPanel?: (id: string) => void
 }
 
 /**
@@ -173,7 +176,7 @@ export interface InspectorProps {
 function InspectorImpl({
   onToggle: _onToggle, templateOf, tab, onSelectTab, model, summary, onRename, onClose, onSavePreset, onRestart, onFrontEnd, onAnswer, onRevokeGrants, onOpenReview, onLock, onUnlock, onPin, onUnpin, onMaximise, onRestore, pinnedCount,
   onLink, onRemoveLink, onRelabelLink, onSetRestartOnExit, onSetLinkAutomation, automationResults, automations, review, toolbox, onOpenToolbox, selectedEdge, panelRun, onRunAgain, branchLine, repository, onResizeHandleDown,
-  contextBand, onShowRelated, onShowTask
+  contextBand, onShowRelated, onShowTask, onGoToPanel
 }: InspectorProps): JSX.Element {
   // M46. The toggle lives in the top bar now (there is no pane to hold it
   // while the pane is hidden); the prop stays so the wiring reads the same.
@@ -190,6 +193,9 @@ function InspectorImpl({
             <div className="shell__region-title">Canvas</div>
             <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
             <InspectorEmpty summary={summary} />
+            {/* M279. With nothing selected, the whole canvas's feed — each row jumps to its panel. */}
+            <div className="shell__region-title">Activity</div>
+            <InspectorActivity panelId={null} onGoToPanel={onGoToPanel} />
           </>
         : <InspectorPanel
             templateOf={templateOf}
@@ -561,8 +567,9 @@ function InspectorPanel({
   }, [menuOpen])
   useEffect(() => { setCloseArmed(false); setMenuOpen(false) }, [model.id])
   const pid = model.fields.find((f) => f.key === 'pid')?.value
+  // M279. Activity: what the object has DONE — the fourth question.
   const TABS: Array<{ id: ContextTab; label: string }> = [
-    { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }
+    { id: 'detail', label: 'Detail' }, { id: 'work', label: 'Work' }, { id: 'tools', label: 'Tools' }, { id: 'activity', label: 'Activity' }
   ]
   return (
     <div className="context">
@@ -974,6 +981,10 @@ function InspectorPanel({
           )}
         </section>
       )}
+      </section>
+      {/* M279. The object's feed — deep detail, so it is here and on no frame. */}
+      <section className="context__panel" data-context-panel="activity" role="tabpanel" hidden={tab !== 'activity'}>
+        <InspectorActivity panelId={model.id} />
       </section>
       <section className="context__panel" data-context-panel="tools" role="tabpanel" hidden={tab !== 'tools'}>
       <AutomationList rows={automations} results={automationResults} onSetLinkAutomation={onSetLinkAutomation} />
