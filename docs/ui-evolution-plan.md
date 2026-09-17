@@ -246,3 +246,46 @@ Each step: typecheck + build, `npm run affected`, commit. Electron suites at the
   workflow map gated on flow size (`MINIMAP_FROM`). The map is kept, not deleted — an
   imported flow of thirty blocks is where it pays — and its contents are themed so it
   does not return as xyflow's grey-on-white.
+
+## 5. The reference track is CLOSED (2026-09-17)
+
+`docs/design-reference.png` arrived after M279's gate and opened a follow-on track on the
+Orchestrate page. **That track is finished and landed; do not reopen it from the reference
+image.** Three milestones, each with its own log, and M282's log carries the goldens and the
+gate for all three:
+
+| | What it closed | Log |
+|---|---|---|
+| M280 | The diorama's bloom pass — real HDR post-processing behind a confined `postprocessing` door, additive ground pools, hub crystal, edge ribbons, atmosphere, and `orchestration-working`, the first scene in which any of it is visible | [m280](build-log/m280-orchestration-bloom.md) |
+| M281 + C1 | Dark HUD glass, the real task stage fill, and `orchPhase` as the one reader of a chat's phase | [m281](build-log/m281-orchestration-hud.md) |
+| M282 | The bottom strip as five cells — System / Current task / Terminal / Code / Files — the last three being jump cards onto canvas panels | [m282](build-log/m282-orchestration-jump-cards.md) |
+
+**Three decisions here are settled, and each was declined for a reason, not missed.** Re-reading
+the reference will suggest all three again:
+
+- **No Deployments card.** There is no deploy provider, and a cell of invented state breaks
+  rest-layer honesty. Same reason the greeting and the "System Online" pill were declined at M279.
+- **No progress percentage and no step checklist** on the selected agent. No backend fact stands
+  behind either. The task fill that DID ship measures `stepIndex / (WORK_ITEM_STATES.length - 1)`
+  — stage position, which is a real fact, not estimated completion.
+- **No light-theme bloom.** The ground pools are additive, and additive blending over a light
+  floor can only lighten it, so the pools read as holes cut in the floor. Deferred by the user's
+  dark-first choice, not overlooked.
+
+**What is genuinely still open**, so it is not rediscovered as a bug:
+
+- **Callout crowding on the dense arc.** Cards still overlap cubes on the crowded arc. M280's log
+  has the measurement: ~44% of the stage is free but it is in the corners, not adjacent to the
+  cubes that need it. Reaching it means a smaller ring, a taller stage or a long stem — a design
+  decision about the whole scene. **It is not another placer-weight tuning pass**; four captures
+  of that already proved it does nothing.
+- **`starter` fails to paint**, intermittently, and is red in `verify:visual` on main. It painted
+  during one run and failed minutes later in the next, which is why it must never be
+  re-baselined from whichever run happened to produce a picture.
+- **`verify:panels:agents detail.1` and eight `verify:panels:product` checks** are the carried
+  M277/M279 baseline, reproduced by name at every gate in this track. Not this work's.
+- **"C2b" has no artifact on disk.** It was referred to when this act was closed, but nothing in
+  the tree, the logs or this plan corresponds to it, and every uncommitted change at closing time
+  was accounted for by M280, M281+C1, M282 or the closeout. Either it landed inside one of those
+  under another name, or it was never written. **Do not assume it shipped**; ask before treating
+  it as done.
