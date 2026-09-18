@@ -126,8 +126,8 @@ the check's DOM read is the fact recorded here:
 
 ## Gate
 
-`npm run verify` on 4754f739 (2026-09-18 01:56–02:05, no foreign Electron at start): **52/54
-suites**. Every red is pre-existing and attributed by id, none is this run's:
+`npm run verify` on 4754f739 (2026-09-18 01:56–02:05) and again on the closing commit 4df7c307
+(02:46–02:55), no foreign Electron at either start: **52/54 suites both times**, identical reds. Every red is pre-existing and attributed by id, none is this run's:
 
 - `verify:panels:agents` 88/89 — `detail.1` (recorded at `docs/build-log/m275-swarm-presets.md:107`).
 - `verify:panels:product` 109/117 — `workflow.edit.1`, `workflow.edit.2`, `workflow.lib.1`,
