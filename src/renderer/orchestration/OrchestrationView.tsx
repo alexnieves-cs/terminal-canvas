@@ -970,11 +970,14 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const [tick, setTick] = useState(0)
   // M283. Seeded from, and written back to, Orchestrate's own prefs so a round trip
   // through the Canvas returns to the same view (orchestration-prefs.ts).
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => [...getOrchPrefs().selectedIds])
+  // The SELECTION is not a layout pref and is not kept: a selection surviving the page
+  // toggle re-aimed the pool, the commands and the feed at a session the user was no longer
+  // looking at (the golden critic caught it), which is the plan's stale-target hazard.
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [tab, setTab] = useState<SideTab>(() => getOrchPrefs().tab)
   const [mode, setMode] = useState<OrchMode>(() => getOrchPrefs().mode)
   const [graphCamera, setGraphCamera] = useState(() => getOrchPrefs().camera)
-  useEffect(() => { setOrchPrefs({ selectedIds, tab, mode }) }, [selectedIds, tab, mode])
+  useEffect(() => { setOrchPrefs({ tab, mode }) }, [tab, mode])
   // Foreground cards respond first, then settle at the edge of their readable area.
   const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
@@ -1450,23 +1453,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                 title="Select the task — Open on canvas is in the inspector"
                 {...shellControl(() => { setSelectedIds([]); setFreshNeeds(new Set()) })}
               >
-                <span className="orch__island-kicker">{island.source === 'work-item' ? 'Task' : 'Session · no task yet'}</span>
+                {/* Kind and state share ONE line, and the stage is that WORD, not the bars the
+                    old task card drew under it: the card must be no taller than the one it
+                    replaced, or it covers the ring's back cubes and their needs-you beacons
+                    (the golden critic found `tests`'s beacon hidden, twice). */}
+                <span className="orch__float-state">{island.source === 'work-item' ? 'Task' : 'Session · no task yet'} · {island.state} · {island.memberIds.length} {island.memberIds.length === 1 ? 'session' : 'sessions'}{islandWaiting !== undefined ? ' · needs you' : ''}</span>
                 <span className="orch__float-title" data-orch-island-goal>{island.goal}</span>
                 <span className="orch__island-place" data-orch-island-place>{orchPlacementLine(island)}</span>
-                <span className="orch__float-state">{island.state} · {island.memberIds.length} {island.memberIds.length === 1 ? 'session' : 'sessions'}{islandWaiting !== undefined ? ' · needs you' : ''}</span>
-                {liveSnap.task !== null && island.itemId === liveSnap.task.id && (
-                  <>
-                    {/* Stage position, not an estimate of work completed. */}
-                    <span className="orch__task-fill" aria-hidden="true">
-                      <span style={{ width: `${liveSnap.task.stepIndex / (WORK_ITEM_STATES.length - 1) * 100}%` }} />
-                    </span>
-                    <div className="orch__steps" aria-hidden="true">
-                      {WORK_ITEM_STATES.map((st, i) => (
-                        <span key={st} className={`orch__step${i <= liveSnap.task!.stepIndex ? ' orch__step--on' : ''}`} />
-                      ))}
-                    </div>
-                  </>
-                )}
               </button>
   )
 

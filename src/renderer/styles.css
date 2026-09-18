@@ -7759,10 +7759,13 @@ body {
 .orch__mode-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-shrink: 0; }
 .orch__lens { display: flex; gap: var(--sp-1); }
 .orch__mini:disabled { color: var(--fg-4); cursor: default; }
-.orch__island { max-width: 19rem; gap: var(--sp-1); }
+.orch__island { gap: calc(var(--sp-1) / 2); line-height: 1.25; padding-top: calc(var(--sp-2) - 1px); padding-bottom: calc(var(--sp-2) - 1px); }
+/* The island carries one row more than the task card it replaced (the repository line), and the
+   card sits over the ring's back cubes: at the old card's gaps it grew ~15px and covered the
+   `tests` cube's needs-you beacon (golden critic, orchestration-working). Tighter, and the stage
+   bars went — the kicker line already says the stage in words. */
 .orch__island--static { display: grid; max-width: none; margin-bottom: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--glass-1); color: var(--fg); font-family: var(--font-ui); text-align: left; padding: var(--sp-2) var(--sp-3); cursor: pointer; }
 .orch__island--on { border-color: color-mix(in srgb, var(--iris) 55%, var(--line)); box-shadow: 0 0 0 1px var(--iris-dim); }
-.orch__island-kicker { font-size: var(--t-xs); color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.05em; }
 .orch__island-place { font-size: var(--t-xs); color: var(--fg-2); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orch__needs, .orch__inspector { padding-bottom: var(--sp-3); margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
 .orch__needs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }

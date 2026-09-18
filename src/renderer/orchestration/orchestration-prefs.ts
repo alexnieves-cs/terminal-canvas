@@ -2,10 +2,11 @@
  * M283. Orchestrate's own camera and layout, held OUTSIDE the view.
  *
  * `OrchestrationView` mounts only while its page is shown, so every React state
- * it owned — the scene camera, the mode, the side tab, the selection — reset to
+ * it owned — the scene camera, the mode, the side tab — reset to
  * its default on each Canvas → Orchestrate round trip. A returning user should
  * recognise where work is (the plan's "stable placement"), so the page reads its
- * starting values here and writes them back as they change.
+ * starting values here and writes them back as they change. The SELECTION is
+ * deliberately not among them — see OrchestrationView's own note.
  *
  * Independent of the Canvas by construction: nothing here is the canvas's
  * viewport, layout or pane preferences, and nothing the canvas owns reads it.
@@ -22,7 +23,6 @@ export interface OrchPrefs {
   lens: OrchLens
   camera: { x: number; y: number; k: number }
   tab: 'activity' | 'terminal' | 'review' | 'files'
-  selectedIds: readonly string[]
 }
 
 const DEFAULTS: OrchPrefs = {
@@ -30,7 +30,6 @@ const DEFAULTS: OrchPrefs = {
   lens: 'scene',
   camera: { x: 0, y: 0, k: 1 },
   tab: 'activity',
-  selectedIds: []
 }
 
 let prefs: OrchPrefs = DEFAULTS
