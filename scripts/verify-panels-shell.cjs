@@ -5576,4 +5576,155 @@ runPanelsSuite('shell', WATCHDOG_MS, async (ctx) => {
         JSON.stringify({ ran, sheet, before, duringList, afterList, activeBefore, activeDuring, activeAfter }))
     }
   }
+
+  // ---------------------------------------------------------------------
+  // M283 — the Canvas / Orchestrate page boundary (orch-page.*).
+  // The canvas host stays MOUNTED under Orchestrate (M268) so its sessions keep
+  // running; what M283 adds is that it is also DEAF there — `inert`, focus taken
+  // off the terminal, and the four edit:* chords (menu IPC, which no renderer
+  // keydown sees) gated in shouldIgnoreKeys — and that a return finds it exactly
+  // as left. Every toggle below is the Dock's own button, clicked the way shot.cjs
+  // clicks it; every keystroke is a TRUSTED sendInputEvent, because an untrusted
+  // dispatched key is not what a typing user produces.
+  // ---------------------------------------------------------------------
+  {
+    const toggleOrch = (on) => wc.executeJavaScript(`(() => {
+      const b = document.querySelector(${JSON.stringify(on ? '[data-dock="orchestration"]:not([aria-pressed="true"])' : '[data-dock="orchestration"][aria-pressed="true"]')})
+      if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      return !!b
+    })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    // Opt-in captures of the REAL window for the ledger's exit demo; never read by a check.
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const typeKey = (keyCode) => {
+      wc.sendInputEvent({ type: 'keyDown', keyCode })
+      wc.sendInputEvent({ type: 'char', keyCode })
+      wc.sendInputEvent({ type: 'keyUp', keyCode })
+    }
+    const idsBefore = new Set(await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`))
+    await zoomTo(wc, 'n')
+    const newIds = await waitUntil(async () => {
+      const now = await wc.executeJavaScript(`[...document.querySelectorAll('.panel')].map((p) => p.getAttribute('data-panel-id'))`)
+      return now.length > idsBefore.size ? now.filter((id) => !idsBefore.has(id)) : false
+    }, 4000)
+    const termId = newIds ? newIds[0] : null
+    if (!termId) throw new Error('orch-page: Cmd+N produced no terminal')
+
+    // An unsaved file draft: the M22/M276 fixture's own route (open, Edit, type into Monaco).
+    const ORCH_DIR = mkdtempSync(join(tmpdir(), 'tc panels orch page '))
+    const FIXTURE = join(ORCH_DIR, 'draft.txt')
+    writeFileSync(FIXTURE, 'on disk\n')
+    await wc.executeJavaScript(`window.__m13Open(${JSON.stringify(FIXTURE)})`)
+    await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-panel-kind="file"] [data-file-node-edit]:not([disabled])')`), 5000)
+    await wc.executeJavaScript(`[...document.querySelectorAll('[data-panel-kind="file"] [data-file-node-edit]')].at(-1).dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))`)
+    await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-file-node-editor]:not([data-file-node-editor-loading])')`), 12000)
+    const typed = await wc.executeJavaScript(`window.__m276Type([...document.querySelectorAll('[data-file-node-editor]')].at(-1), 'unsaved draft line\\n')`)
+    await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('[data-file-node-dirty]')`), 5000)
+
+    // The terminal holds the keyboard when the page changes — the case that leaked.
+    // wc.focus() first, as the other focus checks do: the harness window is hidden, and
+    // Chromium dispatches no focus/blur EVENTS to a page without system focus — the
+    // restore's own record (a focusin listener) would never be written.
+    wc.focus()
+    await waitUntil(async () => {
+      await wc.executeJavaScript(`(() => { const slot = document.querySelector('[data-panel-id=${JSON.stringify(termId)}] .panel__slot'); if (slot) slot.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })()`)
+      return wc.executeJavaScript(`window.__m4aFocusedId() === ${JSON.stringify(termId)} && window.__m4aGrid() !== null && document.activeElement?.closest('[data-panel-id=${JSON.stringify(termId)}]') !== null`)
+    }, 5000, 200)
+    const snap = () => wc.executeJavaScript(`JSON.stringify({
+      viewport: window.__m4aViewport(),
+      grid: window.__m4aGrid(),
+      focused: window.__m4aFocusedId(),
+      rects: [...document.querySelectorAll('.panel')].map((p) => [p.getAttribute('data-panel-id'), p.style.cssText]),
+      draft: window.__m276Text([...document.querySelectorAll('[data-file-node-editor]')].at(-1)),
+      dirty: document.querySelector('[data-file-node-dirty]') !== null,
+      sessions: window.__m4aSessions().map((x) => x.id + ':' + x.spawned).sort()
+    })`)
+    const before = await snap()
+    await demo('m283-1-canvas-before')
+
+    const writes = []
+    const resizes = []
+    const origWrite = ptyManager.write.bind(ptyManager)
+    const origResize = ptyManager.resize.bind(ptyManager)
+    ptyManager.write = (id, data) => { writes.push([id, String(data)]); return origWrite(id, data) }
+    ptyManager.resize = (id, cols, rows) => { resizes.push([id, cols, rows]); return origResize(id, cols, rows) }
+    try {
+      const storedBefore = await wc.executeJavaScript(`window.__m283HostFocus()`)
+      const pressed = await toggleOrch(true)
+      const shown = await waitUntil(orchShown, 3000)
+      await settle()
+      const covered = await wc.executeJavaScript(`(() => {
+        const host = document.querySelector('.canvas')
+        return { inert: host?.inert === true, focusInside: host?.contains(document.activeElement) === true, active: document.activeElement?.className ?? null }
+      })()`)
+      ok('orch-page.1 the Dock opens Orchestrate over a canvas host that stays MOUNTED and is inert, and the terminal that had the keyboard no longer has it',
+        pressed === true && shown === true && covered.inert === true && covered.focusInside === false,
+        JSON.stringify({ pressed, shown, covered }))
+
+      // Typing, Tab walking the page, and the four menu chords — none may reach the PTY.
+      for (const k of ['q', 'w', 'Return']) typeKey(k)
+      for (let i = 0; i < 6; i++) { wc.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' }) }
+      for (const k of ['e', 'r']) typeKey(k)
+      const panelsBeforeChords = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      wc.send(IPC_EVENTS.EDIT_PASTE, 'ORCH-PASTE-LEAK')
+      wc.send(IPC_EVENTS.EDIT_UNDO)
+      await sleep(500)
+      const panelsAfterChords = await wc.executeJavaScript(`document.querySelectorAll('.panel').length`)
+      const leaked = writes.filter(([id]) => id === termId)
+      const tabInside = await wc.executeJavaScript(`document.querySelector('.canvas')?.contains(document.activeElement) === true`)
+      ok('orch-page.3 typing, Tab and the menu\'s paste and undo while Orchestrate is shown reach no PTY and change no panel',
+        leaked.length === 0 && tabInside === false && panelsAfterChords === panelsBeforeChords,
+        JSON.stringify({ leaked, tabInside, panelsBeforeChords, panelsAfterChords }))
+
+      // Orchestrate's own layout is its own: a mode chosen there survives the round trip.
+      await wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.orch__mode [role="tab"]')].find((b) => b.textContent.trim() === 'Pipeline'); t?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!t })()`)
+      await settle()
+
+      const storedCovered = await wc.executeJavaScript(`window.__m283HostFocus ? window.__m283HostFocus() : 'no hook'`)
+      const back = await toggleOrch(false)
+      await waitUntil(async () => !(await orchShown()), 3000)
+      await settle()
+      const after = await snap()
+      await demo('m283-2-canvas-after')
+      const refocused = await wc.executeJavaScript(`document.activeElement?.closest('[data-panel-id=${JSON.stringify(termId)}]') !== null`)
+      const activeAfter = await wc.executeJavaScript(`(() => { const a = document.activeElement; if (!a) return null; const chain = []; for (let e = a; e && chain.length < 6; e = e.parentElement) chain.push(e.tagName + (e.className ? '.' + String(e.className).split(' ')[0] : '') + (e.getAttribute('tabindex') !== null ? '[ti=' + e.getAttribute('tabindex') + ']' : '')); return { chain, stored: window.__m283HostFocus ? window.__m283HostFocus() : 'no hook' } })()`)
+      const termResizes = resizes.filter(([id]) => id === termId)
+      ok('orch-page.2 Canvas → Orchestrate → Canvas keeps pan/zoom, every panel rect, the unsaved file draft, the sessions and the terminal\'s cols/rows, with no pty resize',
+        back === true && typed === true && before === after && termResizes.length === 0 && JSON.parse(after).dirty === true && JSON.parse(after).grid !== null,
+        JSON.stringify({ same: before === after, before: JSON.parse(before), after: JSON.parse(after), termResizes }))
+
+      const writesBeforeType = writes.filter(([id]) => id === termId).length
+      typeKey('z')
+      const reached = await waitUntil(() => writes.filter(([id]) => id === termId).length > writesBeforeType, 2000, 50)
+      ok('orch-page.4 the return hands the keyboard back — the next keystroke reaches the terminal that had it',
+        refocused === true && reached === true, JSON.stringify({ refocused, reached, activeAfter, storedBefore, storedCovered }))
+
+      await toggleOrch(true)
+      await waitUntil(orchShown, 3000)
+      const modeKept = await wc.executeJavaScript(`[...document.querySelectorAll('.orch__mode [role="tab"]')].find((b) => b.getAttribute('aria-selected') === 'true')?.textContent.trim() ?? null`)
+      const viewportWhileOrch = await wc.executeJavaScript(`JSON.stringify(window.__m4aViewport())`)
+      ok('orch-page.5 Orchestrate keeps its own layout across the round trip (the mode chosen there), and it is not the canvas\'s: the canvas viewport did not move',
+        modeKept === 'Pipeline' && viewportWhileOrch === JSON.stringify(JSON.parse(before).viewport),
+        JSON.stringify({ modeKept, viewportWhileOrch }))
+      await wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.orch__mode [role="tab"]')].find((b) => b.textContent.trim() === 'Dev'); t?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })) })()`)
+
+      // Cmd+K over Orchestrate: the palette lives in the canvas host, so opening it is a return.
+      await wc.executeJavaScript(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))`)
+      const paletteUp = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.palette__input') !== null`), 2000)
+      await settle()
+      const orchAfterPalette = await orchShown()
+      ok('orch-page.6 Cmd+K over Orchestrate opens the palette on the Canvas page, never as an invisible field under the covered host',
+        paletteUp === true && orchAfterPalette === false, JSON.stringify({ paletteUp, orchAfterPalette }))
+      await wc.executeJavaScript(`document.querySelector('.palette__input')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`)
+      await settle()
+    } finally {
+      ptyManager.write = origWrite
+      ptyManager.resize = origResize
+      if (await orchShown()) await toggleOrch(false)
+    }
+  }
 })

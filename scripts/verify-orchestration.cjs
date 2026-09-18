@@ -531,6 +531,74 @@ ok('orch.bloom-door.2 OrchestrationCubes is still reached through lazy() and not
   })(),
   'the cube island must stay behind lazy()')
 
+// M284 — Orchestrate Phase A's task island, inspector verb and decision queue
+// (orchestration-island.ts), pure: the island is derived from a persisted work item
+// and the worktree it names, and the queue from the chat store's own pending map.
+{
+  const I = load('src/renderer/orchestration/orchestration-island.ts', 'orchestration-island.cjs')
+  const island = typeof I.orchTaskIsland === 'function' ? I.orchTaskIsland : () => null
+  const cwds = { c1: '/Users/me/src/storefront-wt', t1: '/Users/me/src/storefront', c9: '/Users/me/src/docs' }
+  const base = {
+    worktrees: [{ id: 'wt1', branch: 'tc/payment-api', path: '/Users/me/src/storefront-wt', root: '/Users/me/src/storefront' }],
+    sessions: [{ id: 'c9', title: 'Solo chat', kind: 'chat', agentic: true }],
+    membersOf: (id) => id === 'i2' ? ['c1', 't1'] : [],
+    cwdOf: (id) => cwds[id]
+  }
+  const lane = island({ ...base, items: [
+    { id: 'i1', title: 'Queued thing', state: 'todo' },
+    { id: 'i2', title: 'Payment API', state: 'working', key: 'acme/storefront#42', panelId: 'c1', worktreeId: 'wt1' },
+    { id: 'i3', title: 'Also reviewing', state: 'review' }
+  ] })
+  ok('orch-island.1 the island is the canvas\'s focused task (first working, else review), labelled with its goal, the repository its key names and its own worktree\'s branch; its review subject is the lane\'s chat',
+    lane?.itemId === 'i2' && lane.goal === 'Payment API' && lane.repository === 'acme/storefront' &&
+      lane.placement.kind === 'worktree' && lane.placement.branch === 'tc/payment-api' && lane.subjectId === 'c1' &&
+      JSON.stringify(lane.memberIds) === '["c1","t1"]' &&
+      I.orchPlacementLine(lane) === 'acme/storefront · tc/payment-api · own worktree',
+    JSON.stringify(lane))
+  const shared = island({ ...base, items: [{ id: 'i2', title: 'Typed task', state: 'review', panelId: 't1' }] })
+  const solo = island({ ...base, items: [{ id: 'i1', title: 'Queued', state: 'todo' }] })
+  const none = island({ ...base, sessions: [], items: [] })
+  ok('orch-island.2 no worktree is SAID (a shared directory, from a member\'s cwd, repository from its folder); no working/review task falls back to a lone agent session; nothing at all is null, never a sample',
+    shared?.placement.kind === 'shared' && shared.placement.path === '/Users/me/src/storefront' && shared.repository === 'storefront' &&
+      I.orchPlacementLine(shared) === 'storefront · shared directory' &&
+      solo?.source === 'session' && solo.itemId === undefined && solo.subjectId === 'c9' && solo.repository === 'docs' &&
+      none === null,
+    JSON.stringify({ shared, solo, none }))
+  const nx = typeof I.orchNextAction === 'function' ? I.orchNextAction : () => ({})
+  ok('orch-island.3 the inspector\'s next action reads the recorded state: a pending permission is answer, a waiting chat is reply, working is watch, an IDLE agent is review — never done',
+    nx({ state: 'wants-you', kind: 'chat', pendingTool: 'Bash' }).verb === 'answer' &&
+      nx({ state: 'wants-you', kind: 'chat' }).verb === 'reply' &&
+      nx({ state: 'busy', kind: 'terminal' }).verb === 'watch' &&
+      nx({ state: 'idle', kind: 'chat' }).verb === 'review' &&
+      nx({ state: 'exited', kind: 'chat' }).verb === 'open')
+  const pendingQ = [{ id: 'c1', requestId: 'r1', toolName: 'Bash', argument: 'npm test' }, { id: 'c2', requestId: 'r7', toolName: 'Write', argument: 'a.ts' }]
+  const rows = I.orchAttentionRows(pendingQ, (id) => `title ${id}`, new Set([I.orchAnswerKey('c1', 'r1')]))
+  const pruned = I.orchPruneSent(new Set([I.orchAnswerKey('c1', 'r1'), I.orchAnswerKey('c2', 'r7')]), [pendingQ[1]])
+  ok('orch-attn.1 a Needs attention row is keyed by the request\'s own (panel id, requestId), is inert once this page sent its answer, and leaves the sent set when the store drops it (answered anywhere)',
+    rows.length === 2 && rows[0].sent === true && rows[1].sent === false && rows[1].title === 'title c2' &&
+      pruned.size === 1 && pruned.has('c2:r7') && !pruned.has('c1:r1'),
+    JSON.stringify({ rows, pruned: [...pruned] }))
+}
+
+// M284. Every new text the page shows passes the gate the page's other readers do
+// (orch.gate.1), and review is read only through the review node's executors.
+ok('orch.gate.3 OrchestrationView scrubs a pending request\'s argument and every diff line through outward(), and reads review only through window.canvas.review.*',
+  /outward\(p\.argument/.test(viewSrc) && /outward\(line\.text/.test(viewSrc) &&
+    /canvas\.review\.panel\(/.test(viewSrc) && /canvas\.review\.diff\(/.test(viewSrc) &&
+    !/review\.(commit|discard)\(/.test(viewSrc))
+
+// M283. The page boundary, read off Canvas.tsx: the covered host is inert, and the
+// predicate every edit:* chord and canvas shortcut gates on includes the cover. The
+// behaviour itself is verify:panels:shell orch-page.1–.6; this pins the two lines a
+// refactor could drop without any red there being obviously about them.
+{
+  const canvasSrc = readFileSync(join(root, 'src/renderer/canvas/Canvas.tsx'), 'utf8')
+  ok('orch-page.src.1 the canvas host is inert while Orchestrate covers it, and shouldIgnoreKeys reads the cover first',
+    /inert=\{chrome\.centerView === 'orchestration'\}/.test(canvasSrc) &&
+      /\(\) => canvasCoveredRef\.current \|\| palette\.isOpen\(\)/.test(canvasSrc) &&
+      /enabled: !palette\.open && chrome\.centerView !== 'orchestration'/.test(canvasSrc))
+}
+
 const failed = results.filter((x) => !x.pass)
 console.log(`verify:orchestration ${results.length - failed.length}/${results.length}`)
 if (failed.length) {

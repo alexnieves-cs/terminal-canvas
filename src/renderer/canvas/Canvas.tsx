@@ -1,5 +1,5 @@
 import {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
   type DragEvent, type JSX, type MouseEvent, type CSSProperties } from 'react'
 import { CanvasHud } from './CanvasHud'
 import { NewObjectRow } from './NewObjectRow'
@@ -1343,7 +1343,10 @@ export function Canvas({
     // the clipboard into a running agent the user is not looking at.
     // M249. The command pill's input is the same situation again (pill.paste.1).
     // M250. A rich note editor is a text surface too; its own edit:* subscriptions act on it.
-    () => palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
+    // M283. The Orchestrate page covering the canvas is the same situation at page scale:
+    // `focusedId` still names a terminal the user cannot see, and the four edit:* chords
+    // are MENU IPC — `inert` on the host stops keydown, never them (orch-page.3).
+    () => canvasCoveredRef.current || palette.isOpen() || navGridIsOpenRef.current() || chromeTransientRef.current || skillEditorFocused() || checklistFocused() || pillFocused() || noteEditorFocused() || deckFocused() || sheetFocused(),
     [palette.isOpen]
   )
 
@@ -3328,6 +3331,91 @@ export function Canvas({
   chromeTransientRef.current = chrome.navDrawer || chrome.ctxDrawer || chrome.attentionOpen
   const chromeRef = useRef(chrome)
   chromeRef.current = chrome
+  // M283. Orchestrate is a separate PAGE over a canvas that stays mounted (M268): its
+  // sessions keep running, but nothing typed there may reach them. A ref of its own, not
+  // folded into chromeTransientRef — that one also arms the outside-click dismissal of
+  // the drawers, and every mousedown on Orchestrate would trip it. Read by
+  // shouldIgnoreKeys, declared above, only from handlers long after this assignment.
+  const canvasCoveredRef = useRef(false)
+  canvasCoveredRef.current = chrome.centerView === 'orchestration'
+  // M283. The element that last had focus INSIDE the canvas host, kept so a return from
+  // Orchestrate hands the keyboard back — without it the user's next keystroke after the
+  // round trip goes nowhere. Cleared when focus moves deliberately to something OUTSIDE
+  // the host (a rail field), so a return never steals it back from there.
+  const lastHostFocusRef = useRef<HTMLElement | null>(null)
+  // NATIVE focusin/focusout on the DOCUMENT, tested against the host read at event time.
+  // Not React's onFocusCapture (xterm builds its textarea imperatively, outside React's
+  // tree), and not a listener on the host node itself — that node is re-created during
+  // the app's life while Canvas stays mounted, so a listener bound once stayed on a node
+  // no longer in the page (orch-page.4 read the record as null, terminal focused, twice).
+  useEffect(() => {
+    const onIn = (event: FocusEvent): void => {
+      const host = hostRef.current
+      if (host !== null && event.target instanceof HTMLElement && host.contains(event.target)) lastHostFocusRef.current = event.target
+    }
+    const onOut = (event: FocusEvent): void => {
+      const host = hostRef.current
+      // Focus going to NOTHING (our own blur below, a window switch) keeps the record;
+      // focus moving deliberately from the host to something OUTSIDE it drops it.
+      const from = event.target
+      const next = event.relatedTarget
+      if (host === null || !(from instanceof Node) || !host.contains(from)) return
+      if (next instanceof Node && !host.contains(next)) lastHostFocusRef.current = null
+    }
+    document.addEventListener('focusin', onIn)
+    document.addEventListener('focusout', onOut)
+    return () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut) }
+  }, [])
+  useLayoutEffect(() => {
+    const host = hostRef.current
+    const active = document.activeElement
+    // The canvas page's side regions (navigator, file tree, inspector) collapse to
+    // ZERO-WIDTH columns under Orchestrate, never display:none (the shell's load-bearing
+    // rule), so their controls stayed in the tab order: Tab on Orchestrate walked into the
+    // hidden inspector, whose primary action is a terminal's Restart (orch-page.4 found it).
+    // Set here because those components own their roots and forward no attributes.
+    for (const region of shellRef.current?.querySelectorAll<HTMLElement>('.shell__rail, .shell__tree, .shell__inspector') ?? []) {
+      region.inert = chrome.centerView === 'orchestration'
+    }
+    if (chrome.centerView === 'orchestration') {
+      // Blurred HERE, explicitly, rather than trusting `inert` to do it: Chromium's
+      // focus fixup for an inert subtree runs lazily at a later style pass, and until it
+      // does the terminal's textarea still takes a real keystroke (orch-page.3).
+      if (active instanceof HTMLElement && (host?.contains(active) === true || active.closest('.shell__rail, .shell__tree, .shell__inspector') !== null)) active.blur()
+      return
+    }
+    // A task LATER, not here (a timeout, not a frame — a hidden window throttles frames): a Radix focus scope on the Orchestrate page hands focus
+    // back to a body-level focus guard in its UNMOUNT cleanup, a passive effect that runs
+    // after this layout effect — restored here, the keyboard was taken straight back
+    // (orch-page.4 measured it on `span[data-radix-focus-guard]`).
+    const later = window.setTimeout(() => {
+      const el = lastHostFocusRef.current
+      if (el === null || !el.isConnected) return
+      // Yield only to a place the user is TYPING — a rail field, the command box. A
+      // Dock or tab button that Tab or a click left focused on the way back is not
+      // somewhere keystrokes are meant to go, and leaving it would strand them.
+      const now = document.activeElement
+      if (now instanceof HTMLElement && now !== document.body && now.closest('input, textarea, select, [contenteditable="true"]') !== null) return
+      el.focus({ preventScroll: true })
+    }, 0)
+    return () => window.clearTimeout(later)
+  }, [chrome.centerView])
+  // M283. The palette mounts INSIDE the canvas host, which is opacity 0 and inert while
+  // covered — opened over Orchestrate (Cmd+K, the top bar's search) it was an invisible
+  // text field eating keystrokes. Its verbs are the canvas's, so opening it is a return
+  // to the Canvas page. A palette `say()` does this too, which is why Orchestrate's own
+  // refusals are said on Orchestrate, never through the palette.
+  const setCenterView = chrome.setCenterView
+  // M284. Every labelled "Open on canvas" from Orchestrate names its OWN target, so the
+  // focus a plain return would restore (above) belongs to a panel the user did not ask
+  // for — typing would land in that session. The target's own selection decides instead.
+  const leaveForCanvas = useCallback((): void => {
+    lastHostFocusRef.current = null
+    setCenterView('canvas')
+  }, [setCenterView])
+  useEffect(() => {
+    if (palette.open && chrome.centerView === 'orchestration') setCenterView('canvas')
+  }, [palette.open, chrome.centerView, setCenterView])
 
   // Backlog #75's diagnostics overlay toggle. Ephemeral, unlike chrome above:
   // this is a debug view, not a persisted preference.
@@ -3474,7 +3562,9 @@ export function Canvas({
     // The palette owns the keyboard while it is open; two surfaces both
     // claiming Cmd is the one arrangement rule 3 of "who owns the keyboard"
     // exists to prevent.
-    enabled: !palette.open
+    // M283. And never over Orchestrate: the grid mounts inside the covered canvas host,
+    // so it would be invisible, and its release commits a workspace switch.
+    enabled: !palette.open && chrome.centerView !== 'orchestration'
   })
   // Publishes the predicate to the two consumers declared above it — see
   // navGridIsOpenRef's own comment. In an effect rather than a render-time
@@ -3849,6 +3939,8 @@ export function Canvas({
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>
     w.__m13Open = (path: string): void => openFilePanel(path, worldCentre())
+    // M283. What a return from Orchestrate would hand the keyboard back to (orch-page.4).
+    w.__m283HostFocus = (): string | null => { const el = lastHostFocusRef.current; return el === null ? null : `${el.tagName}.${String(el.className).split(' ')[0]}${el.isConnected ? '' : ' (gone)'}` }
     // M113/M114. The board's doors for verify:panels — the SAME verbs the
     // palette rows and the card call, through the palette ref.
     // M182. The binding's Update, through the same member the text mode's submit calls.
@@ -7157,17 +7249,17 @@ export function Canvas({
               return item === undefined ? [] : taskMemberships(panels, [item])[0]?.members.map((m) => m.panelId) ?? []
             }}
             onJumpPanel={(id) => {
-              chrome.setCenterView('canvas')
+              leaveForCanvas()
               paletteActions.goToPanel(id)
             }}
             onJumpWorkItem={(id) => {
-              chrome.setCenterView('canvas')
+              leaveForCanvas()
               goToWorkItem(id)
             }}
             onInterrupt={(id) => { void window.canvas.agentSession.interrupt(id) }}
             onMarkDone={markDone}
             onFocusRelated={(id) => {
-              chrome.setCenterView('canvas')
+              leaveForCanvas()
               const shown = displayPanelsRef.current
               const items = workItemsRef.current
               const target = showTaskTarget(id, shown, taskMemberships(shown, items), Object.fromEntries(items.map((i) => [i.id, i.title])))
@@ -7179,10 +7271,16 @@ export function Canvas({
               frameRects(target.rects)
             }}
             onOpenFiles={() => {
-              chrome.setCenterView('canvas')
+              leaveForCanvas()
               chrome.chooseNavigator('files')
             }}
             onShowCanvas={() => chrome.setCenterView('canvas')}
+            // M284. The Dock's, the palette's and the inspector's executor — one permission path.
+            onAnswer={paletteActions.answerApproval}
+            onReviewOnCanvas={(id) => {
+              leaveForCanvas()
+              openReview(id)
+            }}
           />
         </div>
       )}
@@ -7200,6 +7298,11 @@ export function Canvas({
         className={`canvas${annotating ? ' canvas--annotating' : ''}${panning ? ' canvas--panning' : spaceHeld.isHeld() ? ' canvas--space-armed' : ''}${linkDraw.state !== null ? ' canvas--linking' : ''}${viewport.scale < PORT_MIN_SCALE ? ' canvas--ports-hidden' : ''}${docFocusId !== null ? ' canvas--doc-focus' : ''}${chrome.centerView === 'orchestration' ? ' canvas--behind-orch' : ''}`}
         ref={hostRef}
         aria-hidden={chrome.centerView === 'orchestration' ? true : undefined}
+        // M283. Covered means out of the tab order and deaf to clicks and keys, not only
+        // invisible: an opacity-0 host still takes Tab into a terminal's textarea, and
+        // typing there reached the PTY. `inert`, not display:none — a collapsed host
+        // refits every xterm and SIGWINCHes each running agent (orch-page.2).
+        inert={chrome.centerView === 'orchestration'}
         // M44. Focusable so Cmd+Escape can land DOM focus here and Tab from
         // here walks the chrome. role=application because the canvas owns its
         // own keyboard model (a screen reader must pass keys through, not

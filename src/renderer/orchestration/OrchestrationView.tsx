@@ -15,7 +15,7 @@ import { getAgentState, onAgentTransition } from '@renderer/session/agent-state-
 import { formatCpu, formatMemory, getMachineCostSampledAt, listMachineCosts, useMachineCost, useMachineCostTotal } from '@renderer/session/machine-cost-store'
 import { getLiveSession, useLiveSession } from '@renderer/session/live-session-store'
 import { getWatch } from '@renderer/watcher/watcher-store'
-import { useChat, lastAssistantText } from '@renderer/chat/chat-store'
+import { useChat, lastAssistantText, useApprovals } from '@renderer/chat/chat-store'
 import { outward } from '@shared/outward'
 import { TRIGGER_WORDS } from '@renderer/canvas/trigger-words'
 import { edgeFiredAt, useEdgeActivityVersion } from '@renderer/canvas/useEdgeActivity'
@@ -79,6 +79,13 @@ import {
 } from './orchestration-activity'
 import { ORCH_COS_TILT, ORCH_GROUND_K, orchGroundPlane, orchProjectNode, type OrchDepthBand, type OrchStage } from './orchestration-depth'
 import type { OrchCubeSpec } from './OrchestrationCubes'
+import { getOrchPrefs, setOrchPrefs, type OrchLens } from './orchestration-prefs'
+import {
+  orchAnswerKey, orchAttentionRows, orchNextAction, orchPlacementLine, orchPruneSent, orchTaskIsland,
+  type OrchAttentionRow, type TaskIsland
+} from './orchestration-island'
+import type { WorktreeListRow } from '@shared/ipc-contract'
+import type { ReviewDiff, ReviewResult } from '@shared/review'
 import type { OrchCubeTone } from './orchestration-cube-motion'
 
 /**
@@ -119,12 +126,20 @@ export interface OrchestrationViewProps {
   taskMemberIds?: readonly string[]
   /** D08 members of ANY board item — the stage wash rims the item that moved, not only the focused one. */
   taskMembersOf?: (itemId: string) => readonly string[]
+  /**
+   * M284. A pending permission answered through the SAME executor the Dock, the
+   * palette and the inspector use (`answerApproval` → `agent:answer`), keyed by the
+   * request's own `(panel id, requestId)` — never a second permission state.
+   */
+  onAnswer?: (id: string, requestId: string, allow: boolean) => void
+  /** M284. The existing review node for this panel, on the canvas (openReview) — a labelled page change. */
+  onReviewOnCanvas?: (panelId: string) => void
 }
 
 /** A board stage change, painted as a brief rim on the moved item's member cubes. */
 interface OrchWash { at: number; stage: WorkItemState; ids: readonly string[] }
 
-type SideTab = 'activity' | 'terminal' | 'files'
+type SideTab = 'activity' | 'terminal' | 'review' | 'files'
 
 function panelsToInput(panels: readonly Panel[], templates: readonly OrchTemplateInput[]): OrchPanelInput[] {
   return panels.map((p) => {
@@ -557,8 +572,9 @@ function GraphBoard(props: {
   const isSelected = (n: OrchGraphNode): boolean => selectedId === n.id || selectedIds.includes(n.id)
   const attentionOf = useAttentionAck()
   const [hovered, setHovered] = useState<string | null>(null)
-  const [cam, setCam] = useState({ x: 0, y: 0, k: 1 })
-  useEffect(() => props.onCamera(cam), [cam, props.onCamera])
+  // M283. The camera starts where the user left it, not at the origin (orchestration-prefs.ts).
+  const [cam, setCam] = useState(() => getOrchPrefs().camera)
+  useEffect(() => { setOrchPrefs({ camera: cam }); props.onCamera(cam) }, [cam, props.onCamera])
   const drag = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null)
   // Project endpoints and cubes together so depth never detaches a connection.
   // The stage centres on the hub's model position and reads the ring radius off
@@ -865,13 +881,100 @@ function useOrchOutput(panelId: string | null, kind: OrchRosterRow['kind'] | und
   return lines
 }
 
+/**
+ * M284. The worktree record the task island reads its branch from. A READ of main's
+ * list, refetched when the board changes (a dispatch mints a lane), never a watch.
+ */
+function useOrchWorktrees(signal: unknown): readonly WorktreeListRow[] {
+  const [rows, setRows] = useState<readonly WorktreeListRow[]>([])
+  useEffect(() => {
+    if (typeof window.canvas?.worktree?.list !== 'function') return
+    let live = true
+    void window.canvas.worktree.list().then((got) => { if (live) setRows(got) }, () => { if (live) setRows([]) })
+    return () => { live = false }
+  }, [signal])
+  return rows
+}
+
+export type OrchReviewState =
+  | { kind: 'idle' }
+  | { kind: 'loading'; subjectId: string }
+  | { kind: 'result'; subjectId: string; result: ReviewResult }
+
+export type OrchDiffState =
+  | { kind: 'none' }
+  | { kind: 'loading'; key: string }
+  | { kind: 'no-baseline'; key: string }
+  | { kind: 'diff'; key: string; diff: ReviewDiff }
+
+/**
+ * M284. The selected subject's review, through the SAME executors the review node
+ * uses (`review.panel`, `review.baseline`, `review.diff` — git in main, no file:read,
+ * no watch). Every answer is tagged with the subject it was asked for and dropped if
+ * the selection moved meanwhile: rapid selection must never put one task's diff
+ * under another's controls.
+ */
+function useOrchReview(subjectId: string | null, active: boolean, refresh: number): {
+  review: OrchReviewState
+  diff: OrchDiffState
+  openFile: (path: string, untracked: boolean) => void
+} {
+  const [review, setReview] = useState<OrchReviewState>({ kind: 'idle' })
+  const [diff, setDiff] = useState<OrchDiffState>({ kind: 'none' })
+  const subjectRef = useRef(subjectId)
+  subjectRef.current = subjectId
+  useEffect(() => {
+    setDiff({ kind: 'none' })
+    if (!active || subjectId === null || typeof window.canvas?.review?.panel !== 'function') { setReview({ kind: 'idle' }); return }
+    let live = true
+    setReview({ kind: 'loading', subjectId })
+    void window.canvas.review.panel(subjectId).then(
+      (result) => { if (live && subjectRef.current === subjectId) setReview({ kind: 'result', subjectId, result }) },
+      () => { if (live && subjectRef.current === subjectId) setReview({ kind: 'result', subjectId, result: { kind: 'repo-unreadable', detail: 'the review could not be read' } }) }
+    )
+    return () => { live = false }
+  }, [subjectId, active, refresh])
+  const openFile = useCallback((path: string, untracked: boolean): void => {
+    const asked = subjectRef.current
+    if (asked === null) return
+    const key = `${asked}:${path}`
+    setDiff({ kind: 'loading', key })
+    void (async () => {
+      const baseline = await window.canvas.review.baseline(asked)
+      if (subjectRef.current !== asked) return
+      if (baseline === null) { setDiff({ kind: 'no-baseline', key }); return }
+      const result = await window.canvas.review.panel(asked)
+      if (subjectRef.current !== asked) return
+      if (result.kind !== 'changes' && result.kind !== 'shared') { setDiff({ kind: 'diff', key, diff: { kind: 'unavailable' } }); return }
+      const d = await window.canvas.review.diff({ repoRoot: result.root, baselineSha: baseline.sha, path, untracked })
+      if (subjectRef.current === asked) setDiff({ kind: 'diff', key, diff: d })
+    })().catch(() => { if (subjectRef.current === asked) setDiff({ kind: 'diff', key, diff: { kind: 'unavailable' } }) })
+  }, [])
+  return { review, diff, openFile }
+}
+
+/** M284. What a review answer says in words — every arm named, none rendered as an error it is not. */
+function reviewWords(result: ReviewResult): string {
+  if (result.kind === 'changes') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} · +${result.added} −${result.removed} since this session started`
+  if (result.kind === 'shared') return `${result.files.length} changed file${result.files.length === 1 ? '' : 's'} in a repository ${result.panelCount} sessions share — authorship is ambiguous, so none is attributed to this one`
+  if (result.kind === 'clean') return 'No changes since this session started'
+  if (result.kind === 'never-started') return 'This session has not run yet, so it has no baseline to review against'
+  if (result.kind === 'not-a-repo') return 'Not in a git repository — there is no diff to review'
+  if (result.kind === 'git-missing') return 'git is not available, so changes cannot be read'
+  if (result.kind === 'baseline-lost') return 'The starting point of this session is gone from the repository'
+  return `git could not read the repository: ${result.detail}`
+}
+
 function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
-  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf } = props
+  const { panels, workItems, templates = [], displayName, onJumpPanel, onJumpWorkItem, onInterrupt, onMarkDone, onFocusRelated, onOpenFiles, onShowCanvas, taskMemberIds, taskMembersOf, onAnswer, onReviewOnCanvas } = props
   const [tick, setTick] = useState(0)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [tab, setTab] = useState<SideTab>('activity')
-  const [mode, setMode] = useState<OrchMode>('dev')
-  const [graphCamera, setGraphCamera] = useState({ x: 0, y: 0, k: 1 })
+  // M283. Seeded from, and written back to, Orchestrate's own prefs so a round trip
+  // through the Canvas returns to the same view (orchestration-prefs.ts).
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => [...getOrchPrefs().selectedIds])
+  const [tab, setTab] = useState<SideTab>(() => getOrchPrefs().tab)
+  const [mode, setMode] = useState<OrchMode>(() => getOrchPrefs().mode)
+  const [graphCamera, setGraphCamera] = useState(() => getOrchPrefs().camera)
+  useEffect(() => { setOrchPrefs({ selectedIds, tab, mode }) }, [selectedIds, tab, mode])
   // Foreground cards respond first, then settle at the edge of their readable area.
   const floatStyle = mode === 'dev' ? { translate: `${Math.tanh(graphCamera.x / 20) * 22}px ${Math.tanh(graphCamera.y / 14) * 16 - (graphCamera.k - 1) * 8}px` } : undefined
   const [rosterFilter, setRosterFilter] = useState<OrchRosterFilter>('all')
@@ -890,6 +993,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const knownNeedsRef = useRef<Set<string>>(new Set())
   const prevStagesRef = useRef<Map<string, WorkItemState> | null>(null)
   const visibleRosterRef = useRef<OrchRosterRow[]>([])
+  const listOrderRef = useRef<string[]>([])
   const selectedIdsRef = useRef<string[]>([])
   const total = useMachineCostTotal()
   const selectedId = selectedIds[selectedIds.length - 1] ?? null
@@ -1048,6 +1152,76 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
   const outputLines = useOrchOutput(outputPanelId, outputKind, true)
   const codeFile = orchBestFile(visibleFiles, selectedId)
 
+  // M284. Scene | List — the same objects and the same actions, the list being the
+  // keyboard (and reduced-motion, and no-WebGL) way to reach every one of them.
+  const [lens, setLens] = useState<OrchLens>(() => getOrchPrefs().lens)
+  useEffect(() => { setOrchPrefs({ lens }) }, [lens])
+
+  // M284. The one task island (orchestration-island.ts), from the persisted work item
+  // and the worktree record it names — the same pick as the canvas's focused task.
+  const worktrees = useOrchWorktrees(workItems)
+  const island: TaskIsland | null = useMemo(() => orchTaskIsland({
+    items: workItems.map((w) => ({
+      id: w.id, title: w.title, state: w.state,
+      ...(w.key !== undefined ? { key: w.key } : {}),
+      ...(w.panelId !== undefined ? { panelId: w.panelId } : {}),
+      ...(w.worktreeId !== undefined ? { worktreeId: w.worktreeId } : {})
+    })),
+    worktrees,
+    sessions: liveSnap.roster.map((r) => ({ id: r.id, title: r.title, kind: r.kind, agentic: r.kind === 'chat' || (r.kind === 'terminal' && panels.some((p) => p.rect.id === r.id && isTerminalPanel(p) && p.spec.agent !== undefined)) })),
+    membersOf: (itemId) => taskMembersOf?.(itemId) ?? [],
+    cwdOf: (id) => {
+      const live = getLiveSession(id)?.cwd
+      if (live !== undefined && live !== '') return live
+      const p = panels.find((x) => x.rect.id === id)
+      if (p !== undefined && isChatPanel(p)) return p.chat.cwd
+      if (p !== undefined && isTerminalPanel(p)) return p.spec.cwd
+      return undefined
+    }
+  }), [workItems, worktrees, liveSnap.roster, panels, taskMembersOf])
+  const listRows = useMemo(
+    () => [...visibleRoster].sort((a, b) => Number(island?.memberIds.includes(b.id) ?? false) - Number(island?.memberIds.includes(a.id) ?? false)),
+    [visibleRoster, island]
+  )
+  listOrderRef.current = listRows.map((r) => r.id)
+
+  // M284. Needs attention: the chat store's own pending permissions. A request answered
+  // anywhere (Dock, chat, palette, here) leaves the store, so its row leaves with it.
+  const pending = useApprovals()
+  const [sent, setSent] = useState<ReadonlySet<string>>(() => new Set())
+  useEffect(() => {
+    setSent((cur) => { const next = orchPruneSent(cur, pending); return next.size === cur.size ? cur : next })
+  }, [pending])
+  const titleOf = useCallback((id: string): string => liveSnap.roster.find((r) => r.id === id)?.title ?? id, [liveSnap.roster])
+  const attentionRows = useMemo(
+    () => orchAttentionRows(pending.map((p) => ({ ...p, argument: outward(p.argument, `panel ${p.id}`).text })), titleOf, sent),
+    [pending, titleOf, sent]
+  )
+  // A session waiting on the user with NO permission pending asked a question: it is
+  // answered in its own conversation, so the row says so and opens it.
+  const waitingOnly = liveSnap.roster.filter((r) => r.state === 'wants-you' && !pending.some((p) => p.id === r.id))
+  const answer = (row: OrchAttentionRow, allow: boolean): void => {
+    const key = orchAnswerKey(row.id, row.requestId)
+    // Re-read the LIVE queue, not the row: a request answered elsewhere between render
+    // and click is gone, and main's own guard would refuse it — say nothing, send nothing.
+    if (onAnswer === undefined || sent.has(key) || !pending.some((p) => p.id === row.id && p.requestId === row.requestId)) return
+    setSent((cur) => new Set(cur).add(key))
+    onAnswer(row.id, row.requestId, allow)
+  }
+
+  // M284. The inspector's subject: the selected session, else the island's task.
+  const inspectTask = selectedRow === null && island !== null
+  const pendingOfSelected = selectedRow === null ? undefined : pending.find((p) => p.id === selectedRow.id)
+  const nextAction = selectedRow !== null
+    ? orchNextAction({ state: selectedRow.state, kind: selectedRow.kind, ...(pendingOfSelected !== undefined ? { pendingTool: pendingOfSelected.toolName } : {}) })
+    : null
+  const islandWaiting = island === null ? undefined : attentionRows.find((r) => island.memberIds.includes(r.id))
+  const reviewSubjectId = selectedRow !== null
+    ? (selectedRow.kind === 'chat' || selectedRow.kind === 'terminal' ? selectedRow.id : null)
+    : island?.subjectId ?? null
+  const [reviewRefresh, setReviewRefresh] = useState(0)
+  const orchReview = useOrchReview(reviewSubjectId, tab === 'review', reviewRefresh)
+
   const stageItems = useMemo(
     () => filterWorkItems(workItems.map((w) => ({
       id: w.id, title: w.title, state: w.state,
@@ -1148,9 +1322,13 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
       const target = event.target instanceof Element ? event.target : null
       if (!orchKeysShouldHandle(target)) return
       if (isEscape && target !== null && target.closest('input, textarea, select')) return
-      const rows = visibleRosterRef.current
+      // M284. From a List row, step in the LIST's order (island members first) and from
+      // the row that has the keyboard — the roster's order and the last selection are
+      // the scene's, and stepping by them left a keyboard user's focus behind.
+      const listRow = target?.closest('[data-orch-list-row]')?.getAttribute('data-orch-list-row') ?? null
+      const rows = listRow !== null ? listOrderRef.current.map((id) => ({ id })) : visibleRosterRef.current
       const current = selectedIdsRef.current
-      const primary = current[current.length - 1] ?? null
+      const primary = listRow ?? current[current.length - 1] ?? null
       if (isEscape) {
         event.preventDefault()
         setSelectedIds([])
@@ -1159,14 +1337,24 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
       }
       if (isEnter) {
         if (primary === null) return
+        // M284. Enter INSPECTS — it hands the keyboard to the inspector's actions and
+        // stays on this page. Leaving for the canvas is the labelled Open on canvas
+        // button (the plan's direct controls), never a side effect of a key.
+        // A focused button's own Enter is its click, and is left alone.
+        if (target !== null && target.closest('button, a, input, textarea, select') !== null) return
         event.preventDefault()
-        jump(primary)
+        document.querySelector<HTMLElement>('[data-orch-inspector] [data-orch-open]')?.focus()
         return
       }
       event.preventDefault()
       const next = orchRosterStep(rows, primary, event.key === 'ArrowDown' ? 1 : -1)
       if (next === null) return
       select(next, { range: event.shiftKey })
+      // M284. In the List the keyboard's focus follows the selection, so Tab and Enter
+      // act on the row the user just arrowed to (a no-op in the scene, which has no rows).
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(`[data-orch-list-row="${CSS.escape(next)}"] button`)?.focus({ preventScroll: false })
+      })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -1248,6 +1436,39 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
 
   const outputCommand = selectedLive?.currentCommand || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.command : undefined)
   const outputCwd = selectedLive?.cwd || (outputPanelId === liveSnap.terminalSnippet?.panelId ? liveSnap.terminalSnippet?.cwd : undefined)
+
+  // M284. ONE island card, floating over the scene or leading the List — in the List a
+  // floating card covered the table's State and Next columns.
+  const islandCard = (floating: boolean): JSX.Element | null => island === null ? null : (
+              <button
+                type="button"
+                className={`${floating ? 'orch__float orch__float--task ' : 'orch__island--static '}orch__island${inspectTask ? ' orch__island--on' : ''}`}
+                style={floating ? floatStyle : undefined}
+                data-orch-island={island.itemId ?? island.subjectId ?? ''}
+                data-orch-island-source={island.source}
+                aria-pressed={inspectTask}
+                title="Select the task — Open on canvas is in the inspector"
+                {...shellControl(() => { setSelectedIds([]); setFreshNeeds(new Set()) })}
+              >
+                <span className="orch__island-kicker">{island.source === 'work-item' ? 'Task' : 'Session · no task yet'}</span>
+                <span className="orch__float-title" data-orch-island-goal>{island.goal}</span>
+                <span className="orch__island-place" data-orch-island-place>{orchPlacementLine(island)}</span>
+                <span className="orch__float-state">{island.state} · {island.memberIds.length} {island.memberIds.length === 1 ? 'session' : 'sessions'}{islandWaiting !== undefined ? ' · needs you' : ''}</span>
+                {liveSnap.task !== null && island.itemId === liveSnap.task.id && (
+                  <>
+                    {/* Stage position, not an estimate of work completed. */}
+                    <span className="orch__task-fill" aria-hidden="true">
+                      <span style={{ width: `${liveSnap.task.stepIndex / (WORK_ITEM_STATES.length - 1) * 100}%` }} />
+                    </span>
+                    <div className="orch__steps" aria-hidden="true">
+                      {WORK_ITEM_STATES.map((st, i) => (
+                        <span key={st} className={`orch__step${i <= liveSnap.task!.stepIndex ? ' orch__step--on' : ''}`} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </button>
+  )
 
   return (
     <div className="orch" role="region" aria-label="Orchestration">
@@ -1388,6 +1609,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
         </aside>
 
         <main className="orch__main">
+          <div className="orch__mode-row">
           <div className="orch__mode" role="tablist" aria-label="Orchestration mode">
             {ORCH_MODES.map((m) => (
               <button
@@ -1400,9 +1622,51 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               >{m.label}</button>
             ))}
           </div>
+            <span className="orch__lens" role="group" aria-label="Scene or list">
+              {(['scene', 'list'] as const).map((l) => (
+                <button key={l} type="button" className={`orch__tab${lens === l ? ' orch__tab--on' : ''}`} aria-pressed={lens === l}
+                  data-orch-lens={l} {...shellControl(() => setLens(l))}>{l === 'scene' ? 'Scene' : 'List'}</button>
+              ))}
+            </span>
+          </div>
 
           <div className="orch__graph-wrap">
-            {mode === 'dev' ? (
+            {lens === 'list' ? (
+              // M284. The List is the scene's equal, not a summary of it: every roster
+              // object, the island's members first and marked, each one a real button in
+              // the tab order (Arrow keys move the selection, Enter opens on canvas — the
+              // page's own keyboard model), and the inspector beside it carries every
+              // action the scene's selection does.
+              <div className="orch__list" data-orch-list role="region" aria-label="Sessions list">
+                {islandCard(false)}
+                <table className="orch__list-table">
+                  <thead>
+                    <tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">State</th><th scope="col">Next</th></tr>
+                  </thead>
+                  <tbody>
+                    {listRows.map((row) => {
+                      const next = orchNextAction({ state: row.state, kind: row.kind, ...(pending.some((p) => p.id === row.id) ? { pendingTool: pending.find((p) => p.id === row.id)!.toolName } : {}) })
+                      const inIsland = island?.memberIds.includes(row.id) === true
+                      return (
+                        <tr key={row.id} data-orch-list-row={row.id} data-selected={selectedIds.includes(row.id) || undefined}>
+                          <td>
+                            <button type="button" className="orch__list-name" aria-pressed={selectedIds.includes(row.id)}
+                              {...shellControl(() => select(row.id))} onDoubleClick={() => jump(row.id)}>
+                              <span className="orch__dot status-dot" data-tone={row.tone} aria-hidden="true" />
+                              {row.title}{inIsland && <span className="orch__list-tag">in task</span>}
+                            </button>
+                          </td>
+                          <td>{row.kind}</td>
+                          <td>{stateWord(row)}</td>
+                          <td className="orch__list-next" data-verb={next.verb}>{next.label}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {visibleRoster.length === 0 && <EmptyState id="orch-roster" onVerb={onShowCanvas} />}
+              </div>
+            ) : mode === 'dev' ? (
               <GraphBoard
                 nodes={members === null ? framed.graph.nodes : [...framed.graph.nodes, ...liveSnap.graph.nodes.filter((n) => !members.includes(n.id) && n.id !== ORCH_OVERFLOW_ID)]}
                 edges={framed.graph.edges}
@@ -1490,30 +1754,11 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
               </button>
             )}
 
-            {liveSnap.task && (
-              <button
-                type="button"
-                className="orch__float orch__float--task"
-                style={floatStyle}
-                title="Open task on canvas"
-                {...shellControl(() => onJumpWorkItem(liveSnap.task!.id))}
-              >
-                <span className="orch__float-title">{liveSnap.task.title}</span>
-                <span className="orch__float-state">{liveSnap.task.state}</span>
-                {/* Stage position, not an estimate of work completed. */}
-                <span className="orch__task-fill" aria-hidden="true">
-                  <span style={{ width: `${liveSnap.task.stepIndex / (WORK_ITEM_STATES.length - 1) * 100}%` }} />
-                </span>
-                <div className="orch__steps" aria-hidden="true">
-                  {WORK_ITEM_STATES.map((s, i) => (
-                    <span
-                      key={s}
-                      className={`orch__step${i <= liveSnap.task!.stepIndex ? ' orch__step--on' : ''}`}
-                    />
-                  ))}
-                </div>
-              </button>
-            )}
+            {/* M284. The task island's label: goal, repository and where its files live
+                (own worktree + branch, or a shared directory, said). A click SELECTS the
+                task — the inspector follows — and stays on this page; Open on canvas is
+                the inspector's separate, labelled action (the plan's direct controls). */}
+            {island !== null && lens === 'scene' && islandCard(true)}
           </div>
 
           <div className="orch__bottom">
@@ -1674,9 +1919,93 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
           </div>
         </main>
 
-        <MotionSurface open enter><aside className="orch__side" aria-label="Activity">
+        <MotionSurface open enter><aside className="orch__side" aria-label="Decisions and inspector">
+          {/* M284. Needs attention — a pending permission is answered HERE through the
+              existing identity, and leaves the moment it is answered anywhere. */}
+          <section className="orch__needs" aria-label="Needs attention" data-orch-needs>
+            <div className="orch__section-head">
+              <div className="orch__section-title">Needs attention</div>
+              <span className="orch__caption">{attentionRows.length + waitingOnly.length === 0 ? 'Nothing needs you' : `${attentionRows.length + waitingOnly.length} waiting`}</span>
+            </div>
+            {(attentionRows.length > 0 || waitingOnly.length > 0) && (
+              <ul className="orch__needs-list">
+                {attentionRows.map((row) => (
+                  <li key={orchAnswerKey(row.id, row.requestId)} className="orch__needs-row" data-orch-needs-row={row.id} data-orch-request={row.requestId} data-sent={row.sent || undefined}>
+                    <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
+                      <span className="orch__needs-title">{row.title}</span>
+                      <span className="orch__needs-ask">wants to use <strong>{row.toolName}</strong>{row.argument !== '' ? ` · ${row.argument}` : ''}</span>
+                    </button>
+                    {row.sent ? (
+                      <span className="orch__caption" role="status">Answer sent — waiting for the agent</span>
+                    ) : (
+                      <span className="orch__needs-actions">
+                        <button type="button" className="orch__mini" data-orch-allow disabled={onAnswer === undefined} {...shellControl(() => answer(row, true))}>Allow</button>
+                        <button type="button" className="orch__mini orch__mini--stop" data-orch-deny disabled={onAnswer === undefined} {...shellControl(() => answer(row, false))}>Deny</button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+                {waitingOnly.map((row) => (
+                  <li key={row.id} className="orch__needs-row" data-orch-needs-row={row.id}>
+                    <button type="button" className="orch__needs-main" {...shellControl(() => select(row.id))}>
+                      <span className="orch__needs-title">{row.title}</span>
+                      <span className="orch__needs-ask">is waiting on you — reply in its conversation</span>
+                    </button>
+                    <span className="orch__needs-actions">
+                      <button type="button" className="orch__mini" {...shellControl(() => jump(row.id))}>Open on canvas</button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* M284. The inspector: identity, state, next action — for the selected session,
+              or for the task island when nothing is selected. */}
+          <section className="orch__inspector" aria-label="Inspector" data-orch-inspector={selectedRow?.id ?? (inspectTask ? 'task' : '')}>
+            {selectedRow !== null ? (
+              <>
+                <div className="orch__inspector-id">
+                  <span className="orch__roster-kind" aria-hidden="true">{kindGlyph(selectedRow.kind)}</span>
+                  <span className="orch__selected-title" data-orch-inspector-title>{selectedRow.title}</span>
+                  <span className="orch__roster-state" data-tone={selectedRow.tone} data-orch-inspector-state>{stateWord(selectedRow)}</span>
+                </div>
+                <p className="orch__caption">{selectedRow.kind} · {selectedRow.id}{island?.memberIds.includes(selectedRow.id) === true ? ` · in ${island.goal}` : ''}{outputCwd !== undefined ? ` · ${displayPath(outputCwd).short}` : ''}</p>
+                {nextAction !== null && <p className="orch__inspector-next" data-orch-next={nextAction.verb}>Next: {nextAction.label}</p>}
+                <div className="orch__roster-actions">
+                  <button type="button" className="orch__mini" data-orch-open {...shellControl(() => jump(selectedRow.id))}>Open on canvas</button>
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setTab('review'))}>Review changes</button>}
+                  {selectedCanStop && onInterrupt !== undefined && (
+                    <button type="button" className="orch__mini orch__mini--stop" {...shellControl(() => onInterrupt(selectedRow.id))}><Stop size={12} /> Interrupt</button>
+                  )}
+                </div>
+              </>
+            ) : island !== null ? (
+              <>
+                <div className="orch__inspector-id">
+                  <span className="orch__roster-kind" aria-hidden="true"><KindWork size={16} /></span>
+                  <span className="orch__selected-title" data-orch-inspector-title>{island.goal}</span>
+                  <span className="orch__roster-state" data-orch-inspector-state>{island.state}</span>
+                </div>
+                <p className="orch__caption">{orchPlacementLine(island)}{island.placement.kind !== 'unknown' ? ` · ${displayPath(island.placement.path).short}` : ''}</p>
+                <p className="orch__inspector-next" data-orch-next={islandWaiting !== undefined ? 'answer' : island.state === WORK_ITEM_STATES[2] ? 'review' : 'watch'}>
+                  Next: {islandWaiting !== undefined ? `Answer ${islandWaiting.title}'s ${islandWaiting.toolName} request` : island.state === WORK_ITEM_STATES[2] ? 'Review its changes' : 'Watch its sessions work'}
+                </p>
+                <div className="orch__roster-actions">
+                  <button type="button" className="orch__mini" data-orch-open {...shellControl(() => {
+                    if (island.itemId !== undefined) onJumpWorkItem(island.itemId)
+                    else if (island.subjectId !== null) jump(island.subjectId)
+                  })}>Open on canvas</button>
+                  {reviewSubjectId !== null && <button type="button" className="orch__mini" data-orch-review-open {...shellControl(() => setTab('review'))}>Review changes</button>}
+                </div>
+              </>
+            ) : (
+              <p className="orch__caption">Select a session in the scene or the list to inspect it.</p>
+            )}
+          </section>
+
           <div className="orch__tabs" role="tablist">
-                {(['activity', 'terminal', 'files'] as const).map((t) => (
+                {(['activity', 'terminal', 'review', 'files'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -1684,7 +2013,7 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   aria-selected={tab === t}
                   className={`orch__tab${tab === t ? ' orch__tab--on' : ''}`}
                   {...shellControl(() => setTab(t))}
-                >{t === 'activity' ? 'Activity' : t === 'terminal' ? 'Logs' : 'Files'}</button>
+                >{t === 'activity' ? 'Activity' : t === 'terminal' ? 'Output' : t === 'review' ? 'Review' : 'Files'}</button>
               ))}
           </div>
           {tab === 'activity' && (
@@ -1746,6 +2075,59 @@ function OrchestrationViewImpl(props: OrchestrationViewProps): JSX.Element {
                   <pre className="orch__term-log" aria-label="Scrollback tail">
                     {outputLines.length === 0 ? 'No recorded output yet for this panel.' : outputLines.join('\n')}
                   </pre>
+                </>
+              )}
+            </div>
+          )}
+          {tab === 'review' && (
+            // M284. The selected subject's changes through the review node's own executors,
+            // read-only here. Committing or discarding stays on the review node — a labelled
+            // page change — so this page never carries a second copy of those gates.
+            <div className="orch__review" data-orch-review={reviewSubjectId ?? ''}>
+              {reviewSubjectId === null ? (
+                <p className="orch__caption">Select a chat or terminal session, or the task, to review its changes.</p>
+              ) : (
+                <>
+                  <p className="orch__caption">Changes by {titleOf(reviewSubjectId)} — read from git, since the session started.</p>
+                  {orchReview.review.kind !== 'result' ? (
+                    <p className="orch__caption" role="status">Reading changes…</p>
+                  ) : (
+                    <>
+                      <p className="orch__review-words" data-orch-review-kind={orchReview.review.result.kind}>{reviewWords(orchReview.review.result)}</p>
+                      {(orchReview.review.result.kind === 'changes' || orchReview.review.result.kind === 'shared') && (
+                        <ul className="orch__review-files">
+                          {orchReview.review.result.files.map((f) => (
+                            <li key={f.path}>
+                              <button type="button" className={`orch__activity-row${orchReview.diff.kind !== 'none' && orchReview.diff.key === `${reviewSubjectId}:${f.path}` ? ' orch__roster-row--on' : ''}`}
+                                data-orch-review-file={f.path} {...shellControl(() => orchReview.openFile(f.path, f.untracked))}>
+                                <span className="orch__roster-kind" aria-hidden="true"><KindFile /></span>
+                                <span className="orch__activity-title">{f.path}</span>
+                                <span className="orch__activity-detail">{f.binary ? 'binary' : f.untracked ? 'new file' : `+${f.added} −${f.removed}`}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  )}
+                  {orchReview.diff.kind === 'loading' && <p className="orch__caption" role="status">Reading the diff…</p>}
+                  {orchReview.diff.kind === 'no-baseline' && <p className="orch__caption">This session has no baseline to diff against.</p>}
+                  {orchReview.diff.kind === 'diff' && (
+                    orchReview.diff.diff.kind === 'diff' ? (
+                      <pre className="orch__diff" data-orch-diff aria-label="Diff">
+                        {orchReview.diff.diff.lines.map((line, i) => (
+                          <span key={i} className={`orch__diff-line orch__diff-line--${line.kind}`}>{outward(line.text, `panel ${reviewSubjectId}`).text}{'\n'}</span>
+                        ))}
+                        {orchReview.diff.diff.truncated > 0 && <span className="orch__diff-line orch__diff-line--meta">{`… ${orchReview.diff.diff.truncated} more lines — open the review on canvas for the whole diff`}</span>}
+                      </pre>
+                    ) : <p className="orch__caption">{orchReview.diff.diff.kind === 'binary' ? 'A binary file — no text diff to show.' : 'The diff could not be read.'}</p>
+                  )}
+                  <div className="orch__roster-actions">
+                    <button type="button" className="orch__mini" data-orch-review-refresh {...shellControl(() => setReviewRefresh((n) => n + 1))}>Refresh</button>
+                    {onReviewOnCanvas !== undefined && (
+                      <button type="button" className="orch__mini" data-orch-review-canvas {...shellControl(() => onReviewOnCanvas(reviewSubjectId))}>Review on canvas</button>
+                    )}
+                  </div>
                 </>
               )}
             </div>

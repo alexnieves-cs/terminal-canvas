@@ -3608,4 +3608,164 @@ runPanelsSuite('agents', WATCHDOG_MS, async (ctx) => {
     }
 
   }
+
+  // ---------------------------------------------------------------------
+  // M284 — Orchestrate Phase A: one real task island and its actions
+  // (orch-task.*). A REAL chat (the fake runner under a real
+  // AgentSessionManager) in a REAL git repository is the island; every step
+  // is driven through Orchestrate's own controls — the list, the inspector,
+  // Needs attention, Output, Review, Open on canvas — and the permission's
+  // answer is read off the WIRE (the control_response main wrote), not off
+  // the page. Nothing here seeds the view model directly.
+  // ---------------------------------------------------------------------
+  {
+    const oLog = []
+    const onO = (_e, level, m) => { if (level >= 2) oLog.push(String(m).slice(0, 200)) }
+    wc.on('console-message', onO)
+    const click = (q) => wc.executeJavaScript(`(() => { const b = document.querySelector(${JSON.stringify(q)}); if (b) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return !!b })()`)
+    const orchShown = () => wc.executeJavaScript(`document.querySelector('.shell__orch[data-center-view="orchestration"]') !== null`)
+    // Opt-in captures of the REAL window for the ledger's exit demo; never read by a check.
+    const demo = async (name) => {
+      if (!process.env.TC_DEMO_SHOTS) return
+      mkdirSync(process.env.TC_DEMO_SHOTS, { recursive: true })
+      writeFileSync(join(process.env.TC_DEMO_SHOTS, `${name}.png`), (await wc.capturePage()).toPNG())
+    }
+    const IDS = [
+      'orch-task.1 Orchestrate shows ONE task island built from a real session, labelled with its goal, its repository and where its files live',
+      'orch-task.2 selecting in the List syncs the scene\'s selection and the inspector (identity, state, next action)',
+      'orch-task.3 a real pending permission appears in Needs attention and Allow there answers on the wire exactly once, even clicked twice; the row leaves',
+      'orch-task.4 a permission answered ELSEWHERE (the Dock) leaves Orchestrate\'s queue, with exactly one answer for it on the wire',
+      'orch-task.5 Output mirrors the selected session read-only, and Review shows its changed file and diff through the review executors',
+      'orch-task.6 Open on canvas is a separate labelled action: it switches page and selects the existing object',
+      'orch-task.7 the List is reachable by keyboard: Tab lands on a row, ArrowDown moves the selection and the focus with it'
+    ]
+    try {
+      const repo = mkdtempSync(join(tmpdir(), 'tc panels orch task-'))
+      const g = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
+      g('init', '-q', '.'); g('config', 'user.email', 'v@example.com'); g('config', 'user.name', 'v')
+      writeFileSync(join(repo, 'app.txt'), 'first\n'); g('add', '-A'); g('commit', '-qm', 'init')
+      const minted = await wc.executeJavaScript(`window.__m73Chat(${JSON.stringify(repo)})`)
+      const chatId = await waitUntil(() => wc.executeJavaScript(`(() => { const ps = [...document.querySelectorAll('.panel[data-panel-kind="chat"]')]; const p = ps[ps.length - 1]; return p ? p.getAttribute('data-panel-id') : false })()`), 5000)
+      const sel = (q) => `document.querySelector('.panel[data-panel-id="${chatId}"] ${q}')`
+      const sendText = (text) => waitUntil(() => wc.executeJavaScript(`(() => {
+        const ta = ${sel('[data-chat-input]')}; if (!ta || ta.disabled) return false
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
+        setter.call(ta, ${JSON.stringify(text)}); ta.dispatchEvent(new Event('input', { bubbles: true }))
+        const b = ${sel('[data-chat-send]')}; if (!b || b.disabled) return false
+        b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`), 8000)
+      const idle = () => waitUntil(() => wc.executeJavaScript(`${sel('[data-chat-state]')}?.textContent === 'idle' || false`), 8000)
+      // Every control_response main wrote to ANY fake process — the chat may be respawned,
+      // so a fixed index into chatSpawns reads the wrong one; each assertion then keys on
+      // the request id it is about.
+      const wire = () => chatSpawns.flatMap((sp) => sp.proc.stdin.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter((x) => x && x.type === 'control_response'))
+      await sendText('start the task')
+      await idle()
+      const baseline = await waitUntil(() => wc.executeJavaScript(`window.canvas.review.baseline(${JSON.stringify(chatId)}).then((b) => b && b.sha ? b.sha : false)`), 8000)
+      writeFileSync(join(repo, 'app.txt'), 'first\nchanged by the task\n')
+      const chatTitle = await wc.executeJavaScript(`document.querySelector('[data-rail-row="${chatId}"]')?.textContent ?? null`)
+
+      // Onto the Orchestrate page, through the Dock.
+      await click('[data-dock="orchestration"]:not([aria-pressed="true"])')
+      await waitUntil(orchShown, 3000)
+      await settle()
+      const islandRead = () => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-island]'); return i ? { id: i.getAttribute('data-orch-island'), source: i.getAttribute('data-orch-island-source'), goal: i.querySelector('[data-orch-island-goal]')?.textContent ?? null, place: i.querySelector('[data-orch-island-place]')?.textContent ?? null, count: document.querySelectorAll('[data-orch-island]').length } : null })()`)
+      const island = await waitUntil(islandRead, 4000)
+      await demo('m284-1-island')
+      const repoName = repo.split('/').filter(Boolean).pop()
+      // The island is the canvas's focused TASK when an earlier check left one working
+      // or in review; otherwise it is this session. Either way it is real and single.
+      ok(IDS[0],
+        minted && minted.kind === 'spawned' && typeof baseline === 'string' && island && island.count === 1 && typeof island.goal === 'string' && island.goal !== '' &&
+          (island.source === 'work-item' || (island.source === 'session' && island.id === chatId && island.place.startsWith(repoName) && /shared directory/.test(island.place))),
+        JSON.stringify({ minted, baseline, island, repoName, chatTitle, log: oLog.slice(-3) }))
+
+      // The List lens, then select the chat there.
+      await click('[data-orch-lens="list"]')
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-list-row="${chatId}"] button') !== null`), 3000)
+      await click(`[data-orch-list-row="${chatId}"] button`)
+      const inspected = await waitUntil(() => wc.executeJavaScript(`(() => { const i = document.querySelector('[data-orch-inspector="${chatId}"]'); if (!i) return false; return { title: i.querySelector('[data-orch-inspector-title]')?.textContent ?? null, state: i.querySelector('[data-orch-inspector-state]')?.textContent ?? null, next: i.querySelector('[data-orch-next]')?.getAttribute('data-orch-next') ?? null, open: i.querySelector('[data-orch-open]')?.textContent ?? null, rowOn: document.querySelector('[data-orch-list-row="${chatId}"]')?.hasAttribute('data-selected') === true, rosterOn: [...document.querySelectorAll('.orch__roster-row--on')].length } })()`), 3000)
+      await demo('m284-2-list-inspector')
+      ok(IDS[1],
+        inspected && typeof inspected.title === 'string' && inspected.title !== '' && inspected.state === 'idle' && inspected.next === 'review' && inspected.open === 'Open on canvas' && inspected.rowOn === true && inspected.rosterOn === 1,
+        JSON.stringify({ inspected }))
+
+      // A real permission, answered here — twice-clicked, once on the wire.
+      // The chat's composer lives on the covered canvas: sent through its own API, the
+      // way the canvas would, with the page left on Orchestrate.
+      await wc.executeJavaScript(`window.canvas.agentSession.send(${JSON.stringify(chatId)}, 'ask: list the repository')`).catch(() => null)
+      const row = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]'); return r ? { request: r.getAttribute('data-orch-request'), ask: r.querySelector('.orch__needs-ask')?.textContent ?? null, allow: !!r.querySelector('[data-orch-allow]') } : false })()`), 8000)
+      await demo('m284-3-needs-attention')
+      const nextWhilePending = await wc.executeJavaScript(`document.querySelector('[data-orch-inspector="${chatId}"] [data-orch-next]')?.getAttribute('data-orch-next') ?? null`)
+      await wc.executeJavaScript(`(() => { const a = document.querySelector('[data-orch-needs-row="${chatId}"] [data-orch-allow]'); if (!a) return false; a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); return true })()`)
+      const rowGone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]') === null`), 6000)
+      await idle()
+      const wire1 = wire()
+      const stillOrch = await orchShown()
+      ok(IDS[2],
+        row && /Bash/.test(row.ask) && /ls -la/.test(row.ask) && row.allow === true && nextWhilePending === 'answer' &&
+          rowGone === true && wire1.filter((w) => JSON.stringify(w).includes(row.request)).length === 1 && /allow/.test(JSON.stringify(wire1.find((w) => JSON.stringify(w).includes(row.request)))) && stillOrch === true,
+        JSON.stringify({ row, nextWhilePending, rowGone, wire1, stillOrch, log: oLog.slice(-3) }))
+
+      // Answered elsewhere: the Dock's attention popover, beside the Orchestrate page.
+      await wc.executeJavaScript(`window.canvas.agentSession.send(${JSON.stringify(chatId)}, 'ask: again')`).catch(() => null)
+      const row2 = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]')?.getAttribute('data-orch-request') ?? false`), 8000)
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') !== 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-rail-attention="${chatId}"] [data-rail-allow]') !== null`), 4000)
+      await click(`[data-rail-attention="${chatId}"] [data-rail-allow]`)
+      const row2Gone = await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-needs-row="${chatId}"][data-orch-request]') === null`), 6000)
+      await idle()
+      const wire2 = wire()
+      await wc.executeJavaScript(`(() => { const b = document.querySelector('[data-dock="attention"]'); if (b && b.getAttribute('aria-pressed') === 'true') b.dispatchEvent(new MouseEvent('click', { bubbles: true })); return !!b })()`)
+      ok(IDS[3],
+        typeof row2 === 'string' && row2Gone === true && wire2.filter((w) => JSON.stringify(w).includes(row2)).length === 1,
+        JSON.stringify({ row2, row2Gone, wire2 }))
+
+      // Output, then Review — through the inspector's own Review changes button.
+      await wc.executeJavaScript(`(() => { const t = [...document.querySelectorAll('.orch__tabs [role="tab"]')].find((b) => b.textContent.trim() === 'Output'); t?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return !!t })()`)
+      const output = await waitUntil(() => wc.executeJavaScript(`(() => { const l = document.querySelector('.orch__term-log'); return l && l.textContent.trim() !== '' && !/No recorded output/.test(l.textContent) ? l.textContent.slice(0, 120) : false })()`), 4000)
+      await click(`[data-orch-inspector="${chatId}"] [data-orch-review-open]`)
+      const files = await waitUntil(() => wc.executeJavaScript(`(() => { const r = document.querySelector('[data-orch-review="${chatId}"]'); if (!r) return false; const k = r.querySelector('[data-orch-review-kind]')?.getAttribute('data-orch-review-kind'); const f = [...r.querySelectorAll('[data-orch-review-file]')].map((e) => e.getAttribute('data-orch-review-file')); return k && f.length > 0 ? { kind: k, files: f } : false })()`), 8000)
+      await click(`[data-orch-review="${chatId}"] [data-orch-review-file="app.txt"]`)
+      const diff = await waitUntil(() => wc.executeJavaScript(`(() => { const d = document.querySelector('[data-orch-diff]'); return d && /changed by the task/.test(d.textContent) ? { adds: d.querySelectorAll('.orch__diff-line--add').length } : false })()`), 6000)
+      await demo('m284-4-review-diff')
+      ok(IDS[4],
+        typeof output === 'string' && files && (files.kind === 'changes' || files.kind === 'shared') && files.files.includes('app.txt') && diff && diff.adds >= 1,
+        JSON.stringify({ output, files, diff, log: oLog.slice(-3) }))
+
+      // Keyboard in the List: Tab to a row, ArrowDown moves selection and focus.
+      await click('[data-orch-lens="list"]')
+      const kb = await wc.executeJavaScript(`(async () => {
+        const btns = [...document.querySelectorAll('[data-orch-list-row] button')]
+        if (btns.length < 2) return { rows: btns.length }
+        btns[0].focus()
+        return { rows: btns.length, first: btns[0].closest('[data-orch-list-row]').getAttribute('data-orch-list-row') }
+      })()`)
+      let kbAfter = null
+      if (kb.rows >= 2) {
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'Down' }); wc.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
+        kbAfter = await waitUntil(() => wc.executeJavaScript(`(() => { const f = document.activeElement?.closest('[data-orch-list-row]')?.getAttribute('data-orch-list-row'); const s = document.querySelector('[data-orch-list-row][data-selected]')?.getAttribute('data-orch-list-row'); return f && f !== ${JSON.stringify(kb.first)} && f === s ? { focused: f, selected: s } : false })()`), 3000)
+      }
+      const tabbable = await wc.executeJavaScript(`[...document.querySelectorAll('[data-orch-list-row] button')].every((b) => b.tabIndex >= 0 && !b.disabled)`)
+      ok(IDS[6], kb.rows >= 2 && kbAfter !== false && kbAfter !== null && tabbable === true, JSON.stringify({ kb, kbAfter, tabbable }))
+
+      // Open on canvas: re-select the chat, then the inspector's labelled action.
+      await click(`[data-orch-list-row="${chatId}"] button`)
+      await waitUntil(() => wc.executeJavaScript(`document.querySelector('[data-orch-inspector="${chatId}"] [data-orch-open]') !== null`), 3000)
+      await click(`[data-orch-inspector="${chatId}"] [data-orch-open]`)
+      const leftOrch = await waitUntil(async () => !(await orchShown()), 3000)
+      await settle()
+      const selected = await wc.executeJavaScript(`(() => { const p = document.querySelector('.panel[data-panel-id="${chatId}"]'); return p ? p.className : null })()`)
+      const selectedId = await waitUntil(() => wc.executeJavaScript(`document.querySelector('.panel--selected')?.getAttribute('data-panel-id') ?? false`), 3000)
+      await demo('m284-5-open-on-canvas')
+      ok(IDS[5], leftOrch === true && selectedId === chatId, JSON.stringify({ leftOrch, selectedId, selected }))
+
+      await clickPanelClose(wc, chatId)
+      try { rmSync(repo, { recursive: true, force: true }) } catch { /* best effort */ }
+    } catch (oErr) {
+      for (const id of IDS) ok(id, false, 'threw: ' + String(oErr && oErr.message || oErr) + ' | renderer: ' + (oLog.slice(-4).join(' || ') || '(none)'))
+    } finally {
+      wc.removeListener('console-message', onO)
+      if (await orchShown()) await click('[data-dock="orchestration"][aria-pressed="true"]')
+    }
+  }
 })

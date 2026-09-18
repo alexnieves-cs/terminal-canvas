@@ -7753,6 +7753,55 @@ body {
 }
 .orch__mini:hover { color: var(--fg); border-color: var(--line-strong); }
 .orch__mini--stop { color: var(--amber); }
+/* M284. Orchestrate Phase A: the mode row carries the Scene | List lens beside the
+   mode tabs; the side column leads with Needs attention, then the inspector, then the
+   tabs. Scoped to .orch — the plan's density exceptions are Orchestrate's only. */
+.orch__mode-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-shrink: 0; }
+.orch__lens { display: flex; gap: var(--sp-1); }
+.orch__mini:disabled { color: var(--fg-4); cursor: default; }
+.orch__island { max-width: 19rem; gap: var(--sp-1); }
+.orch__island--static { display: grid; max-width: none; margin-bottom: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--glass-1); color: var(--fg); font-family: var(--font-ui); text-align: left; padding: var(--sp-2) var(--sp-3); cursor: pointer; }
+.orch__island--on { border-color: color-mix(in srgb, var(--iris) 55%, var(--line)); box-shadow: 0 0 0 1px var(--iris-dim); }
+.orch__island-kicker { font-size: var(--t-xs); color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.05em; }
+.orch__island-place { font-size: var(--t-xs); color: var(--fg-2); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch__needs, .orch__inspector { padding-bottom: var(--sp-3); margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.orch__needs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.orch__needs-row {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border: 1px solid color-mix(in srgb, var(--amber) 40%, var(--line)); border-radius: var(--r-sm);
+}
+.orch__needs-row[data-sent] { border-color: var(--line); color: var(--fg-3); }
+.orch__needs-main {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1);
+  border: 0; background: transparent; color: var(--fg); font-family: var(--font-ui); text-align: left; padding: 0; cursor: pointer;
+}
+.orch__needs-title { font-size: var(--t-sm); font-weight: 500; }
+.orch__needs-ask { font-size: var(--t-xs); color: var(--amber); overflow-wrap: anywhere; }
+.orch__needs-actions { display: flex; gap: var(--sp-2); }
+.orch__inspector-id { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; margin-bottom: var(--sp-1); }
+.orch__inspector-next { margin: 0; font-size: var(--t-sm); color: var(--fg); }
+.orch__list { position: absolute; inset: 0; overflow: auto; padding: var(--sp-3); background: var(--glass-1); }
+.orch__list-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); color: var(--fg-2); }
+.orch__list-table th { text-align: left; font-size: var(--t-xs); font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; padding: var(--sp-1) var(--sp-2); }
+.orch__list-table td { padding: var(--sp-1) var(--sp-2); border-top: 1px solid var(--line); }
+.orch__list-table tr[data-selected] td { background: var(--iris-dim); }
+.orch__list-name {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  border: 0; background: transparent; color: var(--fg); font-family: var(--font-ui); font-size: var(--t-sm); cursor: pointer; padding: 0;
+}
+.orch__list-tag { font-size: var(--t-xs); color: var(--iris); border: 1px solid var(--iris-dim); border-radius: var(--r-sm); padding: 0 var(--sp-1); }
+.orch__list-next[data-verb="answer"], .orch__list-next[data-verb="reply"] { color: var(--amber); }
+.orch__review-words { margin: 0 0 var(--sp-2); font-size: var(--t-sm); color: var(--fg); }
+.orch__review-files { list-style: none; margin: 0 0 var(--sp-2); padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.orch__diff {
+  margin: 0; padding: var(--sp-3); max-height: 20rem; overflow: auto;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--well);
+  font-family: var(--font-mono); font-size: var(--t-xs); line-height: 1.4; white-space: pre; color: var(--fg-2);
+}
+.orch__diff-line--add { color: var(--green); }
+.orch__diff-line--del { color: var(--red); }
+.orch__diff-line--hunk { color: var(--blue); }
+.orch__diff-line--meta { color: var(--fg-3); }
 .orch__selected-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
 .orch__term-log {
   margin: var(--sp-3) 0 0;
