@@ -8,6 +8,7 @@ import { noteStateWord, useLastActive } from '@renderer/session/last-active-stor
 import { useAgentState } from '@renderer/session/agent-state-store'
 import { useScrollbackTail } from '@renderer/session/scrollback-store'
 import type { CardDetail } from '@renderer/canvas/card-detail'
+import { useTierFade } from '@renderer/canvas/tier-fade'
 import type { AgentState } from '@shared/types'
 import { PanelFrame } from './PanelFrame'
 import { KindTerminal } from '@renderer/icons'
@@ -339,27 +340,22 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
   const lastAt = useLastActive(session.id)
   const since = lastActiveWord({ at: lastAt, now: Date.now(), tone: shown.tone })
   const sinceChip = since === undefined ? null : <span className="panel__card-since" data-last-active>{since}</span>
-  return (
-    <div
-      // The card carries the state too. A glow that reached only live panels
-      // would be invisible exactly when it matters: LIVE_BUDGET caps live
-      // panels at eight, so on the twelve-panel canvas this feature exists
-      // for, most of what wants you is a card.
-      className={`pf__body panel__card${agentState ? ` panel__card--agent-${agentState}` : ''}${detail === 'tail' ? '' : ` panel__card--${detail}`}`}
-      data-card-detail={detail}
-    >
-      {/* M57. Semantic zoom: the card becomes LESS as the camera pulls
-          away. `summary` and `block` draw from facts the Panel holds (title,
-          agent state, cost) plus at most one line, so a dormant panel with
-          no buffer has the same three tiers as a live one. The `tail` markup
-          below stays byte-identical: three checks read .panel__card-idle. */}
-      {detail === 'cluster' ? (
-        <div className="panel__card-cluster" data-card-cluster data-tone={shown.tone} />
-      ) : detail === 'block' ? (
+  const leaving = useTierFade(detail)
+  // Zoom crossfade: one renderer for any tier, so the tier being LEFT can be
+  // drawn as an absolutely positioned ghost over the incoming one.
+  // M57. Semantic zoom: the card becomes LESS as the camera pulls away.
+  // `summary` and `block` draw from facts the Panel holds (title, agent
+  // state, cost) plus at most one line, so a dormant panel with no buffer has
+  // the same four tiers as a live one. The `tail` markup stays
+  // byte-identical: three checks read .panel__card-idle.
+  const renderTier = (d: CardDetail): JSX.Element => (
+    d === 'cluster' ? (
+      <div className="panel__card-cluster" data-card-cluster data-tone={shown.tone} />
+    ) : d === 'block' ? (
         <div className={`panel__card-block${state ? ` panel__card-block--${state}` : ''}`} data-card-block data-tone={shown.tone}>
           <span className="panel__card-block-title">{title}</span>
         </div>
-      ) : detail === 'summary' ? (
+      ) : d === 'summary' ? (
         <div className="panel__card-summary" data-card-summary data-tone={shown.tone}>
           {/* M166. The terminal's glyph: at a fifth of the size a card is a light with a name. */}
           <span className="panel__card-summary-glyph" aria-hidden="true"><KindTerminal /></span>
@@ -408,6 +404,28 @@ function PanelCard({ session, agentState, detail, title, state, shown }: {
           {session.dormant && (recorded === undefined || recorded.length === 0) && <div className="panel__card-sentence">asleep — nothing recorded before the last quit</div>}
           <div className="panel__card-idle" data-tone={shown.tone}>click to start</div>
         </div>
+      )
+  )
+  return (
+    <div
+      // The card carries the state too. A glow that reached only live panels
+      // would be invisible exactly when it matters: LIVE_BUDGET caps live
+      // panels at eight, so on the twelve-panel canvas this feature exists
+      // for, most of what wants you is a card.
+      className={`pf__body panel__card${agentState ? ` panel__card--agent-${agentState}` : ''}${detail === 'tail' ? '' : ` panel__card--${detail}`}`}
+      data-card-detail={detail}
+      data-tier-fading={leaving !== null ? '' : undefined}
+    >
+      {/* M57. Semantic zoom: the card becomes LESS as the camera pulls
+          away. `summary` and `block` draw from facts the Panel holds (title,
+          agent state, cost) plus at most one line, so a dormant panel with
+          no buffer has the same three tiers as a live one. The `tail` markup
+          below stays byte-identical: three checks read .panel__card-idle. */}
+      {renderTier(detail)}
+      {leaving !== null && (
+        // After the live tier so a querySelector finds the live copy first;
+        // inert and aria-hidden so the fading copy is never a target.
+        <div className={`tier-ghost tier-ghost--${leaving}`} aria-hidden="true" inert={true} data-tier-ghost>{renderTier(leaving)}</div>
       )}
     </div>
   )

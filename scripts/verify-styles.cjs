@@ -1225,7 +1225,9 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   // orch-stage-wash: one rim on a task's member cubes when its board stage moves.
   // activity-row-in: M279's feed — the newest row rises once when an event
   // lands in the inspector's Activity tab; an arrival, panel-enter's family.
-  const allowed = ['activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
+  // tier-in / tier-out: the zoom-level crossfade between card-detail tiers —
+  // opacity only, on layers that are never layout (tier-fade.1).
+  const allowed = ['activity-row-in', 'attention-pip', 'chat-caret', 'cluster-arrive', 'context-panel-enter', 'drawer-in-left', 'drawer-in-right', 'drawer-scrim-in', 'edge-current', 'edge-waiting', 'integration-verified-pop', 'landing-halo', 'navgrid-cell-enter', 'orch-beacon', 'orch-callout-rise', 'orch-bob', 'orch-breath', 'orch-enter', 'orch-needs-pulse', 'orch-rim-shimmer', 'orch-settle', 'orch-stage-shift', 'orch-stage-wash', 'palette-enter', 'palette-scrim-in', 'panel-demote', 'panel-enter', 'panel-settle', 'panel-wake', 'pill-beacon', 'pill-expand', 'signal-live', 'tier-in', 'tier-out', 'trail-card-in', 'wants-you-pulse', 'wf-flow']
   const stray = names.filter((n) => !allowed.includes(n))
   ok('motion.2', 'every transition and animation duration is a token, the panel arrival is a spring rise (never a scale above .pf__body), and only state-bearing moments declare keyframes',
     literal.length === 0 && spawn && breath && stray.length === 0, JSON.stringify({ literal: literal.slice(0, 6), spawn, breath, stray }))
@@ -1254,6 +1256,24 @@ ok('frame.1', 'the five duplicated panel-kind families are declared once, on the
   const scrimOk = !!scrim && /pointer-events:\s*none/.test(scrim.body) && /drawer-scrim-in[^;]*var\(--dur-drawer\)/.test(scrim.body) && /background:\s*var\(--scrim\)/.test(scrim.body)
   ok('drawer-motion.1', 'the compact drawers slide from their own edges on --dur-drawer (200ms) over a fading, click-through scrim',
     tok && nav && ctx && left && right && scrimOk, JSON.stringify({ tok, nav, ctx, left, right, scrimOk }))
+}
+
+// Zoom-level crossfade — tier-fade.1. A card-detail tier change fades rather
+// than swaps, and the frame's geometry must not move while it does: every
+// fading layer that is not the in-flow body is ABSOLUTE (a layer in flow would
+// reflow the body and refit a live xterm — M234's SIGWINCH), both keyframes
+// touch opacity and nothing else, and reduced motion removes the layers.
+{
+  const rule = (sel) => all.find((r) => r.sel.trim() === sel)
+  const ghost = rule('.tier-ghost'), layer = rule('.pf__tier-layer')
+  const kfOnlyOpacity = ['tier-in', 'tier-out'].every((n) => {
+    const m = new RegExp(`@keyframes\\s+${n}\\s*\\{([\\s\\S]*?)\\}\\s*\\}`).exec(bare)
+    return m !== null && [...m[1].matchAll(/([\w-]+)\s*:/g)].every((p) => p[1] === 'opacity')
+  })
+  const absolute = [ghost, layer].every((r) => r !== undefined && /position:\s*absolute/.test(r.body) && /pointer-events:\s*none/.test(r.body))
+  const reduced = /@media \(prefers-reduced-motion: reduce\) \{[^@]*\.tier-ghost, \.pf__tier-layer \{ display: none; \}/.test(bare)
+  ok('tier-fade.1', 'the zoom crossfade animates opacity only, on absolutely positioned layers that take no pointer, and reduced motion removes them',
+    kfOnlyOpacity && absolute && reduced, JSON.stringify({ kfOnlyOpacity, absolute, reduced }))
 }
 
 // M177 — empty.1. EMPTY STATES AS PLACES: one `.empty-state` rule — centred,

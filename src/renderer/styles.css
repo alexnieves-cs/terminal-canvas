@@ -3418,6 +3418,37 @@ body {
 .pf__far { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-5); overflow: hidden; min-height: 0; }
 .pf__far--block { padding: 0; }
 .pf__far .panel__card-summary { display: flex; flex-direction: column; gap: var(--sp-2); }
+/* Zoom-level crossfade (canvas/tier-fade.ts). A tier change fades the tier
+   being left out over the incoming one instead of swapping in a frame. Every
+   layer that is not the in-flow body is ABSOLUTE, so nothing here is layout:
+   the frame's rect, its header and a live xterm's fit are identical on every
+   frame of the fade (the M234 lesson — a box that reflows refits xterm). Only
+   opacity animates. The ghost's own padding and alignment restate the tier it
+   drew, because it cannot carry `.panel__card--<tier>` — a second
+   `.panel__card` would be counted by the checks that read that class. */
+@keyframes tier-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tier-out { from { opacity: 1; } to { opacity: 0; } }
+.panel__card[data-tier-fading] { position: relative; }
+.panel__card[data-tier-fading] > :not(.tier-ghost) { animation: tier-in var(--dur-2) var(--ease); }
+.tier-ghost {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: var(--sp-6); overflow: hidden; pointer-events: none;
+  animation: tier-out var(--dur-2) var(--ease) forwards;
+}
+.tier-ghost--summary { justify-content: center; gap: var(--sp-3); }
+.tier-ghost--block { padding: 0; }
+.pf__tier-layer { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; flex-direction: column; pointer-events: none; }
+.pf__tier-layer > .pf__body { flex: 1; }
+.pf__tier-layer--in { animation: tier-in var(--dur-2) var(--ease) both; }
+.pf__tier-layer--out { animation: tier-out var(--dur-2) var(--ease) forwards; }
+.pf[data-tier-fade="to-far"] .pf__keep > * { animation: tier-out var(--dur-2) var(--ease) forwards; }
+.pf[data-tier-fade="to-near"] .pf__keep > *,
+.pf[data-tier-fade="far"] .pf__far:not(.pf__tier-layer .pf__far) { animation: tier-in var(--dur-2) var(--ease); }
+@media (prefers-reduced-motion: reduce) {
+  .tier-ghost, .pf__tier-layer { display: none; }
+  .panel__card[data-tier-fading] > *, .pf[data-tier-fade] .pf__keep > *, .pf[data-tier-fade] .pf__far { animation: none; }
+}
 
 .minimap {
   position: absolute;
