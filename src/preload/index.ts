@@ -424,7 +424,10 @@ const bridge: CanvasBridge = {
     prepare: () => ipcRenderer.invoke(IPC.STARTER_PREPARE)
   },
   platform: process.platform,
-  telemetry: { enabled: telemetryEnabled }
+  telemetry: { enabled: telemetryEnabled },
+  // The startup splash needs the version BEFORE first paint; the update
+  // check's answer is async and belongs to the update notice.
+  appVersion: (process.argv.find((a) => a.startsWith('--tc-version=')) ?? '').slice('--tc-version='.length)
 }
 
 contextBridge.exposeInMainWorld('canvas', bridge)

@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { attachPtyLifecycle } from '../window-lifecycle'
 import { pushDefaultPreset } from '../presets'
 import type { Stores } from './stores'
@@ -40,7 +40,9 @@ export function createWindow(state: MainState, stores: Stores): void {
       // M112. The renderer's one fact about telemetry, as an argv flag the
       // preload reads: no channel, no store read from the renderer, and the
       // SDK is never loaded in a process that will not send.
-      additionalArguments: state.telemetryOn ? ['--tc-telemetry=1'] : []
+      // The version rides the same door so the splash can tell a fresh
+      // install/update from a same-version relaunch without a store read.
+      additionalArguments: [...(state.telemetryOn ? ['--tc-telemetry=1'] : []), `--tc-version=${app.getVersion()}`]
     }
   })
   state.window = window

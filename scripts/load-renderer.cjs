@@ -66,7 +66,12 @@ const loadRenderer = async (win, { attempts = 3, log = console.log } = {}) => {
   const failures = []
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      await win.loadFile(RENDERER_HTML)
+      // `tc-splash=off`: the startup splash is an overlay over the first
+      // seconds of a fresh profile — exactly when every harness sleeps a
+      // fixed window, reads elementFromPoint and captures goldens. On, it
+      // would swallow the first clicks and paint into shots with no error.
+      // verify:viewport splash.3 reads this line as text.
+      await win.loadFile(RENDERER_HTML, { query: { 'tc-splash': 'off' } })
       if (failures.length) {
         log(`[harness] renderer loaded on attempt ${attempt} after ${failures.join('; ')}`)
       }

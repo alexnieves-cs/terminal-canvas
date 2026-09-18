@@ -1988,4 +1988,6 @@ export interface CanvasBridge {
   platform: NodeJS.Platform
   /** M112. A FIELD, not a channel: main decided at launch and stamped an argv flag. */
   telemetry: { enabled: boolean }
+  /** A FIELD like `telemetry`: main's app.getVersion(), stamped as argv; '' if absent. */
+  appVersion: string
 }

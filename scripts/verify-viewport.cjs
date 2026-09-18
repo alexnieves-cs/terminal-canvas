@@ -2596,6 +2596,40 @@ console.log('\n' + '='.repeat(60))
     cramped !== null && cramped.x - 280 >= 16 - 1e-9 && cramped.y - 280 >= 16 - 1e-9,
     JSON.stringify(cramped))
 }
+{
+  // Startup splash. The mode table: a first launch or a new version plays the
+  // long scene, an ordinary launch traces the layout, and every "be still"
+  // input — the setting, the harness flag, reduced motion, a reload, the
+  // merged view — wins over both.
+  const M = V.splashMode
+  const base = { enabled: true, harnessOff: false, reducedMotion: false, playedThisSession: false, merged: false, panelCount: 3, lastVersion: '5.0.0', version: '5.0.0' }
+  const m = (over) => (typeof M === 'function' ? M({ ...base, ...over }) : 'absent')
+  const table = {
+    ordinary: m({}), first: m({ lastVersion: null }), updated: m({ version: '5.1.0' }), emptyCanvas: m({ panelCount: 0 }),
+    firstEmpty: m({ lastVersion: null, panelCount: 0 }), unknownVersion: m({ version: '' }),
+    off: m({ enabled: false, lastVersion: null }), harness: m({ harnessOff: true, lastVersion: null }),
+    reduced: m({ reducedMotion: true }), reload: m({ playedThisSession: true, lastVersion: null }), merged: m({ merged: true })
+  }
+  ok('splash.1 splashMode: first launch and a new version play field, an ordinary launch plays ghost, an empty canvas or an unknown version never replays field, and setting/harness/reduced-motion/reload/merged each force none',
+    table.ordinary === 'ghost' && table.first === 'field' && table.updated === 'field' && table.emptyCanvas === 'none' &&
+      table.firstEmpty === 'field' && table.unknownVersion === 'ghost' &&
+      ['off', 'harness', 'reduced', 'reload', 'merged'].every((k) => table[k] === 'none'),
+    JSON.stringify(table))
+
+  // Field math. Midway between opposite poles the field runs along the axis
+  // joining them; a filing is axial, so it turns the SHORT way modulo PI.
+  const F = V.fieldAt, A = V.filingAngle
+  const have = typeof F === 'function' && typeof A === 'function'
+  const f = have ? F([{ x: 0, y: 0, q: 1 }, { x: 200, y: 0, q: -1 }], 100, 0, 50) : { x: 0, y: 1 }
+  const axis = Math.abs(f.y) < 1e-9 && f.x > 0
+  const short = have && Math.abs(A(0.1, Math.PI + 0.1, 1) - 0.1) < 1e-9 && Math.abs(A(0, 0.5, 0.5) - 0.25) < 1e-9 && A(0, 1, 0) === 0
+  ok('splash.2 fieldAt points along the pole axis at the midpoint; filingAngle is axial (a half-turn target is no turn) and interpolates by k',
+    have && axis && short, JSON.stringify({ have, f, short }))
+
+  const loader = require('node:fs').readFileSync(join(__dirname, 'load-renderer.cjs'), 'utf8')
+  ok('splash.3 every real-Electron harness loads the renderer with tc-splash=off, so no splash paints into a golden or swallows a click',
+    /loadFile\(RENDERER_HTML,\s*\{\s*query:\s*\{\s*'tc-splash':\s*'off'\s*\}\s*\}\)/.test(loader), 'scripts/load-renderer.cjs')
+}
 
 const failed = results.filter((r) => !r.pass)
 console.log(`${results.length - failed.length}/${results.length} passed`)

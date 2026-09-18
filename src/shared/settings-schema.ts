@@ -257,6 +257,15 @@ export const SETTINGS: readonly SettingDef[] = [
     category: APPEARANCE_CATEGORY
   },
   {
+    id: 'appearance.startupAnimation',
+    label: 'Startup animation',
+    description: 'play field lines on a first launch or after an update, and trace your saved layout on every other launch; reduced motion always skips it',
+    keywords: ['splash', 'startup', 'launch', 'animation', 'motion', 'intro'],
+    type: 'boolean',
+    default: true,
+    category: APPEARANCE_CATEGORY
+  },
+  {
     id: 'agent.idleAfterMs',
     label: 'Idle after',
     description: 'call a working panel idle after this many milliseconds of silence',
