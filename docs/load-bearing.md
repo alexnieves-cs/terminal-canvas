@@ -3180,6 +3180,8 @@ element with a state word and all three went red with "need one idle and one run
 A summary of an unstarted panel is "not started", and the element that says so is the same
 one.
 
+**A zoom tier change CROSSFADES, and every fading layer that is not the in-flow body is absolutely positioned (`canvas/tier-fade.ts`, `TerminalPanel.tsx`'s `PanelCard`, `PanelFrame.tsx`'s `pf__tier-layer`).** `useTierFade` keeps the tier being left for `TIER_FADE_MS`, derived during render so the first frame of the new tier already has its ghost (an effect would paint one un-faded frame, the very switch this removes). The ghost is absolute, `inert` and `aria-hidden`, rendered AFTER the live tier so `querySelector` finds the live copy, and never carries `.panel__card` (a check counts that class). A non-terminal's near body (`pf__keep`) holds drafts and webviews and is never cloned: leaving near it stays IN FLOW fading out while the far body floats over it at the header's bottom edge; returning, it is in flow at once and the far body it replaces is the ghost. A layer in flow would reflow the body and refit a live xterm — M234's SIGWINCH. Only opacity animates; reduced motion gets the old instant swap. `verify:styles tier-fade.1`.
+
 **Export reads the DURABLE log, never the xterm buffer, and the PNG is main's `capturePage`,
 never a DOM capture (`main/export.ts`, `scrollback-log.ts`'s `readAll`, `index.ts`).** Two
 silent failures, one per door. The text door: the xterm buffer is whatever scrollback xterm

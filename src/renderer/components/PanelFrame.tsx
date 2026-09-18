@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createContext, useContext, type CSSProperties, type JSX, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { CardDetailContext } from './card-detail-context'
+import type { CardDetail } from '@renderer/canvas/card-detail'
+import { useTierFade } from '@renderer/canvas/tier-fade'
 import type { DragState } from '@renderer/canvas/panel-interaction'
 import type { WorldRect } from '@renderer/canvas/viewport'
 import type { Panel } from '@renderer/panels/panels'
@@ -208,16 +210,16 @@ export function PanelFrame({
   // chrome row stays and the state edge is the border, so the edge survives
   // every tier. The terminal's own tiers are its own (TerminalPanel).
   const detail = useContext(CardDetailContext)
-  const farBody: ReactNode | null = kind === 'terminal' ? null
-    : detail === 'cluster' ? (
+  const renderFar = (d: CardDetail): ReactNode | null => kind === 'terminal' ? null
+    : d === 'cluster' ? (
       <div className="pf__body pf__far pf__far--cluster" data-card-cluster data-tone={tone}>
         <div className="panel__card-cluster" data-tone={tone} />
       </div>
-    ) : detail === 'block' ? (
+    ) : d === 'block' ? (
       <div className="pf__body pf__far pf__far--block" data-card-block data-tone={tone}>
         <div className="panel__card-block" data-tone={tone}><span className="panel__card-block-title">{title}</span></div>
       </div>
-    ) : detail === 'summary' ? (
+    ) : d === 'summary' ? (
       <div className="pf__body pf__far" data-card-summary>
         <div className="panel__card-summary" data-tone={tone}>
           {/* M166. The kind's glyph, large: a light with a name. */}
@@ -228,6 +230,28 @@ export function PanelFrame({
         </div>
       </div>
     ) : null
+  const farBody = renderFar(detail)
+  // Zoom crossfade (tier-fade.ts). The tier being left fades out while the
+  // incoming one fades in, and whichever layer is NOT the in-flow body is
+  // absolutely positioned over the body area — so the frame's geometry is the
+  // same on every frame of the fade. The near body (`pf__keep`) can hold a
+  // draft or a webview and is never cloned: leaving near, it stays in flow and
+  // the far body floats over it; returning to near, it is in flow at once and
+  // the far body it replaces floats as the ghost.
+  const leaving = useTierFade(detail)
+  const headerRef = useRef<HTMLElement | null>(null)
+  const fading = kind !== 'terminal' && leaving !== null
+  const toFar = fading && farBody !== null && renderFar(leaving) === null
+  const layerTop = ((): number => {
+    const h = headerRef.current
+    if (h === null || getComputedStyle(h).position === 'absolute') return 0
+    return h.offsetTop + h.offsetHeight
+  })()
+  const tierLayer = !fading ? null : toFar ? (
+    <div className="pf__tier-layer pf__tier-layer--in" style={{ top: layerTop }} aria-hidden="true" inert={true} data-tier-ghost>{farBody}</div>
+  ) : (
+    <div className="pf__tier-layer pf__tier-layer--out" style={{ top: layerTop }} aria-hidden="true" inert={true} data-tier-ghost>{renderFar(leaving)}</div>
+  )
   const style: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: z }
   const beginMove = (event: ReactMouseEvent): void => {
     // Chrome selects, and starts a move. stopPropagation keeps the canvas
@@ -240,7 +264,7 @@ export function PanelFrame({
   }
   const inner = (
     <>
-      <header className="pf__chrome panel__chrome" onMouseDown={beginMove}>
+      <header ref={headerRef} className="pf__chrome panel__chrome" onMouseDown={beginMove}>
         {/* The state dot (terminal) or the kind's accent mark — ONE rule set,
             keyed on data-agent-state, shared with the rail and the context
             pane (`.status-dot`). */}
@@ -339,11 +363,12 @@ export function PanelFrame({
           </button>
         )}
       </header>
-      {farBody}
+      {toFar ? null : farBody}
       {/* Mounted under every tier and hidden under the far ones: a body
           subtree can hold a draft (a Jira comment), and unmounting it on a
           zoom would discard typed work with no sign (M69's verifier). */}
-      <div className="pf__keep" hidden={farBody !== null}>{children}</div>
+      <div className="pf__keep" hidden={farBody !== null && !toFar}>{children}</div>
+      {tierLayer}
       {/* East, south and south-east only — see ResizeEdge. Each handle is a
           child of the frame, so it rides .world's transform with the rest of
           the panel instead of sitting in screen pixels and drifting on zoom.
@@ -385,6 +410,8 @@ export function PanelFrame({
       data-edge-arriving={arriving ? '' : undefined}
       // M204 (D08). The task lens, as an ATTRIBUTE the stylesheet paints —
       // opacity and an outline, neither of which is layout.
+      // Which way a zoom crossfade runs; the stylesheet fades the in-flow body.
+      data-tier-fade={!fading ? undefined : toFar ? 'to-far' : farBody === null ? 'to-near' : 'far'}
       data-task-lens={marks.lens === undefined || marks.lens === null ? undefined : marks.lens.has(id) ? 'member' : 'other'}
       {...(rootAttrs ?? {})}
     >
